@@ -9,10 +9,6 @@ import {
   type LocalHarnessRuntimeDriver,
 } from "../packages/trainer-local/src/index.js";
 import {
-  SandboxHarnessRuntimeAdapter,
-  type SandboxHarnessRuntimeClient,
-} from "../packages/trainer-sandbox/src/index.js";
-import {
   createHarnessRunManifest,
   runRuntimeAdapterConformance,
 } from "@openpond/training-sdk";
@@ -26,41 +22,23 @@ import {
 } from "./helpers/portable-training-fixtures.js";
 
 describe("harness runtime adapter conformance", () => {
-  test("local and Sandbox runtimes preserve one lifecycle contract", async () => {
+  test("the local runtime preserves the shared lifecycle contract", async () => {
     const release = createHarnessFixture().release;
     const localDriver = driver();
-    const sandboxClient = driver();
     const local = new LocalHarnessRuntimeAdapter(
       localDriver,
       async () => capabilities("local-harness", ["local"]),
     );
-    const sandbox = new SandboxHarnessRuntimeAdapter({
-      ...sandboxClient,
-      capabilities: async () =>
-        capabilities("sandbox-latitude", ["remote"]),
-      uploadAndMaterialize: sandboxClient.materialize,
-      create: async ({ manifest }) => sandboxClient.create(manifest),
-    } satisfies SandboxHarnessRuntimeClient);
 
-    const [localResult, sandboxResult] = await Promise.all([
-      runRuntimeAdapterConformance({
-        adapter: local,
-        release,
-        manifest: localManifest(release.contentHash),
-        action: action(),
-      }),
-      runRuntimeAdapterConformance({
-        adapter: sandbox,
-        release,
-        manifest: sandboxManifest(release.contentHash),
-        action: action(),
-      }),
-    ]);
+    const localResult = await runRuntimeAdapterConformance({
+      adapter: local,
+      release,
+      manifest: localManifest(release.contentHash),
+      action: action(),
+    });
 
     expect(localResult.passed).toBe(true);
-    expect(sandboxResult.passed).toBe(true);
     expect(localDriver.destroy).toHaveBeenCalledTimes(1);
-    expect(sandboxClient.destroy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -155,29 +133,6 @@ function graderEvidence(): HarnessGraderEvidence {
     privilegedEvidenceRefs: ["r2://private/reward.json"],
   };
   return { ...base, contentHash: contentHash(base) };
-}
-
-function sandboxManifest(harnessHash: string): HarnessRunManifest {
-  const source = createManifestFixture();
-  const { contentHash: _contentHash, ...content } = source;
-  return createHarnessRunManifest({
-    ...content,
-    harnessRelease: { ...source.harnessRelease, contentHash: harnessHash },
-    runtimeTarget: {
-      adapterId: "sandbox-latitude",
-      placement: "remote",
-      capabilityReceipt: sha256("sandbox-latitude-capability"),
-      runtimeVersion: "1",
-      dataPlane: {
-        provider: "latitude",
-        dataPlaneId: "latitude-staging",
-        cellId: "cell-a",
-        runnerPoolId: "pool-a",
-        runtimeImageDigest: `sha256:${sha256("sandbox-runtime")}`,
-        capabilityReceipt: sha256("latitude-placement"),
-      },
-    },
-  });
 }
 
 function localManifest(harnessHash: string): HarnessRunManifest {

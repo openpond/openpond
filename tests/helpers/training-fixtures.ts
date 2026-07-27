@@ -48,7 +48,7 @@ export function tasksetFixture(options: { ready?: boolean; profileId?: string; g
   ];
   const draft = TasksetSchema.parse({ schemaVersion: "openpond.taskset.v1", id: "taskset_fixture", profileId: options.profileId ?? "default", name: "Fixture Taskset", objective: "Reproduce an approved greeting style.", status: "needs_review", sourceRefs: [trainSource, evalSource], policy: { policyVisibleFields: ["input.prompt"], privilegedFields: ["expectedOutput.text"], hiddenGraderRefs: ["expected_output"], connectedAppScopes: [] }, environment: { protocolVersion: "openpond.taskEnvironment.v1", kind: "chat", entrypoint: "environment/taskset.ts", stateful: false, deterministicSeeds: true, toolNames: [], lifecycle: ["create", "reset", "step", "grade", "cleanup"], defaultTimeoutMs: 120_000, networkPolicy: "none", metadata: {} }, capabilities: { schemaVersion: "openpond.tasksetCapabilities.v1", taskKind: "chat", supportedSignals: ["demonstration"], compatibleMethods: ["sft"], rewardKinds: ["deterministic"], requiresTools: false, requiresState: false, requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"], exportable: true, portabilityBlockers: [] }, tasks, graders, graderFixtures, learningSignals: { demonstrations: [{ id: "demo_train", kind: "demonstration", taskId: "task_train", sourceRefs: [trainSource.id], artifactRef: "expected_train", approved: true, confidence: 1, metadata: {} }], preferences: [], corrections: [], feedback: [], rewards: [], labels: [] }, authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {}, skillHash: contentHash("skill"), promptTemplateVersion: "task-authoring.v1", evidenceHashes: [trainSource.sourceHash, evalSource.sourceHash], tasksetSdkVersion: "0.0.1", sourceCommit: null, repairHistory: [], createdAt: FIXED_TIME }, readiness: null, contentHash: "00000000", createdAt: FIXED_TIME, updatedAt: FIXED_TIME, metadata: { trainingMethod: "sft", diagnosis: { schemaVersion: "openpond.capabilityDiagnosis.v1", summary: "Reproduce a stable greeting style.", stableBehavior: ["Use the approved greeting style."], changingKnowledge: [], requiredContext: [], requiredTools: [], intervention: "sft", trainingEligible: true, rationale: ["Independent examples demonstrate the stable behavior."], confidence: 0.9 } } });
   const hash = computeTasksetHash(draft);
-  const readiness = options.ready ? { schemaVersion: "openpond.tasksetReadiness.v1" as const, tasksetId: draft.id, tasksetHash: hash, ready: true, recommendedMethod: "sft" as const, compatibleDestinationClasses: ["export" as const, "local_cpu_fixture" as const, "custom" as const, "openpond_managed" as const], blockers: [], warnings: [], baselineReportId: "baseline_fixture", generatedAt: FIXED_TIME } : null;
+  const readiness = options.ready ? { schemaVersion: "openpond.tasksetReadiness.v1" as const, tasksetId: draft.id, tasksetHash: hash, ready: true, recommendedMethod: "sft" as const, compatibleDestinationClasses: ["export" as const, "local_cpu_fixture" as const, "custom" as const], blockers: [], warnings: [], generatedAt: FIXED_TIME } : null;
   return TasksetSchema.parse({ ...draft, status: readiness ? "ready" : "needs_review", readiness, contentHash: hash });
 }
 
@@ -114,7 +114,6 @@ export function preferenceTasksetFixture(): Taskset {
       compatibleDestinationClasses: ["local_cpu_fixture"],
       blockers: [],
       warnings: [],
-      baselineReportId: null,
       baselineReward: null,
       generatedAt: FIXED_TIME,
     },
@@ -176,7 +175,6 @@ export function rewardTasksetFixture(): Taskset {
       compatibleDestinationClasses: ["local_cpu_fixture"],
       blockers: [],
       warnings: [],
-      baselineReportId: null,
       baselineReward: null,
       generatedAt: FIXED_TIME,
     },

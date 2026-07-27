@@ -226,36 +226,14 @@ export function CreateImproveAuthoringDialog({
   const [scanCandidates, setScanCandidates] = useState<TaskCandidate[]>([]);
   const [minerConfig, setMinerConfig] = useState<TaskMinerConfig>(() => training.payload?.minerConfig ?? defaultMinerConfig());
 
-  const generatedBaselineSessionIds = useMemo(
-    () => new Set(
-      sources
-        .filter(
-          (source) => {
-            const workflowSignature = source.metadata.workflowSignature;
-            return (
-              source.metadata.frontierBaseline === true
-              || workflowSignature === "cross-system-operations"
-              || (
-                typeof workflowSignature === "string"
-                && workflowSignature.startsWith("baseline:")
-              )
-              || Boolean(source.metadata.crossSystemOperations)
-            );
-          },
-        )
-        .map((source) => source.sessionId),
-    ),
-    [sources],
-  );
   const eligibleSessions = useMemo(
     () => sessions.filter(
       (session) =>
         !session.systemKind
         && !session.hiddenFromDefaultSidebar
-        && session.status !== "active"
-        && !generatedBaselineSessionIds.has(session.id),
+        && session.status !== "active",
     ),
-    [generatedBaselineSessionIds, sessions],
+    [sessions],
   );
   const sessionById = useMemo(() => new Map(sessions.map((session) => [session.id, session])), [sessions]);
   const sourceBySession = useMemo(() => new Map(sources.map((source) => [source.sessionId, source])), [sources]);

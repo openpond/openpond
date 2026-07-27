@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import type {
   CreateImproveRun,
   ModelRunDraft,
-  TasksetBaselineRun,
   TrainingJob,
 } from "@openpond/contracts";
 import {
@@ -24,7 +23,6 @@ import {
   currentModelBinding,
   labBaseModelVersion,
   labLifecycleModelRuns,
-  labModelBaselineRuns,
   labModelJobs,
   labModelPlans,
   labModelTasksets,
@@ -38,7 +36,6 @@ type VersionEntry = {
   key: string;
   job: TrainingJob | null;
   version: LabModelVersion | null;
-  baselineRun: TasksetBaselineRun | null;
   draft: ModelRunDraft | null;
 };
 
@@ -73,10 +70,6 @@ export function LabModelVersionsPage({
     () => labModelVersions(workproduct, runs, state),
     [runs, state, workproduct]
   );
-  const baselineRuns = useMemo(
-    () => labModelBaselineRuns(workproduct, runs, state),
-    [runs, state, workproduct]
-  );
   const plans = useMemo(
     () => labModelPlans(workproduct, runs, state),
     [runs, state, workproduct]
@@ -90,14 +83,13 @@ export function LabModelVersionsPage({
       modelVersionEntries(
         jobs,
         versions,
-        baselineRuns,
         state?.modelRunDrafts.filter(
           (draft) =>
             draft.modelId === workproduct.id &&
             (draft.status === "draft" || draft.status === "ready_to_run")
         ) ?? []
       ),
-    [baselineRuns, jobs, state?.modelRunDrafts, versions, workproduct.id]
+    [jobs, state?.modelRunDrafts, versions, workproduct.id]
   );
   const currentBinding = currentModelBinding(workproduct, runs, state);
   const baseVersion = labBaseModelVersion(workproduct, state);
@@ -250,7 +242,6 @@ export function LabModelVersionsPage({
               </tr>
             ) : null}
             {entries.map((entry) => {
-              const baselineRun = entry.baselineRun;
               const draft = entry.draft;
               const plan =
                 entry.version?.plan ??
@@ -260,9 +251,7 @@ export function LabModelVersionsPage({
                 tasksets.find(
                   (taskset) =>
                     taskset.id ===
-                    (draft?.tasksetRef?.id ??
-                      baselineRun?.tasksetId ??
-                      plan?.tasksetId)
+                    (draft?.tasksetRef?.id ?? plan?.tasksetId)
                 ) ??
                 null;
               const version = entry.version;
@@ -304,9 +293,7 @@ export function LabModelVersionsPage({
                         {shortId(
                           draft?.id ??
                             version?.lineage.id ??
-                            entry.job?.id ??
-                            baselineRun?.id ??
-                            entry.key
+                            entry.job?.id ?? entry.key
                         )}
                       </small>
                     </button>
@@ -314,10 +301,6 @@ export function LabModelVersionsPage({
                   <td>
                     {draft?.method
                       ? trainingMethodLabel(draft.method)
-                      : baselineRun
-                      ? baselineRun.configuration.split === "train"
-                        ? "Train-signal check"
-                        : "Base-model check"
                       : trainingMethodLabel(plan?.recipe.method)}
                   </td>
                   <td>
@@ -343,15 +326,12 @@ export function LabModelVersionsPage({
                           ? draft.status === "ready_to_run"
                             ? "Ready to run"
                             : "Draft"
-                          : baselineRun
-                          ? baselineRunStatusLabel(baselineRun)
                           : entry.job
                           ? statusLabel(entry.job.status)
                           : "Imported"
                       }
                       value={
                         draft?.status ??
-                        baselineRun?.status ??
                         entry.job?.status ??
                         "completed"
                       }
@@ -360,8 +340,6 @@ export function LabModelVersionsPage({
                   <td>
                     {draft ? (
                       "—"
-                    ) : baselineRun ? (
-                      <BaselineRunProgressBadge run={baselineRun} />
                     ) : (
                       <VersionEvalBadge job={entry.job} version={version} />
                     )}
@@ -377,7 +355,6 @@ export function LabModelVersionsPage({
                     {formatDateTime(
                       draft?.updatedAt ??
                         version?.lineage.importedAt ??
-                        baselineRun?.updatedAt ??
                         entry.job?.updatedAt ??
                         ""
                     )}
@@ -394,19 +371,6 @@ export function LabModelVersionsPage({
                         }}
                       >
                         Resume
-                      </button>
-                    ) : baselineRun && isActiveBaselineRun(baselineRun) ? (
-                      <button
-                        className="training-button secondary"
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void training.actions.cancelBaselineRun(
-                            baselineRun.id
-                          );
-                        }}
-                      >
-                        Cancel
                       </button>
                     ) : version ? (
                       <div className="training-table-actions">
@@ -480,7 +444,6 @@ export function LabModelVersionsPage({
 export function modelVersionEntries(
   jobs: TrainingJob[],
   versions: LabModelVersion[],
-  baselineRuns: TasksetBaselineRun[],
   drafts: ModelRunDraft[] = []
 ): VersionEntry[] {
   const versionByJobId = new Map(
@@ -492,7 +455,6 @@ export function modelVersionEntries(
     key: `job:${job.id}`,
     job,
     version: versionByJobId.get(job.id) ?? null,
-    baselineRun: null,
     draft: null,
   }));
   const knownJobIds = new Set(jobs.map((job) => job.id));
@@ -502,16 +464,6 @@ export function modelVersionEntries(
       key: `version:${version.lineage.id}`,
       job: version.job,
       version,
-      baselineRun: null,
-      draft: null,
-    });
-  }
-  for (const baselineRun of baselineRuns) {
-    entries.push({
-      key: `baseline:${baselineRun.id}`,
-      job: null,
-      version: null,
-      baselineRun,
       draft: null,
     });
   }
@@ -520,7 +472,6 @@ export function modelVersionEntries(
       key: `draft:${draft.id}`,
       job: null,
       version: null,
-      baselineRun: null,
       draft,
     });
   }
@@ -533,54 +484,9 @@ function entryTimestamp(entry: VersionEntry): string {
   return (
     entry.version?.lineage.importedAt ??
     entry.draft?.updatedAt ??
-    entry.baselineRun?.updatedAt ??
     entry.job?.updatedAt ??
     entry.job?.createdAt ??
     ""
-  );
-}
-
-export function baselineRunStatusLabel(run: TasksetBaselineRun): string {
-  switch (run.status) {
-    case "queued":
-      return "Check queued";
-    case "preparing":
-      return "Preparing check";
-    case "running":
-      return "Check running";
-    case "cancelling":
-      return "Cancelling check";
-    case "cancelled":
-      return "Check cancelled";
-    case "succeeded":
-      return "Check passed";
-    case "failed":
-      return "Check failed";
-  }
-}
-
-export function isActiveBaselineRun(run: TasksetBaselineRun): boolean {
-  return ["queued", "preparing", "running", "cancelling"].includes(run.status);
-}
-
-function BaselineRunProgressBadge({ run }: { run: TasksetBaselineRun }) {
-  const progress = `${run.progress.completedAttempts} / ${run.progress.totalAttempts}`;
-  const label = run.reportId
-    ? "Recorded"
-    : run.progress.completedAttempts
-    ? progress
-    : "No attempts";
-  return (
-    <LabStatusBadge
-      label={label}
-      value={
-        run.reportId
-          ? "passed"
-          : isActiveBaselineRun(run)
-          ? "running"
-          : run.status
-      }
-    />
   );
 }
 

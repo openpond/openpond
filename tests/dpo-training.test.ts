@@ -148,7 +148,6 @@ function preferenceTaskset(chosen = "Hello friend."): Taskset {
       compatibleDestinationClasses: ["local_cpu_fixture"],
       blockers: [],
       warnings: [],
-      baselineReportId: null,
       baselineReward: null,
       generatedAt: "2026-07-23T12:00:00.000Z",
     },

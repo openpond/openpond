@@ -1,6 +1,5 @@
 import type {
   CreateImproveRun,
-  CrossSystemFrontierBaselineRun,
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
@@ -24,7 +23,6 @@ import {
 import { trainingMethodLabel } from "../training/training-model-data";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { LabModelBaselineProgress } from "./LabModelBaseline";
 import { labBaseModelVersion, labModelVersions } from "./lab-models";
 import { type LabWorkproductProgression } from "./lab-workproduct-progression";
 import type { LabsRouteProps } from "./LabsRoute";
@@ -94,7 +92,6 @@ export function SuggestionsTab({
 }
 
 export function WorkproductsTable({
-  frontierBaselineRuns,
   items,
   loading,
   progressionByKey,
@@ -104,7 +101,6 @@ export function WorkproductsTable({
   onUseModel,
   onUseSkill,
 }: {
-  frontierBaselineRuns: CrossSystemFrontierBaselineRun[];
   items: LabWorkproductSummary[];
   loading: boolean;
   progressionByKey: Map<string, LabWorkproductProgression>;
@@ -124,9 +120,6 @@ export function WorkproductsTable({
     return (
       <div className="labs-table-empty">No workproducts match this view.</div>
     );
-  const frontierBaselineById = new Map(
-    frontierBaselineRuns.map((run) => [run.id, run] as const)
-  );
   return (
     <div className="training-table-wrap">
       <table
@@ -150,9 +143,6 @@ export function WorkproductsTable({
         <tbody>
           {items.map((item) => {
             const progression = progressionByKey.get(item.key);
-            const frontierBaseline = item.frontierBaselineRunId
-              ? frontierBaselineById.get(item.frontierBaselineRunId) ?? null
-              : null;
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
                 {showType ? (
@@ -162,22 +152,12 @@ export function WorkproductsTable({
                 ) : null}
                 <td>
                   <button
-                    className={
-                      frontierBaseline
-                        ? "labs-workproduct-link labs-training-run-name"
-                        : "labs-workproduct-link"
-                    }
+                    className="labs-workproduct-link"
                     type="button"
                     onClick={() => onSelect(item.key)}
                   >
                     <strong>{item.name}</strong>
                     <span>{item.description}</span>
-                    {frontierBaseline ? (
-                      <LabModelBaselineProgress
-                        run={frontierBaseline}
-                        showOutcomes={false}
-                      />
-                    ) : null}
                   </button>
                 </td>
                 <td>

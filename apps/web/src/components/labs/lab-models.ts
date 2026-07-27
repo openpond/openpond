@@ -5,7 +5,6 @@ import type {
   ModelRun,
   ModelVersion,
   Taskset,
-  TasksetBaselineRun,
   TrainingJob,
   TrainingPlan,
   TrainingStateResponse,
@@ -131,24 +130,6 @@ export function labModelDatasets(
   }
   if (workproduct.tasksetId) ids.add(workproduct.tasksetId);
   return labModelTasksets(state).filter((taskset) => ids.has(taskset.id));
-}
-
-export function labModelBaselineRuns(
-  workproduct: LabWorkproductSummary,
-  runs: CreateImproveRun[],
-  state: TrainingStateResponse | null,
-): TasksetBaselineRun[] {
-  if (!state) return [];
-  const datasetIds = new Set(
-    labModelDatasets(workproduct, runs, state).map((taskset) => taskset.id),
-  );
-  return (state.baselineRuns ?? [])
-    .filter((run) =>
-      run.targetModelId
-        ? run.targetModelId === workproduct.id
-        : datasetIds.has(run.tasksetId),
-    )
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 export function labModelVersions(

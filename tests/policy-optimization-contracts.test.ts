@@ -220,7 +220,6 @@ function plan(
       retentionDays: null,
       region: null,
     },
-    rftSignalGate: null,
     estimatedCostUsd: 0,
     createdAt: timestamp,
     contentHash: hash,

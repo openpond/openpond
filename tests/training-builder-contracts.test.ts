@@ -115,7 +115,6 @@ test("method readiness and destination availability remain distinct", () => {
     compatibleDestinationClasses: ["export"],
     blockers: [],
     warnings: [],
-    baselineReportId: null,
     generatedAt: FIXED_TIME,
   });
   const availability = TrainingMethodAvailabilitySchema.parse({

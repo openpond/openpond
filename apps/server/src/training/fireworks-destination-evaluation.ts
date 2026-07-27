@@ -12,7 +12,7 @@ import {
   type TrainingPlan,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
-import { runTrainingTasksetAttempt } from "./task-baseline-attempt-runner.js";
+import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
 import {
   FireworksApiClient,
   resourceId,
@@ -616,7 +616,7 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
             spec.servingMode === "direct" ? deploymentName : undefined;
           for (const task of frozen) {
             const providerUsage: unknown[] = [];
-            const attempt = await runTrainingTasksetAttempt({
+            const attempt = await runPostTrainingEvaluationAttempt({
               store: this.deps.store,
               storeDir: this.deps.storeDir,
               resultId: frozenEvaluationAttemptId(

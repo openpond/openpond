@@ -11,8 +11,15 @@ describe("training tactic recommender", () => {
     expect(recommendTrainingTactic({ evidence, scorecard }).tactic).toBe("sft");
   });
 
-  test("only recommends GRPO after useful baseline reward variance", () => {
-    const baseline = { schemaVersion: "openpond.baselineReport.v1" as const, id: "baseline", tasksetId: "taskset", tasksetHash: "tasksethash", graderSetHash: "graderhash", attemptRefs: ["attempt"], gradeRefs: ["grade"], passAtK: { "1": 0.5 }, reward: { count: 4, mean: 0.5, min: 0, max: 1, variance: 0.25 }, failureClusters: {}, totalCostUsd: 0, userInterventions: 0, hackingChecksPassed: true, leakageChecksPassed: true, createdAt: "2026-07-12T00:00:00Z" };
-    expect(recommendTrainingTactic({ evidence, scorecard, baseline }).tactic).toBe("grpo_rft");
+  test("recommends GRPO for verifiable expert labels", () => {
+    const expertEvidence: TaskCandidateEvidence[] = evidence.map(
+      (item) => ({ ...item, kind: "expert_label" }),
+    );
+    expect(
+      recommendTrainingTactic({
+        evidence: expertEvidence,
+        scorecard,
+      }).tactic,
+    ).toBe("grpo_rft");
   });
 });

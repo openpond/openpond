@@ -225,7 +225,6 @@ function destinationLabel(destination: ModelRunDraft["destinationId"]): string {
   if (destination === "local_mlx") return "Apple Silicon";
   if (destination === "ssh_gpu") return "SSH GPU";
   if (destination === "prime_hosted") return "Prime Raw GPU";
-  if (destination === "openpond_managed") return "OpenPond Managed";
   return destination ? destination.replaceAll("_", " ") : "Not selected";
 }
 

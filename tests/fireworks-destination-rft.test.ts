@@ -231,8 +231,8 @@ describe.sequential("Fireworks RFT destination", () => {
         const attempts = await store.listTaskAttempts(taskset.id);
         expect(attempts).toHaveLength(2);
         expect(attempts.map((attempt) => attempt.metadata.execution)).toEqual([
-          "taskset_baseline_tool_loop",
-          "taskset_baseline_tool_loop",
+          "post_training_evaluation_tool_loop",
+          "post_training_evaluation_tool_loop",
         ]);
         expect(attempts.map((attempt) => attempt.metadata.verifierOutcome)).toEqual([
           "parse_failure",
@@ -322,67 +322,6 @@ describe.sequential("Fireworks RFT destination", () => {
         })).rejects.toThrow(
           "approved by 0xglu, but the signed-in OpenPond account is different-account",
         );
-        expect(provider.calls.some((call) => call.startsWith("POST "))).toBe(false);
-        expect(await store.listTrainingJobs()).toHaveLength(0);
-      } finally {
-        await service.close();
-      }
-    }));
-
-  test("blocks paid GRPO before provider upload when the frozen baseline has zero reward variance", async () =>
-    withTrainingStore(async ({ store, directory }) => {
-      const proven = rftTasksetFixture();
-      const taskset = TasksetSchema.parse({
-        ...proven,
-        readiness: {
-          ...proven.readiness!,
-          baselineReportId: "baseline_zero_variance",
-          baselineReward: {
-            count: 4,
-            mean: 0,
-            min: 0,
-            max: 0,
-            variance: 0,
-          },
-        },
-      });
-      await store.upsertTaskset(taskset);
-      const provider = fireworksRftMock();
-      const service = createTrainingService({
-        store,
-        storeDir: directory,
-        localWorkerProjectDir: path.resolve("python/openpond-training"),
-        resolveApprovalActor,
-        resolveFireworksCredential: async () => ({
-          value: API_KEY,
-          source: "local_secret",
-          createdAt: "2026-07-17T00:00:00.000Z",
-          updatedAt: "2026-07-17T00:01:00.000Z",
-        }),
-        fireworksRequest: provider.request,
-        fireworksRftPublicBaseUrl: () =>
-          "https://rft.openpond.test/v1/training/fireworks/rft",
-      });
-      try {
-        await expect(service.start({
-          modelId: "model_fireworks_fixture",
-          tasksetId: taskset.id,
-          destinationId: "fireworks",
-          recipe: fireworksRftRecipe(),
-          exportApproved: true,
-          maximumCostUsd: 9,
-          retentionDays: 7,
-        })).rejects.toThrow("Training Plan is incompatible and cannot be bundled");
-        const [plan] = await store.listTrainingPlans();
-        expect(plan?.compatibility).toMatchObject({
-          compatible: false,
-          issues: expect.arrayContaining([
-            expect.objectContaining({
-              code: "rft_reward_variance_missing",
-              severity: "error",
-            }),
-          ]),
-        });
         expect(provider.calls.some((call) => call.startsWith("POST "))).toBe(false);
         expect(await store.listTrainingJobs()).toHaveLength(0);
       } finally {

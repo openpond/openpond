@@ -176,23 +176,6 @@ export function validateTrainingCompatibility(input: {
       recipe.dataset.trainSplit
     ] ?? trainTasks.length;
     if (!trainCount) issues.push({ code: "rft_train_split_empty", severity: "error", path: input.taskset.datasetArtifact ? "taskset.datasetArtifact.splitCounts.train" : "taskset.tasks", message: "RFT requires at least one approved train prompt." });
-    const baselineReward = input.taskset.readiness?.baselineReward ?? null;
-    const hasRewardVariance = Boolean(
-      input.taskset.readiness?.baselineReportId
-      && baselineReward
-      && baselineReward.count >= 2
-      && (baselineReward.variance ?? 0) > 0
-      && (baselineReward.mean ?? 0) > 0.05
-      && (baselineReward.mean ?? 0) < 0.95,
-    );
-    if (!hasRewardVariance) {
-      issues.push({
-        code: "rft_reward_variance_missing",
-        severity: "error",
-        path: "taskset.readiness.baselineReward",
-        message: "Paid RFT requires a current frozen baseline with non-trivial eligible reward variance and a policy that reaches both passing and failing reward states.",
-      });
-    }
     if (!input.capabilities.environmentPlacements.includes("provider_native")) issues.push({ code: "rft_environment_placement", severity: "error", path: "environmentPlacement", message: "RFT requires a provider-native rollout environment placement." });
     if (input.plan.destinationId !== "fireworks") issues.push({ code: "rft_destination_unproven", severity: "error", path: "destinationId", message: "The executable RFT contract is currently proven only for Fireworks." });
     if (input.plan.environmentPlacement !== "provider_native") issues.push({ code: "rft_plan_placement", severity: "error", path: "environmentPlacement", message: "The RFT plan must use provider-native placement." });

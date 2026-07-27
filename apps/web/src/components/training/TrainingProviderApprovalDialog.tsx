@@ -6,7 +6,6 @@ import {
   destinationLabel,
   formatBytes,
   modelLabel,
-  type PortableTrainingMethod,
 } from "./training-start-view-helpers";
 
 export function TrainingProviderApprovalDialog({
@@ -14,12 +13,6 @@ export function TrainingProviderApprovalDialog({
   busy,
   destinationId,
   baseModelId,
-  method,
-  rftBaselineReady,
-  baselineBusy,
-  baselineActionLabel,
-  baselineActionAvailable,
-  onRunBaseline,
   approvalFields,
   prepared,
   preparedQuote,
@@ -32,12 +25,6 @@ export function TrainingProviderApprovalDialog({
   busy: boolean;
   destinationId: string;
   baseModelId: string;
-  method: PortableTrainingMethod;
-  rftBaselineReady: boolean;
-  baselineBusy: boolean;
-  baselineActionLabel: string;
-  baselineActionAvailable: boolean;
-  onRunBaseline: () => void;
   approvalFields: ReactNode;
   prepared: TrainingPreparedStart | null;
   preparedQuote: number | null;
@@ -76,34 +63,6 @@ export function TrainingProviderApprovalDialog({
             <X size={16} />
           </button>
         </div>
-        {method === "grpo" ? (
-          <section className="training-launch-check">
-            <div>
-              <strong>
-                {rftBaselineReady
-                  ? "Train signal verified"
-                  : "Train-signal check required"}
-              </strong>
-              <span>
-                {rftBaselineReady
-                  ? "The selected prompts produced the mixed rewards required for GRPO."
-                  : "Run the selected train prompts before any provider upload or paid training job can start."}
-              </span>
-            </div>
-            {!rftBaselineReady ? (
-              <button
-                className="training-button secondary"
-                type="button"
-                disabled={
-                  baselineBusy || !baseModelId || !baselineActionAvailable
-                }
-                onClick={onRunBaseline}
-              >
-                {baselineActionLabel}
-              </button>
-            ) : null}
-          </section>
-        ) : null}
         {approvalFields}
         {prepared ? (
           <dl className="training-start-summary">

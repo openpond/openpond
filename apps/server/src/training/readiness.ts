@@ -1,6 +1,5 @@
 import {
   TasksetReadinessReportSchema,
-  type BaselineReport,
   type GraderAuditReport,
   type Taskset,
   type TasksetReadinessReport,
@@ -9,7 +8,6 @@ import { contentHash, validateTaskset } from "@openpond/taskset-sdk";
 
 export function buildTasksetReadiness(input: {
   taskset: Taskset;
-  baseline: BaselineReport | null;
   graderAudit?: GraderAuditReport | null;
   generatedAt?: string;
 }): TasksetReadinessReport {
@@ -104,11 +102,8 @@ export function buildTasksetReadiness(input: {
   if (input.graderAudit && !input.graderAudit.infrastructureSafetyPassed) blockers.push({ code: "infrastructure_reward", message: "An infrastructure failure produced a score or eligible reward.", path: "graderFixtures" });
   const hasRewardEligibleGrader = input.taskset.graders.some((grader) => grader.rewardEligible && (grader.kind !== "model_judge" || grader.calibrationStatus === "passed"));
   if (requiresOnlineReward && !hasRewardEligibleGrader) blockers.push({ code: "online_reward_grader_missing", message: `${authoredTrainingMethod?.toUpperCase()} requires a calibrated reward-eligible grader.`, path: "graders" });
-  const currentBaseline = input.baseline?.tasksetHash === input.taskset.contentHash ? input.baseline : null;
-  const baselineReward = currentBaseline?.reward;
-  const hasRewardVariance = Boolean(baselineReward && (baselineReward.variance ?? 0) > 0 && (baselineReward.mean ?? 0) > 0.05 && (baselineReward.mean ?? 0) < 0.95);
   const recommendedMethod = authoredTrainingMethod
-    ?? (hasRewardVariance && hasRewardEligibleGrader && input.taskset.capabilities.compatibleMethods.includes("grpo") ? "grpo" : trainTaskCount > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
+    ?? (trainTaskCount > 0 && input.taskset.capabilities.compatibleMethods.includes("sft") ? "sft" : "none");
   const demonstrationRefs = input.taskset.learningSignals.demonstrations.filter((signal) => signal.approved).map((signal) => signal.id);
   const trainingPath = recommendedMethod === "none" ? null : {
     primaryMethod: recommendedMethod,
@@ -156,7 +151,7 @@ export function buildTasksetReadiness(input: {
     }
     if (globalMethodReason && reasonCodes.length === 0) {
       reasonCodes.push("taskset_not_ready");
-      reasons.push("Resolve the Dataset validation, grader-audit, and baseline blockers.");
+      reasons.push("Resolve the Dataset validation and grader-audit blockers.");
     }
     const datasetBlockingReasons = reasonCodes.filter((code) =>
       code !== "value_model_required");
@@ -179,20 +174,19 @@ export function buildTasksetReadiness(input: {
     recommendedMethod,
     trainingPath,
     methodReadiness,
-    compatibleDestinationClasses: ready ? recommendedMethod === "grpo" ? ["export", "custom", "openpond_managed", "hosted_byok"] : ["export", "local_cpu_fixture", "custom", "openpond_managed"] : ["export"],
+    compatibleDestinationClasses: ready
+      ? recommendedMethod === "grpo"
+        ? ["export", "custom", "hosted_byok"]
+        : ["export", "local_cpu_fixture", "custom"]
+      : ["export"],
     blockers,
     warnings: [
       ...validation.issues.filter((issue) => issue.severity === "warning").map((issue) => issue.message),
-      ...(input.baseline && input.baseline.tasksetHash !== input.taskset.contentHash ? ["The saved baseline is stale and will not be used for method selection or comparison."] : []),
-      ...(currentBaseline && (!currentBaseline.hackingChecksPassed || !currentBaseline.leakageChecksPassed) ? ["The optional baseline reported a safety failure; review it before using baseline results for method selection."] : []),
       ...(recommendedMethod === "grpo" ? ["GRPO is readiness-compatible but not executable in the local CPU fixture."] : []),
-      ...(recommendedMethod === "grpo" && !hasRewardVariance ? ["A frozen baseline with reward variance is still required before a GRPO execution claim."] : []),
       ...metadataStrings(input.taskset.metadata.warnings),
     ],
-    baselineReportId: currentBaseline?.id ?? null,
-    baselineReward: currentBaseline?.reward ?? null,
     generatedAt: input.generatedAt ?? new Date().toISOString(),
-    metadata: { reportHash: contentHash([input.taskset.contentHash, currentBaseline?.id ?? null, blockers]) },
+    metadata: { reportHash: contentHash([input.taskset.contentHash, blockers]) },
   });
 }
 

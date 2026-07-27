@@ -9,52 +9,38 @@ import {
 import type {
   ModelProject,
   ModelRunDraft,
-  ModelRunPreset,
   Taskset,
   TrainingDestinationId,
   TrainingRecipe,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
-import {
-  TrainingGoalCards,
-  type DatasetEvidenceIntent,
-} from "../training/TrainingGoalCards";
+import type { DatasetEvidenceIntent } from "../training/TrainingGoalCards";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
-import {
-  TrainingStartDialog,
-  type TrainingStartApproval,
-} from "../training/TrainingStartDialog";
+import type { TrainingStartApproval } from "../training/TrainingStartDialog";
 import {
   ModelSetupConfigurationPreview,
   ModelSetupOverviewPreview,
   ModelSetupRunsPreview,
 } from "./ModelRunSetupPreviews";
-import {
-  MODEL_SETUP_STEPS,
-  ModelSetupSteps,
-  type ModelSetupStepId,
-} from "./ModelSetupSteps";
+import type { ModelSetupStepId } from "./ModelSetupSteps";
+import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
+import { ModelRunSetupContent } from "./ModelRunSetupContent";
 import {
   bindTaskset,
   buildPageReason,
   cloneRunDraft,
   comparableEditor,
-  datasetGuidance,
   firstIncompleteSetupStep,
   methodAvailability,
   newDraft,
   nextModelName,
   newProject,
   preparationReview,
-  presetFor,
-  presetsFor,
-  setupStepComplete,
 } from "./model-run-editor-helpers";
 
 export { nextModelName } from "./model-run-editor-helpers";
 
-const RUN_CONTROL_ID = "model-build-run-control";
 const SETUP_TABS = [
   ["setup", "Setup"],
   ["overview", "Overview"],
@@ -145,8 +131,6 @@ export function ModelRunEditorPage({
       );
   }
   const [project, setProject] = useState(initialProjectRef.current);
-  const [editingName, setEditingName] = useState(false);
-  const nameBeforeEditRef = useRef(initialProjectRef.current.name);
   const initialDraftRef = useRef<ModelRunDraft | null>(null);
   if (!initialDraftRef.current) {
     const baseDraft = restoredDraft
@@ -361,60 +345,6 @@ export function ModelRunEditorPage({
     }));
   }
 
-  const datasetStepContent = (
-    <div className="model-build-existing-dataset">
-      <label className="model-build-field">
-        <span>Taskset revision</span>
-        <select
-          aria-label="Taskset revision"
-          value={selectedTaskset?.id ?? ""}
-          onChange={(event) => {
-            const taskset = state?.tasksets.find(
-              (candidate) => candidate.id === event.target.value
-            );
-            if (taskset) selectTaskset(taskset);
-          }}
-        >
-          <option value="">
-            {state?.tasksets.length ? "Select a Taskset" : "No Tasksets yet"}
-          </option>
-          {state?.tasksets.map((taskset) => (
-            <option
-              key={`${taskset.id}:${taskset.revision}`}
-              value={taskset.id}
-            >
-              {taskset.name} · r{taskset.revision} ·{" "}
-              {taskset.readiness?.ready ? "ready" : "needs work"}
-            </option>
-          ))}
-        </select>
-      </label>
-      <button
-        className="training-button secondary"
-        type="button"
-        disabled={!draft.buildIntent}
-        title={
-          draft.buildIntent
-            ? undefined
-            : "Choose a goal before building a Taskset."
-        }
-        onClick={() => {
-          setDraft((current) => ({
-            ...current,
-            datasetMode: "build",
-            tasksetRef: null,
-            updatedAt: new Date().toISOString(),
-          }));
-          setDatasetBuilderOpen(true);
-        }}
-      >
-        {draft.datasetMode === "build"
-          ? "Continue building Taskset"
-          : "Build a Taskset"}
-      </button>
-    </div>
-  );
-
   if (datasetBuilderOpen && draft.buildIntent) {
     return (
       <main
@@ -472,97 +402,19 @@ export function ModelRunEditorPage({
   return (
     <>
       <main className="model-build-page" aria-label="Run setup">
-        <header className="model-build-header">
-          <div>
-            {persistedProject ? (
-              <>
-                <h1 className="model-build-name">New run</h1>
-                <p>{project.name}</p>
-              </>
-            ) : (
-              <>
-                {editingName ? (
-                  <input
-                    aria-label="Model name"
-                    autoFocus
-                    className="model-build-name model-build-name-input"
-                    value={project.name}
-                    onBlur={() => {
-                      setProject((current) => ({
-                        ...current,
-                        name: current.name.trim() || nameBeforeEditRef.current,
-                        updatedAt: new Date().toISOString(),
-                      }));
-                      setEditingName(false);
-                    }}
-                    onChange={(event) =>
-                      setProject((current) => ({
-                        ...current,
-                        name: event.target.value,
-                        updatedAt: new Date().toISOString(),
-                      }))
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                      if (event.key === "Escape") {
-                        setProject((current) => ({
-                          ...current,
-                          name: nameBeforeEditRef.current,
-                          updatedAt: new Date().toISOString(),
-                        }));
-                        setEditingName(false);
-                      }
-                    }}
-                  />
-                ) : (
-                  <button
-                    aria-label={`Rename ${project.name}`}
-                    className="model-build-name model-build-name-button"
-                    type="button"
-                    onClick={() => {
-                      nameBeforeEditRef.current = project.name;
-                      setEditingName(true);
-                    }}
-                  >
-                    {project.name}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-          <div className="model-build-actions">
-            <button
-              id="model-run-editor-cancel"
-              className="training-button secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => void cancel()}
-            >
-              Cancel
-            </button>
-            <button
-              className="training-button secondary"
-              type="button"
-              disabled={busy || !dirty || !project.name.trim()}
-              onClick={() => void save()}
-            >
-              Save
-            </button>
-            <span
-              className="model-build-run-control"
-              title={pageReason ?? launchState.actionLabel}
-            >
-              <button
-                className="training-button"
-                type="button"
-                disabled={!canRun}
-                onClick={() => void launch()}
-              >
-                {launchState.actionLabel}
-              </button>
-            </span>
-          </div>
-        </header>
+        <ModelRunEditorHeader
+          project={project}
+          persisted={Boolean(persistedProject)}
+          busy={busy}
+          dirty={dirty}
+          canRun={canRun}
+          pageReason={pageReason}
+          actionLabel={launchState.actionLabel}
+          onProjectChange={setProject}
+          onCancel={() => void cancel()}
+          onSave={() => void save()}
+          onLaunch={() => void launch()}
+        />
 
         <div
           className="training-detail-tabs model-setup-tabs"
@@ -584,277 +436,34 @@ export function ModelRunEditorPage({
         </div>
 
         {activeSetupTab === "setup" ? (
-          <>
-            <ModelSetupSteps
-              activeStep={activeSetupStep}
-              steps={MODEL_SETUP_STEPS.map((step) => ({
-                ...step,
-                complete: setupStepComplete(
-                  step.id,
-                  draft,
-                  selectedTaskset,
-                  canRun
-                ),
-              }))}
-              onStepChange={setActiveSetupStep}
-            />
-
-            {activeSetupStep === "goal" ? (
-              <section className="model-build-section">
-                <div className="model-build-section-heading">
-                  <h2>What do you want to build?</h2>
-                </div>
-                <TrainingGoalCards
-                  value={draft.buildIntent}
-                  onChange={(buildIntent) => {
-                    setDraft((current) => ({
-                      ...current,
-                      buildIntent,
-                      buildSpecification:
-                        current.buildSpecification?.kind === buildIntent
-                          ? current.buildSpecification
-                          : null,
-                      updatedAt: new Date().toISOString(),
-                    }));
-                    setActiveSetupStep("dataset");
-                  }}
-                />
-              </section>
-            ) : activeSetupStep === "dataset" ? (
-              <section className="model-build-section">
-                <div className="model-build-section-heading">
-                  <div>
-                    <h2>Choose or build a Taskset</h2>
-                    <p>{datasetGuidance(draft.buildIntent)}</p>
-                  </div>
-                </div>
-                <div className="model-build-dataset-step">
-                  {datasetStepContent}
-                </div>
-              </section>
-            ) : activeSetupStep === "method" ? (
-              <section className="model-build-section">
-                <div className="model-build-section-heading">
-                  <h2>Choose a training method</h2>
-                </div>
-                <div className="model-build-method-grid">
-                  {methodCards.map((candidate) => (
-                    <button
-                      className={
-                        draft.method === candidate.method
-                          ? "model-build-method selected"
-                          : "model-build-method"
-                      }
-                      key={candidate.method}
-                      type="button"
-                      disabled={!candidate.available}
-                      title={candidate.available ? undefined : candidate.reason}
-                      onClick={() => {
-                        setDraft((current) => ({
-                          ...current,
-                          method: candidate.method,
-                          runPreset: "standard",
-                          recipe: null,
-                          updatedAt: new Date().toISOString(),
-                        }));
-                        setActiveSetupStep("configuration");
-                      }}
-                    >
-                      <span>
-                        <strong>{candidate.method.toUpperCase()}</strong>
-                        <em>{candidate.state}</em>
-                      </span>
-                      <small>{candidate.reason}</small>
-                      <span
-                        className="model-build-method-targets"
-                        aria-label="Execution targets"
-                      >
-                        {candidate.executionTargets.map((target) => (
-                          <span
-                            aria-label={`${target.label}: ${
-                              target.available
-                                ? "available"
-                                : target.reason
-                            }`}
-                            className={
-                              target.available
-                                ? "model-build-target-pill available"
-                                : "model-build-target-pill unavailable"
-                            }
-                            key={target.id}
-                            title={
-                              target.available ? undefined : target.reason
-                            }
-                          >
-                            {target.label}
-                          </span>
-                        ))}
-                      </span>
-                      <span
-                        className="training-choice-indicator"
-                        aria-hidden="true"
-                      />
-                    </button>
-                  ))}
-                </div>
-              </section>
-            ) : (
-              <section className="model-build-section">
-                <div className="model-build-section-heading">
-                  <div>
-                    <h2>Choose a model</h2>
-                    <p>Select the starting model and where it will train.</p>
-                  </div>
-                </div>
-                {selectedTaskset &&
-                (draft.method === "sft" ||
-                  draft.method === "dpo" ||
-                  draft.method === "grpo" ||
-                  draft.method === "ppo") ? (
-                  <TrainingStartDialog
-                    key={`${selectedTaskset.id}:${selectedTaskset.revision}:${draft.method}:${draft.runPreset}`}
-                    baseModelCandidates={state?.baseModelCandidates ?? []}
-                    connection={connection}
-                    taskset={selectedTaskset}
-                    modelId={draft.modelId}
-                    destinations={state?.destinations ?? []}
-                    initialMethod={draft.method}
-                    preferredBaseModel={draft.baseModel}
-                    busy={[
-                      "baseline",
-                      "prepare-training",
-                      "prepare-model-run",
-                      "start-prepared-training",
-                      "start-training",
-                      "start-model-run",
-                    ].includes(training.busyAction ?? "")}
-                    busyAction={training.busyAction}
-                    baselineReports={
-                      state?.baselineReports.filter(
-                        (report) =>
-                          report.tasksetId === selectedTaskset.id &&
-                          report.tasksetHash === selectedTaskset.contentHash
-                      ) ?? []
-                    }
-                    baselineRuns={
-                      state?.baselineRuns.filter(
-                        (run) => run.tasksetId === selectedTaskset.id
-                      ) ?? []
-                    }
-                    presentation="embedded"
-                    hideActions
-                    runControlId={RUN_CONTROL_ID}
-                    runPreset={draft.runPreset ?? "standard"}
-                    hideMethodTabs
-                    approvalPresentation="dialog"
-                    configurationContent={
-                      <details className="model-run-options">
-                        <summary>
-                          <span>Training configuration</span>
-                          <strong>
-                            {presetFor(draft.method, draft.runPreset)?.label ??
-                              "Recommended"}
-                          </strong>
-                        </summary>
-                        <label className="model-build-field">
-                          <span>Training budget</span>
-                          <select
-                            aria-label="Training budget"
-                            value={draft.runPreset ?? "standard"}
-                            onChange={(event) =>
-                              setDraft((current) => ({
-                                ...current,
-                                runPreset: event.target
-                                  .value as ModelRunPreset,
-                                recipe: null,
-                                updatedAt: new Date().toISOString(),
-                              }))
-                            }
-                          >
-                            {presetsFor(draft.method).map((preset) => (
-                              <option key={preset.id} value={preset.id}>
-                                {preset.label}
-                              </option>
-                            ))}
-                          </select>
-                          <small>
-                            {presetFor(draft.method, draft.runPreset)
-                              ?.description ??
-                              "Use Taskset-aware recommended limits."}
-                          </small>
-                        </label>
-                      </details>
-                    }
-                    onReadinessChange={updateLaunchState}
-                    onConfigurationChange={updateConfiguration}
-                    onClose={() => undefined}
-                    onOpenProviderSettings={onOpenProviderSettings}
-                    onRunBaseline={async (model, options) =>
-                      Boolean(
-                        await training.actions.baseline(
-                          selectedTaskset.id,
-                          model,
-                          options
-                        )
-                      )
-                    }
-                    onPrepare={(destinationId, recipe, approval) =>
-                      training.actions.prepareTraining({
-                        modelId: draft.modelId,
-                        tasksetId: selectedTaskset.id,
-                        destinationId,
-                        recipe,
-                        exportApproved: approval.exportApproved,
-                        retentionDays: approval.retentionDays,
-                        region: approval.region,
-                      })
-                    }
-                    onConfirmPrepared={async (prepared, maximumCostUsd) => {
-                      const started =
-                        await training.actions.startPreparedTraining({
-                          planId: prepared.plan.id,
-                          bundleId: prepared.bundle.id,
-                          maximumCostUsd,
-                        });
-                      if (!started) return false;
-                      await training.actions.saveModelRunDraft({
-                        ...draft,
-                        status: "launched",
-                        updatedAt: new Date().toISOString(),
-                      });
-                      await onFinished(draft.modelId, selectedTaskset.id);
-                      return true;
-                    }}
-                    onStart={async (
-                      destinationId,
-                      recipe,
-                      approval: TrainingStartApproval
-                    ) => {
-                      const started = await training.actions.startTraining({
-                        modelId: draft.modelId,
-                        tasksetId: selectedTaskset.id,
-                        destinationId,
-                        recipe,
-                        ...approval,
-                      });
-                      if (!started) return false;
-                      await training.actions.saveModelRunDraft({
-                        ...draft,
-                        status: "launched",
-                        updatedAt: new Date().toISOString(),
-                      });
-                      await onFinished(draft.modelId, selectedTaskset.id);
-                      return true;
-                    }}
-                  />
-                ) : (
-                  <div className="model-build-empty">
-                    Choose a Taskset and training method to select a model.
-                  </div>
-                )}
-              </section>
-            )}
-          </>
+          <ModelRunSetupContent
+            activeStep={activeSetupStep}
+            onStepChange={setActiveSetupStep}
+            draft={draft}
+            setDraft={setDraft}
+            selectedTaskset={selectedTaskset}
+            methodCards={methodCards}
+            tasksets={state?.tasksets ?? []}
+            baseModelCandidates={state?.baseModelCandidates ?? []}
+            destinations={state?.destinations ?? []}
+            connection={connection}
+            training={training}
+            canRun={canRun}
+            onSelectTaskset={selectTaskset}
+            onOpenDatasetBuilder={() => {
+              setDraft((current) => ({
+                ...current,
+                datasetMode: "build",
+                tasksetRef: null,
+                updatedAt: new Date().toISOString(),
+              }));
+              setDatasetBuilderOpen(true);
+            }}
+            onLaunchStateChange={updateLaunchState}
+            onConfigurationChange={updateConfiguration}
+            onOpenProviderSettings={onOpenProviderSettings}
+            onFinished={onFinished}
+          />
         ) : activeSetupTab === "overview" ? (
           <ModelSetupOverviewPreview
             project={project}

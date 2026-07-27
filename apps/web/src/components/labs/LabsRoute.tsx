@@ -621,9 +621,6 @@ export function LabsRoute({
             </div>
           ) : null}
           <WorkproductsTable
-            frontierBaselineRuns={
-              training.training.payload?.frontierBaselineRuns ?? []
-            }
             loading={createImprove.loading && !workproducts.length}
             items={homeWorkproducts.slice(
               (page - 1) * PAGE_SIZE,

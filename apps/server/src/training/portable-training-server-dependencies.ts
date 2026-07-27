@@ -21,18 +21,13 @@ import {
   type ConnectedWorkerEnvironment,
 } from "./configured-connected-worker.js";
 import {
-  createConfiguredSandboxM8,
-  type SandboxM8Environment,
-} from "./configured-sandbox-m8.js";
-import {
   createConfiguredPrimeRaw,
   type PrimeRawEnvironment,
 } from "./configured-prime-raw.js";
 import { createVerifiedWorkerCatalogLoader } from "./worker-catalog-loader.js";
 
 type PortableTrainingEnvironment = ConnectedWorkerEnvironment &
-  PrimeRawEnvironment &
-  SandboxM8Environment & {
+  PrimeRawEnvironment & {
   OPENPOND_WORKER_CATALOG_PATH?: string;
   OPENPOND_WORKER_CATALOG_PUBLIC_KEY_PATH?: string;
   OPENPOND_WORKER_CATALOG_SIGNING_KEY_ID?: string;
@@ -43,7 +38,6 @@ export type PortableTrainingAdapterComposition = {
   runtimes?: HarnessRuntimeAdapter[];
   workerImageDigest?: string;
   primeRawConfigured?: boolean;
-  sandboxManagedConfigured?: boolean;
   engineRoutes?: Array<{
     canonicalEngineId: string;
     route: TrainingEngineRoute;
@@ -60,20 +54,13 @@ export function createPortableTrainingServerDependencies(input: {
     storeDir: input.storeDir,
     environment: input.environment,
   });
-  const configuredSandbox = createConfiguredSandboxM8({
-    storeDir: input.storeDir,
-    environment: input.environment,
-  });
   const configuredPrime = createConfiguredPrimeRaw({
     storeDir: input.storeDir,
     environment: input.environment,
   });
   const composedAdapters = mergePortableAdapterComposition(
-    mergePortableAdapterComposition(
-      input.adapters,
-      configuredPrime ?? undefined,
-    ),
-    configuredSandbox?.adapters,
+    input.adapters,
+    configuredPrime ?? undefined,
   );
   const workerImages = new WorkerImageDistribution(
     new SpawnWorkerImageCommandRunner(),
@@ -96,13 +83,9 @@ export function createPortableTrainingServerDependencies(input: {
     connectedWorkerConfigured: configuredConnectedWorker !== null,
     connectedEngineConfigured:
       configuredConnectedWorker !== null ||
-      composedAdapters.primeRawConfigured === true ||
-      composedAdapters.sandboxManagedConfigured === true,
+      composedAdapters.primeRawConfigured === true,
     primeRawConfigured:
       composedAdapters.primeRawConfigured === true,
-    sandboxManagedConfigured:
-      composedAdapters.sandboxManagedConfigured === true,
-    sandboxBinding: configuredSandbox?.binding ?? null,
     connectedWorkerImageDigest:
       input.environment.OPENPOND_CONNECTED_WORKER_IMAGE_DIGEST ??
       composedAdapters.workerImageDigest ??
@@ -204,9 +187,6 @@ function mergePortableAdapterComposition(
     primeRawConfigured:
       first?.primeRawConfigured === true ||
       second?.primeRawConfigured === true,
-    sandboxManagedConfigured:
-      first?.sandboxManagedConfigured === true ||
-      second?.sandboxManagedConfigured === true,
   };
 }
 

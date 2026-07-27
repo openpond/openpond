@@ -72,7 +72,6 @@ export function createTaskMinerService(deps: {
       }
       const evidence = group.map((source) => evidenceFromSource(source, signature));
       const scorecard = scoreCandidate(group, evidence);
-      const crossSystem = crossSystemBaseline(group);
       const fingerprint = contentHash([input.profileId, signature]);
       const existing = await deps.store.findTaskCandidateByFingerprint(input.profileId, fingerprint);
       const timestamp = now();
@@ -87,25 +86,17 @@ export function createTaskMinerService(deps: {
         workflowSignature: signature,
         evidence,
         scorecard,
-        recommendation: crossSystemRecommendation(crossSystem)
-          ?? recommendTrainingTactic({
-            evidence,
-            scorecard,
-            changingFacts: group.some((source) => source.metadata.changingFacts === true),
-            baselineReward: crossSystem?.reward,
-          }),
+        recommendation: recommendTrainingTactic({
+          evidence,
+          scorecard,
+          changingFacts: group.some((source) => source.metadata.changingFacts === true),
+        }),
         mergedIntoId: existing?.mergedIntoId ?? null,
         createdAt: existing?.createdAt ?? timestamp,
         updatedAt: timestamp,
         metadata: {
           sourceCount: group.length,
           clustering: activeConfig.clustering,
-          ...(crossSystem ? {
-            flagship: "cross-system-operations",
-            toolContractHash: crossSystem.toolContractHash,
-            baselineReward: crossSystem.reward,
-            approvedSuccessfulTrajectoryIds: crossSystem.approvedSuccessfulTrajectoryIds,
-          } : {}),
         },
       });
       await deps.store.upsertTaskCandidate(candidate);
@@ -340,47 +331,6 @@ function scoreCandidate(sources: TrainingSourceRef[], evidence: TaskCandidateEvi
   const signalQuality = evidence.reduce((sum, item) => sum + item.confidence, 0) / Math.max(1, evidence.length);
   const overall = Math.max(0, Math.min(1, recurrence * 0.2 + verifiable * 0.2 + signalQuality * 0.25 + frontierCost * 0.15 + (1 - privacyRisk) * 0.2));
   return { frequency: recurrence, businessValue: isCrossSystem ? 0.85 : 0.6, frontierCost, signalQuality, verifiability: verifiable, repeatability: recurrence, privacyRisk, overall };
-}
-
-function crossSystemBaseline(sources: TrainingSourceRef[]): {
-  toolContractHash: string;
-  reward: { count: number; mean: number; min: number; max: number; variance: number };
-  approvedSuccessfulTrajectoryIds: string[];
-} | null {
-  const traces = sources.map((source) => metadataRecord(source.metadata.crossSystemOperations)).filter((value): value is Record<string, unknown> => Boolean(value));
-  if (traces.length !== sources.length || traces.length < 3) return null;
-  const hashes = new Set(traces.map((trace) => typeof trace.toolContractHash === "string" ? trace.toolContractHash : ""));
-  if (hashes.size !== 1 || ![...hashes][0]) return null;
-  const rewards = traces.map((trace) => typeof trace.reward === "number" ? trace.reward : null).filter((value): value is number => value !== null && Number.isFinite(value));
-  if (rewards.length < 3) return null;
-  const mean = rewards.reduce((sum, reward) => sum + reward, 0) / rewards.length;
-  const variance = rewards.reduce((sum, reward) => sum + (reward - mean) ** 2, 0) / rewards.length;
-  return {
-    toolContractHash: [...hashes][0]!,
-    reward: { count: rewards.length, mean, min: Math.min(...rewards), max: Math.max(...rewards), variance },
-    approvedSuccessfulTrajectoryIds: traces.flatMap((trace) => trace.outcome === "correct" && trace.approved === true && typeof trace.trajectoryId === "string" ? [trace.trajectoryId] : []),
-  };
-}
-
-function crossSystemRecommendation(
-  baseline: ReturnType<typeof crossSystemBaseline>,
-) {
-  if (!baseline || baseline.reward.variance > 0) return null;
-  return {
-    tactic: "grpo_rft" as const,
-    eligible: false,
-    reasons: [
-      "The deterministic Cross-System environment has an exact reward, but the measured base policy did not reach distinct reward-bearing states.",
-    ],
-    blockers: [
-      "The base policy produced zero eligible reward variance. Add approved expert bootstrap trajectories or use a policy that reaches reward-bearing states before paid RFT.",
-    ],
-    requiredSignals: [
-      "non-trivial frozen reward variance",
-      "approved expert trajectories when bootstrapping",
-    ],
-    generatedBy: "baseline_reassessment" as const,
-  };
 }
 
 function metadataRecord(value: unknown): Record<string, unknown> | null {

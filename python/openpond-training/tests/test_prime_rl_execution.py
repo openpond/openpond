@@ -129,7 +129,7 @@ def plan() -> dict:
         "capabilityReceipt": "a" * 64,
     }
     runtime = {
-        "adapterId": "sandbox-latitude",
+        "adapterId": "local-harness",
         "placement": "remote",
         "capabilityReceipt": "9" * 64,
         "runtimeVersion": "1",

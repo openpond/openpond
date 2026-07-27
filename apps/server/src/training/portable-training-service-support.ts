@@ -30,16 +30,10 @@ export function createPortableTrainingServiceSupport(input: {
   connectedWorkerConfigured?: boolean;
   connectedEngineConfigured?: boolean;
   primeRawConfigured?: boolean;
-  sandboxManagedConfigured?: boolean;
   connectedWorkerImageDigest?: string | null;
   searchTrainingModels?: (
     query: string,
   ) => Promise<RegistryModelSearchResult[]>;
-  sandboxBinding?: {
-    runtime: import("@openpond/contracts").HarnessRuntimeTargetBinding;
-    compute: import("@openpond/contracts").ComputeTargetBinding;
-    resolvedBundleHash: string;
-  } | null;
 }) {
   async function catalog(query = "") {
     const [
@@ -75,8 +69,6 @@ export function createPortableTrainingServiceSupport(input: {
         input.connectedEngineConfigured ?? false,
       primeRawConfigured:
         input.primeRawConfigured ?? false,
-      sandboxManagedConfigured:
-        input.sandboxManagedConfigured ?? false,
       connectedWorkerImageDigest:
         input.connectedWorkerImageDigest ?? null,
       adapterCompute,
@@ -100,7 +92,6 @@ export function createPortableTrainingServiceSupport(input: {
     const bindings = resolvePortableBindings({
       modelRun,
       catalog: trainingCatalog,
-      sandboxBinding: input.sandboxBinding,
     });
     const worker = bindings.engine
       ? trainingCatalog.workers.find(
@@ -113,9 +104,7 @@ export function createPortableTrainingServiceSupport(input: {
       ((input.connectedWorkerConfigured === true &&
         input.connectedWorkerImageDigest === worker.image.digest) ||
         (modelRun.destinationId === "prime_hosted" &&
-          input.primeRawConfigured === true) ||
-        (modelRun.destinationId === "openpond_managed" &&
-          input.sandboxManagedConfigured === true));
+          input.primeRawConfigured === true));
     const workerCached = configuredWorkerAlreadyRunning
       ? true
       : worker && input.workerImages

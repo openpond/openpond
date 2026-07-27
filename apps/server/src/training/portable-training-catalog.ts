@@ -87,7 +87,6 @@ export function createPortableTrainingCatalog(input: {
   connectedWorkerConfigured?: boolean;
   connectedEngineConfigured?: boolean;
   primeRawConfigured?: boolean;
-  sandboxManagedConfigured?: boolean;
   connectedWorkerImageDigest?: string | null;
   adapterCompute?: ComputeTargetCapabilities[];
   adapterRuntimes?: HarnessRuntimeCapabilities[];
@@ -99,7 +98,6 @@ export function createPortableTrainingCatalog(input: {
     input.inventory,
     generatedAt,
     input.connectedWorkerConfigured ?? false,
-    input.sandboxManagedConfigured ?? false,
     input.primeRawConfigured ?? false,
     input.adapterCompute ?? [],
   );
@@ -205,8 +203,7 @@ export function createPortableTrainingCatalog(input: {
           : !option
           ? ("unsupported" as const)
           : !target.available
-            ? target.computeAdapterId === "prime-raw" ||
-              target.computeAdapterId === "sandbox-connected-gpu"
+            ? target.computeAdapterId === "prime-raw"
               ? ("compute_setup_required" as const)
               : engine && !engine.available &&
                   target.engineAdapterId === "connected-prime-rl"
@@ -361,17 +358,6 @@ function trainingTargets(input: {
       ...CONNECTED_TARGET_POLICY,
     },
     {
-      id: "sandbox-managed",
-      label: "OpenPond Managed",
-      description: "Let OpenPond prepare and operate the compute for this training run.",
-      destinationId: "openpond_managed",
-      computeAdapterId: "sandbox-connected-gpu",
-      runtimeAdapterId: "sandbox-latitude",
-      engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["Managed"],
-      ...CONNECTED_TARGET_POLICY,
-    },
-    {
       id: "fireworks-managed",
       label: "Fireworks",
       description: "Use provider-managed training after quote and approval.",
@@ -475,10 +461,6 @@ export function preparePortableModelRun(input: {
 export function resolvePortableBindings(input: {
   modelRun: ModelRunDraft;
   catalog: TrainingCatalog;
-  sandboxBinding?: {
-    runtime: HarnessRuntimeTargetBinding;
-    compute: ComputeTargetBinding;
-  } | null;
 }): {
   runtime: HarnessRuntimeTargetBinding | null;
   compute: ComputeTargetBinding | null;
@@ -489,11 +471,9 @@ export function resolvePortableBindings(input: {
   const computeId = computeIdForDestination(destinationId);
   const engineId = engineIdForDestination(destinationId);
   const runtimeId =
-    destinationId === "openpond_managed"
-      ? "sandbox-latitude"
-      : destinationId === "fireworks"
-        ? "provider-native"
-        : "local-harness";
+    destinationId === "fireworks"
+      ? "provider-native"
+      : "local-harness";
   const compute = input.catalog.compute.find(
     (candidate) => candidate.adapterId === computeId,
   );
@@ -509,32 +489,18 @@ export function resolvePortableBindings(input: {
   const worker = input.catalog.workers.find(
     (candidate) => candidate.engineAdapterId === engineId,
   );
-  const dataPlane =
-    runtimeId === "sandbox-latitude"
-      ? latitudeDataPlaneReceipt()
-      : null;
   return {
-    runtime:
-      destinationId === "openpond_managed" &&
-      input.sandboxBinding
-        ? input.sandboxBinding.runtime
-        : {
+    runtime: {
       adapterId: runtime.adapterId,
       placement:
         runtimeId === "provider-native"
           ? "provider_native"
-          : runtimeId === "sandbox-latitude"
-            ? "remote"
-            : "local",
+          : "local",
       capabilityReceipt: runtime.capabilityReceipt,
       runtimeVersion: "1",
-      dataPlane,
+      dataPlane: null,
     },
-    compute:
-      destinationId === "openpond_managed" &&
-      input.sandboxBinding
-        ? input.sandboxBinding.compute
-        : {
+    compute: {
       adapterId: compute.adapterId,
       kind: compute.kind,
       deviceOrPool: compute.devices[0]?.id ?? compute.adapterId,
@@ -555,7 +521,6 @@ function computeCapabilities(
   inventory: ComputeInventory | null,
   checkedAt: string,
   connectedWorkerConfigured: boolean,
-  sandboxManagedConfigured: boolean,
   primeRawConfigured: boolean,
   adapters: ComputeTargetCapabilities[],
 ): ComputeTargetCapabilities[] {
@@ -639,16 +604,6 @@ function computeCapabilities(
       primeRawConfigured
         ? null
         : "Connect and verify Prime before requesting a fresh raw-GPU quote.",
-    ),
-    capability(
-      "sandbox-connected-gpu",
-      "managed",
-      "sandbox",
-      [],
-      sandboxManagedConfigured,
-      sandboxManagedConfigured
-        ? null
-        : "OpenPond Managed is not available for this account.",
     ),
     capability("fireworks-managed", "managed", "fireworks", [], true, null),
   ];
@@ -768,7 +723,6 @@ function runtimeCapabilities(
   });
   const defaults = [
     runtime("local-harness", ["local"], true),
-    runtime("sandbox-latitude", ["remote"], true),
     runtime("provider-native", ["provider_native"], false),
   ];
   return mergeAdapterCapabilities(defaults, adapters);
@@ -787,19 +741,6 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
   return [...resolved.values()];
 }
 
-function latitudeDataPlaneReceipt(): NonNullable<
-  HarnessRuntimeTargetBinding["dataPlane"]
-> {
-  const content = {
-    provider: "latitude",
-    dataPlaneId: "openpond-latitude-staging",
-    cellId: "openpond-latitude-staging-k8s",
-    runnerPoolId: "openpond-latitude-staging-k8s:default",
-    runtimeImageDigest: `sha256:${sha256("openpond-latitude-runtime-v1")}`,
-  };
-  return { ...content, capabilityReceipt: contentHash(content) };
-}
-
 function computeIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-cpu",
@@ -807,7 +748,6 @@ function computeIdForDestination(destinationId: string): string {
     local_mlx: "local-mlx",
     ssh_gpu: "ssh-worker",
     prime_hosted: "prime-raw",
-    openpond_managed: "sandbox-connected-gpu",
     fireworks: "fireworks-managed",
   };
   return values[destinationId] ?? "unsupported";
@@ -820,7 +760,6 @@ function engineIdForDestination(destinationId: string): string {
     local_mlx: "local-mlx",
     ssh_gpu: "connected-prime-rl",
     prime_hosted: "connected-prime-rl",
-    openpond_managed: "connected-prime-rl",
     fireworks: "fireworks-native",
   };
   return values[destinationId] ?? "unsupported";

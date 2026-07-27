@@ -13,7 +13,6 @@
     { "path": "packages/trainer-connected" },
     { "path": "packages/compute-provider-prime" },
     { "path": "packages/trainer-fireworks" },
-    { "path": "packages/trainer-sandbox" },
     { "path": "apps/server" },
     { "path": "apps/web" },
     { "path": "apps/terminal" },

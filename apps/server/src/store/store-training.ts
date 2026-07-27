@@ -1,6 +1,4 @@
 import type {
-  BaselineReport,
-  CrossSystemFrontierBaselineRun,
   GradeResult,
   GraderAuditReport,
   ModelArtifactLineage,
@@ -16,7 +14,6 @@ import type {
   TaskMinerConfig,
   TaskMinerRun,
   Taskset,
-  TasksetBaselineRun,
   TasksetReadinessReport,
   TrainingApproval,
   TrainingArtifact,
@@ -29,8 +26,6 @@ import type {
   Turn,
 } from "@openpond/contracts";
 import {
-  BaselineReportSchema,
-  CrossSystemFrontierBaselineRunSchema,
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
@@ -45,7 +40,6 @@ import {
   TaskMinerConfigSchema,
   TaskMinerRunSchema,
   TasksetReadinessReportSchema,
-  TasksetBaselineRunSchema,
   TasksetSchema,
   TrainingApprovalSchema,
   TrainingArtifactSchema,
@@ -450,7 +444,6 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
         await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
-        await this.run("DELETE FROM baseline_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
@@ -552,60 +545,6 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
-  async saveBaselineReport(reportInput: BaselineReport): Promise<BaselineReport> {
-    const report = BaselineReportSchema.parse(reportInput);
-    await this.upsertPayload(
-      `INSERT INTO baseline_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`,
-      [report.id, report.tasksetId, JSON.stringify(report), report.createdAt],
-    );
-    return report;
-  }
-
-  async listBaselineReports(tasksetId: string): Promise<BaselineReport[]> {
-    return this.listParsedPayloads("SELECT payload FROM baseline_reports WHERE taskset_id = ? ORDER BY created_at DESC", [tasksetId], BaselineReportSchema.parse);
-  }
-
-  async saveTasksetBaselineRun(runInput: TasksetBaselineRun): Promise<TasksetBaselineRun> {
-    const run = TasksetBaselineRunSchema.parse(runInput);
-    await this.upsertPayload(
-      `INSERT INTO taskset_baseline_runs (id, profile_id, taskset_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, taskset_id = excluded.taskset_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [run.id, run.profileId, run.tasksetId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
-    );
-    return run;
-  }
-
-  async getTasksetBaselineRun(id: string): Promise<TasksetBaselineRun | null> {
-    return this.getParsedPayload(
-      "SELECT payload FROM taskset_baseline_runs WHERE id = ?",
-      [id],
-      TasksetBaselineRunSchema.parse,
-    );
-  }
-
-  async listTasksetBaselineRuns(input: { profileId?: string; tasksetId?: string } = {}): Promise<TasksetBaselineRun[]> {
-    if (input.tasksetId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM taskset_baseline_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
-        [input.tasksetId],
-        TasksetBaselineRunSchema.parse,
-      );
-    }
-    if (input.profileId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM taskset_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC",
-        [input.profileId],
-        TasksetBaselineRunSchema.parse,
-      );
-    }
-    return this.listParsedPayloads(
-      "SELECT payload FROM taskset_baseline_runs ORDER BY updated_at DESC",
-      [],
-      TasksetBaselineRunSchema.parse,
-    );
-  }
-
   async saveGraderAuditReport(reportInput: GraderAuditReport): Promise<GraderAuditReport> {
     const report = GraderAuditReportSchema.parse(reportInput);
     await this.upsertPayload(`INSERT INTO grader_audit_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`, [report.id, report.tasksetId, JSON.stringify(report), report.createdAt]);
@@ -662,30 +601,6 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     return profileId
       ? this.listParsedPayloads("SELECT payload FROM task_miner_runs WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskMinerRunSchema.parse)
       : this.listParsedPayloads("SELECT payload FROM task_miner_runs ORDER BY updated_at DESC", [], TaskMinerRunSchema.parse);
-  }
-
-  async saveCrossSystemFrontierBaselineRun(runInput: CrossSystemFrontierBaselineRun): Promise<CrossSystemFrontierBaselineRun> {
-    const run = CrossSystemFrontierBaselineRunSchema.parse(runInput);
-    await this.upsertPayload(
-      `INSERT INTO cross_system_frontier_baseline_runs (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [run.id, run.profileId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
-    );
-    return run;
-  }
-
-  async getCrossSystemFrontierBaselineRun(id: string): Promise<CrossSystemFrontierBaselineRun | null> {
-    return this.getParsedPayload("SELECT payload FROM cross_system_frontier_baseline_runs WHERE id = ?", [id], CrossSystemFrontierBaselineRunSchema.parse);
-  }
-
-  async listCrossSystemFrontierBaselineRuns(profileId?: string): Promise<CrossSystemFrontierBaselineRun[]> {
-    return this.listParsedPayloads(
-      profileId
-        ? "SELECT payload FROM cross_system_frontier_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC"
-        : "SELECT payload FROM cross_system_frontier_baseline_runs ORDER BY updated_at DESC",
-      profileId ? [profileId] : [],
-      CrossSystemFrontierBaselineRunSchema.parse,
-    );
   }
 
   async saveModelProject(projectInput: ModelProject): Promise<ModelProject> {

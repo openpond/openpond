@@ -20,15 +20,12 @@ import {
 } from "../training/training-model-data";
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import {
-  labModelBaselineRuns,
   labModelJobs,
   labModelPlans,
   labModelTasksets,
   labModelVersions,
 } from "./lab-models";
 import {
-  baselineRunStatusLabel,
-  isActiveBaselineRun,
   modelVersionEntries,
   type ModelWorkspaceProps,
 } from "./LabModelWorkspace";
@@ -66,10 +63,6 @@ export function LabModelVersionDetailPage({
     () => labModelVersions(workproduct, runs, state),
     [runs, state, workproduct]
   );
-  const baselineRuns = useMemo(
-    () => labModelBaselineRuns(workproduct, runs, state),
-    [runs, state, workproduct]
-  );
   const plans = useMemo(
     () => labModelPlans(workproduct, runs, state),
     [runs, state, workproduct]
@@ -79,8 +72,8 @@ export function LabModelVersionDetailPage({
     [plans]
   );
   const entries = useMemo(
-    () => modelVersionEntries(jobs, versions, baselineRuns),
-    [baselineRuns, jobs, versions]
+    () => modelVersionEntries(jobs, versions),
+    [jobs, versions]
   );
   const selected =
     entries.find((entry) => entry.key === selectedEntryKey) ?? null;
@@ -94,7 +87,6 @@ export function LabModelVersionDetailPage({
   const selectedEvaluationArtifactId =
     selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
   const managedServing = selectedVersion?.lineage.managedServing ?? null;
-  const selectedBaselineRun = selected?.baselineRun ?? null;
   const selectedPlan =
     selectedVersion?.plan ??
     (selectedJob ? planById.get(selectedJob.planId) ?? null : null);
@@ -103,7 +95,7 @@ export function LabModelVersionDetailPage({
     labModelTasksets(state).find(
       (taskset) =>
         taskset.id ===
-        (selectedBaselineRun?.tasksetId ?? selectedPlan?.tasksetId)
+        selectedPlan?.tasksetId
     ) ??
     null;
   const detail = useTrainingRunDetail(
@@ -181,28 +173,12 @@ export function LabModelVersionDetailPage({
       {activeRunTab === "summary" ? (
         <DetailSection
           title={
-            selectedBaselineRun
-              ? selectedBaselineRun.configuration.split === "train"
-                ? "Train-signal check"
-                : "Base-model check"
-              : selectedVersion
+            selectedVersion
               ? `Version ${selectedVersion.number}`
               : `${trainingMethodLabel(selectedPlan?.recipe.method)} attempt`
           }
           actions={
-            selectedBaselineRun && isActiveBaselineRun(selectedBaselineRun) ? (
-              <button
-                className="training-button secondary"
-                type="button"
-                onClick={() =>
-                  void training.actions.cancelBaselineRun(
-                    selectedBaselineRun.id
-                  )
-                }
-              >
-                Cancel check
-              </button>
-            ) : selectedVersion ? (
+            selectedVersion ? (
               <div className="training-table-actions">
                 {selectedTaskset ? (
                   <button
@@ -241,11 +217,9 @@ export function LabModelVersionDetailPage({
         >
           <dl className="labs-inline-facts">
             <Fact
-              label={selectedBaselineRun ? "Check status" : "Training status"}
+              label="Training status"
               value={
-                selectedBaselineRun
-                  ? baselineRunStatusLabel(selectedBaselineRun)
-                  : selectedJob
+                selectedJob
                   ? statusLabel(selectedJob.status)
                   : "Imported"
               }
@@ -263,19 +237,13 @@ export function LabModelVersionDetailPage({
             <Fact
               label="Training"
               value={
-                selectedBaselineRun
-                  ? "RFT readiness check"
-                  : trainingMethodLabel(selectedPlan?.recipe.method)
+                trainingMethodLabel(selectedPlan?.recipe.method)
               }
             />
             <Fact
               label="Base model"
               value={
-                selectedBaselineRun
-                  ? modelRefName(
-                      selectedBaselineRun.configuration.model.modelId
-                    )
-                  : baseModelName(selectedPlan)
+                baseModelName(selectedPlan)
               }
             />
             <Fact
@@ -285,9 +253,7 @@ export function LabModelVersionDetailPage({
             <Fact
               label="Compute"
               value={
-                selectedBaselineRun
-                  ? "Fireworks"
-                  : selectedPlan
+                selectedPlan
                   ? destinationLabel(selectedPlan.destinationId)
                   : selectedJob
                   ? destinationLabel(selectedJob.destinationId)
@@ -297,12 +263,7 @@ export function LabModelVersionDetailPage({
             <Fact
               label="Duration"
               value={
-                selectedBaselineRun
-                  ? formatDuration(
-                      selectedBaselineRun.startedAt,
-                      selectedBaselineRun.completedAt
-                    )
-                  : selectedJob
+                selectedJob
                   ? formatDuration(
                       selectedJob.startedAt,
                       selectedJob.completedAt
@@ -315,8 +276,6 @@ export function LabModelVersionDetailPage({
               value={
                 selectedVersion
                   ? `Version ${selectedVersion.number}`
-                  : selectedBaselineRun?.reportId
-                  ? "Check report"
                   : "No Version"
               }
             />
@@ -330,9 +289,9 @@ export function LabModelVersionDetailPage({
               Open {selectedTaskset.name}
             </button>
           ) : null}
-          {selectedBaselineRun?.error || selectedJob?.error ? (
+          {selectedJob?.error ? (
             <p className="labs-training-error">
-              {selectedBaselineRun?.error ?? selectedJob?.error}
+              {selectedJob.error}
             </p>
           ) : null}
           {selectedLifecycleRun?.receipt?.telemetry ? (
@@ -472,44 +431,21 @@ export function LabModelVersionDetailPage({
         <DetailSection title="Configuration and artifacts">
           <dl className="training-configuration-list">
             <Fact
-              label={selectedBaselineRun ? "Check run" : "Training attempt"}
-              value={
-                selectedBaselineRun?.id ?? selectedJob?.id ?? "Provider import"
-              }
+              label="Training attempt"
+              value={selectedJob?.id ?? "Provider import"}
             />
             <Fact
               label="Taskset"
               value={selectedTaskset?.name ?? "Unavailable"}
             />
             <Fact
-              label={selectedBaselineRun ? "Selection" : "Prepared data"}
-              value={
-                selectedBaselineRun
-                  ? `${selectedBaselineRun.configuration.taskLimit} prompts × ${selectedBaselineRun.configuration.attemptsPerTask} attempts`
-                  : selectedJob?.bundleHash ?? "Provider managed"
-              }
+              label="Prepared data"
+              value={selectedJob?.bundleHash ?? "Provider managed"}
             />
             <Fact
-              label={selectedBaselineRun ? "Provider deployment" : "Version ID"}
-              value={
-                selectedBaselineRun
-                  ? selectedBaselineRun.provider?.deploymentId ??
-                    "Not provisioned"
-                  : selectedVersion?.lineage.id ?? "No Version created"
-              }
+              label="Version ID"
+              value={selectedVersion?.lineage.id ?? "No Version created"}
             />
-            {selectedBaselineRun ? (
-              <Fact
-                label="Attempt progress"
-                value={`${selectedBaselineRun.progress.completedAttempts} of ${selectedBaselineRun.progress.totalAttempts}`}
-              />
-            ) : null}
-            {selectedBaselineRun?.provider?.statusCode ? (
-              <Fact
-                label="Provider status"
-                value={selectedBaselineRun.provider.statusCode}
-              />
-            ) : null}
           </dl>
         </DetailSection>
       ) : null}
@@ -523,7 +459,7 @@ export function LabModelVersionDetailPage({
           />
         ) : (
           <div className="training-run-placeholder">
-            {selectedBaselineRun?.error ?? "No run log entries yet."}
+            No run log entries yet.
           </div>
         )
       ) : null}

@@ -3,26 +3,10 @@ import type {
   BaseModelPreference,
   RftLossMethod,
   Taskset,
-  TasksetBaselineRun,
   TrainingDestinationId,
 } from "@openpond/contracts";
 
 export type PortableTrainingMethod = "sft" | "dpo" | "grpo" | "ppo";
-
-export function baselineRunLabel(run: TasksetBaselineRun | null): string {
-  if (!run) return "Starting train-signal check…";
-  if (run.status === "cancelling") return "Cancelling train-signal check…";
-  if (run.progress.stage === "provisioning") {
-    return "Preparing inference capacity…";
-  }
-  if (run.progress.stage === "running") {
-    return `Checking train signal… ${run.progress.completedAttempts}/${run.progress.totalAttempts}`;
-  }
-  if (run.progress.stage === "cleaning_up") {
-    return "Removing temporary deployment…";
-  }
-  return "Checking train signal…";
-}
 
 export function rftLossLabel(method: RftLossMethod): string {
   return method === "gspo-token" ? "GSPO-token" : method.toUpperCase();

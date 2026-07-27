@@ -196,7 +196,6 @@ function destinationLabel(destinationId: BaseModelExecutionOption["destinationId
   const labels: Partial<Record<BaseModelExecutionOption["destinationId"], string>> = {
     fireworks: "Fireworks",
     prime_hosted: "Prime Raw GPU",
-    openpond_managed: "OpenPond Managed",
     local_cpu_fixture: "Local CPU",
     local_cuda: "Local NVIDIA GPU",
     local_mlx: "Apple Silicon",

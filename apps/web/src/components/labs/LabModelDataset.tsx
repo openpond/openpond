@@ -13,7 +13,6 @@ import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
 import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { LabDatasetRuns } from "./LabDatasetRuns";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
 type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
@@ -27,7 +26,6 @@ const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
 const EXAMPLE_PAGE_SIZE = 10;
 export function LabModelDataset({
   artifact,
-  defaultModel,
   tab = "overview",
   taskset,
   onOpenFiles,
@@ -132,11 +130,6 @@ export function LabModelDataset({
   const rubricLabels = taskset.learningSignals.labels.filter(
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
-  const baselineRuns = training.payload?.baselineRuns.filter((run) =>
-    run.tasksetId === taskset.id) ?? [];
-  const latestBaselineReport = [...(training.payload?.baselineReports ?? [])]
-    .reverse()
-    .find((report) => report.tasksetId === taskset.id) ?? null;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
 
   async function runCheck(
@@ -206,30 +199,9 @@ export function LabModelDataset({
       <>
         <DetailSection title="Taskset checks">
           <p className="labs-detail-copy">
-            Test the reward and graders before creating a Model run. The train-signal check is a bounded evaluation and does not train a model.
+            Audit the reward and graders before creating a Model run.
           </p>
           <div className="labs-dataset-detail-actions">
-            <button
-              className="training-button"
-              disabled={training.busyAction !== null}
-              type="button"
-              onClick={() => void runCheck(
-                "Train-signal check",
-                () => training.actions.baseline(
-                  taskset.id,
-                  tasksetBaselineModel(taskset, defaultModel),
-                  {
-                    split: "train",
-                    taskLimit: 8,
-                    attemptsPerTask: 4,
-                    selectionStrategy:
-                      tasksetBaselineSelectionStrategy(artifact),
-                  },
-                ),
-              )}
-            >
-              Run train-signal check
-            </button>
             <button
               className="training-button secondary"
               disabled={training.busyAction !== null}
@@ -277,40 +249,7 @@ export function LabModelDataset({
               </ul>
             </div>
           ) : null}
-          {latestBaselineReport ? (
-            <dl className="labs-inline-facts">
-              <Fact label="Mean reward" value={formatMetric(latestBaselineReport.reward.mean)} />
-              <Fact label="Reward variance" value={formatMetric(latestBaselineReport.reward.variance)} />
-              <Fact
-                label="GRPO signal"
-                value={latestBaselineReport.rftSignal
-                  ? latestBaselineReport.rftSignal.passed ? "Passed" : "Needs work"
-                  : "Not measured"}
-              />
-              <Fact
-                label="Mixed reward groups"
-                value={String(latestBaselineReport.rftSignal?.mixedRewardGroups ?? 0)}
-              />
-              <Fact
-                label="Valid tool traces"
-                value={latestBaselineReport.rftSignal
-                  ? `${latestBaselineReport.rftSignal.validToolTraceAttempts}/${latestBaselineReport.rftSignal.toolEligibleAttempts}`
-                  : "Not measured"}
-              />
-              <Fact
-                label="Terminal decisions"
-                value={latestBaselineReport.rftSignal
-                  ? `${latestBaselineReport.rftSignal.terminalDecisionAttempts}/${latestBaselineReport.rftSignal.toolEligibleAttempts}`
-                  : "Not measured"}
-              />
-            </dl>
-          ) : null}
         </DetailSection>
-        <LabDatasetRuns
-          runs={baselineRuns}
-          taskset={taskset}
-          onCancel={training.actions.cancelBaselineRun}
-        />
         <DetailSection title="Graders">
           <div className="labs-dataset-grader-list">
             {taskset.graders.map((grader) => (
@@ -437,22 +376,6 @@ export function LabModelDataset({
   );
 }
 
-export function tasksetBaselineSelectionStrategy(
-  artifact: DatasetArtifactSummary | null,
-): "stable_hash_top_n" | "rft_easy_curriculum_v1" {
-  return artifact ? "rft_easy_curriculum_v1" : "stable_hash_top_n";
-}
-
-export function tasksetBaselineModel(
-  _taskset: Taskset,
-  defaultModel: ChatModelRef,
-): ChatModelRef {
-  return defaultModel;
-}
-
-function formatMetric(value: number | null): string {
-  return value === null ? "—" : value.toFixed(3);
-}
 
 function DatasetExample({
   index,

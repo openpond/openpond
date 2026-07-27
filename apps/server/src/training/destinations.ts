@@ -44,7 +44,7 @@ export class PortablePreparationTrainingDestination
   constructor(
     readonly id: Extract<
       TrainingDestinationId,
-      "ssh_gpu" | "prime_hosted" | "openpond_managed"
+      "ssh_gpu" | "prime_hosted"
     >,
     private readonly options: {
       resolveTaskset: TasksetResolver;

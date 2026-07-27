@@ -15,8 +15,6 @@ import {
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type BaseModelPreference,
-  type ChatModelRef,
-  type CrossSystemWorldSpec,
   type TaskCreationRequest,
   type TaskCreationSnapshot,
 } from "@openpond/contracts";
@@ -29,8 +27,6 @@ import type { createTrainingChatSearchService } from "./training-chat-search.js"
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import { trainingRunDetail } from "./run-detail.js";
-import { scriptedOpenPondModelsEnabled } from "../openpond/scripted-chat-provider.js";
-import { recordFixtureBaselineSources } from "./cross-system-operations/index.js";
 import {
   advanceUnexecutedModelRunTasksetRef,
   createExistingTasksetModelCreateImproveRun,
@@ -65,17 +61,6 @@ export function createTrainingApi(deps: {
   chatSearch: TrainingChatSearch;
   datasetArtifacts: DatasetArtifacts;
   datasetImports: DatasetImports;
-  frontierBaseline: {
-    startRun: (input: {
-      profileId: string;
-      createImproveRunId?: string | null;
-      localProjectId: string;
-      worldSpecs: CrossSystemWorldSpec[];
-      model: ChatModelRef;
-      reasoningEffort: ReturnType<typeof CodexReasoningEffortSchema.parse> | null;
-    }) => Promise<unknown>;
-    cancelRun: (id: string) => Promise<unknown>;
-  };
 }) {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
@@ -178,28 +163,6 @@ export function createTrainingApi(deps: {
     if (action === "cancel_dataset_import") {
       return deps.datasetImports.cancel(requiredString(input.importId, "importId"));
     }
-    if (action === "run_cross_system_frontier_baseline") {
-      return deps.frontierBaseline.startRun({
-        profileId: requiredString(input.profileId, "profileId"),
-        createImproveRunId: string(input.createImproveRunId),
-        localProjectId: requiredString(input.localProjectId, "localProjectId"),
-        worldSpecs: crossSystemWorldSpecs(input.worldSpecs),
-        model: ChatModelRefSchema.parse(input.model),
-        reasoningEffort: input.reasoningEffort ? CodexReasoningEffortSchema.parse(input.reasoningEffort) : null,
-      });
-    }
-    if (action === "cancel_cross_system_frontier_baseline") return deps.frontierBaseline.cancelRun(requiredString(input.runId, "runId"));
-    if (action === "record_cross_system_fixture_baseline") {
-      if (!scriptedOpenPondModelsEnabled()) throw new Error("The deterministic fixture baseline is available only in desktop harness mode.");
-      return recordFixtureBaselineSources({
-        store: deps.store,
-        profileId: requiredString(input.profileId, "profileId"),
-        sourceIds: requiredStringArray(input.sourceIds, "sourceIds"),
-        worldSpecs: crossSystemWorldSpecs(input.worldSpecs),
-        model: ChatModelRefSchema.parse(input.model),
-        approvedBy: string(input.approvedBy) ?? undefined,
-      });
-    }
     if (action === "remove_source") { await deps.store.deleteTrainingSource(requiredString(input.sourceId, "sourceId")); return { removed: true }; }
     if (action === "delete_taskset") return deps.training.deleteTaskset(requiredString(input.tasksetId, "tasksetId"));
     if (action === "create_model_from_taskset") {
@@ -264,24 +227,6 @@ export function createTrainingApi(deps: {
       return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
     if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
-    if (action === "baseline") return deps.evaluation.startBaseline({
-      tasksetId: requiredString(input.tasksetId, "tasksetId"),
-      targetModelId: string(input.targetModelId),
-      models: modelRefs(input.models),
-      seeds: numberArray(input.seeds),
-      attemptsPerTask: number(input.attemptsPerTask),
-      taskLimit: number(input.taskLimit),
-      selectionSeed: number(input.selectionSeed),
-      split: baselineSplit(input.split),
-      selectionStrategy: baselineSelectionStrategy(input.selectionStrategy),
-      sampling: baselineSampling(input.sampling),
-    });
-    if (action === "cancel_baseline_run") {
-      return deps.evaluation.cancelBaselineRun(
-        requiredString(input.runId, "runId"),
-      );
-    }
-    if (action === "regrade_baseline") return deps.evaluation.regradeBaseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), baselineReportId: requiredString(input.baselineReportId, "baselineReportId") });
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
@@ -452,8 +397,6 @@ export function createTrainingApi(deps: {
       candidates,
       minerConfig,
       minerRuns,
-      frontierBaselineRuns,
-      baselineRuns,
       modelProjects,
       modelRunDrafts,
       modelVersions,
@@ -469,8 +412,6 @@ export function createTrainingApi(deps: {
       deps.store.listTaskCandidates(profileId, "all"),
       deps.taskMiner.config(profileId),
       deps.store.listTaskMinerRuns(profileId),
-      deps.store.listCrossSystemFrontierBaselineRuns(profileId),
-      deps.store.listTasksetBaselineRuns({ profileId }),
       deps.store.listModelProjects(),
       deps.store.listModelRunDrafts(),
       deps.store.listModelVersions(),
@@ -479,7 +420,6 @@ export function createTrainingApi(deps: {
       deps.training.state(profileId),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
-    const baselineReports = (await Promise.all(tasksets.map((taskset) => deps.store.listBaselineReports(taskset.id)))).flat();
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
     return {
       schemaVersion: "openpond.trainingState.v1",
@@ -489,13 +429,10 @@ export function createTrainingApi(deps: {
       tasksets,
       datasetImports,
       datasetArtifacts,
-      baselineReports,
-      baselineRuns,
       graderAuditReports,
       candidates,
       minerConfig,
       minerRuns,
-      frontierBaselineRuns,
       modelProjects,
       modelRunDrafts,
       modelVersions,
@@ -741,23 +678,7 @@ function requiredBaseModelPreference(value: unknown, legacyId: unknown): BaseMod
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []; }
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
-function number(value: unknown): number | undefined { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
-function numberArray(value: unknown): number[] { return Array.isArray(value) ? value.filter((item): item is number => typeof item === "number" && Number.isFinite(item)) : []; }
-function modelRefs(value: unknown): ChatModelRef[] { if (!Array.isArray(value) || !value.length) throw new Error("At least one baseline model is required."); return value.map((item) => ChatModelRefSchema.parse(item)); }
-function baselineSplit(value: unknown): "train" | "validation" | "frozen_eval" | undefined { return value === "train" || value === "validation" || value === "frozen_eval" ? value : undefined; }
-function baselineSelectionStrategy(value: unknown): "stable_hash_top_n" | "rft_easy_curriculum_v1" | undefined { return value === "stable_hash_top_n" || value === "rft_easy_curriculum_v1" ? value : undefined; }
-function baselineSampling(value: unknown): { maxOutputTokens?: number; temperature?: number; topP?: number } | undefined {
-  const candidate = record(value);
-  const sampling = {
-    maxOutputTokens: number(candidate.maxOutputTokens),
-    temperature: number(candidate.temperature),
-    topP: number(candidate.topP),
-  };
-  return Object.values(sampling).some((item) => item !== undefined)
-    ? sampling
-    : undefined;
-}
 
 function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
   return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"
@@ -781,16 +702,3 @@ function tasksetTargetIntent(value: unknown): TaskCreationRequest["targetIntent"
   };
 }
 function creationSurface(value: unknown) { return value === "session_menu" || value === "bulk_selection" || value === "training_page" || value === "task_candidate" ? value : "slash_train"; }
-function crossSystemWorldSpecs(value: unknown): CrossSystemWorldSpec[] {
-  if (!Array.isArray(value)) throw new Error("worldSpecs must be an array.");
-  return value.map((item) => {
-    const candidate = record(item);
-    const seed = number(candidate.seed);
-    const split = candidate.split;
-    const difficulty = candidate.difficulty;
-    if (!Number.isInteger(seed) || (split !== "train" && split !== "validation" && split !== "frozen_eval") || (difficulty !== "easy" && difficulty !== "medium" && difficulty !== "hard")) {
-      throw new Error("Each world spec requires an integer seed, valid split, and valid difficulty.");
-    }
-    return { seed: seed!, split, difficulty } as CrossSystemWorldSpec;
-  });
-}

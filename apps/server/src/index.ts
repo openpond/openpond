@@ -148,12 +148,8 @@ import { createTrainingApi } from "./training/training-api.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
-import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
-import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
 import { createPrimeComputeProviderSetup } from "./compute/prime-provider-setup.js";
-import { createPrimeEvaluationSessionService } from "./training/prime-evaluation-session.js";
-import { createCrossSystemFrontierModelStream } from "./training/cross-system-frontier-model-stream.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
@@ -166,8 +162,6 @@ import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
 import {
   createCrossSystemChatToolRuntime,
-  createCrossSystemFrontierBaselineService,
-  createFrontierBaselineChatSource,
 } from "./training/cross-system-operations/index.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
@@ -489,9 +483,6 @@ export async function createOpenPondServer(
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
-  let trainingBaselineAttemptRunner: ReturnType<
-    typeof createTrainingBaselineAttemptRunner
-  > | null = null;
   const datasetArtifactService = createDatasetArtifactService({
     store,
     workerProjectDir: path.resolve(
@@ -500,52 +491,11 @@ export async function createOpenPondServer(
       "openpond-training",
     ),
   });
-  const fireworksBaselineDeployments =
-    createFireworksBaselineDeploymentService({
-      resolveCredential: resolveFireworksCredential,
-    });
-  const primeEvaluationSessions =
-    createPrimeEvaluationSessionService({
-      storeDir,
-      resolvePrimeCredential: () =>
-        primeComputeProvider.resolveCredential(),
-      now: () => new Date(now()),
-    });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
-    projectDatasetArtifact: datasetArtifactService.project,
-    prepareBaselineModels: async (models, options) => {
-      if (
-        models.some(
-          (model) =>
-            model.providerId === "custom-openai-compatible"
-            && model.modelId === "Qwen/Qwen3-0.6B",
-        )
-      ) {
-        return primeEvaluationSessions.prepareBaselineModels(
-          models,
-          options,
-        );
-      }
-      return fireworksBaselineDeployments.prepare(
-        models,
-        options,
-      );
-    },
-    cleanupBaselineDeployments: async () => [
-      ...await fireworksBaselineDeployments
-        .cleanupOrphanedDeployments(),
-      ...await primeEvaluationSessions.cleanup(),
-    ],
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
-    runAttempt: async (input) => {
-      if (!trainingBaselineAttemptRunner) {
-        throw new Error("The Taskset baseline runner is not initialized.");
-      }
-      return trainingBaselineAttemptRunner(input);
-    },
     modelJudge: async ({ grader, task, attempt }) => {
       const raw = await trainingModelText({
         model: grader.judge,
@@ -723,52 +673,6 @@ export async function createOpenPondServer(
       (await computeService.settings()).datasetStorePath,
   });
   await datasetImportService.reconcile();
-  const crossSystemFrontierModelStream =
-    createCrossSystemFrontierModelStream({
-      primeEvaluationSessions,
-      trainedAdapterChatRuntime,
-      streamOpenPondHostedChatTurn,
-      localByokRuntimeState,
-      saveChatGptSubscriptionCredential: async (providerId, credential) => {
-        await writeProviderChatGptSubscriptionCredential({
-          paths: providerSecretPaths,
-          providerId,
-          credential,
-          timestamp: now(),
-        });
-      },
-    });
-  trainingBaselineAttemptRunner = createTrainingBaselineAttemptRunner({
-    store,
-    storeDir,
-    modelText: trainingModelText,
-    crossSystemStream: crossSystemFrontierModelStream,
-    timestamp: now,
-  });
-  const crossSystemFrontierBaselineService =
-    createCrossSystemFrontierBaselineService({
-      store,
-      stream: crossSystemFrontierModelStream,
-      findLocalProject: findLocalWorkspace,
-      createEvidenceSource: ({
-        profileId,
-        model,
-        localProject,
-        task,
-        trajectory,
-      }) =>
-        createFrontierBaselineChatSource({
-          store,
-          profileId,
-          model,
-          localProject,
-          task,
-          trajectory,
-          createSession,
-          appendRuntimeEvent,
-          addSessionSource: taskCreatorService.addSessionSource,
-        }),
-    });
   const trainingApi = createTrainingApi({
     store,
     taskCreator: taskCreatorService,
@@ -778,7 +682,6 @@ export async function createOpenPondServer(
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
-    frontierBaseline: crossSystemFrontierBaselineService,
   });
   const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({
@@ -1907,7 +1810,6 @@ export async function createOpenPondServer(
       trainedAdapterChatRuntime.close,
       managedAdapterSyncService.close,
       crossSystemChatToolRuntime.close,
-      crossSystemFrontierBaselineService.close,
       taskMinerService.close,
       taskEvaluationService.close,
       trainingService.close,

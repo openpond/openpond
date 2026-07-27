@@ -86,11 +86,23 @@ describe("Training UI", () => {
   });
 
   test("opens the Model run editor from a Dataset with its immutable revision selected", async () => {
-    const [datasets, route, builder, builderHelpers, previews, pane, css] =
+    const [
+      datasets,
+      route,
+      builder,
+      setup,
+      header,
+      builderHelpers,
+      previews,
+      pane,
+      css,
+    ] =
       await Promise.all([
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
       readFile("apps/web/src/components/labs/ModelRunEditorPage.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/ModelRunSetupContent.tsx", "utf8"),
+      readFile("apps/web/src/components/labs/ModelRunEditorHeader.tsx", "utf8"),
       readFile(
         "apps/web/src/components/labs/model-run-editor-helpers.ts",
         "utf8"
@@ -109,43 +121,42 @@ describe("Training UI", () => {
     expect(builder).toContain("contentHash: taskset.contentHash");
     expect(builder).not.toContain(">Model Builder<");
     expect(builder).toContain('aria-label="Run setup"');
-    expect(builder).toContain("What do you want to build?");
+    expect(setup).toContain("What do you want to build?");
     expect(builder).toContain('aria-label="Model creation"');
     expect(builder).toContain('["setup", "Setup"]');
     expect(builder).toContain('["overview", "Overview"]');
     expect(builder).toContain('["runs", "Runs"]');
     expect(builder).toContain('["configuration", "Configuration"]');
     expect(builder).not.toContain("selectedContent={datasetGoalContent}");
-    expect(builder).toContain("<ModelSetupSteps");
-    expect(builder).toContain('activeSetupStep === "dataset"');
-    expect(builder).toContain('activeSetupStep === "method"');
-    expect(builder).toContain("datasetStepContent");
-    expect(builder).toContain('aria-label="Taskset revision"');
-    expect(builder).toContain("Build a Taskset");
-    expect(builder).not.toContain("Choose existing Taskset");
-    expect(builder).toContain('setActiveSetupStep("dataset")');
+    expect(setup).toContain("<ModelSetupSteps");
+    expect(setup).toContain('activeStep === "dataset"');
+    expect(setup).toContain('activeStep === "method"');
+    expect(setup).toContain('aria-label="Taskset revision"');
+    expect(setup).toContain("Build a Taskset");
+    expect(setup).not.toContain("Choose existing Taskset");
+    expect(setup).toContain('onStepChange("dataset")');
     expect(builder).toContain('setActiveSetupStep("method")');
-    expect(builder).toContain('setActiveSetupStep("configuration")');
-    expect(builder).toContain('approvalPresentation="dialog"');
-    expect(builder).toContain("hideMethodTabs");
-    expect(builder).toContain("configurationContent={");
-    expect(builder).toContain('aria-label="Training budget"');
-    expect(builder).toContain('runPreset: "standard"');
-    expect(builder).toContain("<h2>Choose a model</h2>");
+    expect(setup).toContain('onStepChange("configuration")');
+    expect(setup).toContain('approvalPresentation="dialog"');
+    expect(setup).toContain("hideMethodTabs");
+    expect(setup).toContain("configurationContent={");
+    expect(setup).toContain('aria-label="Training budget"');
+    expect(setup).toContain('runPreset: "standard"');
+    expect(setup).toContain("<h2>Choose a model</h2>");
     expect(builder).toContain("method: current.method ?? configuration.method");
     expect(builder).not.toContain("Training target · LLM weights");
     expect(builder).not.toContain("RLHF and RLVR are guidance labels");
     expect(builder).not.toContain('"Unsaved"');
-    expect(builder).toMatch(/>\s*Save\s*</);
-    expect(builder).not.toContain("Save draft");
+    expect(header).toMatch(/>\s*Save\s*</);
+    expect(header).not.toContain("Save draft");
     expect(builder).toContain("onNameChange?.(project.name)");
     expect(builder).toContain("nextModelName(state?.modelProjects ?? [])");
-    expect(builder).toContain("model-build-name-button");
-    expect(builder).toContain("setEditingName(true)");
+    expect(header).toContain("model-build-name-button");
+    expect(header).toContain("setEditingName(true)");
     expect(builder).not.toContain("window.confirm");
     expect(builder).toContain("<ConfirmDialog");
     expect(builder).not.toContain("model-build-readiness");
-    expect(builder).toContain("disabled={!candidate.available}");
+    expect(setup).toContain("disabled={!candidate.available}");
     expect(builderHelpers).toContain("Incompatible Taskset");
     expect(builderHelpers).toContain(
       "taskset.capabilities.compatibleMethods.includes(method)"
@@ -157,7 +168,7 @@ describe("Training UI", () => {
     expect(builderHelpers).toContain(
       'method === "grpo" ? "Fireworks RFT" : "Fireworks"'
     );
-    expect(builder).toContain("model-build-target-pill unavailable");
+    expect(setup).toContain("model-build-target-pill unavailable");
     expect(builderHelpers).toContain(
       "does not execute ${method.toUpperCase()}."
     );

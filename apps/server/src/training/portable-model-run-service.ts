@@ -71,11 +71,6 @@ export function createPortableModelRunService(deps: {
       cached: boolean;
     }>;
   };
-  sandboxBinding?: {
-    runtime: import("@openpond/contracts").HarnessRuntimeTargetBinding;
-    compute: import("@openpond/contracts").ComputeTargetBinding;
-    resolvedBundleHash: string;
-  } | null;
 }) {
   async function start(input: {
     modelRunId: string;
@@ -150,7 +145,6 @@ export function createPortableModelRunService(deps: {
     const bindings = resolvePortableBindings({
       modelRun,
       catalog: await deps.catalog(),
-      sandboxBinding: deps.sandboxBinding,
     });
     if (!bindings.runtime || !bindings.compute || !bindings.engine) {
       throw new Error(
@@ -174,10 +168,6 @@ export function createPortableModelRunService(deps: {
       },
       openpondRelease: "0.0.38",
       workerProtocol: "openpond.connectedWorker.v1",
-      externalResolvedBundleHash:
-        modelRun.destinationId === "openpond_managed"
-          ? deps.sandboxBinding?.resolvedBundleHash
-          : undefined,
       releasePublishedAt: await resolveExistingTasksetReleasePublishedAt({
         storeDir: deps.storeDir,
         taskset,

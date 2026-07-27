@@ -1,13 +1,9 @@
 import { z } from "zod";
 import {
   BaseModelPreferenceSchema,
-  BaselineRftSignalSchema,
-  BaselineReportSchema,
-  BaselineScopeSchema,
   DatasetBuildIntentSchema,
   DatasetBuildSpecificationSchema,
   GraderAuditReportSchema,
-  TasksetBaselineRunSchema,
   TaskCreationSnapshotSchema,
   TasksetSchema,
   TrainingMethodReadinessReasonCodeSchema,
@@ -18,7 +14,6 @@ import {
   TaskMinerConfigSchema,
   TaskMinerRunSchema,
 } from "./task-mining.js";
-import { CrossSystemFrontierBaselineRunSchema } from "./cross-system-frontier-baseline.js";
 import { DatasetArtifactSummarySchema } from "./dataset-artifacts.js";
 import { DatasetImportJobSchema } from "./dataset-imports.js";
 import { ModelRunSchema, ModelVersionSchema } from "./model-lifecycle.js";
@@ -73,7 +68,6 @@ export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
   "export",
   "local_cpu_fixture",
-  "openpond_managed",
   "custom",
   "prime_hosted",
   "fireworks",
@@ -480,15 +474,6 @@ export const TrainingPlanSchema = z.object({
     retentionDays: z.number().int().nonnegative().nullable(),
     region: z.string().trim().min(1).max(200).nullable(),
   }),
-  rftSignalGate: z
-    .object({
-      baselineReportId: IdSchema,
-      baselineReportHash: HashSchema,
-      scope: BaselineScopeSchema,
-      signal: BaselineRftSignalSchema,
-    })
-    .nullable()
-    .default(null),
   estimatedCostUsd: z.number().nonnegative().nullable(),
   createdAt: TimestampSchema,
   contentHash: HashSchema,
@@ -865,15 +850,10 @@ export const TrainingStateResponseSchema = z.object({
   tasksets: z.array(TasksetSchema),
   datasetImports: z.array(DatasetImportJobSchema).default([]),
   datasetArtifacts: z.array(DatasetArtifactSummarySchema).default([]),
-  baselineReports: z.array(BaselineReportSchema),
-  baselineRuns: z.array(TasksetBaselineRunSchema).default([]),
   graderAuditReports: z.array(GraderAuditReportSchema),
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),
-  frontierBaselineRuns: z
-    .array(CrossSystemFrontierBaselineRunSchema)
-    .default([]),
   modelProjects: z.array(ModelProjectSchema).default([]),
   modelRunDrafts: z.array(ModelRunDraftSchema).default([]),
   modelVersions: z.array(ModelVersionSchema).default([]),

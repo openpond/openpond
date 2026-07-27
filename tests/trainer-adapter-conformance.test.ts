@@ -147,9 +147,9 @@ describe("trainer package conformance", () => {
       "connected-prime-rl",
       [
         {
-          id: "sandbox",
+          id: "alternate",
           matches: (resolved) =>
-            resolved.runtime.adapterId === "sandbox-latitude",
+            resolved.runtime.adapterId === "alternate-runtime",
           adapter: new LocalTrainingEngineAdapter(
             secondaryWorker,
             "connected-prime-rl",
@@ -158,7 +158,7 @@ describe("trainer package conformance", () => {
         {
           id: "connected",
           matches: (resolved) =>
-            resolved.runtime.adapterId !== "sandbox-latitude",
+            resolved.runtime.adapterId !== "alternate-runtime",
           adapter: new LocalTrainingEngineAdapter(
             primaryWorker,
             "connected-prime-rl",

@@ -438,148 +438,10 @@ export const GradeResultSchema = z.object({
   createdAt: TimestampSchema,
 });
 
-export const BaselineRewardSummarySchema = z.object({
-  count: z.number().int().nonnegative(),
-  mean: z.number().min(0).max(1).nullable(),
-  min: z.number().min(0).max(1).nullable(),
-  max: z.number().min(0).max(1).nullable(),
-  variance: z.number().nonnegative().nullable(),
-});
-
 export const DatasetSelectionStrategySchema = z.enum([
   "stable_hash_top_n",
   "rft_easy_curriculum_v1",
 ]);
-
-export const BaselineScopeSchema = z.object({
-  split: TasksetSplitSchema,
-  taskCount: z.number().int().positive().max(100_000),
-  attemptsPerTask: z.number().int().positive().max(64),
-  selectionSeed: z.number().int(),
-  selectionStrategy: DatasetSelectionStrategySchema,
-  taskIdsHash: HashSchema,
-  harnessContractHash: HashSchema.nullable().default(null),
-  model: ChatModelRefSchema,
-  sampling: z.object({
-    maxOutputTokens: z.number().int().positive().max(32_768),
-    temperature: z.number().min(0).max(2),
-    topP: z.number().positive().max(1),
-  }),
-});
-
-export const BaselineRftSignalSchema = z.object({
-  requiredMixedRewardGroups: z.number().int().positive().max(100_000),
-  mixedRewardGroups: z.number().int().nonnegative(),
-  allCorrectRewardGroups: z.number().int().nonnegative(),
-  allIncorrectRewardGroups: z.number().int().nonnegative(),
-  unscoredGroups: z.number().int().nonnegative(),
-  infrastructureFailures: z.number().int().nonnegative(),
-  eligibleAttempts: z.number().int().nonnegative(),
-  correctAttempts: z.number().int().nonnegative(),
-  incorrectAttempts: z.number().int().nonnegative(),
-  parseableAttempts: z.number().int().nonnegative(),
-  toolEligibleAttempts: z.number().int().nonnegative().default(0),
-  validToolTraceAttempts: z.number().int().nonnegative().default(0),
-  terminalDecisionAttempts: z.number().int().nonnegative().default(0),
-  passed: z.boolean(),
-});
-
-export const BaselineReportSchema = z.object({
-  schemaVersion: z.literal("openpond.baselineReport.v1"),
-  id: IdSchema,
-  tasksetId: IdSchema,
-  tasksetHash: HashSchema,
-  graderSetHash: HashSchema,
-  attemptRefs: z.array(IdSchema).min(1).max(1_000_000),
-  gradeRefs: z.array(IdSchema).min(1).max(1_000_000),
-  passAtK: z.record(z.string(), z.number().min(0).max(1)),
-  reward: BaselineRewardSummarySchema,
-  failureClusters: z.record(z.string(), z.number().int().nonnegative()),
-  totalCostUsd: z.number().nonnegative().nullable(),
-  userInterventions: z.number().int().nonnegative(),
-  hackingChecksPassed: z.boolean(),
-  leakageChecksPassed: z.boolean(),
-  scope: BaselineScopeSchema.nullable().default(null),
-  rftSignal: BaselineRftSignalSchema.nullable().default(null),
-  createdAt: TimestampSchema,
-});
-
-export const TasksetBaselineRunSchema = z.object({
-  schemaVersion: z.literal("openpond.tasksetBaselineRun.v1"),
-  id: IdSchema,
-  profileId: IdSchema,
-  targetModelId: IdSchema.nullable().default(null),
-  tasksetId: IdSchema,
-  tasksetHash: HashSchema,
-  status: z.enum([
-    "queued",
-    "preparing",
-    "running",
-    "cancelling",
-    "cancelled",
-    "succeeded",
-    "failed",
-  ]),
-  configuration: z.object({
-    split: TasksetSplitSchema,
-    taskLimit: z.number().int().positive().max(100_000),
-    attemptsPerTask: z.number().int().positive().max(64),
-    selectionSeed: z.number().int(),
-    selectionStrategy: DatasetSelectionStrategySchema,
-    model: ChatModelRefSchema,
-    sampling: z.object({
-      maxOutputTokens: z.number().int().positive().max(32_768),
-      temperature: z.number().min(0).max(2),
-      topP: z.number().positive().max(1),
-    }),
-  }),
-  scope: BaselineScopeSchema.nullable(),
-  progress: z.object({
-    stage: z.enum([
-      "queued",
-      "selecting",
-      "auditing",
-      "provisioning",
-      "running",
-      "persisting",
-      "cleaning_up",
-      "complete",
-    ]),
-    completedAttempts: z.number().int().nonnegative(),
-    totalAttempts: z.number().int().nonnegative(),
-    correctAttempts: z.number().int().nonnegative(),
-    incorrectAttempts: z.number().int().nonnegative(),
-    parseableAttempts: z.number().int().nonnegative(),
-    infrastructureFailures: z.number().int().nonnegative(),
-  }),
-  provider: z.object({
-    providerId: z.literal("fireworks"),
-    accountId: IdSchema,
-    deploymentId: IdSchema,
-    phase: z.enum([
-      "validating",
-      "creating",
-      "ready",
-      "deleting",
-      "deleted",
-      "failed",
-    ]),
-    state: z.string().trim().min(1).max(200).nullable(),
-    statusCode: z.string().trim().min(1).max(200).nullable(),
-    statusMessage: z.string().trim().min(1).max(5_000).nullable(),
-    createdAt: TimestampSchema,
-    readyAt: TimestampSchema.nullable(),
-    releasedAt: TimestampSchema.nullable(),
-  }).nullable(),
-  reportId: IdSchema.nullable(),
-  estimatedCostUsd: z.number().nonnegative().nullable(),
-  cancelRequested: z.boolean(),
-  error: z.string().trim().min(1).max(20_000).nullable(),
-  createdAt: TimestampSchema,
-  startedAt: TimestampSchema.nullable(),
-  completedAt: TimestampSchema.nullable(),
-  updatedAt: TimestampSchema,
-});
 
 export const GraderAuditReportSchema = z.object({
   schemaVersion: z.literal("openpond.graderAuditReport.v1"),
@@ -633,11 +495,11 @@ export const TasksetReadinessReportSchema = z.object({
   recommendedMethod: z.enum(["none", "retrieval", "sft", "dpo", "grpo", "ppo", "sdft", "opd", "opsd", "sdpo"]),
   trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
   methodReadiness: z.array(TrainingMethodReadinessSchema).default([]),
-  compatibleDestinationClasses: z.array(z.enum(["export", "local_cpu_fixture", "custom", "openpond_managed", "hosted_byok"])),
+  compatibleDestinationClasses: z.array(
+    z.enum(["export", "local_cpu_fixture", "custom", "hosted_byok"]),
+  ),
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
-  baselineReportId: NullableIdSchema,
-  baselineReward: BaselineRewardSummarySchema.nullable().default(null),
   generatedAt: TimestampSchema,
 });
 
@@ -875,8 +737,6 @@ export type TaskAttemptArtifact = z.infer<typeof TaskAttemptArtifactSchema>;
 export type GradeComponent = z.infer<typeof GradeComponentSchema>;
 export type GradeResult = z.infer<typeof GradeResultSchema>;
 export type DatasetSelectionStrategy = z.infer<typeof DatasetSelectionStrategySchema>;
-export type BaselineReport = z.infer<typeof BaselineReportSchema>;
-export type TasksetBaselineRun = z.infer<typeof TasksetBaselineRunSchema>;
 export type GraderAuditReport = z.infer<typeof GraderAuditReportSchema>;
 export type TrainingPathRecommendation = z.infer<typeof TrainingPathRecommendationSchema>;
 export type TrainingMethodReadinessReasonCode = z.infer<typeof TrainingMethodReadinessReasonCodeSchema>;

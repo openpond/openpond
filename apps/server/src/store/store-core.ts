@@ -8,12 +8,10 @@ import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
 import {
   createCreateImproveRunTables,
-  createCrossSystemFrontierBaselineRunTables,
   createFireworksModelServingSessionTables,
   createGraderAuditTables,
   createTaskAttemptArtifactTables,
   createTaskCreationProjectionTables,
-  createTasksetBaselineRunTables,
   createTasksetRevisionTables,
   createTrainingReceiptAndModelBindingTables,
   deduplicateFireworksMetricArtifacts,
@@ -680,14 +678,6 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
     `);
-  }
-
-  async createCrossSystemFrontierBaselineRunTables(): Promise<void> {
-    await createCrossSystemFrontierBaselineRunTables((sql) => this.exec(sql));
-  }
-
-  async createTasksetBaselineRunTables(): Promise<void> {
-    await createTasksetBaselineRunTables((sql) => this.exec(sql));
   }
 
   protected async addColumnIfMissing(table: string, column: string, definition: string): Promise<void> {

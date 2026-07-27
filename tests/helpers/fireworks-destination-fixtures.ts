@@ -174,7 +174,6 @@ export function rftTasksetFixture() {
       compatibleDestinationClasses: ["hosted_byok"],
       blockers: [],
       warnings: [],
-      baselineReportId: "baseline_rft_fixture",
       baselineReward: {
         count: 4,
         mean: 0.5,

@@ -113,7 +113,6 @@ export function destinationLabel(destination: string): string {
     runpod_byoc: "RunPod",
     prime_hosted: "Prime Raw GPU",
     fireworks: "Fireworks",
-    openpond_managed: "OpenPond Managed",
   };
   return labels[destination] ?? destination.replaceAll("_", " ");
 }

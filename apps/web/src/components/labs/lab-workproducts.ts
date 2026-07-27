@@ -1,8 +1,6 @@
 import type {
   CreateImproveRun,
-  CrossSystemFrontierBaselineRun,
   OpenPondProfileState,
-  Taskset,
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
@@ -33,7 +31,6 @@ export type LabWorkproductSummary = {
   runIds: string[];
   conversationId: string | null;
   tasksetId: string | null;
-  frontierBaselineRunId?: string | null;
   trainingRunCount: number;
   evaluationStatus: "not_run" | "passed" | "failed";
   useActionId: string | null;
@@ -117,7 +114,6 @@ export function labWorkproductProjection(input: {
       runIds: [],
       conversationId: null,
       tasksetId: null,
-      frontierBaselineRunId: null,
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: defaultChatAction?.id ?? null,
@@ -141,7 +137,6 @@ export function labWorkproductProjection(input: {
       runIds: [],
       conversationId: null,
       tasksetId: null,
-      frontierBaselineRunId: null,
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: null,
@@ -210,7 +205,6 @@ export function labWorkproductProjection(input: {
         latestDraft?.tasksetRef?.id ??
         baseVersion?.taskset.id ??
         null,
-      frontierBaselineRunId: null,
       trainingRunCount: drafts.length + lifecycleRuns.length,
       evaluationStatus: "not_run",
       useActionId: null,
@@ -288,7 +282,6 @@ export function labWorkproductProjection(input: {
         : existing?.runIds ?? [],
       conversationId: null,
       tasksetId: row.taskset.id,
-      frontierBaselineRunId: null,
       trainingRunCount: Math.max(
         existing?.trainingRunCount ?? 0,
         modelJobs.length
@@ -344,7 +337,6 @@ export function labWorkproductProjection(input: {
         run.target.kind === "model"
           ? run.tasksetRef?.id ?? existing?.tasksetId ?? null
           : null,
-      frontierBaselineRunId: existing?.frontierBaselineRunId ?? null,
       trainingRunCount:
         kind === "model"
           ? Math.max(
@@ -355,38 +347,6 @@ export function labWorkproductProjection(input: {
       evaluationStatus:
         runEvaluationStatus(run) ?? existing?.evaluationStatus ?? "not_run",
       useActionId: existing?.useActionId ?? null,
-    });
-  }
-
-  for (const baselineRun of input.training?.frontierBaselineRuns ?? []) {
-    const linkedRunId = linkedModelRunId(baselineRun, input.runs);
-    if (!linkedRunId) continue;
-    const entry = [...byKey.values()].find((workproduct) =>
-      workproduct.runIds.includes(linkedRunId)
-    );
-    if (!entry) continue;
-    const currentTaskset = entry.tasksetId
-      ? input.training?.tasksets.find(
-          (taskset) => taskset.id === entry.tasksetId
-        ) ?? null
-      : null;
-    if (
-      currentTaskset &&
-      !frontierBaselineMatchesCurrentTaskset(baselineRun, currentTaskset)
-    ) {
-      continue;
-    }
-    const priorBaseline = entry.frontierBaselineRunId
-      ? input.training?.frontierBaselineRuns.find(
-          (run) => run.id === entry.frontierBaselineRunId
-        ) ?? null
-      : null;
-    if (priorBaseline && priorBaseline.updatedAt >= baselineRun.updatedAt)
-      continue;
-    byKey.set(entry.key, {
-      ...entry,
-      updatedAt: newer(entry.updatedAt, baselineRun.updatedAt),
-      frontierBaselineRunId: baselineRun.id,
     });
   }
 
@@ -402,43 +362,6 @@ export function labWorkproductProjection(input: {
   });
 }
 
-export function frontierBaselineMatchesCurrentTaskset(
-  run: CrossSystemFrontierBaselineRun,
-  taskset: Taskset
-): boolean {
-  if (["queued", "running", "cancelling"].includes(run.status)) return true;
-  const tasksetSourceIds = new Set(
-    taskset.sourceRefs.map((source) => source.id)
-  );
-  return (
-    run.sourceIds.length === tasksetSourceIds.size &&
-    run.sourceIds.every((sourceId) => tasksetSourceIds.has(sourceId))
-  );
-}
-
-function linkedModelRunId(
-  baselineRun: CrossSystemFrontierBaselineRun,
-  runs: CreateImproveRun[]
-): string | null {
-  if (
-    baselineRun.createImproveRunId &&
-    runs.some(
-      (run) =>
-        run.id === baselineRun.createImproveRunId && run.target.kind === "model"
-    )
-  ) {
-    return baselineRun.createImproveRunId;
-  }
-  if (baselineRun.sourceIds.length === 0) return null;
-  const sourceIds = new Set(baselineRun.sourceIds);
-  return (
-    runs.find(
-      (run) =>
-        run.target.kind === "model" &&
-        [...sourceIds].every((sourceId) => run.sourceRefs.includes(sourceId))
-    )?.id ?? null
-  );
-}
 
 function lifecycleModelRunStatus(
   status: "prepared" | "running" | "succeeded" | "failed" | "cancelled"

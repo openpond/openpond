@@ -22,8 +22,7 @@ export function createTrainingPlan(input: {
   const environmentPlacement =
     input.destinationId === "fireworks"
       ? ("provider_native" as const)
-      : input.destinationId === "openpond_managed" ||
-          input.destinationId === "ssh_gpu" ||
+      : input.destinationId === "ssh_gpu" ||
           input.destinationId === "prime_hosted"
         ? ("remote" as const)
         : ("local" as const);
