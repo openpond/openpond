@@ -94,17 +94,23 @@ export function inlineBaselineTasks(input: {
 
 export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeResult[]) {
   const gradeByAttempt = new Map(grades.map((grade) => [grade.attemptId, grade]));
-  const groups = new Map<string, GradeResult[]>();
+  const groups = new Map<
+    string,
+    Array<{ attempt: TaskAttemptResult; grade: GradeResult }>
+  >();
   let infrastructureFailures = 0;
   let eligibleAttempts = 0;
   let correctAttempts = 0;
   let incorrectAttempts = 0;
   let parseableAttempts = 0;
+  let marketingAttempts = 0;
+  let validToolTraceAttempts = 0;
+  let terminalDecisionAttempts = 0;
   for (const attempt of attempts) {
     const grade = gradeByAttempt.get(attempt.id);
     if (!grade) continue;
     const group = groups.get(attempt.taskId) ?? [];
-    group.push(grade);
+    group.push({ attempt, grade });
     groups.set(attempt.taskId, group);
     if (attempt.infrastructureError || grade.failureClass === "infrastructure_failure") {
       infrastructureFailures += 1;
@@ -115,21 +121,46 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
       else incorrectAttempts += 1;
     }
     const text = typeof attempt.output.text === "string" ? attempt.output.text : "";
-    if (extractFinalAnswer(text) !== null) parseableAttempts += 1;
+    const isMarketingAttempt =
+      attempt.metadata.execution === "marketing_portfolio_tool_loop";
+    const validToolTrace =
+      isMarketingAttempt && attempt.metadata.validToolTrace === true;
+    const terminalDecision =
+      isMarketingAttempt && attempt.output.terminalDecision === true;
+    if (isMarketingAttempt) marketingAttempts += 1;
+    if (validToolTrace) validToolTraceAttempts += 1;
+    if (terminalDecision) terminalDecisionAttempts += 1;
+    if (extractFinalAnswer(text) !== null || (validToolTrace && terminalDecision)) {
+      parseableAttempts += 1;
+    }
   }
   let mixedRewardGroups = 0;
   let allCorrectRewardGroups = 0;
   let allIncorrectRewardGroups = 0;
   let unscoredGroups = 0;
-  for (const gradesForTask of groups.values()) {
-    const eligible = gradesForTask.filter((grade) => grade.score !== null);
+  for (const resultsForTask of groups.values()) {
+    const eligible = resultsForTask
+      .map(({ grade }) => grade)
+      .filter((grade) => grade.score !== null);
     const correct = eligible.filter((grade) => grade.passed).length;
     const incorrect = eligible.length - correct;
-    if (correct > 0 && incorrect > 0) mixedRewardGroups += 1;
-    else if (correct > 0) allCorrectRewardGroups += 1;
+    const rewards = eligible.map((grade) => grade.score!);
+    if (
+      rewards.length > 1
+      && rewards.some((reward) => Math.abs(reward - rewards[0]!) > 1e-9)
+    ) {
+      mixedRewardGroups += 1;
+    }
+    if (correct > 0 && incorrect === 0) allCorrectRewardGroups += 1;
     else if (incorrect > 0) allIncorrectRewardGroups += 1;
     else unscoredGroups += 1;
   }
+  const marketingToolGatePassed =
+    marketingAttempts === 0
+    || (
+      validToolTraceAttempts === marketingAttempts
+      && terminalDecisionAttempts === marketingAttempts
+    );
   return {
     requiredMixedRewardGroups: REQUIRED_MIXED_RFT_GROUPS,
     mixedRewardGroups,
@@ -141,7 +172,13 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
     correctAttempts,
     incorrectAttempts,
     parseableAttempts,
-    passed: mixedRewardGroups >= REQUIRED_MIXED_RFT_GROUPS && infrastructureFailures === 0,
+    toolEligibleAttempts: marketingAttempts,
+    validToolTraceAttempts,
+    terminalDecisionAttempts,
+    passed:
+      mixedRewardGroups >= REQUIRED_MIXED_RFT_GROUPS
+      && infrastructureFailures === 0
+      && marketingToolGatePassed,
   };
 }
 

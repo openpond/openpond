@@ -161,15 +161,15 @@ export function buildPageReason(
   if (!project.name.trim()) return "Name this Model.";
   if (!draft.buildIntent) return "Choose what you want to build.";
   if (!draft.datasetMode) {
-    return "Choose an existing Dataset or build a new one.";
+    return "Choose an existing Taskset or build a new one.";
   }
-  if (!taskset) return "Choose or build a Dataset to enable Run.";
+  if (!taskset) return "Choose or build a Taskset to enable Run.";
   if (!draft.method) return "Choose a training method.";
   const readiness = taskset.readiness?.methodReadiness.find(
     (item) => item.method === draft.method,
   );
   if (readiness?.status === "needs_dataset_work") {
-    return readiness.reasons[0] ?? "Resolve Dataset readiness for this method.";
+    return readiness.reasons[0] ?? "Resolve Taskset readiness for this method.";
   }
   if (!draft.runPreset) {
     return draft.method === "grpo" || draft.method === "ppo"
@@ -246,9 +246,9 @@ export function methodAvailability(
     );
     const state =
       readiness?.status === "needs_dataset_work"
-        ? "Needs Dataset work"
+        ? "Needs Taskset work"
         : !datasetCompatible
-          ? "Incompatible Dataset"
+          ? "Incompatible Taskset"
           : !executable
             ? "Destination unavailable"
             : readiness?.status === "recommended"
@@ -257,7 +257,7 @@ export function methodAvailability(
     const reason =
       readiness?.reasons[0] ??
       (!datasetCompatible
-        ? `This Dataset revision does not contain the evidence required for ${method.toUpperCase()}.`
+        ? `This Taskset revision does not contain the evidence required for ${method.toUpperCase()}.`
         : !executable
           ? `No configured destination currently executes ${method.toUpperCase()}.`
           : methodTradeoff(method));
@@ -340,7 +340,7 @@ export function datasetGuidance(
   intent: DatasetEvidenceIntent | null,
 ): string {
   if (!intent) {
-    return "Choose an existing Dataset, or select a goal before building a new one.";
+    return "Choose an existing Taskset, or select a goal before building a new one.";
   }
   if (intent === "demonstrations") {
     return "Build or choose prompts paired with approved responses. OpenPond will recommend SFT.";
@@ -354,7 +354,7 @@ export function datasetGuidance(
   if (intent === "rubric") {
     return "Build or choose rubric examples and calibrate evaluation before selecting optimization.";
   }
-  return "Discover evidence first; OpenPond will recommend a concrete Dataset shape and method.";
+  return "Discover evidence first; OpenPond will recommend a concrete Taskset shape and method.";
 }
 
 export function presetsFor(
@@ -375,7 +375,7 @@ export function presetsFor(
       {
         id: "standard",
         label: "Recommended",
-        description: "Use the Dataset-aware recommended online budgets.",
+        description: "Use the Taskset-aware recommended online budgets.",
       },
       {
         id: "custom",
@@ -395,7 +395,7 @@ export function presetsFor(
       id: "standard",
       label: "Recommended",
       description:
-        "Use Dataset-aware recommended examples and optimizer limits.",
+        "Use Taskset-aware recommended examples and optimizer limits.",
     },
     {
       id: "custom",

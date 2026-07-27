@@ -12,7 +12,7 @@ export type ModelSetupStep = {
 
 export const MODEL_SETUP_STEPS: Array<Pick<ModelSetupStep, "id" | "label">> = [
   { id: "goal", label: "Goal" },
-  { id: "dataset", label: "Dataset" },
+  { id: "dataset", label: "Taskset" },
   { id: "method", label: "Training method" },
   { id: "configuration", label: "Model" },
 ];

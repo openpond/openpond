@@ -1360,7 +1360,7 @@ export function MainPane({
       sidebarFileSourceSessionId={selectedSessionId}
       onSetSidebarFileStatus={onSetSidebarFileStatus}
       readOnly={showLabCandidateDiffPanel}
-      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
+      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title, running: panel.running }))}
       sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
       viewState={workspaceDiffPanelViewState}
@@ -1704,9 +1704,8 @@ export function MainPane({
                     setMentionedAppId(null);
                     if (provider) {
                       changeDraftProvider(provider);
-                    } else {
-                      setView("chat");
                     }
+                    setView("chat");
                   },
                 }}
                 insights={{

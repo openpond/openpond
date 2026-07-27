@@ -66,6 +66,10 @@ export const OPENPOND_AGENT_OVERVIEW_VIDEO_URL = publicVideoUrl(
   "openpond-agent-overview",
 );
 
+export const PROFILE_TO_DEPLOYMENT_VIDEO_URL = publicVideoUrl(
+  "profile-to-deployment-overview",
+);
+
 export function makeAgentTutorialVideoUrl(chapter: "create" | "use" | "improve"): string {
   return publicVideoUrl(`make-agent-tutorial-${chapter}`);
 }

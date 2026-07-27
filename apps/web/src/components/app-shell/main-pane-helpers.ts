@@ -144,8 +144,7 @@ export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): s
   if (command.command === "edit") return `/edit ${command.args}`;
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
   if (command.command === "sync-cloud") return command.args ? `/sync-cloud ${command.args}` : "/sync-cloud";
-  if (command.command === "goal-local") return `Goal: ${command.args}`;
-  return `Goal: ${command.args}`;
+  return command.args ? `/${command.command} ${command.args}` : `/${command.command}`;
 }
 
 export function usageAttributionForComposerSlashCommand(

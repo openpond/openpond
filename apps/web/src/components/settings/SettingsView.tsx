@@ -274,6 +274,9 @@ export function SettingsView({
             busy={computeSettings.busy}
             onScan={computeSettings.scan}
             onSave={computeSettings.save}
+            onSavePrimeCredential={computeSettings.savePrimeCredential}
+            onValidatePrimeCredential={computeSettings.validatePrimeCredential}
+            onDeletePrimeCredential={computeSettings.deletePrimeCredential}
             onDownloadSmolLm2={computeSettings.downloadSmolLm2}
             onCancelDownload={computeSettings.cancelDownload}
           />

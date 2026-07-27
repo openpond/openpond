@@ -88,6 +88,36 @@ export function createHarnessFixture(): {
           visibility: "privileged",
         },
       ],
+      actionBindings: [
+        {
+          schemaVersion: "openpond.harnessActionBinding.v1",
+          actionId: "profile.fixture.inspect",
+          modelToolName: "agent_fixture_inspect",
+          description: "Inspect the fixture state.",
+          inputSchema: {
+            type: "object",
+            additionalProperties: false,
+            properties: { id: { type: "string" } },
+            required: ["id"],
+          },
+          actionSchemaHash: contentHash({
+            type: "object",
+            additionalProperties: false,
+            properties: { id: { type: "string" } },
+            required: ["id"],
+          }),
+          agentRelease: {
+            id: "agent-fixture-1",
+            contentHash: sha256("agent-fixture-1"),
+          },
+          implementationHash: sha256("agent-fixture-implementation"),
+          runtimeBindingId: "profile-action-runtime",
+          capabilityReceiptHash: hashes.capability,
+          sideEffect: "read",
+          studentVisible: true,
+          timeoutMs: 30_000,
+        },
+      ],
       secretDeclarations: [
         {
           id: "grader-token",

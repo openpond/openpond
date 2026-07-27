@@ -6,7 +6,11 @@ import type {
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
-import { conciseWorkproductName } from "@openpond/contracts";
+import {
+  conciseWorkproductName,
+  managedAdapterEvaluationPassed,
+  resolveModelBindingPromotionGate,
+} from "@openpond/contracts";
 
 import {
   statusLabel,
@@ -19,6 +23,7 @@ export type LabWorkproductSummary = {
   key: string;
   kind: LabWorkproductKind;
   id: string;
+  ownerProfileId: string | null;
   name: string;
   description: string;
   status: string;
@@ -95,6 +100,7 @@ export function labWorkproductProjection(input: {
       key,
       kind: "agent",
       id: agent.id,
+      ownerProfileId: input.profile?.activeProfile ?? null,
       name: agent.name || agent.id,
       description: agent.enabled
         ? "Enabled Profile Agent"
@@ -119,6 +125,7 @@ export function labWorkproductProjection(input: {
       key,
       kind: "skill",
       id: skill.name,
+      ownerProfileId: input.profile?.activeProfile ?? null,
       name: skill.name,
       description: skill.description,
       status:
@@ -149,26 +156,55 @@ export function labWorkproductProjection(input: {
         (draft.status === "draft" || draft.status === "ready_to_run"),
     );
     const latestDraft = drafts[0] ?? null;
+    const lifecycleRuns = (input.training?.modelRuns ?? [])
+      .filter((run) => run.modelId === project.id)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const latestLifecycleRun = lifecycleRuns[0] ?? null;
+    const baseVersion = (input.training?.modelVersions ?? []).find(
+      (version) =>
+        version.modelId === project.id
+        && version.kind === "base_reference"
+        && version.version === 0,
+    ) ?? null;
     const key = workproductKey("model", project.id);
     byKey.set(key, {
       key,
       kind: "model",
       id: project.id,
+      ownerProfileId: project.profileId,
       name: conciseWorkproductName(project.name, "Untitled Model"),
       description: project.objective ?? "Configure this Model and run its first training job.",
-      status: latestDraft?.status === "ready_to_run"
-        ? "Ready to run"
-        : latestDraft
-          ? "Draft"
-          : "Ready",
-      updatedAt: latestDraft?.updatedAt ?? project.updatedAt,
-      path: latestDraft?.tasksetRef ? `tasksets/${latestDraft.tasksetRef.id}` : null,
-      enabled: null,
+      status: latestLifecycleRun
+        ? lifecycleModelRunStatus(latestLifecycleRun.status)
+        : latestDraft?.status === "ready_to_run"
+          ? "Ready to run"
+          : latestDraft
+            ? "Draft"
+            : baseVersion
+              ? "Base ready"
+              : "Ready",
+      updatedAt:
+        latestLifecycleRun?.updatedAt
+        ?? latestDraft?.updatedAt
+        ?? project.updatedAt,
+      path:
+        latestLifecycleRun
+          ? `tasksets/${latestLifecycleRun.taskset.id}`
+          : latestDraft?.tasksetRef
+            ? `tasksets/${latestDraft.tasksetRef.id}`
+            : baseVersion
+              ? `tasksets/${baseVersion.taskset.id}`
+              : null,
+      enabled: baseVersion ? false : null,
       runIds: [],
       conversationId: null,
-      tasksetId: latestDraft?.tasksetRef?.id ?? null,
+      tasksetId:
+        latestLifecycleRun?.taskset.id
+        ?? latestDraft?.tasksetRef?.id
+        ?? baseVersion?.taskset.id
+        ?? null,
       frontierBaselineRunId: null,
-      trainingRunCount: drafts.length,
+      trainingRunCount: drafts.length + lifecycleRuns.length,
       evaluationStatus: "not_run",
       useActionId: null,
     });
@@ -231,6 +267,7 @@ export function labWorkproductProjection(input: {
       key,
       kind: "model",
       id: modelId,
+      ownerProfileId: existing?.ownerProfileId ?? row.taskset.profileId,
       name: conciseWorkproductName(
         existing?.name ?? modelRun?.target.displayName ?? row.name,
         "New model",
@@ -240,7 +277,8 @@ export function labWorkproductProjection(input: {
       updatedAt: latestModelJob?.updatedAt ?? row.updatedAt,
       path: `tasksets/${row.taskset.id}`,
       enabled: row.localModel
-        ? row.localModel.status === "imported" && row.localModel.promotable
+        ? row.localModel.status === "imported"
+          && Boolean(resolveModelBindingPromotionGate(row.localModel))
         : null,
       runIds: modelRun
         ? [...new Set([...(existing?.runIds ?? []), modelRun.id])]
@@ -291,6 +329,7 @@ export function labWorkproductProjection(input: {
       key,
       kind,
       id,
+      ownerProfileId: existing?.ownerProfileId ?? run.scope.profileId,
       name,
       description: existing?.description ?? run.objective,
       status: runStatusLabel(run),
@@ -399,6 +438,16 @@ function linkedModelRunId(
   );
 }
 
+function lifecycleModelRunStatus(
+  status: "prepared" | "running" | "succeeded" | "failed" | "cancelled",
+): string {
+  if (status === "prepared") return "Prepared";
+  if (status === "running") return "Running";
+  if (status === "succeeded") return "Rollout complete";
+  if (status === "failed") return "Failed";
+  return "Cancelled";
+}
+
 export function workproductKey(kind: LabWorkproductKind, id: string): string {
   return `${kind}:${id}`;
 }
@@ -502,12 +551,18 @@ function modelJobEvaluationStatus(
 ): LabWorkproductSummary["evaluationStatus"] {
   if (!job) return "not_run";
   const complete =
-    job.metadata.frozenEvaluationComplete === true
-    || Boolean(lineage?.frozenEvaluationArtifactId);
+    Boolean(lineage && resolveModelBindingPromotionGate(lineage))
+    || job.metadata.frozenEvaluationComplete === true
+    || Boolean(lineage?.frozenEvaluationArtifactId)
+    || Boolean(lineage?.managedServing?.evaluation);
   if (!complete) return "not_run";
-  const passed = typeof job.metadata.frozenEvaluationThresholdPassed === "boolean"
-    ? job.metadata.frozenEvaluationThresholdPassed
-    : lineage?.promotable === true;
+  const passed = Boolean(
+    lineage
+      && (
+        resolveModelBindingPromotionGate(lineage)
+        || managedAdapterEvaluationPassed(lineage)
+      ),
+  );
   return passed ? "passed" : "failed";
 }
 

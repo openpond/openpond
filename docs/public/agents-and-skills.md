@@ -6,7 +6,7 @@ OpenPond agents and skills start local by default. When you create one from chat
 
 | Use | Choose | Why |
 | --- | --- | --- |
-| Reusable instructions, checklists, or a focused workflow with no executable code | Skill | A profile skill is intentionally a small package centered on one `SKILL.md`. |
+| Reusable instructions, checklists, references, or a focused workflow | Skill | A profile skill is intentionally a small package centered on one `SKILL.md`; loading it supplies context but does not execute its supporting files. |
 | Code, actions, tools, scripts, fixtures, evals, setup requirements, or a durable runtime | Agent | An agent is a full source package with an explicit action and validation surface. |
 
 Agents can call tools, coordinate subagents, run goal loops, expose actions, and move between local and hosted execution without becoming hidden chat state. Skills give any compatible agent a reusable procedure without duplicating that procedure in every prompt.
@@ -58,7 +58,7 @@ Chat-driven edits should end as source and tests. The conversation explains why 
 
 ## Skill Lifecycle
 
-Skills are discovered from the active profile and made available to compatible local turns. Create a skill when the behavior can be expressed as focused instructions and supporting references. Keep it narrow enough to load only when relevant, and promote it to an agent when it starts needing executable tools, scripts, state, fixtures, or evals.
+Skills are discovered from the active profile and made available to compatible local turns. A skill package may include supporting references, templates, or scripts, but selecting or loading the skill only supplies its instructions and resources; OpenPond does not auto-run those files. Create a skill when the behavior can be expressed as a focused procedure. Promote it to an Agent when the model needs callable tools, automatic execution, durable state, fixtures, setup, or evals.
 
 Profile skill creation and editing are local profile operations. Commit skill changes in the profile repository before syncing them so local and hosted users share an explicit source version.
 

@@ -16,6 +16,7 @@ import { ComposerCreateImproveStrip } from "../apps/web/src/components/chat/Comp
 import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView";
 import { WorkspaceDiffTabs } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanelChrome";
 import {
+  promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
   shouldSubmitComposerSlashCommandToChat,
   shouldRunCreateImproveCommandLocally,
@@ -259,6 +260,9 @@ describe("OpenPond App action channel", () => {
     expect(shouldSubmitComposerSlashCommandToChat(goalCommand!)).toBe(true);
     expect(shouldSubmitComposerSlashCommandToChat(localGoalCommand!)).toBe(true);
     expect(shouldSubmitComposerSlashCommandToChat(remoteGoalCommand!)).toBe(false);
+    expect(promptForAppSlashCommand(goalCommand!)).toBe("/goal smoke goal");
+    expect(promptForAppSlashCommand(localGoalCommand!)).toBe("/goal-local smoke goal");
+    expect(promptForAppSlashCommand(remoteGoalCommand!)).toBe("/goal-remote smoke goal");
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {

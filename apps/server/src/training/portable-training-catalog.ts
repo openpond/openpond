@@ -86,6 +86,7 @@ export function createPortableTrainingCatalog(input: {
   registeredEngineIds?: string[];
   connectedWorkerConfigured?: boolean;
   connectedEngineConfigured?: boolean;
+  primeRawConfigured?: boolean;
   sandboxManagedConfigured?: boolean;
   connectedWorkerImageDigest?: string | null;
   adapterCompute?: ComputeTargetCapabilities[];
@@ -99,6 +100,7 @@ export function createPortableTrainingCatalog(input: {
     generatedAt,
     input.connectedWorkerConfigured ?? false,
     input.sandboxManagedConfigured ?? false,
+    input.primeRawConfigured ?? false,
     input.adapterCompute ?? [],
   );
   const engines = engineCapabilities({
@@ -108,6 +110,8 @@ export function createPortableTrainingCatalog(input: {
     registeredEngineIds: input.registeredEngineIds ?? [],
     connectedEngineConfigured:
       input.connectedEngineConfigured ?? false,
+    primeRawConfigured:
+      input.primeRawConfigured ?? false,
     connectedWorkerImageDigest: input.connectedWorkerImageDigest ?? null,
   });
   const runtimes = runtimeCapabilities(
@@ -346,24 +350,25 @@ function trainingTargets(input: {
     },
     {
       id: "prime-gpu",
-      label: "Prime GPU",
-      description: "Provision a raw Prime node behind the connected worker.",
+      label: "Prime Raw GPU",
+      description:
+        "Provision raw Prime compute for OpenPond-controlled rollout and PRIME-RL execution. This is not Prime Hosted Training.",
       destinationId: "prime_hosted",
       computeAdapterId: "prime-raw",
       runtimeAdapterId: "local-harness",
       engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["Prime GPU"],
+      capabilityPills: ["Prime Raw GPU"],
       ...CONNECTED_TARGET_POLICY,
     },
     {
       id: "sandbox-managed",
-      label: "Sandbox",
-      description: "Run isolated Latitude environments with replaceable GPU compute.",
+      label: "OpenPond Managed",
+      description: "Let OpenPond prepare and operate the compute for this training run.",
       destinationId: "openpond_managed",
       computeAdapterId: "sandbox-connected-gpu",
       runtimeAdapterId: "sandbox-latitude",
       engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["Sandbox"],
+      capabilityPills: ["Managed"],
       ...CONNECTED_TARGET_POLICY,
     },
     {
@@ -551,6 +556,7 @@ function computeCapabilities(
   checkedAt: string,
   connectedWorkerConfigured: boolean,
   sandboxManagedConfigured: boolean,
+  primeRawConfigured: boolean,
   adapters: ComputeTargetCapabilities[],
 ): ComputeTargetCapabilities[] {
   const localDevices: ComputeTargetCapabilities["devices"] =
@@ -615,7 +621,25 @@ function computeCapabilities(
     capability("local-cuda", "local", null, nvidia, nvidia.length > 0, nvidia.length ? null : "No compatible NVIDIA GPU is available."),
     capability("local-mlx", "local", null, apple, apple.length > 0, apple.length ? null : "No compatible Apple accelerator is available."),
     capability("ssh-worker", "ssh", null, [], sshAvailable, sshAvailable ? null : "Configure and verify an SSH worker connection."),
-    capability("prime-raw", "managed", "prime", [], false, "A fresh Prime quote and explicit spend approval are required."),
+    capability(
+      "prime-raw",
+      "managed",
+      "prime",
+      primeRawConfigured
+        ? [{
+            id: "prime-raw-dynamic",
+            kind: "gpu",
+            vendor: "nvidia",
+            name: "Prime secure H100 (fresh quote)",
+            memoryBytes: 80_000_000_000,
+            runtime: "cuda",
+          }]
+        : [],
+      primeRawConfigured,
+      primeRawConfigured
+        ? null
+        : "Connect and verify Prime before requesting a fresh raw-GPU quote.",
+    ),
     capability(
       "sandbox-connected-gpu",
       "managed",
@@ -624,7 +648,7 @@ function computeCapabilities(
       sandboxManagedConfigured,
       sandboxManagedConfigured
         ? null
-        : "Sandbox Managed RFT requires a configured M8 endpoint.",
+        : "OpenPond Managed is not available for this account.",
     ),
     capability("fireworks-managed", "managed", "fireworks", [], true, null),
   ];
@@ -637,6 +661,7 @@ function engineCapabilities(input: {
   generatedAt: string;
   registeredEngineIds: string[];
   connectedEngineConfigured: boolean;
+  primeRawConfigured: boolean;
   connectedWorkerImageDigest: string | null;
 }): TrainingEngineCapabilities[] {
   const engine = (
@@ -690,16 +715,21 @@ function engineCapabilities(input: {
         "grader_evidence",
         "infrastructure_failure",
       ],
-      Boolean(primeWorker) &&
-        input.connectedEngineConfigured &&
-        registered.has("connected-prime-rl") &&
-        (input.connectedWorkerImageDigest === null ||
-          workerDigestMatches),
+      input.primeRawConfigured ||
+        (
+          Boolean(primeWorker) &&
+          input.connectedEngineConfigured &&
+          registered.has("connected-prime-rl") &&
+          (input.connectedWorkerImageDigest === null ||
+            workerDigestMatches)
+        ),
       PRIME_RL_REVISION,
-      !primeWorker
+      input.primeRawConfigured
+        ? null
+        : !primeWorker
         ? "Install a verified signed prime-rl worker catalog entry."
         : !input.connectedEngineConfigured
-          ? "Configure an authenticated connected or Sandbox worker route."
+          ? "Configure an authenticated connected or managed worker route."
           : input.connectedWorkerImageDigest !== null &&
               !workerDigestMatches
             ? "The configured worker image does not match the verified signed catalog."

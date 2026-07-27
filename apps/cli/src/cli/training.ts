@@ -1,4 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { request as requestHttp } from "node:http";
+import os from "node:os";
+import path from "node:path";
 import { createInterface } from "node:readline/promises";
 
 import {
@@ -32,7 +35,14 @@ export async function runTrainingCommand(
   const id = rest[1];
   if (
     !subcommand ||
-    !["start", "status", "watch", "logs", "cancel", "artifacts"].includes(
+    ![
+      "start",
+      "status",
+      "watch",
+      "logs",
+      "cancel",
+      "artifacts",
+    ].includes(
       subcommand,
     ) ||
     !id
@@ -45,12 +55,15 @@ export async function runTrainingCommand(
     throw new Error(`training ${subcommand} accepts exactly one identifier`);
   }
 
+  const baseUrl =
+    resolveApiBaseUrlOption(options) ??
+    process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
+    DEFAULT_LOCAL_TRAINING_API_URL;
   const client = new TrainingApiClient({
-    baseUrl:
-      resolveApiBaseUrlOption(options) ??
-      process.env.OPENPOND_LOCAL_API_URL?.replace(/\/$/, "") ??
-      DEFAULT_LOCAL_TRAINING_API_URL,
-    request: dependencies.request,
+    baseUrl,
+    request:
+      dependencies.request ??
+      await createLocalAuthenticatedRequest(baseUrl),
   });
   const json = parseBooleanOption(options.json);
 
@@ -89,6 +102,103 @@ export async function runTrainingCommand(
     subcommand === "cancel" ? "POST" : "GET",
   );
   printResult(result, json);
+}
+
+async function createLocalAuthenticatedRequest(
+  baseUrl: string,
+): Promise<typeof fetch> {
+  const url = new URL(baseUrl);
+  if (
+    url.protocol !== "http:"
+    || !["127.0.0.1", "localhost", "::1"].includes(url.hostname)
+  ) {
+    return fetch;
+  }
+  const appHome =
+    process.env.OPENPOND_APP_HOME?.trim()
+    || path.join(os.homedir(), ".openpond", "openpond-app");
+  const token = (await readFile(path.join(appHome, "token"), "utf8")).trim();
+  if (!token) {
+    throw new Error("OpenPond local capability token is empty.");
+  }
+  return (async (
+    resource: string | URL | Request,
+    init: RequestInit = {},
+  ) => {
+    const target =
+      resource instanceof Request
+        ? new URL(resource.url)
+        : new URL(String(resource));
+    const headers = new Headers(init.headers);
+    headers.set("authorization", `Bearer ${token}`);
+    const nodeHeaders: Record<string, string> = {};
+    headers.forEach((value, name) => {
+      nodeHeaders[name] = value;
+    });
+    return new Promise<Response>((resolve, reject) => {
+      let settled = false;
+      const request = requestHttp(
+        target,
+        {
+          method: init.method ?? "GET",
+          headers: nodeHeaders,
+        },
+        (response) => {
+          const chunks: Buffer[] = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.once("error", rejectOnce);
+          response.once("end", () => {
+            if (settled) return;
+            settled = true;
+            const responseHeaders = new Headers();
+            for (const [name, value] of Object.entries(response.headers)) {
+              if (Array.isArray(value)) {
+                for (const item of value) responseHeaders.append(name, item);
+              } else if (value !== undefined) {
+                responseHeaders.set(name, value);
+              }
+            }
+            resolve(
+              new Response(new Uint8Array(Buffer.concat(chunks)), {
+                status: response.statusCode ?? 500,
+                statusText: response.statusMessage,
+                headers: responseHeaders,
+              }),
+            );
+          });
+        },
+      );
+      const rejectOnce = (error: Error) => {
+        if (settled) return;
+        settled = true;
+        reject(error);
+      };
+      request.once("error", rejectOnce);
+      if (init.signal) {
+        const abort = () =>
+          request.destroy(
+            init.signal?.reason instanceof Error
+              ? init.signal.reason
+              : new Error("Training API request aborted."),
+          );
+        if (init.signal.aborted) abort();
+        else init.signal.addEventListener("abort", abort, { once: true });
+      }
+      if (init.body !== undefined && init.body !== null) {
+        if (
+          typeof init.body !== "string"
+          && !(init.body instanceof Uint8Array)
+        ) {
+          request.destroy(
+            new Error("Local Training API supports string or byte request bodies."),
+          );
+          return;
+        }
+        request.write(init.body);
+      }
+      request.end();
+    });
+  }) as typeof fetch;
 }
 
 export class TrainingApiClient {

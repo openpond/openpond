@@ -1,6 +1,12 @@
 import { access, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BUILT_IN_OPENPOND_PROFILE_SKILLS,
+  type OpenPondProfileSkill,
+} from "@openpond/contracts";
+import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 
 const REFERENCE_FILES = [
   "task-design.md",
@@ -23,6 +29,40 @@ export async function loadTasksetAuthoringSkillBundle(repoRoot = process.cwd()):
     ...references.map((reference, index) =>
       `\n## Bundled reference: ${REFERENCE_FILES[index]}\n\n${reference.trim()}`),
   ].join("\n");
+}
+
+export async function loadTasksetAuthoringProfileSkill(
+  repoRoot = process.cwd(),
+): Promise<OpenPondProfileSkill> {
+  const root = await resolveTasksetAuthoringSkillRoot(repoRoot);
+  const body = await loadTasksetAuthoringSkillBundle(repoRoot);
+  const builtIn = BUILT_IN_OPENPOND_PROFILE_SKILLS[0];
+  return {
+    ...builtIn,
+    path: path.join(root, "SKILL.md"),
+    sourcePath: root,
+    charCount: body.length,
+    sourceHash: createHash("sha256").update(body).digest("hex"),
+    validationMessages: [...builtIn.validationMessages],
+    resourceFiles: [...builtIn.resourceFiles],
+  };
+}
+
+export async function readTasksetAuthoringProfileSkill(
+  repoRoot = process.cwd(),
+): Promise<ProfileSkillReadResult> {
+  const skill = await loadTasksetAuthoringProfileSkill(repoRoot);
+  const body = await loadTasksetAuthoringSkillBundle(repoRoot);
+  return {
+    name: skill.name,
+    description: skill.description,
+    body,
+    path: skill.path,
+    sourceHash: skill.sourceHash,
+    charCount: skill.charCount,
+    packagePath: skill.sourcePath,
+    resourceFiles: skill.resourceFiles,
+  };
 }
 
 export async function resolveTasksetAuthoringSkillRoot(

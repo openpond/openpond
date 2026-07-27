@@ -16,6 +16,7 @@ export type WorkspaceDiffTabRequest = {
 export type WorkspaceDiffSideChatTab = {
   id: string;
   title: string;
+  running?: boolean;
 };
 
 export type WorkspaceFileSourceValue = "local" | "sandbox";

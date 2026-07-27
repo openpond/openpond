@@ -159,10 +159,48 @@ export const ComputeCompatibilityReportSchema = z.object({
   checkedAt: TimestampSchema,
 });
 
+export const PrimeComputeProviderStateSchema = z.enum([
+  "disconnected",
+  "configured",
+  "credential_valid",
+  "ready",
+  "error",
+]);
+
+export const PrimeComputeProviderStatusSchema = z.object({
+  schemaVersion: z.literal("openpond.primeComputeProviderStatus.v1"),
+  providerId: z.literal("prime"),
+  displayName: z.literal("Prime Intellect"),
+  state: PrimeComputeProviderStateSchema,
+  credential: z.object({
+    configured: z.boolean(),
+    redacted: z.string().trim().min(1).max(100).nullable(),
+    storedLocally: z.literal(true),
+  }),
+  availability: z.object({
+    availableOfferingCount: z.number().int().nonnegative(),
+    lowestHourlyUsd: z.number().nonnegative().nullable(),
+    registeredSshKeyCount: z.number().int().nonnegative(),
+  }).nullable(),
+  worker: z.object({
+    ready: z.boolean(),
+    status: z.enum(["not_configured", "setup_required", "ready"]),
+    message: z.string().trim().min(1).max(2_000),
+    issues: z.array(z.string().trim().min(1).max(2_000)).max(20),
+  }),
+  lastValidatedAt: TimestampSchema.nullable(),
+  lastError: z.string().trim().min(1).max(2_000).nullable(),
+});
+
+export const ComputeProviderStatusesSchema = z.object({
+  prime: PrimeComputeProviderStatusSchema,
+});
+
 export const ComputeStateResponseSchema = z.object({
   schemaVersion: z.literal("openpond.computeState.v1"),
   settings: ComputeSettingsSchema,
   inventory: ComputeInventorySchema.nullable(),
+  providers: ComputeProviderStatusesSchema,
   scanning: z.boolean(),
 });
 
@@ -171,6 +209,10 @@ export const UpdateComputeSettingsRequestSchema = z.object({
   datasetStorePath: z.string().trim().min(1).max(4_000).nullable().optional(),
   defaultDeviceIds: z.array(IdSchema).max(64).optional(),
   additionalModelPaths: z.array(z.string().trim().min(1).max(4_000)).max(32).optional(),
+});
+
+export const SavePrimeComputeCredentialRequestSchema = z.object({
+  apiKey: z.string().trim().min(1).max(20_000),
 });
 
 export type ComputeDevice = z.infer<typeof ComputeDeviceSchema>;
@@ -183,4 +225,8 @@ export type ComputeHostProfile = z.infer<typeof ComputeHostProfileSchema>;
 export type ComputeSettings = z.infer<typeof ComputeSettingsSchema>;
 export type ComputeInventory = z.infer<typeof ComputeInventorySchema>;
 export type ComputeCompatibilityReport = z.infer<typeof ComputeCompatibilityReportSchema>;
+export type PrimeComputeProviderState = z.infer<typeof PrimeComputeProviderStateSchema>;
+export type PrimeComputeProviderStatus = z.infer<typeof PrimeComputeProviderStatusSchema>;
+export type ComputeProviderStatuses = z.infer<typeof ComputeProviderStatusesSchema>;
 export type ComputeStateResponse = z.infer<typeof ComputeStateResponseSchema>;
+export type SavePrimeComputeCredentialRequest = z.infer<typeof SavePrimeComputeCredentialRequestSchema>;

@@ -31,8 +31,10 @@ export function ProfileAgentsSection({
           <small>{scheduleHeadingLabel(schedules.schedules.length, schedules.loading)}</small>
         </div>
       </div>
-      {profile.agents.length || schedules.schedules.length ? (
-        <div className="profile-table-frame">
+      <p className="settings-help">
+        Profile Agents are exposed to the normal Chat loop as scoped native actions. Built-in Agents are available in every Profile.
+      </p>
+      <div className="profile-table-frame">
           <table className="profile-data-table profile-agent-table" aria-label="Profile agents table">
             <colgroup>
               <col className="profile-agent-column" />
@@ -49,6 +51,7 @@ export function ProfileAgentsSection({
               </tr>
             </thead>
             <tbody>
+              <ProfileBuiltInDatasetAgentRow />
               {profile.agents.map((agent) => (
                 <ProfileAgentRow
                   agent={agent}
@@ -71,14 +74,31 @@ export function ProfileAgentsSection({
               ))}
             </tbody>
           </table>
-        </div>
-      ) : (
-        <div className="empty-account-list">
-          <strong>No profile agents found</strong>
-          <span>Create an agent, then run Profile checks to add it to the catalog.</span>
-        </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+function ProfileBuiltInDatasetAgentRow() {
+  return (
+    <tr className="profile-agent-row">
+      <td>
+        <div className="profile-agent-identity">
+          <Bot size={18} />
+          <div>
+            <strong>Dataset Builder</strong>
+            <span>Built in · every Profile</span>
+          </div>
+        </div>
+      </td>
+      <td>
+        <div className="profile-agent-action">
+          <span>Design · Materialize · Test</span>
+        </div>
+      </td>
+      <td><ProfileStatusText status={{ state: "ready", label: "Ready" }} /></td>
+      <td><ProfileStatusText status={{ state: "ready", label: "Built in" }} /></td>
+    </tr>
   );
 }
 

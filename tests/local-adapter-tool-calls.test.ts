@@ -18,6 +18,7 @@ import {
   serializeLocalAdapterMessages,
 } from "../apps/server/src/training/local-adapter-tool-protocol";
 import { nativeToolTransportEnabledForProvider, resolveHostedToolRolloutFlags } from "../apps/server/src/runtime/hosted-turn/rollout";
+import { hostedTrainingHarnessRound } from "../apps/server/src/runtime/hosted-turn/tool-loop-runtime";
 import { createOpenPondActionModelToolDefinitions } from "../apps/server/src/openpond/model-tool-registry";
 import { createCrossSystemChatToolRuntime, generateCrossSystemTasks, generateCrossSystemWorld, PersistentPythonSandbox } from "../apps/server/src/training/cross-system-operations";
 import { tasksetFixture } from "./helpers/training-fixtures";
@@ -170,6 +171,69 @@ describe("local adapter constrained tool protocol", () => {
     const result = await direct[0]!.execute({ model: "lineage_cso", session: { localProjectId: "project_cso", workspaceKind: "local_project", workspaceId: "project_cso" }, turnId: "turn_cso", callId: "call_cso", args: { query: "Atlas", fields: ["account_id"], cursor: null, limit: 10 }, userPrompt: "Generated question", turnMetadata: { crossSystemTaskId: "cso_task_validation_1" }, signal: new AbortController().signal } as any);
     expect(result).toMatchObject({ ok: true, name: "search_crm" });
     expect(calls[0]).toMatchObject({ modelId: "lineage_cso", localProjectId: "project_cso", turnId: "turn_cso", name: "search_crm", taskId: "cso_task_validation_1" });
+  });
+
+  test("forces each stateful harness action through one required tool at a time", () => {
+    const actionBindings = [
+      { modelToolName: "get_portfolio_snapshot" },
+      { modelToolName: "submit_budget_decision" },
+    ] as any;
+    const harnessTools: HostedChatTool[] = actionBindings.map(
+      ({ modelToolName }: { modelToolName: string }) => ({
+        type: "function",
+        function: {
+          name: modelToolName,
+          parameters: { type: "object" },
+        },
+      }),
+    );
+    const trainingHarness = { actionBindings };
+
+    expect(
+      hostedTrainingHarnessRound({
+        trainingHarness,
+        completedActionCount: 0,
+        nativeTools: harnessTools,
+      }),
+    ).toMatchObject({
+      tools: [{ function: { name: "get_portfolio_snapshot" } }],
+      toolChoice: "required",
+      requiredToolName: "get_portfolio_snapshot",
+    });
+    expect(
+      hostedTrainingHarnessRound({
+        trainingHarness,
+        completedActionCount: 1,
+        nativeTools: harnessTools,
+      }),
+    ).toMatchObject({
+      tools: [
+        { function: { name: "get_portfolio_snapshot" } },
+        { function: { name: "submit_budget_decision" } },
+      ],
+      toolChoice: "required",
+      requiredToolName: "submit_budget_decision",
+    });
+    expect(
+      hostedTrainingHarnessRound({
+        trainingHarness,
+        completedActionCount: 2,
+        nativeTools: harnessTools,
+      }),
+    ).toEqual({
+      tools: [],
+      toolChoice: "none",
+      requiredToolName: null,
+    });
+    expect(() =>
+      hostedTrainingHarnessRound({
+        trainingHarness,
+        completedActionCount: 0,
+        nativeTools: harnessTools.slice(1),
+      }),
+    ).toThrow(
+      "Training harness tool get_portfolio_snapshot is unavailable",
+    );
   });
 
   test("cancels in-flight persistent sandbox work instead of leaving a worker behind", async () => {

@@ -1,28 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import json
-from pathlib import Path
 import subprocess
-
-import pytest
+import sys
+from pathlib import Path
 
 import openpond_training.prime_rl_execution as prime
+import pytest
+from openpond_training.canonical_json import content_hash
 from openpond_training.engine_adapters import (
     PRIME_RL_BASE_IMAGE_DIGEST,
     PRIME_RL_UPSTREAM_REVISION,
 )
 from openpond_training.prime_rl_worker import read_signal_journal
 
-
 WORKER_DIGEST = f"sha256:{'7' * 64}"
-
-
-def content_hash(value: object) -> str:
-    canonical = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, indent=2
-    ) + "\n"
-    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def plan() -> dict:
@@ -304,6 +296,14 @@ def test_projects_exact_external_batch_and_configs() -> None:
     assert f"# prime_rl_commit = {PRIME_RL_UPSTREAM_REVISION}" in trainer
     assert "resume_step" not in trainer
     assert "interval = 1" in trainer
+    run = prime.render_prime_rl_run_config(
+        settings=settings,
+        model_path=Path("/models/exact"),
+        output_root=Path("/output"),
+        step=1,
+    )
+    assert '[renderer]\nname = "default"' in run
+    assert "[orchestrator.renderer]" not in run
     assert PRIME_RL_BASE_IMAGE_DIGEST.startswith("sha256:")
 
 
@@ -373,7 +373,11 @@ def test_executes_pinned_trainer_command_and_exports_artifacts(
         timeout_seconds=30,
         run_process=fake_run,
     )
-    assert commands[0][0:4] == ["uv", "run", "--no-sync", "torchrun"]
+    assert commands[0][0:3] == [
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
+    ]
     assert commands[0][-4:] == [
         "-m",
         "prime_rl.trainer.rl.train",

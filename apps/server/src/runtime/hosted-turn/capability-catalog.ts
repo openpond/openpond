@@ -1,4 +1,5 @@
 import type {
+  HarnessActionBinding,
   OpenPondActionCatalogEntry,
   RuntimeEvent,
   SubagentRoleSettings,
@@ -47,9 +48,22 @@ export function createCapabilityCatalogRuntime(deps: {
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
+      trainingHarness?: {
+        taskId: string;
+        actionBindings: HarnessActionBinding[];
+      };
     } = {},
   ): ModelToolDefinition[] {
     const definitions: ModelToolDefinition[] = [];
+    if (options.trainingHarness) {
+      return createOpenPondActionModelToolDefinitions({
+        actionCatalog: openPondActionCatalog,
+        executeWorkspaceTool: deps.executeWorkspaceTool,
+        executeProfileAction: deps.executeProfileAction,
+        executeCrossSystemTool: deps.executeCrossSystemTool,
+        trainingHarness: options.trainingHarness,
+      });
+    }
     if (!options.disableWorkflowDelegationTools) {
       const handlers: CapabilityHandlers = {
         startCreateImprove: deps.handlers.startCreateImprove,
@@ -59,6 +73,9 @@ export function createCapabilityCatalogRuntime(deps: {
           : {}),
         ...(deps.handlers.startProfileSkillGoal
           ? { startProfileSkillGoal: deps.handlers.startProfileSkillGoal }
+          : {}),
+        ...(deps.handlers.runDatasetBuilder
+          ? { runDatasetBuilder: deps.handlers.runDatasetBuilder }
           : {}),
         ...(deps.subagentToolsAvailable() && options.subagentToolsEnabled !== false
           ? {

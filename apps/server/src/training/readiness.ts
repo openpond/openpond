@@ -38,7 +38,11 @@ export function buildTasksetReadiness(input: {
     ? allTrainTasks.filter((task) => approvedDemonstrationTaskIds.has(task.id))
     : allTrainTasks;
   const unapprovedTrainTasks = input.taskset.tasks.filter((task) => task.split === "train" && task.expectedOutput && !approvedDemonstrationTaskIds.has(task.id));
-  const frozenTasks = input.taskset.tasks.filter((task) => task.split === "frozen_eval" && task.expectedOutput);
+  const frozenTasks = input.taskset.tasks.filter(
+    (task) =>
+      task.split === "frozen_eval" &&
+      (task.expectedOutput || requiresOnlineReward),
+  );
   const artifactTrainCount = artifact && artifactHasExpectedOutput
     ? artifact.splitCounts.train ?? 0
     : 0;

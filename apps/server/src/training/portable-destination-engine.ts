@@ -13,6 +13,7 @@ import type {
   TrainingCatalog,
   TrainingPlan,
 } from "@openpond/contracts";
+import { LearningSignalBatchSchema } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
   TrainingAdapterRegistry,
@@ -44,6 +45,10 @@ type DestinationBridgeDependencies = {
   cancel(jobId: string): Promise<TrainingJob>;
   collect(jobId: string): Promise<TrainingArtifact[]>;
   events(jobId: string): Promise<TrainingJobEvent[]>;
+  deliverSignals(
+    jobId: string,
+    batch: LearningSignalBatch,
+  ): Promise<void>;
 };
 
 export function createPortableDestinationAdapterRegistry(input: {
@@ -106,6 +111,17 @@ export function createPortableDestinationAdapterRegistry(input: {
           .get(definition.destinationId)
           .collect(jobId),
       events: (jobId) => input.store.listTrainingJobEvents(jobId),
+      deliverSignals: async (jobId, batch) => {
+        const destination = input.destinations.get(
+          definition.destinationId,
+        );
+        if (!destination.consumeSignals) {
+          throw new Error(
+            `Training destination ${definition.destinationId} does not accept online learning signals.`,
+          );
+        }
+        await destination.consumeSignals(jobId, batch);
+      },
     });
     bridges.set(definition.adapterId, bridge);
     adapters.registerEngine(
@@ -143,6 +159,11 @@ export class PortableDestinationEngineBridge {
     PortableDestinationExecutionContext
   >();
   private readonly manifestHashes = new Map<string, string>();
+  private readonly manifestIds = new Map<string, string>();
+  private readonly signalReceipts = new Map<
+    string,
+    Map<number, string>
+  >();
 
   constructor(private readonly deps: DestinationBridgeDependencies) {}
 
@@ -239,6 +260,7 @@ export class PortableDestinationEngineBridge {
     }
     const job = await this.deps.launch(context);
     this.manifestHashes.set(job.id, plan.manifest.contentHash);
+    this.manifestIds.set(job.id, plan.manifest.id);
     return {
       runId: job.id,
       adapterId: this.deps.adapterId,
@@ -255,13 +277,38 @@ export class PortableDestinationEngineBridge {
     ref: TrainingExecutionRef,
     batch: LearningSignalBatch,
   ): Promise<void> {
+    const parsed = LearningSignalBatchSchema.parse(batch);
     const manifestHash = this.manifestHashes.get(ref.runId);
+    const manifestId = this.manifestIds.get(ref.runId);
     if (
-      (manifestHash && manifestHash !== batch.manifestHash) ||
-      batch.manifestId.length === 0
+      !manifestHash
+      || !manifestId
+      || manifestHash !== parsed.manifestHash
+      || manifestId !== parsed.manifestId
     ) {
       throw new Error("Learning signals do not match this execution.");
     }
+    const { contentHash: suppliedHash, ...content } = parsed;
+    if (suppliedHash !== contentHash(content)) {
+      throw new Error("Learning signal batch content hash is invalid.");
+    }
+    const receipts =
+      this.signalReceipts.get(ref.runId) ?? new Map<number, string>();
+    const existing = receipts.get(parsed.sequence);
+    if (existing) {
+      if (existing !== parsed.contentHash) {
+        throw new Error(
+          "A delivered learning signal sequence changed content.",
+        );
+      }
+      return;
+    }
+    if (parsed.sequence !== receipts.size) {
+      throw new Error("Learning signal delivery sequence is not contiguous.");
+    }
+    await this.deps.deliverSignals(ref.runId, parsed);
+    receipts.set(parsed.sequence, parsed.contentHash);
+    this.signalReceipts.set(ref.runId, receipts);
   }
 
   private async status(

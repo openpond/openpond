@@ -1,7 +1,9 @@
 import type { HostedChatTool } from "@openpond/cloud";
+import { createHash } from "node:crypto";
 import type {
   ChatProvider,
   ConnectedAppProviderFamilyId,
+  HarnessActionBinding,
   OpenPondActionCatalogEntry,
   OpenPondApp,
   OpenPondProfileSkill,
@@ -995,10 +997,43 @@ export function createOpenPondActionModelToolDefinitions(deps: {
     taskId?: string;
     signal: AbortSignal;
   }) => Promise<NativeModelToolResult>;
+  trainingHarness?: {
+    taskId: string;
+    actionBindings: HarnessActionBinding[];
+  };
 }): ModelToolDefinition[] {
   if (deps.actionCatalog.length === 0) return [];
   const actionById = new Map(deps.actionCatalog.map((action) => [action.id, action]));
   const enabled = () => actionById.size > 0;
+  if (deps.trainingHarness) {
+    return deps.trainingHarness.actionBindings.map((binding) => {
+      const action = actionById.get(binding.actionId);
+      if (!action) {
+        throw new Error(
+          `Taskset Harness action ${binding.actionId} is not available in the active Profile.`,
+        );
+      }
+      return {
+        name: binding.modelToolName,
+        description: binding.description,
+        parameters: structuredClone(binding.inputSchema),
+        enabled,
+        execute: (context) =>
+          executeScopedOpenPondAction({
+            action,
+            context,
+            deps,
+            resultToolName: binding.modelToolName,
+            compactProfileResultForModel: true,
+            input: bindHarnessEpisodeArguments({
+              binding,
+              arguments: context.args,
+              taskId: deps.trainingHarness!.taskId,
+            }),
+          }),
+      };
+    });
+  }
   const directCrossSystemActions = new Map(deps.actionCatalog.flatMap((action) => {
     const name = action.sourceActionId ?? action.name ?? action.id;
     return (CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(name) ? [[name, action] as const] : [];
@@ -1024,8 +1059,37 @@ export function createOpenPondActionModelToolDefinitions(deps: {
         }),
       }))
     : [];
+  const directAgentTools = deps.actionCatalog
+    .filter((action) => {
+      const implementation = asRecord(action.implementation);
+      const actionName = action.sourceActionId ?? action.name ?? action.id;
+      return (
+        !(CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(actionName) &&
+        (Boolean(action.agentId) || implementation?.type === "openpond-profile-action")
+      );
+    })
+    .map<ModelToolDefinition>((action) => {
+      const name = directOpenPondActionToolName(action);
+      return {
+        name,
+        description: [
+          action.description ?? `Run the ${action.label ?? action.name ?? action.id} Profile Agent action.`,
+          `This tool is scoped to action ${action.id}; pass the action input directly.`,
+        ].join(" "),
+        parameters: actionInputSchema(action),
+        enabled,
+        execute: (context) => executeScopedOpenPondAction({
+          action,
+          context,
+          deps,
+          resultToolName: name,
+          input: context.args,
+        }),
+      };
+    });
   return [
     ...directCrossSystemTools,
+    ...directAgentTools,
     {
       name: "openpond_action_search",
       description:
@@ -1093,114 +1157,210 @@ export function createOpenPondActionModelToolDefinitions(deps: {
             `Action ${actionId} is not in the scoped allowed action catalog.`,
           );
         }
-        const implementation = asRecord(action.implementation);
-        if (implementation?.type === "openpond-profile-action") {
-          const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
-          if (isSandboxExecutionTarget(executionTarget)) {
-            return failedActionToolResult(
-              context.callId,
-              "openpond_action_run",
-              `Action ${actionId} is a local profile action and cannot run while Working in Hybrid or sandbox. Use a sandbox action for hosted workspace work, or switch Working in to Local before running this profile action.`,
-            );
-          }
-          if (!deps.executeProfileAction) {
-            return failedActionToolResult(
-              context.callId,
-              "openpond_action_run",
-              `Action ${actionId} is a profile action, but profile action execution is not configured.`,
-            );
-          }
-          const profileActionId = stringValue(implementation.actionId) ?? action.id;
-          const input = asRecord(context.args.input) ?? {};
-          const prompt = stringValue(input.prompt) ?? stringValue(input.message) ?? context.userPrompt;
-          const result = await deps.executeProfileAction({
-            action: profileActionId,
-            input: {
-              ...input,
-              prompt,
-              message: prompt,
-              source: "openpond_app",
-            },
-            metadata: {
-              source: "openpond_app",
-              selectedActionId: profileActionId,
-              selectedActionLabel: action.label ?? action.name ?? profileActionId,
-              selectedBy: "native_model_tool",
-              displayPrompt: context.userPrompt,
-              sessionId: context.session.id,
-            },
-          });
-          return {
-            toolCallId: context.callId,
-            name: "openpond_action_run",
-            ok: true,
-            contentText: JSON.stringify(
-              {
-                ok: true,
-                action: "openpond_action_run",
-                output: `Ran profile action ${profileActionId}.`,
-                data: { result },
-              },
-              null,
-              2,
-            ),
-            data: { result },
-          };
-        }
-        const actionName = action.sourceActionId ?? action.name ?? action.id;
-        const payloadArgs: Record<string, unknown> = {
-          actionName,
+        return executeScopedOpenPondAction({
+          action,
+          context,
+          deps,
+          resultToolName: "openpond_action_run",
           input: asRecord(context.args.input) ?? {},
-        };
-        const allowedProjectId = stringValue(implementation?.projectId);
-        const requestedProjectId = stringValue(context.args.projectId);
-        if (requestedProjectId) {
-          if (!allowedProjectId || requestedProjectId !== allowedProjectId) {
-            return failedActionToolResult(
-              context.callId,
-              "openpond_action_run",
-              `Project ${requestedProjectId} is not authorized for action ${actionId}.`,
-            );
-          }
-          payloadArgs.projectId = requestedProjectId;
-        } else if (allowedProjectId) {
-          payloadArgs.projectId = allowedProjectId;
-        }
-        const allowedAgentId = action.agentId ?? stringValue(implementation?.agentId);
-        const requestedAgentId = stringValue(context.args.agentId);
-        if (requestedAgentId) {
-          if (!allowedAgentId || requestedAgentId !== allowedAgentId) {
-            return failedActionToolResult(
-              context.callId,
-              "openpond_action_run",
-              `Agent ${requestedAgentId} is not authorized for action ${actionId}.`,
-            );
-          }
-          payloadArgs.agentId = requestedAgentId;
-        } else if (allowedAgentId) {
-          payloadArgs.agentId = allowedAgentId;
-        }
-        const result = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_run_action",
-            args: payloadArgs,
-            source: "chat_action",
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          },
-        );
-        return workspaceToolResultToModelToolResult(context.callId, "openpond_action_run", result);
+          requestedProjectId: stringValue(context.args.projectId) ?? undefined,
+          requestedAgentId: stringValue(context.args.agentId) ?? undefined,
+        });
       },
     },
   ];
 }
 
+export function directOpenPondActionToolName(action: OpenPondActionCatalogEntry): string {
+  const source = action.sourceActionId ?? action.name ?? action.label ?? action.id;
+  const slug = source
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 44) || "action";
+  const suffix = createHash("sha256").update(action.id).digest("hex").slice(0, 8);
+  return `agent_${slug}_${suffix}`;
+}
+
+function actionInputSchema(action: OpenPondActionCatalogEntry): Record<string, unknown> {
+  const schema = asRecord(action.inputSchema);
+  if (schema?.type === "object") return structuredClone(schema);
+  return {
+    type: "object",
+    additionalProperties: true,
+    description: typeof action.inputSchema === "string"
+      ? `Input must satisfy the Profile schema ${action.inputSchema}.`
+      : "Input accepted by this Profile Agent action.",
+  };
+}
+
+async function executeScopedOpenPondAction(input: {
+  action: OpenPondActionCatalogEntry;
+  context: ModelToolExecutionContext;
+  deps: {
+    executeWorkspaceTool: (
+      sessionId: string,
+      payload: unknown,
+      options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
+    ) => Promise<WorkspaceToolResult>;
+    executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  };
+  resultToolName: string;
+  input: Record<string, unknown>;
+  requestedProjectId?: string;
+  requestedAgentId?: string;
+  compactProfileResultForModel?: boolean;
+}): Promise<NativeModelToolResult> {
+  const { action, context, deps, resultToolName } = input;
+  const implementation = asRecord(action.implementation);
+  if (implementation?.type === "openpond-profile-action") {
+    const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+    if (isSandboxExecutionTarget(executionTarget)) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is a local profile action and cannot run while Working in Hybrid or sandbox. Use a sandbox action for hosted workspace work, or switch Working in to Local before running this profile action.`,
+      );
+    }
+    if (!deps.executeProfileAction) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is a profile action, but profile action execution is not configured.`,
+      );
+    }
+    const profileActionId = stringValue(implementation.actionId) ?? action.id;
+    const prompt = stringValue(input.input.prompt) ?? stringValue(input.input.message) ?? context.userPrompt;
+    const result = await deps.executeProfileAction({
+      action: profileActionId,
+      input: {
+        ...input.input,
+        prompt,
+        message: prompt,
+        source: "openpond_app",
+      },
+      metadata: {
+        source: "openpond_app",
+        selectedActionId: profileActionId,
+        selectedActionLabel: action.label ?? action.name ?? profileActionId,
+        selectedBy: "native_model_tool",
+        displayPrompt: context.userPrompt,
+        sessionId: context.session.id,
+      },
+    });
+    const modelResult = input.compactProfileResultForModel
+      ? compactProfileActionResult(result)
+      : result;
+    return {
+      toolCallId: context.callId,
+      name: resultToolName,
+      ok: true,
+      contentText: JSON.stringify(
+        {
+          ok: true,
+          action: resultToolName,
+          output: `Ran profile action ${profileActionId}.`,
+          data: { result: modelResult },
+        },
+        null,
+        2,
+      ),
+      data: { result },
+    };
+  }
+
+  const payloadArgs: Record<string, unknown> = {
+    actionName: action.sourceActionId ?? action.name ?? action.id,
+    input: input.input,
+  };
+  const allowedProjectId = stringValue(implementation?.projectId);
+  if (input.requestedProjectId) {
+    if (!allowedProjectId || input.requestedProjectId !== allowedProjectId) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Project ${input.requestedProjectId} is not authorized for action ${action.id}.`,
+      );
+    }
+    payloadArgs.projectId = input.requestedProjectId;
+  } else if (allowedProjectId) {
+    payloadArgs.projectId = allowedProjectId;
+  }
+  const allowedAgentId = action.agentId ?? stringValue(implementation?.agentId);
+  if (input.requestedAgentId) {
+    if (!allowedAgentId || input.requestedAgentId !== allowedAgentId) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Agent ${input.requestedAgentId} is not authorized for action ${action.id}.`,
+      );
+    }
+    payloadArgs.agentId = input.requestedAgentId;
+  } else if (allowedAgentId) {
+    payloadArgs.agentId = allowedAgentId;
+  }
+  const result = await deps.executeWorkspaceTool(
+    context.session.id,
+    {
+      action: "sandbox_run_action",
+      args: payloadArgs,
+      source: "chat_action",
+    },
+    {
+      turnId: context.turnId,
+      workspaceDiffBaseline: context.workspaceDiffBaseline,
+    },
+  );
+  return workspaceToolResultToModelToolResult(context.callId, resultToolName, result);
+}
+
+function compactProfileActionResult(value: unknown): unknown {
+  const execution = asRecord(value);
+  const stdout = stringValue(execution?.stdout);
+  if (!stdout) return value;
+  let payload: unknown;
+  try {
+    payload = JSON.parse(stdout) as unknown;
+  } catch {
+    return value;
+  }
+  const actionResult = asRecord(payload)?.result ?? payload;
+  const actionResultRecord = asRecord(actionResult);
+  const metadata = asRecord(actionResultRecord?.metadata);
+  for (const key of ["snapshot", "decision", "submission", "receipt"]) {
+    if (metadata && Object.hasOwn(metadata, key)) return metadata[key];
+  }
+  const text = stringValue(actionResultRecord?.text);
+  if (text) {
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return text;
+    }
+  }
+  return actionResult;
+}
+
 function crossSystemTaskIdFromTurnMetadata(metadata: Turn["metadata"]): string | undefined {
   const value = metadata?.crossSystemTaskId;
   return typeof value === "string" && value.trim() ? value.trim().slice(0, 240) : undefined;
+}
+
+function bindHarnessEpisodeArguments(input: {
+  binding: HarnessActionBinding;
+  arguments: Record<string, unknown>;
+  taskId: string;
+}): Record<string, unknown> {
+  const resolved = structuredClone(input.arguments);
+  for (const binding of input.binding.episodeArgumentBindings) {
+    if (Object.hasOwn(resolved, binding.argument)) {
+      throw new Error(
+        `Harness action ${input.binding.actionId} cannot accept caller-supplied episode argument ${binding.argument}.`,
+      );
+    }
+    resolved[binding.argument] = input.taskId;
+  }
+  return resolved;
 }
 
 function workspaceToolResultToModelToolResult(

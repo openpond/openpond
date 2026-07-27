@@ -174,7 +174,7 @@ export function WorkproductConfiguration({
         <dl className="training-configuration-list">
           <Config label="Stable Model ID" value={workproduct.id} />
           <Config
-            label="Dataset"
+            label="Taskset"
             value={workproduct.tasksetId ?? "Select one in Build"}
           />
           <Config

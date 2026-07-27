@@ -1,9 +1,10 @@
-import type {
-  OpenPondExtensionCatalog,
-  OpenPondProfileLibrary,
-  OpenPondProfileRef,
-  OpenPondProfileSkill,
-  OpenPondProfileState,
+import {
+  BUILT_IN_OPENPOND_PROFILE_SKILLS,
+  type OpenPondExtensionCatalog,
+  type OpenPondProfileLibrary,
+  type OpenPondProfileRef,
+  type OpenPondProfileSkill,
+  type OpenPondProfileState,
 } from "@openpond/contracts";
 
 export type ComposerProfileTarget = {
@@ -68,7 +69,16 @@ export function composerSkillsForProfile(
   profile: OpenPondProfileState | null | undefined,
   extensions: OpenPondExtensionCatalog | null | undefined,
 ): OpenPondProfileSkill[] {
-  const skills = new Map((profile?.skills ?? []).map((skill) => [skill.name, skill]));
+  const skills = new Map<string, OpenPondProfileSkill>(
+    BUILT_IN_OPENPOND_PROFILE_SKILLS.map((skill) => [skill.name, {
+      ...skill,
+      validationMessages: [...skill.validationMessages],
+      resourceFiles: [...skill.resourceFiles],
+    }]),
+  );
+  for (const skill of profile?.skills ?? []) {
+    if (!skills.has(skill.name)) skills.set(skill.name, skill);
+  }
   for (const extension of extensions?.extensions ?? []) {
     if (extension.validationStatus !== "valid") continue;
     for (const skill of extension.skills) {

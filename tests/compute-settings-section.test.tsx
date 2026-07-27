@@ -28,6 +28,32 @@ function computeState(): ComputeStateResponse {
       warnings: [],
       scannedAt: now,
     },
+    providers: {
+      prime: {
+        schemaVersion: "openpond.primeComputeProviderStatus.v1",
+        providerId: "prime",
+        displayName: "Prime Intellect",
+        state: "credential_valid",
+        credential: {
+          configured: true,
+          redacted: "••••••••••••",
+          storedLocally: true,
+        },
+        availability: {
+          availableOfferingCount: 4,
+          lowestHourlyUsd: 1.25,
+          registeredSshKeyCount: 1,
+        },
+        worker: {
+          ready: false,
+          status: "setup_required",
+          message: "The connected Prime-RL worker runtime is the next setup step.",
+          issues: ["Publish and pin the worker image."],
+        },
+        lastValidatedAt: now,
+        lastError: null,
+      },
+    },
     scanning: false,
   };
 }
@@ -39,6 +65,9 @@ describe("compute model storage settings", () => {
       busy: null,
       onScan: noopAsync,
       onSave: async () => true,
+      onSavePrimeCredential: async () => true,
+      onValidatePrimeCredential: noopAsync,
+      onDeletePrimeCredential: noopAsync,
       onDownloadSmolLm2: noopAsync,
       onCancelDownload: noopAsync,
     }));
@@ -53,6 +82,13 @@ describe("compute model storage settings", () => {
     expect(html).not.toContain("Choose a writable drive");
     expect(html).not.toContain("model-storage-selection");
     expect(html).not.toContain('placeholder="Choose a local or mounted folder"');
+    expect(html).toContain("Prime Intellect");
+    expect(html).toContain("Key verified");
+    expect(html).toContain("4");
+    expect(html).toContain("$1.25/hr");
+    expect(html).not.toContain("actual-prime-secret");
+    expect(html).not.toContain("Connected worker setup");
+    expect(html).not.toContain("remaining runtime");
   });
 
   test("shows the full mounted path inside the manual location dialog", () => {

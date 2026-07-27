@@ -6,6 +6,28 @@ export const SHIPPED_OPENPOND_SKILL_NAMES = [
   "openpond-taskset-authoring",
 ] as const;
 
+export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
+  {
+    name: "openpond-taskset-authoring",
+    description:
+      "Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented evidence, or imported data.",
+    path: "skills/openpond-taskset-authoring/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: [
+      "references/task-design.md",
+      "references/graders-and-rewards.md",
+      "references/method-selection.md",
+      "references/privacy-and-provenance.md",
+    ],
+  },
+] as const;
+
 export const OpenPondExtensionSkillSchema = z.object({
   name: z.string(),
   description: z.string(),

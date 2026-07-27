@@ -23,7 +23,7 @@ export function LabDatasetRuns({
     <DetailSection title="Checks">
       {runs.length ? (
         <div className="training-table-wrap">
-          <table className="training-data-table" aria-label="Dataset checks">
+          <table className="training-data-table" aria-label="Taskset checks">
             <thead>
               <tr>
                 <th>Check</th>
@@ -74,7 +74,7 @@ export function LabDatasetRuns({
           </table>
         </div>
       ) : (
-        <div className="training-run-placeholder">No checks have been run for this Dataset yet.</div>
+        <div className="training-run-placeholder">No checks have been run for this Taskset yet.</div>
       )}
     </DetailSection>
   );

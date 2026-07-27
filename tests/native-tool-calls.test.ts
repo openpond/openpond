@@ -70,6 +70,32 @@ describe("native tool call accumulator", () => {
     });
   });
 
+  test("removes stream-only tool indexes from replayed assistant history", () => {
+    const accumulator = new NativeToolCallAccumulator();
+    accumulator.append([
+      {
+        index: 0,
+        id: "call_1",
+        type: "function",
+        function: { name: "get_portfolio_snapshot", arguments: "{}" },
+      } as any,
+    ]);
+
+    expect(
+      assistantMessageForNativeToolCalls("", accumulator.completed())
+        .tool_calls,
+    ).toEqual([
+      {
+        id: "call_1",
+        type: "function",
+        function: {
+          name: "get_portfolio_snapshot",
+          arguments: "{}",
+        },
+      },
+    ]);
+  });
+
   test("preserves opaque Responses reasoning items on assistant tool-call messages", () => {
     const reasoningItem = {
       type: "reasoning",

@@ -8,8 +8,7 @@ manifest or bundle.
 
 ## Shared worker release configuration
 
-Connected, raw Prime, and Sandbox M8 targets require a verified signed worker
-catalog:
+Connected and direct-provider targets require a verified signed worker catalog:
 
 ```text
 OPENPOND_WORKER_CATALOG_PATH
@@ -82,46 +81,26 @@ the mTLS worker, and persists the provider lease and bootstrap receipt for
 restart recovery. Cancellation, collection, validation failure, and
 bootstrap failure all attempt worker cleanup before provider termination.
 
-## Sandbox M8
+## OpenPond Managed
 
-The Sandbox route implements only the M8 portable-execution composition. It
-does not reimplement or reopen Sandbox M0-M7:
+OpenPond Managed is the hosted compute option for a portable Model Run.
+OpenPond prepares an isolated per-run environment, resolves compatible
+accelerator capacity, operates the training lifecycle, and preserves the
+resulting artifacts and receipts.
 
-```text
-OPENPOND_SANDBOX_M8_URL
-OPENPOND_SANDBOX_M8_AUTH_TOKEN_FILE
-OPENPOND_SANDBOX_M8_COMPOSITION_FILE
-```
-
-The auth file is read for every request so a five-minute scoped `opsvc_`
-service token can be rotated atomically. It must be a private regular
-non-symlink file. The composition file uses
-`openpond.sandboxM8Composition.v1` and contains:
-
-- the exact isolated M8 environment value and canonical SHA-256;
-- the exact GCP-control-plane/Latitude runtime placement receipt;
-- the qualified provider-neutral connected-GPU binding;
-- the expected signed worker digest, upstream revision, and capability
-  receipt;
-- the immutable Profile, Taskset, Model, environment-archive, limit, and
-  connected-GPU input template.
-
-At launch OpenPond uploads the exact environment value to the tenant-owned R2
-store, uploads and materializes the immutable Harness Release, verifies the
-placement receipt, obtains a qualified GPU quote, checks it against the
-approved maximum, obtains an approval lease, and projects the OpenPond GRPO
-Recipe into the pinned prime-rl M8 recipe. The projection carries the source
-Recipe hash, so Sandbox can validate translation lineage without changing
-the canonical OpenPond manifest.
+The infrastructure and provider topology stay behind the OpenPond Managed
+boundary. Users choose the method, Model, retention, and maximum spend; they
+do not configure OpenPond's underlying provider credentials or placement.
+The Harness Run Manifest continues to pin provider-neutral runtime and
+compute capabilities so the release graph remains inspectable and portable.
 
 ## Recovery and local state
 
 Portable release objects and manifests live below
-`training/portable-releases`. Connected artifacts, provisioned compute
-sessions, and Prime bootstrap receipts use separate private directories below
-`training/`. Lifecycle references persist the selected engine route, so
-status, logs, cancellation, collection, and cleanup do not infer a provider
-after restart.
+`training/portable-releases`. Connected artifacts and provisioned compute
+sessions use separate private directories below `training/`. Lifecycle
+references persist the selected engine route, so status, logs, cancellation,
+collection, and cleanup do not infer a provider after restart.
 
 Selecting a Model or target has no download, upload, quote, provisioning, or
 spend side effect. Those operations begin only from the top-level Run review.

@@ -138,7 +138,7 @@ export const SubagentPreferencesSchema = z.object({
   enabled: z.boolean().default(true),
   workspaceDefaultsVersion: z.literal(1).default(1),
   toolDefaultsVersion: z.literal(1).default(1),
-  delegationMode: SubagentDelegationModeSchema.default("balanced"),
+  delegationMode: SubagentDelegationModeSchema.default("manual"),
   defaultModelRef: ChatModelRefSchema.nullable().default(null),
   roles: z
     .array(SubagentRoleSettingsSchema)

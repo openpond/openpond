@@ -12,6 +12,12 @@ export const OPENPOND_AGENT_OVERVIEW_POSTER_URL = publicAssetUrl(
 export const OPENPOND_AGENT_OVERVIEW_CAPTIONS_URL = publicAssetUrl(
   "tutorials/what-is-an-openpond-agent.vtt",
 );
+export const PROFILE_TO_DEPLOYMENT_POSTER_URL = publicAssetUrl(
+  "tutorials/profile-to-deployment-poster.png",
+);
+export const PROFILE_TO_DEPLOYMENT_CAPTIONS_URL = publicAssetUrl(
+  "tutorials/profile-to-deployment.vtt",
+);
 export const MAKE_AGENT_TUTORIAL_POSTER_URL = publicAssetUrl(
   "tutorials/how-to-make-an-agent-poster.png",
 );

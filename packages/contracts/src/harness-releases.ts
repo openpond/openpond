@@ -13,6 +13,7 @@ import {
   ScopedSecretDeclarationSchema,
   VersionedReleaseRefSchema,
 } from "./release-core.js";
+import { HarnessActionBindingSchema } from "./harness-actions.js";
 
 export const HarnessBundleProjectionSchema = z.enum([
   "student",
@@ -58,6 +59,7 @@ export const HarnessReleaseContentSchema = z
     profileRelease: VersionedReleaseRefSchema.nullable(),
     children: z.array(HarnessChildReleaseRefSchema).min(7).max(10_000),
     assets: z.array(HarnessReleaseAssetSchema).max(100_000),
+    actionBindings: z.array(HarnessActionBindingSchema).max(200).optional(),
     secretDeclarations: z
       .array(ScopedSecretDeclarationSchema)
       .max(1_000)
@@ -259,6 +261,7 @@ export const HarnessExecutionBundleManifestSchema = z
       })
       .strict(),
     files: z.array(HarnessExecutionBundleFileSchema).max(100_000),
+    actionBindings: z.array(HarnessActionBindingSchema).max(200).optional(),
     secretDeclarations: z.array(ScopedSecretDeclarationSchema).max(1_000),
     contentHash: ReleaseHashSchema,
   })

@@ -53,7 +53,7 @@ export function LabNewVersionDialog({
         <div className="training-dialog-header">
           <div>
             <h2>New version</h2>
-            <p>Choose the immutable Dataset revision. Training setup comes next.</p>
+            <p>Choose the immutable Taskset revision. Training setup comes next.</p>
           </div>
           <button aria-label="Close New version" type="button" onClick={onClose}>
             <X size={16} />
@@ -63,12 +63,12 @@ export function LabNewVersionDialog({
         <div className="labs-new-version-step">
           <span className="labs-new-version-step-number">1</span>
           <div>
-            <strong>Dataset</strong>
+            <strong>Taskset</strong>
             <p>Every run keeps the exact selected revision and Eval boundary.</p>
           </div>
         </div>
         <label className="labs-new-version-select">
-          <span>Dataset revision</span>
+          <span>Taskset revision</span>
           <select
             value={tasksetId}
             onChange={(event) => setTasksetId(event.target.value)}
@@ -99,12 +99,12 @@ export function LabNewVersionDialog({
           </dl>
         ) : (
           <div className="training-run-placeholder">
-            No Dataset is available. Create a Dataset first.
+            No Taskset is available. Create a Taskset first.
           </div>
         )}
         {selected && !selectedReady ? (
           <div className="training-banner warning labs-new-version-readiness">
-            <strong>This Dataset needs its local checks before training.</strong>
+            <strong>This Taskset needs its local checks before training.</strong>
             <p>
               OpenPond verifies the grader, split boundary, and immutable
               artifact before it can prepare a provider export.
@@ -118,7 +118,7 @@ export function LabNewVersionDialog({
                   onReview(selected.id);
                 }}
               >
-                Review Dataset
+                Review Taskset
               </button>
               <button
                 className="training-button secondary"
@@ -126,7 +126,7 @@ export function LabNewVersionDialog({
                 type="button"
                 onClick={() => void onCheck(selected.id)}
               >
-                {checking ? "Checking…" : "Run Dataset checks"}
+                {checking ? "Checking…" : "Run Taskset checks"}
               </button>
             </div>
           </div>

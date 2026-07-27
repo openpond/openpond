@@ -299,9 +299,15 @@ export type EvalDefinition = {
   run: (t: EvalContext) => Promise<void>;
 };
 
+export type EvalActionInput = Record<string, unknown> &
+  Partial<AgentChatInput>;
+
 export type EvalContext = {
-  send(input: Partial<AgentChatInput> & { prompt: string }): Promise<AgentChatResult>;
-  runAction(actionName: string, input: Partial<AgentChatInput> & { prompt: string }): Promise<AgentChatResult>;
+  send(input: EvalActionInput & { prompt: string }): Promise<AgentChatResult>;
+  runAction(
+    actionName: string,
+    input: EvalActionInput,
+  ): Promise<AgentChatResult>;
   expectIntent(name: string): void;
   expectTextIncludes(text: string): void;
   expectArtifact(ref: string): void;

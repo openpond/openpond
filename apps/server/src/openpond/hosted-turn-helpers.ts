@@ -301,6 +301,7 @@ function buildActionCatalogContext(
     mode === "native_tool"
       ? [
           "- These are the allowed source-defined actions for the selected OpenPond Project.",
+          "- Profile Agent actions may also be available as direct native function tools. When one directly matches the request, call it instead of searching the catalog.",
           "- Use openpond_action_search to find action ids when needed.",
           "- Use openpond_action_run only with an actionId from this catalog or from openpond_action_search.",
           "- Do not infer hidden action ids from user text.",

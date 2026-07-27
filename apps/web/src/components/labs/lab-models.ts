@@ -2,6 +2,8 @@ import type {
   CreateImproveRun,
   ModelArtifactLineage,
   ModelBinding,
+  ModelRun,
+  ModelVersion,
   Taskset,
   TasksetBaselineRun,
   TrainingJob,
@@ -19,6 +21,50 @@ export type LabModelVersion = {
   taskset: Taskset | null;
   current: boolean;
 };
+
+export function labModelTasksets(
+  state: TrainingStateResponse | null,
+): Taskset[] {
+  if (!state) return [];
+  const byRevision = new Map<string, Taskset>();
+  for (const taskset of [
+    ...(state.modelTasksets ?? []),
+    ...(state.tasksets ?? []),
+  ]) {
+    byRevision.set(
+      `${taskset.id}:${taskset.revision}:${taskset.contentHash}`,
+      taskset,
+    );
+  }
+  return [...byRevision.values()];
+}
+
+export function labBaseModelVersion(
+  workproduct: LabWorkproductSummary,
+  state: TrainingStateResponse | null,
+): ModelVersion | null {
+  return (
+    (state?.modelVersions ?? [])
+      .filter(
+        (version) =>
+          version.modelId === workproduct.id
+          && version.kind === "base_reference",
+      )
+      .sort((left, right) => right.version - left.version)[0] ?? null
+  );
+}
+
+export function labLifecycleModelRuns(
+  workproduct: LabWorkproductSummary,
+  state: TrainingStateResponse | null,
+): ModelRun[] {
+  return (
+    (state?.modelRuns ?? [])
+      .filter((run) => run.modelId === workproduct.id)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)) ??
+    []
+  );
+}
 
 export function labModelPlans(
   workproduct: LabWorkproductSummary,
@@ -84,7 +130,7 @@ export function labModelDatasets(
     }
   }
   if (workproduct.tasksetId) ids.add(workproduct.tasksetId);
-  return state.tasksets.filter((taskset) => ids.has(taskset.id));
+  return labModelTasksets(state).filter((taskset) => ids.has(taskset.id));
 }
 
 export function labModelBaselineRuns(
@@ -133,7 +179,9 @@ export function labModelVersions(
         job,
         plan: job ? planById.get(job.planId) ?? null : null,
         taskset:
-          state.tasksets.find((taskset) => taskset.id === lineage.tasksetId) ??
+          labModelTasksets(state).find(
+            (taskset) => taskset.id === lineage.tasksetId,
+          ) ??
           null,
         current: currentBinding?.modelArtifactLineageId === lineage.id,
       };
@@ -147,6 +195,18 @@ export function currentModelBinding(
   state: TrainingStateResponse | null,
 ): ModelBinding | null {
   if (!state) return null;
+  const associatedJobIds = new Set(
+    labModelJobs(workproduct, runs, state).map((job) => job.id),
+  );
+  const associatedLineageIds = new Set(
+    state.models
+      .filter(
+        (lineage) =>
+          lineage.modelId === workproduct.id ||
+          associatedJobIds.has(lineage.jobId),
+      )
+      .map((lineage) => lineage.id),
+  );
   const legacyTargets = new Set(
     runs.flatMap((run) =>
       run.target.kind === "model" &&
@@ -164,7 +224,9 @@ export function currentModelBinding(
           binding.status === "active" &&
           binding.role === "chat_manual" &&
           (binding.roleTargetId === workproduct.id ||
-            legacyTargets.has(binding.roleTargetId)),
+            legacyTargets.has(binding.roleTargetId) ||
+            (binding.roleTargetId === "default" &&
+              associatedLineageIds.has(binding.modelArtifactLineageId))),
       )
       .sort((left, right) =>
         right.promotedAt.localeCompare(left.promotedAt),

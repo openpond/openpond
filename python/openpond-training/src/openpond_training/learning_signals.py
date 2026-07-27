@@ -1,10 +1,15 @@
+# ruff: noqa: TRY004
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-import hashlib
-import json
-from typing import Any, Iterable
+from typing import Any
 
+from .canonical_json import content_hash
+
+# Signal parsing treats wrong schema value types as invalid content, so callers
+# receive one stable validation exception rather than Python API type errors.
 
 SIGNAL_KINDS = {
     "trajectory",
@@ -87,7 +92,7 @@ def parse_signals(values: Iterable[dict[str, Any]]) -> list[CanonicalSignal]:
         content = {
             key: item for key, item in value.items() if key != "contentHash"
         }
-        if _content_hash(content) != supplied_hash:
+        if content_hash(content) != supplied_hash:
             raise ValueError(
                 f"learning signal {signal_id} content hash changed"
             )
@@ -350,8 +355,10 @@ def _validate_optimizer_sample(value: Any, signal_id: str) -> None:
         or isinstance(completion_count, bool)
         or completion_count <= 0
         or prompt_count + completion_count != length
-        or any(arrays["mask"][:prompt_count])
-        or not all(arrays["mask"][prompt_count:])
+        or sum(1 for trainable in arrays["mask"] if not trainable)
+        != prompt_count
+        or sum(1 for trainable in arrays["mask"] if trainable)
+        != completion_count
     ):
         raise ValueError(
             f"learning signal {signal_id} optimizerSample token partition is invalid"
@@ -376,10 +383,3 @@ def _validate_optimizer_sample(value: Any, signal_id: str) -> None:
         raise ValueError(
             f"learning signal {signal_id} optimizerSample policy is invalid"
         )
-
-
-def _content_hash(value: Any) -> str:
-    canonical = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, indent=2
-    ) + "\n"
-    return hashlib.sha256(canonical.encode()).hexdigest()

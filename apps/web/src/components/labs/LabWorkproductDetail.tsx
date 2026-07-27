@@ -161,6 +161,12 @@ export function LabWorkproductDetail({
     ? latestReviewableCandidate(selectedChangeRun)
     : null;
   const locationKindLabel = labWorkproductKindLabel(workproduct.kind);
+  const readOnlyModel =
+    workproduct.kind === "model"
+    && Boolean(
+      workproduct.ownerProfileId
+      && workproduct.ownerProfileId !== profile?.activeProfile,
+    );
   const selectedChangeCommit = selectedChangeCandidate?.git?.headCommit ?? null;
   const locationSegments = useMemo(
     () =>
@@ -172,7 +178,7 @@ export function LabWorkproductDetail({
                 onSelect: () => requestEditorExit("runs"),
               },
               { label: editingRunDraftId === "new" ? "New run" : "Resume draft" },
-              ...(editorSection === "dataset" ? [{ label: "New Dataset" }] : []),
+              ...(editorSection === "dataset" ? [{ label: "New Taskset" }] : []),
             ]
           : selectedModelEntryKey
             ? [
@@ -207,7 +213,10 @@ export function LabWorkproductDetail({
     ],
   );
   const taskset = workproduct.tasksetId
-    ? training.payload?.tasksets.find((item) => item.id === workproduct.tasksetId) ?? null
+    ? [
+        ...(training.payload?.tasksets ?? []),
+        ...(training.payload?.modelTasksets ?? []),
+      ].find((item) => item.id === workproduct.tasksetId) ?? null
     : null;
   const persistedProfileAgent =
     workproduct.kind === "agent"
@@ -323,6 +332,7 @@ export function LabWorkproductDetail({
   useEffect(() => () => onCandidateReviewChange(null), [onCandidateReviewChange]);
 
   function useModelVersion(versionId: string) {
+    if (readOnlyModel) return;
     const version = labModelVersions(workproduct, runs, training.payload).find(
       (candidate) => candidate.lineage.id === versionId,
     );
@@ -378,7 +388,7 @@ export function LabWorkproductDetail({
             <LabStatusDot label={progression.statusLabel} value={progression.statusValue} />
           </div>
         </div>
-        {workproduct.kind === "model" ? (
+        {workproduct.kind === "model" && !readOnlyModel ? (
           <div className="labs-workproduct-header-actions">
             <button
               className="training-button"
@@ -449,6 +459,7 @@ export function LabWorkproductDetail({
               selectedEntryKey={selectedModelEntryKey}
               training={training}
               workproduct={workproduct}
+              readOnly={readOnlyModel}
               onBack={() => {
                 setSelectedModelEntryKey(null);
                 setSelectedModelRunTab("summary");
@@ -462,6 +473,7 @@ export function LabWorkproductDetail({
               runs={runs}
               training={training}
               workproduct={workproduct}
+              readOnly={readOnlyModel}
               onOpenDataset={onOpenDataset}
               onOpenEntry={setSelectedModelEntryKey}
               onResumeDraft={setEditingRunDraftId}
@@ -475,7 +487,20 @@ export function LabWorkproductDetail({
               <Fact label="Runs" value={String(workproduct.trainingRunCount)} />
               <Fact
                 label="Versions"
-                value={String(labModelVersions(workproduct, runs, training.payload).length)}
+                value={String(
+                  labModelVersions(workproduct, runs, training.payload).length
+                  + Number(
+                    training.payload?.modelVersions.some(
+                      (version) =>
+                        version.modelId === workproduct.id
+                        && version.kind === "base_reference",
+                    ) ?? false,
+                  ),
+                )}
+              />
+              <Fact
+                label="Profile"
+                value={workproduct.ownerProfileId ?? "Unknown"}
               />
               <Fact label="Model ID" value={workproduct.id} />
             </dl>

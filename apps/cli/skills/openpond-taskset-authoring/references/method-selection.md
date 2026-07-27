@@ -9,4 +9,4 @@
 - Teacher-only demonstrations: SDFT/OPSD when the teacher surface exposes the required signal.
 - Long processes with tools and state: agentic RL environment.
 
-The initially executable OpenPond recipe is LoRA SFT. Other methods remain recommendations until a real destination proves their execution contract.
+Choose the method only after the Taskset and baseline expose the available signal. A first small smoke run may use GRPO when rewards are executable, bounded, and show non-trivial baseline variance. SFT remains the simplest path for approved demonstrations, and DPO is appropriate only when trustworthy preference pairs exist. Do not stack SFT, DPO, GRPO, and PPO by default; each method needs a specific signal and reason. A real destination must still prove the chosen execution contract before training starts.

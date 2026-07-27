@@ -33,10 +33,7 @@ export async function resolveManagedAdapterUserAccess(
 export async function resolveManagedAdapterControlAccess(
   dependencies: HostedApiAccessDependencies = {},
 ): Promise<{ apiBaseUrl: string; token: string; teamId: string }> {
-  if (
-    process.env[MANAGED_ADAPTER_CONTROL_RUNTIME_ENV]?.trim() !==
-    TRUSTED_HOSTED_CONTROL_RUNTIME
-  ) {
+  if (!isManagedAdapterControlRuntimeEnabled()) {
     throw new Error(
       "Managed-adapter publication is available only in the trusted hosted bridge runtime.",
     );
@@ -55,6 +52,13 @@ export async function resolveManagedAdapterControlAccess(
     token,
     teamId: managedAdapterTeamId(dependencies.teamId),
   };
+}
+
+export function isManagedAdapterControlRuntimeEnabled(): boolean {
+  return (
+    process.env[MANAGED_ADAPTER_CONTROL_RUNTIME_ENV]?.trim() ===
+    TRUSTED_HOSTED_CONTROL_RUNTIME
+  );
 }
 
 export function hostedApiAuthHeaders(token: string): Headers {

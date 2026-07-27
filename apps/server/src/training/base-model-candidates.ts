@@ -9,6 +9,7 @@ import {
   type ModelAsset,
   type TrainingDestinationCapabilities,
 } from "@openpond/contracts";
+import { primeGrpoBaseProfileForModel } from "./prime-grpo-base-profiles.js";
 
 const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture", "local_cuda", "local_mlx"]);
 const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
@@ -30,13 +31,14 @@ export function projectBaseModelCandidates(input: {
   for (const modelId of managedModelIds) {
     const options = executionOptions(input.destinations, modelId, false);
     if (!options.length) continue;
+    const primeProfile = primeGrpoBaseProfileForModel(modelId);
     candidates.push(candidate({
       preference: {
         schemaVersion: "openpond.baseModelPreference.v1",
         modelId,
-        revision: null,
-        tokenizerRevision: null,
-        chatTemplateHash: null,
+        revision: primeProfile?.revision ?? null,
+        tokenizerRevision: primeProfile?.tokenizerRevision ?? null,
+        chatTemplateHash: primeProfile?.chatTemplateHash ?? null,
         modelAssetId: null,
         source: "managed",
       },
@@ -193,8 +195,8 @@ function localSourceLabel(model: ModelAsset): string {
 function destinationLabel(destinationId: BaseModelExecutionOption["destinationId"]): string {
   const labels: Partial<Record<BaseModelExecutionOption["destinationId"], string>> = {
     fireworks: "Fireworks",
-    prime_hosted: "Prime hosted",
-    openpond_managed: "OpenPond managed",
+    prime_hosted: "Prime Raw GPU",
+    openpond_managed: "OpenPond Managed",
     local_cpu_fixture: "Local CPU",
     local_cuda: "Local NVIDIA GPU",
     local_mlx: "Apple Silicon",

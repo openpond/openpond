@@ -108,6 +108,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     cleanupSandboxForSubagent,
     executeOpenPondCommand,
     executeProfileAction,
+    executeDatasetBuilderAction,
     executeCrossSystemTool,
     finalizeCrossSystemTurn,
     loadOpenPondProfileState,
@@ -324,6 +325,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         ? () => loadOpenPondProfileState()
         : undefined,
     readProfileSkill: readOpenPondProfileSkill,
+    loadBuiltInSkills: deps.loadBuiltInOpenPondSkills,
+    readBuiltInSkill: deps.readBuiltInOpenPondSkill,
     loadExtensionCatalog: loadOpenPondExtensionCatalog,
     readExtensionSkill: readOpenPondExtensionSkill,
     appendRuntimeEvent,
@@ -342,6 +345,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentToolsAvailable,
     runtimeEventsForSession: (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
     getSession,
+    getTaskset: store.getTaskset
+      ? (tasksetId) => store.getTaskset!(tasksetId)
+      : undefined,
     appendHostedContextUsage,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
@@ -592,6 +598,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }),
           }
         : {}),
+      ...(executeDatasetBuilderAction
+        ? {
+            runDatasetBuilder: (context, action, input) =>
+              executeDatasetBuilderAction({
+                session: context.session,
+                provider: context.provider,
+                model: context.model,
+                action,
+                payload: input,
+              }),
+          }
+        : {}),
     },
     subagentToolsAvailable,
     hostedToolFlags,
@@ -613,6 +631,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
+      trainingHarness?: {
+        taskId: string;
+        actionBindings: import("@openpond/contracts").HarnessActionBinding[];
+      };
     } = {},
   ) {
     return capabilityCatalogDefinitions(
@@ -927,7 +949,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               messages: loopMessages,
               tools: options?.tools,
               toolChoice: options?.toolChoice,
-              requestId: turn.id,
+              requestId: options?.requestId ?? turn.id,
+              reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: controller.signal,
             })) {
               if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
@@ -1003,6 +1026,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               modelId: runtimeModel,
               messages: streamInput.messages,
               requestId: streamInput.requestId,
+              reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: streamInput.signal ?? controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
@@ -1045,7 +1069,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               messages: loopMessages,
               tools: options?.tools,
               toolChoice: options?.toolChoice,
-              requestId: turn.id,
+              requestId: options?.requestId ?? turn.id,
               signal: controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };

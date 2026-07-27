@@ -6,6 +6,7 @@ import type {
   TrainingDestinationId,
   TrainingJob,
   TrainingPlan,
+  LearningSignalBatch,
 } from "@openpond/contracts";
 
 export interface TrainingDestination {
@@ -14,6 +15,10 @@ export interface TrainingDestination {
   validate(plan: TrainingPlan): Promise<TrainingCompatibilityReport>;
   quote(plan: TrainingPlan): Promise<{ estimatedCostUsd: number | null; assumptions: string[] }>;
   launch(plan: TrainingPlan, approval: TrainingApproval): Promise<TrainingJob>;
+  consumeSignals?(
+    jobId: string,
+    batch: LearningSignalBatch,
+  ): Promise<void>;
   status(jobId: string): Promise<TrainingJob>;
   cancel(jobId: string): Promise<TrainingJob>;
   collect(jobId: string): Promise<TrainingArtifact[]>;

@@ -2,6 +2,7 @@ import type {
   Approval,
   AppPreferences,
   ChatProvider,
+  CodexReasoningEffort,
   ConnectedAppConnectionLike,
   CreateImproveRun,
   CreateImproveRunAction,
@@ -34,6 +35,7 @@ import type {
 } from "@openpond/cloud";
 import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { BrowserHarnessToolExecutor } from "../../openpond/browser-tool-registry.js";
+import type { OpenPondDatasetBuilderAction } from "../../openpond/capability-tool-registry.js";
 import type { OpenPondCommandExecutionInput, OpenPondCommandRunResult } from "../../openpond/command-access.js";
 import type { ConnectedAppToolExecutor } from "../../openpond/connected-app-tool-registry.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
@@ -80,6 +82,7 @@ export type SubagentSandboxCleanupRequest = {
 };
 
 export type TurnRepository = {
+  getTaskset?(id: string): Promise<import("@openpond/contracts").Taskset | null>;
   runtimeEventsForSession(
     sessionId: string,
     query?: {
@@ -209,6 +212,7 @@ export type ProviderRuntime = {
     tools?: HostedChatTool[];
     toolChoice?: HostedChatToolChoice;
     requestId: string;
+    reasoningEffort?: CodexReasoningEffort;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
@@ -278,6 +282,13 @@ export type TurnRunnerDependencies = {
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
   executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeDatasetBuilderAction?: (input: {
+    session: Session;
+    provider: ChatProvider;
+    model: string;
+    action: OpenPondDatasetBuilderAction;
+    payload: Record<string, unknown>;
+  }) => Promise<unknown>;
   executeCrossSystemTool?: (input: {
     modelId: string;
     localProjectId: string | null;
@@ -307,6 +318,8 @@ export type TurnRunnerDependencies = {
   loadOpenPondProfileStateForRef?: (ref: OpenPondProfileRef | null | undefined) => Promise<OpenPondProfileState>;
   loadOpenPondProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
+  loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
+  readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   executeProfileSkillCommand?: (input: {

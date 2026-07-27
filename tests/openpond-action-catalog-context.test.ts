@@ -89,6 +89,12 @@ describe("OpenPond action catalog context", () => {
     );
 
     expect(prompt).toContain("Available fallback actions: resource_search, resource_read.");
+    expect(prompt).toContain(
+      "Profile Agent actions may also be available as direct native function tools.",
+    );
+    expect(prompt).toContain(
+      "When one directly matches the request, call it instead of searching the catalog.",
+    );
     expect(prompt).toContain("- Use openpond_action_run only with an actionId from this catalog");
     expect(prompt).toContain("- Use available native resource tools for inspection");
     expect(prompt).not.toContain("Available actions: create_sandbox_template_scaffold");

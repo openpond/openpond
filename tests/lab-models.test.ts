@@ -179,6 +179,46 @@ describe("Lab Model workspace projection", () => {
     );
   });
 
+  test("recognizes the active default Chat binding for a Model lineage", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const modelId = "model_fixture_default_binding";
+    const workproduct = modelWorkproduct(modelId, taskset);
+    const version = lineage(
+      "lineage_default_binding",
+      modelId,
+      taskset.id,
+      "training_job_default_binding",
+      "2026-07-13T02:00:00.000Z",
+    );
+    const binding = {
+      schemaVersion: "openpond.modelBinding.v1",
+      id: "model_binding_default",
+      profileId: "default",
+      role: "chat_manual",
+      roleTargetId: "default",
+      modelArtifactLineageId: version.id,
+      tasksetId: taskset.id,
+      evaluationArtifactId: version.frozenEvaluationArtifactId,
+      status: "active",
+      priorBindingId: null,
+      rollbackTargetBindingId: null,
+      promotedBy: "acceptance",
+      promotedAt: "2026-07-13T03:00:00.000Z",
+      rolledBackAt: null,
+      metadata: {},
+    } satisfies ModelBinding;
+    const state = {
+      tasksets: [taskset],
+      plans: [],
+      jobs: [],
+      models: [version],
+      modelBindings: [binding],
+    } as unknown as TrainingStateResponse;
+
+    expect(currentModelBinding(workproduct, [], state)?.id).toBe(binding.id);
+    expect(labModelVersions(workproduct, [], state)[0]?.current).toBe(true);
+  });
+
   test("keeps executed Model identities separate from each other and reusable-Dataset drafts", () => {
     const taskset = tasksetFixture({ ready: true });
     const firstPlan = {

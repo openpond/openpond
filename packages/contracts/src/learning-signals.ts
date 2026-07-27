@@ -95,25 +95,23 @@ export const OptimizerTrainingSampleSchema = z
       });
     }
     if (
-      sample.mask
-        .slice(0, sample.promptTokenCount)
-        .some((trainable) => trainable)
+      sample.mask.filter((trainable) => !trainable).length
+      !== sample.promptTokenCount
     ) {
       context.addIssue({
         code: "custom",
         path: ["mask"],
-        message: "prompt tokens cannot be trainable",
+        message: "promptTokenCount must equal the non-trainable mask count",
       });
     }
     if (
-      sample.mask
-        .slice(sample.promptTokenCount)
-        .some((trainable) => !trainable)
+      sample.mask.filter((trainable) => trainable).length
+      !== sample.completionTokenCount
     ) {
       context.addIssue({
         code: "custom",
         path: ["mask"],
-        message: "completion tokens must be trainable",
+        message: "completionTokenCount must equal the trainable mask count",
       });
     }
   });

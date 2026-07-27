@@ -110,6 +110,7 @@ describe("training CLI", () => {
       ),
     ).rejects.toThrow("requires --yes");
   });
+
 });
 
 function jsonResponse(value: unknown, status = 200): Response {

@@ -30,8 +30,13 @@ import {
   LabModelBaselineEvals,
   LabModelBaselineProgress,
 } from "../apps/web/src/components/labs/LabModelBaseline";
-import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
+import {
+  LabModelDataset,
+  tasksetBaselineModel,
+  tasksetBaselineSelectionStrategy,
+} from "../apps/web/src/components/labs/LabModelDataset";
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
+import { LabModelsPage } from "../apps/web/src/components/labs/LabModelsPage";
 import {
   LabModelVersionDetailPage,
   LabModelVersionsPage,
@@ -44,47 +49,59 @@ import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
 const noop = () => undefined;
 
 describe("Lab Phase 1", () => {
-  test("hosts Dataset Build in detail tabs without a duplicate list action", () => {
+  test("selects the RFT curriculum only for registered Dataset artifacts", () => {
+    expect(tasksetBaselineSelectionStrategy(null)).toBe("stable_hash_top_n");
+    expect(
+      tasksetBaselineSelectionStrategy({
+        artifactId: "dataset-artifact",
+      } as never),
+    ).toBe("rft_easy_curriculum_v1");
+  });
+
+  test("runs marketing train-signal checks against the exact raw-Prime base", () => {
+    const base = tasksetFixture();
+    const marketing = {
+      ...base,
+      environment: {
+        ...base.environment,
+        metadata: {
+          ...base.environment.metadata,
+          benchmark: { id: "marketing-portfolio-v1" },
+        },
+      },
+    };
+    const fallback = {
+      providerId: "openpond",
+      modelId: "openpond-chat",
+    };
+
+    expect(tasksetBaselineModel(marketing, fallback)).toEqual({
+      providerId: "custom-openai-compatible",
+      modelId: "Qwen/Qwen3-0.6B",
+    });
+    expect(tasksetBaselineModel(base, fallback)).toEqual(fallback);
+  });
+
+  test("keeps Taskset Lab focused on viewing and testing instead of embedding a builder", () => {
     const markup = renderToStaticMarkup(
       createElement(LabDatasetsPage, {
-        building: true,
-        buildContent: createElement("div", null, "Embedded Dataset builder"),
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
         runs: [],
         selectedId: null,
         state: null,
         training: {} as any,
         onToast: noop,
         onSelectedIdChange: noop,
-        onBuild: noop,
+        onImproveInChat: noop,
         onTrainModel: noop,
         onOpenFiles: noop,
       }),
     );
 
-    expect(markup).toContain("New Dataset");
-    expect(markup).toContain(
-      'aria-selected="true" class="active" role="tab" type="button">Build</button>',
-    );
-    expect(markup).toContain(
-      'aria-selected="false" role="tab" type="button">Overview</button>',
-    );
-    expect(markup).toContain("Embedded Dataset builder");
-    expect(markup.indexOf(">Build</button>")).toBeLessThan(markup.indexOf(">Overview</button>"));
-
-    const listMarkup = renderToStaticMarkup(
-      createElement(LabDatasetsPage, {
-        runs: [],
-        selectedId: null,
-        state: null,
-        training: {} as any,
-        onToast: noop,
-        onSelectedIdChange: noop,
-        onBuild: noop,
-        onTrainModel: noop,
-        onOpenFiles: noop,
-      }),
-    );
-    expect(listMarkup).not.toContain("Create Dataset");
+    expect(markup).toContain('aria-label="Search Tasksets"');
+    expect(markup).not.toContain(">Build</button>");
+    expect(markup).not.toContain("Embedded Taskset builder");
+    expect(markup).not.toContain("Create Dataset");
   });
 
   test("reviews exact expert trajectories in a normal-cased approval dialog", () => {
@@ -155,7 +172,7 @@ describe("Lab Phase 1", () => {
     expect(markup).not.toContain("REVIEW EXPERT TRAJECTORIES");
   });
 
-  test("renders the single-profile Lab tabs and registered create menu", () => {
+  test("renders first-class Taskset and Model Lab tabs", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
         activeTab: "workproducts",
@@ -170,9 +187,9 @@ describe("Lab Phase 1", () => {
 
     expect(markup).toContain('aria-label="Lab"');
     expect(markup).toContain(">Home<");
-    expect(markup).toContain(">Datasets<");
+    expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain(">Models<");
     expect(markup).toContain(">Suggestions<");
-    expect(markup).not.toContain(">Models<");
     expect(markup).not.toContain(">Profile<");
     expect(markup).toContain("Unified inventory");
     expect(markup).toContain('role="tablist"');
@@ -180,33 +197,72 @@ describe("Lab Phase 1", () => {
     expect(markup).not.toContain(">Agents</button>");
   });
 
-  test("routes Agent and Dataset authoring through the shared shell and Model creation through the run editor", async () => {
+  test("defaults the Model inventory to All profiles and labels ownership", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LabModelsPage, {
+        activeProfileId: "user-active",
+        items: [{
+          key: "model:model-default",
+          kind: "model",
+          id: "model-default",
+          ownerProfileId: "default",
+          name: "Default Profile Model",
+          description: "A Model owned by another accessible Profile.",
+          status: "Base ready",
+          updatedAt: "2026-07-25T06:48:57.803Z",
+          path: "tasksets/taskset-default",
+          enabled: false,
+          runIds: [],
+          conversationId: null,
+          tasksetId: "taskset-default",
+          trainingRunCount: 1,
+          evaluationStatus: "not_run",
+          useActionId: null,
+        }],
+        loading: false,
+        runs: [],
+        state: null,
+        onSelect: noop,
+        onUseModel: noop,
+      }),
+    );
+
+    expect(markup).toContain(
+      '<option value="all" selected="">All profiles</option>',
+    );
+    expect(markup).toContain('<option value="default">default</option>');
+    expect(markup).toContain("<th>Profile</th>");
+    expect(markup).toContain(">default<");
+    expect(markup).not.toContain("No Models exist in this workspace yet.");
+  });
+
+  test("routes Agent and Taskset authoring through the shared shell and Model creation through the run editor", async () => {
     const [route, dialog, datasetsPage] = await Promise.all([
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
       readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
     ]);
-    expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(4);
+    expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(3);
     expect(route).toContain("<ModelRunEditorPage");
     expect(route).toContain("initialCreation={resumedModelCreation}");
     expect(route).toContain(
       'targetIntent={{ kind: "agent", id: null, displayName: null, operation: "create" }}',
     );
     expect(route).toContain('operation: "improve"');
-    expect(route).toContain('resourceIntent="dataset"');
-    expect(route).toContain('presentation="embedded"');
-    expect(route).toContain('operation: taskset ? "improve" : "create"');
-    expect(route).toContain("kind: null");
+    expect(route).toContain("$openpond-taskset-authoring");
+    expect(route).toContain("<DatasetBuilderChatHandoff");
+    expect(route).toContain("Help me create a Taskset.");
+    expect(route).not.toContain("Use the Dataset Builder Agent actions");
+    expect(route).not.toContain("return the Dataset ID plus readiness blockers");
     expect(route).not.toContain("LabAgentCreateDialog");
     expect(route).not.toContain("LabAgentImproveDialog");
     expect(route).not.toContain("genericCreateOpen");
     expect(route).not.toContain("onCreateGeneric");
     expect(dialog).toContain("Discard the unsaved Dataset evidence in this builder?");
     expect(dialog).not.toContain("current selections will be discarded");
-    expect(datasetsPage.indexOf('{ id: "build", label: "Build" }')).toBeLessThan(
-      datasetsPage.indexOf('{ id: "overview", label: "Overview" }'),
-    );
-    expect(datasetsPage).toContain("buildContent");
+    expect(datasetsPage).not.toContain('{ id: "build", label: "Build" }');
+    expect(datasetsPage).toContain("Improve in Chat");
+    expect(datasetsPage).toContain("Run Taskset checks before training");
   });
 
   test("uses solid semantic status tones", () => {
@@ -359,7 +415,7 @@ describe("Lab Phase 1", () => {
     const dataMarkup = renderToStaticMarkup(createElement(LabModelBaselineData, { run }));
     const evalMarkup = renderToStaticMarkup(createElement(LabModelBaselineEvals, { run }));
 
-    expect(dataMarkup).toContain("Dataset splits");
+    expect(dataMarkup).toContain("Taskset splits");
     expect(dataMarkup).toContain("15</strong> recorded trajectories");
     expect(dataMarkup).not.toContain("<dt>Incorrect</dt>");
     expect(dataMarkup).not.toContain("Each deterministic world records");
@@ -369,7 +425,7 @@ describe("Lab Phase 1", () => {
     expect(evalMarkup).not.toContain("The baseline is complete");
   });
 
-  test("renders generated model data as an inspectable Dataset instead of dead Evidence rows", () => {
+  test("renders generated model data as an inspectable Taskset instead of dead Evidence rows", () => {
     const base = tasksetFixture({ ready: true });
     const taskset = {
       ...base,
@@ -390,8 +446,10 @@ describe("Lab Phase 1", () => {
     const markup = renderToStaticMarkup(
       createElement(LabModelDataset, {
         artifact: null,
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
         taskset,
         onOpenFiles: noop,
+        onToast: noop,
         training: {
           actions: {
             datasetRows: async () => null,
@@ -402,9 +460,11 @@ describe("Lab Phase 1", () => {
     const dataMarkup = renderToStaticMarkup(
       createElement(LabModelDataset, {
         artifact: null,
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
         tab: "data",
         taskset,
         onOpenFiles: noop,
+        onToast: noop,
         training: {
           actions: {
             datasetRows: async () => null,
@@ -413,9 +473,9 @@ describe("Lab Phase 1", () => {
       }),
     );
 
-    expect(markup).toContain(">Dataset<");
+    expect(markup).toContain(">Taskset<");
     expect(markup).toContain("uses no raw chats or customer data");
-    expect(dataMarkup).toContain('aria-label="Dataset splits"');
+    expect(dataMarkup).toContain('aria-label="Taskset splits"');
     expect(dataMarkup).toContain(">Training<");
     expect(dataMarkup).toContain("Say hello");
     expect(dataMarkup).toContain("Generated scenario");
@@ -425,7 +485,7 @@ describe("Lab Phase 1", () => {
     expect(markup).not.toContain(">Evidence<");
   });
 
-  test("shows failed train-signal checks on the current Dataset version", () => {
+  test("shows failed train-signal checks on the current Taskset version", () => {
     const taskset = tasksetFixture({ ready: true });
     const run = TasksetBaselineRunSchema.parse({
       schemaVersion: "openpond.tasksetBaselineRun.v1",
@@ -480,9 +540,11 @@ describe("Lab Phase 1", () => {
     const markup = renderToStaticMarkup(
       createElement(LabModelDataset, {
         artifact: null,
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
         tab: "evals",
         taskset,
         onOpenFiles: noop,
+        onToast: noop,
         training: {
           payload: { baselineRuns: [run] },
           actions: {
@@ -493,8 +555,10 @@ describe("Lab Phase 1", () => {
       }),
     );
 
-    expect(markup).toContain(">Checks<");
-    expect(markup).toContain("Train signal");
+    expect(markup).toContain(">Taskset checks<");
+    expect(markup).toContain("Run train-signal check");
+    expect(markup).toContain("Audit graders");
+    expect(markup).toContain("Refresh readiness");
     expect(markup).toContain("Current");
     expect(markup).toContain("RESOURCE_EXHAUSTED");
     expect(markup).toContain("no available capacity");
@@ -987,7 +1051,7 @@ describe("Lab Phase 1", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="Runs"');
+    expect(markup).toContain('aria-label="Versions and runs"');
     expect(markup).toContain("<table");
     expect(markup).toContain("<th>Run</th>");
     expect(markup).toContain("No runs yet.");
@@ -1133,7 +1197,7 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("no available capacity");
   });
 
-  test("chooses only the Dataset in the first New version dialog", () => {
+  test("chooses only the Taskset in the first New version dialog", () => {
     const taskset = tasksetFixture({ ready: true });
     const state = TrainingStateResponseSchema.parse({
       schemaVersion: "openpond.trainingState.v1",
@@ -1166,7 +1230,7 @@ describe("Lab Phase 1", () => {
       }),
     );
 
-    expect(markup).toContain("Choose the immutable Dataset revision.");
+    expect(markup).toContain("Choose the immutable Taskset revision.");
     expect(markup).toContain("Training setup comes next.");
     expect(markup).toContain("Configure training");
     expect(markup).not.toContain("Version training method");
@@ -1340,10 +1404,11 @@ describe("Lab Phase 1", () => {
     expect(route).not.toContain('"Search profile"');
     expect(route).not.toContain('"Filter workproduct type"');
     expect(route).toContain(
-      'showHeader={!training.launchRequest && !selected && !selectedDatasetId && datasetCreateRoute !== "build"}',
+      "showHeader={!training.launchRequest && !selected && !selectedDatasetId}",
     );
-    expect(route).toContain('className="labs-home-models"');
-    expect(route).not.toContain("homeModels.length ?");
+    expect(route).toContain('activeTab === "models"');
+    expect(route).toContain("<LabModelsPage");
+    expect(route).not.toContain('className="labs-home-models"');
     expect(detail).toContain("labWorkproductProgression");
     expect(decision).toContain("<ComposerCreateImproveStrip");
     expect(detail).toContain("renderModelRunEditor({");
@@ -1375,9 +1440,9 @@ describe("Lab Phase 1", () => {
       view.indexOf("<strong>Model</strong>"),
     );
     expect(view.indexOf("<strong>Model</strong>")).toBeLessThan(
-      view.indexOf("<strong>Dataset</strong>"),
+      view.indexOf("<strong>Taskset</strong>"),
     );
-    expect(view).toContain('activeTab !== "datasets"');
+    expect(view).toContain('activeTab === "workproducts"');
     expect(view.match(/<small>Coming soon<\/small>/g)).toHaveLength(2);
     expect(view.match(/<button disabled type="button" role="menuitem">/g)).toHaveLength(2);
     expect(detail).toContain("Improve agent");
@@ -1390,7 +1455,7 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("<LabModelVersionsPage");
     expect(detail).toContain("<LabModelVersionDetailPage");
     expect(detail).toContain("selectedModelEntryKey");
-    expect(modelWorkspace).toContain('aria-label="Runs"');
+    expect(modelWorkspace).toContain('aria-label="Versions and runs"');
     expect(modelWorkspace).toContain("<th>Output</th>");
     expect(modelWorkspace).toContain("Back to runs");
     expect(modelWorkspace).not.toContain("Version history");
@@ -1399,7 +1464,11 @@ describe("Lab Phase 1", () => {
     expect(modelWorkspace).toContain("<TrainingRunEvaluation");
     expect(modelWorkspace).toContain("<TrainingRolloutReceipts");
     expect(modelWorkspace).toContain("Download LoRA");
-    expect(modelWorkspace).toContain("disabled={!selectedVersion.lineage.promotable}");
+    expect(modelWorkspace).toContain(
+      "!resolveModelBindingPromotionGate(selectedVersion.lineage)",
+    );
+    expect(modelWorkspace).toContain("<ManagedAdapterServingEvidence");
+    expect(modelWorkspace).toContain("<ManagedAdapterEvaluationPanel");
     expect(modelWorkspace).toContain('["artifacts", "Artifacts"]');
     expect(modelWorkspace).not.toContain("LabModelOverviewPage");
     expect(modelWorkspace).not.toContain("LabModelRunsPage");

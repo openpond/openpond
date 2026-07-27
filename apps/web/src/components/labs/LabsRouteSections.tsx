@@ -4,6 +4,10 @@ import type {
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
+import {
+  managedAdapterEvaluationPassed,
+  resolveModelBindingPromotionGate,
+} from "@openpond/contracts";
 
 import type { InsightsViewProps } from "../insights/InsightsView";
 import { InsightsView } from "../insights/InsightsView";
@@ -26,7 +30,7 @@ import {
 } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { LabModelBaselineProgress } from "./LabModelBaseline";
-import { labModelVersions } from "./lab-models";
+import { labBaseModelVersion, labModelVersions } from "./lab-models";
 import {
   type LabWorkproductProgression,
 } from "./lab-workproduct-progression";
@@ -255,6 +259,7 @@ export function ModelsTable({
   loading,
   runs,
   state,
+  emptyMessage = "No Models yet.",
   onSelect,
   onUseModel,
 }: {
@@ -262,6 +267,7 @@ export function ModelsTable({
   loading: boolean;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
+  emptyMessage?: string;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
 }) {
@@ -273,7 +279,7 @@ export function ModelsTable({
     );
   }
   if (!items.length) {
-    return <div className="labs-table-empty">No Models yet.</div>;
+    return <div className="labs-table-empty">{emptyMessage}</div>;
   }
   return (
     <div className="training-table-wrap">
@@ -281,6 +287,7 @@ export function ModelsTable({
         <thead>
           <tr>
             <th>Model</th>
+            <th>Profile</th>
             <th>Active</th>
             <th>Eval</th>
             <th>Runs</th>
@@ -291,6 +298,7 @@ export function ModelsTable({
         <tbody>
           {items.map((item) => {
             const versions = labModelVersions(item, runs, state);
+            const baseVersion = labBaseModelVersion(item, state);
             const current =
               versions.find((version) => version.current) ?? null;
             const latest = versions[0] ?? null;
@@ -306,28 +314,38 @@ export function ModelsTable({
                     <span>{item.description}</span>
                   </button>
                 </td>
+                <td>{item.ownerProfileId ?? "Unknown"}</td>
                 <td>
                   {current
                     ? `Version ${current.number} · ${trainingMethodLabel(
                         current.plan?.recipe.method,
                       )}`
-                    : "Not selected"}
+                    : baseVersion
+                      ? "Base version 0"
+                      : "Not selected"}
                 </td>
                 <td>
                   <LabStatusBadge
                     label={
                       latest
-                        ? latest.lineage.promotable
+                        ? resolveModelBindingPromotionGate(latest.lineage)
+                          || managedAdapterEvaluationPassed(latest.lineage)
                           ? "Passed"
                           : latest.lineage.frozenEvaluationArtifactId
+                            || latest.lineage.managedServing?.evaluation
                             ? "Failed"
                             : "Not run"
                         : "Not run"
                     }
                     value={
-                      latest?.lineage.promotable
+                      latest &&
+                      (
+                        resolveModelBindingPromotionGate(latest.lineage)
+                        || managedAdapterEvaluationPassed(latest.lineage)
+                      )
                         ? "passed"
                         : latest?.lineage.frozenEvaluationArtifactId
+                          || latest?.lineage.managedServing?.evaluation
                           ? "failed"
                           : "not_run"
                     }

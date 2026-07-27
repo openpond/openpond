@@ -6,11 +6,7 @@ import {
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import {
-  computeTasksetHash,
-  contentHash,
-  sha256,
-} from "@openpond/taskset-sdk";
+import { computeTasksetHash, contentHash, sha256 } from "@openpond/taskset-sdk";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -21,7 +17,48 @@ import {
 
 describe("Taskset portable release publication", () => {
   it("publishes separate immutable Harness, Dataset, Evidence, and Run identities", async () => {
-    const taskset = tasksetFixture({ ready: true });
+    const baseTaskset = tasksetFixture({ ready: true });
+    const agentInputSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: { campaignId: { type: "string" } },
+      required: ["campaignId"],
+    };
+    const tasksetDraft = TasksetSchema.parse({
+      ...baseTaskset,
+      status: "needs_review",
+      readiness: null,
+      environment: {
+        ...baseTaskset.environment,
+        toolNames: ["agent_review_campaign"],
+        actionBindings: [
+          {
+            schemaVersion: "openpond.harnessActionBinding.v1",
+            actionId: "profile.cmo.review-campaign",
+            modelToolName: "agent_review_campaign",
+            description:
+              "Review campaign metrics and recommend the next action.",
+            inputSchema: agentInputSchema,
+            actionSchemaHash: contentHash(agentInputSchema),
+            agentRelease: {
+              id: "agent_cmo_r1",
+              contentHash: sha256("agent-cmo-release"),
+            },
+            implementationHash: sha256("agent-cmo-implementation"),
+            runtimeBindingId: "profile-action-runtime",
+            capabilityReceiptHash: sha256("profile-action-capability"),
+            sideEffect: "read",
+            studentVisible: true,
+            timeoutMs: 120_000,
+          },
+        ],
+      },
+      contentHash: "00000000",
+    });
+    const taskset = TasksetSchema.parse({
+      ...tasksetDraft,
+      contentHash: computeTasksetHash(tasksetDraft),
+    });
     const modelRun = ModelRunDraftSchema.parse({
       schemaVersion: "openpond.modelRunDraft.v1",
       id: "model-run-portable-1",
@@ -89,45 +126,81 @@ describe("Taskset portable release publication", () => {
     });
 
     expect(graph.manifest.harnessRelease.contentHash).toBe(
-      graph.harnessRelease.contentHash,
+      graph.harnessRelease.contentHash
     );
     expect(graph.manifest.datasetRelease.contentHash).not.toBe(
-      graph.harnessRelease.contentHash,
+      graph.harnessRelease.contentHash
     );
     expect(graph.manifest.datasetRelease.contentHash).toBe(
-      graph.datasetRelease.contentHash,
+      graph.datasetRelease.contentHash
     );
     expect(graph.evidenceSetRelease.signals).toHaveLength(1);
+    expect(graph.harnessRelease.actionBindings).toEqual(
+      taskset.environment.actionBindings
+    );
+    expect(
+      JSON.parse(
+        new TextDecoder().decode(graph.assets.get("tool-contract.json"))
+      )
+    ).toEqual(
+      expect.objectContaining({
+        toolNames: ["agent_review_campaign"],
+        actionBindings: taskset.environment.actionBindings,
+      })
+    );
     expect(
       graph.harnessRelease.assets
         .filter((asset) => asset.visibility === "privileged")
-        .every((asset) => !asset.projections.includes("student")),
+        .every((asset) => !asset.projections.includes("student"))
     ).toBe(true);
     expect(graph.manifest.contentHash).toHaveLength(64);
     expect(graph.manifest.resolvedBundleHash).toBe(
-      graph.resolvedBundleManifest.contentHash,
+      graph.resolvedBundleManifest.contentHash
     );
     expect(graph.resolvedBundleManifest.projection).toBe("trainer");
-    expect(
-      graph.resolvedBundleManifest.files.map((file) => file.path),
-    ).toEqual(
+    expect(graph.resolvedBundleManifest.files.map((file) => file.path)).toEqual(
       expect.arrayContaining([
         "dataset/train.json",
         "environment.json",
         "tool-contract.json",
         "evidence/evidence-set-release.json",
-      ]),
+      ])
     );
+    const laterModelRun = ModelRunDraftSchema.parse({
+      ...modelRun,
+      id: "model-run-portable-2",
+      createdAt: "2026-07-13T00:00:00.000Z",
+      updatedAt: "2026-07-13T00:00:00.000Z",
+    });
+    const replay = publishTasksetTrainingGraph({
+      taskset,
+      modelRun: laterModelRun,
+      runtime: graph.manifest.runtimeTarget,
+      compute: graph.manifest.computeTarget,
+      engine: graph.manifest.engine,
+      approval: {
+        approvalHash: contentHash({
+          modelRunId: laterModelRun.id,
+          maximum: 0,
+        }),
+        approvedAt: laterModelRun.updatedAt,
+        maximumSpendUsd: 0,
+      },
+      openpondRelease: "0.0.38",
+      workerProtocol: "openpond.connectedWorker.v1",
+    });
+    expect(replay.harnessRelease).toEqual(graph.harnessRelease);
+    expect(replay.datasetRelease).toEqual(graph.datasetRelease);
+    expect(replay.evidenceSetRelease).toEqual(graph.evidenceSetRelease);
+    expect(replay.resolvedBundleManifest).toEqual(graph.resolvedBundleManifest);
+    expect(replay.manifest.contentHash).not.toBe(graph.manifest.contentHash);
     expect(
-      graph.resolvedBundleManifest.files.map((file) => file.path),
+      graph.resolvedBundleManifest.files.map((file) => file.path)
     ).not.toEqual(
-      expect.arrayContaining([
-        "dataset/frozen-eval.json",
-        "graders.json",
-      ]),
+      expect.arrayContaining(["dataset/frozen-eval.json", "graders.json"])
     );
     const storeRoot = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-dataset-release-"),
+      path.join(os.tmpdir(), "openpond-dataset-release-")
     );
     try {
       const store = new ContentAddressedReleaseStore(storeRoot);
@@ -140,7 +213,7 @@ describe("Taskset portable release publication", () => {
           id: graph.datasetRelease.id,
           revision: graph.datasetRelease.revision,
           contentHash: graph.datasetRelease.contentHash,
-        }),
+        })
       ).toEqual(graph.datasetRelease);
     } finally {
       await rm(storeRoot, { recursive: true, force: true });

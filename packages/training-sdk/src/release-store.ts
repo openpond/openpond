@@ -27,10 +27,10 @@ import {
 } from "./release-graph.js";
 
 export type HarnessAssetReader = (
-  asset: HarnessRelease["assets"][number],
+  asset: HarnessRelease["assets"][number]
 ) => Promise<Uint8Array>;
 export type DatasetAssetReader = (
-  asset: DatasetRelease["assets"][number],
+  asset: DatasetRelease["assets"][number]
 ) => Promise<Uint8Array>;
 
 export class ContentAddressedReleaseStore {
@@ -45,8 +45,13 @@ export class ContentAddressedReleaseStore {
     if (issues.length) throw new Error(formatIssues("Harness Release", issues));
     for (const asset of release.assets) {
       const bytes = await input.readAsset(asset);
-      if (bytes.byteLength !== asset.sizeBytes || sha256(bytes) !== asset.sha256) {
-        throw new Error(`Harness asset ${asset.path} failed hash or size validation.`);
+      if (
+        bytes.byteLength !== asset.sizeBytes ||
+        sha256(bytes) !== asset.sha256
+      ) {
+        throw new Error(
+          `Harness asset ${asset.path} failed hash or size validation.`
+        );
       }
       await this.writeObject(asset.sha256, bytes);
     }
@@ -55,23 +60,24 @@ export class ContentAddressedReleaseStore {
       release.id,
       release.revision,
       release.contentHash,
-      canonicalJson(release),
+      canonicalJson(release)
     );
     return release;
   }
 
   async publishEvidenceSetRelease(
-    input: EvidenceSetRelease,
+    input: EvidenceSetRelease
   ): Promise<EvidenceSetRelease> {
     const release = EvidenceSetReleaseSchema.parse(input);
     const issues = validateEvidenceSetRelease(release);
-    if (issues.length) throw new Error(formatIssues("Evidence Set Release", issues));
+    if (issues.length)
+      throw new Error(formatIssues("Evidence Set Release", issues));
     await this.writeRelease(
       "evidence",
       release.id,
       release.revision,
       release.contentHash,
-      canonicalJson(release),
+      canonicalJson(release)
     );
     return release;
   }
@@ -92,7 +98,7 @@ export class ContentAddressedReleaseStore {
         sha256(bytes) !== asset.sha256
       ) {
         throw new Error(
-          `Dataset asset ${asset.path} failed hash or size validation.`,
+          `Dataset asset ${asset.path} failed hash or size validation.`
         );
       }
       await this.writeObject(asset.sha256, bytes);
@@ -102,7 +108,7 @@ export class ContentAddressedReleaseStore {
       release.id,
       release.revision,
       release.contentHash,
-      canonicalJson(release),
+      canonicalJson(release)
     );
     return release;
   }
@@ -119,11 +125,11 @@ export class ContentAddressedReleaseStore {
             "harness",
             input.id,
             input.revision,
-            input.contentHash,
+            input.contentHash
           ),
-          "utf8",
-        ),
-      ),
+          "utf8"
+        )
+      )
     );
     const issues = validateHarnessRelease(release);
     if (
@@ -132,9 +138,27 @@ export class ContentAddressedReleaseStore {
       release.revision !== input.revision ||
       release.contentHash !== input.contentHash
     ) {
-      throw new Error("Stored Harness Release failed immutable identity validation.");
+      throw new Error(
+        "Stored Harness Release failed immutable identity validation."
+      );
     }
     return release;
+  }
+
+  async findHarnessRelease(input: {
+    id: string;
+    revision: number;
+  }): Promise<HarnessRelease | null> {
+    const contentHash = await this.findPublishedReleaseHash(
+      "harness",
+      input.id,
+      input.revision
+    );
+    if (!contentHash) return null;
+    return this.readHarnessRelease({
+      ...input,
+      contentHash,
+    });
   }
 
   async resolveHarnessRelease(input: {
@@ -145,31 +169,28 @@ export class ContentAddressedReleaseStore {
     const id = safeSegment(input.id);
     const root = path.join(this.root, "releases", "harness", id);
     const revisions = await import("node:fs/promises").then((fs) =>
-      fs.readdir(root, { withFileTypes: true }).catch(
-        (error: NodeJS.ErrnoException) => {
+      fs
+        .readdir(root, { withFileTypes: true })
+        .catch((error: NodeJS.ErrnoException) => {
           if (error.code === "ENOENT") return [];
           throw error;
-        },
-      ),
+        })
     );
     const matches: number[] = [];
     for (const entry of revisions) {
-      if (
-        !entry.isDirectory() ||
-        !/^[1-9][0-9]*$/.test(entry.name)
-      ) {
+      if (!entry.isDirectory() || !/^[1-9][0-9]*$/.test(entry.name)) {
         continue;
       }
       const candidate = path.join(
         root,
         entry.name,
-        `${input.contentHash}.json`,
+        `${input.contentHash}.json`
       );
       if (await exists(candidate)) matches.push(Number(entry.name));
     }
     if (matches.length !== 1) {
       throw new Error(
-        `Harness Release ${input.id}@${input.contentHash} resolved ${matches.length} immutable revisions.`,
+        `Harness Release ${input.id}@${input.contentHash} resolved ${matches.length} immutable revisions.`
       );
     }
     return this.readHarnessRelease({
@@ -191,11 +212,11 @@ export class ContentAddressedReleaseStore {
             "evidence",
             input.id,
             input.revision,
-            input.contentHash,
+            input.contentHash
           ),
-          "utf8",
-        ),
-      ),
+          "utf8"
+        )
+      )
     );
     const issues = validateEvidenceSetRelease(release);
     if (
@@ -205,7 +226,7 @@ export class ContentAddressedReleaseStore {
       release.contentHash !== input.contentHash
     ) {
       throw new Error(
-        "Stored Evidence Set Release failed immutable identity validation.",
+        "Stored Evidence Set Release failed immutable identity validation."
       );
     }
     return release;
@@ -223,11 +244,11 @@ export class ContentAddressedReleaseStore {
             "dataset",
             input.id,
             input.revision,
-            input.contentHash,
+            input.contentHash
           ),
-          "utf8",
-        ),
-      ),
+          "utf8"
+        )
+      )
     );
     const issues = validateDatasetRelease(release);
     if (
@@ -237,7 +258,7 @@ export class ContentAddressedReleaseStore {
       release.contentHash !== input.contentHash
     ) {
       throw new Error(
-        "Stored Dataset Release failed immutable identity validation.",
+        "Stored Dataset Release failed immutable identity validation."
       );
     }
     return release;
@@ -246,12 +267,17 @@ export class ContentAddressedReleaseStore {
   async readObject(contentHash: string): Promise<Uint8Array> {
     const bytes = await readFile(this.objectPath(contentHash));
     if (sha256(bytes) !== contentHash) {
-      throw new Error(`Content-addressed object ${contentHash} failed verification.`);
+      throw new Error(
+        `Content-addressed object ${contentHash} failed verification.`
+      );
     }
     return bytes;
   }
 
-  private async writeObject(contentHash: string, bytes: Uint8Array): Promise<void> {
+  private async writeObject(
+    contentHash: string,
+    bytes: Uint8Array
+  ): Promise<void> {
     const target = this.objectPath(contentHash);
     await mkdir(path.dirname(target), { recursive: true });
     if (await exists(target)) {
@@ -269,21 +295,21 @@ export class ContentAddressedReleaseStore {
     id: string,
     revision: number,
     contentHash: string,
-    serialized: string,
+    serialized: string
   ): Promise<void> {
     const directory = path.dirname(
-      this.releasePath(kind, id, revision, contentHash),
+      this.releasePath(kind, id, revision, contentHash)
     );
     await mkdir(directory, { recursive: true });
     const entries = await import("node:fs/promises").then((fs) =>
-      fs.readdir(directory).catch(() => []),
+      fs.readdir(directory).catch(() => [])
     );
     const other = entries.find(
-      (entry) => entry.endsWith(".json") && entry !== `${contentHash}.json`,
+      (entry) => entry.endsWith(".json") && entry !== `${contentHash}.json`
     );
     if (other) {
       throw new Error(
-        `${kind} release ${id} revision ${revision} is already published with another immutable hash.`,
+        `${kind} release ${id} revision ${revision} is already published with another immutable hash.`
       );
     }
     const target = this.releasePath(kind, id, revision, contentHash);
@@ -299,27 +325,72 @@ export class ContentAddressedReleaseStore {
 
   private objectPath(contentHash: string): string {
     assertReleaseHash(contentHash);
-    return path.join(this.root, "objects", "sha256", contentHash.slice(0, 2), contentHash);
+    return path.join(
+      this.root,
+      "objects",
+      "sha256",
+      contentHash.slice(0, 2),
+      contentHash
+    );
   }
 
   private releasePath(
     kind: "harness" | "dataset" | "evidence",
     id: string,
     revision: number,
-    contentHash: string,
+    contentHash: string
+  ): string {
+    assertReleaseHash(contentHash);
+    return path.join(
+      this.releaseDirectory(kind, id, revision),
+      `${contentHash}.json`
+    );
+  }
+
+  private releaseDirectory(
+    kind: "harness" | "dataset" | "evidence",
+    id: string,
+    revision: number
   ): string {
     if (!Number.isInteger(revision) || revision < 1) {
       throw new Error("Release revision must be a positive integer.");
     }
-    assertReleaseHash(contentHash);
     return path.join(
       this.root,
       "releases",
       kind,
       safeSegment(id),
-      String(revision),
-      `${contentHash}.json`,
+      String(revision)
     );
+  }
+
+  private async findPublishedReleaseHash(
+    kind: "harness" | "dataset" | "evidence",
+    id: string,
+    revision: number
+  ): Promise<string | null> {
+    const entries = await import("node:fs/promises").then((fs) =>
+      fs
+        .readdir(this.releaseDirectory(kind, id, revision))
+        .catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") return [];
+          throw error;
+        })
+    );
+    const releaseFiles = entries.filter((entry) => entry.endsWith(".json"));
+    if (releaseFiles.length === 0) return null;
+    if (releaseFiles.length !== 1) {
+      throw new Error(
+        `${kind} release ${id} revision ${revision} has multiple immutable hashes.`
+      );
+    }
+    const match = /^([a-f0-9]{64})\.json$/.exec(releaseFiles[0]!);
+    if (!match) {
+      throw new Error(
+        `${kind} release ${id} revision ${revision} has an invalid immutable hash filename.`
+      );
+    }
+    return match[1]!;
   }
 }
 
@@ -358,7 +429,7 @@ function assertReleaseHash(value: string): void {
 
 function formatIssues(
   label: string,
-  issues: Array<{ code: string; path: string; message: string }>,
+  issues: Array<{ code: string; path: string; message: string }>
 ): string {
   return `${label} validation failed: ${issues
     .map((issue) => `${issue.code} (${issue.path})`)

@@ -2,10 +2,19 @@ import { useCallback, useEffect, useState } from "react";
 import type { ComputeStateResponse } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 
+export type ComputeSettingsBusy =
+  | "load"
+  | "scan"
+  | "save"
+  | "prime-save"
+  | "prime-validate"
+  | "prime-delete"
+  | null;
+
 export function useComputeSettings(input: { connection: ClientConnection | null; enabled: boolean; onError: (message: string | null) => void }) {
   const { connection, enabled, onError } = input;
   const [state, setState] = useState<ComputeStateResponse | null>(null);
-  const [busy, setBusy] = useState<"load" | "scan" | "save" | null>(null);
+  const [busy, setBusy] = useState<ComputeSettingsBusy>(null);
 
   const refresh = useCallback(async () => {
     if (!connection) return;
@@ -63,6 +72,57 @@ export function useComputeSettings(input: { connection: ClientConnection | null;
     catch (error) { onError(message(error)); }
   }, [connection, onError, refresh]);
 
+  const savePrimeCredential = useCallback(async (apiKey: string) => {
+    if (!connection) return false;
+    setBusy("prime-save");
+    try {
+      await api.savePrimeComputeCredential(connection, apiKey);
+      const prime = await api.validatePrimeComputeCredential(connection);
+      setState((current) => current
+        ? { ...current, providers: { ...current.providers, prime } }
+        : current);
+      onError(null);
+      return true;
+    } catch (error) {
+      onError(message(error));
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }, [connection, onError]);
+
+  const validatePrimeCredential = useCallback(async () => {
+    if (!connection) return;
+    setBusy("prime-validate");
+    try {
+      const prime = await api.validatePrimeComputeCredential(connection);
+      setState((current) => current
+        ? { ...current, providers: { ...current.providers, prime } }
+        : current);
+      onError(null);
+    } catch (error) {
+      onError(message(error));
+    } finally {
+      setBusy(null);
+    }
+  }, [connection, onError]);
+
+  const deletePrimeCredential = useCallback(async () => {
+    if (!connection) return;
+    setBusy("prime-delete");
+    try {
+      const prime = await api.deletePrimeComputeCredential(connection);
+      setState((current) => current
+        ? { ...current, providers: { ...current.providers, prime } }
+        : current);
+      onError(null);
+    } catch (error) {
+      onError(message(error));
+    } finally {
+      setBusy(null);
+    }
+  }, [connection, onError]);
+
   useEffect(() => {
     if (!enabled) return;
     void refresh();
@@ -75,7 +135,18 @@ export function useComputeSettings(input: { connection: ClientConnection | null;
     return () => window.clearInterval(interval);
   }, [enabled, hasActiveDownload, refresh]);
 
-  return { state, busy, refresh, scan, save, downloadSmolLm2, cancelDownload };
+  return {
+    state,
+    busy,
+    refresh,
+    scan,
+    save,
+    savePrimeCredential,
+    validatePrimeCredential,
+    deletePrimeCredential,
+    downloadSmolLm2,
+    cancelDownload,
+  };
 }
 
 function message(error: unknown): string { return error instanceof Error ? error.message : String(error); }

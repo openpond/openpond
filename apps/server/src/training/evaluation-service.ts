@@ -13,6 +13,7 @@ import {
   type GraderAuditReport,
   type DatasetSplit,
   type TaskDataRecord,
+  type Taskset,
   type TasksetBaselineRun,
 } from "@openpond/contracts";
 import { buildBaselineReport, buildTaskset, computeTasksetHash, contentHash, gradeAttempt, runBaseline, sha256, type BaselineAttemptRunner, type ModelJudgeRunner } from "@openpond/taskset-sdk";
@@ -37,6 +38,9 @@ import {
   isActiveBaselineRun,
   summarizeRftSignal,
 } from "./evaluation-helpers.js";
+import {
+  MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH,
+} from "./marketing-portfolio-constraint-repair.js";
 
 const MAX_BASELINE_TASKS = 32;
 const MAX_BASELINE_ATTEMPTS_PER_TASK = 8;
@@ -192,6 +196,7 @@ export function createTaskEvaluationService(deps: {
         selectionSeed: input.selectionSeed ?? 17,
         selectionStrategy,
         taskIdsHash: selection.taskIdsHash,
+        harnessContractHash: baselineHarnessContractHash(taskset),
         model: models[0]!,
         sampling,
       },
@@ -243,6 +248,7 @@ export function createTaskEvaluationService(deps: {
         selectionSeed: input.selectionSeed ?? 17,
         selectionStrategy,
         taskIdsHash: selection.taskIdsHash,
+        harnessContractHash: baselineHarnessContractHash(taskset),
         model: models[0]!,
         sampling,
       },
@@ -252,6 +258,17 @@ export function createTaskEvaluationService(deps: {
     });
     await lifecycle.onStage?.("persisting");
     return persistBaselineExecution({ taskset, fixtureAudit: fixtureAudit.report, execution });
+  }
+
+  function baselineHarnessContractHash(taskset: Taskset): string | null {
+    const benchmark = taskset.environment.metadata.benchmark;
+    return benchmark
+      && typeof benchmark === "object"
+      && !Array.isArray(benchmark)
+      && (benchmark as Record<string, unknown>).id
+        === "marketing-portfolio-v1"
+      ? MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH
+      : null;
   }
 
   async function artifactBaselineTasks(input: {
@@ -878,7 +895,7 @@ export function createTaskEvaluationService(deps: {
         status: "failed",
         error: cleanupError
           ? `The server restarted before this baseline completed, and provider cleanup could not be confirmed: ${cleanupError}`
-          : "The server restarted before this baseline completed. Any temporary Fireworks deployment was cleaned up.",
+          : "The server restarted before this baseline completed. Any temporary provider resources were cleaned up.",
         completedAt,
         updatedAt: completedAt,
       });

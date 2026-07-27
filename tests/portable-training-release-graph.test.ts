@@ -22,12 +22,15 @@ describe("portable training release graph", () => {
   it("binds an immutable harness and evidence graph into a canonical manifest", () => {
     const { release } = createHarnessFixture();
     const evidence = createEvidenceFixture(release);
-    const manifest = createManifestFixture({ harness: release, evidence: [evidence] });
+    const manifest = createManifestFixture({
+      harness: release,
+      evidence: [evidence],
+    });
     expect(
       validateHarnessRunManifest(manifest, {
         harnessRelease: release,
         evidenceSets: [evidence],
-      }),
+      })
     ).toEqual([]);
   });
 
@@ -51,7 +54,7 @@ describe("portable training release graph", () => {
       validateHarnessRunManifest(missingLease, {
         harnessRelease: release,
         evidenceSets: [evidence],
-      }).map((issue) => issue.code),
+      }).map((issue) => issue.code)
     ).toContain("required_secret_lease_missing");
 
     const driftedEvidence = {
@@ -62,9 +65,7 @@ describe("portable training release graph", () => {
       },
     };
     const driftedEvidenceContent = Object.fromEntries(
-      Object.entries(driftedEvidence).filter(
-        ([key]) => key !== "contentHash",
-      ),
+      Object.entries(driftedEvidence).filter(([key]) => key !== "contentHash")
     );
     driftedEvidence.contentHash = contentHash(driftedEvidenceContent);
     const driftedManifest = createManifestFixture({
@@ -75,12 +76,14 @@ describe("portable training release graph", () => {
       validateHarnessRunManifest(driftedManifest, {
         harnessRelease: release,
         evidenceSets: [driftedEvidence],
-      }).map((issue) => issue.code),
+      }).map((issue) => issue.code)
     ).toContain("evidence_model_mismatch");
   });
 
   it("detects a release changed after publication", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-release-store-"));
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-release-store-")
+    );
     try {
       const { release, assets } = createHarnessFixture();
       const store = new ContentAddressedReleaseStore(root);
@@ -93,19 +96,31 @@ describe("portable training release graph", () => {
           id: release.id,
           revision: release.revision,
           contentHash: release.contentHash,
-        }),
+        })
       ).toEqual(release);
+      await expect(
+        store.findHarnessRelease({
+          id: release.id,
+          revision: release.revision,
+        })
+      ).resolves.toEqual(release);
+      await expect(
+        store.findHarnessRelease({
+          id: "harness-not-published",
+          revision: 1,
+        })
+      ).resolves.toBeNull();
       await expect(
         store.resolveHarnessRelease({
           id: release.id,
           contentHash: release.contentHash,
-        }),
+        })
       ).resolves.toEqual(release);
       await expect(
         store.publishHarnessRelease({
           release: { ...release, sourceRevision: "mutated" },
           readAsset: async (asset) => assets.get(asset.path)!,
-        }),
+        })
       ).rejects.toThrow(/content hash|validation failed/i);
       const storedRelease = path.join(
         root,
@@ -113,21 +128,21 @@ describe("portable training release graph", () => {
         "harness",
         release.id,
         String(release.revision),
-        `${release.contentHash}.json`,
+        `${release.contentHash}.json`
       );
       await writeFile(
         storedRelease,
-        JSON.stringify({ ...release, sourceRevision: "tampered" }),
+        JSON.stringify({ ...release, sourceRevision: "tampered" })
       );
       await expect(
         store.readHarnessRelease({
           id: release.id,
           revision: release.revision,
           contentHash: release.contentHash,
-        }),
+        })
       ).rejects.toThrow(/immutable identity/i);
       await expect(store.readObject("../unsafe")).rejects.toThrow(
-        /content hash is invalid/i,
+        /content hash is invalid/i
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -135,7 +150,9 @@ describe("portable training release graph", () => {
   });
 
   it("materializes isolated projections deterministically and detects corruption", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-materializer-"));
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-materializer-")
+    );
     try {
       const { release, assets } = createHarnessFixture();
       const readAsset = async (asset: (typeof release.assets)[number]) =>
@@ -161,8 +178,15 @@ describe("portable training release graph", () => {
       expect(first.cacheHit).toBe(false);
       expect(second.cacheHit).toBe(true);
       expect(first.directory).toBe(second.directory);
-      expect(first.manifest.files.map((file) => file.path)).toEqual(["student.ts"]);
-      await expect(readFile(path.join(first.directory, "grader.ts"))).rejects.toThrow();
+      expect(first.manifest.files.map((file) => file.path)).toEqual([
+        "student.ts",
+      ]);
+      expect(
+        first.manifest.actionBindings?.map((binding) => binding.modelToolName)
+      ).toEqual(["agent_fixture_inspect"]);
+      await expect(
+        readFile(path.join(first.directory, "grader.ts"))
+      ).rejects.toThrow();
       await writeFile(path.join(first.directory, "unlisted.txt"), "unexpected");
       await expect(
         materializeHarnessRelease({
@@ -170,7 +194,7 @@ describe("portable training release graph", () => {
           cacheRoot: root,
           target,
           readAsset,
-        }),
+        })
       ).rejects.toThrow(/inventory changed/i);
       await rm(path.join(first.directory, "unlisted.txt"));
       await writeFile(path.join(first.directory, "student.ts"), "corrupt");
@@ -180,7 +204,7 @@ describe("portable training release graph", () => {
           cacheRoot: root,
           target,
           readAsset,
-        }),
+        })
       ).rejects.toThrow(/changed/i);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -189,7 +213,7 @@ describe("portable training release graph", () => {
 
   it("materializes and re-verifies the exact resolved run bundle hash", async () => {
     const root = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-resolved-bundle-"),
+      path.join(os.tmpdir(), "openpond-resolved-bundle-")
     );
     try {
       const bytes = Buffer.from("exact harness asset", "utf8");
@@ -231,26 +255,23 @@ describe("portable training release graph", () => {
       expect(replay.cacheHit).toBe(true);
       await writeFile(
         path.join(first.directory, "unlisted.json"),
-        "unexpected",
+        "unexpected"
       );
       await expect(
         materializeResolvedTrainingBundle({
           manifest,
           assets: new Map([["program.json", bytes]]),
           cacheRoot: root,
-        }),
+        })
       ).rejects.toThrow(/inventory changed/i);
       await rm(path.join(first.directory, "unlisted.json"));
-      await writeFile(
-        path.join(first.directory, "program.json"),
-        "corrupt",
-      );
+      await writeFile(path.join(first.directory, "program.json"), "corrupt");
       await expect(
         materializeResolvedTrainingBundle({
           manifest,
           assets: new Map([["program.json", bytes]]),
           cacheRoot: root,
-        }),
+        })
       ).rejects.toThrow(/changed/i);
     } finally {
       await rm(root, { recursive: true, force: true });

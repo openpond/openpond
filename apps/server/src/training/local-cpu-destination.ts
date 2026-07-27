@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { access, cp, lstat, mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { access, appendFile, cp, lstat, mkdir, readFile, readdir, rm, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   GradeResultSchema,
@@ -18,6 +18,7 @@ import {
   type TrainingCompatibilityReport,
   type TrainingDestinationCapabilities,
   type TrainingJob,
+  type LearningSignalBatch,
   type TrainingPlan,
   type Taskset,
 } from "@openpond/contracts";
@@ -108,6 +109,26 @@ export class LocalCpuTrainingDestination implements TrainingDestination {
   }
 
   async status(jobId: string): Promise<TrainingJob> { const job = await this.deps.store.getTrainingJob(jobId); if (!job) throw new Error("Training job not found."); return job; }
+
+  async consumeSignals(
+    jobId: string,
+    batch: LearningSignalBatch,
+  ): Promise<void> {
+    const job = await this.status(jobId);
+    if (!["starting", "running"].includes(job.status)) {
+      throw new Error("Local training job is not accepting learning signals.");
+    }
+    const outputDirectory =
+      typeof job.metadata.outputDirectory === "string"
+        ? job.metadata.outputDirectory
+        : path.join(this.deps.storeDir, "training", "jobs", jobId);
+    await mkdir(outputDirectory, { recursive: true, mode: 0o700 });
+    await appendFile(
+      path.join(outputDirectory, "signals.jsonl"),
+      `${JSON.stringify(batch)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+  }
 
   async cancel(jobId: string): Promise<TrainingJob> {
     const job = await this.status(jobId);

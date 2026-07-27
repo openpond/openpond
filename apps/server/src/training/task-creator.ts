@@ -48,6 +48,7 @@ import {
   learningSignalsForBuildSpecification,
   manualBuildEvidence,
 } from "./task-creator-signals.js";
+import { materializeAgentBenchmark } from "./task-creator-agent-benchmark.js";
 
 export { crossSystemStructuredExample, enrichCrossSystemProposal };
 
@@ -446,9 +447,6 @@ export function createTaskCreatorService(deps: {
     }
     const manual = manualBuildEvidence(snapshot);
     const effectiveSources = manual ? [...sources, manual.source] : sources;
-    const tasks = taskRecords(proposal, effectiveSources, snapshot.request.buildSpecification);
-    const agentTarget = snapshot.request.targetIntent.kind === "agent";
-    const timestamp = now();
     const tasksetId = materializedTasksetId(snapshot, proposal);
     const existingTaskset = snapshot.request.resourceIntent === "dataset"
       && snapshot.request.targetIntent.operation === "improve"
@@ -461,46 +459,66 @@ export function createTaskCreatorService(deps: {
     ) {
       throw new Error(`Dataset ${tasksetId} was not found.`);
     }
+    const tasksetRevision = existingTaskset ? existingTaskset.revision + 1 : 1;
+    const agentBenchmarkSpecification =
+      snapshot.request.buildSpecification?.kind === "agent_benchmark"
+        ? snapshot.request.buildSpecification
+        : null;
+    const agentBenchmark = agentBenchmarkSpecification
+      ? await materializeAgentBenchmark({
+          specification: agentBenchmarkSpecification,
+          profile,
+          source: manual?.source ?? effectiveSources[0]!,
+          tasksetRevision,
+        })
+      : null;
+    const tasks = agentBenchmark?.tasks ??
+      taskRecords(proposal, effectiveSources, snapshot.request.buildSpecification);
+    const agentTarget = snapshot.request.targetIntent.kind === "agent";
+    const timestamp = now();
     const draft = {
       schemaVersion: "openpond.taskset.v1" as const,
       id: tasksetId,
-      revision: existingTaskset ? existingTaskset.revision + 1 : 1,
+      revision: tasksetRevision,
       profileId: snapshot.request.profileId,
+      profileRelease: agentBenchmark?.profileRelease ?? null,
       createImproveRunId: snapshot.request.createImproveRunId,
       name: proposal.name,
       objective: proposal.objective,
       status: "needs_review" as const,
       sourceRefs: effectiveSources,
-      policy: proposal.policy,
+      policy: agentBenchmark?.policy ?? proposal.policy,
       environment: {
         protocolVersion: "openpond.taskEnvironment.v1" as const,
-        kind: agentTarget ? "agent" as const : proposal.taskKind === "chat" ? "chat" as const : "agent" as const,
-        entrypoint: agentTarget ? "chat" : "environment/taskset.ts",
-        stateful: proposal.taskKind === "custom_program" || proposal.taskKind === "multi_agent" || proposal.diagnosis.requiredTools.length > 0,
+        kind: agentBenchmark ? "stateful_harness" as const : agentTarget ? "agent" as const : proposal.taskKind === "chat" ? "chat" as const : "agent" as const,
+        entrypoint: agentBenchmark ? "openpond/profile-agent-benchmark" : agentTarget ? "chat" : "environment/taskset.ts",
+        stateful: Boolean(agentBenchmark) || proposal.taskKind === "custom_program" || proposal.taskKind === "multi_agent" || proposal.diagnosis.requiredTools.length > 0,
         deterministicSeeds: true,
-        toolNames: proposal.diagnosis.requiredTools,
+        toolNames: agentBenchmark?.actionBindings.map((binding) => binding.modelToolName) ?? proposal.diagnosis.requiredTools,
+        actionBindings: agentBenchmark?.actionBindings,
         lifecycle: ["create", "reset", "step", "grade", "cleanup"] as const,
         defaultTimeoutMs: 120_000,
         networkPolicy: "none" as const,
         metadata: {
           ...crossSystemTasksetMetadata(effectiveSources),
           ...(agentTarget ? { executor: "openpond-agent-sdk", action: "chat" } : {}),
+          ...agentBenchmark?.environmentMetadata,
         },
       },
       capabilities: {
         schemaVersion: "openpond.tasksetCapabilities.v1" as const,
-        taskKind: agentTarget ? "single_agent" as const : proposal.taskKind,
+        taskKind: agentBenchmark ? "single_agent" as const : agentTarget ? "single_agent" as const : proposal.taskKind,
         ...capabilitiesForBuildSpecification(snapshot.request.buildSpecification, proposal),
-        requiresTools: proposal.diagnosis.requiredTools.length > 0,
-        requiresState: agentTarget || proposal.taskKind !== "chat",
+        requiresTools: Boolean(agentBenchmark) || proposal.diagnosis.requiredTools.length > 0,
+        requiresState: Boolean(agentBenchmark) || agentTarget || proposal.taskKind !== "chat",
         requiresPrivilegedGrading: true,
         environmentPlacements: ["local", "remote", "colocated"] as const,
         exportable: true,
         portabilityBlockers: [],
       },
       tasks,
-      graders: normalizeAuthoredGraders(proposal.proposedGraders),
-      graderFixtures: proposal.graderFixtures.map((fixture) => {
+      graders: agentBenchmark?.graders ?? normalizeAuthoredGraders(proposal.proposedGraders),
+      graderFixtures: agentBenchmark?.graderFixtures ?? proposal.graderFixtures.map((fixture) => {
         const task = fixture.metadata.preferFrozenEvaluation === true ? tasks.find((item) => item.split === "frozen_eval") ?? tasks[fixture.taskIndex] ?? tasks[0]! : tasks[fixture.taskIndex] ?? tasks[0]!;
         const output = fixture.metadata.substituteExpectedOutput === true
           ? { ...(task.expectedOutput ?? {}), ...Object.fromEntries(Object.entries(fixture.output).filter(([, value]) => value !== "__EXPECTED_OUTPUT__")) }
@@ -569,7 +587,12 @@ export function createTaskCreatorService(deps: {
     };
     const unhashed = TasksetSchema.parse({ ...draft, contentHash: "00000000" });
     const taskset = TasksetSchema.parse({ ...unhashed, contentHash: computeTasksetHash(unhashed) });
-    await buildTaskset(taskset, path.join(deps.tasksetRootDir, taskset.id), { generatedFiles: proposal.generatedFiles });
+    await buildTaskset(taskset, path.join(deps.tasksetRootDir, taskset.id), {
+      generatedFiles: [
+        ...proposal.generatedFiles,
+        ...(agentBenchmark?.generatedFiles ?? []),
+      ],
+    });
     await deps.store.upsertTaskset(taskset);
     return taskset;
   }

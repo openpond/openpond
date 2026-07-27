@@ -110,6 +110,12 @@ export async function materializeHarnessRelease(input: {
         ...asset,
         sourceReleaseId: release.id,
       })),
+      actionBindings: (release.actionBindings ?? []).filter((binding) =>
+        input.target.projection === "student"
+          ? binding.studentVisible
+          : input.target.projection === "orchestrator" ||
+              input.target.projection === "environment" ||
+              input.target.projection === "trainer"),
       secretDeclarations: release.secretDeclarations.filter(
         (declaration) =>
           declaration.audience === input.target.projection ||

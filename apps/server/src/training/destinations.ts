@@ -52,6 +52,7 @@ export class PortablePreparationTrainingDestination
       methods: TrainingDestinationCapabilities["methods"];
       environmentPlacements: TrainingDestinationCapabilities["environmentPlacements"];
       assumptions: string[];
+      modelAllowlist?: string[];
     },
   ) {}
 
@@ -62,7 +63,7 @@ export class PortablePreparationTrainingDestination
       available: true,
       methods: this.options.methods,
       parameterizations: ["lora"],
-      modelAllowlist: [],
+      modelAllowlist: this.options.modelAllowlist ?? [],
       maxDatasetBytes: null,
       environmentPlacements: this.options.environmentPlacements,
       nonProduction: true,

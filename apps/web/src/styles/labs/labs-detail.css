@@ -352,11 +352,6 @@
   gap: 8px;
 }
 
-.labs-dataset-show-all {
-  justify-self: center;
-  margin-top: 4px;
-}
-
 .labs-dataset-example {
   overflow: hidden;
   border: 1px solid var(--border);

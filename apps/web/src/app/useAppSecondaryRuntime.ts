@@ -261,7 +261,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     visibleWorkspaceState,
   });
   const subagentDelegationDefaultMode =
-    bootstrap?.preferences.subagents.delegationMode ?? "balanced";
+    bootstrap?.preferences.subagents.delegationMode ?? "manual";
   const subagentDelegationMode =
     selectedSession?.subagentDelegationMode ?? draftSubagentDelegationMode;
   const subagentDelegationAvailable = Boolean(

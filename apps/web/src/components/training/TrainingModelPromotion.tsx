@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import type {
-  ModelArtifactLineage,
-  ModelBindingRole,
-  TrainingStateResponse,
+import {
+  resolveModelBindingPromotionGate,
+  type ModelArtifactLineage,
+  type ModelBindingRole,
+  type TrainingStateResponse,
 } from "@openpond/contracts";
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
@@ -54,9 +55,13 @@ export function TrainingModelPromotion({
     return <div className="training-run-placeholder">Promotion is available after a verified artifact is imported.</div>;
   }
   const model = lineage;
+  const promotionGate = resolveModelBindingPromotionGate(model);
 
   const busy = Boolean(training.busyAction);
-  const canBind = model.status === "imported" && model.promotable && Boolean(roleTargetId.trim());
+  const canBind =
+    model.status === "imported" &&
+    Boolean(promotionGate) &&
+    Boolean(roleTargetId.trim());
   const bindingIsCurrent = activeBinding?.modelArtifactLineageId === model.id;
 
   async function bind() {
@@ -95,7 +100,7 @@ export function TrainingModelPromotion({
       <div className="training-promotion-status">
         <div>
           <span>Promotion gate</span>
-          <strong>{lineage.promotable ? "Passed" : "Blocked"}</strong>
+          <strong>{promotionGate ? "Passed" : "Blocked"}</strong>
         </div>
         <div>
           <span>Selected role</span>
@@ -156,7 +161,7 @@ export function TrainingModelPromotion({
           </button>
         </div>
       </div>
-      {!lineage.promotable ? (
+      {!promotionGate ? (
         <p className="training-promotion-note">
           {evaluationIncomplete
             ? "The artifact remains inspectable. Its prior evaluation was blocked by provider infrastructure and recorded no quality result."

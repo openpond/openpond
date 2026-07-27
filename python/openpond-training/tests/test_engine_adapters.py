@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-import json
-
+from openpond_training.canonical_json import content_hash
 from openpond_training.engine_adapters import (
     PRIME_RL_BASE_IMAGE_DIGEST,
     PRIME_RL_UPSTREAM_REVISION,
@@ -30,14 +28,6 @@ def signal(kind: str, payload: dict, *, signal_id: str, approved: bool = True) -
         "metadata": {},
     }
     return {**content, "contentHash": content_hash(content)}
-
-
-def content_hash(value: dict) -> str:
-    canonical = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, indent=2
-    ) + "\n"
-    return hashlib.sha256(canonical.encode()).hexdigest()
-
 
 def manifest() -> dict:
     return {

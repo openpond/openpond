@@ -48,6 +48,11 @@ const agentOverviewVideo = {
   localPath: "tutorials/what-is-an-openpond-agent.mp4",
 };
 
+const profileToDeploymentVideo = {
+  id: "profile-to-deployment-overview",
+  localPath: "tutorials/profile-to-deployment.mp4",
+};
+
 const fullCourseVideo = {
   id: "post-training-full-course",
   localPath: "courses/post-training/full-course.mp4",
@@ -57,6 +62,7 @@ const catalog = [
   ...courseVideos,
   fullCourseVideo,
   agentOverviewVideo,
+  profileToDeploymentVideo,
   ...makeAgentVideos,
 ];
 

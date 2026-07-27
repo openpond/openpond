@@ -5,16 +5,32 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
-import type { ModelBinding, TrainingArtifact } from "@openpond/contracts";
+import {
+  ManagedAdapterEvaluationEvidenceSchema,
+  ManagedAdapterServingReceiptRecordSchema,
+  type ManagedAdapterDeploymentEvidence,
+  type ManagedAdapterEvaluationEvidence,
+  type ManagedAdapterServingPoolEvidence,
+  type ManagedAdapterServingReceiptRecord,
+  type ModelBinding,
+  type TrainingArtifact,
+} from "@openpond/contracts";
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterControlAccess,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
+import {
+  type OpenPondTrainingProvenancePayload,
+} from "./managed-adapter-training-provenance.js";
 
 export const MANAGED_QWEN3_8B_BASE_PROFILE_ID = "qwen3-8b-b968826d";
 export const MANAGED_QWEN3_8B_BASE_REVISION =
   "b968826d9c46dd6066d109eabc6255188de91218";
+export const MANAGED_QWEN3_0_6B_BASE_PROFILE_ID =
+  "qwen3-0-6b-c1899de2";
+export const MANAGED_QWEN3_0_6B_BASE_REVISION =
+  "c1899de289a04d12100db370d81485cdf75e47ca";
 
 export type ManagedRegistryArtifact = {
   id: string;
@@ -23,13 +39,21 @@ export type ManagedRegistryArtifact = {
   state: string;
   promotable: boolean;
   customerBindingAllowed: boolean;
+  contentHash: string | null;
+  baseProfileId: string | null;
+  evaluation: ManagedAdapterEvaluationEvidence | null;
 };
 
 export type ManagedRegistryDeployment = {
   id: string;
   artifactId: string;
   state: string;
+  evidence: ManagedAdapterDeploymentEvidence | null;
 };
+
+export type ManagedRegistryServingPool = ManagedAdapterServingPoolEvidence;
+export type ManagedRegistryServingReceipt =
+  ManagedAdapterServingReceiptRecord;
 
 export type ManagedAdapterChatDelta = {
   text?: string;
@@ -67,6 +91,15 @@ export type FireworksSourceImport = {
   files: PortableUploadFile[];
 };
 
+export type OpenPondTrainingSourceImport = {
+  teamId: string;
+  lineageId: string;
+  label: string;
+  baseProfileId: string;
+  files: PortableUploadFile[];
+  provenance: OpenPondTrainingProvenancePayload;
+};
+
 export type ManagedAdapterRegistryClientDependencies = {
   fetchImpl?: typeof fetch;
   readFileImpl?: typeof readFile;
@@ -93,7 +126,6 @@ export function createManagedAdapterRegistryClient(
   const resolveInferenceAccess =
     dependencies.resolveInferenceAccess ??
     ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
-
   async function requestJson<T>(
     resolveAccess: ManagedAdapterAccessResolver,
     teamId: string,
@@ -125,27 +157,55 @@ export function createManagedAdapterRegistryClient(
     return payload as T;
   }
 
-  async function listRegistry(teamId: string): Promise<{
+  async function listRegistryWithAccess(
+    resolveAccess: ManagedAdapterAccessResolver,
+    teamId: string,
+  ): Promise<{
     artifacts: ManagedRegistryArtifact[];
     deployments: ManagedRegistryDeployment[];
+    servingPools: ManagedRegistryServingPool[];
+    servingReceipts: ManagedRegistryServingReceipt[];
   }> {
-    const [artifactPayload, deploymentPayload] = await Promise.all([
+    const [
+      artifactPayload,
+      deploymentPayload,
+      servingPoolPayload,
+      servingReceiptPayload,
+    ] = await Promise.all([
       requestJson<{ artifacts?: unknown }>(
-        resolveRegistryAccess,
+        resolveAccess,
         teamId,
         "/v1/model-adapters/artifacts?limit=200",
       ),
       requestJson<{ deployments?: unknown }>(
-        resolveRegistryAccess,
+        resolveAccess,
         teamId,
         "/v1/model-adapters/deployments",
+      ),
+      requestJson<{ pools?: unknown }>(
+        resolveAccess,
+        teamId,
+        "/v1/model-adapters/serving-pools",
+      ),
+      requestJson<{ receipts?: unknown }>(
+        resolveAccess,
+        teamId,
+        "/v1/model-adapters/serving-receipts?limit=100",
       ),
     ]);
     return {
       artifacts: registryArtifacts(artifactPayload.artifacts),
       deployments: registryDeployments(deploymentPayload.deployments),
+      servingPools: registryServingPools(servingPoolPayload.pools),
+      servingReceipts: registryServingReceipts(
+        servingReceiptPayload.receipts,
+      ),
     };
   }
+  const listRegistry = (teamId: string) =>
+    listRegistryWithAccess(resolveRegistryAccess, teamId);
+  const listTrustedRegistry = (teamId: string) =>
+    listRegistryWithAccess(resolveTrustedSourceAccess, teamId);
 
   async function publishFireworksSource(
     input: FireworksSourceImport,
@@ -167,6 +227,23 @@ export function createManagedAdapterRegistryClient(
     });
   }
 
+  async function publishTrustedOpenPondTrainingSource(
+    input: OpenPondTrainingSourceImport,
+  ): Promise<ManagedRegistryArtifact> {
+    return uploadSource({
+      input,
+      resolveAccess: resolveTrustedSourceAccess,
+      baseProfileId: input.baseProfileId,
+      source: "openpond_training",
+      sourceRef: input.lineageId,
+      idempotencyKey:
+        `openpond-training:v5:${input.lineageId}:${input.provenance.sourceArtifactSha256}`,
+      sourceProvenance: input.provenance,
+      sourceImportPath:
+        "/v1/model-adapters/openpond-training-publications",
+    });
+  }
+
   async function uploadFireworksSource({
     input,
     resolveAccess,
@@ -176,6 +253,68 @@ export function createManagedAdapterRegistryClient(
     resolveAccess: ManagedAdapterAccessResolver;
     trustedProvenance: boolean;
   }): Promise<ManagedRegistryArtifact> {
+    return uploadSource({
+      input,
+      resolveAccess,
+      baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
+      source: trustedProvenance
+        ? "openpond_fireworks"
+        : null,
+      sourceRef: trustedProvenance ? input.lineageId : null,
+      idempotencyKey:
+        `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
+      sourceProvenance: trustedProvenance
+        ? {
+            schemaVersion:
+              "openpond.modelAdapterSourceProvenance.v1",
+            sourceSystem: "openpond_fireworks",
+            trainingJobId: input.trainingJobId,
+            trainingPlanId: input.trainingPlanId,
+            sourceArtifactId: input.sourceArtifactId,
+            sourceArtifactSha256:
+              input.sourceArtifactSha256,
+            tasksetId: input.tasksetId,
+            tasksetHash: input.tasksetHash,
+            ...(input.evaluationArtifactId
+            && input.evaluationArtifactSha256
+              ? {
+                  evaluationArtifactId:
+                    input.evaluationArtifactId,
+                  evaluationArtifactSha256:
+                    input.evaluationArtifactSha256,
+                }
+              : {}),
+            ...(input.providerRunId
+              ? { providerRunId: input.providerRunId }
+              : {}),
+          }
+        : null,
+    });
+  }
+
+  async function uploadSource({
+    input,
+    resolveAccess,
+    baseProfileId,
+    source,
+    sourceRef,
+    idempotencyKey,
+    sourceProvenance,
+    sourceImportPath,
+  }: {
+    input: {
+      teamId: string;
+      label: string;
+      files: PortableUploadFile[];
+    };
+    resolveAccess: ManagedAdapterAccessResolver;
+    baseProfileId: string;
+    source: "openpond_fireworks" | "openpond_training" | null;
+    sourceRef: string | null;
+    idempotencyKey: string;
+    sourceProvenance: unknown | null;
+    sourceImportPath?: string;
+  }): Promise<ManagedRegistryArtifact> {
     assertPortableUploadFiles(input.files);
     const created = await requestJson<{
       upload: { id: string; version: number; state: string };
@@ -183,42 +322,21 @@ export function createManagedAdapterRegistryClient(
     }>(
       resolveAccess,
       input.teamId,
-      trustedProvenance
-        ? "/v1/model-adapters/source-imports"
+      source
+        ? sourceImportPath ??
+          "/v1/model-adapters/source-imports"
         : "/v1/model-adapters/uploads",
       {
         method: "POST",
         body: JSON.stringify({
           label: input.label,
-          idempotencyKey: `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
-          baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-          ...(trustedProvenance
+          idempotencyKey,
+          baseProfileId,
+          ...(source && sourceRef && sourceProvenance
             ? {
-                source: "openpond_fireworks",
-                sourceRef: input.lineageId,
-                sourceProvenance: {
-                  schemaVersion:
-                    "openpond.modelAdapterSourceProvenance.v1",
-                  sourceSystem: "openpond_fireworks",
-                  trainingJobId: input.trainingJobId,
-                  trainingPlanId: input.trainingPlanId,
-                  sourceArtifactId: input.sourceArtifactId,
-                  sourceArtifactSha256: input.sourceArtifactSha256,
-                  tasksetId: input.tasksetId,
-                  tasksetHash: input.tasksetHash,
-                  ...(input.evaluationArtifactId &&
-                  input.evaluationArtifactSha256
-                    ? {
-                        evaluationArtifactId:
-                          input.evaluationArtifactId,
-                        evaluationArtifactSha256:
-                          input.evaluationArtifactSha256,
-                      }
-                    : {}),
-                  ...(input.providerRunId
-                    ? { providerRunId: input.providerRunId }
-                    : {}),
-                },
+                source,
+                sourceRef,
+                sourceProvenance,
               }
             : {}),
           files: input.files.map(({ artifact, path, mediaType }) => ({
@@ -294,18 +412,90 @@ export function createManagedAdapterRegistryClient(
     return requiredRegistryArtifact(completed.artifact);
   }
 
-  async function syncBinding(input: {
-    teamId: string;
-    binding: ModelBinding;
-    logicalModelName: string;
-    artifactId: string;
-    deploymentId: string;
-    bindingVersion: number;
-    sourceUpdatedAt: string;
-    state: "active" | "inactive" | "deleted";
-  }): Promise<void> {
+  async function requestEvaluationWithAccess(
+    resolveAccess: ManagedAdapterAccessResolver,
+    input: {
+      teamId: string;
+      artifactId: string;
+      role?: "chat_manual";
+    },
+  ): Promise<void> {
     await requestJson(
-      resolveRegistryAccess,
+      resolveAccess,
+      input.teamId,
+      `/v1/model-adapters/artifacts/${encodeURIComponent(input.artifactId)}/evaluations`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          role: input.role ?? "chat_manual",
+        }),
+      },
+    );
+  }
+
+  async function requestEvaluation(input: {
+    teamId: string;
+    artifactId: string;
+    role?: "chat_manual";
+  }): Promise<void> {
+    return requestEvaluationWithAccess(resolveRegistryAccess, input);
+  }
+  const requestTrustedEvaluation = (input: {
+    teamId: string;
+    artifactId: string;
+    role?: "chat_manual";
+  }) => requestEvaluationWithAccess(resolveTrustedSourceAccess, input);
+
+  async function deployArtifactWithAccess(
+    resolveAccess: ManagedAdapterAccessResolver,
+    input: {
+      teamId: string;
+      artifactId: string;
+      idleTimeoutSeconds?: number;
+    },
+  ): Promise<ManagedRegistryDeployment> {
+    const result = await requestJson<{
+      deployment: ManagedRegistryDeployment;
+    }>(
+      resolveAccess,
+      input.teamId,
+      `/v1/model-adapters/artifacts/${encodeURIComponent(input.artifactId)}/deploy`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          idleTimeoutSeconds:
+            input.idleTimeoutSeconds ?? 300,
+        }),
+      },
+    );
+    return requiredRegistryDeployment(result.deployment);
+  }
+  const deployArtifact = (input: {
+    teamId: string;
+    artifactId: string;
+    idleTimeoutSeconds?: number;
+  }) => deployArtifactWithAccess(resolveRegistryAccess, input);
+  const deployTrustedArtifact = (input: {
+    teamId: string;
+    artifactId: string;
+    idleTimeoutSeconds?: number;
+  }) => deployArtifactWithAccess(resolveTrustedSourceAccess, input);
+
+  async function syncBindingWithAccess(
+    resolveAccess: ManagedAdapterAccessResolver,
+    input: {
+      teamId: string;
+      binding: ModelBinding;
+      logicalModelName: string;
+      artifactId: string;
+      deploymentId: string;
+      bindingVersion: number;
+      sourceUpdatedAt: string;
+      state: "active" | "inactive" | "deleted";
+    },
+  ): Promise<void> {
+    await requestJson(
+      resolveAccess,
       input.teamId,
       "/v1/model-adapters/binding-projections",
       {
@@ -325,6 +515,26 @@ export function createManagedAdapterRegistryClient(
       },
     );
   }
+  const syncBinding = (input: {
+    teamId: string;
+    binding: ModelBinding;
+    logicalModelName: string;
+    artifactId: string;
+    deploymentId: string;
+    bindingVersion: number;
+    sourceUpdatedAt: string;
+    state: "active" | "inactive" | "deleted";
+  }) => syncBindingWithAccess(resolveRegistryAccess, input);
+  const syncTrustedBinding = (input: {
+    teamId: string;
+    binding: ModelBinding;
+    logicalModelName: string;
+    artifactId: string;
+    deploymentId: string;
+    bindingVersion: number;
+    sourceUpdatedAt: string;
+    state: "active" | "inactive" | "deleted";
+  }) => syncBindingWithAccess(resolveTrustedSourceAccess, input);
 
   async function* streamChat(input: {
     teamId: string;
@@ -407,9 +617,16 @@ export function createManagedAdapterRegistryClient(
 
   return {
     listRegistry,
+    listTrustedRegistry,
     publishFireworksSource,
     publishTrustedFireworksSource,
+    publishTrustedOpenPondTrainingSource,
+    requestEvaluation,
+    requestTrustedEvaluation,
+    deployArtifact,
+    deployTrustedArtifact,
     syncBinding,
+    syncTrustedBinding,
     streamChat,
   };
 }
@@ -426,21 +643,28 @@ function registryArtifacts(value: unknown): ManagedRegistryArtifact[] {
 
 function registryDeployments(value: unknown): ManagedRegistryDeployment[] {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (
-      !isRecord(item) ||
-      typeof item.id !== "string" ||
-      typeof item.artifactId !== "string" ||
-      typeof item.state !== "string"
-    ) {
-      throw new Error("Managed adapter registry returned an invalid deployment.");
-    }
-    return {
-      id: item.id,
-      artifactId: item.artifactId,
-      state: item.state,
-    };
-  });
+  return value.map(requiredRegistryDeployment);
+}
+
+function requiredRegistryDeployment(
+  item: unknown,
+): ManagedRegistryDeployment {
+  if (
+    !isRecord(item) ||
+    typeof item.id !== "string" ||
+    typeof item.artifactId !== "string" ||
+    typeof item.state !== "string"
+  ) {
+    throw new Error(
+      "Managed adapter registry returned an invalid deployment.",
+    );
+  }
+  return {
+    id: item.id,
+    artifactId: item.artifactId,
+    state: item.state,
+    evidence: managedDeploymentEvidence(item),
+  };
 }
 
 function requiredRegistryArtifact(value: unknown): ManagedRegistryArtifact {
@@ -462,7 +686,77 @@ function requiredRegistryArtifact(value: unknown): ManagedRegistryArtifact {
     state: value.state,
     promotable: value.promotable,
     customerBindingAllowed: value.customerBindingAllowed,
+    contentHash:
+      typeof value.contentHash === "string" ? value.contentHash : null,
+    baseProfileId:
+      typeof value.baseProfileId === "string"
+        ? value.baseProfileId
+        : null,
+    evaluation: registryEvaluation(value.evaluation),
   };
+}
+
+function registryEvaluation(
+  value: unknown,
+): ManagedAdapterEvaluationEvidence | null {
+  const parsed = ManagedAdapterEvaluationEvidenceSchema.safeParse(value);
+  return parsed.success ? parsed.data : null;
+}
+
+function managedDeploymentEvidence(
+  value: Record<string, unknown>,
+): ManagedAdapterDeploymentEvidence | null {
+  if (
+    value.schemaVersion !== "openpond.adapterDeployment.v1"
+    || typeof value.provider !== "string"
+    || !("poolId" in value)
+    || typeof value.opaqueModelName !== "string"
+    || !("providerConfigurationHash" in value)
+    || !("lastVerifiedAt" in value)
+    || !("failureCode" in value)
+    || typeof value.createdAt !== "string"
+    || typeof value.updatedAt !== "string"
+  ) {
+    return null;
+  }
+  return value as ManagedAdapterDeploymentEvidence;
+}
+
+function registryServingPools(
+  value: unknown,
+): ManagedRegistryServingPool[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (
+      !isRecord(item)
+      || typeof item.id !== "string"
+      || typeof item.baseProfileId !== "string"
+      || typeof item.provider !== "string"
+      || typeof item.state !== "string"
+      || typeof item.workersMin !== "number"
+      || typeof item.workersMax !== "number"
+      || typeof item.idleTimeoutSeconds !== "number"
+      || !("providerConfigurationHash" in item)
+      || !("leaseExpiresAt" in item)
+      || !("estimatedHourlyUsd" in item)
+      || !("lastReconciledAt" in item)
+      || !("failureCode" in item)
+      || typeof item.createdAt !== "string"
+      || typeof item.updatedAt !== "string"
+    ) {
+      return [];
+    }
+    return [item as ManagedRegistryServingPool];
+  });
+}
+
+function registryServingReceipts(
+  value: unknown,
+): ManagedRegistryServingReceipt[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(
+    (item) => ManagedAdapterServingReceiptRecordSchema.parse(item),
+  );
 }
 
 function assertResolvedTeam(
@@ -497,8 +791,15 @@ function assertUploadCapability(capability: UploadCapability): void {
     url.protocol === "https:" &&
     url.hostname.endsWith(".amazonaws.com") &&
     url.hostname.split(".").some((part) => part.startsWith("s3"));
-  if (!local && !awsS3) {
-    throw new Error("Managed adapter upload capability used an unsafe URL.");
+  const cloudflareR2 =
+    url.protocol === "https:" &&
+    /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(
+      url.hostname,
+    );
+  if (!local && !awsS3 && !cloudflareR2) {
+    throw new Error(
+      `Managed adapter upload capability used an unsafe URL host (${url.protocol}//${url.hostname}).`,
+    );
   }
   if (
     Object.keys(capability.headers).some(

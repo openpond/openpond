@@ -4,6 +4,7 @@ import {
   MANAGED_ADAPTER_CONTROL_RUNTIME_ENV,
   MANAGED_ADAPTER_SERVICE_API_KEY_ENV,
   MANAGED_ADAPTER_TEAM_ID_ENV,
+  isManagedAdapterControlRuntimeEnabled,
   resolveHostedApiAccess,
   resolveManagedAdapterControlAccess,
   resolveManagedAdapterUserAccess,
@@ -72,6 +73,7 @@ describe("hosted API access identities", () => {
 
   test("refuses publication from an untrusted desktop runtime even when the key exists", async () => {
     vi.stubEnv(MANAGED_ADAPTER_SERVICE_API_KEY_ENV, "opk_service");
+    expect(isManagedAdapterControlRuntimeEnabled()).toBe(false);
     await expect(
       resolveManagedAdapterControlAccess({
         loadAccountContext: async () => accountContext("opk_user"),
@@ -83,6 +85,7 @@ describe("hosted API access identities", () => {
     vi.stubEnv(MANAGED_ADAPTER_CONTROL_RUNTIME_ENV, "trusted-hosted");
     vi.stubEnv(MANAGED_ADAPTER_SERVICE_API_KEY_ENV, "opk_service");
     vi.stubEnv(MANAGED_ADAPTER_TEAM_ID_ENV, "team_qa");
+    expect(isManagedAdapterControlRuntimeEnabled()).toBe(true);
     await expect(
       resolveManagedAdapterControlAccess({
         loadAccountContext: async () => accountContext("opk_user"),

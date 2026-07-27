@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import fcntl
 import hashlib
 import json
 import math
 import os
-from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import time
-from typing import Any, Callable
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
+from .canonical_json import content_hash
 from .engine_adapters import (
     PRIME_RL_BASE_IMAGE_DIGEST,
     PRIME_RL_UPSTREAM_REVISION,
@@ -473,6 +476,9 @@ def render_prime_rl_run_config(
         "[model]",
         f"name = {toml_string(str(model_path))}",
         "",
+        "[renderer]",
+        'name = "default"',
+        "",
         "[model.lora]",
         'name = "candidate"',
         f"rank = {settings.lora_rank}",
@@ -548,10 +554,7 @@ def _materialize_pinned_model_locked(
     model_path.mkdir(parents=True, exist_ok=True)
     result = run_process(
         [
-            "uv",
-            "run",
-            "--no-sync",
-            "hf",
+            shutil.which("hf") or "hf",
             "download",
             settings.model_id,
             "--revision",
@@ -568,10 +571,7 @@ def _materialize_pinned_model_locked(
         shutil.rmtree(tokenizer_overlay, ignore_errors=True)
         tokenizer_result = run_process(
             [
-                "uv",
-                "run",
-                "--no-sync",
-                "hf",
+                shutil.which("hf") or "hf",
                 "download",
                 settings.model_id,
                 "--revision",
@@ -659,6 +659,8 @@ def execute_prime_rl_step(
     run_process: Callable[..., subprocess.CompletedProcess[Any]] = subprocess.run,
     cancelled: Callable[[], bool] | None = None,
 ) -> dict[str, Any]:
+    optimizer_started_at = _timestamp()
+    optimizer_monotonic_started_at = time.monotonic()
     engine_output = engine_root / "output"
     run_root = engine_output / "run_default"
     config_root = engine_root / "config"
@@ -689,10 +691,9 @@ def execute_prime_rl_step(
     )
     write_prime_rl_batch(batch_path, batch)
     command = [
-        "uv",
-        "run",
-        "--no-sync",
-        "torchrun",
+        sys.executable,
+        "-m",
+        "torch.distributed.run",
         "--standalone",
         "--nproc-per-node=1",
         "-m",
@@ -714,10 +715,17 @@ def execute_prime_rl_step(
             timeout_seconds=timeout_seconds,
             cancelled=cancelled,
         )
+    optimizer_completed_at = _timestamp()
+    optimizer_duration_ms = max(
+        0.0,
+        (time.monotonic() - optimizer_monotonic_started_at) * 1_000,
+    )
     if return_code == 130:
         raise PrimeRlExecutionError("prime_rl_cancelled")
     if return_code != 0:
         raise PrimeRlExecutionError("prime_rl_trainer_step_failed")
+    checkpoint_started_at = _timestamp()
+    checkpoint_monotonic_started_at = time.monotonic()
     weights = engine_output / "weights" / f"step_{batch.step}"
     checkpoint = engine_output / "checkpoints" / f"step_{batch.step}"
     adapter_config = next(weights.rglob("adapter_config.json"), None)
@@ -738,6 +746,11 @@ def execute_prime_rl_step(
     shutil.copy2(
         adapter_model, adapter_target / "adapter_model.safetensors"
     )
+    checkpoint_completed_at = _timestamp()
+    checkpoint_duration_ms = max(
+        0.0,
+        (time.monotonic() - checkpoint_monotonic_started_at) * 1_000,
+    )
     receipt = {
         "schemaVersion": "openpond.primeRlOptimizerStep.v1",
         "step": batch.step,
@@ -756,9 +769,36 @@ def execute_prime_rl_step(
         "adapterSha256": hashlib.sha256(
             (adapter_target / "adapter_model.safetensors").read_bytes()
         ).hexdigest(),
+        "adapter": {
+            "path": str(adapter_target.resolve()),
+            "configSha256": hashlib.sha256(
+                (adapter_target / "adapter_config.json").read_bytes()
+            ).hexdigest(),
+            "weightsSha256": hashlib.sha256(
+                (adapter_target / "adapter_model.safetensors").read_bytes()
+            ).hexdigest(),
+        },
         "checkpointContentHash": directory_content_hash(
             checkpoint_target
         ),
+        "spans": [
+            {
+                "name": "optimizer_execution",
+                "startedAt": optimizer_started_at,
+                "completedAt": optimizer_completed_at,
+                "durationMs": optimizer_duration_ms,
+                "clock": "monotonic",
+                "outcome": "succeeded",
+            },
+            {
+                "name": "checkpoint_writing",
+                "startedAt": checkpoint_started_at,
+                "completedAt": checkpoint_completed_at,
+                "durationMs": checkpoint_duration_ms,
+                "clock": "monotonic",
+                "outcome": "succeeded",
+            },
+        ],
     }
     receipt = {**receipt, "contentHash": content_hash(receipt)}
     receipt_path = output_directory / "prime-rl-step-receipts.jsonl"
@@ -767,6 +807,13 @@ def execute_prime_rl_step(
         file.flush()
         os.fsync(file.fileno())
     return receipt
+
+
+def _timestamp() -> str:
+    return (
+        time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime())
+        + f".{int(time.time_ns() / 1_000_000) % 1_000:03d}Z"
+    )
 
 
 def load_prime_rl_progress(
@@ -897,13 +944,6 @@ def _terminate_process_group(process: subprocess.Popen[Any]) -> None:
         except ProcessLookupError:
             pass
         process.wait(timeout=5)
-
-
-def content_hash(value: Any) -> str:
-    canonical = json.dumps(
-        value, sort_keys=True, ensure_ascii=False, indent=2
-    ) + "\n"
-    return hashlib.sha256(canonical.encode()).hexdigest()
 
 
 def _validate_hashed_object(

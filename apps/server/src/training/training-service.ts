@@ -4,6 +4,7 @@ import {
   LocalModelChatConfigurationSchema,
   ModelBindingRoleSchema,
   ModelBindingSchema,
+  resolveModelBindingPromotionGate,
   TrainingRecipeSchema,
   TrainingApprovalSchema,
   TrainingPreparedStartSchema,
@@ -128,13 +129,13 @@ export function createTrainingService(deps: {
           methods: ["grpo"],
           environmentPlacements: ["remote"],
           assumptions: [
-            "Sandbox materializes the exact environment projection on Latitude.",
-            "GPU provisioning requires a fresh quote and explicit maximum spend.",
+            "OpenPond Managed prepares an isolated environment for the exact release graph.",
+            "Accelerator provisioning requires a fresh quote and explicit maximum spend.",
           ],
         })
       : new UnavailableTrainingDestination(
           "openpond_managed",
-          "OpenPond Managed requires a configured Sandbox M8 endpoint.",
+          "OpenPond Managed is not available for this account.",
           resolveTaskset,
         ),
   );
@@ -148,7 +149,11 @@ export function createTrainingService(deps: {
           environmentPlacements: ["local"],
           assumptions: [
             "Prime provisions raw compute before the generic connected-worker bootstrap.",
-            "A fresh provider quote and explicit maximum spend are required.",
+            "A fresh provider quote is bounded by the available Prime wallet balance.",
+          ],
+          modelAllowlist: [
+            "Qwen/Qwen3-0.6B",
+            "Qwen/Qwen3-8B",
           ],
         })
       : new UnavailableTrainingDestination(
@@ -717,14 +722,17 @@ export function createTrainingService(deps: {
     if (!roleTargetId) throw new Error("Model binding target is required.");
     const model = await deps.store.getModelArtifactLineage(input.modelId);
     if (!model || model.status !== "imported") throw new Error("Imported model not found.");
-    if (!model.promotable || !model.frozenEvaluationArtifactId) {
-      throw new Error("This Model did not pass its source-owned frozen evaluation promotion gate.");
+    const promotionGate = resolveModelBindingPromotionGate(model);
+    if (!promotionGate) {
+      throw new Error("This Model did not pass a supported frozen evaluation promotion gate.");
     }
     const [taskset, job, artifact, evaluationArtifact] = await Promise.all([
       deps.store.getTaskset(model.tasksetId),
       deps.store.getTrainingJob(model.jobId),
       deps.store.getTrainingArtifact(model.artifactId),
-      deps.store.getTrainingArtifact(model.frozenEvaluationArtifactId),
+      promotionGate.evaluationArtifactId
+        ? deps.store.getTrainingArtifact(promotionGate.evaluationArtifactId)
+        : Promise.resolve(null),
     ]);
     if (!taskset || taskset.profileId !== input.profileId) {
       throw new Error("The Model does not belong to the active Profile.");
@@ -732,21 +740,25 @@ export function createTrainingService(deps: {
     if (!job || job.status !== "succeeded" || !artifact) {
       throw new Error("The Model artifact does not have a completed training receipt.");
     }
-    if (
+    if (promotionGate.kind === "source_frozen_evaluation" && (
       !evaluationArtifact ||
       evaluationArtifact.kind !== "evaluation" ||
       evaluationArtifact.jobId !== job.id ||
       evaluationArtifact.metadata.thresholdPassed !== true
-    ) {
+    )) {
       throw new Error("The Model has no matching frozen-evaluation threshold receipt.");
     }
     await Promise.all([
       assertArtifactIntegrity(artifact.path, artifact.sha256, artifact.sizeBytes),
-      assertArtifactIntegrity(
-        evaluationArtifact.path,
-        evaluationArtifact.sha256,
-        evaluationArtifact.sizeBytes,
-      ),
+      ...(evaluationArtifact
+        ? [
+            assertArtifactIntegrity(
+              evaluationArtifact.path,
+              evaluationArtifact.sha256,
+              evaluationArtifact.sizeBytes,
+            ),
+          ]
+        : []),
     ]);
     let current = await deps.store.getActiveModelBinding({
       profileId: input.profileId,
@@ -769,7 +781,7 @@ export function createTrainingService(deps: {
       roleTargetId,
       modelArtifactLineageId: model.id,
       tasksetId: taskset.id,
-      evaluationArtifactId: evaluationArtifact.id,
+      evaluationArtifactId: promotionGate.evaluationArtifactId,
       status: "active",
       priorBindingId: current?.id ?? null,
       rollbackTargetBindingId: current?.id ?? null,
@@ -782,6 +794,9 @@ export function createTrainingService(deps: {
         artifactHash: artifact.sha256,
         trainingMethod: (await deps.store.getTrainingPlan(job.planId))?.recipe.method ?? null,
         evaluationThresholdPassed: true,
+        promotionGate: promotionGate.kind,
+        canonicalSandboxArtifactId: promotionGate.canonicalArtifactId,
+        canonicalSandboxDeploymentId: promotionGate.canonicalDeploymentId,
         managedProjectionVersion: 1,
       },
     });

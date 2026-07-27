@@ -111,9 +111,9 @@ export function destinationLabel(destination: string): string {
     local_mlx: "Apple Silicon",
     ssh_gpu: "SSH GPU",
     runpod_byoc: "RunPod",
-    prime_hosted: "Prime hosted",
+    prime_hosted: "Prime Raw GPU",
     fireworks: "Fireworks",
-    openpond_managed: "OpenPond managed",
+    openpond_managed: "OpenPond Managed",
   };
   return labels[destination] ?? destination.replaceAll("_", " ");
 }

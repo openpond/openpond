@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { ComputeDevice, ComputeStateResponse } from "@openpond/contracts";
 import { RefreshCw } from "../icons";
 import { ModelStoragePicker } from "./ModelStoragePicker";
+import { PrimeComputeProviderCard } from "./PrimeComputeProviderCard";
+import type { ComputeSettingsBusy } from "./useComputeSettings";
 
 export function ComputeSettingsSection({
   state,
@@ -9,11 +11,14 @@ export function ComputeSettingsSection({
   title = "Compute",
   onScan,
   onSave,
+  onSavePrimeCredential,
+  onValidatePrimeCredential,
+  onDeletePrimeCredential,
   onDownloadSmolLm2,
   onCancelDownload,
 }: {
   state: ComputeStateResponse | null;
-  busy: "load" | "scan" | "save" | null;
+  busy: ComputeSettingsBusy;
   title?: string;
   onScan: () => Promise<void>;
   onSave: (
@@ -21,6 +26,9 @@ export function ComputeSettingsSection({
     datasetStorePath: string | null,
     defaultDeviceIds: string[],
   ) => Promise<boolean>;
+  onSavePrimeCredential: (apiKey: string) => Promise<boolean>;
+  onValidatePrimeCredential: () => Promise<void>;
+  onDeletePrimeCredential: () => Promise<void>;
   onDownloadSmolLm2: () => Promise<void>;
   onCancelDownload: (jobId: string) => Promise<void>;
 }) {
@@ -63,6 +71,28 @@ export function ComputeSettingsSection({
           </div>
         </div>
       </div>
+
+      <div className="account-list-heading compute-section-heading">
+        <span>Remote accelerators</span>
+      </div>
+      {state ? (
+        <PrimeComputeProviderCard
+          status={state.providers.prime}
+          busy={busy}
+          onSave={onSavePrimeCredential}
+          onValidate={onValidatePrimeCredential}
+          onDelete={onDeletePrimeCredential}
+        />
+      ) : (
+        <div className="account-summary">
+          <div className="account-summary-main compute-summary-main">
+            <div>
+              <strong>Loading remote compute</strong>
+              <small>Checking provider connections stored on this machine.</small>
+            </div>
+          </div>
+        </div>
+      )}
 
       <form className="provider-settings-form" onSubmit={(event) => void save(event)}>
         <div className="account-list-heading"><span>Defaults</span></div>

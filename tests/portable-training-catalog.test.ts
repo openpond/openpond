@@ -11,6 +11,7 @@ import {
   createPortableTrainingCatalog,
   preparePortableModelRun,
 } from "../apps/server/src/training/portable-training-catalog.js";
+import { destinationLabel } from "../apps/web/src/components/training/training-model-data.js";
 import {
   FIXED_TIME,
   sftRecipeFixture,
@@ -18,6 +19,33 @@ import {
 } from "./helpers/training-fixtures.js";
 
 describe("server-owned portable training catalog", () => {
+  it("presents hosted compute through the OpenPond Managed product boundary", () => {
+    const catalog = createPortableTrainingCatalog({
+      candidates: [],
+      destinations: [],
+      inventory: null,
+      workerCatalog: null,
+      now: FIXED_TIME,
+    });
+    const managed = catalog.targets.find(
+      (target) => target.destinationId === "openpond_managed",
+    );
+
+    expect(managed).toMatchObject({
+      label: "OpenPond Managed",
+      description: "Let OpenPond prepare and operate the compute for this training run.",
+      capabilityPills: ["Managed"],
+      unavailableReason: "OpenPond Managed is not available for this account.",
+    });
+    expect(destinationLabel("openpond_managed")).toBe("OpenPond Managed");
+    expect([
+      managed?.label,
+      managed?.description,
+      ...(managed?.capabilityPills ?? []),
+      managed?.unavailableReason,
+    ].join(" ")).not.toMatch(/\b(?:sandbox|latitude|prime|gcp|cloudflare|m8)\b/i);
+  });
+
   it("resolves compute, model, engine, worker preparation without side effects", () => {
     const taskset = tasksetFixture({ ready: true });
     const destination = TrainingDestinationCapabilitiesSchema.parse({

@@ -42,11 +42,139 @@ describe("managed adapter chat runtime", () => {
     );
   });
 
+  test("aligns managed Qwen3 serving with the no-thinking training renderer", async () => {
+    const binding = modelBinding();
+    const lineage = modelLineage();
+    const streamChat = vi.fn(async function* () {
+      yield { text: "managed" };
+    });
+    const runtime = createManagedAdapterChatRuntime({
+      store: {
+        getActiveModelBinding: vi.fn(async () => binding),
+        getModelArtifactLineage: vi.fn(async () => lineage),
+        listModelVersions: vi.fn(async () => [
+          {
+            artifactLineageId: lineage.id,
+            baseModel: { modelId: "Qwen/Qwen3-0.6B" },
+          },
+        ]),
+      } as unknown as SqliteStore,
+      client: { streamChat } as never,
+    });
+
+    await collect(
+      runtime.stream({
+        modelId: "binding:profile-1:chat_manual:target-1",
+        messages: [
+          { role: "system", content: "Use the harness." },
+          { role: "user", content: "Inspect the portfolio." },
+        ],
+        requestId: "request-qwen-no-think",
+        signal: new AbortController().signal,
+      }),
+    );
+
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: "system", content: "Use the harness." },
+          {
+            role: "user",
+            content: "Inspect the portfolio.\n\n/no_think",
+          },
+        ],
+      }),
+    );
+  });
+
   test("uses persisted monotonic binding projection versions", () => {
     expect(managedBindingProjectionVersion(modelBinding())).toBe(3);
     expect(
       managedBindingLogicalModelName(modelBinding()),
     ).toMatch(/^trained-[a-f0-9]{32}$/);
+  });
+
+  test("routes a catalog lineage id through its active manual binding", async () => {
+    const binding = modelBinding();
+    const lineage = modelLineage();
+    const store = {
+      listModelBindings: vi.fn(async () => [
+        {
+          ...binding,
+          id: "binding-agent",
+          role: "agent",
+          roleTargetId: "agent-1",
+        },
+        binding,
+      ]),
+      getModelArtifactLineage: vi.fn(async () => lineage),
+    } as unknown as SqliteStore;
+    const streamChat = vi.fn(async function* () {
+      yield { text: "managed-lineage" };
+    });
+    const runtime = createManagedAdapterChatRuntime({
+      store,
+      client: { streamChat } as never,
+    });
+
+    expect(await runtime.appliesTo(lineage.id)).toBe(true);
+    await expect(
+      collect(
+        runtime.stream({
+          modelId: lineage.id,
+          messages: [{ role: "user", content: "hello" }],
+          requestId: "request-lineage",
+          signal: new AbortController().signal,
+        }),
+      ),
+    ).resolves.toEqual([{ text: "managed-lineage" }]);
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        teamId: "team_qa",
+        logicalModelName: managedBindingLogicalModelName(binding),
+      }),
+    );
+  });
+
+  test("prefers the default active manual binding for a catalog lineage id", async () => {
+    const defaultBinding = {
+      ...modelBinding(),
+      roleTargetId: "default",
+    };
+    const alternateBinding = {
+      ...modelBinding(),
+      id: "binding-alternate",
+      roleTargetId: "alternate",
+      promotedAt: "2026-07-20T12:00:00.000Z",
+    };
+    const lineage = modelLineage();
+    const streamChat = vi.fn(async function* () {
+      yield { text: "managed-default" };
+    });
+    const runtime = createManagedAdapterChatRuntime({
+      store: {
+        listModelBindings: vi.fn(async () => [
+          alternateBinding,
+          defaultBinding,
+        ]),
+        getModelArtifactLineage: vi.fn(async () => lineage),
+      } as unknown as SqliteStore,
+      client: { streamChat } as never,
+    });
+
+    await collect(
+      runtime.stream({
+        modelId: lineage.id,
+        messages: [{ role: "user", content: "hello" }],
+        requestId: "request-default-binding",
+        signal: new AbortController().signal,
+      }),
+    );
+    expect(streamChat).toHaveBeenCalledWith(
+      expect.objectContaining({
+        logicalModelName: managedBindingLogicalModelName(defaultBinding),
+      }),
+    );
   });
 
   test.each([
@@ -58,7 +186,7 @@ describe("managed adapter chat runtime", () => {
     {
       state: "imported" as const,
       artifactState: "promotable" as const,
-      deploymentState: "provisioning" as const,
+      deploymentState: "deploying" as const,
     },
     {
       state: "failed" as const,
@@ -196,6 +324,12 @@ function modelLineage(): ModelArtifactLineage {
       canonicalDeploymentId: "deployment-1",
       canonicalDeploymentState: "ready",
       state: "ready",
+      artifactContentHash: null,
+      baseProfileId: null,
+      evaluation: null,
+      deployment: null,
+      servingPool: null,
+      servingReceipts: [],
       publishedAt: "2026-07-19T11:30:00.000Z",
       lastSyncedAt: "2026-07-19T12:00:00.000Z",
       lastError: null,

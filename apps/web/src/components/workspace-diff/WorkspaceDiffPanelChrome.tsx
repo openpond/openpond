@@ -247,6 +247,9 @@ export function WorkspaceDiffTabs({
               title={chat.title}
               onClick={() => onSelectSideChat?.(chat.id)}
             >
+              {chat.running ? (
+                <span className="right-chat-status-dot" aria-label="Running" />
+              ) : null}
               <span>{chat.title}</span>
             </button>
             {onCloseSideChat ? (

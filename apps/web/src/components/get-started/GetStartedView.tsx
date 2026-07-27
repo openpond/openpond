@@ -7,6 +7,7 @@ import { MakeAgentTutorialCard } from "./MakeAgentTutorialCard";
 import { LearningVideoCard } from "./LearningVideoCard";
 import { PostTrainingSeries } from "./PostTrainingSeries";
 import { OPENPOND_AGENT_OVERVIEW } from "./openpond-agent-overview";
+import { PROFILE_TO_DEPLOYMENT_OVERVIEW } from "./profile-to-deployment-overview";
 import type { PostTrainingCourseState } from "./post-training-lessons";
 import type {
   MakeAgentTutorialState,
@@ -64,6 +65,7 @@ export function GetStartedView({
           </header>
           <div className="get-started-learning-grid">
             <LearningVideoCard titleElement="h1" video={OPENPOND_AGENT_OVERVIEW} />
+            <LearningVideoCard video={PROFILE_TO_DEPLOYMENT_OVERVIEW} />
           </div>
         </section>
 

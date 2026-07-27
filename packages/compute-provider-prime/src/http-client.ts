@@ -20,6 +20,7 @@ type PrimeOffering = {
   diskHourlyUsdPerGb: number;
   variablePrice: boolean;
   prepaidHours: number | null;
+  images: string[];
 };
 
 type PrimePod = {
@@ -34,17 +35,21 @@ type PrimePod = {
 export type PrimeRawComputeHttpClientOptions = {
   apiKey(): Promise<string> | string;
   sshKeyId: string;
-  workerTemplateId: string;
+  workerTemplateId?: string;
+  gpuType?: string;
+  image?:
+    | "prime_rl"
+    | "vllm_llama_8b"
+    | "ubuntu_22_cuda_12"
+    | "custom_template";
   request?: typeof fetch;
   baseUrl?: string;
   diskSizeGb?: number;
   pollIntervalMs?: number;
   readyTimeoutMs?: number;
+  autoRestart?: boolean;
   now?: () => Date;
-  verifySshHostKey(input: {
-    host: string;
-    port: number;
-  }): Promise<string>;
+  verifySshHostKey(input: { host: string; port: number }): Promise<string>;
 };
 
 /**
@@ -61,11 +66,25 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
   private readonly pollIntervalMs: number;
   private readonly readyTimeoutMs: number;
   private readonly now: () => Date;
+  private readonly image:
+    | "prime_rl"
+    | "vllm_llama_8b"
+    | "ubuntu_22_cuda_12"
+    | "custom_template";
+  private readonly gpuType: string;
 
   constructor(private readonly options: PrimeRawComputeHttpClientOptions) {
-    if (!options.sshKeyId.trim() || !options.workerTemplateId.trim()) {
+    this.image =
+      options.image ??
+      (options.workerTemplateId ? "custom_template" : "prime_rl");
+    if (
+      !options.sshKeyId.trim() ||
+      (this.image === "custom_template" && !options.workerTemplateId?.trim())
+    ) {
       throw new Error(
-        "Prime raw compute requires an SSH key ID and immutable worker template ID.",
+        this.image === "custom_template"
+          ? "Prime custom-template compute requires an SSH key ID and immutable worker template ID."
+          : "Prime raw compute requires an SSH key ID."
       );
     }
     this.request = options.request ?? fetch;
@@ -74,11 +93,41 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     this.pollIntervalMs = options.pollIntervalMs ?? 2_000;
     this.readyTimeoutMs = options.readyTimeoutMs ?? 10 * 60_000;
     this.now = options.now ?? (() => new Date());
+    this.gpuType = options.gpuType?.trim() || "H100_80GB";
+  }
+
+  async walletBalance() {
+    const payload = object(
+      await this.json("/api/v1/billing/wallet?limit=1&offset=0"),
+      "Prime wallet response"
+    );
+    const walletId = string(payload.wallet_id, "wallet_id");
+    const teamId =
+      payload.team_id === null || payload.team_id === undefined
+        ? null
+        : string(payload.team_id, "team_id");
+    const balanceUsd = nonnegativeNumber(payload.balance_usd, "balance_usd");
+    const currency = string(payload.currency, "currency");
+    const checkedAt = this.now().toISOString();
+    return {
+      walletId,
+      teamId,
+      balanceUsd,
+      currency,
+      checkedAt,
+      receipt: contentHash({
+        walletId,
+        teamId,
+        balanceUsd,
+        currency,
+        checkedAt,
+      }),
+    };
   }
 
   async inventory() {
     const query = new URLSearchParams({
-      gpu_type: "H100_80GB",
+      gpu_type: this.gpuType,
       gpu_count: "1",
       security: "secure_cloud",
       page: "1",
@@ -86,31 +135,33 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     });
     const payload = object(
       await this.json(`/api/v1/availability/gpus?${query}`),
-      "Prime availability response",
+      "Prime availability response"
     );
     const items = array(payload.items, "Prime availability items")
       .map(parseOffering)
       .filter(
         (offering) =>
-          offering.gpuType === "H100_80GB" &&
+          offering.gpuType === this.gpuType &&
           offering.gpuCount === 1 &&
           offering.security === "secure_cloud" &&
           !offering.variablePrice &&
           offering.prepaidHours === null &&
-          offering.stockStatus.toLowerCase() === "available",
+          offering.images.includes(this.image) &&
+          offering.stockStatus.toLowerCase() === "available"
       );
     this.offerings.clear();
     for (const offering of items) {
-      if (this.offerings.has(offering.cloudId)) {
+      const id = offeringDeviceId(offering);
+      if (this.offerings.has(id)) {
         throw new Error(
-          `Prime availability returned duplicate cloud ID ${offering.cloudId}.`,
+          `Prime availability returned duplicate offering ${id}.`
         );
       }
-      this.offerings.set(offering.cloudId, offering);
+      this.offerings.set(id, offering);
     }
     const checkedAt = this.now().toISOString();
     const devices = items.map((offering) => ({
-      id: offering.cloudId,
+      id: offeringDeviceId(offering),
       kind: "gpu" as const,
       vendor: "nvidia" as const,
       name: `${offering.gpuType} · ${offering.provider} · ${offering.region}`,
@@ -133,11 +184,10 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     const deadline = new Date(input.deadline);
     const hours = Math.max(
       0,
-      (deadline.getTime() - this.now().getTime()) / 3_600_000,
+      (deadline.getTime() - this.now().getTime()) / 3_600_000
     );
     const totalHourlyUsd =
-      offering.hourlyUsd +
-      offering.diskHourlyUsdPerGb * this.diskSizeGb;
+      offering.hourlyUsd + offering.diskHourlyUsdPerGb * this.diskSizeGb;
     const estimatedCostUsd = roundUsd(totalHourlyUsd * hours);
     const quoteId = contentHash({
       offering: offeringIdentity(offering),
@@ -149,15 +199,12 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
       estimatedCostUsd,
       hourlyCostUsd: totalHourlyUsd,
       expiresAt: new Date(
-        Math.min(
-          deadline.getTime(),
-          this.now().getTime() + 15 * 60_000,
-        ),
+        Math.min(deadline.getTime(), this.now().getTime() + 15 * 60_000)
       ).toISOString(),
       assumptions: [
         `Prime availability ${offering.cloudId}`,
         `${this.diskSizeGb} GB ephemeral disk`,
-        "One secure-cloud H100 80 GB",
+        `One secure-cloud ${offering.gpuType} (${offering.gpuMemory} GB)`,
       ],
     };
   }
@@ -166,12 +213,19 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     deviceOrPool: string;
     deadline: string;
     idempotencyKey: string;
+    signal?: AbortSignal;
+    onProvisioned?: (resource: {
+      nodeId: string;
+      acquiredAt: string;
+    }) => void | Promise<void>;
   }) {
+    throwIfAborted(input.signal);
     const offering = await this.requireOffering(input.deviceOrPool);
     const name = `openpond-${contentHash(input.idempotencyKey).slice(0, 24)}`;
     const existing = (await this.listPods()).find(
-      (pod) => pod.name === name && !terminalPodStatus(pod.status),
+      (pod) => pod.name === name && !terminalPodStatus(pod.status)
     );
+    throwIfAborted(input.signal);
     let pod = existing;
     if (!pod) {
       pod = parsePod(
@@ -186,29 +240,38 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
               name,
               diskSize: this.diskSizeGb,
               maxPrice: offering.hourlyUsd,
-              image: "custom_template",
-              customTemplateId: this.options.workerTemplateId,
+              image: this.image,
+              ...(this.image === "custom_template"
+                ? { customTemplateId: this.options.workerTemplateId }
+                : {}),
               dataCenterId: offering.dataCenter ?? undefined,
               country: offering.country,
               security: offering.security,
               envVars: [],
               sshKeyId: this.options.sshKeyId,
-              autoRestart: true,
+              autoRestart: this.options.autoRestart ?? true,
             },
             provider: { type: offering.provider },
             disks: [],
             shared_with_team: false,
           }),
-        }),
+        })
       );
     }
     try {
-      const ready = await this.waitForSsh(pod.id);
+      await input.onProvisioned?.({
+        nodeId: pod.id,
+        acquiredAt: pod.createdAt,
+      });
+      const ready = await this.waitForSsh(pod.id, input.signal);
       const connection = parseSshConnection(ready.sshConnection);
-      const sshHostFingerprint =
-        await this.options.verifySshHostKey(connection);
+      const sshHostFingerprint = await this.options.verifySshHostKey(
+        connection
+      );
       if (!/^SHA256:[A-Za-z0-9+/]+$/.test(sshHostFingerprint)) {
-        throw new Error("Prime SSH host-key verifier returned an invalid fingerprint.");
+        throw new Error(
+          "Prime SSH host-key verifier returned an invalid fingerprint."
+        );
       }
       this.deadlines.set(ready.id, input.deadline);
       return {
@@ -241,10 +304,38 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     };
   }
 
+  async connect(nodeId: string, deadline: string) {
+    const ready = await this.waitForSsh(nodeId);
+    const connection = parseSshConnection(ready.sshConnection);
+    const sshHostFingerprint = await this.options.verifySshHostKey(connection);
+    if (!/^SHA256:[A-Za-z0-9+/]+$/.test(sshHostFingerprint)) {
+      throw new Error(
+        "Prime SSH host-key verifier returned an invalid fingerprint."
+      );
+    }
+    this.deadlines.set(nodeId, deadline);
+    return {
+      nodeId,
+      ...connection,
+      sshHostFingerprint,
+      acquiredAt: ready.createdAt,
+      expiresAt: deadline,
+      capabilityReceipt: contentHash({
+        podId: nodeId,
+        sshHostFingerprint,
+        reconnected: true,
+      }),
+    };
+  }
+
   async terminate(nodeId: string): Promise<void> {
-    await this.json(`/api/v1/pods/${encodeURIComponent(nodeId)}`, {
-      method: "DELETE",
-    }, true);
+    await this.json(
+      `/api/v1/pods/${encodeURIComponent(nodeId)}`,
+      {
+        method: "DELETE",
+      },
+      true
+    );
     this.deadlines.delete(nodeId);
   }
 
@@ -257,35 +348,45 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     return offering;
   }
 
-  private async waitForSsh(podId: string): Promise<PrimePod> {
+  private async waitForSsh(
+    podId: string,
+    signal?: AbortSignal
+  ): Promise<PrimePod> {
     const deadline = this.now().getTime() + this.readyTimeoutMs;
     while (true) {
-      const pod = await this.getPod(podId);
+      throwIfAborted(signal);
+      const pod = await this.getPod(podId, signal);
       if (pod.sshConnection && readyPodStatus(pod.status)) return pod;
       if (terminalPodStatus(pod.status) || pod.installationFailure) {
         throw new Error(
           `Prime node ${podId} failed before SSH bootstrap: ${
             pod.installationFailure ?? pod.status
-          }.`,
+          }.`
         );
       }
       if (this.now().getTime() >= deadline) {
         throw new Error(`Prime node ${podId} did not become SSH-ready.`);
       }
-      await delay(this.pollIntervalMs);
+      await delay(this.pollIntervalMs, signal);
     }
   }
 
-  private async getPod(podId: string): Promise<PrimePod> {
+  private async getPod(
+    podId: string,
+    signal?: AbortSignal
+  ): Promise<PrimePod> {
     return parsePod(
-      await this.json(`/api/v1/pods/${encodeURIComponent(podId)}`),
+      await this.json(
+        `/api/v1/pods/${encodeURIComponent(podId)}`,
+        signal ? { signal } : {}
+      )
     );
   }
 
   private async listPods(): Promise<PrimePod[]> {
     const payload = object(
       await this.json("/api/v1/pods/?offset=0&limit=100"),
-      "Prime pod list",
+      "Prime pod list"
     );
     return array(payload.data, "Prime pods").map(parsePod);
   }
@@ -293,7 +394,7 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
   private async json(
     path: string,
     init: RequestInit = {},
-    allowEmpty = false,
+    allowEmpty = false
   ): Promise<unknown> {
     const apiKey = (await this.options.apiKey()).trim();
     if (!apiKey) throw new Error("Prime API key is empty.");
@@ -312,7 +413,9 @@ export class PrimeRawComputeHttpClient implements PrimeRawComputeClient {
     const text = await response.text();
     if (!response.ok) {
       throw new Error(
-        `Prime API ${init.method ?? "GET"} ${path} failed (${response.status}): ${text.slice(0, 300)}`,
+        `Prime API ${init.method ?? "GET"} ${path} failed (${
+          response.status
+        }): ${text.slice(0, 300)}`
       );
     }
     if (!text) {
@@ -332,14 +435,13 @@ function parseOffering(value: unknown): PrimeOffering {
   const prices = object(item.prices, "Prime availability prices");
   const disk =
     item.disk && typeof item.disk === "object" && !Array.isArray(item.disk)
-      ? item.disk as Record<string, unknown>
+      ? (item.disk as Record<string, unknown>)
       : {};
   const diskPricePerUnit =
     disk.pricePerUnit === null || disk.pricePerUnit === undefined
       ? 0
       : nonnegativeNumber(disk.pricePerUnit, "disk.pricePerUnit");
-  const diskIncluded =
-    disk.defaultIncludedInPrice === true;
+  const diskIncluded = disk.defaultIncludedInPrice === true;
   return {
     cloudId: string(item.cloudId, "cloudId"),
     gpuType: string(item.gpuType, "gpuType"),
@@ -356,18 +458,18 @@ function parseOffering(value: unknown): PrimeOffering {
     stockStatus: string(item.stockStatus, "stockStatus"),
     security: string(item.security, "security"),
     hourlyUsd: nonnegativeNumber(prices.onDemand, "prices.onDemand"),
-    diskHourlyUsdPerGb: diskIncluded
-      ? 0
-      : diskPricePerUnit,
+    diskHourlyUsdPerGb: diskIncluded ? 0 : diskPricePerUnit,
     variablePrice:
-      prices.isVariable === undefined ||
-      prices.isVariable === null
+      prices.isVariable === undefined || prices.isVariable === null
         ? false
         : boolean(prices.isVariable, "prices.isVariable"),
     prepaidHours:
       item.prepaidTime === undefined || item.prepaidTime === null
         ? null
         : nonnegativeNumber(item.prepaidTime, "prepaidTime"),
+    images: array(item.images, "images").map((image) =>
+      string(image, "images item")
+    ),
   };
 }
 
@@ -378,31 +480,44 @@ function parsePod(value: unknown): PrimePod {
     rawConnection === null || rawConnection === undefined
       ? null
       : Array.isArray(rawConnection)
-        ? rawConnection.map((item) => string(item, "sshConnection"))
-        : string(rawConnection, "sshConnection");
+      ? rawConnection.map((item) => string(item, "sshConnection"))
+      : string(rawConnection, "sshConnection");
   return {
     id: string(pod.id, "pod.id"),
     name: string(pod.name, "pod.name"),
     status: string(pod.status, "pod.status"),
     sshConnection,
     installationFailure:
-      pod.installationFailure === null ||
-      pod.installationFailure === undefined
+      pod.installationFailure === null || pod.installationFailure === undefined
         ? null
         : string(pod.installationFailure, "pod.installationFailure"),
-    createdAt: string(pod.createdAt, "pod.createdAt"),
+    createdAt: utcTimestamp(pod.createdAt, "pod.createdAt"),
   };
 }
 
-function parseSshConnection(
-  value: PrimePod["sshConnection"],
-): { host: string; port: number; user: string } {
+function utcTimestamp(value: unknown, label: string): string {
+  const raw = string(value, label);
+  const timezoneQualified = /(?:Z|[+-][0-9]{2}:?[0-9]{2})$/i.test(raw)
+    ? raw
+    : `${raw}Z`;
+  const timestamp = Date.parse(timezoneQualified);
+  if (!Number.isFinite(timestamp)) {
+    throw new Error(`${label} must be an ISO-8601 timestamp.`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function parseSshConnection(value: PrimePod["sshConnection"]): {
+  host: string;
+  port: number;
+  user: string;
+} {
   const command = Array.isArray(value)
     ? value.find((item) => item.trim().length > 0)
     : value;
   if (!command) throw new Error("Prime pod has no SSH connection.");
   const destination = command.match(
-    /(?:^|\s)([A-Za-z0-9._-]+)@(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9._:-]+)/,
+    /(?:^|\s)([A-Za-z0-9._-]+)@(\[[0-9A-Fa-f:]+\]|[A-Za-z0-9._:-]+)/
   );
   const port = command.match(/(?:^|\s)-p\s+([0-9]{1,5})(?:\s|$)/);
   if (!destination) {
@@ -435,7 +550,15 @@ function offeringIdentity(offering: PrimeOffering) {
     diskHourlyUsdPerGb: offering.diskHourlyUsdPerGb,
     variablePrice: offering.variablePrice,
     prepaidHours: offering.prepaidHours,
+    images: offering.images,
   };
+}
+
+function offeringDeviceId(offering: PrimeOffering): string {
+  return `prime-offering-${contentHash(offeringIdentity(offering)).slice(
+    0,
+    24
+  )}`;
 }
 
 function readyPodStatus(value: string): boolean {
@@ -444,14 +567,11 @@ function readyPodStatus(value: string): boolean {
 
 function terminalPodStatus(value: string): boolean {
   return ["failed", "terminated", "cancelled", "canceled"].includes(
-    value.toLowerCase(),
+    value.toLowerCase()
   );
 }
 
-function object(
-  value: unknown,
-  label: string,
-): Record<string, unknown> {
+function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} must be an object.`);
   }
@@ -495,6 +615,31 @@ function roundUsd(value: number): number {
   return Math.ceil(value * 1_000_000) / 1_000_000;
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+function delay(
+  milliseconds: number,
+  signal?: AbortSignal
+): Promise<void> {
+  throwIfAborted(signal);
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError(signal));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) return;
+  throw abortError(signal);
+}
+
+function abortError(signal?: AbortSignal): Error {
+  return signal?.reason instanceof Error
+    ? signal.reason
+    : new Error("Prime provisioning was cancelled.");
 }

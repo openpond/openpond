@@ -305,6 +305,9 @@ export function RightChatPanelStack({
                   onClick={() => selectPanel(panel.id)}
                   onKeyDown={(event) => handleTabKeyDown(event, panel.id)}
                 >
+                  {panel.running ? (
+                    <span className="right-chat-status-dot" aria-label="Running" />
+                  ) : null}
                   <span>{panel.title}</span>
                 </button>
                 <button

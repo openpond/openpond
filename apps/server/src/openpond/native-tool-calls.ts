@@ -72,7 +72,14 @@ export function assistantMessageForNativeToolCalls(
     role: "assistant",
     content: content.trim() || (continuation ? "" : null),
     ...(continuation ? { continuation } : {}),
-    tool_calls: toolCalls.map((toolCall) => toolCall.hostedToolCall),
+    tool_calls: toolCalls.map((toolCall) => ({
+      id: toolCall.id,
+      type: toolCall.hostedToolCall.type || "function",
+      function: {
+        name: toolCall.name,
+        arguments: toolCall.argumentsJson,
+      },
+    })),
   };
 }
 

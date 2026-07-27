@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Taskset } from "@openpond/contracts";
+import { resolveModelBindingPromotionGate } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
@@ -62,7 +63,7 @@ export function TrainingModels({
           <td>{row.runCount}</td>
           <td>{formatDateTime(row.updatedAt)}</td>
           <td><span className={`training-run-status ${row.latestJob?.status ?? "ready"}`}>{row.status}</span></td>
-          <td><div className="training-table-actions">{row.localModel ? <button className="training-table-chat" type="button" aria-label={`Chat with ${row.name}`} disabled={!row.localModel.promotable} title={row.localModel.promotable ? "Start a bounded chat session with this model" : "Chat is available after a version passes frozen evaluation"} onClick={(event) => { event.stopPropagation(); onChatWithModel(buildTrainingModelChatHandoff({ modelId: row.localModel!.id, taskset: row.taskset })); }}><MessageSquare size={13}/> Chat</button> : null}<ChevronRight size={15}/></div></td>
+          <td><div className="training-table-actions">{row.localModel ? <button className="training-table-chat" type="button" aria-label={`Chat with ${row.name}`} disabled={!resolveModelBindingPromotionGate(row.localModel)} title={resolveModelBindingPromotionGate(row.localModel) ? "Start a bounded chat session with this model" : "Chat is available after a version passes frozen evaluation"} onClick={(event) => { event.stopPropagation(); onChatWithModel(buildTrainingModelChatHandoff({ modelId: row.localModel!.id, taskset: row.taskset })); }}><MessageSquare size={13}/> Chat</button> : null}<ChevronRight size={15}/></div></td>
         </tr>)}</tbody>
       </table></div> : <div className="training-empty-detail"><h2>No models yet</h2><p>Create a Taskset from selected chats to start training.</p></div>}
 

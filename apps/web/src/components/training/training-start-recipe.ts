@@ -111,6 +111,72 @@ export function trainingRecipe(input: {
       policyOptimization: null,
     };
   }
+  if (input.method === "grpo" && input.executionMode === "connected_worker") {
+    const benchmark = input.taskset.environment.metadata.benchmark;
+    const marketingPortfolio =
+      benchmark !== null &&
+      typeof benchmark === "object" &&
+      !Array.isArray(benchmark) &&
+      (benchmark as Record<string, unknown>).id === "marketing-portfolio-v1";
+    const grader = input.taskset.graders.find(
+      (candidate) => candidate.rewardEligible,
+    );
+    const metadataToolContractHash =
+      input.taskset.environment.metadata.toolContractHash;
+    const toolContractHash =
+      typeof metadataToolContractHash === "string" &&
+      metadataToolContractHash.trim()
+        ? metadataToolContractHash
+        : "server-authoritative-tool-contract-hash";
+    return {
+      schemaVersion: "openpond.rftRecipe.v1",
+      method: "grpo",
+      parameterization: "lora",
+      baseModel: providerNativeModelRef(input),
+      dataset: {
+        trainSplit: "train",
+        validationSplit: "frozen_eval",
+        maxPromptTokens: input.sequenceLength,
+        maxExamples: input.trainingExamples,
+        selectionStrategy: "stable_hash_top_n",
+      },
+      lora: { rank: input.rank },
+      rollout: {
+        groupSize: input.rolloutGroupSize,
+        concurrency: input.rolloutConcurrency,
+        maxTurns: marketingPortfolio ? 8 : 1,
+        maxOutputTokens: input.rolloutMaxOutputTokens,
+        temperature: 0.8,
+        topP: 0.95,
+        seed: 17,
+      },
+      optimizer: {
+        learningRate: input.learningRate,
+        maxSteps: input.maxSteps,
+      },
+      loss: {
+        method:
+          input.rftLossMethod ?? defaultRftLossMethod(input.taskset),
+        klBeta: null,
+      },
+      reward: {
+        graderId: grader?.id ?? "server-authoritative-grader",
+        graderHash: "server-derived-grader-hash",
+        environmentId: input.taskset.environment.entrypoint,
+        environmentVersion: input.taskset.environment.protocolVersion,
+        toolContractHash,
+      },
+      resourceLimits: {
+        wallTimeMs: 20 * 60_000,
+        maxRollouts: Math.max(
+          input.rolloutGroupSize,
+          input.trainingExamples * input.rolloutGroupSize,
+        ),
+        maxPayloadBytes: 1_000_000,
+      },
+      policyOptimization: null,
+    };
+  }
   if (
     input.method === "ppo" &&
     input.destinationId === "local_cpu_fixture"

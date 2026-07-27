@@ -38,7 +38,9 @@ export function selectPortableModelArtifacts(
   for (const artifact of artifacts) {
     const providerFilename = artifact.metadata.providerFilename;
     if (
-      artifact.metadata.provider !== "fireworks"
+      !["fireworks", "prime"].includes(
+        String(artifact.metadata.provider),
+      )
       || typeof providerFilename !== "string"
     ) {
       continue;

@@ -78,6 +78,42 @@ describe("provider-neutral base-model candidates", () => {
       sourceLabel: "Fireworks",
     });
   });
+
+  test("pins both qualified Prime GRPO base profiles exactly", () => {
+    const candidates = projectBaseModelCandidates({
+      destinations: [
+        destination("prime_hosted", {
+          modelAllowlist: [
+            "Qwen/Qwen3-0.6B",
+            "Qwen/Qwen3-8B",
+          ],
+          methods: ["grpo"],
+        }),
+      ],
+      inventory: null,
+    });
+
+    expect(
+      candidates.map((candidate) => candidate.preference),
+    ).toEqual([
+      expect.objectContaining({
+        modelId: "Qwen/Qwen3-0.6B",
+        revision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        tokenizerRevision:
+          "c1899de289a04d12100db370d81485cdf75e47ca",
+        chatTemplateHash:
+          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      }),
+      expect.objectContaining({
+        modelId: "Qwen/Qwen3-8B",
+        revision: "b968826d9c46dd6066d109eabc6255188de91218",
+        tokenizerRevision:
+          "b968826d9c46dd6066d109eabc6255188de91218",
+        chatTemplateHash:
+          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      }),
+    ]);
+  });
 });
 
 function destination(

@@ -6,6 +6,10 @@ import type {
   TrainingJob,
   TrainingJobEvent,
 } from "@openpond/contracts";
+import {
+  managedAdapterEvaluationPassed,
+  resolveModelBindingPromotionGate,
+} from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
@@ -25,10 +29,17 @@ import {
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
+  ManagedAdapterEvaluationPanel,
+  ManagedAdapterServingEvidence,
+} from "./ManagedAdapterServingEvidence";
+import {
   currentModelBinding,
+  labBaseModelVersion,
+  labLifecycleModelRuns,
   labModelBaselineRuns,
   labModelJobs,
   labModelPlans,
+  labModelTasksets,
   labModelVersions,
 } from "./lab-models";
 import type { LabWorkproductSummary } from "./lab-workproducts";
@@ -58,23 +69,34 @@ export function LabModelVersionsPage({
   onOpenEntry,
   onResumeDraft,
   onToast,
+  readOnly = false,
 }: ModelWorkspaceProps & {
   onOpenEntry: (entryKey: string) => void;
   onResumeDraft: (draftId: string) => void;
   onToast: ShowAppToast;
+  readOnly?: boolean;
 }) {
   const state = training.payload;
-  const jobs = useMemo(() => labModelJobs(workproduct, runs, state), [runs, state, workproduct]);
+  const jobs = useMemo(
+    () => labModelJobs(workproduct, runs, state),
+    [runs, state, workproduct]
+  );
   const versions = useMemo(
     () => labModelVersions(workproduct, runs, state),
-    [runs, state, workproduct],
+    [runs, state, workproduct]
   );
   const baselineRuns = useMemo(
     () => labModelBaselineRuns(workproduct, runs, state),
-    [runs, state, workproduct],
+    [runs, state, workproduct]
   );
-  const plans = useMemo(() => labModelPlans(workproduct, runs, state), [runs, state, workproduct]);
-  const planById = useMemo(() => new Map(plans.map((plan) => [plan.id, plan] as const)), [plans]);
+  const plans = useMemo(
+    () => labModelPlans(workproduct, runs, state),
+    [runs, state, workproduct]
+  );
+  const planById = useMemo(
+    () => new Map(plans.map((plan) => [plan.id, plan] as const)),
+    [plans]
+  );
   const entries = useMemo(
     () =>
       modelVersionEntries(
@@ -84,33 +106,44 @@ export function LabModelVersionsPage({
         state?.modelRunDrafts.filter(
           (draft) =>
             draft.modelId === workproduct.id &&
-            (draft.status === "draft" || draft.status === "ready_to_run"),
-        ) ?? [],
+            (draft.status === "draft" || draft.status === "ready_to_run")
+        ) ?? []
       ),
-    [baselineRuns, jobs, state?.modelRunDrafts, versions, workproduct.id],
+    [baselineRuns, jobs, state?.modelRunDrafts, versions, workproduct.id]
   );
   const currentBinding = currentModelBinding(workproduct, runs, state);
+  const baseVersion = labBaseModelVersion(workproduct, state);
+  const lifecycleRuns = labLifecycleModelRuns(workproduct, state);
+  const tasksets = labModelTasksets(state);
 
   async function setCurrent(versionId: string) {
-    const version = versions.find((candidate) => candidate.lineage.id === versionId);
-    if (!version?.lineage.promotable) return;
-    if (!window.confirm(`Set Version ${version.number} as active for ${workproduct.name}?`)) {
+    if (readOnly) return;
+    const version = versions.find(
+      (candidate) => candidate.lineage.id === versionId
+    );
+    if (!version || !resolveModelBindingPromotionGate(version.lineage)) return;
+    if (
+      !window.confirm(
+        `Set Version ${version.number} as active for ${workproduct.name}?`
+      )
+    ) {
       return;
     }
     const result = await training.actions.bindModel(
       version.lineage.id,
       "chat_manual",
-      workproduct.id,
+      workproduct.id
     );
     onToast(
       result
         ? `Version ${version.number} is now active.`
         : "The active Version could not be changed.",
-      result ? "success" : "error",
+      result ? "success" : "error"
     );
   }
 
   async function togglePinned(versionId: string, pinned: boolean) {
+    if (readOnly) return;
     const result = await training.actions.setModelPinned(versionId, pinned);
     onToast(
       result
@@ -118,19 +151,96 @@ export function LabModelVersionsPage({
           ? "Version pinned."
           : "Version unpinned."
         : "Version pin could not be changed.",
-      result ? "success" : "error",
+      result ? "success" : "error"
     );
   }
 
   return (
-    <section className="labs-model-version-index" aria-label="Runs">
+    <section
+      className="labs-model-version-index"
+      aria-label="Versions and runs"
+    >
+      {baseVersion ? (
+        <DetailSection title="Base version 0">
+          <div className="training-summary-grid">
+            <Fact label="Base model" value={baseVersion.baseModel.modelId} />
+            <Fact label="Profile" value={baseVersion.profileId} />
+            <Fact label="Adapter" value="No adapter trained yet" />
+            <Fact label="Status" value="Available" />
+            <Fact
+              label="Taskset"
+              value={
+                tasksets.find(
+                  (taskset) => taskset.id === baseVersion.taskset.id
+                )?.name ?? baseVersion.taskset.id
+              }
+            />
+            <Fact
+              label="Revision"
+              value={baseVersion.baseModel.revision ?? "Unpinned"}
+            />
+          </div>
+        </DetailSection>
+      ) : null}
+      {lifecycleRuns.length ? (
+        <DetailSection title="Rollout runs">
+          <div className="training-table-wrap">
+            <table className="training-data-table">
+              <thead>
+                <tr>
+                  <th>Run</th>
+                  <th>Status</th>
+                  <th>Method</th>
+                  <th>Taskset</th>
+                  <th>Reward</th>
+                  <th>Output</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lifecycleRuns.map((run) => {
+                  const taskset = tasksets.find(
+                    (candidate) => candidate.id === run.taskset.id
+                  );
+                  return (
+                    <tr key={run.id}>
+                      <td>
+                        <strong>{shortId(run.id)}</strong>
+                      </td>
+                      <td>
+                        <LabStatusBadge
+                          label={statusLabel(run.status)}
+                          value={run.status}
+                        />
+                      </td>
+                      <td>{trainingMethodLabel(run.method)}</td>
+                      <td>
+                        <button
+                          className="labs-version-dataset-link"
+                          type="button"
+                          onClick={() => onOpenDataset(run.taskset.id)}
+                        >
+                          {taskset?.name ?? run.taskset.id}
+                        </button>
+                      </td>
+                      <td>{run.reward ? run.reward.raw.toFixed(6) : "—"}</td>
+                      <td>No adapter trained</td>
+                      <td>{formatDateTime(run.updatedAt)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </DetailSection>
+      ) : null}
       <div className="training-table-wrap">
         <table className="training-data-table labs-model-versions-table">
           <thead>
             <tr>
               <th>Run</th>
               <th>Training</th>
-              <th>Dataset</th>
+              <th>Taskset</th>
               <th>Training status</th>
               <th>Evaluation</th>
               <th>Output</th>
@@ -141,11 +251,12 @@ export function LabModelVersionsPage({
             </tr>
           </thead>
           <tbody>
-            {!entries.length ? (
+            {!entries.length && !lifecycleRuns.length ? (
               <tr>
                 <td colSpan={8}>
                   <div className="training-run-placeholder">
-                    No runs yet. Complete the build setup and start the first run.
+                    No runs yet. Complete the build setup and start the first
+                    run.
                   </div>
                 </td>
               </tr>
@@ -154,38 +265,52 @@ export function LabModelVersionsPage({
               const baselineRun = entry.baselineRun;
               const draft = entry.draft;
               const plan =
-                entry.version?.plan ?? (entry.job ? planById.get(entry.job.planId) ?? null : null);
+                entry.version?.plan ??
+                (entry.job ? planById.get(entry.job.planId) ?? null : null);
               const dataset =
                 entry.version?.taskset ??
-                state?.tasksets.find(
+                tasksets.find(
                   (taskset) =>
                     taskset.id ===
-                    (draft?.tasksetRef?.id ?? baselineRun?.tasksetId ?? plan?.tasksetId),
+                    (draft?.tasksetRef?.id ??
+                      baselineRun?.tasksetId ??
+                      plan?.tasksetId)
                 ) ??
                 null;
               const version = entry.version;
               const automaticallyPinned =
-                version && currentBinding?.modelArtifactLineageId === version.lineage.id;
+                version &&
+                currentBinding?.modelArtifactLineageId === version.lineage.id;
 
               return (
                 <tr
                   key={entry.key}
-                  onClick={() => (draft ? onResumeDraft(draft.id) : onOpenEntry(entry.key))}
+                  onClick={() =>
+                    draft && !readOnly
+                      ? onResumeDraft(draft.id)
+                      : !draft
+                      ? onOpenEntry(entry.key)
+                      : undefined
+                  }
                 >
                   <td>
                     <button
                       className="labs-version-row-button"
                       type="button"
                       onClick={() =>
-                        draft ? onResumeDraft(draft.id) : onOpenEntry(entry.key)
+                        draft && !readOnly
+                          ? onResumeDraft(draft.id)
+                          : !draft
+                          ? onOpenEntry(entry.key)
+                          : undefined
                       }
                     >
                       <strong>
                         {draft
                           ? draft.title
                           : version
-                            ? `Version ${version.number}`
-                            : "Run"}
+                          ? `Version ${version.number}`
+                          : "Run"}
                       </strong>
                       <small>
                         {shortId(
@@ -193,7 +318,7 @@ export function LabModelVersionsPage({
                             version?.lineage.id ??
                             entry.job?.id ??
                             baselineRun?.id ??
-                            entry.key,
+                            entry.key
                         )}
                       </small>
                     </button>
@@ -236,7 +361,12 @@ export function LabModelVersionsPage({
                           ? statusLabel(entry.job.status)
                           : "Imported"
                       }
-                      value={draft?.status ?? baselineRun?.status ?? entry.job?.status ?? "completed"}
+                      value={
+                        draft?.status ??
+                        baselineRun?.status ??
+                        entry.job?.status ??
+                        "completed"
+                      }
                     />
                   </td>
                   <td>
@@ -249,7 +379,11 @@ export function LabModelVersionsPage({
                     )}
                   </td>
                   <td>
-                    {draft ? "—" : <VersionStatusBadge job={entry.job} version={version} />}
+                    {draft ? (
+                      "—"
+                    ) : (
+                      <VersionStatusBadge job={entry.job} version={version} />
+                    )}
                   </td>
                   <td>
                     {formatDateTime(
@@ -257,13 +391,14 @@ export function LabModelVersionsPage({
                         version?.lineage.importedAt ??
                         baselineRun?.updatedAt ??
                         entry.job?.updatedAt ??
-                        "",
+                        ""
                     )}
                   </td>
                   <td>
                     {draft ? (
                       <button
                         className="training-button secondary"
+                        disabled={readOnly}
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -278,7 +413,9 @@ export function LabModelVersionsPage({
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void training.actions.cancelBaselineRun(baselineRun.id);
+                          void training.actions.cancelBaselineRun(
+                            baselineRun.id
+                          );
                         }}
                       >
                         Cancel
@@ -286,9 +423,12 @@ export function LabModelVersionsPage({
                     ) : version ? (
                       <div className="training-table-actions">
                         <button
-                          aria-pressed={version.lineage.pinned || Boolean(automaticallyPinned)}
+                          aria-pressed={
+                            version.lineage.pinned ||
+                            Boolean(automaticallyPinned)
+                          }
                           className="labs-version-icon-button"
-                          disabled={Boolean(automaticallyPinned)}
+                          disabled={readOnly || Boolean(automaticallyPinned)}
                           title={
                             automaticallyPinned
                               ? "The active Version stays pinned"
@@ -299,7 +439,10 @@ export function LabModelVersionsPage({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void togglePinned(version.lineage.id, !version.lineage.pinned);
+                            void togglePinned(
+                              version.lineage.id,
+                              !version.lineage.pinned
+                            );
                           }}
                         >
                           <Pin size={14} />
@@ -307,7 +450,10 @@ export function LabModelVersionsPage({
                         {!version.current ? (
                           <button
                             className="training-button secondary"
-                            disabled={!version.lineage.promotable}
+                            disabled={
+                              readOnly ||
+                              !resolveModelBindingPromotionGate(version.lineage)
+                            }
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
@@ -323,7 +469,9 @@ export function LabModelVersionsPage({
                           type="button"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void training.actions.downloadModelPackage(version.lineage.id);
+                            void training.actions.downloadModelPackage(
+                              version.lineage.id
+                            );
                           }}
                         >
                           <Download size={14} />
@@ -351,51 +499,91 @@ export function LabModelVersionDetailPage({
   onOpenDataset,
   onTabChange,
   onUseVersion,
+  readOnly = false,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
   selectedEntryKey: string;
   onBack: () => void;
-  onTabChange?: (tab: "summary" | "metrics" | "evals" | "artifacts" | "logs") => void;
+  onTabChange?: (
+    tab: "summary" | "metrics" | "evals" | "artifacts" | "logs"
+  ) => void;
   onUseVersion: (versionId: string) => void;
+  readOnly?: boolean;
 }) {
   const [activeRunTab, setActiveRunTab] = useState<
     "summary" | "metrics" | "evals" | "artifacts" | "logs"
   >("summary");
   const state = training.payload;
-  const jobs = useMemo(() => labModelJobs(workproduct, runs, state), [runs, state, workproduct]);
+  const jobs = useMemo(
+    () => labModelJobs(workproduct, runs, state),
+    [runs, state, workproduct]
+  );
   const versions = useMemo(
     () => labModelVersions(workproduct, runs, state),
-    [runs, state, workproduct],
+    [runs, state, workproduct]
   );
   const baselineRuns = useMemo(
     () => labModelBaselineRuns(workproduct, runs, state),
-    [runs, state, workproduct],
+    [runs, state, workproduct]
   );
-  const plans = useMemo(() => labModelPlans(workproduct, runs, state), [runs, state, workproduct]);
-  const planById = useMemo(() => new Map(plans.map((plan) => [plan.id, plan] as const)), [plans]);
+  const plans = useMemo(
+    () => labModelPlans(workproduct, runs, state),
+    [runs, state, workproduct]
+  );
+  const planById = useMemo(
+    () => new Map(plans.map((plan) => [plan.id, plan] as const)),
+    [plans]
+  );
   const entries = useMemo(
     () => modelVersionEntries(jobs, versions, baselineRuns),
-    [baselineRuns, jobs, versions],
+    [baselineRuns, jobs, versions]
   );
-  const selected = entries.find((entry) => entry.key === selectedEntryKey) ?? null;
+  const selected =
+    entries.find((entry) => entry.key === selectedEntryKey) ?? null;
   const selectedJob = selected?.job ?? null;
   const selectedVersion = selected?.version ?? null;
+  const selectedLifecycleRun = selectedJob
+    ? state?.modelRuns.find(
+        (run) => run.id === selectedJob.metadata.modelRunId
+      ) ?? null
+    : null;
+  const selectedLifecycleVersion = selectedVersion
+    ? state?.modelVersions.find(
+        (version) => version.artifactLineageId === selectedVersion.lineage.id
+      ) ?? null
+    : null;
+  const selectedBenchmarkRun = selectedLifecycleVersion
+    ? state?.marketingBenchmarkRuns.find(
+        (run) =>
+          run.candidateModelVersionId === selectedLifecycleVersion.id &&
+          run.status === "succeeded"
+      ) ?? null
+    : null;
+  const selectedEvaluationArtifactId =
+    selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
+  const managedServing =
+    selectedVersion?.lineage.managedServing ?? null;
   const selectedBaselineRun = selected?.baselineRun ?? null;
   const selectedPlan =
-    selectedVersion?.plan ?? (selectedJob ? planById.get(selectedJob.planId) ?? null : null);
+    selectedVersion?.plan ??
+    (selectedJob ? planById.get(selectedJob.planId) ?? null : null);
   const selectedTaskset =
     selectedVersion?.taskset ??
-    state?.tasksets.find(
-      (taskset) => taskset.id === (selectedBaselineRun?.tasksetId ?? selectedPlan?.tasksetId),
+    labModelTasksets(state).find(
+      (taskset) =>
+        taskset.id ===
+        (selectedBaselineRun?.tasksetId ?? selectedPlan?.tasksetId)
     ) ??
     null;
   const detail = useTrainingRunDetail(
     connection,
     selectedJob?.id ?? null,
-    selectedJob?.status ?? null,
+    selectedJob?.status ?? null
   );
   const receipts = selectedJob
-    ? state?.rolloutReceipts.filter((receipt) => receipt.jobId === selectedJob.id) ?? []
+    ? state?.rolloutReceipts.filter(
+        (receipt) => receipt.jobId === selectedJob.id
+      ) ?? []
     : [];
   useEffect(() => {
     setActiveRunTab("summary");
@@ -405,7 +593,11 @@ export function LabModelVersionDetailPage({
   if (!selected) {
     return (
       <div className="labs-model-version-detail">
-        <button className="settings-secondary compact" type="button" onClick={onBack}>
+        <button
+          className="settings-secondary compact"
+          type="button"
+          onClick={onBack}
+        >
           Back to runs
         </button>
         <div className="training-run-placeholder">
@@ -425,14 +617,20 @@ export function LabModelVersionDetailPage({
         Back to runs
       </button>
 
-      <div className="training-detail-tabs" role="tablist" aria-label="Run detail">
-        {([
-          ["summary", "Summary"],
-          ["metrics", "Metrics"],
-          ["evals", "Evals"],
-          ["artifacts", "Artifacts"],
-          ["logs", "Logs"],
-        ] as const).map(([id, label]) => (
+      <div
+        className="training-detail-tabs"
+        role="tablist"
+        aria-label="Run detail"
+      >
+        {(
+          [
+            ["summary", "Summary"],
+            ["metrics", "Metrics"],
+            ["evals", "Evals"],
+            ["artifacts", "Artifacts"],
+            ["logs", "Logs"],
+          ] as const
+        ).map(([id, label]) => (
           <button
             aria-selected={activeRunTab === id}
             className={activeRunTab === id ? "active" : undefined}
@@ -449,142 +647,255 @@ export function LabModelVersionDetailPage({
         ))}
       </div>
 
-      {activeRunTab === "summary" ? <DetailSection
-        title={
-          selectedBaselineRun
-            ? selectedBaselineRun.configuration.split === "train"
-              ? "Train-signal check"
-              : "Base-model check"
-            : selectedVersion
-            ? `Version ${selectedVersion.number}`
-            : `${trainingMethodLabel(selectedPlan?.recipe.method)} attempt`
-        }
-        actions={
-          selectedBaselineRun && isActiveBaselineRun(selectedBaselineRun) ? (
-            <button
-              className="training-button secondary"
-              type="button"
-              onClick={() => void training.actions.cancelBaselineRun(selectedBaselineRun.id)}
-            >
-              Cancel check
-            </button>
-          ) : selectedVersion ? (
-            <div className="training-table-actions">
-              {selectedTaskset ? (
-                <button
-                  className="training-button secondary"
-                  disabled={!selectedVersion.lineage.promotable}
-                  title={
-                    selectedVersion.lineage.promotable
-                      ? "Chat with this Version"
-                      : "Chat is unavailable because this Version did not pass evaluation."
-                  }
-                  type="button"
-                  onClick={() => onUseVersion(selectedVersion.lineage.id)}
-                >
-                  <MessageSquare size={14} />
-                  Chat
-                </button>
-              ) : null}
+      {activeRunTab === "summary" ? (
+        <DetailSection
+          title={
+            selectedBaselineRun
+              ? selectedBaselineRun.configuration.split === "train"
+                ? "Train-signal check"
+                : "Base-model check"
+              : selectedVersion
+              ? `Version ${selectedVersion.number}`
+              : `${trainingMethodLabel(selectedPlan?.recipe.method)} attempt`
+          }
+          actions={
+            selectedBaselineRun && isActiveBaselineRun(selectedBaselineRun) ? (
               <button
                 className="training-button secondary"
                 type="button"
                 onClick={() =>
-                  void training.actions.downloadModelPackage(selectedVersion.lineage.id)
+                  void training.actions.cancelBaselineRun(
+                    selectedBaselineRun.id
+                  )
+                }
+              >
+                Cancel check
+              </button>
+            ) : selectedVersion ? (
+              <div className="training-table-actions">
+                {selectedTaskset ? (
+                  <button
+                    className="training-button secondary"
+                    disabled={
+                      readOnly ||
+                      !resolveModelBindingPromotionGate(selectedVersion.lineage)
+                    }
+                    title={
+                      resolveModelBindingPromotionGate(selectedVersion.lineage)
+                        ? "Chat with this Version"
+                        : "Chat is unavailable because this Version did not pass evaluation."
+                    }
+                    type="button"
+                    onClick={() => onUseVersion(selectedVersion.lineage.id)}
+                  >
+                    <MessageSquare size={14} />
+                    Chat
+                  </button>
+                ) : null}
+                <button
+                  className="training-button secondary"
+                  type="button"
+                  onClick={() =>
+                    void training.actions.downloadModelPackage(
+                      selectedVersion.lineage.id
+                    )
+                  }
+                >
+                  <Download size={14} />
+                  Download LoRA
+                </button>
+              </div>
+            ) : null
+          }
+        >
+          <dl className="labs-inline-facts">
+            <Fact
+              label={selectedBaselineRun ? "Check status" : "Training status"}
+              value={
+                selectedBaselineRun
+                  ? baselineRunStatusLabel(selectedBaselineRun)
+                  : selectedJob
+                  ? statusLabel(selectedJob.status)
+                  : "Imported"
+              }
+            />
+            <Fact
+              label="Version status"
+              value={
+                selectedVersion
+                  ? selectedVersion.current
+                    ? "Active"
+                    : "Available"
+                  : "Not created"
+              }
+            />
+            <Fact
+              label="Training"
+              value={
+                selectedBaselineRun
+                  ? "RFT readiness check"
+                  : trainingMethodLabel(selectedPlan?.recipe.method)
+              }
+            />
+            <Fact
+              label="Base model"
+              value={
+                selectedBaselineRun
+                  ? modelRefName(
+                      selectedBaselineRun.configuration.model.modelId
+                    )
+                  : baseModelName(selectedPlan)
+              }
+            />
+            <Fact
+              label="Taskset"
+              value={selectedTaskset?.name ?? "Unavailable"}
+            />
+            <Fact
+              label="Compute"
+              value={
+                selectedBaselineRun
+                  ? "Fireworks"
+                  : selectedPlan
+                  ? destinationLabel(selectedPlan.destinationId)
+                  : selectedJob
+                  ? destinationLabel(selectedJob.destinationId)
+                  : "Not recorded"
+              }
+            />
+            <Fact
+              label="Duration"
+              value={
+                selectedBaselineRun
+                  ? formatDuration(
+                      selectedBaselineRun.startedAt,
+                      selectedBaselineRun.completedAt
+                    )
+                  : selectedJob
+                  ? formatDuration(
+                      selectedJob.startedAt,
+                      selectedJob.completedAt
+                    )
+                  : "Not recorded"
+              }
+            />
+            <Fact
+              label="Output"
+              value={
+                selectedVersion
+                  ? `Version ${selectedVersion.number}`
+                  : selectedBaselineRun?.reportId
+                  ? "Check report"
+                  : "No Version"
+              }
+            />
+          </dl>
+          {selectedTaskset ? (
+            <button
+              className="labs-version-dataset-link labs-version-detail-dataset"
+              type="button"
+              onClick={() => onOpenDataset(selectedTaskset.id)}
+            >
+              Open {selectedTaskset.name}
+            </button>
+          ) : null}
+          {selectedBaselineRun?.error || selectedJob?.error ? (
+            <p className="labs-training-error">
+              {selectedBaselineRun?.error ?? selectedJob?.error}
+            </p>
+          ) : null}
+          {selectedLifecycleRun?.receipt?.telemetry ? (
+            <div className="training-run-evaluation">
+              <div className="training-evaluation-facts">
+                <Fact
+                  label="GPU"
+                  value={`${
+                    selectedLifecycleRun.receipt.telemetry.resource.gpuCount ??
+                    0
+                  } × ${
+                    selectedLifecycleRun.receipt.telemetry.resource.gpuType ??
+                    "unreported"
+                  }`}
+                />
+                <Fact
+                  label="Tokens"
+                  value={`${
+                    selectedLifecycleRun.receipt.telemetry.usage.promptTokens ??
+                    0
+                  } prompt · ${
+                    selectedLifecycleRun.receipt.telemetry.usage
+                      .generatedTokens ?? 0
+                  } generated`}
+                />
+                <Fact
+                  label="Trajectories"
+                  value={`${
+                    selectedLifecycleRun.receipt.telemetry.usage
+                      .successfulTrajectories ?? 0
+                  } succeeded · ${
+                    selectedLifecycleRun.receipt.telemetry.usage
+                      .failedTrajectories ?? 0
+                  } failed`}
+                />
+                <Fact
+                  label="GPU time"
+                  value={`${
+                    selectedLifecycleRun.receipt.telemetry.usage.gpuSeconds?.toFixed(
+                      1
+                    ) ?? "0.0"
+                  } seconds`}
+                />
+                <Fact
+                  label={
+                    selectedLifecycleRun.receipt.telemetry.cost
+                      .providerReportedUsd === null
+                      ? "Estimated cost"
+                      : "Provider-reported cost"
+                  }
+                  value={`$${(
+                    selectedLifecycleRun.receipt.telemetry.cost
+                      .providerReportedUsd ??
+                    selectedLifecycleRun.receipt.telemetry.cost.estimatedUsd ??
+                    0
+                  ).toFixed(4)}`}
+                />
+                <Fact
+                  label="Optimizer"
+                  value={`${
+                    selectedLifecycleRun.receipt.telemetry.usage
+                      .optimizerSteps ?? 0
+                  } step`}
+                />
+              </div>
+              <button
+                className="training-button secondary"
+                type="button"
+                onClick={() =>
+                  downloadCanonicalJson(
+                    `${selectedLifecycleRun.id}-receipt.json`,
+                    selectedLifecycleRun.receipt
+                  )
                 }
               >
                 <Download size={14} />
-                Download LoRA
+                Download Model Run receipt
               </button>
             </div>
-          ) : null
-        }
-      >
-        <dl className="labs-inline-facts">
-          <Fact
-            label={selectedBaselineRun ? "Check status" : "Training status"}
-            value={
-              selectedBaselineRun
-                ? baselineRunStatusLabel(selectedBaselineRun)
-                : selectedJob
-                ? statusLabel(selectedJob.status)
-                : "Imported"
-            }
-          />
-          <Fact
-            label="Version status"
-            value={
-              selectedVersion ? (selectedVersion.current ? "Active" : "Available") : "Not created"
-            }
-          />
-          <Fact
-            label="Training"
-            value={
-              selectedBaselineRun
-                ? "RFT readiness check"
-                : trainingMethodLabel(selectedPlan?.recipe.method)
-            }
-          />
-          <Fact
-            label="Base model"
-            value={
-              selectedBaselineRun
-                ? modelRefName(selectedBaselineRun.configuration.model.modelId)
-                : baseModelName(selectedPlan)
-            }
-          />
-          <Fact label="Dataset" value={selectedTaskset?.name ?? "Unavailable"} />
-          <Fact
-            label="Compute"
-            value={
-              selectedBaselineRun
-                ? "Fireworks"
-                : selectedPlan
-                ? destinationLabel(selectedPlan.destinationId)
-                : selectedJob
-                ? destinationLabel(selectedJob.destinationId)
-                : "Not recorded"
-            }
-          />
-          <Fact
-            label="Duration"
-            value={
-              selectedBaselineRun
-                ? formatDuration(selectedBaselineRun.startedAt, selectedBaselineRun.completedAt)
-                : selectedJob
-                ? formatDuration(selectedJob.startedAt, selectedJob.completedAt)
-                : "Not recorded"
-            }
-          />
-          <Fact
-            label="Output"
-            value={
-              selectedVersion
-                ? `Version ${selectedVersion.number}`
-                : selectedBaselineRun?.reportId
-                ? "Check report"
-                : "No Version"
-            }
-          />
-        </dl>
-        {selectedTaskset ? (
-          <button
-            className="labs-version-dataset-link labs-version-detail-dataset"
-            type="button"
-            onClick={() => onOpenDataset(selectedTaskset.id)}
-          >
-            Open {selectedTaskset.name}
-          </button>
-        ) : null}
-        {selectedBaselineRun?.error || selectedJob?.error ? (
-          <p className="labs-training-error">{selectedBaselineRun?.error ?? selectedJob?.error}</p>
-        ) : null}
-      </DetailSection> : null}
+          ) : null}
+        </DetailSection>
+      ) : null}
+      {activeRunTab === "summary" ? (
+        <ManagedAdapterServingEvidence projection={managedServing} />
+      ) : null}
 
       {selectedJob && activeRunTab === "metrics" ? (
         <>
           <DetailSection
-            title={selectedPlan?.recipe.method === "grpo" ? "Rollout scores" : "Training metrics"}
+            title={
+              selectedPlan?.recipe.method === "grpo"
+                ? "Rollout scores"
+                : "Training metrics"
+            }
           >
             <TrainingRunMetrics
               detail={detail.detail}
@@ -601,45 +912,136 @@ export function LabModelVersionDetailPage({
       ) : null}
 
       {activeRunTab === "evals" ? (
-        <DetailSection title="Evaluation">
-          <TrainingRunEvaluation detail={detail.detail} loading={detail.loading} />
-        </DetailSection>
+        <>
+          <DetailSection title="Product-quality evaluation">
+            {selectedBenchmarkRun?.receipt ? (
+              <div className="training-run-evaluation">
+                <div className="training-evaluation-facts">
+                  <Fact
+                    label="Base Qwen3-0.6B"
+                    value={selectedBenchmarkRun.receipt.aggregate.base.meanReward.toFixed(
+                      3
+                    )}
+                  />
+                  <Fact
+                    label="Trained LoRA"
+                    value={selectedBenchmarkRun.receipt.aggregate.candidate.meanReward.toFixed(
+                      3
+                    )}
+                  />
+                  <Fact
+                    label="GPT-5.6 Sol"
+                    value={selectedBenchmarkRun.receipt.aggregate.frontier_reference.meanReward.toFixed(
+                      3
+                    )}
+                  />
+                  <Fact
+                    label="Promotion"
+                    value={
+                      selectedBenchmarkRun.receipt.pairedComparison
+                        .candidatePromotionPassed
+                        ? "Passed"
+                        : "Rejected"
+                    }
+                  />
+                </div>
+                <p className="training-muted">
+                  {selectedBenchmarkRun.receipt.disclosure}
+                </p>
+                <details>
+                  <summary>96 paired tool trajectories</summary>
+                  <ol>
+                    {selectedBenchmarkRun.receipt.trajectories.map(
+                      (trajectory) => (
+                        <li
+                          key={`${trajectory.arm}:${trajectory.taskId}:${trajectory.attempt}`}
+                        >
+                          {trajectory.arm.replaceAll("_", " ")} ·{" "}
+                          {trajectory.taskId} · attempt {trajectory.attempt + 1} ·{" "}
+                          {trajectory.reward?.toFixed(3) ?? "n/a"} ·{" "}
+                          {trajectory.toolSequence.join(" → ") ||
+                            trajectory.failureClass}
+                        </li>
+                      )
+                    )}
+                  </ol>
+                </details>
+                {selectedEvaluationArtifactId ? (
+                  <button
+                    className="training-button secondary"
+                    type="button"
+                    onClick={() =>
+                      void training.actions.downloadArtifact(
+                        selectedEvaluationArtifactId
+                      )
+                    }
+                  >
+                    Download canonical receipt
+                  </button>
+                ) : null}
+              </div>
+            ) : (
+              <TrainingRunEvaluation
+                detail={detail.detail}
+                loading={detail.loading}
+              />
+            )}
+          </DetailSection>
+          {managedServing?.evaluation ? (
+            <DetailSection title="Sandbox compatibility and admission">
+              <ManagedAdapterEvaluationPanel
+                evaluation={managedServing.evaluation}
+              />
+            </DetailSection>
+          ) : null}
+        </>
       ) : null}
 
-      {activeRunTab === "artifacts" ? <DetailSection title="Configuration and artifacts">
-        <dl className="training-configuration-list">
-          <Fact
-            label={selectedBaselineRun ? "Check run" : "Training attempt"}
-            value={selectedBaselineRun?.id ?? selectedJob?.id ?? "Provider import"}
-          />
-          <Fact label="Dataset" value={selectedTaskset?.name ?? "Unavailable"} />
-          <Fact
-            label={selectedBaselineRun ? "Selection" : "Prepared data"}
-            value={
-              selectedBaselineRun
-                ? `${selectedBaselineRun.configuration.taskLimit} prompts × ${selectedBaselineRun.configuration.attemptsPerTask} attempts`
-                : selectedJob?.bundleHash ?? "Provider managed"
-            }
-          />
-          <Fact
-            label={selectedBaselineRun ? "Provider deployment" : "Version ID"}
-            value={
-              selectedBaselineRun
-                ? selectedBaselineRun.provider?.deploymentId ?? "Not provisioned"
-                : selectedVersion?.lineage.id ?? "No Version created"
-            }
-          />
-          {selectedBaselineRun ? (
+      {activeRunTab === "artifacts" ? (
+        <DetailSection title="Configuration and artifacts">
+          <dl className="training-configuration-list">
             <Fact
-              label="Attempt progress"
-              value={`${selectedBaselineRun.progress.completedAttempts} of ${selectedBaselineRun.progress.totalAttempts}`}
+              label={selectedBaselineRun ? "Check run" : "Training attempt"}
+              value={
+                selectedBaselineRun?.id ?? selectedJob?.id ?? "Provider import"
+              }
             />
-          ) : null}
-          {selectedBaselineRun?.provider?.statusCode ? (
-            <Fact label="Provider status" value={selectedBaselineRun.provider.statusCode} />
-          ) : null}
-        </dl>
-      </DetailSection> : null}
+            <Fact
+              label="Taskset"
+              value={selectedTaskset?.name ?? "Unavailable"}
+            />
+            <Fact
+              label={selectedBaselineRun ? "Selection" : "Prepared data"}
+              value={
+                selectedBaselineRun
+                  ? `${selectedBaselineRun.configuration.taskLimit} prompts × ${selectedBaselineRun.configuration.attemptsPerTask} attempts`
+                  : selectedJob?.bundleHash ?? "Provider managed"
+              }
+            />
+            <Fact
+              label={selectedBaselineRun ? "Provider deployment" : "Version ID"}
+              value={
+                selectedBaselineRun
+                  ? selectedBaselineRun.provider?.deploymentId ??
+                    "Not provisioned"
+                  : selectedVersion?.lineage.id ?? "No Version created"
+              }
+            />
+            {selectedBaselineRun ? (
+              <Fact
+                label="Attempt progress"
+                value={`${selectedBaselineRun.progress.completedAttempts} of ${selectedBaselineRun.progress.totalAttempts}`}
+              />
+            ) : null}
+            {selectedBaselineRun?.provider?.statusCode ? (
+              <Fact
+                label="Provider status"
+                value={selectedBaselineRun.provider.statusCode}
+              />
+            ) : null}
+          </dl>
+        </DetailSection>
+      ) : null}
 
       {activeRunTab === "logs" ? (
         selectedJob ? (
@@ -658,14 +1060,28 @@ export function LabModelVersionDetailPage({
   );
 }
 
+function downloadCanonicalJson(filename: string, value: unknown): void {
+  const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function modelVersionEntries(
   jobs: TrainingJob[],
   versions: LabModelVersion[],
   baselineRuns: TasksetBaselineRun[],
-  drafts: ModelRunDraft[] = [],
+  drafts: ModelRunDraft[] = []
 ): VersionEntry[] {
   const versionByJobId = new Map(
-    versions.flatMap((version) => (version.job ? [[version.job.id, version] as const] : [])),
+    versions.flatMap((version) =>
+      version.job ? [[version.job.id, version] as const] : []
+    )
   );
   const entries: VersionEntry[] = jobs.map((job) => ({
     key: `job:${job.id}`,
@@ -703,7 +1119,9 @@ function modelVersionEntries(
       draft,
     });
   }
-  return entries.sort((left, right) => entryTimestamp(right).localeCompare(entryTimestamp(left)));
+  return entries.sort((left, right) =>
+    entryTimestamp(right).localeCompare(entryTimestamp(left))
+  );
 }
 
 function entryTimestamp(entry: VersionEntry): string {
@@ -750,7 +1168,13 @@ function BaselineRunProgressBadge({ run }: { run: TasksetBaselineRun }) {
   return (
     <LabStatusBadge
       label={label}
-      value={run.reportId ? "passed" : isActiveBaselineRun(run) ? "running" : run.status}
+      value={
+        run.reportId
+          ? "passed"
+          : isActiveBaselineRun(run)
+          ? "running"
+          : run.status
+      }
     />
   );
 }
@@ -763,23 +1187,27 @@ function VersionEvalBadge({
   version: LabModelVersion | null;
 }) {
   const evaluationComplete = version
-    ? job?.metadata.frozenEvaluationComplete === true
-      || Boolean(version.lineage.frozenEvaluationArtifactId)
+    ? Boolean(resolveModelBindingPromotionGate(version.lineage)) ||
+      job?.metadata.frozenEvaluationComplete === true ||
+      Boolean(version.lineage.frozenEvaluationArtifactId) ||
+      Boolean(version.lineage.managedServing?.evaluation)
     : false;
   const evaluationPassed = version
-    ? typeof job?.metadata.frozenEvaluationThresholdPassed === "boolean"
-      ? job.metadata.frozenEvaluationThresholdPassed
-      : version.lineage.promotable
+    ? Boolean(resolveModelBindingPromotionGate(version.lineage)) ||
+      managedAdapterEvaluationPassed(version.lineage)
     : false;
   const label = version
     ? !evaluationComplete
       ? "Not run"
       : evaluationPassed
-        ? "Passed"
-        : "Failed"
-    : job && ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)
-      ? "Pending"
-      : "Not run";
+      ? "Passed"
+      : "Failed"
+    : job &&
+      ["queued", "starting", "running", "cancelling", "reconciling"].includes(
+        job.status
+      )
+    ? "Pending"
+    : "Not run";
   const value = version
     ? evaluationPassed
       ? "passed"
@@ -798,25 +1226,45 @@ function VersionStatusBadge({
   version: LabModelVersion | null;
 }) {
   const pending = Boolean(
-    job && ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status),
+    job &&
+      ["queued", "starting", "running", "cancelling", "reconciling"].includes(
+        job.status
+      )
   );
   return (
     <LabStatusBadge
-      label={version ? (version.current ? "Active" : "Available") : pending ? "Pending" : "Not created"}
-      value={version ? (version.current ? "current" : "ready") : pending ? "running" : "not_run"}
+      label={
+        version
+          ? version.current
+            ? "Active"
+            : "Available"
+          : pending
+          ? "Pending"
+          : "Not created"
+      }
+      value={
+        version
+          ? version.current
+            ? "current"
+            : "ready"
+          : pending
+          ? "running"
+          : "not_run"
+      }
     />
   );
 }
 
 function baseModelName(plan: ReturnType<typeof labModelPlans>[number] | null) {
   if (!plan) return "Not recorded";
-  const model = plan.recipe.method === "sft" || plan.recipe.method === "grpo"
-    ? plan.recipe.baseModel
-    : plan.recipe.method === "dpo"
+  const model =
+    plan.recipe.method === "sft" || plan.recipe.method === "grpo"
+      ? plan.recipe.baseModel
+      : plan.recipe.method === "dpo"
       ? plan.recipe.policyModel
       : plan.recipe.method === "ppo"
-        ? plan.recipe.policyOptimization.policyModel
-        : null;
+      ? plan.recipe.policyOptimization.policyModel
+      : null;
   return model ? modelRefName(model.id) : "Not recorded";
 }
 
@@ -891,7 +1339,9 @@ function TrainingEventLog({
 }
 
 function eventLabel(type: TrainingJobEvent["type"]): string {
-  return type.replaceAll("_", " ").replace(/^./, (value) => value.toUpperCase());
+  return type
+    .replaceAll("_", " ")
+    .replace(/^./, (value) => value.toUpperCase());
 }
 
 function eventSummary(event: TrainingJobEvent): string {
@@ -907,17 +1357,24 @@ function eventSummary(event: TrainingJobEvent): string {
     return maxSteps == null ? `Step ${step}.` : `Step ${step} of ${maxSteps}.`;
   }
   if (event.type === "metric") {
-    const kind = typeof payload.metricKind === "string"
-      ? payload.metricKind.replaceAll("_", " ")
-      : "metric";
+    const kind =
+      typeof payload.metricKind === "string"
+        ? payload.metricKind.replaceAll("_", " ")
+        : "metric";
     const values = [
       numericSummary("loss", payload.loss),
       numericSummary("reward", payload.meanReward ?? payload.reward),
       numericSummary("policy loss", payload.policyLoss),
       numericSummary("value loss", payload.valueLoss),
-      numericSummary("preference accuracy", payload.preferenceAccuracy, percentValue),
+      numericSummary(
+        "preference accuracy",
+        payload.preferenceAccuracy,
+        percentValue
+      ),
     ].filter((value): value is string => Boolean(value));
-    return `${kind}${step == null ? "" : ` · step ${step}`}${values.length ? ` · ${values.join(" · ")}` : ""}`;
+    return `${kind}${step == null ? "" : ` · step ${step}`}${
+      values.length ? ` · ${values.join(" · ")}` : ""
+    }`;
   }
   if (event.type === "complete") {
     const artifactCount = finiteNumber(payload.artifactCount);
@@ -935,7 +1392,9 @@ function numericSummary(
   label: string,
   value: unknown,
   format: (value: number) => string = (number) =>
-    new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(number),
+    new Intl.NumberFormat(undefined, { maximumFractionDigits: 4 }).format(
+      number
+    )
 ): string | null {
   const number = finiteNumber(value);
   return number == null ? null : `${label} ${format(number)}`;

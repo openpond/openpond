@@ -15,7 +15,7 @@ const SOURCES = [
   {
     id: "huggingface" as const,
     title: "Hugging Face",
-    description: "Paste a Dataset URL or repository ID.",
+    description: "Import task data from a Dataset URL or repository ID.",
     icon: DownloadCloud,
     available: true,
   },
@@ -40,12 +40,12 @@ export function DatasetSourcePickerDialog({
 
   return (
     <AppDialog
-      ariaLabel="New Dataset"
+      ariaLabel="New Taskset"
       className="training-dialog training-run-dialog training-run-start-step"
       onClose={onClose}
     >
         <div className="training-dialog-header">
-          <h2>New Dataset</h2>
+          <h2>New Taskset</h2>
           <button
             aria-label="Close"
             className="training-icon-button"
@@ -58,12 +58,12 @@ export function DatasetSourcePickerDialog({
         <div className="training-run-step-heading">
           <h3>Choose a source</h3>
           <p>
-            Every source becomes the same immutable, Parquet-backed OpenPond
-            Dataset.
+            Every source becomes an immutable OpenPond Taskset with
+            Parquet-backed Data.
           </p>
         </div>
         <div
-          aria-label="How to create a Dataset"
+          aria-label="How to create a Taskset"
           className="training-method-options training-start-mode-options"
           role="radiogroup"
         >

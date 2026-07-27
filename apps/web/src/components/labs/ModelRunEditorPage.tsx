@@ -179,7 +179,7 @@ export function ModelRunEditorPage({
     actionLabel: string;
   }>({
     ready: false,
-    reason: "Select a Dataset.",
+    reason: "Select a Taskset.",
     actionLabel: "Run",
   });
   const [runApproval, setRunApproval] = useState<TrainingStartApproval>({
@@ -364,9 +364,9 @@ export function ModelRunEditorPage({
   const datasetStepContent = (
     <div className="model-build-existing-dataset">
       <label className="model-build-field">
-        <span>Dataset revision</span>
+        <span>Taskset revision</span>
         <select
-          aria-label="Dataset revision"
+          aria-label="Taskset revision"
           value={selectedTaskset?.id ?? ""}
           onChange={(event) => {
             const taskset = state?.tasksets.find(
@@ -376,7 +376,7 @@ export function ModelRunEditorPage({
           }}
         >
           <option value="">
-            {state?.tasksets.length ? "Select a Dataset" : "No Datasets yet"}
+            {state?.tasksets.length ? "Select a Taskset" : "No Tasksets yet"}
           </option>
           {state?.tasksets.map((taskset) => (
             <option
@@ -396,7 +396,7 @@ export function ModelRunEditorPage({
         title={
           draft.buildIntent
             ? undefined
-            : "Choose a goal before building a Dataset."
+            : "Choose a goal before building a Taskset."
         }
         onClick={() => {
           setDraft((current) => ({
@@ -409,8 +409,8 @@ export function ModelRunEditorPage({
         }}
       >
         {draft.datasetMode === "build"
-          ? "Continue building Dataset"
-          : "Build a Dataset"}
+          ? "Continue building Taskset"
+          : "Build a Taskset"}
       </button>
     </div>
   );
@@ -419,11 +419,11 @@ export function ModelRunEditorPage({
     return (
       <main
         className="model-build-page model-build-dataset-page"
-        aria-label="New Dataset"
+        aria-label="New Taskset"
       >
         <header className="model-build-header">
           <div>
-            <h1>New Dataset</h1>
+            <h1>New Taskset</h1>
           </div>
           <button
             className="training-button secondary"
@@ -624,7 +624,7 @@ export function ModelRunEditorPage({
               <section className="model-build-section">
                 <div className="model-build-section-heading">
                   <div>
-                    <h2>Choose or build a Dataset</h2>
+                    <h2>Choose or build a Taskset</h2>
                     <p>{datasetGuidance(draft.buildIntent)}</p>
                   </div>
                 </div>
@@ -780,7 +780,7 @@ export function ModelRunEditorPage({
                           <small>
                             {presetFor(draft.method, draft.runPreset)
                               ?.description ??
-                              "Use Dataset-aware recommended limits."}
+                              "Use Taskset-aware recommended limits."}
                           </small>
                         </label>
                       </details>
@@ -849,7 +849,7 @@ export function ModelRunEditorPage({
                   />
                 ) : (
                   <div className="model-build-empty">
-                    Choose a Dataset and training method to select a model.
+                    Choose a Taskset and training method to select a model.
                   </div>
                 )}
               </section>

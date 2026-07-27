@@ -3,6 +3,8 @@ import type {
   CrossSystemFrontierBaselineRun,
   GradeResult,
   GraderAuditReport,
+  MarketingBenchmarkRun,
+  MarketingBenchmarkSpecification,
   ModelArtifactLineage,
   ModelProject,
   ModelRunDraft,
@@ -33,6 +35,8 @@ import {
   CrossSystemFrontierBaselineRunSchema,
   GradeResultSchema,
   GraderAuditReportSchema,
+  MarketingBenchmarkRunSchema,
+  MarketingBenchmarkSpecificationSchema,
   ModelArtifactLineageSchema,
   ModelProjectSchema,
   ModelRunDraftSchema,
@@ -396,8 +400,14 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     return this.getParsedPayload("SELECT payload FROM task_design_proposals WHERE creation_id = ?", [creationId], TaskDesignProposalSchema.parse);
   }
 
-  async listTasksets(profileId: string): Promise<Taskset[]> {
-    return this.listParsedPayloads("SELECT payload FROM tasksets WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TasksetSchema.parse);
+  async listTasksets(profileId?: string): Promise<Taskset[]> {
+    return this.listParsedPayloads(
+      profileId
+        ? "SELECT payload FROM tasksets WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM tasksets ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
+      TasksetSchema.parse,
+    );
   }
 
   async getTaskset(id: string): Promise<Taskset | null> {
@@ -446,6 +456,8 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM baseline_reports WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM marketing_benchmark_runs WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM marketing_benchmark_specifications WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
@@ -601,6 +613,108 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
+  async saveMarketingBenchmarkSpecification(
+    specificationInput: MarketingBenchmarkSpecification,
+  ): Promise<MarketingBenchmarkSpecification> {
+    const specification = MarketingBenchmarkSpecificationSchema.parse(
+      specificationInput,
+    );
+    const existing = (
+      await this.listMarketingBenchmarkSpecifications({
+        tasksetId: specification.taskset.id,
+      })
+    ).find((candidate) => candidate.id === specification.id);
+    if (existing && existing.contentHash !== specification.contentHash) {
+      throw new Error(
+        `Marketing benchmark specification ${specification.id} is immutable.`,
+      );
+    }
+    await this.upsertPayload(
+      `INSERT INTO marketing_benchmark_specifications (id, profile_id, taskset_id, content_hash, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, taskset_id = excluded.taskset_id, content_hash = excluded.content_hash, payload = excluded.payload`,
+      [
+        specification.id,
+        specification.profileId,
+        specification.taskset.id,
+        specification.contentHash,
+        JSON.stringify(specification),
+        specification.createdAt,
+      ],
+    );
+    return specification;
+  }
+
+  async listMarketingBenchmarkSpecifications(
+    input: { profileId?: string; tasksetId?: string } = {},
+  ): Promise<MarketingBenchmarkSpecification[]> {
+    const query = input.tasksetId
+      ? {
+          sql: "SELECT payload FROM marketing_benchmark_specifications WHERE taskset_id = ? ORDER BY created_at DESC",
+          parameters: [input.tasksetId],
+        }
+      : input.profileId
+        ? {
+            sql: "SELECT payload FROM marketing_benchmark_specifications WHERE profile_id = ? ORDER BY created_at DESC",
+            parameters: [input.profileId],
+          }
+        : {
+            sql: "SELECT payload FROM marketing_benchmark_specifications ORDER BY created_at DESC",
+            parameters: [],
+          };
+    return this.listParsedPayloads(
+      query.sql,
+      query.parameters,
+      MarketingBenchmarkSpecificationSchema.parse,
+    );
+  }
+
+  async saveMarketingBenchmarkRun(
+    runInput: MarketingBenchmarkRun,
+  ): Promise<MarketingBenchmarkRun> {
+    const run = MarketingBenchmarkRunSchema.parse(runInput);
+    await this.upsertPayload(
+      `INSERT INTO marketing_benchmark_runs (id, profile_id, taskset_id, specification_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, taskset_id = excluded.taskset_id, specification_id = excluded.specification_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [
+        run.id,
+        run.profileId,
+        run.tasksetId,
+        run.specificationId,
+        run.status,
+        JSON.stringify(run),
+        run.createdAt,
+        run.updatedAt,
+      ],
+    );
+    return run;
+  }
+
+  async listMarketingBenchmarkRuns(
+    input: { profileId?: string; tasksetId?: string } = {},
+  ): Promise<MarketingBenchmarkRun[]> {
+    const query = input.tasksetId
+      ? {
+          sql: "SELECT payload FROM marketing_benchmark_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
+          parameters: [input.tasksetId],
+        }
+      : input.profileId
+        ? {
+            sql: "SELECT payload FROM marketing_benchmark_runs WHERE profile_id = ? ORDER BY updated_at DESC",
+            parameters: [input.profileId],
+          }
+        : {
+            sql: "SELECT payload FROM marketing_benchmark_runs ORDER BY updated_at DESC",
+            parameters: [],
+          };
+    return this.listParsedPayloads(
+      query.sql,
+      query.parameters,
+      MarketingBenchmarkRunSchema.parse,
+    );
+  }
+
   async saveGraderAuditReport(reportInput: GraderAuditReport): Promise<GraderAuditReport> {
     const report = GraderAuditReportSchema.parse(reportInput);
     await this.upsertPayload(`INSERT INTO grader_audit_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`, [report.id, report.tasksetId, JSON.stringify(report), report.createdAt]);
@@ -701,10 +815,12 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
-  async listModelProjects(profileId: string): Promise<ModelProject[]> {
+  async listModelProjects(profileId?: string): Promise<ModelProject[]> {
     return this.listParsedPayloads(
-      "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC",
-      [profileId],
+      profileId
+        ? "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM model_projects ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
       ModelProjectSchema.parse,
     );
   }
@@ -727,10 +843,12 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
-  async listModelRunDrafts(profileId: string): Promise<ModelRunDraft[]> {
+  async listModelRunDrafts(profileId?: string): Promise<ModelRunDraft[]> {
     return this.listParsedPayloads(
-      "SELECT payload FROM model_run_drafts WHERE profile_id = ? ORDER BY updated_at DESC",
-      [profileId],
+      profileId
+        ? "SELECT payload FROM model_run_drafts WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM model_run_drafts ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
       ModelRunDraftSchema.parse,
     );
   }

@@ -1,38 +1,80 @@
 ---
 name: openpond-taskset-authoring
-description: Turn consented OpenPond conversations and traces into provider-neutral Tasksets, executable graders, baseline plans, readiness reports, and inspectable SFT handoffs.
-metadata:
-  short-description: Author training Tasksets
+description: Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use when the user asks for training or evaluation tasks, graders, GRPO/RFT environments, baseline evaluation, Taskset readiness, or help deciding what a model should practice.
 ---
 
 # OpenPond Taskset Authoring
 
-Use this skill when `/train`, the Training page, a selected conversation, or a Task Miner suggestion asks you to define a learnable capability.
+Turn a normal chat request into a tested, reusable Taskset. The user should only
+need a short sentence, for example:
 
-## Required workflow
+> Build a Taskset that teaches the marketing portfolio agent to make defensible budget decisions.
 
-1. Inspect only the explicitly selected evidence. Cite source IDs; never copy unrelated conversation history.
-2. Separate policy-visible input from privileged outcome and grader state.
-3. Inventory existing demonstrations, corrections, preferences, labels, feedback, and verifiable rewards. Historical assistant messages are candidate outcomes, not automatically approved demonstrations. Do not fabricate expert approval.
-4. Diagnose the stable behavior separately from changing knowledge, required runtime context, and tool use. Recommend `no_training`, prompting, or retrieval when weights are not the right intervention.
-5. Draft one provider-neutral `TaskDesignProposal` with a bounded objective and a typed capability diagnosis. Only training-eligible proposals include task instances, split-cluster keys, graders, calibration fixtures, and assumptions. Keep the user-facing name and objective natural: describe the repeated job and desired outcome in one or two short sentences.
-6. Ask a question only for a blocking ambiguity: objective, consent, success signal, privacy/licensing boundary, or mutually exclusive interpretations.
-7. Prefer deterministic graders. A model judge must be declared, pinned, calibrated, versioned, and recorded; it is not deterministic.
-8. Run validation, positive/negative/boundary/adversarial grader fixtures, baselines, leakage checks, and reward-hacking checks.
-9. Materialize only after approval, then show the generated diff and readiness blockers.
-10. Training requires a separate approval for destination, method, model, data export, retention, and budget.
+Do not ask the user to provide internal names, IDs, schema fields, split-family
+IDs, action names, approval booleans, or orchestration instructions. Infer
+reversible defaults from the selected Profile, Agent, evidence, and current
+conversation.
 
-Never put source IDs, hashes, cluster keys, split-placement rules, consent boilerplate, privileged expected values, encodings, or grader implementation details in the proposal name or objective. Keep those details in source references, policy boundaries, grader configuration, assumptions, warnings, and generated code.
+When a missing choice would materially change the tasks or their grading, ask
+one plain-language question at a time. Ask only about:
 
-Treat synthetic smoke fixtures as diagnostics, not representative business tasks. When the only evidence is a trivial fixed response or exact string, recommend `no_training`, explain that application logic or prompting is sufficient, and still use a short human description if a diagnostic Taskset is explicitly requested.
+- the repeated behavior the model should learn;
+- the starting evidence or state it may see;
+- the tools or actions it may use;
+- what observable result should count as success;
+- privacy, licensing, or data boundaries;
+- task variety or run budget when the default is unsuitable.
 
-Label every proposed example as `extracted`, `corrected`, `synthetic`, or `expert_authored`. Extracted examples must exactly match their cited source turn. Corrected and synthetic examples must remain visibly transformed and may not be represented as expert-approved merely because an authoring model produced them.
+## What a Taskset contains
 
-Use `Create with defaults` when evidence is sufficient. Record reversible assumptions and proceed to the single materialization approval. Use `Customize` for a conversational design pass.
+A Taskset is a versioned, executable training and evaluation package:
+
+- task instances and their source/data references;
+- isolated training, validation, and frozen-evaluation splits;
+- the Profile, Agent, Harness, tools, reset, and termination contract;
+- graders, reward components, fixtures, and aggregate metrics;
+- resource, network, private-verifier, and artifact boundaries;
+- provenance plus an immutable, content-addressed release.
+
+The dataset is the task collection or source data inside that package. It is
+not the whole Taskset. A Model is also separate: submitting the first rollout or
+training run should resolve a Model project, record base-policy version 0, and
+attach the run to it. Taskset creation alone does not imply trained weights.
+
+## Authoring workflow
+
+1. Infer the capability and claim from the user's sentence.
+2. Inspect only the selected Profile, Agent, tools, and consented evidence.
+3. Separate stable behavior from changing knowledge. Recommend prompting,
+   retrieval, or `no_training` when weights are not the right intervention.
+4. Ask one focused question only when a material decision cannot be inferred.
+5. Draft a compact proposal in product language, keeping policy-visible input
+   separate from expected outcomes and private grader state.
+6. Author varied tasks with semantic families isolated by split. Label examples
+   `extracted`, `corrected`, `synthetic`, or `expert_authored`.
+7. Prefer deterministic graders. Pin, calibrate, and version any model judge.
+8. Use ordinary conversational confirmation before materializing the proposed
+   Taskset. Do not expose the underlying action payload.
+9. Validate schema and lifecycle, grader fixtures, leakage, reward hacking,
+   optional reference-solution solvability, and a bounded base-model baseline.
+10. Return a compact readiness summary and keep training as the next, separate
+    action.
+
+Use the installed Dataset Builder actions for design, materialization, and
+testing, following their schemas internally. Do not recite those schemas in the
+chat.
+
+Treat fixed synthetic smoke fixtures as diagnostics rather than evidence of a
+general capability. Historical assistant messages are candidate outcomes, not
+automatically approved demonstrations. Frozen evaluation tasks never become
+prompt examples, repair context, demonstrations, or grader calibration data.
 
 Read only the reference needed for the current decision:
 
-- Task reconstruction and split isolation: `references/task-design.md`
-- Graders, reward eligibility, and calibration: `references/graders-and-rewards.md`
+- Task contracts, task reconstruction, and split isolation:
+  `references/task-design.md`
+- Graders, reward eligibility, and calibration:
+  `references/graders-and-rewards.md`
 - Method selection and readiness: `references/method-selection.md`
-- Privacy, consent, and provenance: `references/privacy-and-provenance.md`
+- Privacy, consent, and provenance:
+  `references/privacy-and-provenance.md`

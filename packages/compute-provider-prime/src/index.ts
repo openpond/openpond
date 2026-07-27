@@ -8,8 +8,17 @@ import type {
 } from "@openpond/training-sdk";
 
 export * from "./http-client.js";
+export * from "./credential-probe.js";
 
 export interface PrimeRawComputeClient {
+  walletBalance(): Promise<{
+    walletId: string;
+    teamId: string | null;
+    balanceUsd: number;
+    currency: string;
+    checkedAt: string;
+    receipt: string;
+  }>;
   inventory(): Promise<{
     devices: ComputeTargetCapabilities["devices"];
     capabilityReceipt: string;
@@ -29,7 +38,25 @@ export interface PrimeRawComputeClient {
     deviceOrPool: string;
     deadline: string;
     idempotencyKey: string;
+    signal?: AbortSignal;
+    onProvisioned?: (resource: {
+      nodeId: string;
+      acquiredAt: string;
+    }) => void | Promise<void>;
   }): Promise<{
+    nodeId: string;
+    host: string;
+    port: number;
+    user: string;
+    sshHostFingerprint: string;
+    acquiredAt: string;
+    expiresAt: string;
+    capabilityReceipt: string;
+  }>;
+  connect(
+    nodeId: string,
+    deadline: string,
+  ): Promise<{
     nodeId: string;
     host: string;
     port: number;
@@ -84,15 +111,25 @@ export class PrimeComputeTargetAdapter implements ComputeTargetAdapter {
 
   async acquire(request: ComputeRequest): Promise<ComputeLease> {
     const quote = await this.quote(request);
-    if (request.maximumSpendUsd === null) {
-      throw new Error("Prime provisioning requires an explicit maximum spend.");
+    const wallet = await this.client.walletBalance();
+    if (wallet.currency.toUpperCase() !== "USD") {
+      throw new Error(
+        `Prime wallet ${wallet.walletId} uses unsupported currency ${wallet.currency}.`,
+      );
     }
+    const effectiveMaximumSpendUsd =
+      request.maximumSpendUsd === null
+        ? wallet.balanceUsd
+        : Math.min(request.maximumSpendUsd, wallet.balanceUsd);
     if (
       quote.estimatedCostUsd !== null &&
-      quote.estimatedCostUsd > request.maximumSpendUsd
+      quote.estimatedCostUsd > effectiveMaximumSpendUsd
     ) {
       throw new Error(
-        `Prime quote $${quote.estimatedCostUsd} exceeds the approved maximum.`,
+        request.maximumSpendUsd !== null &&
+          request.maximumSpendUsd <= wallet.balanceUsd
+          ? `Prime quote $${quote.estimatedCostUsd} exceeds the approved maximum.`
+          : `Prime quote $${quote.estimatedCostUsd} exceeds the available wallet balance of $${wallet.balanceUsd}.`,
       );
     }
     const node = await this.client.provision({

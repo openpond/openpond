@@ -192,3 +192,18 @@
   padding: 2px 8px;
   font-size: 11px;
 }
+
+.right-chat-status-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #7aa2ff);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #7aa2ff) 38%, transparent);
+  animation: right-chat-status-pulse 2.65s ease-out infinite;
+}
+
+@keyframes right-chat-status-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #7aa2ff) 38%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 5px transparent; }
+}

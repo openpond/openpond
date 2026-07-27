@@ -9,6 +9,7 @@ export * from "./policy-comparison.js";
 export * from "./release-graph.js";
 export * from "./release-store.js";
 export * from "./harness-materializer.js";
+export * from "./harness-action-runtime.js";
 export * from "./adapters.js";
 export * from "./worker-catalog.js";
 export * from "./worker-image-attestation.js";

@@ -46,6 +46,17 @@ export function buildSpecificationReady(
       && specification.rules.length > 0
       && specification.rules.every((rule) => Boolean(rule.condition.trim()));
   }
+  if (specification.kind === "agent_benchmark") {
+    const familyIds = new Set(
+      specification.promptFamilies.map((family) => family.id),
+    );
+    return Boolean(specification.task.trim())
+      && familyIds.size === specification.promptFamilies.length
+      && specification.promptFamilies.every((family) =>
+        Boolean(family.id.trim() && family.prompt.trim()))
+      && ["train", "validation", "frozen_eval"].every((split) =>
+        specification.promptFamilies.some((family) => family.split === split));
+  }
   return Boolean(
     specification.task.trim()
     && specification.criteria.length > 0
@@ -116,6 +127,106 @@ export function TrainingEvidenceEditor({
         ))}
         <AddButton disabled={disabled} label="Add reward rule" onClick={() => onChange({ ...specification, rules: [...specification.rules, { id: nextId("reward", specification.rules.map((item) => item.id)), points: 1, condition: "" }] })} />
         <label className="training-signal-editor-number"><span>Otherwise</span><input type="number" step="0.1" value={specification.otherwisePoints} disabled={disabled} onChange={(event) => onChange({ ...specification, otherwisePoints: Number(event.target.value) })} /></label>
+      </section>
+    );
+  }
+
+  if (specification.kind === "agent_benchmark") {
+    return (
+      <section className="training-signal-editor" aria-label="Agent benchmark evidence">
+        <EditorHeading
+          title="Define the Agent benchmark"
+          description="The authoring model writes split-isolated prompt families. Private cases, tool bindings, and scorer state are added by the Harness materializer."
+        />
+        <TextField
+          label="Task"
+          value={specification.task}
+          disabled={disabled}
+          onChange={(task) => onChange({ ...specification, task })}
+        />
+        {specification.promptFamilies.map((family, index) => (
+          <EditorCard
+            key={`${family.split}:${family.id}`}
+            label={`Prompt family ${index + 1}`}
+            disabled={disabled}
+            onRemove={() => onChange({
+              ...specification,
+              promptFamilies: specification.promptFamilies.filter(
+                (item) => item !== family,
+              ),
+            })}
+          >
+            <label>
+              <span>Split</span>
+              <select
+                value={family.split}
+                disabled={disabled}
+                onChange={(event) => onChange({
+                  ...specification,
+                  promptFamilies: specification.promptFamilies.map((item) =>
+                    item === family
+                      ? {
+                          ...item,
+                          split: event.target.value as typeof family.split,
+                        }
+                      : item),
+                })}
+              >
+                <option value="train">Training</option>
+                <option value="validation">Validation</option>
+                <option value="frozen_eval">Frozen Eval</option>
+              </select>
+            </label>
+            <TextField
+              label="Family ID"
+              value={family.id}
+              disabled={disabled}
+              onChange={(id) => onChange({
+                ...specification,
+                promptFamilies: specification.promptFamilies.map((item) =>
+                  item === family ? { ...item, id } : item),
+              })}
+            />
+            <TextField
+              label="Student-visible prompt"
+              value={family.prompt}
+              disabled={disabled}
+              onChange={(prompt) => onChange({
+                ...specification,
+                promptFamilies: specification.promptFamilies.map((item) =>
+                  item === family ? { ...item, prompt } : item),
+              })}
+            />
+          </EditorCard>
+        ))}
+        <AddButton
+          disabled={disabled}
+          label="Add prompt family"
+          onClick={() => onChange({
+            ...specification,
+            promptFamilies: [
+              ...specification.promptFamilies,
+              {
+                id: nextId(
+                  "family",
+                  specification.promptFamilies.map((family) => family.id),
+                ),
+                split: "train",
+                prompt: "",
+              },
+            ],
+          })}
+        />
+        <dl className="training-configuration-list">
+          <dt>Agent</dt>
+          <dd>{specification.agentId}</dd>
+          <dt>Episodes</dt>
+          <dd>
+            {specification.splitCounts.train} train ·{" "}
+            {specification.splitCounts.validation} validation ·{" "}
+            {specification.splitCounts.frozenEval} frozen eval
+          </dd>
+        </dl>
       </section>
     );
   }

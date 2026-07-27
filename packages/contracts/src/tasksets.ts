@@ -4,6 +4,8 @@ import { CodexReasoningEffortSchema } from "./settings.js";
 import { TrainingTacticSchema } from "./task-mining.js";
 import { DatasetArtifactManifestSchema, DatasetSplitSchema } from "./dataset-artifacts.js";
 import { ExternalDatasetSourceRefSchema } from "./dataset-sources.js";
+import { HarnessActionBindingSchema } from "./harness-actions.js";
+import { VersionedReleaseRefSchema } from "./release-core.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -86,6 +88,30 @@ export const DatasetBuildSpecificationSchema = z.discriminatedUnion("kind", [
     positiveExample: DatasetEvidenceTextSchema,
     negativeExample: DatasetEvidenceTextSchema,
     boundaryExample: DatasetEvidenceTextSchema,
+  }),
+  z.object({
+    kind: z.literal("agent_benchmark"),
+    benchmarkId: z.literal("marketing-portfolio-v1"),
+    agentId: IdSchema,
+    actionIds: z.array(IdSchema).min(1).max(10),
+    task: DatasetEvidenceTextSchema,
+    promptFamilies: z
+      .array(
+        z.object({
+          id: IdSchema,
+          split: z.enum(["train", "validation", "frozen_eval"]),
+          prompt: DatasetEvidenceTextSchema,
+        }),
+      )
+      .min(3)
+      .max(100),
+    splitCounts: z
+      .object({
+        train: z.number().int().positive().max(10_000),
+        validation: z.number().int().positive().max(10_000),
+        frozenEval: z.number().int().positive().max(10_000),
+      })
+      .strict(),
   }),
 ]);
 
@@ -265,6 +291,7 @@ export const TasksetEnvironmentContractSchema = z.object({
   stateful: z.boolean(),
   deterministicSeeds: z.boolean(),
   toolNames: z.array(IdSchema).max(200).default([]),
+  actionBindings: z.array(HarnessActionBindingSchema).max(200).optional(),
   lifecycle: z.array(z.enum(["create", "reset", "step", "grade", "cleanup"])).min(1),
   defaultTimeoutMs: z.number().int().positive().max(3_600_000),
   networkPolicy: z.enum(["none", "declared_read_only", "declared_scoped"]),
@@ -455,6 +482,7 @@ export const BaselineScopeSchema = z.object({
   selectionSeed: z.number().int(),
   selectionStrategy: DatasetSelectionStrategySchema,
   taskIdsHash: HashSchema,
+  harnessContractHash: HashSchema.nullable().default(null),
   model: ChatModelRefSchema,
   sampling: z.object({
     maxOutputTokens: z.number().int().positive().max(32_768),
@@ -474,6 +502,9 @@ export const BaselineRftSignalSchema = z.object({
   correctAttempts: z.number().int().nonnegative(),
   incorrectAttempts: z.number().int().nonnegative(),
   parseableAttempts: z.number().int().nonnegative(),
+  toolEligibleAttempts: z.number().int().nonnegative().default(0),
+  validToolTraceAttempts: z.number().int().nonnegative().default(0),
+  terminalDecisionAttempts: z.number().int().nonnegative().default(0),
   passed: z.boolean(),
 });
 
@@ -679,6 +710,7 @@ export const TasksetSchema = z.object({
   id: IdSchema,
   revision: z.number().int().positive().default(1),
   profileId: IdSchema,
+  profileRelease: VersionedReleaseRefSchema.nullable().optional(),
   createImproveRunId: NullableIdSchema.default(null),
   name: z.string().trim().min(1).max(500),
   objective: z.string().trim().min(1).max(20_000),

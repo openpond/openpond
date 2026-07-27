@@ -187,6 +187,14 @@ describe("trainer package conformance", () => {
     });
     const terminate = vi.fn(async () => undefined);
     const prime = new PrimeComputeTargetAdapter({
+      walletBalance: async () => ({
+        walletId: "wallet-fixture",
+        teamId: null,
+        balanceUsd: 10,
+        currency: "USD",
+        checkedAt: fixtureTimestamp,
+        receipt: sha256("prime-wallet"),
+      }),
       inventory: async () => ({
         devices: [device()],
         capabilityReceipt: sha256("prime-compute"),
@@ -200,6 +208,16 @@ describe("trainer package conformance", () => {
         assumptions: ["one raw GPU"],
       }),
       provision: async () => ({
+        nodeId: "prime-node-1",
+        host: "gpu.example.test",
+        port: 22,
+        user: "openpond",
+        sshHostFingerprint: "SHA256:fixture",
+        acquiredAt: fixtureTimestamp,
+        expiresAt: deadline,
+        capabilityReceipt: sha256("prime-compute"),
+      }),
+      connect: async () => ({
         nodeId: "prime-node-1",
         host: "gpu.example.test",
         port: 22,
@@ -233,6 +251,14 @@ describe("trainer package conformance", () => {
     const resolved = provisionedPlan();
     const terminate = vi.fn(async () => undefined);
     const compute = new PrimeComputeTargetAdapter({
+      walletBalance: async () => ({
+        walletId: "wallet-fixture",
+        teamId: null,
+        balanceUsd: 10,
+        currency: "USD",
+        checkedAt: fixtureTimestamp,
+        receipt: sha256("prime-wallet"),
+      }),
       inventory: async () => ({
         devices: [device()],
         capabilityReceipt: sha256("prime-compute"),
@@ -246,6 +272,16 @@ describe("trainer package conformance", () => {
         assumptions: ["one raw GPU"],
       }),
       provision: async () => ({
+        nodeId: "prime-node-1",
+        host: "gpu.example.test",
+        port: 22,
+        user: "openpond",
+        sshHostFingerprint: "SHA256:fixture",
+        acquiredAt: fixtureTimestamp,
+        expiresAt: "2026-07-23T13:00:00.000Z",
+        capabilityReceipt: sha256("prime-compute"),
+      }),
+      connect: async () => ({
         nodeId: "prime-node-1",
         host: "gpu.example.test",
         port: 22,

@@ -4,10 +4,12 @@ import path from "node:path";
 import { computeTasksetHash, contentHash, runBaseline, sha256 } from "../packages/taskset-sdk/src";
 import {
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  GradeResultSchema,
   TasksetSchema,
   type Taskset,
 } from "../packages/contracts/src";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
+import { summarizeRftSignal } from "../apps/server/src/training/evaluation-helpers";
 import { buildTasksetReadiness } from "../apps/server/src/training/readiness";
 import { createTrainingBaselineAttemptRunner } from "../apps/server/src/training/task-baseline-attempt-runner";
 import { gradeTasksetBaselineAttempt } from "../apps/server/src/training/task-baseline-grade-runner";
@@ -17,9 +19,74 @@ import {
   resolveCrossSystemTrainTask,
   type CrossSystemFrontierModelStream,
 } from "../apps/server/src/training/cross-system-operations";
-import { attemptFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
+import {
+  attemptFixture,
+  rewardTasksetFixture,
+  tasksetFixture,
+  withTrainingStore,
+} from "./helpers/training-fixtures";
 
 describe("baseline evaluator", () => {
+  test("treats non-constant scalar rewards as a mixed GRPO group even when every attempt passes", () => {
+    const taskset = tasksetFixture();
+    const task = taskset.tasks[0]!;
+    const attempts = Array.from({ length: 4 }, (_, attempt) =>
+      attemptFixture({
+        id: `scalar_reward_attempt_${attempt}`,
+        tasksetId: taskset.id,
+        taskId: task.id,
+        split: task.split,
+        seed: 17,
+        attempt,
+        output: {
+          terminalDecision: true,
+          toolSequence: [
+            "get_portfolio_snapshot",
+            "submit_budget_decision",
+          ],
+        },
+        metadata: {
+          execution: "marketing_portfolio_tool_loop",
+          validToolTrace: true,
+        },
+      }));
+    const grades = attempts.map((attempt, index) =>
+      GradeResultSchema.parse({
+        schemaVersion: "openpond.gradeResult.v1",
+        id: `scalar_reward_grade_${index}`,
+        attemptId: attempt.id,
+        graderSetHash: "grader_set_hash",
+        score: 0.8 + index * 0.01,
+        passed: true,
+        components: [{
+          graderId: "grader_fixture",
+          graderVersion: "v1",
+          score: 0.8 + index * 0.01,
+          passed: true,
+          hardGate: false,
+          rewardEligible: true,
+          feedback: null,
+          evidenceRefs: [],
+          calibrationStatus: "not_applicable",
+        }],
+        failureClass: null,
+        feedback: [],
+        rewardEligible: true,
+        createdAt: "2026-07-25T00:00:00.000Z",
+      }));
+
+    expect(summarizeRftSignal(attempts, grades)).toMatchObject({
+      mixedRewardGroups: 1,
+      allCorrectRewardGroups: 1,
+      eligibleAttempts: 4,
+      correctAttempts: 4,
+      parseableAttempts: 4,
+      toolEligibleAttempts: 4,
+      validToolTraceAttempts: 4,
+      terminalDecisionAttempts: 4,
+    });
+  });
+
   test("releases prepared provider resources even when cleanup status persistence fails", async () =>
     withTrainingStore(async ({ store }) => {
       const taskset = tasksetFixture();
@@ -71,10 +138,16 @@ describe("baseline evaluator", () => {
 
   test("preserves GRPO as primary while representing local SFT only as a trajectory bootstrap", async () => withTrainingStore(async ({ store }) => {
     const base = tasksetFixture();
+    const rewards =
+      rewardTasksetFixture().learningSignals.rewards;
     const draft = TasksetSchema.parse({
       ...base,
       contentHash: "00000000",
       capabilities: { ...base.capabilities, supportedSignals: ["demonstration", "reward"], compatibleMethods: ["grpo", "sft"], requiresTools: true, requiresState: true },
+      learningSignals: {
+        ...base.learningSignals,
+        rewards,
+      },
       metadata: { ...base.metadata, trainingMethod: "grpo" },
     });
     const taskset = TasksetSchema.parse({ ...draft, contentHash: computeTasksetHash(draft) });
@@ -94,6 +167,8 @@ describe("baseline evaluator", () => {
 
   test("allows GRPO readiness without relabeling failed policy outputs as demonstrations", async () => withTrainingStore(async ({ store }) => {
     const base = tasksetFixture();
+    const rewards =
+      rewardTasksetFixture().learningSignals.rewards;
     const draft = TasksetSchema.parse({
       ...base,
       contentHash: "00000000",
@@ -104,7 +179,11 @@ describe("baseline evaluator", () => {
         requiresTools: true,
         requiresState: true,
       },
-      learningSignals: { ...base.learningSignals, demonstrations: [] },
+      learningSignals: {
+        ...base.learningSignals,
+        demonstrations: [],
+        rewards,
+      },
       metadata: { ...base.metadata, trainingMethod: "grpo" },
     });
     const taskset = TasksetSchema.parse({ ...draft, contentHash: computeTasksetHash(draft) });
@@ -473,6 +552,9 @@ describe("baseline evaluator", () => {
         crossSystemStream: async function* () {
           throw new Error("The tool harness must not run for a text taskset.");
         },
+        resolveProfile: async () => {
+          throw new Error("The Profile runtime must not run for a text taskset.");
+        },
       });
 
       const result = await runner({
@@ -526,6 +608,9 @@ describe("baseline evaluator", () => {
         return "This path must not run.";
       },
       crossSystemStream: stream,
+      resolveProfile: async () => {
+        throw new Error("The Profile runtime must not run for Cross-System.");
+      },
     });
 
     const result = await runner({
@@ -570,6 +655,9 @@ describe("baseline evaluator", () => {
         calls += 1;
         if (calls === 1) throw new Error("terminated");
         yield { text: `ANSWER: ${JSON.stringify(generatedTask.expectedAnswer)}` };
+      },
+      resolveProfile: async () => {
+        throw new Error("The Profile runtime must not run for Cross-System.");
       },
     });
 

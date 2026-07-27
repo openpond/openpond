@@ -36,4 +36,9 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 28, run: (store) => store.createSidebarFileBookmarkTables() },
   { version: 29, run: (store) => store.createModelBuildDraftTables() },
   { version: 30, run: (store) => store.createModelProjectAndRunDraftTables() },
+  { version: 31, run: (store) => store.createModelLifecycleTables() },
+  {
+    version: 32,
+    run: (store) => store.createTrainingTables(),
+  },
 ];

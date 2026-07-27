@@ -319,9 +319,9 @@ describe("Training UI", () => {
     expect(builder).toContain('activeSetupStep === "dataset"');
     expect(builder).toContain('activeSetupStep === "method"');
     expect(builder).toContain("datasetStepContent");
-    expect(builder).toContain('aria-label="Dataset revision"');
-    expect(builder).toContain("Build a Dataset");
-    expect(builder).not.toContain("Choose existing Dataset");
+    expect(builder).toContain('aria-label="Taskset revision"');
+    expect(builder).toContain("Build a Taskset");
+    expect(builder).not.toContain("Choose existing Taskset");
     expect(builder).toContain('setActiveSetupStep("dataset")');
     expect(builder).toContain('setActiveSetupStep("method")');
     expect(builder).toContain('setActiveSetupStep("configuration")');
@@ -345,7 +345,7 @@ describe("Training UI", () => {
     expect(builder).toContain("<ConfirmDialog");
     expect(builder).not.toContain("model-build-readiness");
     expect(builder).toContain("disabled={!candidate.available}");
-    expect(builderHelpers).toContain("Incompatible Dataset");
+    expect(builderHelpers).toContain("Incompatible Taskset");
     expect(builderHelpers).toContain(
       "taskset.capabilities.compatibleMethods.includes(method)"
     );

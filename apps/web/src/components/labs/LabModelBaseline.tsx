@@ -45,7 +45,7 @@ export function LabModelBaselineData({
 }) {
   return (
     <>
-      <DetailSection title="Dataset">
+      <DetailSection title="Taskset">
         <dl className="labs-inline-facts">
           <Fact label="Scenarios" value={String(run.worldSpecs.length)} />
           <Fact label="Recorded runs" value={String(run.sourceIds.length)} />
@@ -53,7 +53,7 @@ export function LabModelBaselineData({
           <Fact label="Frozen Evals" value={String(splitCount(run, "frozen_eval"))} />
         </dl>
       </DetailSection>
-      <DetailSection title="Dataset splits">
+      <DetailSection title="Taskset splits">
         <div className="training-taskset-facts">
           <span><strong>{splitCount(run, "train")}</strong> training scenarios</span>
           <span><strong>{splitCount(run, "validation")}</strong> validation scenarios</span>

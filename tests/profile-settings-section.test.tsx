@@ -251,7 +251,7 @@ describe("ProfileSettingsSection", () => {
     expect(hostedIndex).toBeLessThan(agentsIndex);
   });
 
-  test("keeps an empty Agents section above Skills", () => {
+  test("keeps the built-in Dataset Builder Agent above Skills", () => {
     const payload = profilePayload();
     payload.profile.agents = [];
 
@@ -267,11 +267,11 @@ describe("ProfileSettingsSection", () => {
     const agentsIndex = html.indexOf(
       'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
     );
-    const emptyAgentsIndex = html.indexOf("No profile agents found");
+    const datasetBuilderIndex = html.indexOf("Dataset Builder");
     const skillsIndex = html.indexOf("<span>Skills</span>");
     expect(agentsIndex).toBeGreaterThan(-1);
-    expect(emptyAgentsIndex).toBeGreaterThan(agentsIndex);
-    expect(skillsIndex).toBeGreaterThan(emptyAgentsIndex);
+    expect(datasetBuilderIndex).toBeGreaterThan(agentsIndex);
+    expect(skillsIndex).toBeGreaterThan(datasetBuilderIndex);
   });
 
   test("renders profile skills beside profile agents", () => {

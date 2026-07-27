@@ -46,6 +46,9 @@ import {
 import {
   createModelProjectAndRunDraftTables as migrateModelProjectAndRunDraftTables,
 } from "./store-model-run-migration.js";
+import {
+  createModelLifecycleTables as migrateModelLifecycleTables,
+} from "./store-model-lifecycle-migration.js";
 import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 
 type UserVersionRow = { user_version: number };
@@ -583,6 +586,12 @@ export class SqliteStoreCore {
       all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
       exec: (sql) => this.exec(sql),
       run: (sql, params = []) => this.run(sql, params),
+    });
+  }
+
+  async createModelLifecycleTables(): Promise<void> {
+    await migrateModelLifecycleTables({
+      exec: (sql) => this.exec(sql),
     });
   }
 

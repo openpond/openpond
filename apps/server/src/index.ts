@@ -22,6 +22,7 @@ import { detectCodexStatus } from "@openpond/codex-provider";
 import {
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
+  loadOpenPondProfileStateForRef,
   readProfileSkill,
 } from "@openpond/cloud";
 import {
@@ -123,7 +124,11 @@ import { communityRequestPayload } from "./openpond/community-client.js";
 import { contentHash } from "@openpond/taskset-sdk";
 import { createTaskCreatorService } from "./training/task-creator.js";
 import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
-import { loadTasksetAuthoringSkillBundle } from "./training/task-authoring-skill.js";
+import {
+  loadTasksetAuthoringProfileSkill,
+  loadTasksetAuthoringSkillBundle,
+  readTasksetAuthoringProfileSkill,
+} from "./training/task-authoring-skill.js";
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
@@ -135,6 +140,11 @@ import { createDatasetImportService } from "./training/dataset-imports/import-se
 import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
 import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
+import { createPrimeComputeProviderSetup } from "./compute/prime-provider-setup.js";
+import { createPrimeRolloutSmokeService } from "./training/prime-rollout-smoke-service.js";
+import { createPrimeGrpoModelRunService } from "./training/prime-grpo-model-run-service.js";
+import { createPrimeEvaluationSessionService } from "./training/prime-evaluation-session.js";
+import { createMarketingBenchmarkRunService } from "./training/marketing-benchmark-run-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
@@ -552,13 +562,40 @@ export async function createOpenPondServer(
     createFireworksBaselineDeploymentService({
       resolveCredential: resolveFireworksCredential,
     });
+  const primeEvaluationSessions =
+    createPrimeEvaluationSessionService({
+      storeDir,
+      resolvePrimeCredential: () =>
+        primeComputeProvider.resolveCredential(),
+      now: () => new Date(now()),
+    });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
     projectDatasetArtifact: datasetArtifactService.project,
-    prepareBaselineModels: fireworksBaselineDeployments.prepare,
-    cleanupBaselineDeployments:
-      fireworksBaselineDeployments.cleanupOrphanedDeployments,
+    prepareBaselineModels: async (models, options) => {
+      if (
+        models.some(
+          (model) =>
+            model.providerId === "custom-openai-compatible"
+            && model.modelId === "Qwen/Qwen3-0.6B",
+        )
+      ) {
+        return primeEvaluationSessions.prepareBaselineModels(
+          models,
+          options,
+        );
+      }
+      return fireworksBaselineDeployments.prepare(
+        models,
+        options,
+      );
+    },
+    cleanupBaselineDeployments: async () => [
+      ...await fireworksBaselineDeployments
+        .cleanupOrphanedDeployments(),
+      ...await primeEvaluationSessions.cleanup(),
+    ],
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
     runAttempt: async (input) => {
@@ -593,6 +630,10 @@ export async function createOpenPondServer(
       return parsed;
     },
   });
+  const primeComputeProvider = createPrimeComputeProviderSetup({
+    storeDir,
+    secretPaths: providerSecretPaths,
+  });
   const computeService = createComputeService({
     storeDir,
     localWorkerProjectDir: path.resolve(
@@ -600,6 +641,7 @@ export async function createOpenPondServer(
       "python",
       "openpond-training"
     ),
+    primeProvider: primeComputeProvider,
   });
   const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
   const managedAdapterSyncService = createManagedAdapterSyncService({
@@ -621,6 +663,12 @@ export async function createOpenPondServer(
       await computeService.scan();
       return settings;
     }
+    if (action === "save_prime_credential")
+      return primeComputeProvider.saveCredential(payload);
+    if (action === "validate_prime_credential")
+      return primeComputeProvider.validateCredential();
+    if (action === "delete_prime_credential")
+      return primeComputeProvider.deleteCredential();
     if (action === "download_smollm2")
       return computeService.startModelDownload();
     if (action === "cancel_download") {
@@ -634,6 +682,29 @@ export async function createOpenPondServer(
     }
     throw new Error(`Unknown compute action ${action}.`);
   };
+  const primeProviderStatus = await primeComputeProvider.status();
+  const savedPrimeRawConfigured = Boolean(
+    primeProviderStatus.credential.configured
+    && !primeProviderStatus.lastError
+    && (
+      primeProviderStatus.state === "credential_valid"
+      || primeProviderStatus.state === "ready"
+    )
+    && (
+      primeProviderStatus.availability?.availableOfferingCount
+        ?? 0
+    ) > 0
+    && (
+      primeProviderStatus.availability?.registeredSshKeyCount
+        ?? 0
+    ) > 0,
+  );
+  const portableTrainingDependencies =
+    createPortableTrainingServerDependencies({
+      storeDir,
+      environment: process.env,
+      computeInventory: computeService.inventory,
+    });
   const trainingService = createTrainingService({
     store,
     storeDir,
@@ -647,11 +718,13 @@ export async function createOpenPondServer(
     prepareModel: (model) => computeService.ensureModel(model),
     modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
-    ...createPortableTrainingServerDependencies({
-      storeDir,
-      environment: process.env,
-      computeInventory: computeService.inventory,
-    }),
+    ...portableTrainingDependencies,
+    primeRawConfigured:
+      portableTrainingDependencies.primeRawConfigured
+      || savedPrimeRawConfigured,
+    connectedEngineConfigured:
+      portableTrainingDependencies.connectedEngineConfigured
+      || savedPrimeRawConfigured,
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -710,6 +783,10 @@ export async function createOpenPondServer(
   await datasetImportService.reconcile();
   const crossSystemFrontierModelStream: CrossSystemFrontierModelStream =
     async function* (input) {
+      if (primeEvaluationSessions.applies(input.model)) {
+        yield* primeEvaluationSessions.stream(input);
+        return;
+      }
       if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
         for await (const delta of trainedAdapterChatRuntime.stream({
           modelId: input.model.modelId,
@@ -741,6 +818,13 @@ export async function createOpenPondServer(
         return;
       }
       const state = await localByokRuntimeState();
+      const chatGptSubscription =
+        input.model.providerId === "openai"
+        && state.secrets.providers.openai?.source === "chatgpt_subscription";
+      let providerResponseId: string | null = null;
+      let providerResponseModel: string | null = null;
+      let providerPromptTokens: number | null = null;
+      let providerGeneratedTokens: number | null = null;
       for await (const delta of streamOpenAiCompatibleChatCompletion({
         providerId: input.model.providerId,
         settings: state.settings,
@@ -750,8 +834,13 @@ export async function createOpenPondServer(
         tools: input.tools,
         toolChoice: input.toolChoice,
         requestId: input.requestId,
+        reasoningEffort: input.reasoningEffort,
         signal: input.signal,
         reasoningEffort: input.reasoningEffort,
+        maxOutputTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
+        seed: input.seed,
         saveChatGptSubscriptionCredential: async (providerId, credential) => {
           await writeProviderChatGptSubscriptionCredential({
             paths: providerSecretPaths,
@@ -761,11 +850,38 @@ export async function createOpenPondServer(
           });
         },
       })) {
+        const facts = providerResponseFactsFromRaw(delta.raw);
+        providerResponseId =
+          facts.responseId ?? providerResponseId;
+        providerResponseModel =
+          facts.responseModel ?? providerResponseModel;
+        providerPromptTokens =
+          facts.promptTokens ?? providerPromptTokens;
+        providerGeneratedTokens =
+          facts.generatedTokens ?? providerGeneratedTokens;
         if (delta.type === "text_delta") yield { text: delta.text };
         if (delta.type === "continuation")
           yield { continuation: delta.continuation };
         if (delta.type === "tool_call_delta")
           yield { toolCalls: delta.toolCalls };
+      }
+      if (providerResponseModel) {
+        yield {
+          responseFacts: {
+            providerResponseIdentity: JSON.stringify({
+              providerId: input.model.providerId,
+              responseId: providerResponseId,
+              responseModel: providerResponseModel,
+            }),
+            promptTokens: providerPromptTokens,
+            generatedTokens: providerGeneratedTokens,
+            samplingSupport: {
+              seed: false,
+              temperature: !chatGptSubscription,
+              topP: !chatGptSubscription,
+            },
+          },
+        };
       }
     };
   trainingBaselineAttemptRunner = createTrainingBaselineAttemptRunner({
@@ -773,8 +889,28 @@ export async function createOpenPondServer(
     storeDir,
     modelText: trainingModelText,
     crossSystemStream: crossSystemFrontierModelStream,
+    resolveProfile: loadOpenPondProfileState,
     timestamp: now,
   });
+  const marketingBenchmarkRuns =
+    createMarketingBenchmarkRunService({
+      store,
+      storeDir,
+      runAttempt: trainingBaselineAttemptRunner,
+      primeEvaluation: primeEvaluationSessions,
+      now: () => new Date(now()),
+    });
+  const marketingBenchmarkReconciliation =
+    await marketingBenchmarkRuns.reconcile();
+  if (
+    marketingBenchmarkReconciliation.failedRunIds.length
+    > 0
+  ) {
+    logger.warn(
+      "Frozen marketing benchmark reconciliation found interrupted runs",
+      marketingBenchmarkReconciliation,
+    );
+  }
   const crossSystemFrontierBaselineService =
     createCrossSystemFrontierBaselineService({
       store,
@@ -808,8 +944,100 @@ export async function createOpenPondServer(
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
+    marketingBenchmarkRuns,
     frontierBaseline: crossSystemFrontierBaselineService,
   });
+  const primeRolloutSmoke = createPrimeRolloutSmokeService({
+    store,
+    storeDir,
+    resolvePrimeCredential: primeComputeProvider.resolveCredential,
+    resolveProfile: loadOpenPondProfileState,
+    openpondRelease: version,
+  });
+  const primeRolloutReconciliation = await primeRolloutSmoke.reconcile();
+  if (primeRolloutReconciliation.errors.length > 0) {
+    logger.warn("Prime rollout Model reconciliation found invalid reports", {
+      errors: primeRolloutReconciliation.errors,
+    });
+  }
+  const primeGrpoModelRuns = createPrimeGrpoModelRunService({
+    store,
+    storeDir,
+    training: trainingService,
+    resolvePrimeCredential: primeComputeProvider.resolveCredential,
+    resolveProfile: loadOpenPondProfileState,
+    openpondRelease: version,
+  });
+  const primeGrpoReconciliation =
+    await primeGrpoModelRuns.reconcile();
+  if (primeGrpoReconciliation.errors.length > 0) {
+    logger.warn(
+      "Prime GRPO Model Run reconciliation found interrupted runs",
+      primeGrpoReconciliation,
+    );
+  }
+  const trainingPayload = async (
+    action: string,
+    payload: unknown,
+    requestUrl?: URL,
+  ) => {
+    const record =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? payload as Record<string, unknown>
+        : {};
+    const modelRunId =
+      typeof record.modelRunId === "string"
+        ? record.modelRunId
+        : null;
+    if (
+      modelRunId
+      && await primeGrpoModelRuns.applies(modelRunId)
+    ) {
+      if (action === "prepare_model_run") {
+        return primeGrpoModelRuns.prepare({
+          modelRunId,
+          maximumSpendUsd:
+            typeof record.maximumSpendUsd === "number"
+              ? record.maximumSpendUsd
+              : null,
+          retentionDays:
+            typeof record.retentionDays === "number"
+              ? record.retentionDays
+              : null,
+        });
+      }
+      if (action === "start_model_run") {
+        return primeGrpoModelRuns.start({
+          modelRunId,
+          maximumSpendUsd:
+            typeof record.maximumSpendUsd === "number"
+              ? record.maximumSpendUsd
+              : null,
+          retentionDays:
+            typeof record.retentionDays === "number"
+              ? record.retentionDays
+              : null,
+          manifest: record.manifest,
+        });
+      }
+      if (action === "model_run_status") {
+        return primeGrpoModelRuns.status(modelRunId);
+      }
+      if (action === "model_run_events") {
+        return primeGrpoModelRuns.events(modelRunId);
+      }
+      if (action === "model_run_logs") {
+        return primeGrpoModelRuns.logs(modelRunId);
+      }
+      if (action === "model_run_artifacts") {
+        return primeGrpoModelRuns.artifacts(modelRunId);
+      }
+      if (action === "cancel_model_run") {
+        return primeGrpoModelRuns.cancel(modelRunId);
+      }
+    }
+    return trainingApi.request(action, payload, requestUrl);
+  };
 
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
@@ -872,12 +1100,100 @@ export async function createOpenPondServer(
       sandboxRequestPayload({ type: "delete", sandboxId }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
+    executeDatasetBuilderAction: async ({ session, provider, model, action, payload }) => {
+      const profile = session.currentProfile
+        ? await loadOpenPondProfileStateForRef(session.currentProfile)
+        : await loadOpenPondProfileState();
+      const profileId = session.currentProfile?.profileId ?? profile.activeProfile ?? "default";
+      const creationId = typeof payload.creationId === "string" ? payload.creationId : null;
+      const tasksetId = typeof payload.tasksetId === "string" ? payload.tasksetId : null;
+      if (action === "start") {
+        return trainingApi.request("start_creation", {
+          profileId,
+          sourceIds: Array.isArray(payload.sourceIds) ? payload.sourceIds : [],
+          surface: "training_page",
+          mode: payload.mode === "customize" ? "customize" : "defaults",
+          entryMode: "manual",
+          resourceIntent: "dataset",
+          buildIntent: payload.buildIntent,
+          buildSpecification: payload.buildSpecification,
+          objective: payload.objective,
+          methodHint: payload.methodHint,
+          analysisModel: { providerId: provider, modelId: model },
+          targetIntent: {
+            kind: null,
+            id: null,
+            displayName: null,
+            operation: "create",
+          },
+        });
+      }
+      if (action === "status") return trainingApi.request("state", { profileId });
+      if (!creationId && ["revise", "answer_questions", "approve_disclosure", "materialize", "cancel"].includes(action)) {
+        throw new Error("creationId is required for this Dataset Builder action.");
+      }
+      if (action === "revise") {
+        return trainingApi.request("chat_creation", {
+          creationId,
+          message: payload.message,
+        });
+      }
+      if (action === "answer_questions") {
+        return trainingApi.request("answer_questions", {
+          creationId,
+          answers: payload.answers,
+        });
+      }
+      if (action === "approve_disclosure") {
+        return trainingApi.request("approve_disclosure", {
+          creationId,
+          approved: payload.approved === true,
+        });
+      }
+      if (action === "materialize") {
+        return trainingApi.request("approve_materialization", {
+          creationId,
+          approved: payload.approved === true,
+        });
+      }
+      if (action === "cancel") {
+        return trainingApi.request("cancel_creation", { creationId });
+      }
+      if (!tasksetId) throw new Error("tasksetId is required for Dataset testing.");
+      if (action === "audit_graders") {
+        return trainingApi.request("audit_graders", { tasksetId });
+      }
+      if (action === "calibrate_judges") {
+        return trainingApi.request("calibrate_judges", { tasksetId });
+      }
+      if (action === "readiness") {
+        return trainingApi.request("readiness", { tasksetId });
+      }
+      return trainingApi.request("baseline", {
+        tasksetId,
+        models: [{ providerId: provider, modelId: model }],
+        seeds: [17],
+        attemptsPerTask: typeof payload.attemptsPerTask === "number"
+          ? payload.attemptsPerTask
+          : 4,
+        taskLimit: typeof payload.taskLimit === "number" ? payload.taskLimit : 8,
+        split: payload.split ?? "train",
+        selectionStrategy: "rft_easy_curriculum_v1",
+      });
+    },
     executeCrossSystemTool: crossSystemChatToolRuntime.execute,
     finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
+    loadBuiltInOpenPondSkills: async () => [await loadTasksetAuthoringProfileSkill()],
+    readBuiltInOpenPondSkill: async (name) => {
+      if (name !== "openpond-taskset-authoring") {
+        throw new Error(`Built-in OpenPond skill not found: ${name}`);
+      }
+      return readTasksetAuthoringProfileSkill();
+    },
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
     executeWebSearch: executeWebSearch ?? undefined,
@@ -1654,7 +1970,7 @@ export async function createOpenPondServer(
       runInsightsScanPayload,
       askInsightsPayload,
       patchInsightPayload,
-      trainingPayload: trainingApi.request,
+      trainingPayload,
       fireworksRftPayload: trainingService.handleFireworksRft,
       computePayload,
       listLocalAgentSchedulesPayload,
@@ -1848,6 +2164,7 @@ export async function createOpenPondServer(
       managedAdapterSyncService.close,
       crossSystemChatToolRuntime.close,
       crossSystemFrontierBaselineService.close,
+      marketingBenchmarkRuns.close,
       taskMinerService.close,
       taskEvaluationService.close,
       trainingService.close,
@@ -1986,6 +2303,62 @@ function createImproveLimit(value: string | null): number | undefined {
   if (!value) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined;
+}
+
+function providerResponseFactsFromRaw(value: unknown): {
+  responseId: string | null;
+  responseModel: string | null;
+  promptTokens: number | null;
+  generatedTokens: number | null;
+} {
+  const root =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+  const nested =
+    root.response
+    && typeof root.response === "object"
+    && !Array.isArray(root.response)
+      ? root.response as Record<string, unknown>
+      : {};
+  const usageValue =
+    nested.usage
+    && typeof nested.usage === "object"
+    && !Array.isArray(nested.usage)
+      ? nested.usage
+      : root.usage;
+  const usage =
+    usageValue
+    && typeof usageValue === "object"
+    && !Array.isArray(usageValue)
+      ? usageValue as Record<string, unknown>
+      : {};
+  return {
+    responseId:
+      stringFact(nested.id) ?? stringFact(root.id),
+    responseModel:
+      stringFact(nested.model) ?? stringFact(root.model),
+    promptTokens:
+      tokenFact(usage.prompt_tokens)
+      ?? tokenFact(usage.input_tokens),
+    generatedTokens:
+      tokenFact(usage.completion_tokens)
+      ?? tokenFact(usage.output_tokens),
+  };
+}
+
+function stringFact(value: unknown): string | null {
+  return typeof value === "string" && value.trim()
+    ? value.trim()
+    : null;
+}
+
+function tokenFact(value: unknown): number | null {
+  return typeof value === "number"
+    && Number.isInteger(value)
+    && value >= 0
+    ? value
+    : null;
 }
 
 if (isCliEntrypoint(import.meta.url)) {

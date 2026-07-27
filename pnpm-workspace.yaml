@@ -9,3 +9,11 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   node-pty: true
+
+# OpenPond packages desktop artifacts but never publishes them to object storage.
+# S3-compatible release publishing belongs to the sibling sandbox repository.
+patchedDependencies:
+  electron-publish@26.15.3: patches/electron-publish@26.15.3.patch
+
+overrides:
+  "electron-publish@26.15.3>aws4": "-"

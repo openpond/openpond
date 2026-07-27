@@ -45,7 +45,7 @@ Once the Taskset is ready:
 
 Bundles contain approved training records, the recipe, policy, and provenance. They exclude raw chats, secrets, and hidden grader assets. Their file hashes and Taskset hash make the handoff inspectable and reproducible.
 
-The open-source repository currently provides bundle export and an optional non-production local CPU training fixture. CUDA and MLX destinations remain unavailable until their live worker conformance is proven. OpenPond Managed is currently a client stub, Prime and Fireworks are not connected in this build, SSH GPU execution is deferred, and custom execution requires a registered destination implementation. The local worker lives in `python/openpond-training` and requires Python `>=3.10,<3.13` plus `uv`.
+The open-source repository provides bundle export and an optional non-production local CPU training fixture. OpenPond Managed is the hosted compute option when it is available for the signed-in account. Connected and direct-provider destinations appear only when their required worker and destination integrations are configured. The local worker lives in `python/openpond-training` and requires Python `>=3.10,<3.13` plus `uv`.
 
 ## The Full Loop
 

@@ -45,6 +45,7 @@ export function publishTasksetTrainingGraph(input: {
   openpondRelease: string;
   workerProtocol: string;
   externalResolvedBundleHash?: string;
+  releasePublishedAt?: string;
 }): PortableTrainingReleaseGraph {
   const { taskset, modelRun } = input;
   if (
@@ -57,9 +58,13 @@ export function publishTasksetTrainingGraph(input: {
     modelRun.tasksetRef.contentHash !== taskset.contentHash
   ) {
     throw new Error(
-      "Model Run must bind an exact Taskset, Model revision, tokenizer, chat template, and Recipe.",
+      "Model Run must bind an exact Taskset, Model revision, tokenizer, chat template, and Recipe."
     );
   }
+  // Release identities belong to the immutable Taskset revision, not to an
+  // individual Model Run. Callers replaying a release published before this
+  // invariant was introduced can provide its original timestamp explicitly.
+  const releasePublishedAt = input.releasePublishedAt ?? taskset.updatedAt;
 
   const environment = bytes({
     schemaVersion: "openpond.harnessEnvironment.v1",
@@ -75,6 +80,7 @@ export function publishTasksetTrainingGraph(input: {
   const toolContract = bytes({
     schemaVersion: "openpond.harnessToolContract.v1",
     toolNames: taskset.environment.toolNames,
+    actionBindings: taskset.environment.actionBindings ?? [],
     capabilities: taskset.capabilities,
     connectedAppScopes: taskset.policy.connectedAppScopes,
   });
@@ -118,14 +124,14 @@ export function publishTasksetTrainingGraph(input: {
       | "feedback_policy"
       | "dependency_lock"
       | "extension_lock",
-    value: unknown,
+    value: unknown
   ) => ({
     kind,
     id: `${releaseId}_${kind}`,
     contentHash: contentHash(value),
     contractVersion: "1",
   });
-  const profileRelease = {
+  const profileRelease = taskset.profileRelease ?? {
     id: `profile_${taskset.profileId}`,
     revision: taskset.revision,
     contentHash: contentHash({
@@ -149,39 +155,45 @@ export function publishTasksetTrainingGraph(input: {
       child("extension_lock", extensionLock),
     ],
     assets: [
-      asset("program.json", program, [
-        "student",
-        "orchestrator",
-        "environment",
-      ], "model_visible"),
-      asset("environment.json", environment, [
-        "orchestrator",
-        "environment",
-        "trainer",
-      ], "orchestrator_only"),
-      asset("graders.json", graders, [
-        "privileged_scorer",
-      ], "privileged"),
-      asset("tool-contract.json", toolContract, [
-        "student",
-        "orchestrator",
-        "environment",
-        "trainer",
-      ], "model_visible"),
-      asset("feedback-policy.json", feedbackPolicy, [
-        "orchestrator",
-        "privileged_scorer",
-        "trainer",
-      ], "orchestrator_only"),
-      asset("dependency-lock.json", dependencyLock, [
-        "trainer",
-        "infrastructure",
-      ], "orchestrator_only"),
-      asset("extension-lock.json", extensionLock, [
-        "orchestrator",
-        "infrastructure",
-      ], "orchestrator_only"),
+      asset(
+        "program.json",
+        program,
+        ["student", "orchestrator", "environment"],
+        "model_visible"
+      ),
+      asset(
+        "environment.json",
+        environment,
+        ["orchestrator", "environment", "trainer"],
+        "orchestrator_only"
+      ),
+      asset("graders.json", graders, ["privileged_scorer"], "privileged"),
+      asset(
+        "tool-contract.json",
+        toolContract,
+        ["student", "orchestrator", "environment", "trainer"],
+        "model_visible"
+      ),
+      asset(
+        "feedback-policy.json",
+        feedbackPolicy,
+        ["orchestrator", "privileged_scorer", "trainer"],
+        "orchestrator_only"
+      ),
+      asset(
+        "dependency-lock.json",
+        dependencyLock,
+        ["trainer", "infrastructure"],
+        "orchestrator_only"
+      ),
+      asset(
+        "extension-lock.json",
+        extensionLock,
+        ["orchestrator", "infrastructure"],
+        "orchestrator_only"
+      ),
     ],
+    actionBindings: taskset.environment.actionBindings ?? [],
     secretDeclarations: taskset.policy.connectedAppScopes.length
       ? [
           {
@@ -202,7 +214,7 @@ export function publishTasksetTrainingGraph(input: {
     },
     sourceRevision:
       taskset.authoringProvenance.sourceCommit ?? taskset.contentHash,
-    publishedAt: modelRun.updatedAt,
+    publishedAt: releasePublishedAt,
     metadata: {
       tasksetId: taskset.id,
       tasksetHash: taskset.contentHash,
@@ -212,7 +224,7 @@ export function publishTasksetTrainingGraph(input: {
 
   const trainTasks = taskset.tasks.filter((task) => task.split === "train");
   const frozenEvalTasks = taskset.tasks.filter(
-    (task) => task.split === "frozen_eval",
+    (task) => task.split === "frozen_eval"
   );
   const datasetAssets: DatasetRelease["assets"] = [];
   for (const [split, tasks, assetPath] of [
@@ -248,7 +260,7 @@ export function publishTasksetTrainingGraph(input: {
       frozenEval: frozenEvalTasks.length,
     },
     sourceRefsHash: contentHash(taskset.sourceRefs),
-    publishedAt: modelRun.updatedAt,
+    publishedAt: releasePublishedAt,
     metadata: {
       datasetArtifactHash: contentHash(taskset.datasetArtifact ?? null),
     },
@@ -279,46 +291,47 @@ export function publishTasksetTrainingGraph(input: {
   });
   const environmentHash = contentHash(taskset.environment);
   const graderHash = contentHash(taskset.graders);
-  const evidenceSetRelease = evidenceSignals.length > 0
-    ? publishEvidenceSetRelease({
-        schemaVersion: "openpond.evidenceSetRelease.v1",
-        id: `evidence_${taskset.id}_r${taskset.revision}`,
-        revision: taskset.revision,
-        datasetRelease: {
-          id: datasetRelease.id,
-          contentHash: datasetRelease.contentHash,
-        },
-        harnessRelease: {
-          id: harnessRelease.id,
-          contentHash: harnessRelease.contentHash,
-        },
-        profileRelease: {
-          id: profileRelease.id,
-          contentHash: profileRelease.contentHash,
-        },
-        model: {
-          source: modelRun.baseModel.modelId,
-          revision: modelRun.baseModel.revision,
-          artifactHash: null,
-        },
-        environmentHash,
-        toolContractHash: contentHash({
-          toolNames: taskset.environment.toolNames,
-          capabilities: taskset.capabilities,
-        }),
-        graderHash,
-        signals: evidenceSignals,
-        coverageReceiptHash: contentHash({
-          taskset: taskset.contentHash,
-          readiness: taskset.readiness,
-        }),
-        verificationPolicyHash: contentHash({
-          policy: taskset.policy,
-          graderFixtures: taskset.graderFixtures,
-        }),
-        publishedAt: modelRun.updatedAt,
-      })
-    : null;
+  const evidenceSetRelease =
+    evidenceSignals.length > 0
+      ? publishEvidenceSetRelease({
+          schemaVersion: "openpond.evidenceSetRelease.v1",
+          id: `evidence_${taskset.id}_r${taskset.revision}`,
+          revision: taskset.revision,
+          datasetRelease: {
+            id: datasetRelease.id,
+            contentHash: datasetRelease.contentHash,
+          },
+          harnessRelease: {
+            id: harnessRelease.id,
+            contentHash: harnessRelease.contentHash,
+          },
+          profileRelease: {
+            id: profileRelease.id,
+            contentHash: profileRelease.contentHash,
+          },
+          model: {
+            source: modelRun.baseModel.modelId,
+            revision: modelRun.baseModel.revision,
+            artifactHash: null,
+          },
+          environmentHash,
+          toolContractHash: contentHash({
+            toolNames: taskset.environment.toolNames,
+            capabilities: taskset.capabilities,
+          }),
+          graderHash,
+          signals: evidenceSignals,
+          coverageReceiptHash: contentHash({
+            taskset: taskset.contentHash,
+            readiness: taskset.readiness,
+          }),
+          verificationPolicyHash: contentHash({
+            policy: taskset.policy,
+            graderFixtures: taskset.graderFixtures,
+          }),
+          publishedAt: releasePublishedAt,
+        })
+      : null;
   const evidenceReleasePath = "evidence/evidence-set-release.json";
   if (evidenceSetRelease) {
     assets.set(evidenceReleasePath, bytes(evidenceSetRelease));
@@ -356,7 +369,7 @@ export function publishTasksetTrainingGraph(input: {
         const value = assets.get(path);
         if (!value) {
           throw new Error(
-            `Resolved trainer projection asset ${path} is missing.`,
+            `Resolved trainer projection asset ${path} is missing.`
           );
         }
         return {
@@ -405,8 +418,7 @@ export function publishTasksetTrainingGraph(input: {
     computeTarget: input.compute,
     engine: input.engine,
     resolvedBundleHash:
-      input.externalResolvedBundleHash ??
-      resolvedBundleManifest.contentHash,
+      input.externalResolvedBundleHash ?? resolvedBundleManifest.contentHash,
     secretLeaseRefs: input.secretLeaseRefs ?? [],
     approval: input.approval,
     createdAt: modelRun.updatedAt,
@@ -419,7 +431,7 @@ export function publishTasksetTrainingGraph(input: {
     throw new Error(
       `Portable training release graph validation failed: ${graphIssues
         .map((issue) => `${issue.code} (${issue.path})`)
-        .join(", ")}`,
+        .join(", ")}`
     );
   }
   return {
@@ -444,7 +456,7 @@ function asset(
   path: string,
   value: Uint8Array,
   projections: HarnessRelease["assets"][number]["projections"],
-  visibility: HarnessRelease["assets"][number]["visibility"],
+  visibility: HarnessRelease["assets"][number]["visibility"]
 ): HarnessRelease["assets"][number] {
   return {
     path,
@@ -458,7 +470,7 @@ function asset(
 }
 
 function evidenceKind(
-  kind: string,
+  kind: string
 ): EvidenceSetRelease["signals"][number]["kind"] {
   switch (kind) {
     case "feedback":

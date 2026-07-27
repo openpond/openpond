@@ -10,6 +10,10 @@ import {
   MakeAgentTutorialPlayer,
 } from "../apps/web/src/components/get-started/MakeAgentTutorialCard";
 import {
+  LearningVideoCard,
+  LearningVideoPlayer,
+} from "../apps/web/src/components/get-started/LearningVideoCard";
+import {
   PostTrainingSeries,
   PostTrainingSeriesPlayer,
 } from "../apps/web/src/components/get-started/PostTrainingSeries";
@@ -35,6 +39,7 @@ import {
   makeAgentTutorialScript,
 } from "../apps/web/src/components/get-started/make-agent-tutorial";
 import { OPENPOND_AGENT_OVERVIEW } from "../apps/web/src/components/get-started/openpond-agent-overview";
+import { PROFILE_TO_DEPLOYMENT_OVERVIEW } from "../apps/web/src/components/get-started/profile-to-deployment-overview";
 
 const noop = () => undefined;
 const getStartedProps = {
@@ -353,8 +358,12 @@ describe("GetStartedView", () => {
     expect(html).toContain("Create/Edit Loop");
     expect(html).toContain("Insights Loop");
     expect(html).toContain("Profile");
+    expect(html).toContain("Train and deploy with OpenPond");
     expect(html).toContain("Local &lt;&gt; Hosted");
     expect(html).toContain("Connect 3rd party apps");
+    expect(html.indexOf("Train and deploy with OpenPond")).toBeLessThan(
+      html.indexOf("Walkthroughs"),
+    );
     expect(html).not.toContain("Profile &amp; SDK");
     expect(html).not.toContain("Create &amp; edit");
     expect(html).not.toContain("Insights loop");
@@ -487,7 +496,7 @@ describe("GetStartedView", () => {
     expect(html).not.toContain("<svg");
   });
 
-  test("keeps the seven conceptual guide decks", () => {
+  test("keeps the conceptual guide decks", () => {
     expect(GET_STARTED_DECKS.map((deck) => deck.label)).toEqual([
       "Goal loop",
       "Orchestration",
@@ -499,6 +508,46 @@ describe("GetStartedView", () => {
     ]);
     expect(GET_STARTED_DECKS).toHaveLength(7);
     expect(GET_STARTED_DECKS.flatMap((deck) => deck.slides)).toHaveLength(14);
+    expect(GET_STARTED_DECKS.some((deck) => deck.id === "train-deploy")).toBe(false);
+  });
+
+  test("puts the Profile-to-deployment MP4 in Start here", () => {
+    const cardHtml = renderToStaticMarkup(createElement(LearningVideoCard, {
+      video: PROFILE_TO_DEPLOYMENT_OVERVIEW,
+    }));
+    const playerHtml = renderToStaticMarkup(createElement(LearningVideoPlayer, {
+      onClose: noop,
+      video: PROFILE_TO_DEPLOYMENT_OVERVIEW,
+    }));
+
+    expect(PROFILE_TO_DEPLOYMENT_OVERVIEW.duration).toBe("1:46");
+    expect(cardHtml).toContain("Train and deploy with OpenPond");
+    expect(cardHtml).toContain("Training walkthrough");
+    expect(cardHtml).toContain("profile-to-deployment-poster.png");
+    expect(cardHtml).not.toContain("<video");
+    expect(playerHtml).toContain("profile-to-deployment.mp4");
+    expect(playerHtml).toContain("profile-to-deployment.vtt");
+    expect(playerHtml).toContain('kind="captions"');
+    expect(playerHtml).toContain("controls");
+    expect(playerHtml).not.toContain("autoplay");
+
+    const tutorialCopy = [
+      readFileSync(
+        new URL("../scripts/tutorials/build-profile-to-deployment.mjs", import.meta.url),
+        "utf8",
+      ),
+      readFileSync(
+        new URL(
+          "../apps/web/public/tutorials/profile-to-deployment.vtt",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ].join("\n");
+    expect(tutorialCopy).toContain("OpenPond Managed");
+    expect(tutorialCopy).not.toMatch(
+      /\b(?:sandbox|latitude|prime|gcp|cloudflare|cloud sql|m8)\b/i,
+    );
   });
 
   test("frames create and edit as first-class goal-loop agents", () => {

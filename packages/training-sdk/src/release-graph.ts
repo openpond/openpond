@@ -156,6 +156,33 @@ export function validateHarnessRelease(
     }
     secretIds.add(secret.id);
   }
+  const actionIds = new Set<string>();
+  const modelToolNames = new Set<string>();
+  for (const [index, binding] of (release.actionBindings ?? []).entries()) {
+    if (actionIds.has(binding.actionId)) {
+      issues.push({
+        code: "duplicate_action_binding",
+        path: `actionBindings.${index}.actionId`,
+        message: `Harness action ${binding.actionId} is bound more than once.`,
+      });
+    }
+    actionIds.add(binding.actionId);
+    if (modelToolNames.has(binding.modelToolName)) {
+      issues.push({
+        code: "duplicate_model_tool_name",
+        path: `actionBindings.${index}.modelToolName`,
+        message: `Harness model tool ${binding.modelToolName} is bound more than once.`,
+      });
+    }
+    modelToolNames.add(binding.modelToolName);
+    if (contentHash(binding.inputSchema) !== binding.actionSchemaHash) {
+      issues.push({
+        code: "action_schema_hash_mismatch",
+        path: `actionBindings.${index}.actionSchemaHash`,
+        message: `Harness action ${binding.actionId} input schema does not match its pinned hash.`,
+      });
+    }
+  }
   return issues;
 }
 

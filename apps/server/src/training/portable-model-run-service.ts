@@ -10,6 +10,7 @@ import {
   type TrainingCatalog,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
+  type Taskset,
   type WorkerCatalogEntry,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
@@ -94,13 +95,13 @@ export function createPortableModelRunService(deps: {
       preparation.state === "compute_setup_required"
     ) {
       throw new Error(
-        preparation.reason ?? "Model Run preparation is incomplete.",
+        preparation.reason ?? "Model Run preparation is incomplete."
       );
     }
     if (preparation.state === "model_download_required") {
       if (!deps.prepareModel) {
         throw new Error(
-          "This Model requires a verified downloader before training can start.",
+          "This Model requires a verified downloader before training can start."
         );
       }
       await deps.prepareModel({
@@ -113,20 +114,15 @@ export function createPortableModelRunService(deps: {
       const worker = preparation.engine
         ? catalog.workers.find(
             (candidate) =>
-              candidate.engineAdapterId ===
-              preparation.engine?.adapterId,
+              candidate.engineAdapterId === preparation.engine?.adapterId
           )
         : null;
       if (!worker || !deps.workerImages) {
-        throw new Error(
-          "This run requires a signed worker image downloader.",
-        );
+        throw new Error("This run requires a signed worker image downloader.");
       }
       const result = await deps.workerImages.prepare(worker);
       if (result.state !== "ready" || !result.cached) {
-        throw new Error(
-          "The signed worker image did not finish preparing.",
-        );
+        throw new Error("The signed worker image did not finish preparing.");
       }
     }
     const prepared = await deps.prepareStart({
@@ -148,14 +144,11 @@ export function createPortableModelRunService(deps: {
     });
     if (!bindings.runtime || !bindings.compute || !bindings.engine) {
       throw new Error(
-        "The saved Model Run has no complete portable adapter binding.",
+        "The saved Model Run has no complete portable adapter binding."
       );
     }
     const taskset = await deps.store.getTaskset(modelRun.tasksetRef.id);
-    if (
-      !taskset ||
-      taskset.contentHash !== modelRun.tasksetRef.contentHash
-    ) {
+    if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
       throw new Error("The saved Model Run Taskset release is stale.");
     }
     const graph = publishTasksetTrainingGraph({
@@ -175,6 +168,10 @@ export function createPortableModelRunService(deps: {
         modelRun.destinationId === "openpond_managed"
           ? deps.sandboxBinding?.resolvedBundleHash
           : undefined,
+      releasePublishedAt: await resolveExistingTasksetReleasePublishedAt({
+        storeDir: deps.storeDir,
+        taskset,
+      }),
     });
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
@@ -195,27 +192,24 @@ export function createPortableModelRunService(deps: {
       storeDir: deps.storeDir,
       graph,
     });
-    const engineAdapter = deps.adapters.engine(
-      bindings.engine.adapterId,
-    );
-    deps.bridges.get(bindings.engine.adapterId)?.register(
-      resolvedPlan.contentHash,
-      {
+    const engineAdapter = deps.adapters.engine(bindings.engine.adapterId);
+    deps.bridges
+      .get(bindings.engine.adapterId)
+      ?.register(resolvedPlan.contentHash, {
         plan: prepared.plan,
         approval,
         manifestHash: graph.manifest.contentHash,
-      },
-    );
+      });
     const validation = await engineAdapter.validate(resolvedPlan);
     if (!validation.valid) {
       throw new Error(
         `Portable engine validation failed: ${validation.issues
           .map((issue) => issue.message)
-          .join("; ")}`,
+          .join("; ")}`
       );
     }
     const executionRef = TrainingExecutionRefSchema.parse(
-      await engineAdapter.launch(resolvedPlan),
+      await engineAdapter.launch(resolvedPlan)
     );
     const launched =
       (await deps.store.getTrainingJob(executionRef.runId)) ??
@@ -245,8 +239,7 @@ export function createPortableModelRunService(deps: {
         harnessRunManifestHash: graph.manifest.contentHash,
         harnessReleaseHash: graph.harnessRelease.contentHash,
         datasetReleaseHash: graph.datasetRelease.contentHash,
-        evidenceSetReleaseHash:
-          graph.evidenceSetRelease?.contentHash ?? null,
+        evidenceSetReleaseHash: graph.evidenceSetRelease?.contentHash ?? null,
         manifestPath: publishedGraph.manifestPath,
         resolvedBundleDirectory: publishedGraph.resolvedBundleDirectory,
         portableAdapterBindings: bindings,
@@ -283,84 +276,61 @@ export function createPortableModelRunService(deps: {
     const job = (await deps.store.listTrainingJobs()).find(
       (candidate) =>
         candidate.id === modelRunId ||
-        candidate.metadata.modelRunId === modelRunId,
+        candidate.metadata.modelRunId === modelRunId
     );
     if (!job) {
-      throw new Error(
-        "No training execution exists for this Model Run.",
-      );
+      throw new Error("No training execution exists for this Model Run.");
     }
     return job;
   }
 
-  function executionRef(
-    job: Awaited<ReturnType<typeof execution>>,
-  ) {
+  function executionRef(job: Awaited<ReturnType<typeof execution>>) {
     return TrainingExecutionRefSchema.safeParse(
-      job.metadata.portableExecutionRef,
+      job.metadata.portableExecutionRef
     );
   }
 
   async function status(modelRunId: string) {
     const job = await execution(modelRunId);
     const parsed = executionRef(job);
-    if (
-      parsed.success &&
-      deps.adapters.hasEngine(parsed.data.adapterId)
-    ) {
-      return deps.adapters
-        .engine(parsed.data.adapterId)
-        .status(parsed.data);
+    if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
+      return deps.adapters.engine(parsed.data.adapterId).status(parsed.data);
     }
     try {
-      return await deps.destinations
-        .get(job.destinationId)
-        .status(job.id);
+      return await deps.destinations.get(job.destinationId).status(job.id);
     } catch {
       return job;
     }
   }
 
   async function events(modelRunId: string) {
-    return deps.store.listTrainingJobEvents(
-      (await execution(modelRunId)).id,
-    );
+    return deps.store.listTrainingJobEvents((await execution(modelRunId)).id);
   }
 
   async function logs(modelRunId: string) {
     const job = await execution(modelRunId);
     const parsed = executionRef(job);
-    if (
-      parsed.success &&
-      deps.adapters.hasEngine(parsed.data.adapterId)
-    ) {
-      return deps.adapters
-        .engine(parsed.data.adapterId)
-        .logs(parsed.data);
+    if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
+      return deps.adapters.engine(parsed.data.adapterId).logs(parsed.data);
     }
-    return (await deps.store.listTrainingJobEvents(job.id)).filter(
-      (event) =>
-        ["log", "progress", "metric", "failure"].includes(event.type),
+    return (await deps.store.listTrainingJobEvents(job.id)).filter((event) =>
+      ["log", "progress", "metric", "failure"].includes(event.type)
     );
   }
 
   async function artifacts(modelRunId: string) {
     const job = await execution(modelRunId);
     const parsed = executionRef(job);
-    if (
-      parsed.success &&
-      deps.adapters.hasEngine(parsed.data.adapterId)
-    ) {
+    if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       const artifacts = await deps.adapters
         .engine(parsed.data.adapterId)
         .collect(parsed.data);
       if (
         typeof job.metadata.harnessRunManifestHash !== "string" ||
-        artifacts.manifestHash !==
-          job.metadata.harnessRunManifestHash
+        artifacts.manifestHash !== job.metadata.harnessRunManifestHash
       ) {
         throw new Error(
-          "Portable training artifacts do not match the saved Harness Run Manifest.",
+          "Portable training artifacts do not match the saved Harness Run Manifest."
         );
       }
       return artifacts;
@@ -371,13 +341,8 @@ export function createPortableModelRunService(deps: {
   async function cancel(modelRunId: string) {
     const job = await execution(modelRunId);
     const parsed = executionRef(job);
-    if (
-      parsed.success &&
-      deps.adapters.hasEngine(parsed.data.adapterId)
-    ) {
-      await deps.adapters
-        .engine(parsed.data.adapterId)
-        .cancel(parsed.data);
+    if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
+      await deps.adapters.engine(parsed.data.adapterId).cancel(parsed.data);
       return status(modelRunId);
     }
     return deps.destinations.get(job.destinationId).cancel(job.id);
@@ -388,7 +353,7 @@ export function createPortableModelRunService(deps: {
 
 function assertSubmittedManifest(
   input: unknown,
-  expected: Parameters<typeof validateHarnessRunManifest>[0],
+  expected: Parameters<typeof validateHarnessRunManifest>[0]
 ): void {
   if (input === undefined) return;
   const submitted = HarnessRunManifestSchema.parse(input);
@@ -397,7 +362,7 @@ function assertSubmittedManifest(
     throw new Error(
       `Submitted Harness Run Manifest is invalid: ${issues
         .map((issue) => `${issue.path}: ${issue.message}`)
-        .join("; ")}`,
+        .join("; ")}`
     );
   }
   if (
@@ -405,12 +370,35 @@ function assertSubmittedManifest(
     contentHash(submitted) !== contentHash(expected)
   ) {
     throw new Error(
-      "Submitted Harness Run Manifest does not exactly match the revalidated server plan.",
+      "Submitted Harness Run Manifest does not exactly match the revalidated server plan."
     );
   }
 }
 
-async function publishRunGraph(input: {
+export async function resolveExistingTasksetReleasePublishedAt(input: {
+  storeDir: string;
+  taskset: Taskset;
+}): Promise<string | undefined> {
+  const releases = new ContentAddressedReleaseStore(
+    path.join(input.storeDir, "training", "portable-releases")
+  );
+  const release = await releases.findHarnessRelease({
+    id: `harness_${input.taskset.id}_r${input.taskset.revision}`,
+    revision: input.taskset.revision,
+  });
+  if (!release) return undefined;
+  if (
+    release.metadata.tasksetId !== input.taskset.id ||
+    release.metadata.tasksetHash !== input.taskset.contentHash
+  ) {
+    throw new Error(
+      "Published Harness Release does not match the requested Taskset revision."
+    );
+  }
+  return release.publishedAt;
+}
+
+export async function publishRunGraph(input: {
   storeDir: string;
   graph: ReturnType<typeof publishTasksetTrainingGraph>;
 }): Promise<{
@@ -418,7 +406,7 @@ async function publishRunGraph(input: {
   resolvedBundleDirectory: string;
 }> {
   const releases = new ContentAddressedReleaseStore(
-    path.join(input.storeDir, "training", "portable-releases"),
+    path.join(input.storeDir, "training", "portable-releases")
   );
   await releases.publishHarnessRelease({
     release: input.graph.harnessRelease,
@@ -441,20 +429,18 @@ async function publishRunGraph(input: {
     },
   });
   if (input.graph.evidenceSetRelease) {
-    await releases.publishEvidenceSetRelease(
-      input.graph.evidenceSetRelease,
-    );
+    await releases.publishEvidenceSetRelease(input.graph.evidenceSetRelease);
   }
   const manifestDirectory = path.join(
     input.storeDir,
     "training",
     "portable-releases",
-    "manifests",
+    "manifests"
   );
   await mkdir(manifestDirectory, { recursive: true });
   const manifestPath = path.join(
     manifestDirectory,
-    `${input.graph.manifest.contentHash}.json`,
+    `${input.graph.manifest.contentHash}.json`
   );
   const serialized = `${JSON.stringify(input.graph.manifest, null, 2)}\n`;
   await writeFile(manifestPath, serialized, {
@@ -473,7 +459,7 @@ async function publishRunGraph(input: {
       input.storeDir,
       "training",
       "portable-releases",
-      "resolved-bundles",
+      "resolved-bundles"
     ),
   });
   if (
@@ -482,7 +468,7 @@ async function publishRunGraph(input: {
     input.graph.resolvedBundleSource !== "external"
   ) {
     throw new Error(
-      "Resolved Training Bundle does not match the Harness Run Manifest.",
+      "Resolved Training Bundle does not match the Harness Run Manifest."
     );
   }
   return {

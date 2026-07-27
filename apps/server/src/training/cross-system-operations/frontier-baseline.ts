@@ -41,6 +41,16 @@ export type CrossSystemFrontierModelDelta = {
   text?: string;
   continuation?: HostedChatContinuation;
   toolCalls?: HostedChatToolCall[];
+  responseFacts?: {
+    providerResponseIdentity: string;
+    promptTokens: number | null;
+    generatedTokens: number | null;
+    samplingSupport: {
+      seed: boolean;
+      temperature: boolean;
+      topP: boolean;
+    };
+  };
 };
 
 export type CrossSystemFrontierModelStream = (input: {
@@ -51,6 +61,10 @@ export type CrossSystemFrontierModelStream = (input: {
   toolChoice: HostedChatToolChoice;
   requestId: string;
   signal: AbortSignal;
+  maxOutputTokens?: number;
+  temperature?: number;
+  topP?: number;
+  seed?: number;
 }) => AsyncIterable<CrossSystemFrontierModelDelta>;
 
 export async function runFrontierCrossSystemBaseline(input: {

@@ -24,7 +24,7 @@ export function ModelSetupOverviewPreview({
       <dl className="model-setup-preview-facts">
         <PreviewFact label="Active version" value="—" />
         <PreviewFact label="Latest run" value="Pending" />
-        <PreviewFact label="Dataset" value={taskset?.name ?? "—"} />
+        <PreviewFact label="Taskset" value={taskset?.name ?? "—"} />
         <PreviewFact label="Evaluation" value="Not run" />
       </dl>
 
@@ -96,7 +96,7 @@ export function ModelSetupRunsPreview({ draft, taskset }: SetupPreviewProps) {
           label="Training"
           value={draft.method?.toUpperCase() ?? "—"}
         />
-        <PreviewFact label="Dataset" value={taskset?.name ?? "—"} />
+        <PreviewFact label="Taskset" value={taskset?.name ?? "—"} />
         <PreviewFact
           label="Base model"
           value={draft.baseModel?.modelId ?? "—"}
@@ -142,7 +142,7 @@ export function ModelSetupConfigurationPreview({
 
       <dl className="model-setup-preview-facts">
         <PreviewFact
-          label="Dataset revision"
+          label="Taskset revision"
           value={taskset ? `${taskset.name} · r${taskset.revision}` : "—"}
         />
         <PreviewFact label="Evaluation" value="Frozen evaluation after run" />
@@ -224,6 +224,8 @@ function destinationLabel(destination: ModelRunDraft["destinationId"]): string {
   if (destination === "local_cuda") return "Local NVIDIA GPU";
   if (destination === "local_mlx") return "Apple Silicon";
   if (destination === "ssh_gpu") return "SSH GPU";
+  if (destination === "prime_hosted") return "Prime Raw GPU";
+  if (destination === "openpond_managed") return "OpenPond Managed";
   return destination ? destination.replaceAll("_", " ") : "Not selected";
 }
 

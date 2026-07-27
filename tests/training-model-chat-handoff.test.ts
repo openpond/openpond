@@ -2,7 +2,11 @@ import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { readFile } from "node:fs/promises";
-import { CROSS_SYSTEM_TOOL_CONTRACT_HASH, TasksetSchema } from "@openpond/contracts";
+import {
+  CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+  TasksetSchema,
+  type Taskset,
+} from "@openpond/contracts";
 import { TrainingModelChatHandoffBar } from "../apps/web/src/components/chat/TrainingModelChatHandoffBar";
 import {
   advanceTrainingModelChatTask,
@@ -126,6 +130,70 @@ describe("training model chat handoff", () => {
     expect(submitHook).toContain("trainingTurn.error ??");
     expect(submitHook).toContain("turnMetadata: trainingTurn.metadata ?? undefined");
     expect(chatActions).toContain("metadata: options.turnMetadata");
+  });
+
+  test("carries stateful Harness case identity without exposing episode arguments", () => {
+    const base = tasksetFixture({ ready: true });
+    const taskset = {
+      ...base,
+      environment: {
+        ...base.environment,
+        kind: "stateful_harness",
+        stateful: true,
+        toolNames: ["get_portfolio_snapshot"],
+        actionBindings: [
+          {
+            schemaVersion: "openpond.harnessActionBinding.v1",
+            actionId: "get-portfolio-snapshot",
+            modelToolName: "get_portfolio_snapshot",
+            description: "Read the current portfolio.",
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {},
+              required: [],
+            },
+            actionSchemaHash: "a".repeat(64),
+            agentRelease: {
+              id: "agent_marketing_fixture",
+              contentHash: "b".repeat(64),
+            },
+            implementationHash: "c".repeat(64),
+            runtimeBindingId: "profile_action_fixture",
+            capabilityReceiptHash: "d".repeat(64),
+            sideEffect: "read",
+            studentVisible: true,
+            timeoutMs: 30_000,
+            episodeArgumentBindings: [
+              { argument: "scenarioId", source: "case_id" },
+            ],
+          },
+        ],
+      },
+      tasks: base.tasks.map((task, index) => ({
+        ...task,
+        input: { ...task.input, prompt: `Portfolio question ${index + 1}` },
+        metadata: { ...task.metadata, caseId: `cmo_case_${index + 1}` },
+      })),
+    } as Taskset;
+    const handoff = buildTrainingModelChatHandoff({
+      modelId: "lineage_marketing",
+      taskset,
+    });
+
+    expect(handoff.taskRuntime).toBe("harness");
+    expect(handoff.tasks[0]?.generatedTaskId).toBe("cmo_case_1");
+    expect(
+      trainingModelChatTurnMetadata(
+        handoff,
+        "Portfolio question 1",
+        null,
+      ),
+    ).toEqual({
+      trainingHarnessTaskId: "cmo_case_1",
+      trainingTasksetId: taskset.id,
+      source: "training_model_chat_handoff",
+    });
   });
 
   test("does not invent generated question controls for an unrelated Taskset", () => {

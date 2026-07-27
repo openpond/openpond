@@ -73,6 +73,8 @@ export function createPortableTrainingServiceSupport(input: {
         input.connectedWorkerConfigured ?? false,
       connectedEngineConfigured:
         input.connectedEngineConfigured ?? false,
+      primeRawConfigured:
+        input.primeRawConfigured ?? false,
       sandboxManagedConfigured:
         input.sandboxManagedConfigured ?? false,
       connectedWorkerImageDigest:

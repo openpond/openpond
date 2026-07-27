@@ -18,6 +18,8 @@ import type {
   TrainingChatSearchResult,
   TrainingStateResponse,
   LocalModelChatConfiguration,
+  MarketingBenchmarkSpecification,
+  MarketingBenchmarkRun,
   ModelProject,
   ModelRunDraft,
   FireworksModelServingSession,
@@ -265,6 +267,32 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/baseline/runs/${encodeURIComponent(runId)}/cancel`,
       {},
     ),
+    preregisterMarketingBenchmark: (
+      tasksetId: string,
+      baselineReportId: string,
+      thresholds: {
+        minimumCandidateScore: number;
+        minimumImprovement: number;
+      },
+    ) => mutate<MarketingBenchmarkSpecification>(
+      "preregister-marketing-benchmark",
+      "/marketing-benchmark/preregister",
+      { tasksetId, baselineReportId, ...thresholds },
+    ),
+    runMarketingBenchmark: (
+      specificationId: string,
+      candidateModelVersionId: string,
+    ) => mutate<MarketingBenchmarkRun>(
+      "run-marketing-benchmark",
+      "/marketing-benchmark/runs",
+      { specificationId, candidateModelVersionId },
+    ),
+    cancelMarketingBenchmark: (runId: string) =>
+      mutate<MarketingBenchmarkRun>(
+        "cancel-marketing-benchmark",
+        "/marketing-benchmark/cancel",
+        { runId },
+      ),
     auditGraders: (tasksetId: string) => mutate<{ passed: boolean; results: Array<{ id: string; label: string; expectedPassed?: boolean; expectedRewardEligible?: boolean; result: { passed: boolean; score: number | null; rewardEligible: boolean } }>; failures: Array<{ label: string; gradeId: string }> }>("audit-graders", "/audit-graders", { tasksetId }),
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     readiness: (tasksetId: string) => mutate("readiness", "/readiness", { tasksetId }),
