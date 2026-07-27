@@ -386,6 +386,7 @@ function defaultChecks(_kind: CreateImproveTarget["kind"]) {
 
 function sourceRootForTarget(target: CreateImproveTarget): string {
   const id = normalizeTargetId(target.id ?? target.displayName ?? "") || "draft";
+  if (target.kind === "agent") return id === "default" ? "agent" : `agents/${id}`;
   if (target.kind === "skill") return `skills/${target.skillName ?? id}`;
   if (target.kind === "extension") return `extensions/${id}`;
   if (target.kind === "model") return `training/models/${id}`;

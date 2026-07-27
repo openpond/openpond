@@ -43,7 +43,7 @@ describe("renderer performance budgets", () => {
       200,
     );
 
-    expect(first.html).toContain("Make Agent");
+    expect(first.html).toContain("Author Agent");
     expect(typed.html).toContain("Run a local goal");
     expect(typed.bytes).toBeGreaterThan(2_000);
   });

@@ -29,7 +29,6 @@ describe("shared app dialog foundation", () => {
       "apps/web/src/components/create-improve/CreateImproveAuthoringShell.tsx",
       "apps/web/src/components/datasets/DatasetSourcePickerDialog.tsx",
       "apps/web/src/components/datasets/HuggingFaceDatasetImportDialog.tsx",
-      "apps/web/src/components/labs/LabNewVersionDialog.tsx",
       "apps/web/src/components/labs/LabAgentRenameDialog.tsx",
       "apps/web/src/components/labs/LabExpertBootstrap.tsx",
       "apps/web/src/components/training/ModelUseDialog.tsx",

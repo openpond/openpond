@@ -129,7 +129,7 @@ export function latestCreatePipelineRuntime(
   messages: ChatMessage[],
 ): ComposerCreateImproveRuntime | null {
   const run = latestCreateImproveRunProjection({ messages });
-  return run ? { run } : null;
+  return run && run.target.kind !== "agent" ? { run } : null;
 }
 
 export function cloudProjectIdFromComposerTarget(value: string): string | null {

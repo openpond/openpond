@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { createImproveActionShapeFromMetadata } from "@openpond/contracts";
 
 import {
   createGoalState,
@@ -10,14 +9,6 @@ import {
   resolveGoalStorageRoot,
   resolveGoalWorkspace,
 } from "./config";
-import {
-  createInitialCreatePipeline,
-  approveCreateImprovePlan,
-  cancelCreateImprovePlan,
-  rejectCreateImprovePlan,
-  reviseCreateImprovePlan,
-  shouldCreatePipelineForGoal,
-} from "./create-pipeline";
 import { createGoalEvent } from "./events";
 import { runGoalIteration } from "./runner";
 import { LocalGoalStateAdapter } from "./state/local";
@@ -44,9 +35,6 @@ export function printGoalHelp(): void {
   console.log("Usage:");
   console.log('  openpond goal "<objective>" [--cwd <path>] [--goal-storage global|workspace]');
   console.log("  openpond goal run --goal-id <id> [--cwd <path>] [--goal-storage global|workspace]");
-  console.log('  openpond goal create-agent "<agent idea>" [--cwd <path>] [--goal-storage global|workspace]');
-  console.log('  openpond goal update-agent "<agent change>" [--agent-id <id>] [--cwd <path>] [--goal-storage global|workspace]');
-  console.log("  openpond goal plan <goal-id> [--json|--edit <instructions>] [--cwd <path>] [--goal-storage global|workspace]");
   console.log(
     "  openpond goal answer <question-id> --choice <choice-id>|--answer <text> [--goal-id <id>] [--cwd <path>] [--goal-storage global|workspace]"
   );
@@ -103,12 +91,6 @@ function arrayOption(
   return value ? [value] : [];
 }
 
-function goalKindFromCommand(command: string): GoalKind {
-  if (command === "create-agent") return "create_agent";
-  if (command === "update-agent") return "update_agent";
-  return "general_code_goal";
-}
-
 async function localGoalPaths(options: Record<string, string | boolean>) {
   const cwd = optionString(options, "cwd");
   const workspace = resolveGoalWorkspace(cwd);
@@ -163,19 +145,6 @@ export async function createLocalGoal(params: {
   options: Record<string, string | boolean>;
   objective: string;
   kind: GoalKind;
-  createImprove?: {
-    command?: "/create" | "/edit" | "openpond extend";
-    surface?:
-      | "direct_prompt_create"
-      | "direct_prompt_improve"
-      | "local_extend";
-    profile?: {
-      activeProfile?: string | null;
-      repoPath?: string | null;
-      sourcePath?: string | null;
-      localHead?: string | null;
-    } | null;
-  };
 }): Promise<GoalState> {
   const local = await localGoalPaths(params.options);
   let state = normalizeGoalState(
@@ -193,82 +162,9 @@ export async function createLocalGoal(params: {
       },
     })
   );
-  if (shouldCreatePipelineForGoal(params.kind)) {
-    const command =
-      params.createImprove?.command ??
-      (params.kind === "update_agent" ? "/edit" : "/create");
-    const surface =
-      params.createImprove?.surface ??
-      (params.kind === "update_agent"
-        ? "direct_prompt_improve"
-        : "direct_prompt_create");
-    const { snapshot, approval } = createInitialCreatePipeline({
-      goal: state,
-      command,
-      surface,
-      profile: params.createImprove?.profile ?? {
-        activeProfile: optionString(params.options, "profile") || null,
-        repoPath: null,
-        sourcePath: local.workspace,
-        localHead: null,
-      },
-    });
-    state = {
-      ...state,
-      status: "awaiting_approval",
-      approvals: [approval],
-      createImproveRun: snapshot,
-      events: [
-        ...state.events,
-        createGoalEvent({
-          goalId: state.id,
-          kind: "create_pipeline.created",
-          summary: "Create/Improve run initialized",
-          payload: {
-            runId: snapshot.id,
-            state: snapshot.state,
-            sourceAuthority: snapshot.adapter.sourceAuthority,
-          },
-        }),
-        createGoalEvent({
-          goalId: state.id,
-          kind: "create_plan.created",
-          summary: "Create plan artifact created",
-          payload: {
-            planId: snapshot.plan?.id ?? null,
-            approvalId: approval.id,
-            status: snapshot.plan?.status ?? null,
-          },
-        }),
-        createGoalEvent({
-          goalId: state.id,
-          kind: "workflow_capture.created",
-          summary: "Workflow capture artifact created",
-          payload: {
-            workflowCaptureId: snapshot.workflowCapture?.id ?? null,
-          },
-        }),
-        createGoalEvent({
-          goalId: state.id,
-          kind: "approval.requested",
-          summary: approval.title,
-          payload: {
-            kind: approval.kind,
-            reason: approval.reason,
-            runId: snapshot.id,
-            planId: snapshot.plan?.id ?? null,
-          },
-        }),
-      ],
-    };
-  }
   await local.adapter.create(state);
   console.log(`Goal created: ${state.id}`);
   console.log(`State: ${goalStateDisplayPath({ storageRoot: local.storageRoot, goalId: state.id, fileName: "state.json" })}`);
-  if (state.createImproveRun?.plan) {
-    console.log(`Plan: ${goalStateDisplayPath({ storageRoot: local.storageRoot, goalId: state.id, fileName: "create-plan.json" })}`);
-    console.log(`Approval required: openpond goal approve ${state.id}`);
-  }
   return state;
 }
 
@@ -479,21 +375,12 @@ async function applyGoalLifecycle(params: {
           }
         : approval
     );
-    let decidedGoal: GoalState = {
+    const decidedGoal: GoalState = {
       ...goal,
       status: goalStatus,
       approvals,
       updatedAt: now,
     };
-    if (pendingApproval?.kind === "create_plan") {
-      if (params.action === "approve") {
-        decidedGoal = approveCreateImprovePlan(decidedGoal, pendingApproval.id);
-      } else if (params.action === "reject") {
-        decidedGoal = rejectCreateImprovePlan(decidedGoal, pendingApproval.id, note);
-      } else {
-        decidedGoal = cancelCreateImprovePlan(decidedGoal, pendingApproval.id, note);
-      }
-    }
     await local.adapter.update(decidedGoal);
     await local.adapter.appendEvent(
       goal.id,
@@ -511,32 +398,6 @@ async function applyGoalLifecycle(params: {
         },
       })
     );
-    if (pendingApproval?.kind === "create_plan") {
-      const toState =
-        params.action === "approve"
-          ? "applying_source"
-          : params.action === "reject"
-            ? "blocked"
-            : "cancelled";
-      await local.adapter.appendEvent(
-        goal.id,
-        createGoalEvent({
-          goalId: goal.id,
-          kind: "create_pipeline.status_changed",
-          summary:
-            params.action === "approve"
-              ? "Create plan approved"
-              : params.action === "reject"
-                ? "Create plan rejected"
-                : "Create plan cancelled",
-          payload: {
-            fromState: goal.createImproveRun?.state ?? null,
-            toState,
-            approvalId: pendingApproval.id,
-          },
-        })
-      );
-    }
     console.log(`Goal ${params.goalId} ${approvalStatus}`);
     return;
   }
@@ -545,127 +406,6 @@ async function applyGoalLifecycle(params: {
     goalId: params.goalId,
     status: statusByCommand[params.action],
   });
-}
-
-async function printGoalPlan(params: {
-  options: Record<string, string | boolean>;
-  goalId: string;
-}) {
-  const credential = resolveHostedGoalCredential();
-  const apiUrl = resolveHostedGoalApiUrl();
-  if (credential && apiUrl) {
-    const config = await new HostedGoalClient(apiUrl, credential).getRunConfig(params.goalId);
-    printCreatePipeline(config.goal, hasFlag(params.options, "json"));
-    return;
-  }
-  const local = await localGoalPaths(params.options);
-  const goal = await local.adapter.get(params.goalId);
-  if (!goal) throw new Error(`goal not found: ${params.goalId}`);
-  printCreatePipeline(goal, hasFlag(params.options, "json"));
-}
-
-async function editGoalPlan(params: {
-  options: Record<string, string | boolean>;
-  goalId: string;
-  revision: string;
-}) {
-  const credential = resolveHostedGoalCredential();
-  const apiUrl = resolveHostedGoalApiUrl();
-  if (credential && apiUrl) {
-    throw new Error("hosted create-plan editing is not available from this CLI yet");
-  }
-  const local = await localGoalPaths(params.options);
-  const goal = await local.adapter.get(params.goalId);
-  if (!goal) throw new Error(`goal not found: ${params.goalId}`);
-  const previousPlanId = goal.createImproveRun?.plan?.id ?? null;
-  const revised = reviseCreateImprovePlan(goal, { revision: params.revision });
-  await local.adapter.update(revised);
-  await local.adapter.appendEvent(
-    goal.id,
-    createGoalEvent({
-      goalId: goal.id,
-      kind: "create_plan.created",
-      summary: "Create plan revised before source mutation",
-      payload: {
-        previousPlanId,
-        planId: revised.createImproveRun?.plan?.id ?? null,
-        revision: params.revision,
-      },
-    })
-  );
-  if (hasFlag(params.options, "json")) {
-    console.log(JSON.stringify(revised.createImproveRun, null, 2));
-    return;
-  }
-  console.log(`Goal ${params.goalId} plan revised`);
-  console.log(`Plan: ${revised.createImproveRun?.plan?.id ?? "unknown"}`);
-}
-
-function printCreatePipeline(goal: GoalState | null, json = false): void {
-  if (!goal?.createImproveRun) {
-    if (json) {
-      console.log(JSON.stringify(null, null, 2));
-      return;
-    }
-    console.log(`Goal ${goal?.id ?? "unknown"} has no Create/Improve run.`);
-    return;
-  }
-  const pipeline = goal.createImproveRun;
-  const plan = pipeline.plan;
-  if (json) {
-    console.log(JSON.stringify(pipeline, null, 2));
-    return;
-  }
-  console.log(`Goal: ${goal.id}`);
-  console.log(`Create/Improve: ${pipeline.state}`);
-  console.log(`Request: ${pipeline.command} ${pipeline.operation}`);
-  console.log(`Objective: ${pipeline.objective}`);
-  if (!plan) return;
-  console.log("");
-  console.log(`Plan: ${plan.status}`);
-  console.log(plan.summary);
-  console.log("");
-  console.log("Captured context:");
-  console.log(`  ${plan.capturedContextSummary}`);
-  console.log("");
-  console.log("Default chat action:");
-  console.log(`  ${plan.defaultChatAction.key ?? "none"}`);
-  const actionShape = createImproveActionShapeFromMetadata(plan.metadata);
-  if (actionShape) {
-    console.log("");
-    console.log("Action shape:");
-    console.log(`  ${actionShape.label}: ${actionShape.detail}`);
-    if (actionShape.directActionHint) {
-      console.log(`  Direct action: ${actionShape.directActionHint}`);
-    }
-    console.log(`  Artifacts: ${actionShape.artifactPolicy}`);
-  }
-  console.log("");
-  console.log("Source plan:");
-  for (const item of plan.sourcePlan) {
-    console.log(`  - ${item.operation} ${item.path}: ${item.reason}`);
-  }
-  console.log("");
-  console.log("Requirements:");
-  if (plan.requirements.length === 0) {
-    console.log("  - none");
-  } else {
-    for (const requirement of plan.requirements) {
-      console.log(`  - ${requirement.kind} ${requirement.name} (${requirement.status})${requirement.detail ? `: ${requirement.detail}` : ""}`);
-    }
-  }
-  console.log("");
-  console.log("Checks:");
-  for (const check of plan.checks) {
-    console.log(`  - ${check.name}: ${check.command}`);
-  }
-  const pendingApproval = goal.approvals.find((approval) => approval.id === plan.approvalId);
-  if (pendingApproval?.status === "pending") {
-    console.log("");
-    console.log(`Approve: openpond goal approve ${goal.id}`);
-    console.log(`Reject: openpond goal reject ${goal.id}`);
-    console.log(`Cancel: openpond goal cancel ${goal.id}`);
-  }
 }
 
 export async function runGoalCommand(
@@ -678,7 +418,7 @@ export async function runGoalCommand(
     return;
   }
 
-  if (!subcommand || !["run", "create-agent", "update-agent", "plan", "answer", "approve", "reject", "pause", "resume", "cancel"].includes(subcommand)) {
+  if (!subcommand || !["run", "answer", "approve", "reject", "pause", "resume", "cancel"].includes(subcommand)) {
     await createLocalGoal({
       options,
       objective: objectiveFromRest(rest, 'usage: goal "<objective>"'),
@@ -691,35 +431,6 @@ export async function runGoalCommand(
     await runGoal({
       options,
       goalId: requireOption(options, "goalId", "usage: goal run --goal-id <id>"),
-    });
-    return;
-  }
-
-  if (subcommand === "plan") {
-    const goalId = rest[1] || optionString(options, "goalId");
-    if (!goalId) throw new Error("usage: goal plan <goal-id> [--json|--edit <instructions>]");
-    const revision = optionString(options, "edit") || optionString(options, "revision");
-    if (revision) {
-      await editGoalPlan({ options, goalId, revision });
-      return;
-    }
-    await printGoalPlan({ options, goalId });
-    return;
-  }
-
-  if (subcommand === "create-agent" || subcommand === "update-agent") {
-    if (subcommand === "update-agent" && !optionString(options, "agentId")) {
-      throw new Error('usage: goal update-agent "<agent change>" --agent-id <id>');
-    }
-    await createLocalGoal({
-      options,
-      objective: objectiveFromRest(
-        rest.slice(1),
-        subcommand === "create-agent"
-          ? 'usage: goal create-agent "<agent idea>"'
-          : 'usage: goal update-agent "<agent change>" --agent-id <id>'
-      ),
-      kind: goalKindFromCommand(subcommand),
     });
     return;
   }

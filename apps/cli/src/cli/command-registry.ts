@@ -137,18 +137,6 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   ...profileSdkAliasDefinitions(),
   {
-    name: "extend",
-    usage: "openpond extend <instructions>",
-    optionSchema: { cwd: "string" },
-    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondExtendCommand(options, rest),
-  },
-  {
-    name: "edit",
-    usage: "openpond edit <instructions>",
-    optionSchema: { cwd: "string" },
-    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondEditCommand(options, rest),
-  },
-  {
     name: "extension",
     usage: "openpond extension <add|preview|list|inspect|update|remove> [owner/repo]",
     usages: [

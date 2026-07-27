@@ -199,18 +199,23 @@ describe("OpenPond App action channel", () => {
 
   test("discovers built-in app commands from composer slash input", () => {
     expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
-      "create",
+      "agent",
       "skill",
       "goal",
       "insights",
       "submit-issue",
-      "edit",
       "goal-remote",
       "goal-local",
       "train",
       "sync-cloud",
     ]);
-    expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);
+    expect(composerSlashCommandMatches({ prompt: "/agent" }).map((item) => item.id)).toEqual(["agent"]);
+    expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual([
+      "agent",
+      "skill",
+      "train",
+    ]);
+    expect(parseComposerSlashCommandPrompt("/create summarize files")).toBeNull();
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
       "goal",
       "goal-remote",
@@ -222,9 +227,9 @@ describe("OpenPond App action channel", () => {
     expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/submit issue" }).map((item) => item.id)).toEqual(["submit-issue"]);
-    expect(parseComposerSlashCommandPrompt("/create summarize files")).toEqual({
-      command: "create",
-      args: "summarize files",
+    expect(parseComposerSlashCommandPrompt("/agent create summarize files")).toEqual({
+      command: "agent",
+      args: "create summarize files",
     });
     expect(parseComposerSlashCommandPrompt("/skill create release-notes")).toEqual({
       command: "skill",
@@ -274,7 +279,7 @@ describe("OpenPond App action channel", () => {
     expect(prompt).toContain("Add export progress to long-running workspace sync.");
   });
 
-  test("builds create pipeline envelopes from composer slash commands", () => {
+  test.skip("legacy composer Agent Create/Improve envelopes are retired", () => {
     const parsed = parseComposerSlashCommandPrompt("/create summarize files");
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
@@ -506,7 +511,7 @@ describe("OpenPond App action channel", () => {
     expect(evalBackedEdit?.context.evalRefs).toEqual(["agent/evals/reply.eval.ts"]);
   });
 
-  test("builds a Lab Agent run on a hidden Lab execution session", () => {
+  test.skip("legacy hidden Lab Agent Create/Improve runs are retired", () => {
     const labSession = session({
       id: "session_lab_agent",
       workspaceKind: "local_project",
@@ -554,7 +559,7 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test("builds a Lab Agent improvement run from a plain outcome statement", () => {
+  test.skip("legacy Lab Agent improvement runs are retired", () => {
     const labSession = session({
       id: "session_lab_agent_improve",
       systemKind: "openpond.lab",
@@ -598,7 +603,7 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test("does not synthesize support-specific create questions from the objective", () => {
+  test.skip("legacy Create/Improve question synthesis is retired", () => {
     const parsed = parseComposerSlashCommandPrompt("/create Help me keep track of open customer support items.");
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
@@ -823,7 +828,7 @@ describe("OpenPond App action channel", () => {
     expect(html).not.toContain(">Review</span>");
   });
 
-  test("keeps create pipeline commands local when a local profile is active", () => {
+  test.skip("legacy local Agent Create/Improve routing is retired", () => {
     const createCommand = parseComposerSlashCommandPrompt("/create smoke agent");
     const goalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
     expect(createCommand).not.toBeNull();
@@ -927,7 +932,7 @@ describe("OpenPond App action channel", () => {
     expect(html.indexOf(">Summary</span>")).toBeLessThan(html.indexOf(">Files</span>"));
   });
 
-  test("builds hosted create pipeline envelopes for Cloud work items", () => {
+  test.skip("legacy hosted Agent Create/Improve envelopes are retired", () => {
     const payload = {
       account: {
         activeProfile: { handle: "sam" },
@@ -1062,7 +1067,7 @@ describe("OpenPond App action channel", () => {
     ).toEqual(["chat", "water.estimate", "build.report"]);
   });
 
-  test("detects ready local Create pipelines for profile catalog refresh", () => {
+  test.skip("legacy Agent Create/Improve profile refresh projection is retired", () => {
     const ignoredBlocked = runtimeEvent({
       id: "event_blocked",
       sessionId: "session_1",
@@ -1402,7 +1407,7 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Parse fixtures");
   });
 
-  test("renders create pipeline receipts in chat messages without duplicate approval controls", () => {
+  test.skip("legacy Agent Create/Improve receipts remain historical only", () => {
     const parsed = parseComposerSlashCommandPrompt("/create release notes agent");
     const request = buildComposerCreateImproveRun({
       parsed: parsed!,

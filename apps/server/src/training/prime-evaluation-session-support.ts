@@ -12,7 +12,6 @@ import { PrimeRawComputeHttpClient } from "@openpond/compute-provider-prime";
 import { canonicalJson, contentHash } from "@openpond/taskset-sdk";
 
 import type { PrimeGrpoBaseProfile } from "./prime-grpo-base-profiles.js";
-import type { PrimeQuoteCandidate } from "./prime-grpo-plan.js";
 import { createPrimeRolloutSshTransport } from "./prime-rollout-ssh.js";
 import type {
   FireworksBaselinePrepareOptions,

@@ -222,7 +222,12 @@ export type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     promptOverride?: string,
-    options?: { clearPrompt?: () => void; displayPrompt?: string; usageAttribution?: UsageRequestAttribution },
+    options?: {
+      clearPrompt?: () => void;
+      displayPrompt?: string;
+      usageAttribution?: UsageRequestAttribution;
+      turnMetadata?: Record<string, unknown>;
+    },
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
   pauseGoal: () => Promise<boolean>;

@@ -9,8 +9,6 @@ import {
   normalizeSidebarFilePath,
   type Approval,
   type ChatProvider,
-  type ChatModelRef,
-  type CodexReasoningEffort,
   type InsightStatus,
   type InsightsListResponse,
   type InsightsScanResponse,
@@ -169,11 +167,11 @@ import { createManagedAdapterRegistryClient } from "./training/managed-adapter-r
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
+import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
 import {
   createCrossSystemChatToolRuntime,
   createCrossSystemFrontierBaselineService,
   createFrontierBaselineChatSource,
-  type CrossSystemFrontierModelStream,
 } from "./training/cross-system-operations/index.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
@@ -453,81 +451,15 @@ export async function createOpenPondServer(
       ),
     };
   }
-  async function resolveFireworksCredential() {
-    const credential = (await readProviderSecrets(providerSecretPaths))
-      .providers.fireworks;
-    if (!credential) return null;
-    const value = credential.source === "local_secret"
-      ? credential.value
-      : credential.source === "env" && credential.envVar
-        ? process.env[credential.envVar] ?? null
-        : null;
-    if (
-      !value?.trim()
-      || (credential.source !== "local_secret" && credential.source !== "env")
-    ) {
-      return null;
-    }
-    return {
-      value,
-      source: credential.source,
-      createdAt: credential.createdAt,
-      updatedAt: credential.updatedAt,
-    };
-  }
-  async function trainingModelText(input: {
-    model: ChatModelRef;
-    reasoningEffort?: CodexReasoningEffort | "none" | null;
-    messages: Array<{ role: "system" | "user"; content: string }>;
-    signal: AbortSignal;
-    requestId: string;
-    maxOutputTokens?: number;
-    temperature?: number;
-    topP?: number;
-    seed?: number;
-  }): Promise<string> {
-    let text = "";
-    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of trainedAdapterChatRuntime.stream({
-        modelId: input.model.modelId,
-        messages: input.messages,
-        requestId: input.requestId,
-        signal: input.signal,
-      })) {
-        if (delta.text) text += delta.text;
-      }
-      return text;
-    }
-    if (input.model.providerId === "openpond") {
-      for await (const delta of streamOpenPondHostedChatTurn({
-        model: input.model.modelId,
-        messages: input.messages,
-        requestId: input.requestId,
-        signal: input.signal,
-      })) {
-        if (delta.type === "text_delta" && delta.text) text += delta.text;
-      }
-      return text;
-    }
-    const state = await localByokRuntimeState();
-    for await (const delta of streamOpenAiCompatibleChatCompletion({
-      providerId: input.model.providerId,
-      settings: state.settings,
-      secrets: state.secrets,
-      modelId: input.model.modelId,
-      messages: input.messages,
-      requestId: input.requestId,
-      signal: input.signal,
-      reasoningEffort: input.reasoningEffort,
-      maxOutputTokens: input.maxOutputTokens,
-      temperature: input.temperature,
-      topP: input.topP,
-      seed: input.seed,
-    })) {
-      if (delta.type === "text_delta" && delta.text) text += delta.text;
-    }
-    return text;
-  }
+  const {
+    resolveFireworksCredential,
+    trainingModelText,
+  } = createTrainingModelRuntime({
+    providerSecretPaths,
+    loadLocalByokRuntimeState: localByokRuntimeState,
+    getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
+    streamOpenPondHostedChatTurn,
+  });
 
   const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
   const taskCreatorService = createTaskCreatorService({

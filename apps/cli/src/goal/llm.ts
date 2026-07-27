@@ -31,8 +31,6 @@ export function buildGoalLlmMessages(goal: GoalState): GoalLlmMessage[] {
         "- Use questions_ask for required user input.",
         "- Use checks_run or configured verification commands before claiming completion.",
         "- Hosted coding sandboxes include node, npm, pnpm, and common POSIX utilities; follow the target repository's lockfile when choosing install/test commands, use command -v for PATH checks, and do not block on standalone toolchain probes once a needed package manager command works.",
-        "- For OpenPond agent goals, run SDK actions through openpond_agent_* tools. Do not invoke openpond-agent through shell, npx, pnpm dlx, or yarn dlx.",
-        "- For OpenPond agent goals, after source edits use openpond_agent_default_checks unless a narrower SDK command is clearly enough; do not spend the remaining rounds on broad inspection.",
         "- After required edits and checks are complete, return a concise final response with no tool calls.",
         "- Do not keep inspecting once you have enough context to make the requested change.",
         "- Do not claim external integration reads or writes succeeded without tool evidence.",
@@ -74,44 +72,6 @@ function buildGoalUserContext(goal: GoalState): string {
     decisionNote: approval.decisionNote,
     decidedAt: approval.decidedAt,
   }));
-  const createImproveRun = goal.createImproveRun
-    ? {
-        id: goal.createImproveRun.id,
-        state: goal.createImproveRun.state,
-        operation: goal.createImproveRun.operation,
-        surface: goal.createImproveRun.surface,
-        command: goal.createImproveRun.command,
-        sourceAuthority: goal.createImproveRun.adapter.sourceAuthority,
-        confirmationPolicy: goal.createImproveRun.adapter.confirmationPolicy,
-        plan: goal.createImproveRun.plan
-          ? {
-              id: goal.createImproveRun.plan.id,
-              status: goal.createImproveRun.plan.status,
-              summary: goal.createImproveRun.plan.summary,
-              defaultChatAction: goal.createImproveRun.plan.defaultChatAction,
-              sourcePlan: goal.createImproveRun.plan.sourcePlan,
-              requirements: goal.createImproveRun.plan.requirements,
-              checks: goal.createImproveRun.plan.checks,
-              metadata: {
-                actionShape:
-                  goal.createImproveRun.plan.metadata?.actionShape ?? null,
-                actionShapeDecisionSource:
-                  goal.createImproveRun.plan.metadata?.actionShapeDecisionSource ?? null,
-              },
-              approvedAt: goal.createImproveRun.plan.approvedAt,
-            }
-          : null,
-        workflowCapture: goal.createImproveRun.workflowCapture
-          ? {
-              id: goal.createImproveRun.workflowCapture.id,
-              tools: goal.createImproveRun.workflowCapture.tools,
-              apps: goal.createImproveRun.workflowCapture.apps,
-              targetRepoAssumptions:
-                goal.createImproveRun.workflowCapture.targetRepoAssumptions,
-            }
-          : null,
-      }
-    : null;
   return [
     `Objective: ${goal.objective}`,
     "",
@@ -127,7 +87,6 @@ function buildGoalUserContext(goal: GoalState): string {
         evidenceRefs: goal.evidenceRefs,
         executionPolicy: goal.executionPolicy,
         verification: goal.verification,
-        createImproveRun,
         answeredQuestions,
         openQuestions,
         approvals,

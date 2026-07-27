@@ -336,7 +336,7 @@ function runnerDependencies({
 }
 
 describe("turn runner workspace cwd", () => {
-  test("uses one revisioned Create/Improve run for approval and queued execution", async () => {
+  test("rejects retired Agent Create/Improve approval without mutating or queueing the run", async () => {
     const run = createImproveRun();
     const turns = [baseTurn(run)];
     const events = [];
@@ -355,28 +355,21 @@ describe("turn runner workspace cwd", () => {
       },
     }));
 
-    const approved = await runner.applyCreateImproveAction(run.id, {
-      runId: run.id,
-      expectedRevision: 0,
-      actionId: "approve_create_improve_contract",
-      type: "approve_plan",
-    });
+    await assert.rejects(
+      runner.applyCreateImproveAction(run.id, {
+        runId: run.id,
+        expectedRevision: 0,
+        actionId: "approve_create_improve_contract",
+        type: "approve_plan",
+      }),
+      /Agent Create\/Improve runs are retired\. Use a normal \/agent authoring turn\./,
+    );
 
-    assert.equal(approved.revision, 1);
-    assert.equal(approved.state, "applying_source");
-    assert.deepEqual(approved.appliedActionIds, ["approve_create_improve_contract"]);
     assert.equal(turns[0].createImproveRun.id, run.id);
-    assert.equal(turns[0].createImproveRun.state, "applying_source");
-    assert.equal(queue.pendingReceipts().length, 1);
-
-    await queue.drain();
-
-    assert.equal(turns[0].createImproveRun.state, "blocked");
-    assert.ok(turns[0].createImproveRun.blockedReason);
-    assert.ok(events.some((event) =>
-      event.name === "create_improve.updated"
-      && event.data?.createImproveRun?.id === run.id
-    ));
+    assert.equal(turns[0].createImproveRun.revision, 0);
+    assert.equal(turns[0].createImproveRun.state, "awaiting_plan_approval");
+    assert.equal(queue.pendingReceipts().length, 0);
+    assert.equal(events.some((event) => event.name === "create_improve.updated"), false);
   });
 
   test("keeps linked local project Codex turns in the local project checkout", async () => {

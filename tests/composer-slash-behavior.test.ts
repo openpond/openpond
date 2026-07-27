@@ -24,7 +24,6 @@ import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-comm
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
 import { openPondActionProjectTarget } from "../apps/web/src/lib/openpond-action-project";
 import {
-  codexProfileSkillPromptForComposer,
   profileSkillPromptForComposer,
   skillPromptForComposer,
 } from "../apps/web/src/lib/profile-skill-composer";
@@ -260,8 +259,9 @@ describe("composer slash behavior", () => {
     ).toBe("@summarize-account Account: Northstar · As of date: 2026-07-20");
   });
 
-  test("treats actions as submittable but requires an objective for Make Agent", () => {
+  test("treats actions and normal-turn authoring commands as submittable", () => {
     const action = buildOpenPondAgentSlashCommand(sandboxAgent(), "Cloud Repo");
+    const agentCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "agent") ?? null;
 
     expect(
       hasComposerSubmittableInput({
@@ -276,23 +276,23 @@ describe("composer slash behavior", () => {
         attachmentCount: 0,
         prompt: "",
         selectedAction: null,
-        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+        selectedCommand: agentCommand,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       hasComposerSubmittableInput({
         attachmentCount: 2,
         prompt: "",
         selectedAction: null,
-        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+        selectedCommand: agentCommand,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       hasComposerSubmittableInput({
         attachmentCount: 0,
         prompt: "Monitor customer account health.",
         selectedAction: null,
-        selectedCommand: COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create") ?? null,
+        selectedCommand: agentCommand,
       }),
     ).toBe(true);
     expect(
@@ -347,7 +347,7 @@ describe("composer slash behavior", () => {
   });
 
   test("plus menu combines add, slash, and mention rows", () => {
-    const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
+    const agentCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "agent")!;
     const skillCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "skill")!;
     const profileSkill = {
       name: "release-notes",
@@ -366,7 +366,7 @@ describe("composer slash behavior", () => {
           { id: "add", items: [{ kind: "files" }], label: "Add" },
           {
             id: "openpond",
-            items: [createCommand, skillCommand].map((command) => ({
+            items: [agentCommand, skillCommand].map((command) => ({
               kind: "slash" as const,
               item: { kind: "command" as const, command },
             })),
@@ -401,7 +401,7 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("composer-command-section-grid");
     expect(markup).toContain('aria-label="@"');
     expect(markup).toContain("Files and folders");
-    expect(markup).toContain("/create Make Agent");
+    expect(markup).toContain("/agent Author Agent");
     expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("lucide-book-open-text");
     expect(markup).toContain('aria-label="Skills"');
@@ -413,13 +413,13 @@ describe("composer slash behavior", () => {
   });
 
   test("filters the persistent plus menu by text, slash, or mention scope", () => {
-    const createCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "create")!;
+    const agentCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "agent")!;
     const goalCommand = COMPOSER_SLASH_COMMANDS.find((command) => command.id === "goal")!;
     const sections: ComposerCommandMenuSection[] = [
       { id: "add", items: [{ kind: "files" }], label: "Add" },
       {
         id: "openpond",
-        items: [createCommand, goalCommand].map((command) => ({
+        items: [agentCommand, goalCommand].map((command) => ({
           kind: "slash" as const,
           item: { kind: "command" as const, command },
         })),
@@ -450,30 +450,18 @@ describe("composer slash behavior", () => {
     });
   });
 
-  test("routes skill requests to the provider-appropriate skill system", () => {
+  test("routes Skill requests through the same OpenPond-owned slash command for every provider", () => {
     expect(profileSkillPromptForComposer("")).toBe("/skill");
     expect(profileSkillPromptForComposer("list")).toBe("/skill list");
     expect(profileSkillPromptForComposer("create release notes")).toBe("/skill create release notes");
     expect(profileSkillPromptForComposer("make a reusable FFmpeg workflow")).toBe(
       "/skill create make a reusable FFmpeg workflow",
     );
-    const profileSourcePath = "/home/user/.openpond/profiles/default";
-    expect(codexProfileSkillPromptForComposer("", profileSourcePath)).toContain("$skill-creator");
-    expect(codexProfileSkillPromptForComposer("list", profileSourcePath)).toContain(
-      "/home/user/.openpond/profiles/default/skills",
-    );
-    expect(codexProfileSkillPromptForComposer("list", profileSourcePath)).toContain(
-      "Do not list personal Codex skills",
-    );
-    expect(codexProfileSkillPromptForComposer("create a reusable FFmpeg workflow", profileSourcePath)).toContain(
-      "Create an OpenPond profile skill package",
-    );
-    expect(codexProfileSkillPromptForComposer("make a reusable FFmpeg workflow", profileSourcePath)).toContain(
-      "Requirements: make a reusable FFmpeg workflow",
-    );
-    expect(skillPromptForComposer("create a reusable FFmpeg workflow", "codex", profileSourcePath)).toContain(
-      "Do not write it to ~/.codex/skills",
-    );
+    expect(skillPromptForComposer(
+      "create a reusable FFmpeg workflow",
+      "codex",
+      "/home/user/.openpond/profiles/default",
+    )).toBe("/skill create a reusable FFmpeg workflow");
     expect(skillPromptForComposer("create a reusable FFmpeg workflow", "openpond")).toBe(
       "/skill create a reusable FFmpeg workflow",
     );
@@ -1080,9 +1068,8 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).toContain("/create Make Agent");
-    expect(markup).toContain("Start the guided Agent creation flow.");
-    expect(markup).toContain("/edit Edit selected agent");
+    expect(markup).toContain("/agent Author Agent");
+    expect(markup).toContain("create, improve, help");
     expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("create, edit, list, help");
     expect(markup).not.toContain("Subcommands:");
@@ -1117,7 +1104,7 @@ describe("composer slash behavior", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
         mode: "start",
-        prompt: "hello /create",
+        prompt: "hello /agent",
         mentionApps: [],
         selectedMentionAppId: null,
         contextWindowStatus,
@@ -1147,7 +1134,7 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain('aria-label="OpenPond agents and actions"');
-    expect(markup).toContain("/create Make Agent");
+    expect(markup).toContain("/agent Author Agent");
   });
 
   test("Cloud composer remains plain task input without slash action menu", () => {

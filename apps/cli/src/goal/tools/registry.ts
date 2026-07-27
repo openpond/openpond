@@ -5,8 +5,7 @@ export type GoalToolFamily =
   | "approvals"
   | "checks"
   | "artifacts"
-  | "source"
-  | "openpond_agent_sdk";
+  | "source";
 
 export type ToolDefinition = {
   type: "function";
@@ -23,14 +22,6 @@ type GoalToolRegistration = {
   aliases: string[];
   schema?: ToolDefinition;
 };
-
-const OPENPOND_AGENT_SDK_COMMANDS = [
-  "inspect",
-  "build",
-  "validate",
-  "eval",
-  "traces",
-] as const;
 
 const GOAL_TOOL_REGISTRY: GoalToolRegistration[] = [
   {
@@ -230,58 +221,6 @@ const GOAL_TOOL_REGISTRY: GoalToolRegistration[] = [
       ["checksPassed"]
     ),
   },
-  ...OPENPOND_AGENT_SDK_COMMANDS.map((sdkCommand) => ({
-    family: "openpond_agent_sdk" as const,
-    canonicalName: `openpond_agent.${sdkCommand}`,
-    aliases: [`openpond_agent_${sdkCommand}`],
-    schema: tool(
-      `openpond_agent_${sdkCommand}`,
-      `Run project-local openpond-agent ${sdkCommand}.`,
-      {
-        args: stringArraySchema("Additional CLI args."),
-        json: {
-          type: "boolean",
-          description: "Request JSON output when supported.",
-          default:
-            sdkCommand === "inspect" ||
-            sdkCommand === "eval" ||
-            sdkCommand === "traces",
-        },
-      },
-      []
-    ),
-  })),
-  {
-    family: "openpond_agent_sdk",
-    canonicalName: "openpond_agent.run",
-    aliases: ["openpond_agent_run"],
-    schema: tool(
-      "openpond_agent_run",
-      "Run a project-local openpond-agent action.",
-      {
-        args: stringArraySchema("CLI args, such as --action and --input."),
-        json: {
-          type: "boolean",
-          description: "Request JSON output when supported.",
-          default: true,
-        },
-      },
-      []
-    ),
-  },
-  {
-    family: "openpond_agent_sdk",
-    canonicalName: "openpond_agent.default_checks",
-    aliases: [
-      "openpond_agent_default_checks",
-      "openpond_agent.default_checks",
-    ],
-    schema: tool(
-      "openpond_agent_default_checks",
-      "Run inspect, build, validate, and eval through the project-local SDK.",
-      {}
-    ),
-  },
 ];
 
 const ALIAS_TO_CANONICAL = new Map<string, string>(
@@ -310,17 +249,9 @@ export function normalizeGoalToolName(
   const canonical = ALIAS_TO_CANONICAL.get(raw);
   if (canonical) return canonical;
 
-  const sdkPrefix = "openpond_agent_";
-  if (raw.startsWith(sdkPrefix)) {
-    return `openpond_agent.${raw.slice(sdkPrefix.length)}`;
-  }
   if (raw === "files") {
     const action = optionalString(args, "action");
     return action ? `files.${action}` : raw;
-  }
-  if (raw === "openpond_agent_sdk") {
-    const command = optionalString(args, "command");
-    return command ? `openpond_agent.${command}` : raw;
   }
   return raw;
 }
@@ -348,15 +279,6 @@ function tool(
 
 function stringSchema(description: string): Record<string, unknown> {
   return { type: "string", description };
-}
-
-function stringArraySchema(description: string): Record<string, unknown> {
-  return {
-    type: "array",
-    description,
-    items: { type: "string" },
-    default: [],
-  };
 }
 
 function optionalString(args: Record<string, unknown>, key: string): string | null {

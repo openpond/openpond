@@ -299,6 +299,7 @@ export function labWorkproductProjection(input: {
   }
 
   for (const run of input.runs) {
+    if (run.target.kind === "agent") continue;
     if (run.target.kind === "configuration" || run.target.kind === "unselected")
       continue;
     if (
@@ -316,9 +317,7 @@ export function labWorkproductProjection(input: {
         : run.target.id ?? run.id;
     const key = workproductKey(kind, id);
     const existing = byKey.get(key);
-    const candidateName = kind === "agent"
-      ? agentWorkproductName(run, existing?.name ?? null)
-      : kind === "model" && stableModelProjectIds.has(id)
+    const candidateName = kind === "model" && stableModelProjectIds.has(id)
         ? existing?.name ?? run.target.displayName ?? draftName(run)
         : run.target.displayName ?? existing?.name ?? draftName(run);
     const name =
@@ -482,38 +481,6 @@ function hasActiveRun(
 function draftName(run: CreateImproveRun): string {
   const prefix = run.operation === "improve" ? "Improve" : "Create";
   return `${prefix} ${run.target.kind}`;
-}
-
-function agentWorkproductName(
-  run: CreateImproveRun,
-  profileName: string | null,
-): string {
-  const targetName = meaningfulAgentName(run.target.displayName);
-  if (targetName) return targetName;
-  const persistedName = meaningfulAgentName(profileName);
-  if (persistedName) return persistedName;
-  const purposeClause = run.objective
-    .split(/[.!?\n]|[,;](?=\s)/, 1)[0]
-    ?.replace(/^(?:please\s+)?(?:create|make|build|improve)\s+(?:an?\s+)?agent\s+(?:that\s+|to\s+)?/i, "")
-    .trim();
-  const purposeTitle = conciseWorkproductName(purposeClause, "New agent");
-  return `${purposeTitle} · ${draftRunLabel(run.id)}`;
-}
-
-function draftRunLabel(runId: string): string {
-  const segments = runId.split(/[^a-z0-9]+/i).filter(Boolean);
-  const candidate = segments.at(-1) ?? runId;
-  return candidate.slice(-6).toUpperCase().padStart(4, "0");
-}
-
-function meaningfulAgentName(value: string | null | undefined): string | null {
-  const name = value?.trim() ?? "";
-  if (!name) return null;
-  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  if (/^(?:create|creating|improve|improving|new) (?:an )?agent$/.test(normalized)) {
-    return null;
-  }
-  return name;
 }
 
 function runStatusLabel(run: CreateImproveRun): string {

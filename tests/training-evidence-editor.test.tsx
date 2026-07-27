@@ -6,16 +6,15 @@ import {
   emptyBuildSpecification,
   TrainingEvidenceEditor,
 } from "../apps/web/src/components/training/TrainingEvidenceEditor";
-import { TrainingStartModeStep } from "../apps/web/src/components/training/TrainingStartModeStep";
+import { TrainingGoalCards } from "../apps/web/src/components/training/TrainingGoalCards";
 
 describe("Training evidence editor", () => {
   test("evidence cards support arrow-key radio navigation", () => {
     const changes: string[] = [];
-    const tree = TrainingStartModeStep({
-      mode: "demonstrations",
-      targetLabel: "dataset",
+    const tree = TrainingGoalCards({
+      value: "demonstrations",
       onChange: (value) => changes.push(value),
-      onContinue: () => undefined,
+      onActivate: () => undefined,
     });
     const buttons = elements(tree).filter((element) => element.props.role === "radio");
     let focused = false;

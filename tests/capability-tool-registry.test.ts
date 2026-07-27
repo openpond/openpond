@@ -33,7 +33,6 @@ describe("OpenPond capability tool registry", () => {
     });
 
     expect(withSubagents.map((definition) => definition.name)).toEqual([
-      "openpond_create_improve",
       "openpond_goal_control",
       "openpond_subagent_start",
       "openpond_subagent_status",

@@ -128,7 +128,9 @@ describe("training model chat handoff", () => {
     expect(handoffHook).toContain("trainingModelChatTurnMetadata(handoff, prompt, selectedLocalProjectId)");
     expect(submitHook).toContain("prepareTrainingTurn(promptForSubmission)");
     expect(submitHook).toContain("trainingTurn.error ??");
-    expect(submitHook).toContain("turnMetadata: trainingTurn.metadata ?? undefined");
+    expect(submitHook).toContain("trainingTurn.metadata || options.turnMetadata");
+    expect(submitHook).toContain("...(trainingTurn.metadata ?? {})");
+    expect(submitHook).toContain("...(options.turnMetadata ?? {})");
     expect(chatActions).toContain("metadata: options.turnMetadata");
   });
 

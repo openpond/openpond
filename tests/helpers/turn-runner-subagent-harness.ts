@@ -412,7 +412,11 @@ export function createSubagentHarness(input: {
     streamLocalByokChatTurn: async function* (streamInput) {
       streamInputs.push(streamInput);
       streamPass += 1;
-      const requestTurn = turns.find((candidate) => candidate.id === streamInput.requestId);
+      const requestTurnId =
+        typeof streamInput.requestId === "string"
+          ? streamInput.requestId.split(":model:")[0]
+          : null;
+      const requestTurn = turns.find((candidate) => candidate.id === requestTurnId);
       const requestSession = requestTurn?.sessionId ? sessions.get(requestTurn.sessionId) : null;
       await input.onStreamInput?.(streamInput, {
         streamPass,

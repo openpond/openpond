@@ -67,6 +67,9 @@ function skillAuthoringRoute(prompt: string): AuthoringCommandRoute | null {
   if (subcommand === "edit") {
     const [targetRaw = "", ...objectiveParts] = parts;
     const targetSkillName = normalizePackageId(targetRaw.replace(/^\$/, ""));
+    if (!targetSkillName) {
+      throw new Error("/skill edit requires an exact lowercase kebab-case Skill name.");
+    }
     return {
       skillName: "openpond-skill-authoring",
       intent: {
@@ -101,13 +104,17 @@ function agentAuthoringRoute(prompt: string): AuthoringCommandRoute | null {
   if (subcommand === "help" || subcommand === "list") return null;
   if (subcommand === "improve" || subcommand === "edit") {
     const [targetRaw = "", ...objectiveParts] = parts;
+    const targetAgentId = normalizePackageId(targetRaw);
+    if (!targetAgentId) {
+      throw new Error("/agent improve requires an exact lowercase kebab-case Agent ID.");
+    }
     return {
       skillName: "openpond-agent-authoring",
       intent: {
         artifact: "agent",
         operation: "improve",
         objective: objectiveParts.join(" ").trim() || `Improve the Profile Agent ${targetRaw || "selected by the user"}.`,
-        targetAgentId: normalizePackageId(targetRaw),
+        targetAgentId,
         source: "slash_command",
       },
     };

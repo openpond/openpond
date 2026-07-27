@@ -37,11 +37,8 @@ import {
 } from "../apps/web/src/components/labs/LabModelDataset";
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { LabModelsPage } from "../apps/web/src/components/labs/LabModelsPage";
-import {
-  LabModelVersionDetailPage,
-  LabModelVersionsPage,
-} from "../apps/web/src/components/labs/LabModelWorkspace";
-import { LabNewVersionDialog } from "../apps/web/src/components/labs/LabNewVersionDialog";
+import { LabModelVersionsPage } from "../apps/web/src/components/labs/LabModelWorkspace";
+import { LabModelVersionDetailPage } from "../apps/web/src/components/labs/LabModelVersionDetailPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
@@ -784,7 +781,7 @@ describe("Lab Phase 1", () => {
     });
   });
 
-  test("uses meaningful Agent names instead of lifecycle labels", () => {
+  test.skip("legacy Agent Create/Improve lifecycle naming is retired", () => {
     const objective =
       "Monitor customer account health, answer account questions with source-backed facts.";
     const draft = createImproveRunFixture({
@@ -808,7 +805,7 @@ describe("Lab Phase 1", () => {
     expect(workproduct?.description).toBe(objective);
   });
 
-  test("gives concurrent Agent drafts distinct stable titles and replaces them with a canonical name", () => {
+  test.skip("legacy concurrent Agent candidate titles are retired", () => {
     const objective = "Monitor customer account health and renewal risk.";
     const draft = (id: string, state: "planning" | "failed" | "awaiting_plan_approval") =>
       createImproveRunFixture({
@@ -857,7 +854,7 @@ describe("Lab Phase 1", () => {
     ).toBe("Account Health Agent");
   });
 
-  test("derives one workproduct status and next action while preserving completed history", () => {
+  test.skip("legacy Agent candidate progression is retired", () => {
     const active = createImproveRunFixture({
       id: "create_improve_active",
       state: "awaiting_plan_approval",
@@ -889,7 +886,7 @@ describe("Lab Phase 1", () => {
     expect(workproducts[0]?.runIds).toEqual(["create_improve_ready", "create_improve_active"]);
   });
 
-  test("continues an authored blocked candidate instead of starting over", () => {
+  test.skip("legacy blocked Agent candidate continuation is retired", () => {
     const run = createImproveRunFixture({
       id: "create_improve_resume_candidate",
       operation: "improve",
@@ -1197,47 +1194,6 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("no available capacity");
   });
 
-  test("chooses only the Taskset in the first New version dialog", () => {
-    const taskset = tasksetFixture({ ready: true });
-    const state = TrainingStateResponseSchema.parse({
-      schemaVersion: "openpond.trainingState.v1",
-      profileId: "default",
-      sources: [],
-      creations: [],
-      tasksets: [taskset],
-      baselineReports: [],
-      graderAuditReports: [],
-      candidates: [],
-      minerConfig: { schemaVersion: "openpond.taskMinerConfig.v1" },
-      plans: [],
-      bundles: [],
-      jobs: [],
-      artifacts: [],
-      models: [],
-      destinations: [],
-      credentialRefs: [],
-      generatedAt: "2026-07-20T12:00:00.000Z",
-    });
-    const markup = renderToStaticMarkup(
-      createElement(LabNewVersionDialog, {
-        state,
-        initialTasksetId: taskset.id,
-        checking: false,
-        onClose: noop,
-        onCheck: async () => undefined,
-        onContinue: noop,
-        onReview: noop,
-      }),
-    );
-
-    expect(markup).toContain("Choose the immutable Taskset revision.");
-    expect(markup).toContain("Training setup comes next.");
-    expect(markup).toContain("Configure training");
-    expect(markup).not.toContain("Version training method");
-    expect(markup).not.toContain(">Supervised<");
-    expect(markup).not.toContain(">RFT<");
-  });
-
   test("shows an active training job instead of a stale authoring state", () => {
     const taskset = tasksetFixture({ ready: true });
     const plan = planFixture(taskset);
@@ -1380,10 +1336,18 @@ describe("Lab Phase 1", () => {
       "utf8",
     );
     const view = await readFile("apps/web/src/components/labs/LabsView.tsx", "utf8");
-    const modelWorkspace = await readFile(
-      "apps/web/src/components/labs/LabModelWorkspace.tsx",
-      "utf8",
-    );
+    const modelWorkspace = (
+      await Promise.all([
+        readFile(
+          "apps/web/src/components/labs/LabModelWorkspace.tsx",
+          "utf8",
+        ),
+        readFile(
+          "apps/web/src/components/labs/LabModelVersionDetailPage.tsx",
+          "utf8",
+        ),
+      ])
+    ).join("\n");
 
     expect(route).toContain("<th>Type</th>");
     expect(route).toContain("<th>Name</th>");

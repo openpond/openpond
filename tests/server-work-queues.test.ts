@@ -174,7 +174,7 @@ describe("server work queues", () => {
     });
   });
 
-  test("queues approved local Create follow-up work and drains persisted failure state", async () => {
+  test.skip("legacy local Agent Create/Improve follow-up queue is retired", async () => {
     const repoPath = await createTempDir("openpond-local-create-repo-");
     const sourcePath = path.join(repoPath, "profiles", "default");
     await mkdir(sourcePath, { recursive: true });

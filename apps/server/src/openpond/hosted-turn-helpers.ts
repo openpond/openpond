@@ -445,7 +445,7 @@ function buildHybridSandboxTurnContext(
     "- The selected Project is backed by a hosted sandbox. Treat normal requests to inspect, edit, test, or diff project files as sandbox workspace work.",
     "- For file edits like README, source, config, or docs updates, inspect and change the active sandbox using sandbox/resource/git tools; do not route those edits through goals or Create Pipeline.",
     "- Keep the user's local checkout unchanged unless the user explicitly asks to preserve, promote, apply, or export sandbox changes.",
-    "- Create Pipeline remains appropriate only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+    "- Agent and Skill authoring remain normal skill-backed turns; do not start Create Pipeline or Goal mode for them.",
   ];
   return [context, hybridRules.join("\n")].filter(Boolean).join("\n");
 }

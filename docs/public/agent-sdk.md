@@ -76,6 +76,14 @@ Agent edits should happen in source, not by hand-editing generated artifacts.
 
 The `editable.ts` policy tells OpenPond Builder Chat and coding workflows which files are in scope and which checks must pass before an edit can publish.
 
+In an OpenPond chat with an editable Profile selected, `/agent create` and `/agent improve <agent-id>` use the same source-first workflow. They are ordinary skill-backed model turns, not Goal or Create/Improve modes. Supporting tools expose the SDK operations as `agent_inspect`, `agent_build`, `agent_validate`, `agent_eval`, `agent_run`, and `agent_traces`; `agent_check` is the required completion gate:
+
+```text
+inspect -> build -> validate -> eval
+```
+
+The tools accept an exact enabled Profile Agent ID and re-resolve it beneath the selected Profile root. They do not accept an arbitrary working directory or own the authoring objective. File changes remain visible ordinary source edits, and OpenPond does not create a branch, candidate, promotion, or Apply step automatically.
+
 ## Public Runtime Surface
 
 Actions are the public runtime surface. Workflows, local agents, remote-agent refs, tools, channels, integrations, and schedules stay behind those actions so web UI, chat, MCP, evals, and hosted runs can all call the same action catalog.

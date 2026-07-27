@@ -221,12 +221,24 @@ function agentCheckDefinition(loadProfileState: LoadProfileState): ModelToolDefi
           );
         }
       }
+      const refreshedProfile = await loadProfileState(selectedProfileRef(context));
       return modelResult(
         context.callId,
         "agent_check",
         true,
         `agent_check passed for ${target.agentId}.`,
-        { agentId: target.agentId, cwd: target.cwd, passed: true, failedStep: null, steps },
+        {
+          agentId: target.agentId,
+          cwd: target.cwd,
+          passed: true,
+          failedStep: null,
+          steps,
+          profileRefresh: {
+            activeProfile: refreshedProfile.activeProfile,
+            agentIds: refreshedProfile.agents.map((agent) => agent.id).slice(0, 200),
+            actionIds: refreshedProfile.actionCatalog.map((action) => action.id).slice(0, 500),
+          },
+        },
       );
     },
   };
@@ -305,6 +317,9 @@ function profileProjection(
     repoPath: profile.repoPath,
     sourcePath: profile.sourcePath,
     manifestPath: profile.manifestPath,
+    profileConfigPath: profile.sourcePath
+      ? path.join(profile.sourcePath, "settings", "profile.yaml")
+      : null,
     authoring: recordArg(turnMetadata, "authoringIntent"),
     skills: profile.skills.slice(0, 200).map((skill) => ({
       name: skill.name,
@@ -314,16 +329,26 @@ function profileProjection(
       enabled: skill.enabled,
       validationStatus: skill.validationStatus,
     })),
-    agents: profile.agents.slice(0, 200).map((agent) => ({
-      id: agent.id,
-      name: agent.name,
-      path: agent.path,
-      enabled: agent.enabled,
-      actionNames: profile.actionCatalog
+    agents: profile.agents.slice(0, 200).map((agent) => {
+      const actions = profile.actionCatalog
         .filter((action) => action.agentId === agent.id)
-        .slice(0, 100)
-        .map((action) => action.id),
-    })),
+        .slice(0, 100);
+      return {
+        id: agent.id,
+        name: agent.name,
+        path: agent.path,
+        sourcePath: profile.sourcePath
+          ? agent.id === "default"
+            ? profile.sourcePath
+            : path.resolve(profile.sourcePath, "agents", agent.id)
+          : agent.path,
+        enabled: agent.enabled,
+        defaultAction: actions.find((action) =>
+          action.sourceActionId === "chat" || action.id === `${agent.id}.chat`
+        )?.id ?? actions[0]?.id ?? null,
+        actionNames: actions.map((action) => action.id),
+      };
+    }),
     git: profile.git
       ? {
           branch: profile.git.branch,

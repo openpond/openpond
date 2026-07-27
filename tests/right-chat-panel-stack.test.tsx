@@ -24,8 +24,7 @@ describe("Right chat panel stack", () => {
     ]));
 
     expect(policies).toMatchObject({
-      create: { kind: "send_prompt", prompt: "/create Review account health" },
-      edit: { kind: "send_prompt", prompt: "/edit Review account health" },
+      agent: { kind: "send_prompt", prompt: "/agent Review account health" },
       skill: { kind: "send_prompt", prompt: "/skill Review account health" },
       goal: { kind: "send_prompt", prompt: "/goal Review account health" },
       "goal-remote": { kind: "send_prompt", prompt: "/goal-remote Review account health" },

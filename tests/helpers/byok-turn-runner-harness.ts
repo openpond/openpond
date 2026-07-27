@@ -13,7 +13,7 @@ import {
   type Session,
   type Turn,
 } from "../../packages/contracts/src";
-import { runProfileSkillGoalCommand } from "../../packages/cloud/src/profile/profile-skill-mutations";
+import { runProfileSkillCommand } from "../../packages/cloud/src/profile/profile-skill-mutations";
 import { loadProfileSkills, readProfileSkill } from "../../packages/cloud/src/profile/profile-skills";
 import { withTurnRunnerTestStore } from "./turn-runner-test-harness";
 
@@ -131,8 +131,8 @@ export function createNativeProfileSkillGoalHarness(input: {
     executeWorkspaceTool: async () => {
       throw new Error("workspace tool execution should not be needed");
     },
-    executeProfileSkillGoal: (commandInput) =>
-      runProfileSkillGoalCommand(commandInput, { loadProfileState: loadTempProfileState }),
+    executeProfileSkillCommand: ({ prompt }) =>
+      runProfileSkillCommand(prompt, { loadProfileState: loadTempProfileState }),
     loadOpenPondProfileState: loadTempProfileState,
     readOpenPondProfileSkill: readProfileSkill,
     loadPersonalizationSoul: async () => "",

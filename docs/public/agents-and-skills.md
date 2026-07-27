@@ -48,7 +48,18 @@ profiles/
 
 ## Agent Lifecycle
 
-1. Create an agent from a useful chat, an Agent SDK template, an existing repository, or the CLI.
+From a chat with an editable Profile selected, use:
+
+```text
+/agent create <what the Agent should do>
+/agent improve <agent-id> <requested change>
+```
+
+These commands load OpenPond's bundled Agent-authoring instructions into an ordinary model turn. They do not start Goal mode, create a plan or candidate, open a worktree, or add an Apply step. The model edits the selected Profile source directly and must finish by passing `agent_check`, which runs inspect, build, validate, and eval in order.
+
+The broader lifecycle is:
+
+1. Create an Agent from a useful chat, an Agent SDK template, or an existing repository.
 2. Keep instructions, actions, setup requirements, and evals in the generated source package.
 3. Inspect, build, validate, and evaluate the package through the Agent SDK.
 4. Review the Git diff and commit the source that should become durable.
@@ -59,6 +70,10 @@ Chat-driven edits should end as source and tests. The conversation explains why 
 ## Skill Lifecycle
 
 Skills are discovered from the active profile and made available to compatible local turns. A skill package may include supporting references, templates, or scripts, but selecting or loading the skill only supplies its instructions and resources; OpenPond does not auto-run those files. Create a skill when the behavior can be expressed as a focused procedure. Promote it to an Agent when the model needs callable tools, automatic execution, durable state, fixtures, setup, or evals.
+
+Use `/skill create <objective>` or `/skill edit <skill-name> <change>` in a chat with an editable Profile selected. OpenPond loads its bundled Skill-authoring package into the normal turn; it does not enter Goal mode or run a template generator. Copy and adaptation requests inspect the complete source package—including referenced instructions, scripts, assets, and metadata—before editing the selected Profile. The packaged validator must pass before the turn reports success.
+
+Ordinary requests such as “make a skill for release notes” can discover the same bundled instructions through the normal skill catalog. The server does not switch modes based on natural-language phrase matching.
 
 Profile skill creation and editing are local profile operations. Commit skill changes in the profile repository before syncing them so local and hosted users share an explicit source version.
 

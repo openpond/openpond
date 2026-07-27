@@ -34,8 +34,6 @@ export type Command =
   | "validate"
   | "eval"
   | "run"
-  | "extend"
-  | "edit"
   | "extension"
   | "sandbox-template"
   | "organization"

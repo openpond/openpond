@@ -20,11 +20,6 @@ import { runGoalVerificationChecks } from "./checks";
 import { listGoalFiles, readGoalPath, writeGoalFile } from "./files";
 import { askGoalQuestion } from "./questions";
 import { normalizeGoalToolName } from "./registry";
-import {
-  runAgentSdkCommand,
-  runDefaultAgentSdkChecks,
-  type AgentSdkCommand,
-} from "./sdk-agent";
 import { runGoalShellCommand } from "./shell";
 import { finalizeCheckedSourceUpdate } from "./source";
 
@@ -359,10 +354,6 @@ async function runKnownTool(
     };
   }
 
-  if (normalizedName.startsWith("openpond_agent.")) {
-    return runAgentTool(context, toolCall, normalizedName);
-  }
-
   throw new Error(`Unsupported goal tool: ${toolCall.name}`);
 }
 
@@ -380,15 +371,6 @@ function hostedFileWritePolicyBlock(
       summary: `Skipped write to protected hosted path: ${path}`,
       next:
         "Use normal source files for edits. Do not write generated metadata, dependency directories, git internals, or secret/env files.",
-    };
-  }
-  if (context.goal.profile === "openpond_agent" && path === "openpond.yaml") {
-    return {
-      path,
-      reason: "hosted_openpond_agent_manifest_write_disallowed",
-      summary: "Skipped write to generated OpenPond agent manifest: openpond.yaml",
-      next:
-        "For hosted OpenPond-agent goals, edit agent/** source files and run openpond_agent_* tools. Do not change openpond.yaml directly.",
     };
   }
   return null;
@@ -422,83 +404,9 @@ function hostedShellCommandPolicyBlock(
   context: GoalToolExecutionContext,
   command: string
 ): { command: string; reason: string; summary: string; next: string } | null {
-  if (!context.hostedClient || context.goal.profile !== "openpond_agent") {
-    return null;
-  }
-  if (!/\bopenpond-agent\b/.test(command)) return null;
-  return {
-    command,
-    reason: "hosted_openpond_agent_shell_disallowed",
-    summary:
-      "Skipped direct OpenPond agent shell command; use openpond_agent_* tools",
-    next:
-      "Call openpond_agent_inspect, openpond_agent_build, openpond_agent_validate, openpond_agent_eval, openpond_agent_traces, openpond_agent_run, or openpond_agent_default_checks.",
-  };
-}
-
-async function runAgentTool(
-  context: GoalToolExecutionContext,
-  toolCall: GoalLlmToolCall,
-  normalizedName: string
-): Promise<GoalToolExecutionResult> {
-  if (normalizedName === "openpond_agent.default_checks") {
-    const results = await runDefaultAgentSdkChecks({
-      goalId: context.goal.id,
-      iterationId: context.iterationId,
-      cwd: context.workspace,
-      workspace: context.workspace,
-      storageRoot: context.storageRoot,
-      localState: context.localState,
-      hostedClient: context.hostedClient,
-    });
-    const failed = results.find((result) => result.code !== 0 || result.timedOut);
-    return {
-      toolCallId: toolCall.id,
-      name: normalizedName,
-      status: failed ? "blocked" : "ok",
-      summary: failed ? "OpenPond agent SDK checks failed" : "OpenPond agent SDK checks passed",
-      output: {
-        commands: results.map((result) => ({
-          command: result.command,
-          code: result.code,
-          timedOut: result.timedOut,
-        })),
-      },
-      checksPassed: !failed,
-    };
-  }
-
-  const sdkCommand = normalizedName.replace("openpond_agent.", "");
-  if (!isAgentSdkCommand(sdkCommand)) {
-    throw new Error(`Unsupported OpenPond agent SDK command: ${sdkCommand}`);
-  }
-  const result = await runAgentSdkCommand({
-    goalId: context.goal.id,
-    iterationId: context.iterationId,
-    cwd: context.workspace,
-    sdkCommand,
-    args: optionalStringArray(toolCall.arguments, "args"),
-    json: optionalBoolean(toolCall.arguments, "json") ?? shouldDefaultJson(sdkCommand),
-    workspace: context.workspace,
-    storageRoot: context.storageRoot,
-    localState: context.localState,
-    hostedClient: context.hostedClient,
-  });
-  const passed = result.code === 0 && !result.timedOut;
-  return {
-    toolCallId: toolCall.id,
-    name: normalizedName,
-    status: passed ? "ok" : "blocked",
-    summary: passed
-      ? `openpond-agent ${sdkCommand} completed`
-      : `openpond-agent ${sdkCommand} failed`,
-    output: {
-      code: result.code,
-      timedOut: result.timedOut,
-      stdoutTail: result.stdoutTail,
-      stderrTail: result.stderrTail,
-    },
-  };
+  void context;
+  void command;
+  return null;
 }
 
 function ok(
@@ -546,16 +454,6 @@ function optionalBoolean(
 ): boolean | null {
   const value = args[key];
   return typeof value === "boolean" ? value : null;
-}
-
-function optionalStringArray(
-  args: Record<string, unknown>,
-  key: string
-): string[] {
-  const value = args[key];
-  return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string")
-    : [];
 }
 
 function optionalRecord(
@@ -627,17 +525,4 @@ function resolveToolCwd(workspace: string, cwd?: string | null): string {
     throw new Error(`Tool cwd is outside workspace: ${cwd}`);
   }
   return resolved;
-}
-
-function isAgentSdkCommand(value: string): value is AgentSdkCommand {
-  return ["inspect", "build", "validate", "eval", "traces", "run"].includes(value);
-}
-
-function shouldDefaultJson(command: AgentSdkCommand): boolean {
-  return (
-    command === "inspect" ||
-    command === "eval" ||
-    command === "traces" ||
-    command === "run"
-  );
 }

@@ -3,6 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { createBackgroundWorkerQueue } from "../apps/server/src/runtime/background-worker-queue";
+import {
+  loadBundledAuthoringSkills,
+  readBundledAuthoringProfileSkill,
+} from "../apps/server/src/runtime/bundled-authoring-skills";
 import { createTurnRunner } from "../apps/server/src/runtime/turn-runner";
 import { withTurnRunnerTestStore } from "./helpers/turn-runner-test-harness";
 import { createContextUsageSnapshot } from "../apps/server/src/openpond/context-usage";
@@ -18,7 +22,7 @@ import {
   type Session,
   type Turn,
 } from "../packages/contracts/src";
-import { runProfileSkillCommand, runProfileSkillGoalCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
+import { runProfileSkillCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
 import { loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
 import {
   baseSession,
@@ -27,7 +31,7 @@ import {
 } from "./helpers/byok-turn-runner-harness";
 
 describe("BYOK turn runner profile, tools, and goal dispatch", () => {
-  test("routes profile skill creation through a goal and loads an existing skill from another chat", async () => {
+  test("routes profile skill creation through a normal skill-backed turn and loads an existing skill from another chat", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-chat-proof-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -44,14 +48,27 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
         };
       };
 
+      const selectedProfileRef = {
+        source: "local" as const,
+        repositoryId: "profile-repo",
+        profileId: "default",
+      };
       const sessions = new Map<string, Session>([
-        ["session_create", baseSession({ id: "session_create", title: "Create skill" })],
-        ["session_use", baseSession({ id: "session_use", title: "Use skill" })],
+        ["session_create", baseSession({
+          id: "session_create",
+          title: "Create skill",
+          currentProfile: selectedProfileRef,
+        })],
+        ["session_use", baseSession({
+          id: "session_use",
+          title: "Use skill",
+          currentProfile: selectedProfileRef,
+        })],
       ]);
       const turns: Turn[] = [];
       const events: RuntimeEvent[] = [];
       const approvals: Approval[] = [];
-      let capturedSystemOptions: any = null;
+      const capturedSystemOptions = new Map<string, any>();
       let capturedCreateMessages: Array<{ role: string; content: string }> = [];
 
       const runner = createTurnRunner({
@@ -135,11 +152,14 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
         },
         executeProfileSkillCommand: ({ prompt }) => runProfileSkillCommand(prompt, { loadProfileState: loadTempProfileState }),
         loadOpenPondProfileState: loadTempProfileState,
+        loadOpenPondProfileStateForRef: loadTempProfileState,
         readOpenPondProfileSkill: readProfileSkill,
+        loadBuiltInOpenPondSkills: loadBundledAuthoringSkills,
+        readBuiltInOpenPondSkill: readBundledAuthoringProfileSkill,
         loadPersonalizationSoul: async () => "",
         maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
-        hostedSystemPrompt: async (_base, _soul, _session, options) => {
-          capturedSystemOptions = options;
+        hostedSystemPrompt: async (_base, _soul, activeSession, options) => {
+          capturedSystemOptions.set(activeSession.id, options);
           return "System prompt";
         },
         appendAssistantText: async (nextSession, turnId, text) => {
@@ -160,7 +180,11 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
           if (capturedCreateMessages.length === 0) {
             capturedCreateMessages = input.messages;
           }
-          const skillName = capturedSystemOptions?.loadedProfileSkills?.[0]?.name ?? "missing-skill";
+          const skillName = capturedSystemOptions.get(
+            input.messages.some((message: any) => message.content?.includes("/skill create"))
+              ? "session_create"
+              : "session_use",
+          )?.loadedProfileSkills?.[0]?.name ?? "missing-skill";
           yield { text: `Used ${skillName}.`, raw: { ok: true } };
         },
         turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up" }),
@@ -174,18 +198,29 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
       });
       expect(createTurn.status).toBe("completed");
       expect(sessions.get("session_create")?.cwd).toBe(repoPath);
-      expect(capturedCreateMessages).toHaveLength(0);
+      expect(capturedCreateMessages.length).toBeGreaterThan(0);
+      expect(createTurn.createImproveRun).toBeNull();
+      expect(createTurn.metadata.authoringIntent).toMatchObject({
+        artifact: "skill",
+        operation: "create",
+        targetSkillName: "support-handoff-summaries",
+      });
+      expect(capturedSystemOptions.get("session_create")?.loadedProfileSkills?.[0]?.name)
+        .toBe("openpond-skill-authoring");
+      expect(events.some((event) =>
+        event.sessionId === "session_create" &&
+        event.name === "skill.loaded" &&
+        (event.data as any)?.skillName === "openpond-skill-authoring"
+      )).toBe(true);
       expect(events.some((event) =>
         event.sessionId === "session_create" &&
         event.name === "diagnostic" &&
-        (event.data as any)?.kind === "thread_goal" &&
-        (event.data as any)?.goal?.kind === "profile_skill_create" &&
-        (event.data as any)?.goal?.status === "completed" &&
-        (event.data as any)?.goal?.targetSkillName === "support-handoff-summaries"
-      )).toBe(true);
-      await expect(
-        readFile(path.join(profileSourcePath, "skills", "support-handoff-summaries", "SKILL.md"), "utf8"),
-      ).resolves.toContain("Draft support handoff summaries.");
+        (event.data as any)?.kind === "thread_goal"
+      )).toBe(false);
+      expect(events.some((event) =>
+        event.sessionId === "session_create" &&
+        event.name === "create_improve.updated"
+      )).toBe(false);
 
       const skillPath = path.join(profileSourcePath, "skills", "support-handoff-summaries", "SKILL.md");
       await mkdir(path.dirname(skillPath), { recursive: true });
@@ -215,8 +250,10 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
         modelRef: { providerId: "openrouter", modelId: "test/model" },
       });
       expect(useTurn.status).toBe("completed");
-      expect(capturedSystemOptions?.openPondProfileSkills?.some((skill: any) => skill.name === "support-handoff-summaries")).toBe(true);
-      expect(capturedSystemOptions?.loadedProfileSkills?.[0]).toMatchObject({
+      expect(capturedSystemOptions.get("session_use")?.openPondProfileSkills?.some(
+        (skill: any) => skill.name === "support-handoff-summaries",
+      )).toBe(true);
+      expect(capturedSystemOptions.get("session_use")?.loadedProfileSkills?.[0]).toMatchObject({
         name: "support-handoff-summaries",
         body: expect.stringContaining("support handoff summaries"),
         packagePath: skillPackagePath,
@@ -783,8 +820,8 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(streamInputs).toHaveLength(2);
     expect(streamInputs[0].toolChoice).toBe("auto");
     expect(streamInputs[0].tools.map((tool: any) => tool.function.name)).toEqual([
-      "openpond_create_improve",
       "openpond_goal_control",
+      "ask_user",
       "resource_search",
       "resource_read",
       "web_fetch",
@@ -855,7 +892,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(events.some((event) => event.name === "assistant.delta" && event.output === "README.md is the relevant resource.")).toBe(true);
   });
 
-  test("executes native profile skill goal tool through the BYOK tool loop", async () => {
+  test.skip("legacy native Profile Skill Goal tool is retired", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-native-tool-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -986,7 +1023,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     }
   });
 
-  test("accepts native profile skill goals that describe packaged resources or setup", async () => {
+  test.skip("legacy packaged-resource Profile Skill Goals are retired", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-agent-reject-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1041,7 +1078,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     }
   });
 
-  test("fails closed for native profile skill goals in Hybrid sessions", async () => {
+  test.skip("legacy Hybrid Profile Skill Goals are retired", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-hybrid-reject-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1098,7 +1135,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     }
   });
 
-  test("allows native profile skill goals that explicitly exclude agent-style files", async () => {
+  test.skip("legacy Profile Skill Goal file classification is retired", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "openpond-profile-skill-negated-agent-terms-"));
     try {
       const repoPath = path.join(tempRoot, "profile-repo");
@@ -1464,7 +1501,7 @@ describe("BYOK turn runner profile, tools, and goal dispatch", () => {
     expect(harness.streamInputs).toHaveLength(2);
     for (const streamInput of harness.streamInputs) {
       expect(streamInput.tools.map((tool: any) => tool.function.name)).toEqual(
-        expect.arrayContaining(["openpond_create_improve", "openpond_goal_control"]),
+        expect.arrayContaining(["openpond_goal_control", "ask_user"]),
       );
     }
     expect(harness.events.some((event) => event.name === "create_improve.updated")).toBe(false);

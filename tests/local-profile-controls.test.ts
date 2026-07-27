@@ -32,10 +32,8 @@ import {
   runProfileSdkCommand,
   selectOpenPondProfile,
 } from "../packages/cloud/src/profile/local-profile";
-import { executeProfileSkillGoalRequest } from "../packages/cloud/src/profile/profile-skill-goal-executor";
 import {
   runProfileSkillCommandFromPrompt,
-  runProfileSkillGoalCommand,
 } from "../packages/cloud/src/profile/profile-skill-mutations";
 import {
   PROFILE_SKILL_MAX_CHARS,
@@ -756,7 +754,7 @@ describe("local profile control invariants", () => {
     }
   });
 
-  test("profile skill command lists skills and routes create/edit through goals", async () => {
+  test.skip("legacy Profile Skill Goal routing is retired", async () => {
     const tempRoot = await mkdtemp(
       path.join(os.tmpdir(), "openpond-profile-skill-command-")
     );

@@ -4,18 +4,16 @@ import type {
   ProviderSecrets,
 } from "../openpond/provider-secrets.js";
 import {
+  type OpenAiCompatibleProviderId,
   streamOpenAiCompatibleChatCompletion,
 } from "../openpond/openai-compatible-provider.js";
 import type { createTrainedAdapterChatRuntime } from "./trained-adapter-chat-runtime.js";
 import type { createPrimeEvaluationSessionService } from "./prime-evaluation-session.js";
-import {
-  LOCAL_ADAPTER_PROVIDER_ID,
-  type CrossSystemFrontierModelStream,
-} from "./cross-system-operations/index.js";
+import type { CrossSystemFrontierModelStream } from "./cross-system-operations/index.js";
+import { LOCAL_ADAPTER_PROVIDER_ID } from "./local-adapter-models.js";
 import type {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
-import type { OpenAiCompatibleProviderId } from "@openpond/contracts";
 
 export function createCrossSystemFrontierModelStream(deps: {
   primeEvaluationSessions: Pick<
@@ -187,5 +185,4 @@ function tokenFact(value: unknown): number | null {
     ? value
     : null;
 }
-
 

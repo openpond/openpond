@@ -1,8 +1,3 @@
-import { randomUUID } from "node:crypto";
-import {
-  CreateImproveRunSchema,
-  type CreateImproveRun,
-} from "@openpond/contracts";
 import type {
   SandboxAgentEditWorkItemOpenInput,
   SandboxAgentEntrypointScope,
@@ -281,7 +276,7 @@ export function buildAgentSourcePublishInput(
 }
 
 export function buildAgentEditOpenInput(
-  agentId: string,
+  _agentId: string,
   teamId: string,
   options: Record<string, string | boolean>
 ): SandboxAgentEditWorkItemOpenInput {
@@ -303,122 +298,7 @@ export function buildAgentEditOpenInput(
     ...(initialMessage ? { initialMessage } : {}),
     ...(sourceRef ? { sourceRef } : {}),
     ...(baseSha ? { baseSha } : {}),
-    createImproveRun: buildAgentEditCreateImproveRun({
-      agentId,
-      teamId,
-      projectId,
-      objective: initialMessage || `Edit hosted agent ${agentId}`,
-      sourceRef,
-      baseSha,
-      activeProfile: optionString(options, "profile") || "default",
-    }),
   };
-}
-
-function buildAgentEditCreateImproveRun(input: {
-  agentId: string;
-  teamId: string;
-  projectId: string;
-  objective: string;
-  sourceRef: string | null;
-  baseSha: string | null;
-  activeProfile: string;
-}): CreateImproveRun {
-  const now = new Date().toISOString();
-  return CreateImproveRunSchema.parse({
-    schemaVersion: "openpond.createImprove.run.v1",
-    id: `create_improve_${randomUUID()}`,
-    revision: 0,
-    operation: "improve",
-    surface: "hosted_improve",
-    command: "/edit",
-    objective: input.objective,
-    state: "planning",
-    adapter: {
-      kind: "hosted",
-      sourceAuthority: "hosted_profile",
-      teamId: input.teamId,
-      projectId: input.projectId,
-      activeProfile: input.activeProfile,
-      sourceRef: input.sourceRef,
-      baseSha: input.baseSha,
-      workItemId: null,
-      confirmationPolicy: "always_require_plan_approval",
-    },
-    actor: {
-      id: null,
-      kind: "user",
-      label: null,
-    },
-    scope: {
-      profileId: input.activeProfile,
-      conversationId: null,
-      originTurnId: null,
-      workItemId: null,
-      projectId: input.projectId,
-      targetProject: {
-        id: input.projectId,
-        name: null,
-        workspacePath: null,
-        sourceRef: input.sourceRef,
-        baseSha: input.baseSha,
-      },
-    },
-    context: {
-      messageIds: [],
-      conversationExcerpts: [],
-      attachments: [],
-      apps: [],
-      tools: [],
-      signalRefs: [],
-      evalRefs: [],
-      targetRepoAssumptions: [`cloud project: ${input.projectId}`],
-    },
-    target: {
-      kind: "agent",
-      id: input.agentId,
-      displayName: null,
-      defaultActionKey: `${input.agentId}.chat`,
-    },
-    plan: null,
-    workflowCapture: null,
-    executionPolicy: {
-      mode: "background",
-      pauseAllowed: true,
-      cancellationAllowed: true,
-    },
-    iterationPolicy: {
-      mode: "single",
-      maximumAttempts: 1,
-      currentAttempt: 0,
-    },
-    approvalIds: [],
-    questionIds: [],
-    questions: [],
-    candidates: [],
-    evaluationReceipts: [],
-    checkRefs: [],
-    sourceRefs: [],
-    externalExecutionRefs: [],
-    localProfileCommit: null,
-    hostedSourceCommit: input.baseSha,
-    hostedSourceRef: input.sourceRef,
-    releaseOutcome: {
-      status: "not_requested",
-      profileCommit: null,
-      profileTag: null,
-      releaseReceiptRef: null,
-      updatedAt: null,
-    },
-    blockedReason: null,
-    appliedActionIds: [],
-    metadata: {
-      source: "cli_agent_edit_open",
-      selectedCommand: "/edit",
-    },
-    createdAt: now,
-    updatedAt: now,
-  });
 }
 
 export function buildCodingWorkItemChatInput(

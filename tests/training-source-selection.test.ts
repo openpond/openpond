@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 describe("Training source selection UI", () => {
   test("supports intent-first flow followed by compact shared evidence selection", async () => {
-    const [rows, view, labs, pane, dialog, flow, startStep, sourceStep, chatPicker, hook] = await Promise.all([
+    const [rows, view, labs, pane, dialog, flow, startStep, goalCards, sourceStep, chatPicker, hook] = await Promise.all([
       readFile("apps/web/src/components/sidebar/SidebarRows.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingView.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsView.tsx", "utf8"),
@@ -11,6 +11,7 @@ describe("Training source selection UI", () => {
       readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
       readFile("apps/web/src/components/training/training-flow.ts", "utf8"),
       readFile("apps/web/src/components/training/TrainingStartModeStep.tsx", "utf8"),
+      readFile("apps/web/src/components/training/TrainingGoalCards.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingSourceStep.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingChatPicker.tsx", "utf8"),
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
@@ -35,12 +36,12 @@ describe("Training source selection UI", () => {
     expect(dialog).toContain("runMiner(");
     expect(dialog).not.toContain("eligibleSessions.map((session) => session.id),");
     expect(startStep).toContain("What do you want to build?");
-    expect(startStep).toContain("Teach with examples");
-    expect(startStep).toContain("Compare responses");
-    expect(startStep).toContain("Reward correct outcomes");
-    expect(startStep).toContain("Score with a rubric");
-    expect(startStep).toContain("Find opportunities");
-    expect(startStep).toContain("training-evidence-intent-example");
+    expect(goalCards).toContain("Teach with examples");
+    expect(goalCards).toContain("Compare responses");
+    expect(goalCards).toContain("Reward correct outcomes");
+    expect(goalCards).toContain("Score with a rubric");
+    expect(goalCards).toContain("Find opportunities");
+    expect(goalCards).toContain("training-evidence-intent-example");
     expect(dialog).toContain('? "existing_dataset"');
     expect(dialog).toContain("onCreateDataset");
     expect(sourceStep).toContain("Build the Dataset");

@@ -1,19 +1,28 @@
-import type { ComponentProps, CSSProperties } from "react";
+import {
+  lazy,
+  Suspense,
+  type ComponentProps,
+  type CSSProperties,
+} from "react";
 import { Sidebar } from "../sidebar/Sidebar";
 import { CloudSetupDialog } from "../workspace/CloudSetupDialog";
 import { AppLazyPanels, AppSettingsRoute } from "./AppLazyPanels";
 import { AppToast as AppToastView } from "./AppToast";
 import { AppTopBar } from "./AppTopBar";
-import { MainPane } from "./MainPane";
+import type { MainPaneProps } from "./main-pane-types";
 import { ProjectConfirmDialog } from "./ProjectConfirmDialog";
 import { RenderCommitBoundary } from "../../lib/render-commit-metrics";
+
+const MainPane = lazy(() =>
+  import("./MainPane").then((module) => ({ default: module.MainPane }))
+);
 
 export type AppShellControllerProps = {
   className: string;
   style: CSSProperties;
   sidebar: ComponentProps<typeof Sidebar>;
   topBar: ComponentProps<typeof AppTopBar>;
-  mainPane: ComponentProps<typeof MainPane>;
+  mainPane: MainPaneProps;
   cloudSetup: ComponentProps<typeof CloudSetupDialog>;
   projectConfirm: ComponentProps<typeof ProjectConfirmDialog>;
   lazyPanels: ComponentProps<typeof AppLazyPanels>;
@@ -39,7 +48,13 @@ export function AppShellController({
 
       <div className="content-shell">
         <AppTopBar {...topBar} />
-        <MainPane {...mainPane} />
+        <Suspense
+          fallback={
+            <main className="main-pane" aria-busy="true" aria-label="Loading workspace" />
+          }
+        >
+          <MainPane {...mainPane} />
+        </Suspense>
       </div>
 
       <CloudSetupDialog {...cloudSetup} />

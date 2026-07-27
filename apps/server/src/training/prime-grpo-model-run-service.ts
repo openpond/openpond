@@ -9,7 +9,6 @@ import {
   ResolvedTrainingPlanSchema,
   TrainingJobSchema,
   type OpenPondProfileState,
-  type ResolvedTrainingPlan,
   type TrainingJob,
 } from "@openpond/contracts";
 import {
@@ -46,7 +45,6 @@ import {
   executePrimeGrpoRun,
   type PrimeGrpoExecutionContext,
   type PrimeGrpoProviderContext,
-  type PrimeGrpoProviderNode,
 } from "./prime-grpo-execution.js";
 import {
   cancelRun,
@@ -97,7 +95,6 @@ type TrainingService = {
 };
 
 type ProviderContext = PrimeGrpoProviderContext;
-type ProviderNode = PrimeGrpoProviderNode;
 
 type StoredPrimeGrpoExecutionContext = Omit<
   PrimeGrpoExecutionContext,

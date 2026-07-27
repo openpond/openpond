@@ -35,9 +35,10 @@ export function useCreateImproveRuns(input: {
     setLoading(true);
     const request = api.listCreateImproveRuns(connection, { profileId, limit: 500 })
       .then((response) => {
-        setRuns(response.runs);
+        const activeRuns = response.runs.filter((run) => run.target.kind !== "agent");
+        setRuns(activeRuns);
         setError(null);
-        return response.runs;
+        return activeRuns;
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : String(caught));

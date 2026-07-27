@@ -159,24 +159,6 @@ Options:
   --json
   --path <string>
 ```
-## extend
-
-```text
-Usage:
-  openpond extend <instructions>
-
-Options:
-  --cwd <string>
-```
-## edit
-
-```text
-Usage:
-  openpond edit <instructions>
-
-Options:
-  --cwd <string>
-```
 ## extension
 
 ```text

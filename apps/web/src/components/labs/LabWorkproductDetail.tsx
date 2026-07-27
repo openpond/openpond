@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type {
   CreateImproveCandidate,
   CreateImproveRun,
@@ -22,7 +30,7 @@ import type { LabDetailLocation } from "./lab-detail-navigation";
 import { LabAgentEvalActions } from "./LabEvalActions";
 import { LabAgentChanges } from "./LabAgentChanges";
 import { LabAgentChangeHistory } from "./LabAgentChangeHistory";
-import { LabModelVersionDetailPage, LabModelVersionsPage } from "./LabModelWorkspace";
+import { LabModelVersionsPage } from "./LabModelWorkspace";
 import { LabRunDecisionSection } from "./LabRunDecisionSection";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { LabStatusDot } from "./LabStatusDot";
@@ -43,6 +51,12 @@ import {
   WorkproductConfiguration,
 } from "./LabWorkproductDetailSections";
 import { SquarePen } from "../icons";
+
+const LabModelVersionDetailPage = lazy(() =>
+  import("./LabModelVersionDetailPage").then((module) => ({
+    default: module.LabModelVersionDetailPage,
+  }))
+);
 
 type TrainingController = ReturnType<typeof useTraining>;
 type WorkproductDetailTab =
@@ -453,21 +467,29 @@ export function LabWorkproductDetail({
           <WorkproductConfiguration workproduct={workproduct} profile={profile} />
         ) : workproduct.kind === "model" && activeTab === "runs" ? (
           selectedModelEntryKey ? (
-            <LabModelVersionDetailPage
-              connection={connection}
-              runs={runs}
-              selectedEntryKey={selectedModelEntryKey}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onBack={() => {
-                setSelectedModelEntryKey(null);
-                setSelectedModelRunTab("summary");
-              }}
-              onOpenDataset={onOpenDataset}
-              onTabChange={setSelectedModelRunTab}
-              onUseVersion={useModelVersion}
-            />
+            <Suspense
+              fallback={
+                <div className="training-run-placeholder">
+                  Loading run details…
+                </div>
+              }
+            >
+              <LabModelVersionDetailPage
+                connection={connection}
+                runs={runs}
+                selectedEntryKey={selectedModelEntryKey}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                onBack={() => {
+                  setSelectedModelEntryKey(null);
+                  setSelectedModelRunTab("summary");
+                }}
+                onOpenDataset={onOpenDataset}
+                onTabChange={setSelectedModelRunTab}
+                onUseVersion={useModelVersion}
+              />
+            </Suspense>
           ) : (
             <LabModelVersionsPage
               runs={runs}

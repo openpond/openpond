@@ -4,7 +4,6 @@ import {
   mkdir,
   readdir,
   readFile,
-  writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 
@@ -14,14 +13,12 @@ import {
   ModelRunSchema,
   ModelVersionSchema,
   TrainingArtifactSchema,
-  TrainingJobSchema,
   TrainingPreparationPlanSchema,
   type ModelRunDraft,
   type ResolvedTrainingPlan,
   type Taskset,
-  type TrainingJob,
 } from "@openpond/contracts";
-import { canonicalJson, contentHash, sha256 } from "@openpond/taskset-sdk";
+import { contentHash, sha256 } from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
 import { resolvePrimeGrpoBaseProfile } from "./prime-grpo-base-profiles.js";
@@ -793,5 +790,4 @@ export async function persistSuccessfulRun(input: {
     modelVersionId: versionId,
   });
 }
-
 
