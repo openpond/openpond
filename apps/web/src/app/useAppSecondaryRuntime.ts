@@ -45,7 +45,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     accountSignedOut, activeModel, activeProvider, activeWorkspaceAppId, activeWorkspaceKind, activeWorkspaceLocation,
     appDefaults, selectedSessionProjectId, workspaceName, accountScopeKey, teamChat, communities,
     selectedProjectConfirmedCloudProject, activeOpenPondCommandAccessMode, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind, openPondActionCatalog,
-    selectedActionCatalog, expandProject, setExpandedProjectIds, selectedCloudWorkItem, createCloudWork, setCloudError,
+    selectedActionCatalog, expandProject, setExpandedProjectIds,
     advanceTrainingModelChatAfterTurn, bindTrainingModelChatSession, prepareTrainingModelChatTurn, chatMessages, pendingChatUserMessages,
     recordPendingChatUserMessage, runningSessionIds, workspaceBusy, visibleWorkspaceState, visibleWorkspaceDiff, rememberWorkspaceState,
     refreshWorkspace, setWorkspaceBusy, refreshWorkspaceDiffWhenNeeded, pendingWorkspaceTarget, setPendingWorkspaceTarget,
@@ -64,9 +64,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
               : "Team"
             : view === "community"
               ? communities.preview?.displayName ?? "Communities"
-              : view === "cloud"
-                ? (selectedCloudWorkItem?.title ?? "Cloud")
-                : (selectedSession?.title ?? "New task");
+              : (selectedSession?.title ?? "New task");
   const {
     browserConversationId,
     handleWorkspaceDiffPanelViewStateChange,
@@ -78,7 +76,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     rightPanelMode,
     selectedAppId,
     selectedCloudProject,
-    selectedCloudWorkItem,
     selectedProjectId,
     selectedSession,
     selectedSessionId,
@@ -434,18 +431,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const changeWorkspaceTarget = useCallback(
     async (target: WorkspaceTargetValue) => {
-      if (target === "queue_cloud") {
-        const linkedCloudProjectId =
-          selectedCloudProject?.id ?? selectedProjectConfirmedCloudProject?.id ?? null;
-        if (!linkedCloudProjectId) {
-          setPendingWorkspaceTarget(null);
-          await changeWorkspaceTargetBase(target);
-          return;
-        }
-        setPendingWorkspaceTarget("queue_cloud");
-        showToast("Next message will queue a Cloud work item and keep this chat local.", "info");
-        return;
-      }
       if (target === "hybrid") {
         const linkedCloudProjectId =
           selectedCloudProject?.id ??
@@ -565,24 +550,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     advanceTrainingTurn: advanceTrainingModelChatAfterTurn,
     bindTrainingSession: bindTrainingModelChatSession,
     composerDraftStore,
-    createCloudWork,
     onSessionCreated: () => setDraftSubagentDelegationMode(null),
-    pendingWorkspaceTarget,
     prepareTrainingTurn: prepareTrainingModelChatTurn,
-    selectedCloudProjectId: selectedCloudProject?.id ?? null,
-    selectedLocalProjectId: selectedProject?.id ?? null,
-    selectedLocalProjectName: selectedProject?.name ?? null,
-    selectedLocalWorkspacePath: selectedProject?.workspacePath ?? selectedProject?.path ?? null,
-    selectedProjectCloudBaseSha: selectedProject?.linkedSandboxProject?.lastUploadedCommit ?? null,
-    selectedProjectCloudProjectId: selectedProjectConfirmedCloudProject?.id ?? null,
-    selectedProjectCloudSourceRef:
-      selectedProject?.linkedSandboxProject?.defaultBranch ??
-      visibleWorkspaceState?.currentBranch ??
-      null,
     sendPrompt,
     setMentionedAppId,
-    setPendingWorkspaceTarget,
-    setPrompt,
     showToast,
   });
 
@@ -611,9 +582,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     cloudProjects: bootstrap?.cloudProjects ?? [],
     diffPanelOpen,
     rightPanelMode,
-    selectedCloudWorkItem,
     selectedProjectId,
-    setCloudError,
     setDiffPanelOpen,
     setNewProjectDialogOpen,
     setNewProjectMode,

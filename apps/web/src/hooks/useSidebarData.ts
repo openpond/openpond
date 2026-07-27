@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import type {
   CloudProject,
-  CloudWorkItem,
   LocalProject,
   Session,
   SidebarAppPreferences,
@@ -17,7 +16,6 @@ import {
 } from "../lib/app-models";
 import {
   buildSidebarProjectPathIndex,
-  isSidebarCloudWorkSession,
   sidebarProjectKeyForSession,
 } from "../lib/sidebar-session-projects";
 import {
@@ -35,7 +33,6 @@ import {
 type UseSidebarDataInput = {
   localProjects: LocalProject[];
   cloudProjects: CloudProject[];
-  cloudWorkItems: CloudWorkItem[];
   sessions: Session[];
   runtimeIndexes: RuntimeIndexes;
   appPreferences: SidebarAppPreferences;
@@ -50,7 +47,6 @@ type UseSidebarDataInput = {
 export function useSidebarData({
   localProjects,
   cloudProjects,
-  cloudWorkItems,
   sessions,
   runtimeIndexes,
   appPreferences,
@@ -100,43 +96,33 @@ export function useSidebarData({
     [cloudProjects],
   );
   const projectPathIndex = useMemo(() => buildSidebarProjectPathIndex(localProjects), [localProjects]);
-  const cloudWorkSessionIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const session of sessions) {
-      if (isSidebarCloudWorkSession(session, cloudProjectIds)) ids.add(session.id);
-    }
-    return ids;
-  }, [cloudProjectIds, sessions]);
   const sidebarProjectIdBySessionId = useMemo(() => {
     const rows: Record<string, string> = {};
     for (const session of activeSessions) {
-      if (cloudWorkSessionIds.has(session.id)) continue;
       const projectKey = sidebarProjectKeyForSession(session, localProjectIds, projectPathIndex, cloudProjectIds);
       if (projectKey) rows[session.id] = projectKey;
     }
     return rows;
-  }, [activeSessions, cloudProjectIds, cloudWorkSessionIds, localProjectIds, projectPathIndex]);
+  }, [activeSessions, cloudProjectIds, localProjectIds, projectPathIndex]);
   const chatSessions = useMemo(
     () =>
       activeSessions.filter(
         (session) =>
-          !cloudWorkSessionIds.has(session.id) &&
           !session.pinned &&
           !session.savedForLater &&
           !session.appId &&
           !sidebarProjectIdBySessionId[session.id]
       ),
-    [activeSessions, cloudWorkSessionIds, sidebarProjectIdBySessionId]
+    [activeSessions, sidebarProjectIdBySessionId]
   );
   const archivedChatSessions = useMemo(
     () =>
       archivedSessions.filter(
         (session) =>
-          !cloudWorkSessionIds.has(session.id) &&
           !session.appId &&
           !sidebarProjectKeyForSession(session, localProjectIds, projectPathIndex, cloudProjectIds)
       ),
-    [archivedSessions, cloudProjectIds, cloudWorkSessionIds, localProjectIds, projectPathIndex]
+    [archivedSessions, cloudProjectIds, localProjectIds, projectPathIndex]
   );
   const projectSessionRowsByProjectId = useMemo(() => {
     const rows: Record<string, Session[]> = {};
@@ -206,17 +192,18 @@ export function useSidebarData({
         .sort(sortSidebarProjectRows),
     [appPreferences, cloudProjects]
   );
-  const localProjectKeyByLinkedCloudProjectId = useMemo(() => {
-    const rows = new Map<string, string>();
-    for (const project of visibleLocalProjects) {
-      const cloudProject = confirmedLinkedCloudProject(project, cloudProjects);
-      if (cloudProject) rows.set(cloudProject.id, projectSelectionKey("local", project.id));
-    }
-    return rows;
-  }, [cloudProjects, visibleLocalProjects]);
+  const linkedCloudProjectIds = useMemo(
+    () =>
+      new Set(
+        visibleLocalProjects
+          .map((project) => confirmedLinkedCloudProject(project, cloudProjects)?.id ?? null)
+          .filter((projectId): projectId is string => Boolean(projectId)),
+      ),
+    [cloudProjects, visibleLocalProjects],
+  );
   const cloudOnlyProjectRows = useMemo(
-    () => cloudProjectRows.filter((item) => !localProjectKeyByLinkedCloudProjectId.has(item.project.id)),
-    [cloudProjectRows, localProjectKeyByLinkedCloudProjectId],
+    () => cloudProjectRows.filter((item) => !linkedCloudProjectIds.has(item.project.id)),
+    [cloudProjectRows, linkedCloudProjectIds],
   );
   const allProjectRows = useMemo<SidebarProjectItem[]>(
     () => [...localProjectRows, ...cloudOnlyProjectRows].sort(sortSidebarProjectRows),
@@ -236,28 +223,6 @@ export function useSidebarData({
     () => visibleSidebarProjectRows(projectRows, projectsExpanded, selectedProjectId),
     [projectRows, projectsExpanded, selectedProjectId]
   );
-  const cloudWorkItemsByProjectId = useMemo(() => {
-    const rows: Record<string, CloudWorkItem[]> = {};
-    const addWorkItem = (projectKey: string, workItem: CloudWorkItem) => {
-      const projectRows = rows[projectKey];
-      if (projectRows) {
-        projectRows.push(workItem);
-      } else {
-        rows[projectKey] = [workItem];
-      }
-    };
-    for (const workItem of cloudWorkItems) {
-      if (workItem.archivedAt) continue;
-      const projectKey = projectSelectionKey("cloud", workItem.projectId);
-      addWorkItem(projectKey, workItem);
-      const linkedLocalProjectKey = localProjectKeyByLinkedCloudProjectId.get(workItem.projectId);
-      if (linkedLocalProjectKey) addWorkItem(linkedLocalProjectKey, workItem);
-    }
-    for (const [projectKey, items] of Object.entries(rows)) {
-      rows[projectKey] = items.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
-    }
-    return rows;
-  }, [cloudWorkItems, localProjectKeyByLinkedCloudProjectId]);
   const pinnedItems = useMemo<PinnedSidebarItem[]>(
     () =>
       [
@@ -333,7 +298,6 @@ export function useSidebarData({
     localProjectRows,
     visibleProjectRows,
     cloudProjectRows: cloudOnlyProjectRows,
-    cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
     childSessionRowsByParentId,
     sidebarProjectIdBySessionId,

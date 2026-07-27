@@ -21,7 +21,6 @@ import type { SidebarProps } from "./Sidebar.types";
 import { SidebarTeamSection } from "./SidebarTeamSection";
 import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import {
-  SidebarCloudWorkItemRow,
   SidebarProjectRow,
   SidebarFileRow,
   SidebarSection,
@@ -63,7 +62,6 @@ export function SidebarSectionList({
   chatRows,
   cloudProjectRows,
   workspaceStates = {},
-  cloudWorkItemsByProjectId,
   childSessionRowsByParentId = {},
   clearSidebarDrag,
   commitPinnedDrop,
@@ -77,7 +75,6 @@ export function SidebarSectionList({
   onTogglePinnedCollapsed,
   onToggleProjectsCollapsed,
   onToggleSavedForLaterCollapsed,
-  openCloudHome,
   createCloudEnvironment,
   pinnedCollapsed,
   pinnedRows,
@@ -98,10 +95,8 @@ export function SidebarSectionList({
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
   sectionMenuOpen,
-  selectCloudWorkItem,
   selectTeamThread,
   openTeamDm,
-  selectedCloudWorkItemId,
   selectedTeamThreadId,
   teamChatEnabled,
   teamChatOrganization,
@@ -149,7 +144,6 @@ export function SidebarSectionList({
   view,
 }: SidebarProps) {
   const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
-  const [expandedCloudProjectWorkItemIds, setExpandedCloudProjectWorkItemIds] = useState<Set<string>>(() => new Set());
   const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] = useState<Set<string>>(() => new Set());
   const activeChildSessionExpansionKey = JSON.stringify(
     Object.entries(childSessionRowsByParentId)
@@ -197,18 +191,6 @@ export function SidebarSectionList({
         return next;
       }
       return { ...current, [projectId]: previousCount };
-    });
-  }
-
-  function toggleCloudProjectWorkItems(projectId: string) {
-    setExpandedCloudProjectWorkItemIds((current) => {
-      const next = new Set(current);
-      if (next.has(projectId)) {
-        next.delete(projectId);
-      } else {
-        next.add(projectId);
-      }
-      return next;
     });
   }
 
@@ -281,19 +263,13 @@ export function SidebarSectionList({
   }
 
   function renderProjectChildren(item: SidebarProjectItem) {
-    if (item.kind === "cloud") return renderCloudProjectChildren(item);
     if (!expandedProjectIds.has(item.id)) return null;
     const sessions = projectSessionRowsByProjectId[item.id] ?? [];
-    const workItems = cloudWorkItemsByProjectId[item.id] ?? [];
-    if (sessions.length === 0 && workItems.length === 0) return null;
+    if (sessions.length === 0) return null;
     const visibleCount = Math.max(SIDEBAR_SECTION_LIMIT, projectChatVisibleCounts[item.id] ?? SIDEBAR_SECTION_LIMIT);
     const visibleSessions = sessions.slice(0, visibleCount);
     const canShowMoreProjectChats = visibleSessions.length < sessions.length;
     const canShowLessProjectChats = visibleSessions.length > SIDEBAR_SECTION_LIMIT;
-    const hasSelectedWorkItem = workItems.some((workItem) => workItem.id === selectedCloudWorkItemId);
-    const workItemsExpandedForProject = hasSelectedWorkItem || expandedCloudProjectWorkItemIds.has(item.id);
-    const visibleWorkItems = workItemsExpandedForProject ? workItems : workItems.slice(0, SIDEBAR_SECTION_LIMIT);
-
     return (
       <div className="sidebar-project-children">
         {visibleSessions.map((session) => (
@@ -336,52 +312,6 @@ export function SidebarSectionList({
               </SidebarShowMoreButton>
             ) : null}
           </div>
-        )}
-        {visibleWorkItems.map((workItem) => (
-          <SidebarCloudWorkItemRow
-            key={workItem.id}
-            workItem={workItem}
-            selected={view === "cloud" && selectedCloudWorkItemId === workItem.id}
-            hideIcon
-            nested
-            onSelect={() => selectCloudWorkItem(workItem)}
-          />
-        ))}
-        {workItems.length > SIDEBAR_SECTION_LIMIT && (
-          <SidebarShowMoreButton
-            expanded={workItemsExpandedForProject}
-            onClick={() => toggleCloudProjectWorkItems(item.id)}
-          />
-        )}
-      </div>
-    );
-  }
-
-  function renderCloudProjectChildren(item: SidebarProjectItem) {
-    if (!expandedProjectIds.has(item.id)) return null;
-    const workItems = cloudWorkItemsByProjectId[item.id] ?? [];
-    if (workItems.length === 0) return <div className="empty-row nested">No tasks</div>;
-    const hasSelectedWorkItem = workItems.some((workItem) => workItem.id === selectedCloudWorkItemId);
-    const workItemsExpandedForProject = hasSelectedWorkItem || expandedCloudProjectWorkItemIds.has(item.id);
-    const visibleWorkItems = workItemsExpandedForProject ? workItems : workItems.slice(0, SIDEBAR_SECTION_LIMIT);
-
-    return (
-      <div className="sidebar-project-children">
-        {visibleWorkItems.map((workItem) => (
-          <SidebarCloudWorkItemRow
-            key={workItem.id}
-            workItem={workItem}
-            selected={view === "cloud" && selectedCloudWorkItemId === workItem.id}
-            hideIcon
-            nested
-            onSelect={() => selectCloudWorkItem(workItem)}
-          />
-        ))}
-        {workItems.length > SIDEBAR_SECTION_LIMIT && (
-          <SidebarShowMoreButton
-            expanded={workItemsExpandedForProject}
-            onClick={() => toggleCloudProjectWorkItems(item.id)}
-          />
         )}
       </div>
     );
@@ -467,7 +397,6 @@ export function SidebarSectionList({
                   selected={view === "chat" && selectedProjectId === row.id && !selectedSessionId}
                   expanded={expandedProjectIds.has(row.id)}
                   workspaceState={row.item.kind === "local" ? workspaceStates[row.item.project.id] ?? null : null}
-                  cloudWorkItems={cloudWorkItemsByProjectId[row.item.id] ?? []}
                   cloudLinkTrusted={row.item.cloudLinkTrusted}
                   cloudLinkWarning={row.item.cloudLinkWarning}
                   placeholder={isDraggedRow}
@@ -639,17 +568,6 @@ export function SidebarSectionList({
                     role="menuitem"
                     onClick={() => {
                       setSectionMenuOpen(null);
-                      openCloudHome();
-                    }}
-                  >
-                    <Cloud size={13} />
-                    <span>New Cloud task</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
                       createCloudEnvironment();
                     }}
                   >
@@ -704,7 +622,6 @@ export function SidebarSectionList({
               selected={view === "chat" && selectedProjectId === item.id && !selectedSessionId}
               expanded={expandedProjectIds.has(item.id)}
               workspaceState={item.kind === "local" ? workspaceStates[item.project.id] ?? null : null}
-              cloudWorkItems={cloudWorkItemsByProjectId[item.id] ?? []}
               cloudLinkTrusted={item.cloudLinkTrusted}
               cloudLinkWarning={item.cloudLinkWarning}
               terminalIndicator={terminalIndicatorForProject(item.id)}

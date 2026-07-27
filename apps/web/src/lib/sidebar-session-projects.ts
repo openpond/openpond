@@ -36,8 +36,6 @@ export function sidebarProjectIdForSession(
   projectPathIndex: ProjectPathEntry[],
   cloudProjectIds: ReadonlySet<string> = new Set(),
 ): string | null {
-  if (isSidebarCloudWorkSession(session, cloudProjectIds)) return null;
-
   if (session.localProjectId && localProjectIds.has(session.localProjectId)) {
     return session.localProjectId;
   }
@@ -81,8 +79,6 @@ export function sidebarProjectKeyForSession(
   projectPathIndex: ProjectPathEntry[],
   cloudProjectIds: ReadonlySet<string> = new Set(),
 ): string | null {
-  if (isSidebarCloudWorkSession(session, cloudProjectIds)) return null;
-
   if (session.localProjectId && localProjectIds.has(session.localProjectId)) {
     return projectSelectionKey("local", session.localProjectId);
   }
@@ -138,22 +134,6 @@ function shouldInferLocalProjectFromCwd(session: Session): boolean {
   return session.workspaceKind === "local_project" ||
     session.provider === "codex" ||
     isCodexHistorySessionId(session.id);
-}
-
-export function isSidebarCloudWorkSession(
-  session: Session,
-  cloudProjectIds: ReadonlySet<string>,
-): boolean {
-  if (session.localProjectId) return false;
-  if (session.metadata?.workspaceTarget === "hybrid") return false;
-
-  return Boolean(
-    session.cloudProjectId &&
-      cloudProjectIds.has(session.cloudProjectId) &&
-      (session.workspaceKind === "sandbox" ||
-        session.workspaceKind === "sandbox_template" ||
-        session.workspaceKind === "sandbox_app"),
-  );
 }
 
 function normalizeSidebarPath(value: string | null | undefined): string | null {

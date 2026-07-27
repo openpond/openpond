@@ -1,5 +1,5 @@
 import { useCallback, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { CloudProject, CloudWorkItem, LocalProject, Session, SidebarFileBookmark, WorkspaceState } from "@openpond/contracts";
+import type { CloudProject, LocalProject, Session, SidebarFileBookmark, WorkspaceState } from "@openpond/contracts";
 import {
   Archive,
   ArchiveRestore,
@@ -512,7 +512,6 @@ export function SidebarProjectRow({
   selected,
   expanded = false,
   workspaceState,
-  cloudWorkItems = [],
   cloudLinkTrusted = true,
   cloudLinkWarning = null,
   placeholder,
@@ -535,7 +534,6 @@ export function SidebarProjectRow({
   selected: boolean;
   expanded?: boolean;
   workspaceState?: WorkspaceState | null;
-  cloudWorkItems?: CloudWorkItem[];
   cloudLinkTrusted?: boolean;
   cloudLinkWarning?: string | null;
   placeholder?: boolean;
@@ -646,7 +644,6 @@ export function SidebarProjectRow({
         kind={kind}
         project={project}
         workspaceState={workspaceState}
-        cloudWorkItems={cloudWorkItems}
         cloudLinkTrusted={cloudLinkTrusted}
         cloudLinkWarning={cloudLinkWarning}
         onWorkspaceTargetSelect={onWorkspaceTargetSelect}
@@ -674,43 +671,6 @@ export function SidebarProjectRow({
   );
 }
 
-export function SidebarCloudWorkItemRow({
-  workItem,
-  selected,
-  hideIcon = false,
-  nested = false,
-  onSelect,
-}: {
-  workItem: CloudWorkItem;
-  selected: boolean;
-  hideIcon?: boolean;
-  nested?: boolean;
-  onSelect: () => void;
-}) {
-  const running = workItem.status === "queued" || workItem.status === "running";
-  const runningDotStyle = useMemo(syncedRunningPulseStyle, []);
-  return (
-    <SidebarInteractiveRow selected={selected} iconless={hideIcon} nested={nested} onSelect={onSelect}>
-      {hideIcon ? null : (
-        <span className="sidebar-row-icon cloud" aria-hidden="true">
-          <Cloud size={15} />
-        </span>
-      )}
-      <span className="row-label-shell">
-        <span className="row-label">{workItem.title}</span>
-        <span className="row-label-detail">{cloudWorkItemDetailNote(workItem)}</span>
-      </span>
-      <div className="row-meta">
-        {running ? (
-          <span className="sidebar-running-dot" style={runningDotStyle} data-tooltip={workItem.status} aria-label={workItem.status} />
-        ) : (
-          <time>{cloudWorkItemMeta(workItem)}</time>
-        )}
-      </div>
-    </SidebarInteractiveRow>
-  );
-}
-
 function SidebarTerminalStatusIcon({ indicator }: { indicator: SidebarTerminalIndicator }) {
   return (
     <span
@@ -722,30 +682,6 @@ function SidebarTerminalStatusIcon({ indicator }: { indicator: SidebarTerminalIn
       <SquareTerminal size={13} />
     </span>
   );
-}
-
-function cloudWorkItemMeta(workItem: CloudWorkItem): string {
-  if (workItem.status === "needs_review") return "Review";
-  if (workItem.status === "failed") return "Failed";
-  if (workItem.status === "cancelled") return "Cancelled";
-  return relativeAge(workItem.updatedAt);
-}
-
-function cloudWorkItemDetailNote(workItem: CloudWorkItem): string {
-  const parts = [statusLabelForSidebar(workItem.status)];
-  if (workItem.sourceRef) parts.push(workItem.sourceRef);
-  if (workItem.latestSandboxId) parts.push("sandbox ready");
-  if (workItem.latestTaskRunId && (workItem.status === "queued" || workItem.status === "running")) {
-    parts.push("task running");
-  }
-  if (workItem.status === "needs_review") parts.push("patch ready");
-  if (workItem.status === "failed") parts.push("open logs");
-  return parts.join(" / ");
-}
-
-function statusLabelForSidebar(status: CloudWorkItem["status"]): string {
-  if (status === "needs_review") return "review";
-  return status.replace(/_/g, " ");
 }
 
 type ProjectLocationRow = {
@@ -767,7 +703,6 @@ function SidebarProjectLocationsPopover({
   kind,
   project,
   workspaceState,
-  cloudWorkItems,
   cloudLinkTrusted,
   cloudLinkWarning,
   onWorkspaceTargetSelect,
@@ -776,7 +711,6 @@ function SidebarProjectLocationsPopover({
   kind: "local" | "cloud";
   project: LocalProject | CloudProject;
   workspaceState?: WorkspaceState | null;
-  cloudWorkItems?: CloudWorkItem[];
   cloudLinkTrusted?: boolean;
   cloudLinkWarning?: string | null;
   onWorkspaceTargetSelect?: (target: WorkspaceTargetValue) => void;
@@ -786,7 +720,6 @@ function SidebarProjectLocationsPopover({
     kind,
     project,
     workspaceState,
-    cloudWorkItems ?? [],
     cloudLinkTrusted,
     cloudLinkWarning,
   );
@@ -873,24 +806,21 @@ function projectLocationRows(
   kind: "local" | "cloud",
   project: LocalProject | CloudProject,
   workspaceState?: WorkspaceState | null,
-  cloudWorkItems: CloudWorkItem[] = [],
   cloudLinkTrusted: boolean = true,
   cloudLinkWarning: string | null = null,
 ): ProjectLocationRow[] {
-  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject, cloudWorkItems);
-  return localProjectLocationRows(project as LocalProject, workspaceState, cloudWorkItems, cloudLinkTrusted, cloudLinkWarning);
+  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject);
+  return localProjectLocationRows(project as LocalProject, workspaceState, cloudLinkTrusted, cloudLinkWarning);
 }
 
 function localProjectLocationRows(
   project: LocalProject,
   workspaceState?: WorkspaceState | null,
-  cloudWorkItems: CloudWorkItem[] = [],
   cloudLinkTrusted: boolean = true,
   cloudLinkWarning: string | null = null,
 ): ProjectLocationRow[] {
   const localRepoNote = localRepoStatusNote(project, workspaceState, cloudLinkTrusted);
   const localAttention = workspaceHasUnstagedChanges(workspaceState);
-  const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
   const cloudLinked = localProjectHasCloud(project, cloudLinkTrusted);
   const cloudWarning = cloudLinkTrusted === false && cloudLinkWarning;
   return [
@@ -906,22 +836,21 @@ function localProjectLocationRows(
       value: cloudWarning
         ? cloudWarning
         : cloudLinked
-          ? cloudProjectStatusValue(project, workspaceState, cloudStatus, cloudLinkTrusted)
+          ? cloudProjectStatusValue(project, workspaceState, cloudLinkTrusted)
           : "not in cloud",
-      tone: cloudWarning ? "attention" : cloudStatus?.tone ?? "cloud",
+      tone: cloudWarning ? "attention" : "cloud",
       icon: <Cloud size={13} />,
       actionTarget: cloudLinked ? "cloud" : "upload_cloud",
     },
   ];
 }
 
-function cloudProjectLocationRows(project: CloudProject, cloudWorkItems: CloudWorkItem[] = []): ProjectLocationRow[] {
-  const cloudStatus = cloudWorkItemsStatus(cloudWorkItems);
+function cloudProjectLocationRows(project: CloudProject): ProjectLocationRow[] {
   return [
     {
       key: "cloud",
-      value: cloudProjectRowStatusValue(project, cloudStatus),
-      tone: cloudStatus?.tone ?? (project.syncedAt ? "cloud" : "attention"),
+      value: cloudProjectRowStatusValue(project),
+      tone: project.syncedAt ? "cloud" : "attention",
       icon: <Cloud size={13} />,
       actionTarget: "cloud",
     },
@@ -963,43 +892,15 @@ function localProjectHasCloud(project: LocalProject, cloudLinkTrusted: boolean =
 function cloudProjectStatusValue(
   project: LocalProject,
   workspaceState: WorkspaceState | null | undefined,
-  workItemStatus: CloudWorkItemsStatus | null,
   cloudLinkTrusted: boolean,
 ): string {
-  const branch = project.linkedSandboxProject?.defaultBranch ?? workspaceState?.defaultBranch ?? "main";
-  if (workItemStatus) return `${branch} / ${workItemStatus.value}`;
   return cloudWorkspaceStateNote(project, null, workspaceState, { cloudLinkTrusted });
 }
 
-function cloudProjectRowStatusValue(project: CloudProject, workItemStatus: CloudWorkItemsStatus | null): string {
+function cloudProjectRowStatusValue(project: CloudProject): string {
   const branch = project.defaultBranch ?? "main";
-  const status = workItemStatus?.value ?? (project.syncedAt ? "setup ready" : "needs setup");
+  const status = project.syncedAt ? "setup ready" : "needs setup";
   return `${branch} / ${status}`;
-}
-
-type CloudWorkItemsStatus = {
-  value: string;
-  tone: "running" | "attention" | "cloud";
-};
-
-function cloudWorkItemsStatus(workItems: CloudWorkItem[]): CloudWorkItemsStatus | null {
-  const active = workItems.filter((item) => item.status === "queued" || item.status === "running");
-  if (active.length > 0) {
-    const running = active.filter((item) => item.status === "running").length;
-    const queued = active.length - running;
-    const value = running > 0
-      ? `${running} running${queued > 0 ? ` / ${queued} queued` : ""}`
-      : `${queued} queued`;
-    return { value, tone: "running" };
-  }
-
-  const review = workItems.find((item) => item.status === "needs_review");
-  if (review) return { value: "review ready", tone: "attention" };
-
-  const failed = workItems.find((item) => item.status === "failed");
-  if (failed) return { value: "cloud work failed", tone: "attention" };
-
-  return null;
 }
 
 function SidebarProjectMoreButton({

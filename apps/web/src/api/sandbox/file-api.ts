@@ -1,11 +1,6 @@
 import type {
-  SandboxFileDeleteResponse,
   SandboxFileDownloadResponse,
   SandboxFileListResponse,
-  SandboxFileMkdirResponse,
-  SandboxFileMoveResponse,
-  SandboxFileSearchResponse,
-  SandboxFileStatResponse,
   SandboxFileUploadResponse,
 } from "../../lib/sandbox-types";
 import {
@@ -80,73 +75,5 @@ export const sandboxFileApi = {
       ...payload,
       contents: payload.file.isBinary ? "" : base64ToText(payload.file.contentsBase64),
     };
-  },
-  sandboxSearchFiles: (
-    connection: ClientConnection,
-    sandboxId: string,
-    input: { query: string; path?: string; maxResults?: number },
-  ) => {
-    const query = new URLSearchParams({ search: "1", query: input.query });
-    if (input.path) query.set("path", input.path);
-    if (input.maxResults !== undefined) query.set("maxResults", String(input.maxResults));
-    return apiFetch<SandboxFileSearchResponse>(
-      connection,
-      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files?${query.toString()}`,
-    );
-  },
-  sandboxDeleteFile: (
-    connection: ClientConnection,
-    sandboxId: string,
-    input: { path: string; recursive?: boolean },
-  ) => {
-    const query = new URLSearchParams({ path: input.path });
-    if (input.recursive !== undefined) query.set("recursive", String(input.recursive));
-    return apiFetch<SandboxFileDeleteResponse>(
-      connection,
-      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files?${query.toString()}`,
-      {
-        method: "DELETE",
-      },
-    );
-  },
-  sandboxStatFile: (connection: ClientConnection, sandboxId: string, path: string) => {
-    const query = new URLSearchParams({ stat: "1", path });
-    return apiFetch<SandboxFileStatResponse>(
-      connection,
-      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files?${query.toString()}`,
-    );
-  },
-  sandboxMkdir: (
-    connection: ClientConnection,
-    sandboxId: string,
-    input: { path: string; recursive?: boolean },
-  ) => {
-    const query = new URLSearchParams({ path: input.path });
-    if (input.recursive !== undefined) query.set("recursive", String(input.recursive));
-    return apiFetch<SandboxFileMkdirResponse>(
-      connection,
-      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files?${query.toString()}`,
-      {
-        method: "PUT",
-      },
-    );
-  },
-  sandboxMoveFile: (
-    connection: ClientConnection,
-    sandboxId: string,
-    input: { fromPath: string; toPath: string; overwrite?: boolean },
-  ) => {
-    const query = new URLSearchParams({
-      fromPath: input.fromPath,
-      toPath: input.toPath,
-    });
-    if (input.overwrite !== undefined) query.set("overwrite", String(input.overwrite));
-    return apiFetch<SandboxFileMoveResponse>(
-      connection,
-      `/v1/sandboxes/${encodeURIComponent(sandboxId)}/files?${query.toString()}`,
-      {
-        method: "PATCH",
-      },
-    );
   },
 };

@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useCallback } from "react";
-import type { BootstrapPayload, CloudProject, CloudWorkItem } from "@openpond/contracts";
+import type { BootstrapPayload, CloudProject } from "@openpond/contracts";
 import type { NewProjectMode, RightPanelMode } from "../app/app-state";
 import { openBrowserLink } from "../lib/browser-sidebar-links";
 import { buildCloudEnvironmentCreateUrl } from "../lib/cloud-environment-setup";
@@ -12,9 +12,7 @@ export function useAppPanelActions({
   cloudProjects,
   diffPanelOpen,
   rightPanelMode,
-  selectedCloudWorkItem,
   selectedProjectId,
-  setCloudError,
   setDiffPanelOpen,
   setNewProjectDialogOpen,
   setNewProjectMode,
@@ -27,9 +25,7 @@ export function useAppPanelActions({
   cloudProjects: CloudProject[];
   diffPanelOpen: boolean;
   rightPanelMode: RightPanelMode;
-  selectedCloudWorkItem: CloudWorkItem | null;
   selectedProjectId: string | null;
-  setCloudError: Dispatch<SetStateAction<string | null>>;
   setDiffPanelOpen: Dispatch<SetStateAction<boolean>>;
   setNewProjectDialogOpen: Dispatch<SetStateAction<boolean>>;
   setNewProjectMode: Dispatch<SetStateAction<NewProjectMode>>;
@@ -82,10 +78,7 @@ export function useAppPanelActions({
   const setupCloudProjectFromCloudView = useCallback(
     (projectId: string) => {
       const project = cloudProjectById.get(projectId);
-      if (!project) {
-        setCloudError("Select a Cloud Project before setup.");
-        return;
-      }
+      if (!project) return;
       openUrlInBrowserPanel(
         buildCloudEnvironmentCreateUrl({
           accountBaseUrl: account?.baseUrl ?? account?.activeProfile?.baseUrl ?? null,
@@ -98,13 +91,13 @@ export function useAppPanelActions({
         { newTab: true },
       );
     },
-    [account, cloudProjectById, openUrlInBrowserPanel, setCloudError],
+    [account, cloudProjectById, openUrlInBrowserPanel],
   );
 
   const createCloudEnvironmentFromSidebar = useCallback(() => {
     const selectedCloudProjectId = selectedProjectId?.startsWith("cloud:")
       ? selectedProjectId.slice("cloud:".length)
-      : (selectedCloudWorkItem?.projectId ?? cloudProjects[0]?.id ?? null);
+      : (cloudProjects[0]?.id ?? null);
     if (selectedCloudProjectId) {
       setupCloudProjectFromCloudView(selectedCloudProjectId);
       return;
@@ -113,7 +106,6 @@ export function useAppPanelActions({
   }, [
     cloudProjects,
     openCloudProjectDialog,
-    selectedCloudWorkItem,
     selectedProjectId,
     setupCloudProjectFromCloudView,
   ]);

@@ -26,7 +26,6 @@ export function useConversationSidebarState(input: {
   rightPanelMode: RightPanelMode;
   selectedAppId: string | null;
   selectedCloudProject: { id: string } | null;
-  selectedCloudWorkItem: { id: string } | null;
   selectedProjectId: string | null;
   selectedSession: Pick<Session, "cwd" | "workspaceKind"> | null;
   selectedSessionId: string | null;
@@ -45,7 +44,6 @@ export function useConversationSidebarState(input: {
     rightPanelMode,
     selectedAppId,
     selectedCloudProject,
-    selectedCloudWorkItem,
     selectedProjectId,
     selectedSession,
     selectedSessionId,
@@ -69,8 +67,6 @@ export function useConversationSidebarState(input: {
     selectedSessionId ??
     `draft:${selectedProjectId ?? selectedAppId ?? selectedCloudProject?.id ?? "general"}`;
   const workspaceDiffPanelSourceKey = useMemo(() => {
-    if (view === "cloud" && selectedCloudWorkItem?.id)
-      return `cloud-work:${selectedCloudWorkItem.id}`;
     if (viewWorkspaceId) return `${viewWorkspaceKind ?? "workspace"}:${viewWorkspaceId}`;
     if (viewWorkspaceAppId) return `app:${viewWorkspaceAppId}`;
     if (selectedSession?.cwd && !isCloudWorkspaceKind(selectedSession.workspaceKind)) {
@@ -78,7 +74,6 @@ export function useConversationSidebarState(input: {
     }
     return "none";
   }, [
-    selectedCloudWorkItem?.id,
     selectedSession?.cwd,
     selectedSession?.workspaceKind,
     view,
