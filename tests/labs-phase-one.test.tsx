@@ -51,7 +51,7 @@ describe("Lab Phase 1", () => {
     expect(
       tasksetBaselineSelectionStrategy({
         artifactId: "dataset-artifact",
-      } as never),
+      } as never)
     ).toBe("rft_easy_curriculum_v1");
   });
 
@@ -78,7 +78,7 @@ describe("Lab Phase 1", () => {
         onImproveInChat: noop,
         onTrainModel: noop,
         onOpenFiles: noop,
-      }),
+      })
     );
 
     expect(markup).toContain('aria-label="Search Tasksets"');
@@ -106,7 +106,12 @@ describe("Lab Phase 1", () => {
           finalAnswer: 'ANSWER: {"account_ids":["account_1"]}',
           trajectoryId: "trajectory_renewal",
           trajectoryHash: "trajectoryhash0001",
-          toolNames: ["search_crm", "query_billing", "search_support", "run_python"],
+          toolNames: [
+            "search_crm",
+            "query_billing",
+            "search_support",
+            "run_python",
+          ],
           toolCallCount: 4,
           messageCount: 4,
           reward: 1.1,
@@ -139,7 +144,7 @@ describe("Lab Phase 1", () => {
         approving: false,
         onApprove: noop,
         onClose: noop,
-      }),
+      })
     );
 
     expect(markup).toContain("Review expert trajectories");
@@ -165,7 +170,7 @@ describe("Lab Phase 1", () => {
         onCreateDataset: noop,
         onCreateModel: noop,
         children: createElement("div", null, "Unified inventory"),
-      }),
+      })
     );
 
     expect(markup).toContain('aria-label="Lab"');
@@ -184,34 +189,36 @@ describe("Lab Phase 1", () => {
     const markup = renderToStaticMarkup(
       createElement(LabModelsPage, {
         activeProfileId: "user-active",
-        items: [{
-          key: "model:model-default",
-          kind: "model",
-          id: "model-default",
-          ownerProfileId: "default",
-          name: "Default Profile Model",
-          description: "A Model owned by another accessible Profile.",
-          status: "Base ready",
-          updatedAt: "2026-07-25T06:48:57.803Z",
-          path: "tasksets/taskset-default",
-          enabled: false,
-          runIds: [],
-          conversationId: null,
-          tasksetId: "taskset-default",
-          trainingRunCount: 1,
-          evaluationStatus: "not_run",
-          useActionId: null,
-        }],
+        items: [
+          {
+            key: "model:model-default",
+            kind: "model",
+            id: "model-default",
+            ownerProfileId: "default",
+            name: "Default Profile Model",
+            description: "A Model owned by another accessible Profile.",
+            status: "Base ready",
+            updatedAt: "2026-07-25T06:48:57.803Z",
+            path: "tasksets/taskset-default",
+            enabled: false,
+            runIds: [],
+            conversationId: null,
+            tasksetId: "taskset-default",
+            trainingRunCount: 1,
+            evaluationStatus: "not_run",
+            useActionId: null,
+          },
+        ],
         loading: false,
         runs: [],
         state: null,
         onSelect: noop,
         onUseModel: noop,
-      }),
+      })
     );
 
     expect(markup).toContain(
-      '<option value="all" selected="">All profiles</option>',
+      '<option value="all" selected="">All profiles</option>'
     );
     expect(markup).toContain('<option value="default">default</option>');
     expect(markup).toContain("<th>Profile</th>");
@@ -222,26 +229,33 @@ describe("Lab Phase 1", () => {
   test("routes Agent and Taskset authoring through the shared shell and Model creation through the run editor", async () => {
     const [route, dialog, datasetsPage] = await Promise.all([
       readFile("apps/web/src/components/labs/LabsRoute.tsx", "utf8"),
-      readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
+      readFile(
+        "apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx",
+        "utf8"
+      ),
       readFile("apps/web/src/components/labs/LabDatasetsPage.tsx", "utf8"),
     ]);
     expect(route.match(/<CreateImproveAuthoringDialog/g)).toHaveLength(3);
     expect(route).toContain("<ModelRunEditorPage");
     expect(route).toContain("initialCreation={resumedModelCreation}");
     expect(route).toContain(
-      'targetIntent={{ kind: "agent", id: null, displayName: null, operation: "create" }}',
+      'targetIntent={{ kind: "agent", id: null, displayName: null, operation: "create" }}'
     );
     expect(route).toContain('operation: "improve"');
     expect(route).toContain("$openpond-taskset-authoring");
     expect(route).toContain("<DatasetBuilderChatHandoff");
     expect(route).toContain("Help me create a Taskset.");
     expect(route).not.toContain("Use the Dataset Builder Agent actions");
-    expect(route).not.toContain("return the Dataset ID plus readiness blockers");
+    expect(route).not.toContain(
+      "return the Dataset ID plus readiness blockers"
+    );
     expect(route).not.toContain("LabAgentCreateDialog");
     expect(route).not.toContain("LabAgentImproveDialog");
     expect(route).not.toContain("genericCreateOpen");
     expect(route).not.toContain("onCreateGeneric");
-    expect(dialog).toContain("Discard the unsaved Dataset evidence in this builder?");
+    expect(dialog).toContain(
+      "Discard the unsaved Dataset evidence in this builder?"
+    );
     expect(dialog).not.toContain("current selections will be discarded");
     expect(datasetsPage).not.toContain('{ id: "build", label: "Build" }');
     expect(datasetsPage).toContain("Improve in Chat");
@@ -269,7 +283,8 @@ describe("Lab Phase 1", () => {
       worldSpecs: Array.from({ length: 15 }, (_, index) => ({
         seed: index,
         split: index < 9 ? "train" : index < 12 ? "validation" : "frozen_eval",
-        difficulty: index % 3 === 0 ? "easy" : index % 3 === 1 ? "medium" : "hard",
+        difficulty:
+          index % 3 === 0 ? "easy" : index % 3 === 1 ? "medium" : "hard",
       })),
       status: "running",
       progress: {
@@ -340,7 +355,9 @@ describe("Lab Phase 1", () => {
       },
       runs: [authoringRun],
     });
-    const markup = renderToStaticMarkup(createElement(LabModelBaselineProgress, { run }));
+    const markup = renderToStaticMarkup(
+      createElement(LabModelBaselineProgress, { run })
+    );
 
     expect(workproduct).toMatchObject({
       kind: "model",
@@ -395,8 +412,12 @@ describe("Lab Phase 1", () => {
       completedAt: "2026-07-17T12:15:00.000Z",
       updatedAt: "2026-07-17T12:15:00.000Z",
     });
-    const dataMarkup = renderToStaticMarkup(createElement(LabModelBaselineData, { run }));
-    const evalMarkup = renderToStaticMarkup(createElement(LabModelBaselineEvals, { run }));
+    const dataMarkup = renderToStaticMarkup(
+      createElement(LabModelBaselineData, { run })
+    );
+    const evalMarkup = renderToStaticMarkup(
+      createElement(LabModelBaselineEvals, { run })
+    );
 
     expect(dataMarkup).toContain("Taskset splits");
     expect(dataMarkup).toContain("15</strong> recorded trajectories");
@@ -438,7 +459,7 @@ describe("Lab Phase 1", () => {
             datasetRows: async () => null,
           },
         } as any,
-      }),
+      })
     );
     const dataMarkup = renderToStaticMarkup(
       createElement(LabModelDataset, {
@@ -453,7 +474,7 @@ describe("Lab Phase 1", () => {
             datasetRows: async () => null,
           },
         } as any,
-      }),
+      })
     );
 
     expect(markup).toContain(">Taskset<");
@@ -535,7 +556,7 @@ describe("Lab Phase 1", () => {
             cancelBaselineRun: async () => null,
           },
         } as any,
-      }),
+      })
     );
 
     expect(markup).toContain(">Taskset checks<");
@@ -597,8 +618,8 @@ describe("Lab Phase 1", () => {
           ...baseRun,
           sourceIds: taskset.sourceRefs.map((source) => source.id),
         }),
-        taskset,
-      ),
+        taskset
+      )
     ).toBe(true);
   });
 
@@ -756,13 +777,17 @@ describe("Lab Phase 1", () => {
       lastCheck: null,
     } as unknown as OpenPondProfileState;
 
-    expect(labWorkproductProjection({ profile, training: null, runs: [] })[0]).toMatchObject({
+    expect(
+      labWorkproductProjection({ profile, training: null, runs: [] })[0]
+    ).toMatchObject({
       id: "account-health-agent",
       useActionId: "chat",
     });
 
     profile.actionCatalog[0]!.id = "account-health-agent.chat";
-    expect(labWorkproductProjection({ profile, training: null, runs: [] })[0]).toMatchObject({
+    expect(
+      labWorkproductProjection({ profile, training: null, runs: [] })[0]
+    ).toMatchObject({
       useActionId: "account-health-agent.chat",
     });
   });
@@ -793,7 +818,10 @@ describe("Lab Phase 1", () => {
 
   test.skip("legacy concurrent Agent candidate titles are retired", () => {
     const objective = "Monitor customer account health and renewal risk.";
-    const draft = (id: string, state: "planning" | "failed" | "awaiting_plan_approval") =>
+    const draft = (
+      id: string,
+      state: "planning" | "failed" | "awaiting_plan_approval"
+    ) =>
       createImproveRunFixture({
         id,
         state,
@@ -817,9 +845,11 @@ describe("Lab Phase 1", () => {
     });
 
     expect(new Set(projected.map((item) => item.name))).toHaveLength(3);
-    expect(projected.every((item) => item.name.startsWith("Monitor customer account health"))).toBe(
-      true,
-    );
+    expect(
+      projected.every((item) =>
+        item.name.startsWith("Monitor customer account health")
+      )
+    ).toBe(true);
     expect(projected.every((item) => item.name !== "Create agent")).toBe(true);
 
     const canonical = createImproveRunFixture({
@@ -836,7 +866,7 @@ describe("Lab Phase 1", () => {
         profile: null,
         training: null,
         runs: [canonical],
-      })[0]?.name,
+      })[0]?.name
     ).toBe("Account Health Agent");
   });
 
@@ -855,7 +885,10 @@ describe("Lab Phase 1", () => {
       training: null,
       runs: [ready, active],
     });
-    const workproductRuns = runsForWorkproduct(workproducts[0]!, [ready, active]);
+    const workproductRuns = runsForWorkproduct(workproducts[0]!, [
+      ready,
+      active,
+    ]);
     const progression = labWorkproductProgression({
       workproduct: workproducts[0]!,
       runs: workproductRuns,
@@ -869,7 +902,10 @@ describe("Lab Phase 1", () => {
       action: { kind: "review_run", label: "Review plan" },
       runId: "create_improve_active",
     });
-    expect(workproducts[0]?.runIds).toEqual(["create_improve_ready", "create_improve_active"]);
+    expect(workproducts[0]?.runIds).toEqual([
+      "create_improve_ready",
+      "create_improve_active",
+    ]);
   });
 
   test.skip("legacy blocked Agent candidate continuation is retired", () => {
@@ -921,7 +957,7 @@ describe("Lab Phase 1", () => {
         runs: [run],
         taskset: null,
         training: null,
-      }).action,
+      }).action
     ).toEqual({ kind: "resume_run", label: "Continue update" });
   });
 
@@ -949,7 +985,7 @@ describe("Lab Phase 1", () => {
         runs: [],
         taskset: draftTaskset,
         training: null,
-      }).action,
+      }).action
     ).toEqual({ kind: "open_data", label: "Review data" });
     expect(
       labWorkproductProgression({
@@ -957,7 +993,7 @@ describe("Lab Phase 1", () => {
         runs: [],
         taskset: readyTaskset,
         training: null,
-      }).action,
+      }).action
     ).toEqual({ kind: "start_training", label: "Start training" });
     const rftTaskset = TasksetSchema.parse({
       ...readyTaskset,
@@ -979,7 +1015,7 @@ describe("Lab Phase 1", () => {
         runs: [],
         taskset: rftTaskset,
         training: null,
-      }),
+      })
     ).toMatchObject({
       statusLabel: "Test base model",
       action: { kind: "start_training", label: "Configure training" },
@@ -1031,7 +1067,7 @@ describe("Lab Phase 1", () => {
         onOpenDataset: noop,
         onOpenEntry: noop,
         onToast: noop,
-      }),
+      })
     );
 
     expect(markup).toContain('aria-label="Versions and runs"');
@@ -1139,7 +1175,7 @@ describe("Lab Phase 1", () => {
         onOpenDataset: noop,
         onOpenEntry: noop,
         onToast: noop,
-      }),
+      })
     );
 
     expect(markup).toContain("Train-signal check");
@@ -1174,7 +1210,7 @@ describe("Lab Phase 1", () => {
         onBack: noop,
         onOpenDataset: noop,
         onUseVersion: noop,
-      }),
+      })
     );
     expect(detail).toContain("Train-signal check");
     expect(detail).toContain("no available capacity");
@@ -1222,7 +1258,7 @@ describe("Lab Phase 1", () => {
         runs: [authoringRun],
         taskset,
         training,
-      }),
+      })
     ).toMatchObject({
       statusLabel: "Running",
       statusValue: "running",
@@ -1274,7 +1310,7 @@ describe("Lab Phase 1", () => {
         runs: [],
         taskset,
         training,
-      }),
+      })
     ).toMatchObject({
       statusLabel: "Evaluation failed",
       statusValue: "failed",
@@ -1312,25 +1348,34 @@ describe("Lab Phase 1", () => {
     ).join("\n");
     const detail = (
       await Promise.all([
-        readFile("apps/web/src/components/labs/LabWorkproductDetail.tsx", "utf8"),
-        readFile("apps/web/src/components/labs/LabWorkproductDetailSections.tsx", "utf8"),
-      ])
-    ).join("\n");
-    const changes = await readFile("apps/web/src/components/labs/LabAgentChanges.tsx", "utf8");
-    const decision = await readFile(
-      "apps/web/src/components/labs/LabRunDecisionSection.tsx",
-      "utf8",
-    );
-    const view = await readFile("apps/web/src/components/labs/LabsView.tsx", "utf8");
-    const modelWorkspace = (
-      await Promise.all([
         readFile(
-          "apps/web/src/components/labs/LabModelWorkspace.tsx",
-          "utf8",
+          "apps/web/src/components/labs/LabWorkproductDetail.tsx",
+          "utf8"
         ),
         readFile(
+          "apps/web/src/components/labs/LabWorkproductDetailSections.tsx",
+          "utf8"
+        ),
+      ])
+    ).join("\n");
+    const changes = await readFile(
+      "apps/web/src/components/labs/LabAgentChanges.tsx",
+      "utf8"
+    );
+    const decision = await readFile(
+      "apps/web/src/components/labs/LabRunDecisionSection.tsx",
+      "utf8"
+    );
+    const view = await readFile(
+      "apps/web/src/components/labs/LabsView.tsx",
+      "utf8"
+    );
+    const modelWorkspace = (
+      await Promise.all([
+        readFile("apps/web/src/components/labs/LabModelWorkspace.tsx", "utf8"),
+        readFile(
           "apps/web/src/components/labs/LabModelVersionDetailPage.tsx",
-          "utf8",
+          "utf8"
         ),
       ])
     ).join("\n");
@@ -1354,7 +1399,7 @@ describe("Lab Phase 1", () => {
     expect(route).not.toContain('"Search profile"');
     expect(route).not.toContain('"Filter workproduct type"');
     expect(route).toContain(
-      "showHeader={!training.launchRequest && !selected && !selectedDatasetId}",
+      "showHeader={!training.launchRequest && !selected && !selectedDatasetId}"
     );
     expect(route).toContain('activeTab === "models"');
     expect(route).toContain("<LabModelsPage");
@@ -1369,7 +1414,7 @@ describe("Lab Phase 1", () => {
     expect(detail).toContain("detailBreadcrumbs(");
     expect(detail).toContain("selectedChangeCommit");
     expect(detail).toContain("workproductLabel: workproduct.name");
-    expect(route).toContain('segments: [');
+    expect(route).toContain("segments: [");
     expect(route).toContain('{ label: modelEditorName ?? "Model" }');
     expect(route).toContain("onNameChange={setModelEditorName}");
     expect(detail).toContain("Download LoRA");
@@ -1387,18 +1432,22 @@ describe("Lab Phase 1", () => {
     expect(view).toContain("<strong>Skill</strong>");
     expect(view).toContain("<strong>Extension</strong>");
     expect(view.indexOf("<strong>Agent</strong>")).toBeLessThan(
-      view.indexOf("<strong>Model</strong>"),
+      view.indexOf("<strong>Model</strong>")
     );
     expect(view.indexOf("<strong>Model</strong>")).toBeLessThan(
-      view.indexOf("<strong>Taskset</strong>"),
+      view.indexOf("<strong>Taskset</strong>")
     );
     expect(view).toContain('activeTab === "workproducts"');
     expect(view.match(/<small>Coming soon<\/small>/g)).toHaveLength(2);
-    expect(view.match(/<button disabled type="button" role="menuitem">/g)).toHaveLength(2);
+    expect(
+      view.match(/<button disabled type="button" role="menuitem">/g)
+    ).toHaveLength(2);
     expect(detail).toContain("Improve agent");
     expect(detail).not.toContain("New change");
     expect(detail).not.toContain("labs-model-current-picker");
-    expect(detail).not.toContain("aria-label={`Current Version for ${workproduct.name}`}");
+    expect(detail).not.toContain(
+      "aria-label={`Current Version for ${workproduct.name}`}"
+    );
     expect(detail).toContain("Available Evals");
     expect(detail).toContain("Used for this change");
     expect(detail).toContain("}, [workproduct.key]);");
@@ -1409,16 +1458,18 @@ describe("Lab Phase 1", () => {
     expect(modelWorkspace).toContain("<th>Output</th>");
     expect(modelWorkspace).toContain("Back to runs");
     expect(modelWorkspace).not.toContain("Version history");
-    expect(modelWorkspace).not.toContain("Each training attempt is listed here.");
+    expect(modelWorkspace).not.toContain(
+      "Each training attempt is listed here."
+    );
     expect(modelWorkspace).toContain("<TrainingRunMetrics");
     expect(modelWorkspace).toContain("<TrainingRunEvaluation");
     expect(modelWorkspace).toContain("<TrainingRolloutReceipts");
     expect(modelWorkspace).toContain("Download LoRA");
     expect(modelWorkspace).toContain(
-      "!resolveModelBindingPromotionGate(selectedVersion.lineage)",
+      "!resolveModelBindingPromotionGate(selectedVersion.lineage)"
     );
-    expect(modelWorkspace).toContain("<ManagedAdapterServingEvidence");
-    expect(modelWorkspace).toContain("<ManagedAdapterEvaluationPanel");
+    expect(modelWorkspace).toContain("<ManagedAdapterServingStatus");
+    expect(modelWorkspace).not.toContain("<ManagedAdapterEvaluationPanel");
     expect(modelWorkspace).toContain('["artifacts", "Artifacts"]');
     expect(modelWorkspace).not.toContain("LabModelOverviewPage");
     expect(modelWorkspace).not.toContain("LabModelRunsPage");
@@ -1441,7 +1492,7 @@ describe("Lab Phase 1", () => {
         currentName: "Support Agent",
         onClose: noop,
         onRename: async () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain("Rename agent");
@@ -1451,16 +1502,29 @@ describe("Lab Phase 1", () => {
   });
 
   test("allows right chat alongside Lab and uses breadcrumbs for detail navigation", async () => {
-    const mainPane = await readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8");
+    const mainPane = await readFile(
+      "apps/web/src/components/app-shell/MainPane.tsx",
+      "utf8"
+    );
     const app = await readFile("apps/web/src/app/AppRuntimeView.tsx", "utf8");
-    const labAgentAuthoring = await readFile("apps/web/src/hooks/useLabAgentAuthoring.ts", "utf8");
-    const navigation = await readFile("apps/web/src/hooks/useLabDetailNavigation.ts", "utf8");
+    const labAgentAuthoring = await readFile(
+      "apps/web/src/hooks/useLabAgentAuthoring.ts",
+      "utf8"
+    );
+    const navigation = await readFile(
+      "apps/web/src/hooks/useLabDetailNavigation.ts",
+      "utf8"
+    );
     expect(mainPane).toContain('(view === "chat" || view === "labs")');
-    expect(mainPane).toContain("onOpenRunConversation={onOpenRightChatForSession}");
+    expect(mainPane).toContain(
+      "onOpenRunConversation={onOpenRightChatForSession}"
+    );
     expect(mainPane).toContain("onCreateAgent={createAgentFromLab}");
     expect(labAgentAuthoring).toContain('systemKind: "openpond.lab"');
     expect(labAgentAuthoring).toContain("hiddenFromDefaultSidebar: true");
-    expect(mainPane).toContain("closeDetailRequestId={labCloseDetailRequestId}");
+    expect(mainPane).toContain(
+      "closeDetailRequestId={labCloseDetailRequestId}"
+    );
     expect(app).toContain("backAction: labDetailNavigation.backAction");
     expect(app).toContain("breadcrumbs: labDetailNavigation.breadcrumbs");
     expect(navigation).toContain("const backAction = null");
@@ -1491,7 +1555,9 @@ describe("Lab Phase 1", () => {
             remoteName: "origin",
             remoteUrl: "git@github.com:openpond/profile.git",
             worktreePath: "/tmp/candidate",
-            changedPaths: ["profiles/default/agents/fixture-agent/agent/agent.ts"],
+            changedPaths: [
+              "profiles/default/agents/fixture-agent/agent/agent.ts",
+            ],
             diffStat: "1 file changed",
             pullRequest: null,
           },
@@ -1512,7 +1578,7 @@ describe("Lab Phase 1", () => {
     const markup = renderToStaticMarkup(
       createElement(ComposerCreateImproveStrip, {
         runtime: { run },
-      }),
+      })
     );
     expect(markup).toContain("Update ready");
     expect(markup).toContain("Current Agent: 0/1 Evals passed");
@@ -1557,7 +1623,9 @@ describe("Lab Phase 1", () => {
           metadata: {},
         },
       ],
-      evaluationReceipts: [evalReceipt("candidate_eval", "candidate", "passed", 1)],
+      evaluationReceipts: [
+        evalReceipt("candidate_eval", "candidate", "passed", 1),
+      ],
     });
     const candidate = run.candidates[0]!;
     const markup = renderToStaticMarkup(
@@ -1590,7 +1658,7 @@ describe("Lab Phase 1", () => {
         onApplyCandidate: async () => undefined,
         onOpenFiles: noop,
         onRejectCandidate: async () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain(">Request<");
@@ -1605,8 +1673,12 @@ describe("Lab Phase 1", () => {
     expect(markup).not.toContain("Review the drafted files and their Evals");
     expect(markup).not.toContain("Files changed");
     expect(markup).not.toContain("profiles/default/agent/instructions.md");
-    expect(markup.indexOf(">Request<")).toBeLessThan(markup.indexOf(">Changes<"));
-    expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf("Files (1)"));
+    expect(markup.indexOf(">Request<")).toBeLessThan(
+      markup.indexOf(">Changes<")
+    );
+    expect(markup.indexOf(">Changes<")).toBeLessThan(
+      markup.indexOf("Files (1)")
+    );
     expect(markup.indexOf("Files (1)")).toBeLessThan(markup.indexOf(">Evals<"));
     expect(markup.indexOf(">Changes<")).toBeLessThan(markup.indexOf(">Evals<"));
     expect(markup.indexOf(">Evals<")).toBeLessThan(markup.indexOf(">Apply<"));
@@ -1615,7 +1687,7 @@ describe("Lab Phase 1", () => {
       createElement(LabAgentChangeHistory, {
         runs: [run],
         onReview: noop,
-      }),
+      })
     );
     expect(history).toContain("Make the Agent better at finding files.");
     expect(history).toContain("1/1 passed");
@@ -1626,7 +1698,7 @@ function evalReceipt(
   id: string,
   subject: "active" | "candidate",
   status: "passed" | "failed",
-  passed: number,
+  passed: number
 ) {
   return {
     id,
@@ -1642,7 +1714,8 @@ function evalReceipt(
     sourceCommit: subject === "active" ? "a".repeat(40) : "b".repeat(40),
     sourceBranch: subject === "active" ? "main" : "openpond/improve/fixture",
     status,
-    publishGate: status === "passed" ? ("passed" as const) : ("failed" as const),
+    publishGate:
+      status === "passed" ? ("passed" as const) : ("failed" as const),
     summaryCounts: { total: 1, passed, failed: 1 - passed },
     evalRefs: ["fixture"],
     artifactRefs: [],

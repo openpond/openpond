@@ -129,14 +129,6 @@
       "durationSeconds": 77.467
     },
     {
-      "id": "profile-to-deployment-overview",
-      "localPath": "tutorials/profile-to-deployment.mp4",
-      "objectKey": "media/videos/70974c2659d81922e1461e41c3f5b4a249b646e40ac0374a14711aa678d37fd9.mp4",
-      "sha256": "70974c2659d81922e1461e41c3f5b4a249b646e40ac0374a14711aa678d37fd9",
-      "sizeBytes": 7542633,
-      "durationSeconds": 105.834
-    },
-    {
       "id": "make-agent-tutorial",
       "localPath": "tutorials/how-to-make-an-agent.mp4",
       "objectKey": "media/videos/252d2f27076c904d85c9854c2f4c494fe9e92b3cea7d2c58ffbaa0323c17f255.mp4",

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   resolveModelBindingPromotionGate,
+  type ManagedAdapterServingProjection,
   type TrainingJobEvent,
 } from "@openpond/contracts";
 
@@ -18,10 +19,6 @@ import {
   trainingMethodLabel,
 } from "../training/training-model-data";
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
-import {
-  ManagedAdapterEvaluationPanel,
-  ManagedAdapterServingEvidence,
-} from "./ManagedAdapterServingEvidence";
 import {
   labModelBaselineRuns,
   labModelJobs,
@@ -96,8 +93,7 @@ export function LabModelVersionDetailPage({
     : null;
   const selectedEvaluationArtifactId =
     selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
-  const managedServing =
-    selectedVersion?.lineage.managedServing ?? null;
+  const managedServing = selectedVersion?.lineage.managedServing ?? null;
   const selectedBaselineRun = selected?.baselineRun ?? null;
   const selectedPlan =
     selectedVersion?.plan ??
@@ -420,7 +416,7 @@ export function LabModelVersionDetailPage({
         </DetailSection>
       ) : null}
       {activeRunTab === "summary" ? (
-        <ManagedAdapterServingEvidence projection={managedServing} />
+        <ManagedAdapterServingStatus projection={managedServing} />
       ) : null}
 
       {selectedJob && activeRunTab === "metrics" ? (
@@ -469,13 +465,6 @@ export function LabModelVersionDetailPage({
               ) : null}
             </div>
           </DetailSection>
-          {managedServing?.evaluation ? (
-            <DetailSection title="Sandbox compatibility and admission">
-              <ManagedAdapterEvaluationPanel
-                evaluation={managedServing.evaluation}
-              />
-            </DetailSection>
-          ) : null}
         </>
       ) : null}
 
@@ -578,6 +567,55 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dd>{value}</dd>
     </div>
   );
+}
+
+function ManagedAdapterServingStatus({
+  projection,
+}: {
+  projection: ManagedAdapterServingProjection | null;
+}) {
+  if (!projection) return null;
+  return (
+    <DetailSection title="Managed Sandbox serving">
+      <p className="training-muted">
+        Sandbox owns evaluation, provider operations, receipts, and costs.
+        OpenPond retains only the binding and readiness state needed for Chat.
+      </p>
+      <dl className="labs-inline-facts">
+        <Fact
+          label="Admission"
+          value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
+        />
+        <Fact
+          label="Artifact"
+          value={managedStateLabel(projection.canonicalArtifactState)}
+        />
+        <Fact
+          label="Deployment"
+          value={managedStateLabel(projection.canonicalDeploymentState)}
+        />
+        <Fact
+          label="Base profile"
+          value={projection.baseProfileId ?? "Pending"}
+        />
+        <Fact
+          label="Last synchronized"
+          value={formatDateTime(projection.lastSyncedAt)}
+        />
+        {projection.lastError ? (
+          <Fact label="Synchronization" value={projection.lastError} />
+        ) : null}
+      </dl>
+    </DetailSection>
+  );
+}
+
+function managedStateLabel(value: string | null): string {
+  return value
+    ? value
+        .replaceAll("_", " ")
+        .replace(/^./, (character) => character.toUpperCase())
+    : "Pending";
 }
 
 function TrainingEventLog({

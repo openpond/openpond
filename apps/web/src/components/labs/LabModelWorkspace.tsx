@@ -6,7 +6,7 @@ import type {
   TrainingJob,
 } from "@openpond/contracts";
 import {
-  managedAdapterEvaluationPassed,
+  managedAdapterCustomerBindingAllowed,
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
@@ -595,11 +595,11 @@ function VersionEvalBadge({
     ? Boolean(resolveModelBindingPromotionGate(version.lineage)) ||
       job?.metadata.frozenEvaluationComplete === true ||
       Boolean(version.lineage.frozenEvaluationArtifactId) ||
-      Boolean(version.lineage.managedServing?.evaluation)
+      Boolean(version.lineage.managedServing?.customerBindingAllowed)
     : false;
   const evaluationPassed = version
     ? Boolean(resolveModelBindingPromotionGate(version.lineage)) ||
-      managedAdapterEvaluationPassed(version.lineage)
+      managedAdapterCustomerBindingAllowed(version.lineage)
     : false;
   const label = version
     ? !evaluationComplete

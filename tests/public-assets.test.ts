@@ -16,7 +16,8 @@ import {
 
 describe("web public asset URLs", () => {
   test("resolve beside the packaged renderer instead of the filesystem root", () => {
-    const rendererUrl = "file:///Applications/openpond.app/Contents/Resources/web/index.html";
+    const rendererUrl =
+      "file:///Applications/openpond.app/Contents/Resources/web/index.html";
     const assetUrls = [
       OPENPOND_ICON_URL,
       OPENPOND_WORDMARK_WHITE_URL,
@@ -27,9 +28,11 @@ describe("web public asset URLs", () => {
 
     for (const assetUrl of assetUrls) {
       expect(assetUrl.startsWith("./")).toBe(true);
-      expect(new URL(assetUrl, rendererUrl).pathname.startsWith(
-        "/Applications/openpond.app/Contents/Resources/web/",
-      )).toBe(true);
+      expect(
+        new URL(assetUrl, rendererUrl).pathname.startsWith(
+          "/Applications/openpond.app/Contents/Resources/web/"
+        )
+      ).toBe(true);
     }
   });
 
@@ -39,43 +42,47 @@ describe("web public asset URLs", () => {
   });
 
   test("uses local MP4s in development and immutable manifest keys in production", () => {
-    expect(PUBLIC_VIDEO_MANIFEST.playlists).toContainEqual(expect.objectContaining({
-      id: "post-training-from-first-principles",
-      fullVideoId: "post-training-full-course",
-      status: "draft",
-      videoIds: expect.arrayContaining([
-        "post-training-01-how-post-training-works",
-        "post-training-10-technical-appendix",
-      ]),
-    }));
-    const postTrainingPlaylist = PUBLIC_VIDEO_MANIFEST.playlists.find(
-      (playlist) => playlist.id === "post-training-from-first-principles",
+    expect(PUBLIC_VIDEO_MANIFEST.playlists).toContainEqual(
+      expect.objectContaining({
+        id: "post-training-from-first-principles",
+        fullVideoId: "post-training-full-course",
+        status: "draft",
+        videoIds: expect.arrayContaining([
+          "post-training-01-how-post-training-works",
+          "post-training-10-technical-appendix",
+        ]),
+      })
     );
-    expect(postTrainingPlaylist?.videoIds).not.toContain("post-training-full-course");
-    expect(PUBLIC_VIDEO_MANIFEST.playlists).toContainEqual(expect.objectContaining({
-      id: "how-to-make-an-agent",
-      playAllVideoId: "make-agent-tutorial",
-      status: "published",
-      title: "Agents",
-      videoIds: [
-        "make-agent-tutorial-create",
-        "make-agent-tutorial-use",
-        "make-agent-tutorial-improve",
-      ],
-    }));
-    expect(PUBLIC_VIDEO_MANIFEST.videos).toContainEqual(expect.objectContaining({
-      id: "openpond-agent-overview",
-      localPath: "tutorials/what-is-an-openpond-agent.mp4",
-    }));
-    expect(PUBLIC_VIDEO_MANIFEST.videos).toContainEqual(expect.objectContaining({
-      id: "profile-to-deployment-overview",
-      localPath: "tutorials/profile-to-deployment.mp4",
-    }));
-    expect(PUBLIC_VIDEO_MANIFEST.videos).toHaveLength(17);
+    const postTrainingPlaylist = PUBLIC_VIDEO_MANIFEST.playlists.find(
+      (playlist) => playlist.id === "post-training-from-first-principles"
+    );
+    expect(postTrainingPlaylist?.videoIds).not.toContain(
+      "post-training-full-course"
+    );
+    expect(PUBLIC_VIDEO_MANIFEST.playlists).toContainEqual(
+      expect.objectContaining({
+        id: "how-to-make-an-agent",
+        playAllVideoId: "make-agent-tutorial",
+        status: "published",
+        title: "Agents",
+        videoIds: [
+          "make-agent-tutorial-create",
+          "make-agent-tutorial-use",
+          "make-agent-tutorial-improve",
+        ],
+      })
+    );
+    expect(PUBLIC_VIDEO_MANIFEST.videos).toContainEqual(
+      expect.objectContaining({
+        id: "openpond-agent-overview",
+        localPath: "tutorials/what-is-an-openpond-agent.mp4",
+      })
+    );
+    expect(PUBLIC_VIDEO_MANIFEST.videos).toHaveLength(16);
     for (const video of PUBLIC_VIDEO_MANIFEST.videos) {
       expect(resolvePublicVideoUrl(video, false)).toBe(`./${video.localPath}`);
       expect(resolvePublicVideoUrl(video, true)).toBe(
-        `${PRODUCTION_MEDIA_ORIGIN}/media/videos/${video.sha256}.mp4`,
+        `${PRODUCTION_MEDIA_ORIGIN}/media/videos/${video.sha256}.mp4`
       );
       expect(video.objectKey).toBe(`media/videos/${video.sha256}.mp4`);
     }

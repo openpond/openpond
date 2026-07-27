@@ -38,7 +38,7 @@ describe("managed adapter chat runtime", () => {
       expect.objectContaining({
         teamId: "team_qa",
         logicalModelName: managedBindingLogicalModelName(binding),
-      }),
+      })
     );
   });
 
@@ -71,7 +71,7 @@ describe("managed adapter chat runtime", () => {
         ],
         requestId: "request-qwen-no-think",
         signal: new AbortController().signal,
-      }),
+      })
     );
 
     expect(streamChat).toHaveBeenCalledWith(
@@ -83,15 +83,15 @@ describe("managed adapter chat runtime", () => {
             content: "Inspect the portfolio.\n\n/no_think",
           },
         ],
-      }),
+      })
     );
   });
 
   test("uses persisted monotonic binding projection versions", () => {
     expect(managedBindingProjectionVersion(modelBinding())).toBe(3);
-    expect(
-      managedBindingLogicalModelName(modelBinding()),
-    ).toMatch(/^trained-[a-f0-9]{32}$/);
+    expect(managedBindingLogicalModelName(modelBinding())).toMatch(
+      /^trained-[a-f0-9]{32}$/
+    );
   });
 
   test("routes a catalog lineage id through its active manual binding", async () => {
@@ -125,14 +125,14 @@ describe("managed adapter chat runtime", () => {
           messages: [{ role: "user", content: "hello" }],
           requestId: "request-lineage",
           signal: new AbortController().signal,
-        }),
-      ),
+        })
+      )
     ).resolves.toEqual([{ text: "managed-lineage" }]);
     expect(streamChat).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: "team_qa",
         logicalModelName: managedBindingLogicalModelName(binding),
-      }),
+      })
     );
   });
 
@@ -168,12 +168,12 @@ describe("managed adapter chat runtime", () => {
         messages: [{ role: "user", content: "hello" }],
         requestId: "request-default-binding",
         signal: new AbortController().signal,
-      }),
+      })
     );
     expect(streamChat).toHaveBeenCalledWith(
       expect.objectContaining({
         logicalModelName: managedBindingLogicalModelName(defaultBinding),
-      }),
+      })
     );
   });
 
@@ -203,8 +203,7 @@ describe("managed adapter chat runtime", () => {
         state,
         canonicalArtifactState: artifactState,
         canonicalDeploymentState: deploymentState,
-        canonicalDeploymentId:
-          deploymentState === null ? null : "deployment-1",
+        canonicalDeploymentId: deploymentState === null ? null : "deployment-1",
       };
       const store = {
         getActiveModelBinding: vi.fn(async () => binding),
@@ -221,16 +220,49 @@ describe("managed adapter chat runtime", () => {
 
       expect(await runtime.appliesTo(modelId)).toBe(true);
       await expect(
-        collect(runtime.stream({
-          modelId,
-          messages: [{ role: "user", content: "hello" }],
-          requestId: "request-not-ready",
-          signal: new AbortController().signal,
-        })),
+        collect(
+          runtime.stream({
+            modelId,
+            messages: [{ role: "user", content: "hello" }],
+            requestId: "request-not-ready",
+            signal: new AbortController().signal,
+          })
+        )
       ).rejects.toThrow("not ready on managed serving");
       expect(streamChat).not.toHaveBeenCalled();
-    },
+    }
   );
+
+  test("fails closed when Sandbox withdraws customer binding admission", async () => {
+    const binding = modelBinding();
+    const lineage = modelLineage();
+    lineage.managedServing = {
+      ...lineage.managedServing!,
+      customerBindingAllowed: false,
+    };
+    const streamChat = vi.fn(async function* () {
+      yield { text: "must-not-run" };
+    });
+    const runtime = createManagedAdapterChatRuntime({
+      store: {
+        getActiveModelBinding: vi.fn(async () => binding),
+        getModelArtifactLineage: vi.fn(async () => lineage),
+      } as unknown as SqliteStore,
+      client: { streamChat } as never,
+    });
+
+    await expect(
+      collect(
+        runtime.stream({
+          modelId: "binding:profile-1:chat_manual:target-1",
+          messages: [{ role: "user", content: "hello" }],
+          requestId: "request-withdrawn-admission",
+          signal: new AbortController().signal,
+        })
+      )
+    ).rejects.toThrow("not ready on managed serving");
+    expect(streamChat).not.toHaveBeenCalled();
+  });
 
   test("does not claim a binding that has never entered managed serving", async () => {
     const binding = modelBinding();
@@ -245,14 +277,12 @@ describe("managed adapter chat runtime", () => {
     });
 
     expect(
-      await runtime.appliesTo("binding:profile-1:chat_manual:target-1"),
+      await runtime.appliesTo("binding:profile-1:chat_manual:target-1")
     ).toBe(false);
   });
 });
 
-async function collect<T>(
-  iterable: AsyncIterable<T>,
-): Promise<T[]> {
+async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const values: T[] = [];
   for await (const value of iterable) values.push(value);
   return values;
@@ -324,12 +354,9 @@ function modelLineage(): ModelArtifactLineage {
       canonicalDeploymentId: "deployment-1",
       canonicalDeploymentState: "ready",
       state: "ready",
+      customerBindingAllowed: true,
       artifactContentHash: null,
       baseProfileId: null,
-      evaluation: null,
-      deployment: null,
-      servingPool: null,
-      servingReceipts: [],
       publishedAt: "2026-07-19T11:30:00.000Z",
       lastSyncedAt: "2026-07-19T12:00:00.000Z",
       lastError: null,

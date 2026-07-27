@@ -39,7 +39,7 @@ describe("Model binding promotion gate", () => {
         ...lineage(),
         promotable: true,
         frozenEvaluationArtifactId: "evaluation-fixture",
-      }),
+      })
     ).toEqual({
       kind: "source_frozen_evaluation",
       evaluationArtifactId: "evaluation-fixture",
@@ -61,13 +61,14 @@ describe("Model binding promotion gate", () => {
         canonicalDeploymentId: "sandbox-deployment-fixture",
         canonicalDeploymentState: "ready",
         state: "ready",
+        customerBindingAllowed: true,
         publishedAt: "2026-07-27T00:00:00.000Z",
         lastSyncedAt: "2026-07-27T00:01:00.000Z",
         lastError: null,
       },
     });
     expect(gate).toEqual({
-      kind: "sandbox_frozen_evaluation",
+      kind: "sandbox_customer_binding",
       evaluationArtifactId: null,
       canonicalArtifactId: "sandbox-artifact-fixture",
       canonicalDeploymentId: "sandbox-deployment-fixture",
@@ -89,7 +90,7 @@ describe("Model binding promotion gate", () => {
         promotedAt: "2026-07-27T00:02:00.000Z",
         rolledBackAt: null,
         metadata: {},
-      }).evaluationArtifactId,
+      }).evaluationArtifactId
     ).toBeNull();
   });
 
@@ -107,11 +108,35 @@ describe("Model binding promotion gate", () => {
           canonicalDeploymentId: "sandbox-deployment-fixture",
           canonicalDeploymentState: "deploying",
           state: "imported",
+          customerBindingAllowed: true,
           publishedAt: "2026-07-27T00:00:00.000Z",
           lastSyncedAt: "2026-07-27T00:01:00.000Z",
           lastError: null,
         },
-      }),
+      })
+    ).toBeNull();
+  });
+
+  test("does not accept Sandbox until customer binding is allowed", () => {
+    expect(
+      resolveModelBindingPromotionGate({
+        ...lineage(),
+        managedServing: {
+          schemaVersion: "openpond.managedAdapterServingProjection.v1",
+          teamId: "team-fixture",
+          source: "openpond_training",
+          sourceRef: "lineage-fixture",
+          canonicalArtifactId: "sandbox-artifact-fixture",
+          canonicalArtifactState: "promotable",
+          canonicalDeploymentId: "sandbox-deployment-fixture",
+          canonicalDeploymentState: "ready",
+          state: "ready",
+          customerBindingAllowed: false,
+          publishedAt: "2026-07-27T00:00:00.000Z",
+          lastSyncedAt: "2026-07-27T00:01:00.000Z",
+          lastError: null,
+        },
+      })
     ).toBeNull();
   });
 });

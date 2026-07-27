@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import "../../styles/get-started/get-started-learning.css";
 import "../../styles/get-started/get-started.css";
 import { GetStartedDeckView } from "./GetStartedDeck";
-import { GET_STARTED_DECKS, type GetStartedDeckId } from "./get-started-content";
+import {
+  GET_STARTED_DECKS,
+  type GetStartedDeckId,
+} from "./get-started-content";
 import { MakeAgentTutorialCard } from "./MakeAgentTutorialCard";
 import { LearningVideoCard } from "./LearningVideoCard";
 import { PostTrainingSeries } from "./PostTrainingSeries";
 import { OPENPOND_AGENT_OVERVIEW } from "./openpond-agent-overview";
-import { PROFILE_TO_DEPLOYMENT_OVERVIEW } from "./profile-to-deployment-overview";
 import type { PostTrainingCourseState } from "./post-training-lessons";
 import type {
   MakeAgentTutorialState,
@@ -43,8 +45,10 @@ export function GetStartedView({
   const [activeDeckId, setActiveDeckId] = useState<GetStartedDeckId>("goal");
   const [deckResetToken, setDeckResetToken] = useState(0);
   const activeDeck = useMemo(
-    () => GET_STARTED_DECKS.find((deck) => deck.id === activeDeckId) ?? GET_STARTED_DECKS[0]!,
-    [activeDeckId],
+    () =>
+      GET_STARTED_DECKS.find((deck) => deck.id === activeDeckId) ??
+      GET_STARTED_DECKS[0]!,
+    [activeDeckId]
   );
   const playerOpen = Boolean(postTrainingCourse || makeAgentTutorial);
 
@@ -59,17 +63,25 @@ export function GetStartedView({
       aria-label="Get started"
     >
       <div className="get-started-shell">
-        <section className="get-started-start-here" aria-labelledby="get-started-start-here-title">
+        <section
+          className="get-started-start-here"
+          aria-labelledby="get-started-start-here-title"
+        >
           <header className="get-started-section-heading">
             <h2 id="get-started-start-here-title">Start here</h2>
           </header>
           <div className="get-started-learning-grid">
-            <LearningVideoCard titleElement="h1" video={OPENPOND_AGENT_OVERVIEW} />
-            <LearningVideoCard video={PROFILE_TO_DEPLOYMENT_OVERVIEW} />
+            <LearningVideoCard
+              titleElement="h1"
+              video={OPENPOND_AGENT_OVERVIEW}
+            />
           </div>
         </section>
 
-        <section className="get-started-walkthroughs" aria-labelledby="get-started-walkthroughs-title">
+        <section
+          className="get-started-walkthroughs"
+          aria-labelledby="get-started-walkthroughs-title"
+        >
           <header className="get-started-section-heading">
             <h2 id="get-started-walkthroughs-title">Walkthroughs</h2>
           </header>
@@ -86,7 +98,10 @@ export function GetStartedView({
           </div>
         </section>
 
-        <section className="get-started-learn" aria-labelledby="get-started-learn-title">
+        <section
+          className="get-started-learn"
+          aria-labelledby="get-started-learn-title"
+        >
           <header className="get-started-section-heading">
             <h2 id="get-started-learn-title">Learn deeper</h2>
           </header>
@@ -94,7 +109,9 @@ export function GetStartedView({
             <PostTrainingSeries
               activeLessonIndex={postTrainingCourse?.lessonIndex ?? 0}
               autoplay={postTrainingCourse?.autoplay ?? true}
-              fullCourseSelected={postTrainingCourse?.fullCourseSelected ?? false}
+              fullCourseSelected={
+                postTrainingCourse?.fullCourseSelected ?? false
+              }
               open={Boolean(postTrainingCourse)}
               onClose={onClosePostTrainingCourse}
               onOpen={onOpenPostTrainingCourse}
@@ -105,12 +122,19 @@ export function GetStartedView({
         </section>
 
         {playerOpen ? null : (
-          <section className="get-started-guides" aria-labelledby="openpond-guides-title">
+          <section
+            className="get-started-guides"
+            aria-labelledby="openpond-guides-title"
+          >
             <header className="get-started-section-heading">
               <h2 id="openpond-guides-title">How OpenPond works</h2>
             </header>
 
-            <div className="surface-tabs get-started-tabs" role="tablist" aria-label="Get started topics">
+            <div
+              className="surface-tabs get-started-tabs"
+              role="tablist"
+              aria-label="Get started topics"
+            >
               {GET_STARTED_DECKS.map((deck) => (
                 <button
                   aria-selected={activeDeck.id === deck.id}

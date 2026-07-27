@@ -4,16 +4,44 @@ import type {
   TrainingArtifact,
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
-import {
-  MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-  MANAGED_QWEN3_0_6B_BASE_REVISION,
-  MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-  MANAGED_QWEN3_8B_BASE_REVISION,
-  type ManagedAdapterRegistryClient,
-} from "./managed-adapter-registry-client.js";
+import { type ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 import { createManagedAdapterSyncService } from "./managed-adapter-sync-service.js";
 
+const MANAGED_QWEN3_0_6B_BASE_PROFILE_ID = "qwen3-0-6b-c1899de2";
+const MANAGED_QWEN3_0_6B_BASE_REVISION =
+  "c1899de289a04d12100db370d81485cdf75e47ca";
+const MANAGED_QWEN3_8B_BASE_PROFILE_ID = "qwen3-8b-b968826d";
+const MANAGED_QWEN3_8B_BASE_REVISION =
+  "b968826d9c46dd6066d109eabc6255188de91218";
+const MANAGED_QWEN_CHAT_TEMPLATE_HASH =
+  "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8";
 const timestamp = "2026-07-19T16:00:00.000Z";
+
+function sandboxCapabilities() {
+  return {
+    schemaVersion: "openpond.modelAdapterPlatformCapabilities.v1" as const,
+    baseModelProfileContractVersion: "openpond.baseModelProfile.v2" as const,
+    lifecyclePolicyOwner: "sandbox" as const,
+    baseProfiles: [
+      {
+        id: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+        repository: "Qwen/Qwen3-0.6B",
+        revision: MANAGED_QWEN3_0_6B_BASE_REVISION,
+        tokenizerRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
+        chatTemplateHash: MANAGED_QWEN_CHAT_TEMPLATE_HASH,
+        status: "qualified" as const,
+      },
+      {
+        id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
+        repository: "Qwen/Qwen3-8B",
+        revision: MANAGED_QWEN3_8B_BASE_REVISION,
+        tokenizerRevision: MANAGED_QWEN3_8B_BASE_REVISION,
+        chatTemplateHash: MANAGED_QWEN_CHAT_TEMPLATE_HASH,
+        status: "qualified" as const,
+      },
+    ],
+  };
+}
 
 function lineage(): ModelArtifactLineage {
   return {
@@ -58,7 +86,7 @@ function lineage(): ModelArtifactLineage {
 function artifact(
   id: string,
   providerFilename: string,
-  baseRevision = MANAGED_QWEN3_8B_BASE_REVISION,
+  baseRevision = MANAGED_QWEN3_8B_BASE_REVISION
 ): TrainingArtifact {
   return {
     schemaVersion: "openpond.trainingArtifact.v1",
@@ -71,7 +99,7 @@ function artifact(
     baseModelId: "Qwen/Qwen3-8B",
     baseModelRevision: baseRevision,
     tokenizerRevision: baseRevision,
-    chatTemplateHash: "2".repeat(64),
+    chatTemplateHash: MANAGED_QWEN_CHAT_TEMPLATE_HASH,
     nonProduction: false,
     createdAt: timestamp,
     metadata: {
@@ -100,10 +128,13 @@ function harness(input: {
   currentLineage.managedServing = input.managedServing ?? null;
   const store = {
     listModelArtifactLineage: vi.fn(async () => [currentLineage]),
-    listTrainingArtifacts: vi.fn(async () => input.artifacts ?? [
-      artifact("config", "adapter_config.json"),
-      artifact("weights", "adapter_model.safetensors"),
-    ]),
+    listTrainingArtifacts: vi.fn(
+      async () =>
+        input.artifacts ?? [
+          artifact("config", "adapter_config.json"),
+          artifact("weights", "adapter_model.safetensors"),
+        ]
+    ),
     getTrainingJob: vi.fn(async () => ({
       id: "job-qa",
       planId: "plan-qa",
@@ -113,7 +144,7 @@ function harness(input: {
     getTrainingArtifact: vi.fn(async (id: string) =>
       id === "source-adapter"
         ? artifact("source-adapter", "adapter_model.safetensors")
-        : null,
+        : null
     ),
     saveModelArtifactLineage: vi.fn(async (value: ModelArtifactLineage) => {
       saved = value;
@@ -130,13 +161,12 @@ function harness(input: {
     customerBindingAllowed: false,
   }));
   const listRegistry = vi.fn(async () => ({
-      artifacts: input.registryArtifact ? [input.registryArtifact] : [],
-      deployments: input.deployment ? [input.deployment] : [],
-      servingPools: [],
-      servingReceipts: [],
-    }));
+    artifacts: input.registryArtifact ? [input.registryArtifact] : [],
+    deployments: input.deployment ? [input.deployment] : [],
+  }));
   const client = {
     listRegistry,
+    capabilities: vi.fn(async () => sandboxCapabilities()),
     publishFireworksSource,
     syncBinding: vi.fn(async () => undefined),
   } as unknown as ManagedAdapterRegistryClient;
@@ -144,9 +174,7 @@ function harness(input: {
     store,
     client,
     resolveSelectedTeamId: async () =>
-      input.selectedTeamId === undefined
-        ? "team_qa"
-        : input.selectedTeamId,
+      input.selectedTeamId === undefined ? "team_qa" : input.selectedTeamId,
     now: () => new Date(timestamp),
   });
   return {
@@ -174,7 +202,7 @@ describe("managed adapter sync service", () => {
           expect.objectContaining({ path: "adapter_config.json" }),
           expect.objectContaining({ path: "adapter_model.safetensors" }),
         ]),
-      }),
+      })
     );
     expect(saved()?.managedServing).toMatchObject({
       teamId: "team_qa",
@@ -212,12 +240,7 @@ describe("managed adapter sync service", () => {
   });
 
   test("reuses a desktop direct import through its persisted projection", async () => {
-    const {
-      service,
-      listRegistry,
-      publishFireworksSource,
-      saved,
-    } = harness({
+    const { service, listRegistry, publishFireworksSource, saved } = harness({
       selectedTeamId: "team_other",
       managedServing: {
         schemaVersion: "openpond.managedAdapterServingProjection.v1",
@@ -229,12 +252,9 @@ describe("managed adapter sync service", () => {
         canonicalDeploymentId: null,
         canonicalDeploymentState: null,
         state: "imported",
+        customerBindingAllowed: false,
         artifactContentHash: null,
         baseProfileId: null,
-        evaluation: null,
-        deployment: null,
-        servingPool: null,
-        servingReceipts: [],
         publishedAt: timestamp,
         lastSyncedAt: timestamp,
         lastError: null,
@@ -262,12 +282,7 @@ describe("managed adapter sync service", () => {
   });
 
   test("follows the selected team after a pre-publication failure", async () => {
-    const {
-      service,
-      listRegistry,
-      publishFireworksSource,
-      saved,
-    } = harness({
+    const { service, listRegistry, publishFireworksSource, saved } = harness({
       selectedTeamId: "team_current",
       managedServing: {
         schemaVersion: "openpond.managedAdapterServingProjection.v1",
@@ -279,12 +294,9 @@ describe("managed adapter sync service", () => {
         canonicalDeploymentId: null,
         canonicalDeploymentState: null,
         state: "failed",
+        customerBindingAllowed: false,
         artifactContentHash: null,
         baseProfileId: null,
-        evaluation: null,
-        deployment: null,
-        servingPool: null,
-        servingReceipts: [],
         publishedAt: null,
         lastSyncedAt: timestamp,
         lastError: "Managed adapter API failed (403): api_key_scope_denied",
@@ -297,7 +309,7 @@ describe("managed adapter sync service", () => {
     expect(publishFireworksSource).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: "team_current",
-      }),
+      })
     );
     expect(saved()?.managedServing).toMatchObject({
       teamId: "team_current",
@@ -310,11 +322,7 @@ describe("managed adapter sync service", () => {
     const { service, publishFireworksSource, saved } = harness({
       artifacts: [
         artifact("config", "adapter_config.json", "3".repeat(40)),
-        artifact(
-          "weights",
-          "adapter_model.safetensors",
-          "3".repeat(40),
-        ),
+        artifact("weights", "adapter_model.safetensors", "3".repeat(40)),
       ],
     });
 
@@ -326,17 +334,14 @@ describe("managed adapter sync service", () => {
       canonicalArtifactId: null,
     });
     expect(saved()?.managedServing?.lastError).toContain(
-      "pinned Qwen/Qwen3-8B",
+      "Sandbox-qualified base profile"
     );
   });
 
   test("fails closed without a UI-selected team before registry access or upload", async () => {
-    const {
-      service,
-      listRegistry,
-      publishFireworksSource,
-      saved,
-    } = harness({ selectedTeamId: null });
+    const { service, listRegistry, publishFireworksSource, saved } = harness({
+      selectedTeamId: null,
+    });
 
     await service.reconcile();
 
@@ -350,7 +355,7 @@ describe("managed adapter sync service", () => {
     });
   });
 
-  test("publishes Prime GRPO lineage through signed trusted provenance and requests Sandbox evaluation", async () => {
+  test("publishes Prime GRPO lineage and leaves evaluation to Sandbox", async () => {
     const prime = primeHarness({
       registryArtifact: null,
       deployment: null,
@@ -358,9 +363,7 @@ describe("managed adapter sync service", () => {
 
     await prime.service.reconcile();
 
-    expect(
-      prime.publishTrustedOpenPondTrainingSource,
-    ).toHaveBeenCalledWith(
+    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: "team_qa",
         lineageId: "lineage-qa",
@@ -379,20 +382,15 @@ describe("managed adapter sync service", () => {
           modelRunId: "job-qa",
           modelVersionId: "model-version-1",
           providerRunId: "job-qa",
-          primeRlRevision:
-            "e0d60e4d85ea636873acb2e7083e794740d20226",
+          primeRlRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
         }),
-      }),
+      })
     );
-    expect(prime.requestEvaluation).toHaveBeenCalledWith({
-      teamId: "team_qa",
-      artifactId: "canonical-artifact",
-      role: "chat_manual",
-    });
+    expect(prime.requestEvaluation).not.toHaveBeenCalled();
     expect(prime.deployArtifact).not.toHaveBeenCalled();
     expect(prime.saved()?.managedServing).toMatchObject({
       source: "openpond_training",
-      canonicalArtifactState: "evaluating",
+      canonicalArtifactState: "imported_unvalidated",
       state: "imported",
       lastError: null,
     });
@@ -408,25 +406,19 @@ describe("managed adapter sync service", () => {
 
     await prime.service.reconcile();
 
-    expect(
-      prime.publishTrustedOpenPondTrainingSource,
-    ).toHaveBeenCalledWith(
+    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
       expect.objectContaining({
         provenance: expect.not.objectContaining({
           evaluationArtifactId: expect.anything(),
           evaluationArtifactSha256: expect.anything(),
           frozenEvaluatorHash: expect.anything(),
         }),
-      }),
+      })
     );
-    expect(prime.requestEvaluation).toHaveBeenCalledWith({
-      teamId: "team_qa",
-      artifactId: "canonical-artifact",
-      role: "chat_manual",
-    });
+    expect(prime.requestEvaluation).not.toHaveBeenCalled();
   });
 
-  test("requests one deployment after the canonical Sandbox gate promotes the Prime adapter", async () => {
+  test("observes promotion while Sandbox owns first deployment", async () => {
     const prime = primeHarness({
       registryArtifact: {
         id: "canonical-artifact",
@@ -441,21 +433,15 @@ describe("managed adapter sync service", () => {
 
     await prime.service.reconcile();
 
-    expect(
-      prime.publishTrustedOpenPondTrainingSource,
-    ).not.toHaveBeenCalled();
+    expect(prime.publishTrustedOpenPondTrainingSource).not.toHaveBeenCalled();
     expect(prime.listTrustedRegistry).toHaveBeenCalledWith("team_qa");
     expect(prime.listRegistry).not.toHaveBeenCalled();
     expect(prime.requestEvaluation).not.toHaveBeenCalled();
-    expect(prime.deployArtifact).toHaveBeenCalledWith({
-      teamId: "team_qa",
-      artifactId: "canonical-artifact",
-      idleTimeoutSeconds: 300,
-    });
+    expect(prime.deployArtifact).not.toHaveBeenCalled();
     expect(prime.saved()?.managedServing).toMatchObject({
       source: "openpond_training",
-      canonicalDeploymentId: "deployment-prime",
-      canonicalDeploymentState: "requested",
+      canonicalDeploymentId: null,
+      canonicalDeploymentState: null,
       state: "imported",
     });
   });
@@ -487,10 +473,10 @@ describe("managed adapter sync service", () => {
         canonicalDeploymentState: state,
         state: "imported",
       });
-    },
+    }
   );
 
-  test("retains Sandbox admission and serving receipts after the paid deployment is offline", async () => {
+  test("retains Sandbox admission after the deployment is offline", async () => {
     const prime = primeHarness({
       registryArtifact: {
         id: "canonical-artifact",
@@ -501,38 +487,12 @@ describe("managed adapter sync service", () => {
         customerBindingAllowed: true,
         contentHash: "1".repeat(64),
         baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-        evaluation: {
-          passed: true,
-          compatibility: { passed: true },
-          evidenceHash: "2".repeat(64),
-        },
       },
       deployment: {
         id: "deployment-failed",
         artifactId: "canonical-artifact",
         state: "failed",
-        evidence: {
-          id: "deployment-failed",
-          poolId: "pool-1",
-          state: "failed",
-        },
       },
-      servingPools: [{
-        id: "pool-1",
-        estimatedHourlyUsd: "1.290000",
-      }],
-      servingReceipts: [{
-        requestId: "request-warm",
-        artifactId: "canonical-artifact",
-        deploymentId: "deployment-failed",
-        poolId: "pool-1",
-        receipt: {
-          contentHash: "3".repeat(64),
-          timestamps: {
-            completedAt: "2026-07-27T05:00:00.000Z",
-          },
-        },
-      }],
     });
 
     await prime.service.reconcile();
@@ -542,25 +502,14 @@ describe("managed adapter sync service", () => {
       canonicalArtifactState: "promotable",
       canonicalDeploymentState: "failed",
       state: "imported",
+      customerBindingAllowed: true,
       artifactContentHash: "1".repeat(64),
       baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-      evaluation: {
-        passed: true,
-        evidenceHash: "2".repeat(64),
-      },
-      deployment: {
-        id: "deployment-failed",
-        state: "failed",
-      },
-      servingPool: {
-        id: "pool-1",
-        estimatedHourlyUsd: "1.290000",
-      },
-      servingReceipts: [{
-        requestId: "request-warm",
-        receipt: { contentHash: "3".repeat(64) },
-      }],
     });
+    expect(prime.saved()?.managedServing).not.toHaveProperty("evaluation");
+    expect(prime.saved()?.managedServing).not.toHaveProperty("deployment");
+    expect(prime.saved()?.managedServing).not.toHaveProperty("servingPool");
+    expect(prime.saved()?.managedServing).not.toHaveProperty("servingReceipts");
   });
 
   test("leaves the last trusted Prime projection untouched in an ordinary local runtime", async () => {
@@ -597,12 +546,10 @@ describe("managed adapter sync service", () => {
 
     await prime.service.reconcile();
 
-    expect(
-      prime.publishTrustedOpenPondTrainingSource,
-    ).toHaveBeenCalledWith(
+    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
       expect.objectContaining({
         baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-      }),
+      })
     );
   });
 });
@@ -617,45 +564,39 @@ function primeHarness(input: {
     customerBindingAllowed: boolean;
     contentHash?: string;
     baseProfileId?: string;
-    evaluation?: Record<string, unknown>;
   } | null;
   deployment: {
     id: string;
     artifactId: string;
     state: string;
-    evidence?: Record<string, unknown>;
   } | null;
-  servingPools?: Array<Record<string, unknown>>;
-  servingReceipts?: Array<Record<string, unknown>>;
   base?: "0.6b" | "8b";
   withEvaluation?: boolean;
   localPromotable?: boolean;
   trustedControlAvailable?: boolean;
 }) {
   const currentLineage = lineage();
-  currentLineage.promotable =
-    input.localPromotable ?? true;
+  currentLineage.promotable = input.localPromotable ?? true;
   currentLineage.frozenEvaluationArtifactId =
-    input.withEvaluation === false
-      ? null
-      : "evaluation-artifact";
+    input.withEvaluation === false ? null : "evaluation-artifact";
   let saved: ModelArtifactLineage | null = null;
   const hash = (character: string) => character.repeat(64);
-  const baseProfile = input.base === "8b"
-    ? {
-        id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-        modelId: "Qwen/Qwen3-8B",
-        revision: MANAGED_QWEN3_8B_BASE_REVISION,
-      }
-    : {
-        id: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-        modelId: "Qwen/Qwen3-0.6B",
-        revision: MANAGED_QWEN3_0_6B_BASE_REVISION,
-      };
+  const baseProfile =
+    input.base === "8b"
+      ? {
+          id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
+          modelId: "Qwen/Qwen3-8B",
+          revision: MANAGED_QWEN3_8B_BASE_REVISION,
+        }
+      : {
+          id: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+          modelId: "Qwen/Qwen3-0.6B",
+          revision: MANAGED_QWEN3_0_6B_BASE_REVISION,
+        };
   const primeArtifact = (
     id: string,
     providerFilename: string,
-    kind: TrainingArtifact["kind"],
+    kind: TrainingArtifact["kind"]
   ): TrainingArtifact => ({
     schemaVersion: "openpond.trainingArtifact.v1",
     id,
@@ -678,21 +619,17 @@ function primeHarness(input: {
       groupedGrpoReceiptHash: hash("6"),
     },
   });
-  const config = primeArtifact(
-    "config",
-    "adapter_config.json",
-    "manifest",
-  );
+  const config = primeArtifact("config", "adapter_config.json", "manifest");
   const weights = primeArtifact(
     "source-adapter",
     "adapter_model.safetensors",
-    "adapter",
+    "adapter"
   );
   const evaluation: TrainingArtifact = {
     ...primeArtifact(
       "evaluation-artifact",
       "evaluation-receipt.json",
-      "evaluation",
+      "evaluation"
     ),
     sha256: hash("7"),
     metadata: {
@@ -700,13 +637,8 @@ function primeHarness(input: {
     },
   };
   const store = {
-    listModelArtifactLineage: vi.fn(async () => [
-      currentLineage,
-    ]),
-    listTrainingArtifacts: vi.fn(async () => [
-      config,
-      weights,
-    ]),
+    listModelArtifactLineage: vi.fn(async () => [currentLineage]),
+    listTrainingArtifacts: vi.fn(async () => [config, weights]),
     getTrainingJob: vi.fn(async () => ({
       id: "job-qa",
       planId: "plan-qa",
@@ -714,8 +646,7 @@ function primeHarness(input: {
         finalPolicyVersion: 1,
         portableAdapterBindings: {
           engine: {
-            upstreamRevision:
-              "e0d60e4d85ea636873acb2e7083e794740d20226",
+            upstreamRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
           },
         },
       },
@@ -725,34 +656,32 @@ function primeHarness(input: {
       contentHash: hash("9"),
     })),
     getTrainingArtifact: vi.fn(async (id: string) =>
-      id === weights.id
-        ? weights
-        : id === evaluation.id
-        ? evaluation
-        : null
+      id === weights.id ? weights : id === evaluation.id ? evaluation : null
     ),
-    listModelRuns: vi.fn(async () => [{
-      id: "job-qa",
-      modelId: "model-qa",
-      modelVersionId: "model-version-1",
-      status: "succeeded",
-      quote: {
-        maximumSpendUsd: 1,
-        hourlyCostUsd: 0.5,
-      },
-      receipt: {
-        provider: "prime",
-        providerRunId: "job-qa",
-        resultHash: hash("a"),
-        traceHash: hash("b"),
-        cleanup: {
-          computeReleased: true,
-          tunnelClosed: true,
+    listModelRuns: vi.fn(async () => [
+      {
+        id: "job-qa",
+        modelId: "model-qa",
+        modelVersionId: "model-version-1",
+        status: "succeeded",
+        quote: {
+          maximumSpendUsd: 1,
+          hourlyCostUsd: 0.5,
         },
-        telemetry: null,
+        receipt: {
+          provider: "prime",
+          providerRunId: "job-qa",
+          resultHash: hash("a"),
+          traceHash: hash("b"),
+          cleanup: {
+            computeReleased: true,
+            tunnelClosed: true,
+          },
+          telemetry: null,
+        },
+        adapterArtifactLineageId: "lineage-qa",
       },
-      adapterArtifactLineageId: "lineage-qa",
-    }]),
+    ]),
     getModelVersion: vi.fn(async () => ({
       id: "model-version-1",
       modelId: "model-qa",
@@ -775,24 +704,20 @@ function primeHarness(input: {
         grader: { contentHash: hash("f") },
       },
     })),
-    saveModelArtifactLineage: vi.fn(
-      async (value: ModelArtifactLineage) => {
-        saved = value;
-        return value;
-      },
-    ),
+    saveModelArtifactLineage: vi.fn(async (value: ModelArtifactLineage) => {
+      saved = value;
+      return value;
+    }),
     listModelBindings: vi.fn(async () => []),
   } as unknown as SqliteStore;
-  const publishTrustedOpenPondTrainingSource = vi.fn(
-    async () => ({
-      id: "canonical-artifact",
-      source: "openpond_training",
-      sourceRef: "lineage-qa",
-      state: "imported_unvalidated",
-      promotable: false,
-      customerBindingAllowed: false,
-    }),
-  );
+  const publishTrustedOpenPondTrainingSource = vi.fn(async () => ({
+    id: "canonical-artifact",
+    source: "openpond_training",
+    sourceRef: "lineage-qa",
+    state: "imported_unvalidated",
+    promotable: false,
+    customerBindingAllowed: false,
+  }));
   const requestEvaluation = vi.fn(async () => undefined);
   const deployArtifact = vi.fn(async () => ({
     id: "deployment-prime",
@@ -800,18 +725,16 @@ function primeHarness(input: {
     state: "requested",
   }));
   const registry = () => ({
-    artifacts: input.registryArtifact
-      ? [input.registryArtifact]
-      : [],
+    artifacts: input.registryArtifact ? [input.registryArtifact] : [],
     deployments: input.deployment ? [input.deployment] : [],
-    servingPools: input.servingPools ?? [],
-    servingReceipts: input.servingReceipts ?? [],
   });
   const listRegistry = vi.fn(async () => registry());
   const listTrustedRegistry = vi.fn(async () => registry());
   const client = {
     listRegistry,
     listTrustedRegistry,
+    capabilities: vi.fn(async () => sandboxCapabilities()),
+    trustedCapabilities: vi.fn(async () => sandboxCapabilities()),
     publishTrustedOpenPondTrainingSource,
     requestEvaluation,
     deployArtifact,
@@ -822,8 +745,7 @@ function primeHarness(input: {
       store,
       client,
       resolveSelectedTeamId: async () => "team_qa",
-      trustedControlAvailable: () =>
-        input.trustedControlAvailable ?? true,
+      trustedControlAvailable: () => input.trustedControlAvailable ?? true,
       now: () => new Date(timestamp),
     }),
     publishTrustedOpenPondTrainingSource,

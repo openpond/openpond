@@ -5,7 +5,7 @@ import type {
   TrainingStateResponse,
 } from "@openpond/contracts";
 import {
-  managedAdapterEvaluationPassed,
+  managedAdapterCustomerBindingAllowed,
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
@@ -21,19 +21,12 @@ import {
   Loader2,
   XCircle,
 } from "../icons";
-import {
-  trainingMethodLabel,
-} from "../training/training-model-data";
-import {
-  workproductKey,
-  type LabWorkproductSummary,
-} from "./lab-workproducts";
+import { trainingMethodLabel } from "../training/training-model-data";
+import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { LabModelBaselineProgress } from "./LabModelBaseline";
 import { labBaseModelVersion, labModelVersions } from "./lab-models";
-import {
-  type LabWorkproductProgression,
-} from "./lab-workproduct-progression";
+import { type LabWorkproductProgression } from "./lab-workproduct-progression";
 import type { LabsRouteProps } from "./LabsRoute";
 
 const PAGE_SIZE = 10;
@@ -169,9 +162,11 @@ export function WorkproductsTable({
                 ) : null}
                 <td>
                   <button
-                    className={frontierBaseline
-                      ? "labs-workproduct-link labs-training-run-name"
-                      : "labs-workproduct-link"}
+                    className={
+                      frontierBaseline
+                        ? "labs-workproduct-link labs-training-run-name"
+                        : "labs-workproduct-link"
+                    }
                     type="button"
                     onClick={() => onSelect(item.key)}
                   >
@@ -231,9 +226,11 @@ export function WorkproductsTable({
                         className="settings-secondary compact labs-workproduct-use"
                         type="button"
                         disabled={!item.enabled}
-                        title={item.enabled
-                          ? "Start a bounded chat session with this model"
-                          : "Chat is available after a version passes frozen evaluation"}
+                        title={
+                          item.enabled
+                            ? "Start a bounded chat session with this model"
+                            : "Chat is available after a version passes frozen evaluation"
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
                           onUseModel(item.id);
@@ -292,15 +289,16 @@ export function ModelsTable({
             <th>Eval</th>
             <th>Runs</th>
             <th>Updated</th>
-            <th><span className="sr-only">Actions</span></th>
+            <th>
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => {
             const versions = labModelVersions(item, runs, state);
             const baseVersion = labBaseModelVersion(item, state);
-            const current =
-              versions.find((version) => version.current) ?? null;
+            const current = versions.find((version) => version.current) ?? null;
             const latest = versions[0] ?? null;
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
@@ -318,36 +316,35 @@ export function ModelsTable({
                 <td>
                   {current
                     ? `Version ${current.number} · ${trainingMethodLabel(
-                        current.plan?.recipe.method,
+                        current.plan?.recipe.method
                       )}`
                     : baseVersion
-                      ? "Base version 0"
-                      : "Not selected"}
+                    ? "Base version 0"
+                    : "Not selected"}
                 </td>
                 <td>
                   <LabStatusBadge
                     label={
                       latest
-                        ? resolveModelBindingPromotionGate(latest.lineage)
-                          || managedAdapterEvaluationPassed(latest.lineage)
+                        ? resolveModelBindingPromotionGate(latest.lineage) ||
+                          managedAdapterCustomerBindingAllowed(latest.lineage)
                           ? "Passed"
-                          : latest.lineage.frozenEvaluationArtifactId
-                            || latest.lineage.managedServing?.evaluation
-                            ? "Failed"
-                            : "Not run"
+                          : latest.lineage.frozenEvaluationArtifactId ||
+                            latest.lineage.managedServing
+                              ?.customerBindingAllowed
+                          ? "Failed"
+                          : "Not run"
                         : "Not run"
                     }
                     value={
                       latest &&
-                      (
-                        resolveModelBindingPromotionGate(latest.lineage)
-                        || managedAdapterEvaluationPassed(latest.lineage)
-                      )
+                      (resolveModelBindingPromotionGate(latest.lineage) ||
+                        managedAdapterCustomerBindingAllowed(latest.lineage))
                         ? "passed"
-                        : latest?.lineage.frozenEvaluationArtifactId
-                          || latest?.lineage.managedServing?.evaluation
-                          ? "failed"
-                          : "not_run"
+                        : latest?.lineage.frozenEvaluationArtifactId ||
+                          latest?.lineage.managedServing?.customerBindingAllowed
+                        ? "failed"
+                        : "not_run"
                     }
                   />
                 </td>
@@ -500,15 +497,15 @@ export async function finishModelCreation(
   training.onDetailTasksetIdChange(creation.materializedTasksetId);
   const refreshed = await refreshRuns();
   const run = refreshed?.find(
-    (candidate) => candidate.id === creation.request.createImproveRunId,
+    (candidate) => candidate.id === creation.request.createImproveRunId
   );
   setSelectedKey(
     workproductKey(
       "model",
       run?.target.kind === "model"
         ? run.target.id ?? run.id
-        : creation.materializedTasksetId,
-    ),
+        : creation.materializedTasksetId
+    )
   );
 }
 

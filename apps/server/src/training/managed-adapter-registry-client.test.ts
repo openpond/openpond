@@ -1,64 +1,100 @@
 import { describe, expect, test, vi } from "vitest";
-import {
-  createManagedAdapterRegistryClient,
-  MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-  MANAGED_QWEN3_0_6B_BASE_REVISION,
-  MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-} from "./managed-adapter-registry-client.js";
+import { createManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 
+const MANAGED_QWEN3_0_6B_BASE_PROFILE_ID = "qwen3-0-6b-c1899de2";
+const MANAGED_QWEN3_8B_BASE_PROFILE_ID = "qwen3-8b-b968826d";
 const SHA_A = "a".repeat(64);
 const SHA_B = "b".repeat(64);
 
 describe("managed adapter registry client", () => {
-  test("uploads desktop Fireworks bytes as a user-scoped direct import", async () => {
-    const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(async (input: string | URL | Request, init = {}) => {
-      const url = String(input);
-      requests.push({ url, init });
-      if (url.endsWith("/v1/model-adapters/uploads")) {
-        return Response.json({
-          upload: { id: "upload-1", version: 1, state: "uploading" },
-          uploadCapabilities: [
+  test("reads Sandbox-owned versioned base-profile capabilities", async () => {
+    const client = createManagedAdapterRegistryClient({
+      fetchImpl: vi.fn(async () =>
+        Response.json({
+          schemaVersion: "openpond.modelAdapterPlatformCapabilities.v1",
+          contractVersions: {
+            baseModelProfile: "openpond.baseModelProfile.v2",
+          },
+          baseProfiles: [
             {
-              path: "adapter_config.json",
-              url:
-                "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/config",
-              headers: { "content-type": "application/json" },
-            },
-            {
-              path: "adapter_model.safetensors",
-              url: "https://openpond-test.s3.us-east-2.amazonaws.com/weights",
-              headers: {
-                "content-type": "application/vnd.safetensors",
-              },
+              id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
+              repository: "Qwen/Qwen3-8B",
+              revision: "b968826d9c46dd6066d109eabc6255188de91218",
+              tokenizerRevision: "b968826d9c46dd6066d109eabc6255188de91218",
+              chatTemplateHash: "a".repeat(64),
+              status: "qualified",
             },
           ],
-        });
-      }
-      if (
-        url.startsWith(
-          "https://openpond-test.s3.us-east-2.amazonaws.com/",
-        ) ||
-        url.startsWith(
-          "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/",
-        )
-      ) {
-        return new Response(null, { status: 200 });
-      }
-      if (url.endsWith("/v1/model-adapters/uploads/upload-1/complete")) {
-        return Response.json({
-          artifact: {
-            id: "artifact-1",
-            source: "direct_upload",
-            sourceRef: "upload:upload-1",
-            state: "imported_unvalidated",
-            promotable: false,
-            customerBindingAllowed: false,
-          },
-        });
-      }
-      throw new Error(`Unexpected request: ${url}`);
+          lifecycle: { policyOwner: "sandbox" },
+        })
+      ) as typeof fetch,
+      resolveRegistryAccess: async (teamId) => ({
+        apiBaseUrl: "https://api.test",
+        token: "opk_user",
+        teamId,
+      }),
     });
+
+    await expect(client.capabilities("team_qa")).resolves.toMatchObject({
+      baseModelProfileContractVersion: "openpond.baseModelProfile.v2",
+      lifecyclePolicyOwner: "sandbox",
+      baseProfiles: [
+        {
+          id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
+          status: "qualified",
+        },
+      ],
+    });
+  });
+
+  test("uploads desktop Fireworks bytes as a user-scoped direct import", async () => {
+    const requests: Array<{ url: string; init: RequestInit }> = [];
+    const fetchImpl = vi.fn(
+      async (input: string | URL | Request, init = {}) => {
+        const url = String(input);
+        requests.push({ url, init });
+        if (url.endsWith("/v1/model-adapters/uploads")) {
+          return Response.json({
+            upload: { id: "upload-1", version: 1, state: "uploading" },
+            uploadCapabilities: [
+              {
+                path: "adapter_config.json",
+                url: "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/config",
+                headers: { "content-type": "application/json" },
+              },
+              {
+                path: "adapter_model.safetensors",
+                url: "https://openpond-test.s3.us-east-2.amazonaws.com/weights",
+                headers: {
+                  "content-type": "application/vnd.safetensors",
+                },
+              },
+            ],
+          });
+        }
+        if (
+          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/") ||
+          url.startsWith(
+            "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/"
+          )
+        ) {
+          return new Response(null, { status: 200 });
+        }
+        if (url.endsWith("/v1/model-adapters/uploads/upload-1/complete")) {
+          return Response.json({
+            artifact: {
+              id: "artifact-1",
+              source: "direct_upload",
+              sourceRef: "upload:upload-1",
+              state: "imported_unvalidated",
+              promotable: false,
+              customerBindingAllowed: false,
+            },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }
+    );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       readFileImpl: (async (path: string) =>
@@ -71,9 +107,7 @@ describe("managed adapter registry client", () => {
         teamId,
       }),
       resolveTrustedSourceAccess: vi.fn(async () => {
-        throw new Error(
-          "trusted source identity must not run in the desktop",
-        );
+        throw new Error("trusted source identity must not run in the desktop");
       }),
       resolveInferenceAccess: vi.fn(async () => {
         throw new Error("inference identity must not publish artifacts");
@@ -81,64 +115,63 @@ describe("managed adapter registry client", () => {
     });
     const artifact = await client.publishFireworksSource(sourceImport());
     expect(artifact.id).toBe("artifact-1");
-    const create = requests.find((request) =>
-      request.url.endsWith("/uploads"),
-    );
-    const body = JSON.parse(String(create?.init.body)) as Record<string, unknown>;
+    const create = requests.find((request) => request.url.endsWith("/uploads"));
+    const body = JSON.parse(String(create?.init.body)) as Record<
+      string,
+      unknown
+    >;
     expect(body.baseProfileId).toBe(MANAGED_QWEN3_8B_BASE_PROFILE_ID);
     expect(body).not.toHaveProperty("teamId");
     expect(body).not.toHaveProperty("token");
     expect(body).not.toHaveProperty("source");
     expect(body).not.toHaveProperty("sourceProvenance");
     expect(new Headers(create?.init.headers).get("openpond-api-key")).toBe(
-      "opk_user",
+      "opk_user"
     );
-    expect(
-      new Headers(create?.init.headers).get("x-openpond-team-id"),
-    ).toBe("team_qa");
+    expect(new Headers(create?.init.headers).get("x-openpond-team-id")).toBe(
+      "team_qa"
+    );
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   test("reserves trusted Fireworks provenance for the hosted service identity", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(async (input: string | URL | Request, init = {}) => {
-      const url = String(input);
-      requests.push({ url, init });
-      if (url.endsWith("/v1/model-adapters/source-imports")) {
-        return Response.json({
-          upload: {
-            id: "upload-trusted",
-            version: 1,
-            state: "uploading",
-          },
-          uploadCapabilities: uploadCapabilities(),
-        });
+    const fetchImpl = vi.fn(
+      async (input: string | URL | Request, init = {}) => {
+        const url = String(input);
+        requests.push({ url, init });
+        if (url.endsWith("/v1/model-adapters/source-imports")) {
+          return Response.json({
+            upload: {
+              id: "upload-trusted",
+              version: 1,
+              state: "uploading",
+            },
+            uploadCapabilities: uploadCapabilities(),
+          });
+        }
+        if (
+          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/")
+        ) {
+          return new Response(null, { status: 200 });
+        }
+        if (
+          url.endsWith("/v1/model-adapters/uploads/upload-trusted/complete")
+        ) {
+          return Response.json({
+            artifact: {
+              id: "artifact-trusted",
+              source: "openpond_fireworks",
+              sourceRef: "lineage-1",
+              state: "imported_unvalidated",
+              promotable: false,
+              customerBindingAllowed: false,
+            },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
       }
-      if (
-        url.startsWith(
-          "https://openpond-test.s3.us-east-2.amazonaws.com/",
-        )
-      ) {
-        return new Response(null, { status: 200 });
-      }
-      if (
-        url.endsWith(
-          "/v1/model-adapters/uploads/upload-trusted/complete",
-        )
-      ) {
-        return Response.json({
-          artifact: {
-            id: "artifact-trusted",
-            source: "openpond_fireworks",
-            sourceRef: "lineage-1",
-            state: "imported_unvalidated",
-            promotable: false,
-            customerBindingAllowed: false,
-          },
-        });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
+    );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       readFileImpl: artifactReader,
@@ -152,16 +185,14 @@ describe("managed adapter registry client", () => {
       }),
     });
 
-    const artifact = await client.publishTrustedFireworksSource(
-      sourceImport(),
-    );
+    const artifact = await client.publishTrustedFireworksSource(sourceImport());
 
     expect(artifact).toMatchObject({
       id: "artifact-trusted",
       source: "openpond_fireworks",
     });
     const create = requests.find((request) =>
-      request.url.endsWith("/source-imports"),
+      request.url.endsWith("/source-imports")
     );
     const body = JSON.parse(String(create?.init.body)) as Record<
       string,
@@ -176,27 +207,20 @@ describe("managed adapter registry client", () => {
       }),
     });
     expect(new Headers(create?.init.headers).get("openpond-api-key")).toBe(
-      "opk_service",
+      "opk_service"
     );
-    expect(
-      new Headers(create?.init.headers).get("x-openpond-team-id"),
-    ).toBe("team_qa");
+    expect(new Headers(create?.init.headers).get("x-openpond-team-id")).toBe(
+      "team_qa"
+    );
   });
 
-  test("publishes signed Prime GRPO provenance and advances evaluation and deployment with separate authorities", async () => {
+  test("publishes signed Prime GRPO provenance without owning serving lifecycle", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = vi.fn(
-      async (
-        input: string | URL | Request,
-        init: RequestInit = {},
-      ) => {
+      async (input: string | URL | Request, init: RequestInit = {}) => {
         const url = String(input);
         requests.push({ url, init });
-        if (
-          url.endsWith(
-            "/v1/model-adapters/openpond-training-publications",
-          )
-        ) {
+        if (url.endsWith("/v1/model-adapters/openpond-training-publications")) {
           return Response.json({
             upload: {
               id: "upload-prime",
@@ -207,17 +231,11 @@ describe("managed adapter registry client", () => {
           });
         }
         if (
-          url.startsWith(
-            "https://openpond-test.s3.us-east-2.amazonaws.com/",
-          )
+          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/")
         ) {
           return new Response(null, { status: 200 });
         }
-        if (
-          url.endsWith(
-            "/v1/model-adapters/uploads/upload-prime/complete",
-          )
-        ) {
+        if (url.endsWith("/v1/model-adapters/uploads/upload-prime/complete")) {
           return Response.json({
             artifact: {
               id: "artifact-prime",
@@ -247,7 +265,7 @@ describe("managed adapter registry client", () => {
           });
         }
         throw new Error(`Unexpected request: ${url}`);
-      },
+      }
     );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
@@ -264,54 +282,33 @@ describe("managed adapter registry client", () => {
       }),
     });
 
-    const artifact =
-      await client.publishTrustedOpenPondTrainingSource(
-        openPondTrainingSourceImport(),
-      );
-    await client.requestEvaluation({
-      teamId: "team_qa",
-      artifactId: artifact.id,
-    });
-    await expect(
-      client.deployArtifact({
-        teamId: "team_qa",
-        artifactId: artifact.id,
-      }),
-    ).resolves.toMatchObject({
-      id: "deployment-prime",
-      state: "requested",
-    });
+    await client.publishTrustedOpenPondTrainingSource(
+      openPondTrainingSourceImport()
+    );
 
     const create = requests.find((request) =>
-      request.url.endsWith(
-        "/openpond-training-publications",
-      ),
+      request.url.endsWith("/openpond-training-publications")
     );
     const body = JSON.parse(String(create?.init.body));
     expect(body).toMatchObject({
       source: "openpond_training",
       sourceRef: "lineage-1",
       baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-      idempotencyKey:
-        `openpond-training:v5:lineage-1:${"1".repeat(64)}`,
+      idempotencyKey: `openpond-training:v5:lineage-1:${"1".repeat(64)}`,
       sourceProvenance: {
         sourceSystem: "openpond_training",
         modelRunId: "model-run-1",
       },
     });
     const publicationHeaders = new Headers(create?.init.headers);
-    expect(publicationHeaders.get("openpond-api-key")).toBe(
-      "opk_service",
-    );
-    for (const request of requests.filter(
-      (candidate) =>
-        candidate.url.endsWith("/evaluations")
-        || candidate.url.endsWith("/deploy"),
-    )) {
-      expect(
-        new Headers(request.init.headers).get("openpond-api-key"),
-      ).toBe("opk_user");
-    }
+    expect(publicationHeaders.get("openpond-api-key")).toBe("opk_service");
+    expect(
+      requests.some(
+        (request) =>
+          request.url.endsWith("/evaluations") ||
+          request.url.endsWith("/deploy")
+      )
+    ).toBe(false);
   });
 
   test("uses the explicit user workspace for registry reads and binding sync", async () => {
@@ -322,37 +319,36 @@ describe("managed adapter registry client", () => {
         requests.push({ url, init });
         if (url.includes("/artifacts?")) {
           return Response.json({
-            artifacts: [{
-              id: "artifact-1",
-              source: "openpond_training",
-              sourceRef: "lineage-1",
-              state: "promotable",
-              promotable: true,
-              customerBindingAllowed: true,
-              contentHash: "1".repeat(64),
-              baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-              evaluation: registryEvaluationEvidence(),
-            }],
+            artifacts: [
+              {
+                id: "artifact-1",
+                source: "openpond_training",
+                sourceRef: "lineage-1",
+                state: "promotable",
+                promotable: true,
+                customerBindingAllowed: true,
+                contentHash: "1".repeat(64),
+                baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+              },
+            ],
           });
         }
         if (url.endsWith("/deployments")) {
           return Response.json({
-            deployments: [registryDeploymentEvidence()],
-          });
-        }
-        if (url.endsWith("/serving-pools")) {
-          return Response.json({ pools: [registryPoolEvidence()] });
-        }
-        if (url.includes("/serving-receipts?")) {
-          return Response.json({
-            receipts: [registryServingReceiptRecord()],
+            deployments: [
+              {
+                id: "deployment-1",
+                artifactId: "artifact-1",
+                state: "failed",
+              },
+            ],
           });
         }
         if (url.endsWith("/binding-projections")) {
           return Response.json({});
         }
         throw new Error(`Unexpected request: ${url}`);
-      },
+      }
     );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
@@ -382,35 +378,24 @@ describe("managed adapter registry client", () => {
       state: "active",
     });
 
-    expect(requests).toHaveLength(5);
+    expect(requests).toHaveLength(3);
     expect(registry).toMatchObject({
-      artifacts: [{
-        id: "artifact-1",
-        contentHash: "1".repeat(64),
-        evaluation: {
-          evidenceHash: "9".repeat(64),
-          compatibility: { passed: true },
+      artifacts: [
+        {
+          id: "artifact-1",
+          contentHash: "1".repeat(64),
+          customerBindingAllowed: true,
         },
-      }],
-      deployments: [{
-        id: "deployment-1",
-        evidence: {
-          poolId: "pool-1",
+      ],
+      deployments: [
+        {
+          id: "deployment-1",
           state: "failed",
         },
-      }],
-      servingPools: [{
-        id: "pool-1",
-        estimatedHourlyUsd: "1.290000",
-      }],
-      servingReceipts: [{
-        requestId: "request-1",
-        receipt: {
-          contentHash: "f".repeat(64),
-          state: { adapterCacheHit: true },
-        },
-      }],
+      ],
     });
+    expect(registry).not.toHaveProperty("servingPools");
+    expect(registry).not.toHaveProperty("servingReceipts");
     for (const request of requests) {
       const headers = new Headers(request.init.headers);
       expect(headers.get("openpond-api-key")).toBe("opk_user");
@@ -430,45 +415,39 @@ describe("managed adapter registry client", () => {
     });
 
     await expect(client.listRegistry("team_customer")).rejects.toThrow(
-      "different OpenPond team",
+      "different OpenPond team"
     );
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   test("resumes a committed idempotent import without re-uploading bytes", async () => {
     const readFileImpl = vi.fn(artifactReader);
-    const fetchImpl = vi.fn(
-      async (input: string | URL | Request) => {
-        const url = String(input);
-        if (url.endsWith("/v1/model-adapters/uploads")) {
-          return Response.json({
-            upload: {
-              id: "upload-replayed",
-              version: 3,
-              state: "committed",
-            },
-            uploadCapabilities: [],
-          });
-        }
-        if (
-          url.endsWith(
-            "/v1/model-adapters/uploads/upload-replayed/complete",
-          )
-        ) {
-          return Response.json({
-            artifact: {
-              id: "artifact-replayed",
-              source: "direct_upload",
-              sourceRef: "upload:upload-replayed",
-              state: "imported_unvalidated",
-              promotable: false,
-              customerBindingAllowed: false,
-            },
-          });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      },
-    );
+    const fetchImpl = vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith("/v1/model-adapters/uploads")) {
+        return Response.json({
+          upload: {
+            id: "upload-replayed",
+            version: 3,
+            state: "committed",
+          },
+          uploadCapabilities: [],
+        });
+      }
+      if (url.endsWith("/v1/model-adapters/uploads/upload-replayed/complete")) {
+        return Response.json({
+          artifact: {
+            id: "artifact-replayed",
+            source: "direct_upload",
+            sourceRef: "upload:upload-replayed",
+            state: "imported_unvalidated",
+            promotable: false,
+            customerBindingAllowed: false,
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       readFileImpl: readFileImpl as never,
@@ -480,7 +459,7 @@ describe("managed adapter registry client", () => {
     });
 
     await expect(
-      client.publishFireworksSource(sourceImport()),
+      client.publishFireworksSource(sourceImport())
     ).resolves.toMatchObject({ id: "artifact-replayed" });
     expect(readFileImpl).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
@@ -493,20 +472,22 @@ describe("managed adapter registry client", () => {
           new TextEncoder().encode(
             'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\n' +
               'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}\n\n' +
-              "data: [DONE]\n\n",
-          ),
+              "data: [DONE]\n\n"
+          )
         );
         controller.close();
       },
     });
     let observedInit: RequestInit | undefined;
-    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
-      observedInit = init;
-      return new Response(stream, {
-        status: 200,
-        headers: { "content-type": "text/event-stream" },
-      });
-    });
+    const fetchImpl = vi.fn(
+      async (_input: string | URL | Request, init?: RequestInit) => {
+        observedInit = init;
+        return new Response(stream, {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        });
+      }
+    );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       resolveRegistryAccess: vi.fn(async () => {
@@ -588,6 +569,7 @@ function sourceImport() {
     teamId: "team_qa",
     lineageId: "lineage-1",
     label: "GRPO adapter",
+    baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
     trainingJobId: "job-1",
     trainingPlanId: "plan-1",
     sourceArtifactId: "source-artifact-1",
@@ -621,8 +603,7 @@ function openPondTrainingSourceImport() {
     baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
     files: sourceImport().files,
     provenance: {
-      schemaVersion:
-        "openpond.modelAdapterSourceProvenance.v1" as const,
+      schemaVersion: "openpond.modelAdapterSourceProvenance.v1" as const,
       sourceSystem: "openpond_training" as const,
       trainingJobId: "job-1",
       trainingPlanId: "plan-1",
@@ -654,151 +635,5 @@ function openPondTrainingSourceImport() {
       graderSha256: hash("1"),
       trainingTelemetrySha256: hash("2"),
     },
-  };
-}
-
-function registryEvaluationEvidence() {
-  return {
-    schemaVersion: "openpond.modelAdapterEvaluation.v1",
-    evaluationId: "evaluation-1",
-    role: "chat_manual",
-    policyId: "qwen3-chat-manual-beta-r1",
-    policyRevision: 1,
-    policyHash: "2".repeat(64),
-    tasksetId: "taskset-1",
-    tasksetHash: "3".repeat(64),
-    baselineScore: 1 / 3,
-    candidateScore: 1 / 3,
-    threshold: 0,
-    minimumCandidateScore: 0.75,
-    passed: true,
-    frozenEvaluatorHash: "4".repeat(64),
-    compatibility: {
-      passed: true,
-      workerImageDigest: `sha256:${"5".repeat(64)}`,
-      baseProfileHash: "6".repeat(64),
-      diagnosticSetHash: "7".repeat(64),
-      testedAt: "2026-07-27T04:30:53.000Z",
-    },
-    resultHashes: {
-      baselineOutputsHash: "8".repeat(64),
-      candidateOutputsHash: "a".repeat(64),
-      diagnosticOutputsHash: "b".repeat(64),
-      resultSetHash: "c".repeat(64),
-    },
-    evidenceHash: "9".repeat(64),
-    completedAt: "2026-07-27T04:30:53.781Z",
-  };
-}
-
-function registryDeploymentEvidence() {
-  return {
-    schemaVersion: "openpond.adapterDeployment.v1",
-    id: "deployment-1",
-    teamId: "team_customer",
-    artifactId: "artifact-1",
-    provider: "prime_vllm",
-    poolId: "pool-1",
-    opaqueModelName: "lora_71b204631fe45791697ba622",
-    state: "failed",
-    providerConfigurationHash: "d".repeat(64),
-    lastVerifiedAt: "2026-07-27T05:00:00.000Z",
-    failureCode: "pool_retired",
-    createdAt: "2026-07-27T04:40:00.000Z",
-    updatedAt: "2026-07-27T06:00:00.000Z",
-  };
-}
-
-function registryPoolEvidence() {
-  return {
-    id: "pool-1",
-    baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-    provider: "prime_vllm",
-    state: "failed",
-    workersMin: 0,
-    workersMax: 1,
-    idleTimeoutSeconds: 300,
-    providerConfigurationHash: "d".repeat(64),
-    leaseExpiresAt: "2026-07-27T05:10:00.000Z",
-    estimatedHourlyUsd: "1.290000",
-    lastReconciledAt: "2026-07-27T06:00:00.000Z",
-    failureCode: "pool_retired",
-    createdAt: "2026-07-27T04:40:00.000Z",
-    updatedAt: "2026-07-27T06:00:00.000Z",
-  };
-}
-
-function registryServingReceiptRecord() {
-  return {
-    schemaVersion: "openpond.modelAdapterServingReceiptRecord.v1",
-    requestId: "request-1",
-    state: "reconciled",
-    artifactId: "artifact-1",
-    deploymentId: "deployment-1",
-    poolId: "pool-1",
-    provider: "prime_vllm",
-    receipt: {
-      schemaVersion: "openpond.modelAdapterServingReceipt.v1",
-      correlation: {
-        requestId: "request-1",
-        providerJobId: "provider-job-1",
-        deploymentId: "deployment-1",
-        poolId: "pool-1",
-        provider: "prime_vllm",
-        providerEndpointId: "prime-endpoint-1",
-      },
-      identity: {
-        logicalModelName: "trained-model",
-        baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-        baseRepository: "Qwen/Qwen3-0.6B",
-        baseRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
-        workerImage: `worker@sha256:${"e".repeat(64)}`,
-        workerBootId: "worker-boot-1",
-        artifactId: "artifact-1",
-        artifactContentHash: "1".repeat(64),
-        requestedAlias: "lora_71b204631fe45791697ba622",
-        resolvedManifestSha256: "a".repeat(64),
-        appliedVllmAdapterId: 1_907_491_939,
-      },
-      state: {
-        requestTemperature: "warm",
-        adapterCacheHit: true,
-        baseEngineInitializationCount: 1,
-        outcome: "succeeded",
-        scaleToZero: {
-          observed: false,
-          observedAt: null,
-          durationMs: null,
-        },
-      },
-      timestamps: {
-        requestStartedAt: "2026-07-27T05:00:00.000Z",
-        firstOutputAt: "2026-07-27T05:00:00.050Z",
-        completedAt: "2026-07-27T05:00:00.085Z",
-      },
-      durationsMs: {
-        adapterMaterialization: 0,
-        timeToFirstToken: 49.929,
-        generation: 84.928,
-        totalRequest: 85,
-      },
-      usage: {
-        inputTokens: 10,
-        outputTokens: 2,
-        totalTokens: 12,
-        providerUsageSource: "estimated",
-      },
-      cost: {
-        currency: "USD",
-        providerReportedUsd: null,
-        estimatedUsd: 0.000031,
-        estimateMethodology: "prime_raw_gpu_quote_worker_seconds_v1",
-      },
-      rawWorkerTelemetrySha256: "e".repeat(64),
-      contentHash: "f".repeat(64),
-    },
-    createdAt: "2026-07-27T05:00:00.000Z",
-    completedAt: "2026-07-27T05:00:00.085Z",
-    reconciledAt: "2026-07-27T05:00:00.100Z",
   };
 }

@@ -8,7 +8,7 @@ import type {
 } from "@openpond/contracts";
 import {
   conciseWorkproductName,
-  managedAdapterEvaluationPassed,
+  managedAdapterCustomerBindingAllowed,
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
@@ -61,11 +61,13 @@ export function labWorkproductProjection(input: {
 }): LabWorkproductSummary[] {
   const byKey = new Map<string, LabWorkproductSummary>();
   const stableModelProjectIds = new Set(
-    (input.training?.modelProjects ?? []).map((project) => project.id),
+    (input.training?.modelProjects ?? []).map((project) => project.id)
   );
   const jobIdsByModelId = new Map<string, Set<string>>();
   const planModelById = new Map(
-    (input.training?.plans ?? []).map((plan) => [plan.id, plan.modelId] as const),
+    (input.training?.plans ?? []).map(
+      (plan) => [plan.id, plan.modelId] as const
+    )
   );
   for (const job of input.training?.jobs ?? []) {
     const modelId = planModelById.get(job.planId);
@@ -76,10 +78,11 @@ export function labWorkproductProjection(input: {
   }
   for (const run of input.runs) {
     if (
-      run.target.kind !== "model"
-      || !run.target.id
-      || !run.target.trainingPlanId
-    ) continue;
+      run.target.kind !== "model" ||
+      !run.target.id ||
+      !run.target.trainingPlanId
+    )
+      continue;
     const jobIds = jobIdsByModelId.get(run.target.id) ?? new Set<string>();
     for (const job of input.training?.jobs ?? []) {
       if (job.planId === run.target.trainingPlanId) jobIds.add(job.id);
@@ -90,12 +93,14 @@ export function labWorkproductProjection(input: {
 
   for (const agent of input.profile?.agents ?? []) {
     const key = workproductKey("agent", agent.id);
-    const defaultChatAction = input.profile?.actionCatalog.find((action) =>
-      action.agentId === agent.id
-      && action.sourceActionId === "chat"
-      && action.visibility !== "internal"
-      && action.visibility !== "debug",
-    ) ?? null;
+    const defaultChatAction =
+      input.profile?.actionCatalog.find(
+        (action) =>
+          action.agentId === agent.id &&
+          action.sourceActionId === "chat" &&
+          action.visibility !== "internal" &&
+          action.visibility !== "debug"
+      ) ?? null;
     byKey.set(key, {
       key,
       kind: "agent",
@@ -153,19 +158,20 @@ export function labWorkproductProjection(input: {
     const drafts = (input.training?.modelRunDrafts ?? []).filter(
       (draft) =>
         draft.modelId === project.id &&
-        (draft.status === "draft" || draft.status === "ready_to_run"),
+        (draft.status === "draft" || draft.status === "ready_to_run")
     );
     const latestDraft = drafts[0] ?? null;
     const lifecycleRuns = (input.training?.modelRuns ?? [])
       .filter((run) => run.modelId === project.id)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
     const latestLifecycleRun = lifecycleRuns[0] ?? null;
-    const baseVersion = (input.training?.modelVersions ?? []).find(
-      (version) =>
-        version.modelId === project.id
-        && version.kind === "base_reference"
-        && version.version === 0,
-    ) ?? null;
+    const baseVersion =
+      (input.training?.modelVersions ?? []).find(
+        (version) =>
+          version.modelId === project.id &&
+          version.kind === "base_reference" &&
+          version.version === 0
+      ) ?? null;
     const key = workproductKey("model", project.id);
     byKey.set(key, {
       key,
@@ -173,36 +179,37 @@ export function labWorkproductProjection(input: {
       id: project.id,
       ownerProfileId: project.profileId,
       name: conciseWorkproductName(project.name, "Untitled Model"),
-      description: project.objective ?? "Configure this Model and run its first training job.",
+      description:
+        project.objective ??
+        "Configure this Model and run its first training job.",
       status: latestLifecycleRun
         ? lifecycleModelRunStatus(latestLifecycleRun.status)
         : latestDraft?.status === "ready_to_run"
-          ? "Ready to run"
-          : latestDraft
-            ? "Draft"
-            : baseVersion
-              ? "Base ready"
-              : "Ready",
+        ? "Ready to run"
+        : latestDraft
+        ? "Draft"
+        : baseVersion
+        ? "Base ready"
+        : "Ready",
       updatedAt:
-        latestLifecycleRun?.updatedAt
-        ?? latestDraft?.updatedAt
-        ?? project.updatedAt,
-      path:
-        latestLifecycleRun
-          ? `tasksets/${latestLifecycleRun.taskset.id}`
-          : latestDraft?.tasksetRef
-            ? `tasksets/${latestDraft.tasksetRef.id}`
-            : baseVersion
-              ? `tasksets/${baseVersion.taskset.id}`
-              : null,
+        latestLifecycleRun?.updatedAt ??
+        latestDraft?.updatedAt ??
+        project.updatedAt,
+      path: latestLifecycleRun
+        ? `tasksets/${latestLifecycleRun.taskset.id}`
+        : latestDraft?.tasksetRef
+        ? `tasksets/${latestDraft.tasksetRef.id}`
+        : baseVersion
+        ? `tasksets/${baseVersion.taskset.id}`
+        : null,
       enabled: baseVersion ? false : null,
       runIds: [],
       conversationId: null,
       tasksetId:
-        latestLifecycleRun?.taskset.id
-        ?? latestDraft?.tasksetRef?.id
-        ?? baseVersion?.taskset.id
-        ?? null,
+        latestLifecycleRun?.taskset.id ??
+        latestDraft?.tasksetRef?.id ??
+        baseVersion?.taskset.id ??
+        null,
       frontierBaselineRunId: null,
       trainingRunCount: drafts.length + lifecycleRuns.length,
       evaluationStatus: "not_run",
@@ -212,9 +219,9 @@ export function labWorkproductProjection(input: {
 
   for (const row of trainingModelRows(input.training)) {
     if (
-      row.taskset.metadata.resourceIntent === "dataset"
-      && !row.latestPlan
-      && !row.localModel
+      row.taskset.metadata.resourceIntent === "dataset" &&
+      !row.latestPlan &&
+      !row.localModel
     ) {
       continue;
     }
@@ -222,37 +229,33 @@ export function labWorkproductProjection(input: {
       input.runs
         .filter(
           (run) =>
-            run.target.kind === "model"
-            && (
-              (
-                row.latestPlan
-                && run.target.trainingPlanId === row.latestPlan.id
-              )
-              || (
-                !row.latestPlan
-                && row.localModel
-                && run.target.trainingJobId === row.localModel.jobId
-              )
-            ),
+            run.target.kind === "model" &&
+            ((row.latestPlan &&
+              run.target.trainingPlanId === row.latestPlan.id) ||
+              (!row.latestPlan &&
+                row.localModel &&
+                run.target.trainingJobId === row.localModel.jobId))
         )
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
-        ?? null;
-    const modelId = modelRun?.target.kind === "model" && modelRun.target.id
-      ? modelRun.target.id
-      : row.latestPlan?.modelId ?? row.localModel?.modelId ?? null;
+        .sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt)
+        )[0] ?? null;
+    const modelId =
+      modelRun?.target.kind === "model" && modelRun.target.id
+        ? modelRun.target.id
+        : row.latestPlan?.modelId ?? row.localModel?.modelId ?? null;
     if (!modelId) continue;
     const key = workproductKey("model", modelId);
     const existing = byKey.get(key);
     const linkedPlanId =
-      modelRun?.target.kind === "model"
-        ? modelRun.target.trainingPlanId
-        : null;
+      modelRun?.target.kind === "model" ? modelRun.target.trainingPlanId : null;
     const modelPlanIds = new Set(
       (input.training?.plans ?? [])
-        .filter((plan) =>
-          plan.modelId === modelId
-          || (linkedPlanId != null && plan.id === linkedPlanId))
-        .map((plan) => plan.id),
+        .filter(
+          (plan) =>
+            plan.modelId === modelId ||
+            (linkedPlanId != null && plan.id === linkedPlanId)
+        )
+        .map((plan) => plan.id)
     );
     const modelJobs = (input.training?.jobs ?? [])
       .filter((job) => modelPlanIds.has(job.planId))
@@ -260,7 +263,7 @@ export function labWorkproductProjection(input: {
     const latestModelJob = modelJobs[0] ?? null;
     const latestModelLineage = latestModelJob
       ? input.training?.models.find(
-          (model) => model.jobId === latestModelJob.id,
+          (model) => model.jobId === latestModelJob.id
         ) ?? null
       : null;
     byKey.set(key, {
@@ -270,15 +273,15 @@ export function labWorkproductProjection(input: {
       ownerProfileId: existing?.ownerProfileId ?? row.taskset.profileId,
       name: conciseWorkproductName(
         existing?.name ?? modelRun?.target.displayName ?? row.name,
-        "New model",
+        "New model"
       ),
       description: existing?.description ?? row.taskset.objective,
       status: latestModelJob ? statusLabel(latestModelJob.status) : row.status,
       updatedAt: latestModelJob?.updatedAt ?? row.updatedAt,
       path: `tasksets/${row.taskset.id}`,
       enabled: row.localModel
-        ? row.localModel.status === "imported"
-          && Boolean(resolveModelBindingPromotionGate(row.localModel))
+        ? row.localModel.status === "imported" &&
+          Boolean(resolveModelBindingPromotionGate(row.localModel))
         : null,
       runIds: modelRun
         ? [...new Set([...(existing?.runIds ?? []), modelRun.id])]
@@ -288,11 +291,11 @@ export function labWorkproductProjection(input: {
       frontierBaselineRunId: null,
       trainingRunCount: Math.max(
         existing?.trainingRunCount ?? 0,
-        modelJobs.length,
+        modelJobs.length
       ),
       evaluationStatus: modelJobEvaluationStatus(
         latestModelJob,
-        latestModelLineage,
+        latestModelLineage
       ),
       useActionId: null,
     });
@@ -303,21 +306,20 @@ export function labWorkproductProjection(input: {
     if (run.target.kind === "configuration" || run.target.kind === "unselected")
       continue;
     if (
-      run.target.kind === "model"
-      && !run.tasksetRef
-      && ["cancelled", "failed", "rejected"].includes(run.state)
+      run.target.kind === "model" &&
+      !run.tasksetRef &&
+      ["cancelled", "failed", "rejected"].includes(run.state)
     ) {
       continue;
     }
     if (run.target.kind === "model" && !run.target.id) continue;
     const kind = run.target.kind;
     const id =
-      run.target.kind === "model"
-        ? run.target.id!
-        : run.target.id ?? run.id;
+      run.target.kind === "model" ? run.target.id! : run.target.id ?? run.id;
     const key = workproductKey(kind, id);
     const existing = byKey.get(key);
-    const candidateName = kind === "model" && stableModelProjectIds.has(id)
+    const candidateName =
+      kind === "model" && stableModelProjectIds.has(id)
         ? existing?.name ?? run.target.displayName ?? draftName(run)
         : run.target.displayName ?? existing?.name ?? draftName(run);
     const name =
@@ -347,7 +349,7 @@ export function labWorkproductProjection(input: {
         kind === "model"
           ? Math.max(
               existing?.trainingRunCount ?? 0,
-              jobIdsByModelId.get(id)?.size ?? 0,
+              jobIdsByModelId.get(id)?.size ?? 0
             )
           : existing?.trainingRunCount ?? 0,
       evaluationStatus:
@@ -364,12 +366,13 @@ export function labWorkproductProjection(input: {
     );
     if (!entry) continue;
     const currentTaskset = entry.tasksetId
-      ? input.training?.tasksets.find((taskset) => taskset.id === entry.tasksetId)
-        ?? null
+      ? input.training?.tasksets.find(
+          (taskset) => taskset.id === entry.tasksetId
+        ) ?? null
       : null;
     if (
-      currentTaskset
-      && !frontierBaselineMatchesCurrentTaskset(baselineRun, currentTaskset)
+      currentTaskset &&
+      !frontierBaselineMatchesCurrentTaskset(baselineRun, currentTaskset)
     ) {
       continue;
     }
@@ -401,15 +404,15 @@ export function labWorkproductProjection(input: {
 
 export function frontierBaselineMatchesCurrentTaskset(
   run: CrossSystemFrontierBaselineRun,
-  taskset: Taskset,
+  taskset: Taskset
 ): boolean {
   if (["queued", "running", "cancelling"].includes(run.status)) return true;
   const tasksetSourceIds = new Set(
-    taskset.sourceRefs.map((source) => source.id),
+    taskset.sourceRefs.map((source) => source.id)
   );
   return (
-    run.sourceIds.length === tasksetSourceIds.size
-    && run.sourceIds.every((sourceId) => tasksetSourceIds.has(sourceId))
+    run.sourceIds.length === tasksetSourceIds.size &&
+    run.sourceIds.every((sourceId) => tasksetSourceIds.has(sourceId))
   );
 }
 
@@ -438,7 +441,7 @@ function linkedModelRunId(
 }
 
 function lifecycleModelRunStatus(
-  status: "prepared" | "running" | "succeeded" | "failed" | "cancelled",
+  status: "prepared" | "running" | "succeeded" | "failed" | "cancelled"
 ): string {
   if (status === "prepared") return "Prepared";
   if (status === "running") return "Running";
@@ -514,21 +517,19 @@ function runEvaluationStatus(
 
 function modelJobEvaluationStatus(
   job: TrainingJob | null,
-  lineage: TrainingStateResponse["models"][number] | null,
+  lineage: TrainingStateResponse["models"][number] | null
 ): LabWorkproductSummary["evaluationStatus"] {
   if (!job) return "not_run";
   const complete =
-    Boolean(lineage && resolveModelBindingPromotionGate(lineage))
-    || job.metadata.frozenEvaluationComplete === true
-    || Boolean(lineage?.frozenEvaluationArtifactId)
-    || Boolean(lineage?.managedServing?.evaluation);
+    Boolean(lineage && resolveModelBindingPromotionGate(lineage)) ||
+    job.metadata.frozenEvaluationComplete === true ||
+    Boolean(lineage?.frozenEvaluationArtifactId) ||
+    Boolean(lineage?.managedServing?.customerBindingAllowed);
   if (!complete) return "not_run";
   const passed = Boolean(
-    lineage
-      && (
-        resolveModelBindingPromotionGate(lineage)
-        || managedAdapterEvaluationPassed(lineage)
-      ),
+    lineage &&
+      (resolveModelBindingPromotionGate(lineage) ||
+        managedAdapterCustomerBindingAllowed(lineage))
   );
   return passed ? "passed" : "failed";
 }

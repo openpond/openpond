@@ -5,32 +5,19 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
+import type { ModelBinding, TrainingArtifact } from "@openpond/contracts";
 import {
-  ManagedAdapterEvaluationEvidenceSchema,
-  ManagedAdapterServingReceiptRecordSchema,
-  type ManagedAdapterDeploymentEvidence,
-  type ManagedAdapterEvaluationEvidence,
-  type ManagedAdapterServingPoolEvidence,
-  type ManagedAdapterServingReceiptRecord,
-  type ModelBinding,
-  type TrainingArtifact,
-} from "@openpond/contracts";
+  registryArtifacts,
+  registryDeployments,
+  requiredRegistryArtifact,
+  requiredRegistryCapabilities,
+} from "./managed-adapter-registry-parsers.js";
 import {
   hostedApiAuthHeaders,
   resolveManagedAdapterControlAccess,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
-import {
-  type OpenPondTrainingProvenancePayload,
-} from "./managed-adapter-training-provenance.js";
-
-export const MANAGED_QWEN3_8B_BASE_PROFILE_ID = "qwen3-8b-b968826d";
-export const MANAGED_QWEN3_8B_BASE_REVISION =
-  "b968826d9c46dd6066d109eabc6255188de91218";
-export const MANAGED_QWEN3_0_6B_BASE_PROFILE_ID =
-  "qwen3-0-6b-c1899de2";
-export const MANAGED_QWEN3_0_6B_BASE_REVISION =
-  "c1899de289a04d12100db370d81485cdf75e47ca";
+import { type OpenPondTrainingProvenancePayload } from "./managed-adapter-training-provenance.js";
 
 export type ManagedRegistryArtifact = {
   id: string;
@@ -41,19 +28,29 @@ export type ManagedRegistryArtifact = {
   customerBindingAllowed: boolean;
   contentHash: string | null;
   baseProfileId: string | null;
-  evaluation: ManagedAdapterEvaluationEvidence | null;
 };
 
 export type ManagedRegistryDeployment = {
   id: string;
   artifactId: string;
   state: string;
-  evidence: ManagedAdapterDeploymentEvidence | null;
 };
 
-export type ManagedRegistryServingPool = ManagedAdapterServingPoolEvidence;
-export type ManagedRegistryServingReceipt =
-  ManagedAdapterServingReceiptRecord;
+export type ManagedRegistryBaseProfile = {
+  id: string;
+  repository: string;
+  revision: string;
+  tokenizerRevision: string;
+  chatTemplateHash: string;
+  status: "draft" | "qualified" | "retired";
+};
+
+export type ManagedRegistryCapabilities = {
+  schemaVersion: "openpond.modelAdapterPlatformCapabilities.v1";
+  baseModelProfileContractVersion: "openpond.baseModelProfile.v2";
+  baseProfiles: ManagedRegistryBaseProfile[];
+  lifecyclePolicyOwner: "sandbox";
+};
 
 export type ManagedAdapterChatDelta = {
   text?: string;
@@ -79,6 +76,7 @@ export type FireworksSourceImport = {
   teamId: string;
   lineageId: string;
   label: string;
+  baseProfileId: string;
   trainingJobId: string;
   trainingPlanId: string;
   sourceArtifactId: string;
@@ -109,11 +107,11 @@ export type ManagedAdapterRegistryClientDependencies = {
 };
 
 type ManagedAdapterAccessResolver = (
-  teamId: string,
+  teamId: string
 ) => Promise<{ apiBaseUrl: string; token: string; teamId: string }>;
 
 export function createManagedAdapterRegistryClient(
-  dependencies: ManagedAdapterRegistryClientDependencies = {},
+  dependencies: ManagedAdapterRegistryClientDependencies = {}
 ) {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const readFileImpl = dependencies.readFileImpl ?? readFile;
@@ -130,7 +128,7 @@ export function createManagedAdapterRegistryClient(
     resolveAccess: ManagedAdapterAccessResolver,
     teamId: string,
     path: string,
-    init: RequestInit = {},
+    init: RequestInit = {}
   ): Promise<T> {
     const access = await resolveAccess(teamId);
     assertResolvedTeam(access.teamId, teamId);
@@ -151,7 +149,7 @@ export function createManagedAdapterRegistryClient(
     };
     if (!response.ok) {
       throw new Error(
-        managedApiError(payload, response.status, response.statusText),
+        managedApiError(payload, response.status, response.statusText)
       );
     }
     return payload as T;
@@ -159,56 +157,52 @@ export function createManagedAdapterRegistryClient(
 
   async function listRegistryWithAccess(
     resolveAccess: ManagedAdapterAccessResolver,
-    teamId: string,
+    teamId: string
   ): Promise<{
     artifacts: ManagedRegistryArtifact[];
     deployments: ManagedRegistryDeployment[];
-    servingPools: ManagedRegistryServingPool[];
-    servingReceipts: ManagedRegistryServingReceipt[];
   }> {
-    const [
-      artifactPayload,
-      deploymentPayload,
-      servingPoolPayload,
-      servingReceiptPayload,
-    ] = await Promise.all([
+    const [artifactPayload, deploymentPayload] = await Promise.all([
       requestJson<{ artifacts?: unknown }>(
         resolveAccess,
         teamId,
-        "/v1/model-adapters/artifacts?limit=200",
+        "/v1/model-adapters/artifacts?limit=200"
       ),
       requestJson<{ deployments?: unknown }>(
         resolveAccess,
         teamId,
-        "/v1/model-adapters/deployments",
-      ),
-      requestJson<{ pools?: unknown }>(
-        resolveAccess,
-        teamId,
-        "/v1/model-adapters/serving-pools",
-      ),
-      requestJson<{ receipts?: unknown }>(
-        resolveAccess,
-        teamId,
-        "/v1/model-adapters/serving-receipts?limit=100",
+        "/v1/model-adapters/deployments"
       ),
     ]);
     return {
       artifacts: registryArtifacts(artifactPayload.artifacts),
       deployments: registryDeployments(deploymentPayload.deployments),
-      servingPools: registryServingPools(servingPoolPayload.pools),
-      servingReceipts: registryServingReceipts(
-        servingReceiptPayload.receipts,
-      ),
     };
   }
   const listRegistry = (teamId: string) =>
     listRegistryWithAccess(resolveRegistryAccess, teamId);
   const listTrustedRegistry = (teamId: string) =>
     listRegistryWithAccess(resolveTrustedSourceAccess, teamId);
+  const capabilities = (teamId: string) =>
+    capabilitiesWithAccess(resolveRegistryAccess, teamId);
+  const trustedCapabilities = (teamId: string) =>
+    capabilitiesWithAccess(resolveTrustedSourceAccess, teamId);
+
+  async function capabilitiesWithAccess(
+    resolveAccess: ManagedAdapterAccessResolver,
+    teamId: string
+  ): Promise<ManagedRegistryCapabilities> {
+    return requiredRegistryCapabilities(
+      await requestJson<unknown>(
+        resolveAccess,
+        teamId,
+        "/v1/model-adapters/capabilities"
+      )
+    );
+  }
 
   async function publishFireworksSource(
-    input: FireworksSourceImport,
+    input: FireworksSourceImport
   ): Promise<ManagedRegistryArtifact> {
     return uploadFireworksSource({
       input,
@@ -218,7 +212,7 @@ export function createManagedAdapterRegistryClient(
   }
 
   async function publishTrustedFireworksSource(
-    input: FireworksSourceImport,
+    input: FireworksSourceImport
   ): Promise<ManagedRegistryArtifact> {
     return uploadFireworksSource({
       input,
@@ -228,7 +222,7 @@ export function createManagedAdapterRegistryClient(
   }
 
   async function publishTrustedOpenPondTrainingSource(
-    input: OpenPondTrainingSourceImport,
+    input: OpenPondTrainingSourceImport
   ): Promise<ManagedRegistryArtifact> {
     return uploadSource({
       input,
@@ -236,11 +230,9 @@ export function createManagedAdapterRegistryClient(
       baseProfileId: input.baseProfileId,
       source: "openpond_training",
       sourceRef: input.lineageId,
-      idempotencyKey:
-        `openpond-training:v5:${input.lineageId}:${input.provenance.sourceArtifactSha256}`,
+      idempotencyKey: `openpond-training:v5:${input.lineageId}:${input.provenance.sourceArtifactSha256}`,
       sourceProvenance: input.provenance,
-      sourceImportPath:
-        "/v1/model-adapters/openpond-training-publications",
+      sourceImportPath: "/v1/model-adapters/openpond-training-publications",
     });
   }
 
@@ -256,32 +248,24 @@ export function createManagedAdapterRegistryClient(
     return uploadSource({
       input,
       resolveAccess,
-      baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-      source: trustedProvenance
-        ? "openpond_fireworks"
-        : null,
+      baseProfileId: input.baseProfileId,
+      source: trustedProvenance ? "openpond_fireworks" : null,
       sourceRef: trustedProvenance ? input.lineageId : null,
-      idempotencyKey:
-        `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
+      idempotencyKey: `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
       sourceProvenance: trustedProvenance
         ? {
-            schemaVersion:
-              "openpond.modelAdapterSourceProvenance.v1",
+            schemaVersion: "openpond.modelAdapterSourceProvenance.v1",
             sourceSystem: "openpond_fireworks",
             trainingJobId: input.trainingJobId,
             trainingPlanId: input.trainingPlanId,
             sourceArtifactId: input.sourceArtifactId,
-            sourceArtifactSha256:
-              input.sourceArtifactSha256,
+            sourceArtifactSha256: input.sourceArtifactSha256,
             tasksetId: input.tasksetId,
             tasksetHash: input.tasksetHash,
-            ...(input.evaluationArtifactId
-            && input.evaluationArtifactSha256
+            ...(input.evaluationArtifactId && input.evaluationArtifactSha256
               ? {
-                  evaluationArtifactId:
-                    input.evaluationArtifactId,
-                  evaluationArtifactSha256:
-                    input.evaluationArtifactSha256,
+                  evaluationArtifactId: input.evaluationArtifactId,
+                  evaluationArtifactSha256: input.evaluationArtifactSha256,
                 }
               : {}),
             ...(input.providerRunId
@@ -323,8 +307,7 @@ export function createManagedAdapterRegistryClient(
       resolveAccess,
       input.teamId,
       source
-        ? sourceImportPath ??
-          "/v1/model-adapters/source-imports"
+        ? sourceImportPath ?? "/v1/model-adapters/source-imports"
         : "/v1/model-adapters/uploads",
       {
         method: "POST",
@@ -346,36 +329,34 @@ export function createManagedAdapterRegistryClient(
             mediaType,
           })),
         }),
-      },
+      }
     );
     if (
       created.upload.state === "created" ||
       created.upload.state === "uploading"
     ) {
-      const filesByPath = new Map(
-        input.files.map((file) => [file.path, file]),
-      );
+      const filesByPath = new Map(input.files.map((file) => [file.path, file]));
       if (
         created.uploadCapabilities.length !== input.files.length ||
-        new Set(created.uploadCapabilities.map((item) => item.path))
-          .size !== input.files.length
+        new Set(created.uploadCapabilities.map((item) => item.path)).size !==
+          input.files.length
       ) {
         throw new Error(
-          "Managed adapter upload capabilities did not match the declared files.",
+          "Managed adapter upload capabilities did not match the declared files."
         );
       }
       for (const capability of created.uploadCapabilities) {
         const file = filesByPath.get(capability.path);
         if (!file) {
           throw new Error(
-            "Managed adapter upload returned an undeclared file capability.",
+            "Managed adapter upload returned an undeclared file capability."
           );
         }
         assertUploadCapability(capability);
         const bytes = await readFileImpl(file.artifact.path);
         if (bytes.byteLength !== file.artifact.sizeBytes) {
           throw new Error(
-            `Training artifact ${file.artifact.id} changed before upload.`,
+            `Training artifact ${file.artifact.id} changed before upload.`
           );
         }
         const response = await fetchImpl(capability.url, {
@@ -385,7 +366,7 @@ export function createManagedAdapterRegistryClient(
         });
         if (!response.ok) {
           throw new Error(
-            `Managed adapter byte upload failed with status ${response.status}.`,
+            `Managed adapter byte upload failed with status ${response.status}.`
           );
         }
       }
@@ -403,83 +384,16 @@ export function createManagedAdapterRegistryClient(
     }>(
       resolveAccess,
       input.teamId,
-      `/v1/model-adapters/uploads/${encodeURIComponent(created.upload.id)}/complete`,
+      `/v1/model-adapters/uploads/${encodeURIComponent(
+        created.upload.id
+      )}/complete`,
       {
         method: "POST",
         body: JSON.stringify({ expectedVersion: created.upload.version }),
-      },
+      }
     );
     return requiredRegistryArtifact(completed.artifact);
   }
-
-  async function requestEvaluationWithAccess(
-    resolveAccess: ManagedAdapterAccessResolver,
-    input: {
-      teamId: string;
-      artifactId: string;
-      role?: "chat_manual";
-    },
-  ): Promise<void> {
-    await requestJson(
-      resolveAccess,
-      input.teamId,
-      `/v1/model-adapters/artifacts/${encodeURIComponent(input.artifactId)}/evaluations`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          role: input.role ?? "chat_manual",
-        }),
-      },
-    );
-  }
-
-  async function requestEvaluation(input: {
-    teamId: string;
-    artifactId: string;
-    role?: "chat_manual";
-  }): Promise<void> {
-    return requestEvaluationWithAccess(resolveRegistryAccess, input);
-  }
-  const requestTrustedEvaluation = (input: {
-    teamId: string;
-    artifactId: string;
-    role?: "chat_manual";
-  }) => requestEvaluationWithAccess(resolveTrustedSourceAccess, input);
-
-  async function deployArtifactWithAccess(
-    resolveAccess: ManagedAdapterAccessResolver,
-    input: {
-      teamId: string;
-      artifactId: string;
-      idleTimeoutSeconds?: number;
-    },
-  ): Promise<ManagedRegistryDeployment> {
-    const result = await requestJson<{
-      deployment: ManagedRegistryDeployment;
-    }>(
-      resolveAccess,
-      input.teamId,
-      `/v1/model-adapters/artifacts/${encodeURIComponent(input.artifactId)}/deploy`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          idleTimeoutSeconds:
-            input.idleTimeoutSeconds ?? 300,
-        }),
-      },
-    );
-    return requiredRegistryDeployment(result.deployment);
-  }
-  const deployArtifact = (input: {
-    teamId: string;
-    artifactId: string;
-    idleTimeoutSeconds?: number;
-  }) => deployArtifactWithAccess(resolveRegistryAccess, input);
-  const deployTrustedArtifact = (input: {
-    teamId: string;
-    artifactId: string;
-    idleTimeoutSeconds?: number;
-  }) => deployArtifactWithAccess(resolveTrustedSourceAccess, input);
 
   async function syncBindingWithAccess(
     resolveAccess: ManagedAdapterAccessResolver,
@@ -492,7 +406,7 @@ export function createManagedAdapterRegistryClient(
       bindingVersion: number;
       sourceUpdatedAt: string;
       state: "active" | "inactive" | "deleted";
-    },
+    }
   ): Promise<void> {
     await requestJson(
       resolveAccess,
@@ -512,7 +426,7 @@ export function createManagedAdapterRegistryClient(
           sourceUpdatedAt: input.sourceUpdatedAt,
           state: input.state,
         }),
-      },
+      }
     );
   }
   const syncBinding = (input: {
@@ -572,12 +486,14 @@ export function createManagedAdapterRegistryClient(
           ...(input.tools?.length ? { tools: input.tools } : {}),
           ...(input.toolChoice ? { tool_choice: input.toolChoice } : {}),
         }),
-      },
+      }
     );
     if (!response.ok || !response.body) {
       const payload = await response.text().catch(() => "");
       throw new Error(
-        `Managed adapter stream failed with status ${response.status}${payload ? `: ${payload.slice(0, 512)}` : ""}.`,
+        `Managed adapter stream failed with status ${response.status}${
+          payload ? `: ${payload.slice(0, 512)}` : ""
+        }.`
       );
     }
     for await (const raw of parseSse(response.body, input.signal)) {
@@ -585,7 +501,7 @@ export function createManagedAdapterRegistryClient(
         throw new Error(
           typeof raw.error.code === "string"
             ? raw.error.code
-            : "managed_adapter_stream_failed",
+            : "managed_adapter_stream_failed"
         );
       }
       const usage = isRecord(raw) && isRecord(raw.usage) ? raw.usage : null;
@@ -603,7 +519,7 @@ export function createManagedAdapterRegistryClient(
           yield {
             toolCalls: delta.tool_calls.filter(
               (value): value is HostedChatToolCall =>
-                Boolean(value) && typeof value === "object",
+                Boolean(value) && typeof value === "object"
             ),
             raw,
           };
@@ -618,13 +534,11 @@ export function createManagedAdapterRegistryClient(
   return {
     listRegistry,
     listTrustedRegistry,
+    capabilities,
+    trustedCapabilities,
     publishFireworksSource,
     publishTrustedFireworksSource,
     publishTrustedOpenPondTrainingSource,
-    requestEvaluation,
-    requestTrustedEvaluation,
-    deployArtifact,
-    deployTrustedArtifact,
     syncBinding,
     syncTrustedBinding,
     streamChat,
@@ -635,137 +549,13 @@ export type ManagedAdapterRegistryClient = ReturnType<
   typeof createManagedAdapterRegistryClient
 >;
 
-function registryArtifacts(value: unknown): ManagedRegistryArtifact[] {
-  return Array.isArray(value)
-    ? value.map(requiredRegistryArtifact)
-    : [];
-}
-
-function registryDeployments(value: unknown): ManagedRegistryDeployment[] {
-  if (!Array.isArray(value)) return [];
-  return value.map(requiredRegistryDeployment);
-}
-
-function requiredRegistryDeployment(
-  item: unknown,
-): ManagedRegistryDeployment {
-  if (
-    !isRecord(item) ||
-    typeof item.id !== "string" ||
-    typeof item.artifactId !== "string" ||
-    typeof item.state !== "string"
-  ) {
-    throw new Error(
-      "Managed adapter registry returned an invalid deployment.",
-    );
-  }
-  return {
-    id: item.id,
-    artifactId: item.artifactId,
-    state: item.state,
-    evidence: managedDeploymentEvidence(item),
-  };
-}
-
-function requiredRegistryArtifact(value: unknown): ManagedRegistryArtifact {
-  if (
-    !isRecord(value) ||
-    typeof value.id !== "string" ||
-    typeof value.source !== "string" ||
-    typeof value.sourceRef !== "string" ||
-    typeof value.state !== "string" ||
-    typeof value.promotable !== "boolean" ||
-    typeof value.customerBindingAllowed !== "boolean"
-  ) {
-    throw new Error("Managed adapter registry returned an invalid artifact.");
-  }
-  return {
-    id: value.id,
-    source: value.source,
-    sourceRef: value.sourceRef,
-    state: value.state,
-    promotable: value.promotable,
-    customerBindingAllowed: value.customerBindingAllowed,
-    contentHash:
-      typeof value.contentHash === "string" ? value.contentHash : null,
-    baseProfileId:
-      typeof value.baseProfileId === "string"
-        ? value.baseProfileId
-        : null,
-    evaluation: registryEvaluation(value.evaluation),
-  };
-}
-
-function registryEvaluation(
-  value: unknown,
-): ManagedAdapterEvaluationEvidence | null {
-  const parsed = ManagedAdapterEvaluationEvidenceSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
-
-function managedDeploymentEvidence(
-  value: Record<string, unknown>,
-): ManagedAdapterDeploymentEvidence | null {
-  if (
-    value.schemaVersion !== "openpond.adapterDeployment.v1"
-    || typeof value.provider !== "string"
-    || !("poolId" in value)
-    || typeof value.opaqueModelName !== "string"
-    || !("providerConfigurationHash" in value)
-    || !("lastVerifiedAt" in value)
-    || !("failureCode" in value)
-    || typeof value.createdAt !== "string"
-    || typeof value.updatedAt !== "string"
-  ) {
-    return null;
-  }
-  return value as ManagedAdapterDeploymentEvidence;
-}
-
-function registryServingPools(
-  value: unknown,
-): ManagedRegistryServingPool[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
-    if (
-      !isRecord(item)
-      || typeof item.id !== "string"
-      || typeof item.baseProfileId !== "string"
-      || typeof item.provider !== "string"
-      || typeof item.state !== "string"
-      || typeof item.workersMin !== "number"
-      || typeof item.workersMax !== "number"
-      || typeof item.idleTimeoutSeconds !== "number"
-      || !("providerConfigurationHash" in item)
-      || !("leaseExpiresAt" in item)
-      || !("estimatedHourlyUsd" in item)
-      || !("lastReconciledAt" in item)
-      || !("failureCode" in item)
-      || typeof item.createdAt !== "string"
-      || typeof item.updatedAt !== "string"
-    ) {
-      return [];
-    }
-    return [item as ManagedRegistryServingPool];
-  });
-}
-
-function registryServingReceipts(
-  value: unknown,
-): ManagedRegistryServingReceipt[] {
-  if (!Array.isArray(value)) return [];
-  return value.map(
-    (item) => ManagedAdapterServingReceiptRecordSchema.parse(item),
-  );
-}
-
 function assertResolvedTeam(
   resolvedTeamId: string,
-  expectedTeamId: string,
+  expectedTeamId: string
 ): void {
   if (resolvedTeamId !== expectedTeamId) {
     throw new Error(
-      "Managed adapter access resolved a different OpenPond team.",
+      "Managed adapter access resolved a different OpenPond team."
     );
   }
 }
@@ -778,7 +568,9 @@ function assertPortableUploadFiles(files: PortableUploadFile[]): void {
     !paths.includes("adapter_config.json") ||
     !paths.some((path) => path.endsWith(".safetensors"))
   ) {
-    throw new Error("Fireworks lineage does not contain a complete portable PEFT adapter.");
+    throw new Error(
+      "Fireworks lineage does not contain a complete portable PEFT adapter."
+    );
   }
 }
 
@@ -793,19 +585,17 @@ function assertUploadCapability(capability: UploadCapability): void {
     url.hostname.split(".").some((part) => part.startsWith("s3"));
   const cloudflareR2 =
     url.protocol === "https:" &&
-    /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(
-      url.hostname,
-    );
+    /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(url.hostname);
   if (!local && !awsS3 && !cloudflareR2) {
     throw new Error(
-      `Managed adapter upload capability used an unsafe URL host (${url.protocol}//${url.hostname}).`,
+      `Managed adapter upload capability used an unsafe URL host (${url.protocol}//${url.hostname}).`
     );
   }
   if (
     Object.keys(capability.headers).some(
       (name) =>
         name.toLowerCase() !== "content-type" &&
-        !name.toLowerCase().startsWith("x-amz-"),
+        !name.toLowerCase().startsWith("x-amz-")
     )
   ) {
     throw new Error("Managed adapter upload capability used unsafe headers.");
@@ -814,7 +604,7 @@ function assertUploadCapability(capability: UploadCapability): void {
 
 async function* parseSse(
   stream: ReadableStream<Uint8Array>,
-  signal: AbortSignal,
+  signal: AbortSignal
 ): AsyncGenerator<unknown> {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -853,14 +643,14 @@ function parseSseBlock(block: string): unknown[] {
 function managedApiError(
   payload: { error?: unknown; message?: unknown },
   status: number,
-  fallback: string,
+  fallback: string
 ): string {
   const detail =
     typeof payload.message === "string"
       ? payload.message
       : typeof payload.error === "string"
-        ? payload.error
-        : fallback;
+      ? payload.error
+      : fallback;
   return `Managed adapter API failed (${status}): ${detail.slice(0, 512)}`;
 }
 

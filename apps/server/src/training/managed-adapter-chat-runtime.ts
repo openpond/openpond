@@ -7,6 +7,7 @@ import type {
   ManagedAdapterServingProjection,
   ModelBinding,
 } from "@openpond/contracts";
+import { managedAdapterProjectionReady } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 import {
@@ -67,7 +68,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     toolChoice?: HostedChatToolChoice;
   }) {
     const resolved = await context(input.modelId);
-    if (!resolved || !readyProjection(resolved.projection)) {
+    if (!resolved || !managedAdapterProjectionReady(resolved.projection)) {
       throw new Error(
         "The selected trained Model is not ready on managed serving.",
       );
@@ -116,19 +117,6 @@ function managedAdapterMessages(
     index === lastUserIndex
       ? { ...message, content: `${content}\n\n/no_think` }
       : message,
-  );
-}
-
-function readyProjection(
-  projection: ManagedAdapterServingProjection,
-): boolean {
-  return (
-    projection.state === "ready" &&
-    projection.canonicalArtifactState === "promotable" &&
-    projection.canonicalDeploymentState === "ready" &&
-    Boolean(projection.teamId) &&
-    Boolean(projection.canonicalArtifactId) &&
-    Boolean(projection.canonicalDeploymentId)
   );
 }
 

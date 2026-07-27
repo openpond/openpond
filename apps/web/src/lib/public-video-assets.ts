@@ -29,7 +29,7 @@ type PublicVideoManifest = {
 
 const manifest = manifestJson as PublicVideoManifest;
 const playlistsById = new Map(
-  manifest.playlists.map((playlist) => [playlist.id, playlist]),
+  manifest.playlists.map((playlist) => [playlist.id, playlist])
 );
 const videosById = new Map(manifest.videos.map((video) => [video.id, video]));
 
@@ -43,7 +43,7 @@ export function publicVideoPlaylist(id: string): PublicVideoPlaylist {
 
 export function resolvePublicVideoUrl(
   video: PublicVideoAsset,
-  production: boolean,
+  production: boolean
 ): string {
   return production
     ? `${PRODUCTION_MEDIA_ORIGIN}/${video.objectKey}`
@@ -59,18 +59,16 @@ export function publicVideoUrl(id: string): string {
 }
 
 export const MAKE_AGENT_TUTORIAL_VIDEO_URL = publicVideoUrl(
-  "make-agent-tutorial",
+  "make-agent-tutorial"
 );
 
 export const OPENPOND_AGENT_OVERVIEW_VIDEO_URL = publicVideoUrl(
-  "openpond-agent-overview",
+  "openpond-agent-overview"
 );
 
-export const PROFILE_TO_DEPLOYMENT_VIDEO_URL = publicVideoUrl(
-  "profile-to-deployment-overview",
-);
-
-export function makeAgentTutorialVideoUrl(chapter: "create" | "use" | "improve"): string {
+export function makeAgentTutorialVideoUrl(
+  chapter: "create" | "use" | "improve"
+): string {
   return publicVideoUrl(`make-agent-tutorial-${chapter}`);
 }
 
