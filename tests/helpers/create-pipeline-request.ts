@@ -15,7 +15,7 @@ import {
   type OpenPondApp,
   type Session,
 } from "@openpond/contracts";
-import type { ChatMessage } from "./app-models";
+import type { ChatMessage } from "../../apps/web/src/lib/app-models";
 
 const MAX_CAPTURED_CHAT_EXCERPTS = 6;
 const MAX_CAPTURED_CHAT_EXCERPT_CHARS = 1200;

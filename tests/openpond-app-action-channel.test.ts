@@ -37,7 +37,7 @@ import {
   buildInitialCreateImproveRun,
   buildLabAgentCreateImproveRun,
   buildLabAgentImproveRun,
-} from "../apps/web/src/lib/create-pipeline-request";
+} from "./helpers/create-pipeline-request";
 import {
   buildOpenPondAppActionRunInput,
   buildOpenPondAgentRunInput,
