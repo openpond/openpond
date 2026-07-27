@@ -278,17 +278,11 @@ export function TrainingCatalogSetup({
             </dd>
           </div>
           <div>
-            <dt>Worker image / package</dt>
+            <dt>Worker image</dt>
             <dd>
               {selectedComputeTarget?.engineAdapterId === "local-trl"
                 ? "Bundled CPU reference worker"
-                : catalog?.workers.find(
-                      (worker) =>
-                        worker.engineAdapterId ===
-                        selectedComputeTarget?.engineAdapterId,
-                    )
-                  ? "Pinned signed worker ready"
-                  : "Verified worker required"}
+                : "Backend-pinned immutable image"}
             </dd>
           </div>
           <div>

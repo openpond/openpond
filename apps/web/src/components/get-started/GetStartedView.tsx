@@ -1,162 +1,175 @@
-import { useMemo, useState } from "react";
-import "../../styles/get-started/get-started-learning.css";
-import "../../styles/get-started/get-started.css";
-import { GetStartedDeckView } from "./GetStartedDeck";
-import {
-  GET_STARTED_DECKS,
-  type GetStartedDeckId,
-} from "./get-started-content";
-import { MakeAgentTutorialCard } from "./MakeAgentTutorialCard";
-import { LearningVideoCard } from "./LearningVideoCard";
-import { PostTrainingSeries } from "./PostTrainingSeries";
-import { OPENPOND_AGENT_OVERVIEW } from "./openpond-agent-overview";
-import type { PostTrainingCourseState } from "./post-training-lessons";
-import type {
-  MakeAgentTutorialState,
-  MakeAgentTutorialVideoId,
-} from "./make-agent-tutorial";
+import { ExternalLink } from "../icons";
+import { publicVideoUrl } from "../../lib/public-video-assets";
+import "../../styles/get-started/get-started-links.css";
 
-type GetStartedViewProps = {
-  onCreateAgent: () => void;
-  makeAgentTutorial: MakeAgentTutorialState | null;
-  onCloseMakeAgentTutorial: () => void;
-  onClosePostTrainingCourse: () => void;
-  onOpenApps: () => void;
-  onOpenChat: () => void;
-  onOpenCloud: () => void;
-  onOpenProfile: () => void;
-  onOpenPostTrainingCourse: () => void;
-  onOpenMakeAgentTutorial: () => void;
-  onSelectMakeAgentTutorialVideo: (videoId: MakeAgentTutorialVideoId) => void;
-  onSelectPostTrainingLesson: (lessonIndex: number) => void;
-  postTrainingCourse: PostTrainingCourseState | null;
+type VideoLink = {
+  description: string;
+  duration: string;
+  href: string;
+  title: string;
 };
 
-export function GetStartedView({
-  makeAgentTutorial,
-  onCloseMakeAgentTutorial,
-  onClosePostTrainingCourse,
-  onOpenMakeAgentTutorial,
-  onOpenPostTrainingCourse,
-  onSelectMakeAgentTutorialVideo,
-  onSelectPostTrainingLesson,
-  postTrainingCourse,
-}: GetStartedViewProps) {
-  const [activeDeckId, setActiveDeckId] = useState<GetStartedDeckId>("goal");
-  const [deckResetToken, setDeckResetToken] = useState(0);
-  const activeDeck = useMemo(
-    () =>
-      GET_STARTED_DECKS.find((deck) => deck.id === activeDeckId) ??
-      GET_STARTED_DECKS[0]!,
-    [activeDeckId]
-  );
-  const playerOpen = Boolean(postTrainingCourse || makeAgentTutorial);
+type VideoSection = {
+  description: string;
+  links: readonly VideoLink[];
+  title: string;
+};
 
-  function selectDeck(deckId: GetStartedDeckId) {
-    setActiveDeckId(deckId);
-    setDeckResetToken((current) => current + 1);
-  }
+const VIDEO_SECTIONS: readonly VideoSection[] = [
+  {
+    title: "OpenPond overview",
+    description: "A short introduction to agents, actions, runtime surfaces, and evals.",
+    links: [
+      {
+        title: "What is an OpenPond Agent?",
+        description: "See how Profile Agents work across chat, actions, and evals.",
+        duration: "1:16",
+        href: publicVideoUrl("openpond-agent-overview"),
+      },
+    ],
+  },
+  {
+    title: "Build an agent",
+    description: "Watch the complete walkthrough or jump directly to one chapter.",
+    links: [
+      {
+        title: "How to make an agent",
+        description: "Create, use, and improve an Account Health Agent.",
+        duration: "4:33",
+        href: publicVideoUrl("make-agent-tutorial"),
+      },
+      {
+        title: "Create an Agent",
+        description: "Turn a concrete workflow into an agent.",
+        duration: "1:40",
+        href: publicVideoUrl("make-agent-tutorial-create"),
+      },
+      {
+        title: "Use the Agent",
+        description: "Run the agent from the OpenPond interface.",
+        duration: "1:15",
+        href: publicVideoUrl("make-agent-tutorial-use"),
+      },
+      {
+        title: "Improve the Agent",
+        description: "Review its results and iterate on the source.",
+        duration: "1:49",
+        href: publicVideoUrl("make-agent-tutorial-improve"),
+      },
+    ],
+  },
+  {
+    title: "Post-training from first principles",
+    description: "The complete course and its individual lessons.",
+    links: [
+      {
+        title: "Full course",
+        description: "All ten lessons in one continuous video.",
+        duration: "29:20",
+        href: publicVideoUrl("post-training-full-course"),
+      },
+      {
+        title: "1. How post-training works",
+        description: "The choose, judge, and update loop behind post-training.",
+        duration: "1:05",
+        href: publicVideoUrl("post-training-01-how-post-training-works"),
+      },
+      {
+        title: "2. Definitions",
+        description: "Policy notation, rollouts, advantages, gradients, and GRPO.",
+        duration: "6:14",
+        href: publicVideoUrl("post-training-02-definitions"),
+      },
+      {
+        title: "3. On-policy and off-policy data",
+        description: "How learner rollouts differ from teacher or stored data.",
+        duration: "1:06",
+        href: publicVideoUrl("post-training-03-on-policy-off-policy"),
+      },
+      {
+        title: "4. Rewards and credit assignment",
+        description: "Follow a trajectory from actions to advantage.",
+        duration: "3:00",
+        href: publicVideoUrl("post-training-04-rewards-credit-assignment"),
+      },
+      {
+        title: "5. Verifiable rewards",
+        description: "How tests create scalable rewards and where they fail.",
+        duration: "2:53",
+        href: publicVideoUrl("post-training-05-verifiable-rewards-rlvr"),
+      },
+      {
+        title: "6. PPO and GRPO",
+        description: "Compare learned critics with sibling-response baselines.",
+        duration: "2:54",
+        href: publicVideoUrl("post-training-06-ppo-grpo"),
+      },
+      {
+        title: "7. Distillation",
+        description: "Transfer a teacher's token distribution.",
+        duration: "2:42",
+        href: publicVideoUrl("post-training-07-distillation"),
+      },
+      {
+        title: "8. OPSD, SDFT, and SDPO",
+        description: "Compare trusted solutions, demonstrations, and feedback.",
+        duration: "2:43",
+        href: publicVideoUrl("post-training-08-opsd-sdft-sdpo"),
+      },
+      {
+        title: "9. Credible experiments",
+        description: "Build fair baselines and claims that survive scrutiny.",
+        duration: "3:32",
+        href: publicVideoUrl("post-training-09-credible-experiments"),
+      },
+      {
+        title: "10. Technical appendix",
+        description: "Advanced details for GRPO, teacher logits, and sample routing.",
+        duration: "3:12",
+        href: publicVideoUrl("post-training-10-technical-appendix"),
+      },
+    ],
+  },
+];
 
+export function GetStartedView() {
   return (
-    <section
-      className={`get-started-view ${playerOpen ? "course-player-open" : ""}`}
-      aria-label="Get started"
-    >
-      <div className="get-started-shell">
-        <section
-          className="get-started-start-here"
-          aria-labelledby="get-started-start-here-title"
-        >
-          <header className="get-started-section-heading">
-            <h2 id="get-started-start-here-title">Start here</h2>
-          </header>
-          <div className="get-started-learning-grid">
-            <LearningVideoCard
-              titleElement="h1"
-              video={OPENPOND_AGENT_OVERVIEW}
-            />
-          </div>
-        </section>
+    <main className="get-started-view">
+      <div className="get-started-links">
+        <header className="get-started-links-header">
+          <h1>Videos</h1>
+          <p>Choose a walkthrough to open it in a new tab.</p>
+        </header>
 
-        <section
-          className="get-started-walkthroughs"
-          aria-labelledby="get-started-walkthroughs-title"
-        >
-          <header className="get-started-section-heading">
-            <h2 id="get-started-walkthroughs-title">Walkthroughs</h2>
-          </header>
-          <div className="get-started-learning-grid">
-            <MakeAgentTutorialCard
-              activeVideoId={makeAgentTutorial?.videoId ?? "create"}
-              autoplay={makeAgentTutorial?.autoplay ?? true}
-              onClose={onCloseMakeAgentTutorial}
-              onOpen={onOpenMakeAgentTutorial}
-              onSelectVideo={onSelectMakeAgentTutorialVideo}
-              open={Boolean(makeAgentTutorial)}
-              playRequestId={makeAgentTutorial?.playRequestId ?? 0}
-            />
-          </div>
-        </section>
-
-        <section
-          className="get-started-learn"
-          aria-labelledby="get-started-learn-title"
-        >
-          <header className="get-started-section-heading">
-            <h2 id="get-started-learn-title">Learn deeper</h2>
-          </header>
-          <div className="get-started-learning-grid">
-            <PostTrainingSeries
-              activeLessonIndex={postTrainingCourse?.lessonIndex ?? 0}
-              autoplay={postTrainingCourse?.autoplay ?? true}
-              fullCourseSelected={
-                postTrainingCourse?.fullCourseSelected ?? false
-              }
-              open={Boolean(postTrainingCourse)}
-              onClose={onClosePostTrainingCourse}
-              onOpen={onOpenPostTrainingCourse}
-              onSelectLesson={onSelectPostTrainingLesson}
-              playRequestId={postTrainingCourse?.playRequestId ?? 0}
-            />
-          </div>
-        </section>
-
-        {playerOpen ? null : (
-          <section
-            className="get-started-guides"
-            aria-labelledby="openpond-guides-title"
-          >
-            <header className="get-started-section-heading">
-              <h2 id="openpond-guides-title">How OpenPond works</h2>
+        {VIDEO_SECTIONS.map((section) => (
+          <section className="get-started-link-section" key={section.title}>
+            <header>
+              <h2>{section.title}</h2>
+              <p>{section.description}</p>
             </header>
-
-            <div
-              className="surface-tabs get-started-tabs"
-              role="tablist"
-              aria-label="Get started topics"
-            >
-              {GET_STARTED_DECKS.map((deck) => (
-                <button
-                  aria-selected={activeDeck.id === deck.id}
-                  className={activeDeck.id === deck.id ? "active" : ""}
-                  key={deck.id}
-                  onClick={() => selectDeck(deck.id)}
-                  role="tab"
-                  type="button"
+            <div className="get-started-link-list">
+              {section.links.map((video) => (
+                <a
+                  className="get-started-video-link"
+                  href={video.href}
+                  key={video.href}
+                  rel="noreferrer"
+                  target="_blank"
                 >
-                  <span>{deck.label}</span>
-                </button>
+                  <span className="get-started-video-copy">
+                    <strong>{video.title}</strong>
+                    <span>{video.description}</span>
+                  </span>
+                  <span className="get-started-video-meta">
+                    <span>{video.duration}</span>
+                    <ExternalLink aria-hidden="true" size={15} />
+                  </span>
+                </a>
               ))}
             </div>
-
-            <GetStartedDeckView
-              key={activeDeck.id}
-              deck={activeDeck}
-              resetToken={deckResetToken}
-            />
           </section>
-        )}
+        ))}
       </div>
-    </section>
+    </main>
   );
 }

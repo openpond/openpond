@@ -68,13 +68,9 @@ export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
   "export",
   "local_cpu_fixture",
-  "custom",
   "prime_hosted",
   "fireworks",
-  "local_cuda",
-  "local_mlx",
   "ssh_gpu",
-  "runpod_byoc",
 ]);
 
 export const SftRecipeSchema = z.object({
@@ -349,36 +345,6 @@ export const TrainingCompatibilityReportSchema = z.object({
   recipeMethod: TrainingMethodSchema,
   issues: z.array(TrainingCompatibilityIssueSchema),
   checkedAt: TimestampSchema,
-});
-
-export const PolicyOptimizationComparisonSchema = z.object({
-  schemaVersion: z.literal("openpond.policyOptimizationComparison.v1"),
-  grpoPlanId: IdSchema,
-  ppoPlanId: IdSchema,
-  comparable: z.boolean(),
-  shared: z
-    .object({
-      tasksetId: IdSchema,
-      tasksetHash: HashSchema,
-      policyModelHash: HashSchema,
-      referenceModelHash: HashSchema,
-      environmentHash: HashSchema,
-      rewardHash: HashSchema,
-      rolloutBudgetHash: HashSchema,
-      evaluationSplit: z.literal("frozen_eval"),
-    })
-    .nullable(),
-  mismatches: z.array(
-    z.enum([
-      "dataset",
-      "policy_model",
-      "reference_model",
-      "environment",
-      "reward",
-      "rollout_budget",
-      "evaluation",
-    ])
-  ),
 });
 
 export const TrainingMethodAvailabilityReasonCodeSchema = z.union([
@@ -828,13 +794,6 @@ export const FireworksModelServingSessionSchema = z.object({
   error: z.string().trim().min(1).max(5_000).nullable(),
 });
 
-export const ManagedTrainingClientConfigSchema = z.object({
-  schemaVersion: z.literal("openpond.managedTrainingClient.v1"),
-  endpoint: z.string().url(),
-  accountId: IdSchema.nullable(),
-  enabled: z.boolean().default(false),
-});
-
 export const TrainingCredentialRefSchema = z.object({
   destinationId: z.string().trim().min(1),
   configured: z.boolean(),
@@ -900,9 +859,6 @@ export type BaseModelExecutionOption = z.infer<
 export type BaseModelCandidate = z.infer<typeof BaseModelCandidateSchema>;
 export type TrainingCompatibilityReport = z.infer<
   typeof TrainingCompatibilityReportSchema
->;
-export type PolicyOptimizationComparison = z.infer<
-  typeof PolicyOptimizationComparisonSchema
 >;
 export type TrainingMethodAvailabilityReasonCode = z.infer<
   typeof TrainingMethodAvailabilityReasonCodeSchema

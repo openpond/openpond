@@ -7,10 +7,9 @@ import {
   publicAssetUrl,
 } from "../apps/web/src/lib/public-assets";
 import {
-  MAKE_AGENT_TUTORIAL_VIDEO_URL,
-  OPENPOND_AGENT_OVERVIEW_VIDEO_URL,
   PRODUCTION_MEDIA_ORIGIN,
   PUBLIC_VIDEO_MANIFEST,
+  publicVideoUrl,
   resolvePublicVideoUrl,
 } from "../apps/web/src/lib/public-video-assets";
 
@@ -21,8 +20,8 @@ describe("web public asset URLs", () => {
     const assetUrls = [
       OPENPOND_ICON_URL,
       OPENPOND_WORDMARK_WHITE_URL,
-      OPENPOND_AGENT_OVERVIEW_VIDEO_URL,
-      MAKE_AGENT_TUTORIAL_VIDEO_URL,
+      publicVideoUrl("openpond-agent-overview"),
+      publicVideoUrl("make-agent-tutorial"),
       connectedAppIconUrl("github"),
     ];
 

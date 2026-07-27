@@ -1,8 +1,6 @@
 import { rm } from "node:fs/promises";
 import path from "node:path";
 import {
-  type SignedWorkerCatalog,
-  type WorkerCatalogEntry,
   type ComputeInventory,
   type GradeResult,
   type TaskAttemptResult,
@@ -19,7 +17,6 @@ import {
 } from "./destinations.js";
 import { listTrainingDestinationSecretRefs, writeTrainingDestinationSecret } from "./destination-secrets.js";
 import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
-import { HardwareGatedTrainingDestination } from "./hardware-gated-destination.js";
 import { FireworksTrainingDestination, type FireworksProviderCredential } from "./fireworks-destination.js";
 import { createFireworksRftEnvironment, validateFireworksRftCallbackCredential } from "./fireworks-rft-environment.js";
 import type { FireworksRftEvaluatorProvisioner } from "./fireworks-rft-evaluator.js";
@@ -70,11 +67,6 @@ export function createTrainingService(deps: {
   fireworksRequest?: typeof fetch;
   provisionFireworksRftEvaluator?: FireworksRftEvaluatorProvisioner;
   fireworksRftPublicBaseUrl?: () => string | null;
-  workerCatalog?: () => Promise<SignedWorkerCatalog | null>;
-  workerImages?: {
-    inspect(entry: WorkerCatalogEntry): Promise<{ cached: boolean }>;
-    prepare(entry: WorkerCatalogEntry): Promise<{ state: string; cached: boolean }>;
-  };
   prepareModel?: (input: {
     modelId: string;
     revision: string | null;
@@ -102,7 +94,6 @@ export function createTrainingService(deps: {
   registry.register(new ExportTrainingDestination(resolveTaskset));
   const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
   registry.register(localCpu);
-  registry.register(new UnavailableTrainingDestination("custom", "Register a custom TrainingDestination implementation before launch.", resolveTaskset));
   registry.register(
     deps.primeRawConfigured
       ? new PortablePreparationTrainingDestination("prime_hosted", {
@@ -172,8 +163,6 @@ export function createTrainingService(deps: {
     localCpu,
   });
   registry.register(fireworks);
-  registry.register(new HardwareGatedTrainingDestination("local_cuda", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
-  registry.register(new HardwareGatedTrainingDestination("local_mlx", { inventory: deps.computeInventory ?? (async () => null), resolveTaskset }));
   registry.register(
     deps.connectedWorkerConfigured
       ? new PortablePreparationTrainingDestination("ssh_gpu", {
@@ -214,8 +203,6 @@ export function createTrainingService(deps: {
     adapters: portableAdapters,
     computeInventory: deps.computeInventory,
     revalidateCompute: deps.revalidateCompute,
-    workerCatalog: deps.workerCatalog,
-    workerImages: deps.workerImages,
     connectedWorkerConfigured: deps.connectedWorkerConfigured,
     connectedEngineConfigured: deps.connectedEngineConfigured,
     primeRawConfigured: deps.primeRawConfigured,
@@ -281,7 +268,6 @@ export function createTrainingService(deps: {
     prepareStart,
     approve,
     prepareModel: deps.prepareModel,
-    workerImages: deps.workerImages,
   });
 
   async function state(profileId?: string) {

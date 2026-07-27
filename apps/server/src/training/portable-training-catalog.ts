@@ -7,13 +7,11 @@ import {
   type HarnessRuntimeCapabilities,
   type HarnessRuntimeTargetBinding,
   type ModelRunDraft,
-  type SignedWorkerCatalog,
   type TrainingCatalog,
   type TrainingDestinationCapabilities,
   type TrainingEngineBinding,
   type TrainingEngineCapabilities,
   type TrainingPreparationPlan,
-  type WorkerCatalogEntry,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { prepareTrainingSelection } from "@openpond/training-sdk";
@@ -81,7 +79,6 @@ export function createPortableTrainingCatalog(input: {
   candidates: BaseModelCandidate[];
   destinations: TrainingDestinationCapabilities[];
   inventory: ComputeInventory | null;
-  workerCatalog: SignedWorkerCatalog | null;
   searchResults?: RegistryModelSearchResult[];
   registeredEngineIds?: string[];
   connectedWorkerConfigured?: boolean;
@@ -93,7 +90,6 @@ export function createPortableTrainingCatalog(input: {
   now?: string;
 }): TrainingCatalog {
   const generatedAt = input.now ?? new Date().toISOString();
-  const workers = input.workerCatalog?.entries ?? [];
   const compute = computeCapabilities(
     input.inventory,
     generatedAt,
@@ -103,7 +99,6 @@ export function createPortableTrainingCatalog(input: {
   );
   const engines = engineCapabilities({
     destinations: input.destinations,
-    workers,
     generatedAt,
     registeredEngineIds: input.registeredEngineIds ?? [],
     connectedEngineConfigured:
@@ -205,9 +200,8 @@ export function createPortableTrainingCatalog(input: {
           : !target.available
             ? target.computeAdapterId === "prime-raw"
               ? ("compute_setup_required" as const)
-              : engine && !engine.available &&
-                  target.engineAdapterId === "connected-prime-rl"
-                ? ("worker_download_required" as const)
+              : engine && !engine.available
+                ? ("unsupported" as const)
                 : ("compute_setup_required" as const)
             : !option.available
               ? ("unsupported" as const)
@@ -222,10 +216,7 @@ export function createPortableTrainingCatalog(input: {
                 ? "Import or rescan this Model to record its exact revision, tokenizer revision, and canonical chat-template hash."
                 : option?.unavailableReason ??
                 "This Model is not supported by the selected training target."
-              : state === "worker_download_required"
-                ? engine?.unavailableReason ??
-                  "A verified worker must be downloaded during Run preparation."
-                : state === "compute_setup_required"
+              : state === "compute_setup_required"
                   ? target.unavailableReason
                   : state === "model_download_required"
                     ? "Pinned Model weights will be downloaded after Run review."
@@ -274,7 +265,6 @@ export function createPortableTrainingCatalog(input: {
     compute,
     runtimes,
     targets,
-    workers,
     generatedAt,
   };
   return TrainingCatalogSchema.parse({
@@ -310,28 +300,6 @@ function trainingTargets(input: {
       runtimeAdapterId: "local-harness",
       engineAdapterId: "local-trl",
       capabilityPills: ["Local"],
-      ...LOCAL_TARGET_POLICY,
-    },
-    {
-      id: "this-device-cuda",
-      label: "This device · CUDA",
-      description: "Use a qualified NVIDIA GPU on this device.",
-      destinationId: "local_cuda",
-      computeAdapterId: "local-cuda",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["Local", "CUDA"],
-      ...CONNECTED_TARGET_POLICY,
-    },
-    {
-      id: "this-device-mlx",
-      label: "This device · MLX",
-      description: "Use a qualified Apple accelerator on this device.",
-      destinationId: "local_mlx",
-      computeAdapterId: "local-mlx",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "local-mlx",
-      capabilityPills: ["Local", "MLX"],
       ...LOCAL_TARGET_POLICY,
     },
     {
@@ -407,7 +375,6 @@ function trainingTargets(input: {
 export function preparePortableModelRun(input: {
   modelRun: ModelRunDraft;
   catalog: TrainingCatalog;
-  workerCached?: boolean;
   maximumSpendUsd?: number | null;
   quoteUsd?: number | null;
   retentionDays?: number | null;
@@ -421,12 +388,6 @@ export function preparePortableModelRun(input: {
     modelRun: input.modelRun,
     catalog: input.catalog,
   });
-  const worker = bindings.engine
-    ? input.catalog.workers.find(
-        (candidate) =>
-          candidate.engineAdapterId === bindings.engine!.adapterId,
-      ) ?? null
-    : null;
   const engine = bindings.engine
     ? input.catalog.engines.find(
         (candidate) => candidate.adapterId === bindings.engine!.adapterId,
@@ -441,8 +402,6 @@ export function preparePortableModelRun(input: {
     modelRunId: input.modelRun.id,
     modelCached: model?.cached ?? false,
     modelBytes: model?.expectedBytes ?? 0,
-    workerCached: input.workerCached ?? false,
-    worker,
     engine,
     compute,
     manifest: bindings,
@@ -451,10 +410,6 @@ export function preparePortableModelRun(input: {
     retentionDays: input.retentionDays ?? null,
     providerManaged:
       input.modelRun.destinationId === "fireworks",
-    workerRequired:
-      bindings.engine?.adapterId !== "local-trl" &&
-      bindings.engine?.adapterId !== "local-mlx" &&
-      input.modelRun.destinationId !== "fireworks",
   });
 }
 
@@ -486,9 +441,6 @@ export function resolvePortableBindings(input: {
   if (!compute || !engine || !runtime) {
     return { runtime: null, compute: null, engine: null };
   }
-  const worker = input.catalog.workers.find(
-    (candidate) => candidate.engineAdapterId === engineId,
-  );
   return {
     runtime: {
       adapterId: runtime.adapterId,
@@ -510,7 +462,7 @@ export function resolvePortableBindings(input: {
     engine: {
       adapterId: engine.adapterId,
       workerVersion: input.catalog.contentHash.slice(0, 16),
-      workerImageDigest: worker?.image.digest ?? null,
+      workerImageDigest: engine.workerImageDigest,
       upstreamRevision: engine.upstreamRevision,
       capabilityReceipt: engine.capabilityReceipt,
     },
@@ -573,8 +525,6 @@ function computeCapabilities(
     checkedAt,
     unavailableReason: reason,
   });
-  const nvidia = localDevices.filter((device) => device.vendor === "nvidia");
-  const apple = localDevices.filter((device) => device.vendor === "apple");
   const sshAvailable =
     connectedWorkerConfigured ||
     (inventory?.connections.some(
@@ -583,8 +533,6 @@ function computeCapabilities(
     ) ?? false);
   const defaults = [
     capability("local-cpu", "local", null, localDevices.filter((device) => device.kind === "cpu"), true, null),
-    capability("local-cuda", "local", null, nvidia, nvidia.length > 0, nvidia.length ? null : "No compatible NVIDIA GPU is available."),
-    capability("local-mlx", "local", null, apple, apple.length > 0, apple.length ? null : "No compatible Apple accelerator is available."),
     capability("ssh-worker", "ssh", null, [], sshAvailable, sshAvailable ? null : "Configure and verify an SSH worker connection."),
     capability(
       "prime-raw",
@@ -612,7 +560,6 @@ function computeCapabilities(
 
 function engineCapabilities(input: {
   destinations: TrainingDestinationCapabilities[];
-  workers: WorkerCatalogEntry[];
   generatedAt: string;
   registeredEngineIds: string[];
   connectedEngineConfigured: boolean;
@@ -645,15 +592,11 @@ function engineCapabilities(input: {
     }),
     checkedAt: input.generatedAt,
     unavailableReason: reason,
+    workerImageDigest:
+      adapterId === "connected-prime-rl"
+        ? input.connectedWorkerImageDigest
+        : null,
   });
-  const primeWorker = input.workers.find(
-    (candidate) =>
-      candidate.engineAdapterId === "connected-prime-rl",
-  );
-  const workerDigestMatches =
-    primeWorker !== undefined &&
-    input.connectedWorkerImageDigest !== null &&
-    primeWorker.image.digest === input.connectedWorkerImageDigest;
   const fireworksAvailable =
     input.destinations.find(
       (destination) => destination.destinationId === "fireworks",
@@ -672,27 +615,21 @@ function engineCapabilities(input: {
       ],
       input.primeRawConfigured ||
         (
-          Boolean(primeWorker) &&
           input.connectedEngineConfigured &&
           registered.has("connected-prime-rl") &&
-          (input.connectedWorkerImageDigest === null ||
-            workerDigestMatches)
+          input.connectedWorkerImageDigest !== null
         ),
       PRIME_RL_REVISION,
       input.primeRawConfigured
         ? null
-        : !primeWorker
-        ? "Install a verified signed prime-rl worker catalog entry."
         : !input.connectedEngineConfigured
           ? "Configure an authenticated connected or managed worker route."
-          : input.connectedWorkerImageDigest !== null &&
-              !workerDigestMatches
-            ? "The configured worker image does not match the verified signed catalog."
+          : input.connectedWorkerImageDigest === null
+            ? "Configure an immutable connected-worker image digest."
             : !registered.has("connected-prime-rl")
               ? "Register the connected training engine."
               : null,
     ),
-    engine("local-mlx", ["sft"], ["demonstration"], false, "mlx-unqualified", "The MLX worker has no conformance receipt on this host."),
     engine("fireworks-native", ["sft", "grpo"], ["demonstration", "trajectory", "reward"], fireworksAvailable && registered.has("fireworks-native"), "provider-managed", !fireworksAvailable ? "Fireworks is not configured." : !registered.has("fireworks-native") ? "The Fireworks adapter is not registered." : null),
   ];
 }
@@ -744,8 +681,6 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
 function computeIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-cpu",
-    local_cuda: "local-cuda",
-    local_mlx: "local-mlx",
     ssh_gpu: "ssh-worker",
     prime_hosted: "prime-raw",
     fireworks: "fireworks-managed",
@@ -756,8 +691,6 @@ function computeIdForDestination(destinationId: string): string {
 function engineIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-trl",
-    local_cuda: "connected-prime-rl",
-    local_mlx: "local-mlx",
     ssh_gpu: "connected-prime-rl",
     prime_hosted: "connected-prime-rl",
     fireworks: "fireworks-native",

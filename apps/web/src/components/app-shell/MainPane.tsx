@@ -110,9 +110,7 @@ import {
   GetStartedView,
   LabsRoute,
   LabSkillSidebar,
-  MakeAgentTutorialLearningPanel,
   NativeSkillSidebar,
-  PostTrainingLearningPanel,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
@@ -183,8 +181,6 @@ export function MainPane({
   rightChatPanels,
   nativeSkillSidebar,
   extensionSkillSidebar,
-  makeAgentTutorial,
-  postTrainingCourse,
   workspaceDiffPanelViewState,
   sidebarFileOpenRequest,
   sidebarFileBookmarks,
@@ -263,19 +259,6 @@ export function MainPane({
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
-  onOpenPostTrainingCourse,
-  onClosePostTrainingCourse,
-  onOpenPostTrainingScript,
-  onSelectPostTrainingFullCourse,
-  onSelectPostTrainingLesson,
-  onSetPostTrainingAutoplay,
-  onShowPostTrainingLessons,
-  onOpenMakeAgentTutorial,
-  onCloseMakeAgentTutorial,
-  onSelectMakeAgentTutorialVideo,
-  onSetMakeAgentTutorialAutoplay,
-  onShowMakeAgentTutorialLessons,
-  onShowMakeAgentTutorialScript,
   onShowDiffPanel,
   onShowBrowserPanel,
   onShowTrainingDraftPanel,
@@ -654,10 +637,6 @@ export function MainPane({
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
   const showExtensionSkillPanel = view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
-  const showPostTrainingPanel =
-    view === "get-started" && diffPanelOpen && Boolean(postTrainingCourse);
-  const showMakeAgentTutorialPanel =
-    view === "get-started" && diffPanelOpen && Boolean(makeAgentTutorial);
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
   const showTeamAgentConversationPanel =
@@ -685,14 +664,10 @@ export function MainPane({
     showRightChatPanel ||
     showTrainingDraftPanel ||
     showNativeSkillPanel ||
-    showPostTrainingPanel ||
-    showMakeAgentTutorialPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
     showRightHomePanel;
   const rightPanelExpanded = showRightPanel
-    && !showPostTrainingPanel
-    && !showMakeAgentTutorialPanel
     && rightPanelMode !== "chat"
     && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
@@ -1515,36 +1490,7 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
     />
   ) : null;
-  const postTrainingPanel = showPostTrainingPanel && postTrainingCourse ? (
-    <PostTrainingLearningPanel
-      activeLessonIndex={postTrainingCourse.lessonIndex}
-      autoplay={postTrainingCourse.autoplay}
-      fullCourseSelected={postTrainingCourse.fullCourseSelected}
-      onResizeStart={onDiffPanelResizeStart}
-      onOpenScript={onOpenPostTrainingScript}
-      onSelectFullCourse={onSelectPostTrainingFullCourse}
-      onSelectLesson={onSelectPostTrainingLesson}
-      onSetAutoplay={onSetPostTrainingAutoplay}
-      onShowLessons={onShowPostTrainingLessons}
-      panelView={postTrainingCourse.panelView}
-      scriptLessonIndex={postTrainingCourse.scriptLessonIndex}
-    />
-  ) : null;
-  const makeAgentTutorialPanel = showMakeAgentTutorialPanel && makeAgentTutorial ? (
-    <MakeAgentTutorialLearningPanel
-      activeVideoId={makeAgentTutorial.videoId}
-      autoplay={makeAgentTutorial.autoplay}
-      onResizeStart={onDiffPanelResizeStart}
-      onSelectVideo={onSelectMakeAgentTutorialVideo}
-      onSetAutoplay={onSetMakeAgentTutorialAutoplay}
-      onShowScript={onShowMakeAgentTutorialScript}
-      onShowLessons={onShowMakeAgentTutorialLessons}
-      panelView={makeAgentTutorial.panelView}
-    />
-  ) : null;
   const rightPanel =
-    makeAgentTutorialPanel ??
-    postTrainingPanel ??
     teamAgentConversationPanel ??
     teamAiThreadPanel ??
     rightChatPanel ??
@@ -1620,30 +1566,9 @@ export function MainPane({
           <CommunityView {...community} />
         </Suspense>
       ) : view === "get-started" ? (
-        <>
-          <Suspense fallback={null}>
-            <GetStartedView
-              onCreateAgent={() => {
-                composerDraftStore.set("/agent create ");
-                setMentionedAppId(null);
-                setView("chat");
-              }}
-              onClosePostTrainingCourse={onClosePostTrainingCourse}
-              makeAgentTutorial={makeAgentTutorial}
-              onCloseMakeAgentTutorial={onCloseMakeAgentTutorial}
-              onOpenApps={() => setView("apps")}
-              onOpenChat={() => setView("chat")}
-              onOpenCloud={() => setView("cloud")}
-              onOpenPostTrainingCourse={onOpenPostTrainingCourse}
-              onOpenMakeAgentTutorial={onOpenMakeAgentTutorial}
-              onOpenProfile={() => setView("labs")}
-              onSelectMakeAgentTutorialVideo={onSelectMakeAgentTutorialVideo}
-              onSelectPostTrainingLesson={onSelectPostTrainingLesson}
-              postTrainingCourse={postTrainingCourse}
-            />
-          </Suspense>
-          {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
-        </>
+        <Suspense fallback={null}>
+          <GetStartedView />
+        </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
           <Suspense fallback={null}>{rightPanel}</Suspense>

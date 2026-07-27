@@ -117,7 +117,6 @@ export function preparationStateLabel(state: string): string {
   const labels: Record<string, string> = {
     ready: "Ready",
     model_download_required: "Model download required",
-    worker_download_required: "Worker download required",
     compute_setup_required: "Compute setup required",
     provider_managed: "Provider managed",
     unsupported: "Unsupported",

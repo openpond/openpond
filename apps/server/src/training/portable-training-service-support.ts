@@ -1,8 +1,6 @@
 import type {
   ComputeInventory,
-  SignedWorkerCatalog,
   TrainingDestinationCapabilities,
-  WorkerCatalogEntry,
 } from "@openpond/contracts";
 import type { TrainingAdapterRegistry } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
@@ -14,7 +12,6 @@ import {
 import {
   createPortableTrainingCatalog,
   preparePortableModelRun,
-  resolvePortableBindings,
 } from "./portable-training-catalog.js";
 
 export function createPortableTrainingServiceSupport(input: {
@@ -23,10 +20,6 @@ export function createPortableTrainingServiceSupport(input: {
   adapters: TrainingAdapterRegistry;
   computeInventory?: () => Promise<ComputeInventory | null>;
   revalidateCompute?: () => Promise<unknown>;
-  workerCatalog?: () => Promise<SignedWorkerCatalog | null>;
-  workerImages?: {
-    inspect(entry: WorkerCatalogEntry): Promise<{ cached: boolean }>;
-  };
   connectedWorkerConfigured?: boolean;
   connectedEngineConfigured?: boolean;
   primeRawConfigured?: boolean;
@@ -39,14 +32,12 @@ export function createPortableTrainingServiceSupport(input: {
     const [
       destinationCapabilities,
       compute,
-      workerCatalog,
       searchResults,
       adapterCompute,
       adapterRuntimes,
     ] = await Promise.all([
       input.destinations(),
       input.computeInventory?.() ?? Promise.resolve(null),
-      input.workerCatalog?.() ?? Promise.resolve(null),
       query.trim().length >= 2
         ? (input.searchTrainingModels ?? searchHuggingFaceModels)(query)
         : Promise.resolve([]),
@@ -60,7 +51,6 @@ export function createPortableTrainingServiceSupport(input: {
       }),
       destinations: destinationCapabilities,
       inventory: compute,
-      workerCatalog,
       searchResults,
       registeredEngineIds: input.adapters.engineIds(),
       connectedWorkerConfigured:
@@ -89,31 +79,9 @@ export function createPortableTrainingServiceSupport(input: {
       throw new Error("A ready saved Model Run is required.");
     }
     const trainingCatalog = await catalog();
-    const bindings = resolvePortableBindings({
-      modelRun,
-      catalog: trainingCatalog,
-    });
-    const worker = bindings.engine
-      ? trainingCatalog.workers.find(
-          (candidate) =>
-            candidate.engineAdapterId === bindings.engine?.adapterId,
-        ) ?? null
-      : null;
-    const configuredWorkerAlreadyRunning =
-      worker !== null &&
-      ((input.connectedWorkerConfigured === true &&
-        input.connectedWorkerImageDigest === worker.image.digest) ||
-        (modelRun.destinationId === "prime_hosted" &&
-          input.primeRawConfigured === true));
-    const workerCached = configuredWorkerAlreadyRunning
-      ? true
-      : worker && input.workerImages
-        ? (await input.workerImages.inspect(worker)).cached
-        : false;
     return preparePortableModelRun({
       modelRun,
       catalog: trainingCatalog,
-      workerCached,
       maximumSpendUsd: inputPlan.maximumSpendUsd,
       retentionDays: inputPlan.retentionDays,
     });

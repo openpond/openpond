@@ -1,13 +1,8 @@
 import type {
   ComputeInventory,
   ComputeTargetCapabilities,
-  WorkerCatalogEntry,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
-import {
-  SpawnWorkerImageCommandRunner,
-  WorkerImageDistribution,
-} from "@openpond/trainer-connected";
 import { LocalComputeTargetAdapter } from "@openpond/trainer-local";
 import {
   RoutedTrainingEngineAdapter,
@@ -24,14 +19,9 @@ import {
   createConfiguredPrimeRaw,
   type PrimeRawEnvironment,
 } from "./configured-prime-raw.js";
-import { createVerifiedWorkerCatalogLoader } from "./worker-catalog-loader.js";
 
 type PortableTrainingEnvironment = ConnectedWorkerEnvironment &
-  PrimeRawEnvironment & {
-  OPENPOND_WORKER_CATALOG_PATH?: string;
-  OPENPOND_WORKER_CATALOG_PUBLIC_KEY_PATH?: string;
-  OPENPOND_WORKER_CATALOG_SIGNING_KEY_ID?: string;
-};
+  PrimeRawEnvironment;
 
 export type PortableTrainingAdapterComposition = {
   compute?: ComputeTargetAdapter[];
@@ -62,24 +52,7 @@ export function createPortableTrainingServerDependencies(input: {
     input.adapters,
     configuredPrime ?? undefined,
   );
-  const workerImages = new WorkerImageDistribution(
-    new SpawnWorkerImageCommandRunner(),
-  );
   return {
-    workerCatalog: createVerifiedWorkerCatalogLoader({
-      catalogPath: input.environment.OPENPOND_WORKER_CATALOG_PATH,
-      publicKeyPath:
-        input.environment.OPENPOND_WORKER_CATALOG_PUBLIC_KEY_PATH,
-      expectedOpenpondRelease: "0.0.38",
-      expectedWorkerProtocolVersion: "openpond.connectedWorker.v1",
-      expectedSigningKeyId:
-        input.environment.OPENPOND_WORKER_CATALOG_SIGNING_KEY_ID,
-    }),
-    workerImages: {
-      inspect: (entry: WorkerCatalogEntry) => workerImages.inspect(entry),
-      prepare: (entry: WorkerCatalogEntry) =>
-        workerImages.prepare({ entry }),
-    },
     connectedWorkerConfigured: configuredConnectedWorker !== null,
     connectedEngineConfigured:
       configuredConnectedWorker !== null ||
@@ -139,8 +112,7 @@ export function createPortableTrainingServerDependencies(input: {
         addEngineRoute("connected-prime-rl", {
           id: "configured-connected-worker",
           matches: (plan) =>
-            plan.compute.adapterId === "ssh-worker" ||
-            plan.compute.adapterId === "local-cuda",
+            plan.compute.adapterId === "ssh-worker",
           adapter: configuredConnectedWorker,
         });
       }
@@ -192,21 +164,16 @@ function mergePortableAdapterComposition(
 
 const localComputeDefinitions = [
   { id: "local-cpu", runtime: "cpu" },
-  { id: "local-cuda", runtime: "cuda" },
-  { id: "local-mlx", runtime: "mlx" },
 ] as const;
 
 function localComputeDevices(
   inventory: ComputeInventory | null,
-  runtime: (typeof localComputeDefinitions)[number]["runtime"],
+  runtime: "cpu",
 ): ComputeTargetCapabilities["devices"] {
   const devices =
     inventory?.devices
       .filter((device) => {
-        if (!device.available) return false;
-        if (runtime === "cuda") return device.vendor === "nvidia";
-        if (runtime === "mlx") return device.vendor === "apple";
-        return device.kind === "cpu";
+        return device.available && device.kind === "cpu";
       })
       .map((device) => ({
         id: device.id,
@@ -216,7 +183,7 @@ function localComputeDevices(
         memoryBytes: device.totalMemoryBytes,
         runtime,
       })) ?? [];
-  if (devices.length > 0 || runtime !== "cpu") return devices;
+  if (devices.length > 0) return devices;
   return [
     {
       id: "cpu",

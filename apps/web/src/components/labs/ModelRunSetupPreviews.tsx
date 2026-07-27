@@ -221,8 +221,6 @@ function PreviewSelect({ label, value }: { label: string; value: string }) {
 function destinationLabel(destination: ModelRunDraft["destinationId"]): string {
   if (destination === "fireworks") return "Fireworks";
   if (destination === "local_cpu_fixture") return "Local CPU";
-  if (destination === "local_cuda") return "Local NVIDIA GPU";
-  if (destination === "local_mlx") return "Apple Silicon";
   if (destination === "ssh_gpu") return "SSH GPU";
   if (destination === "prime_hosted") return "Prime Raw GPU";
   return destination ? destination.replaceAll("_", " ") : "Not selected";

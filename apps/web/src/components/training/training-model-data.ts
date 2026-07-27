@@ -107,10 +107,7 @@ export function destinationLabel(destination: string): string {
   const labels: Record<string, string> = {
     export: "Export only",
     local_cpu_fixture: "Local CPU",
-    local_cuda: "Local GPU",
-    local_mlx: "Apple Silicon",
     ssh_gpu: "SSH GPU",
-    runpod_byoc: "RunPod",
     prime_hosted: "Prime Raw GPU",
     fireworks: "Fireworks",
   };

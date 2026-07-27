@@ -52,8 +52,6 @@ import type {
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import type { CommunityViewProps } from "../community/CommunityView";
-import type { MakeAgentTutorialState, MakeAgentTutorialVideoId } from "../get-started/make-agent-tutorial";
-import type { PostTrainingCourseState } from "../get-started/post-training-lessons";
 import type { LabDetailLocation } from "../labs/lab-detail-navigation";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
@@ -119,8 +117,6 @@ export type MainPaneProps = {
   rightChatPanels: RightChatPanelView[];
   nativeSkillSidebar: SkillSourceDocument | null;
   extensionSkillSidebar: SkillPackageSourceSelection | null;
-  makeAgentTutorial: MakeAgentTutorialState | null;
-  postTrainingCourse: PostTrainingCourseState | null;
   workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;
   sidebarFileOpenRequest: SidebarFileOpenRequest | null;
   sidebarFileBookmarks: SidebarFileBookmark[];
@@ -234,19 +230,6 @@ export type MainPaneProps = {
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
-  onOpenPostTrainingCourse: () => void;
-  onClosePostTrainingCourse: () => void;
-  onOpenPostTrainingScript: (lessonIndex: number) => void;
-  onSelectPostTrainingFullCourse: () => void;
-  onSelectPostTrainingLesson: (lessonIndex: number) => void;
-  onSetPostTrainingAutoplay: (autoplay: boolean) => void;
-  onShowPostTrainingLessons: () => void;
-  onOpenMakeAgentTutorial: () => void;
-  onCloseMakeAgentTutorial: () => void;
-  onSelectMakeAgentTutorialVideo: (videoId: MakeAgentTutorialVideoId) => void;
-  onSetMakeAgentTutorialAutoplay: (autoplay: boolean) => void;
-  onShowMakeAgentTutorialLessons: () => void;
-  onShowMakeAgentTutorialScript: () => void;
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
   onShowGoalSidebarTab: () => void;

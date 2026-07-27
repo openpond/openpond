@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type {
   OpenPondExtension,
   SidebarFileBookmark,
@@ -19,18 +19,6 @@ import type { SkillPackageSourceSelection } from "../components/app-shell/skill-
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
 import { composerSkillsForProfile } from "../lib/profile-selection";
-import {
-  POST_TRAINING_LESSONS,
-  type PostTrainingCourseState,
-} from "../components/get-started/post-training-lessons";
-import {
-  getPostTrainingProgress,
-  startingPostTrainingLessonIndex,
-} from "../components/get-started/post-training-progress";
-import type {
-  MakeAgentTutorialState,
-  MakeAgentTutorialVideoId,
-} from "../components/get-started/make-agent-tutorial";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -100,103 +88,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const harnessSkills = composerSkillsForProfile(bootstrap?.profile, bootstrap?.extensionCatalog);
   const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
   const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);
-  const [makeAgentTutorial, setMakeAgentTutorial] = useState<MakeAgentTutorialState | null>(null);
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] = useState<SidebarFileOpenRequest | null>(null);
-  const preCourseSidebarOpenRef = useRef<boolean | null>(null);
-  const openPostTrainingCourse = useCallback(() => {
-    if (preCourseSidebarOpenRef.current === null) {
-      preCourseSidebarOpenRef.current = diffPanelOpen;
-    }
-    setPostTrainingCourse({
-      autoplay: true,
-      fullCourseSelected: false,
-      lessonIndex: startingPostTrainingLessonIndex(
-        getPostTrainingProgress(),
-        POST_TRAINING_LESSONS.map((lesson) => lesson.id),
-      ),
-      panelView: "lessons",
-      playRequestId: 0,
-      scriptLessonIndex: null,
-    });
-    setMakeAgentTutorial(null);
-    setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen]);
-  const closePostTrainingCourse = useCallback(() => {
-    const previousSidebarOpen = preCourseSidebarOpenRef.current;
-    preCourseSidebarOpenRef.current = null;
-    setPostTrainingCourse(null);
-    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
-  }, [setDiffPanelOpen]);
-  const selectPostTrainingLesson = useCallback((lessonIndex: number) => {
-    setPostTrainingCourse((current) => current
-      ? {
-          ...current,
-          fullCourseSelected: false,
-          lessonIndex,
-          playRequestId: current.playRequestId + 1,
-        }
-      : current);
-  }, []);
-  const selectPostTrainingFullCourse = useCallback(() => {
-    setPostTrainingCourse((current) => current
-      ? {
-          ...current,
-          fullCourseSelected: true,
-          panelView: "lessons",
-          playRequestId: current.playRequestId + 1,
-        }
-      : current);
-  }, []);
-  const setPostTrainingAutoplay = useCallback((autoplay: boolean) => {
-    setPostTrainingCourse((current) => current ? { ...current, autoplay } : current);
-  }, []);
-  const openPostTrainingScript = useCallback((lessonIndex: number) => {
-    setPostTrainingCourse((current) => current
-      ? { ...current, panelView: "script", scriptLessonIndex: lessonIndex }
-      : current);
-  }, []);
-  const showPostTrainingLessons = useCallback(() => {
-    setPostTrainingCourse((current) => current ? { ...current, panelView: "lessons" } : current);
-  }, []);
-  const openMakeAgentTutorial = useCallback(() => {
-    if (preCourseSidebarOpenRef.current === null) {
-      preCourseSidebarOpenRef.current = diffPanelOpen;
-    }
-    setPostTrainingCourse(null);
-    setMakeAgentTutorial({
-      autoplay: true,
-      panelView: "lessons",
-      playRequestId: 0,
-      videoId: "create",
-    });
-    setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen]);
-  const closeMakeAgentTutorial = useCallback(() => {
-    const previousSidebarOpen = preCourseSidebarOpenRef.current;
-    preCourseSidebarOpenRef.current = null;
-    setMakeAgentTutorial(null);
-    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
-  }, [setDiffPanelOpen]);
-  const selectMakeAgentTutorialVideo = useCallback((videoId: MakeAgentTutorialVideoId) => {
-    setMakeAgentTutorial((current) => current
-      ? { ...current, playRequestId: current.playRequestId + 1, videoId }
-      : current);
-  }, []);
-  const setMakeAgentTutorialAutoplay = useCallback((autoplay: boolean) => {
-    setMakeAgentTutorial((current) => current ? { ...current, autoplay } : current);
-  }, []);
-  const showMakeAgentTutorialLessons = useCallback(() => {
-    setMakeAgentTutorial((current) => current ? { ...current, panelView: "lessons" } : current);
-  }, []);
-  const showMakeAgentTutorialScript = useCallback(() => {
-    setMakeAgentTutorial((current) => current ? { ...current, panelView: "script" } : current);
-  }, []);
-  useEffect(() => {
-    if (view === "get-started") return;
-    if (postTrainingCourse) closePostTrainingCourse();
-    else if (makeAgentTutorial) closeMakeAgentTutorial();
-  }, [closeMakeAgentTutorial, closePostTrainingCourse, makeAgentTutorial, postTrainingCourse, view]);
   const openSkillFromSettings = useCallback((skill: SkillSourceDocument) => {
     setPendingNativeSkillSidebar(skill);
     setPendingExtensionSkillSidebar(null);
@@ -351,7 +243,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     view === "chat" ||
     view === "cloud" ||
     view === "labs" ||
-    (view === "get-started" && Boolean(postTrainingCourse || makeAgentTutorial)) ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -521,15 +412,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
-        rightSidebarOpen: view === "get-started"
-          ? Boolean(postTrainingCourse || makeAgentTutorial) && diffPanelOpen
-          : diffPanelOpen,
+        rightSidebarOpen: diffPanelOpen,
         onToggleDiffPanel: toggleRightSidebar,
-        onToggleRightSidebar: view === "get-started"
-          ? () => setDiffPanelOpen((open) => !open)
-          : view === "team" && Boolean(teamAiThreadId)
-            ? toggleTeamAiSidebar
-            : toggleRightSidebar,
+        onToggleRightSidebar: view === "team" && Boolean(teamAiThreadId)
+          ? toggleTeamAiSidebar
+          : toggleRightSidebar,
         onOpenSearch: () => {
           setSectionMenuOpen(null);
           setSearchOpen(true);
@@ -667,8 +554,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         rightChatPanels: rightChatPanelViews,
         nativeSkillSidebar,
         extensionSkillSidebar,
-        makeAgentTutorial,
-        postTrainingCourse,
         workspaceDiffPanelViewState,
         sidebarFileOpenRequest,
         sidebarFileBookmarks,
@@ -711,19 +596,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         chatHistoryLoading: selectedChatHistoryLoading,
         onDiffPanelResizeStart: startDiffPanelResize,
         onToggleDiffPanelExpanded: () => setDiffPanelExpanded((expanded) => !expanded),
-        onOpenPostTrainingCourse: openPostTrainingCourse,
-        onClosePostTrainingCourse: closePostTrainingCourse,
-        onOpenPostTrainingScript: openPostTrainingScript,
-        onSelectPostTrainingFullCourse: selectPostTrainingFullCourse,
-        onSelectPostTrainingLesson: selectPostTrainingLesson,
-        onSetPostTrainingAutoplay: setPostTrainingAutoplay,
-        onShowPostTrainingLessons: showPostTrainingLessons,
-        onOpenMakeAgentTutorial: openMakeAgentTutorial,
-        onCloseMakeAgentTutorial: closeMakeAgentTutorial,
-        onSelectMakeAgentTutorialVideo: selectMakeAgentTutorialVideo,
-        onSetMakeAgentTutorialAutoplay: setMakeAgentTutorialAutoplay,
-        onShowMakeAgentTutorialLessons: showMakeAgentTutorialLessons,
-        onShowMakeAgentTutorialScript: showMakeAgentTutorialScript,
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,
         onShowFilesPanel: () => showRightPanelDiffTab("files"),

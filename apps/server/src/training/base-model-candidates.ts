@@ -11,7 +11,7 @@ import {
 } from "@openpond/contracts";
 import { primeGrpoBaseProfileForModel } from "./prime-grpo-base-profiles.js";
 
-const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture", "local_cuda", "local_mlx"]);
+const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture"]);
 const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
 const TINY_CPU_CHAT_TEMPLATE_HASH = createHash("sha256")
   .update("openpond-tiny-cpu-chat-template-v1")
@@ -197,8 +197,6 @@ function destinationLabel(destinationId: BaseModelExecutionOption["destinationId
     fireworks: "Fireworks",
     prime_hosted: "Prime Raw GPU",
     local_cpu_fixture: "Local CPU",
-    local_cuda: "Local NVIDIA GPU",
-    local_mlx: "Apple Silicon",
   };
   return labels[destinationId] ?? destinationId.replaceAll("_", " ");
 }

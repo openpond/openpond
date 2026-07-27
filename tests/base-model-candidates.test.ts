@@ -23,11 +23,6 @@ describe("provider-neutral base-model candidates", () => {
             "HuggingFaceTB/SmolLM2-135M-Instruct",
           ],
         }),
-        destination("local_cuda", {
-          available: false,
-          modelAllowlist: ["HuggingFaceTB/SmolLM2-135M-Instruct"],
-          unavailableReason: "CUDA worker conformance is missing.",
-        }),
       ],
       inventory: inventory(),
     });
@@ -48,11 +43,6 @@ describe("provider-neutral base-model candidates", () => {
       },
       executionOptions: [
         { destinationId: "local_cpu_fixture", available: true },
-        {
-          destinationId: "local_cuda",
-          available: false,
-          unavailableReason: "CUDA worker conformance is missing.",
-        },
       ],
     });
     expect(JSON.stringify(candidates)).not.toContain("ollama/qwen-local");

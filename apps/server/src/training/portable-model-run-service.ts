@@ -11,7 +11,6 @@ import {
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
   type Taskset,
-  type WorkerCatalogEntry,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -65,12 +64,6 @@ export function createPortableModelRunService(deps: {
     modelId: string;
     revision: string | null;
   }) => Promise<unknown>;
-  workerImages?: {
-    prepare(entry: WorkerCatalogEntry): Promise<{
-      state: string;
-      cached: boolean;
-    }>;
-  };
 }) {
   async function start(input: {
     modelRunId: string;
@@ -113,22 +106,6 @@ export function createPortableModelRunService(deps: {
         modelId: modelRun.baseModel.modelId,
         revision: modelRun.baseModel.revision,
       });
-    }
-    if (preparation.state === "worker_download_required") {
-      const catalog = await deps.catalog();
-      const worker = preparation.engine
-        ? catalog.workers.find(
-            (candidate) =>
-              candidate.engineAdapterId === preparation.engine?.adapterId
-          )
-        : null;
-      if (!worker || !deps.workerImages) {
-        throw new Error("This run requires a signed worker image downloader.");
-      }
-      const result = await deps.workerImages.prepare(worker);
-      if (result.state !== "ready" || !result.cached) {
-        throw new Error("The signed worker image did not finish preparing.");
-      }
     }
     const prepared = await deps.prepareStart({
       modelId: modelRun.modelId,

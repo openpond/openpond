@@ -29,6 +29,11 @@ export const TrainingEngineCapabilitiesSchema = z
     topologies: z.array(z.string().trim().min(1).max(200)),
     workerProtocolVersion: z.string().trim().min(1).max(200),
     upstreamRevision: z.string().trim().min(1).max(500),
+    workerImageDigest: z
+      .string()
+      .regex(/^sha256:[a-f0-9]{64}$/)
+      .nullable()
+      .default(null),
     capabilityReceipt: ReleaseHashSchema,
     checkedAt: ReleaseTimestampSchema,
     unavailableReason: z.string().trim().min(1).max(5_000).nullable(),
@@ -214,134 +219,9 @@ export const TrainingArtifactsSchema = z
   })
   .strict();
 
-export const WorkerEvidenceReferenceSchema = z
-  .object({
-    ref: z.string().trim().min(1).max(2_000),
-    sha256: ReleaseHashSchema,
-  })
-  .strict();
-
-export const WorkerImageAttestationContentSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.workerImageAttestation.v1"),
-    image: z
-      .object({
-        repository: z.string().trim().min(1).max(1_000),
-        digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-        sizeBytes: z.number().int().positive(),
-        contextSha256: ReleaseHashSchema,
-      })
-      .strict(),
-    source: z
-      .object({
-        indexRef: z.string().trim().min(1).max(2_000),
-        manifestDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-        layerCount: z.number().int().positive(),
-        workerLayerDigest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-      })
-      .strict(),
-    sbom: WorkerEvidenceReferenceSchema,
-    publishedAt: ReleaseTimestampSchema,
-    signingKeyId: ReleaseIdSchema,
-    contentHash: ReleaseHashSchema,
-  })
-  .strict();
-
-export const WorkerImageAttestationSchema =
-  WorkerImageAttestationContentSchema.extend({
-    signature: z.string().trim().min(32).max(10_000),
-  }).strict();
-
-export const WorkerConformanceReceiptSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.workerConformanceReceipt.v1"),
-    status: z.literal("passed"),
-    workerId: ReleaseIdSchema,
-    openpondRelease: z.string().regex(/^\d+\.\d+\.\d+$/),
-    workerProtocolVersion: z.string().trim().min(1).max(200),
-    engineAdapterId: ReleaseIdSchema,
-    upstreamRevision: z.string().regex(/^[a-f0-9]{40}$/),
-    image: z
-      .object({
-        repository: z.string().trim().min(1).max(1_000),
-        digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-      })
-      .strict(),
-    accelerator: z.literal("cuda"),
-    architecture: z.string().trim().min(1).max(100),
-    checks: z.tuple([
-      z.literal("connected_bootstrap"),
-      z.literal("baseline"),
-      z.literal("rollout"),
-      z.literal("optimizer_update"),
-      z.literal("checkpoint_reload"),
-      z.literal("artifact_return"),
-      z.literal("evaluation"),
-      z.literal("cancellation"),
-      z.literal("zero_resource_cleanup"),
-    ]),
-    completedAt: ReleaseTimestampSchema,
-    contentHash: ReleaseHashSchema,
-  })
-  .strict();
-
-export const WorkerCatalogEntrySchema = z
-  .object({
-    id: ReleaseIdSchema,
-    engineAdapterId: ReleaseIdSchema,
-    workerProtocolVersion: z.string().trim().min(1).max(200),
-    openpondReleaseRange: z.string().trim().min(1).max(200),
-    upstreamRevision: z.string().trim().min(1).max(500),
-    image: z
-      .object({
-        repository: z.string().trim().min(1).max(1_000),
-        digest: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-        sizeBytes: z.number().int().positive(),
-        sbomRef: z.string().trim().min(1).max(2_000),
-        sbomSha256: ReleaseHashSchema,
-        signatureRef: z.string().trim().min(1).max(2_000),
-      })
-      .strict(),
-    runtime: z
-      .object({
-        python: z.string().trim().min(1).max(100),
-        torch: z.string().trim().min(1).max(100),
-        accelerator: z.enum(["cpu", "cuda", "rocm", "metal"]),
-        acceleratorVersion: z.string().trim().min(1).max(100).nullable(),
-        architectures: z.array(z.string().trim().min(1).max(100)),
-      })
-      .strict(),
-    methods: z.array(z.string().trim().min(1).max(100)),
-    modelFamilies: z.array(z.string().trim().min(1).max(200)),
-    precisions: z.array(
-      z.enum(["fp32", "fp16", "bf16", "tf32", "int8", "int4"]),
-    ),
-    conformanceReceipt: WorkerEvidenceReferenceSchema,
-  })
-  .strict();
-
-export const SignedWorkerCatalogContentSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.workerCatalog.v1"),
-    openpondRelease: z.string().trim().min(1).max(200),
-    workerProtocolVersion: z.string().trim().min(1).max(200),
-    entries: z.array(WorkerCatalogEntrySchema).max(1_000),
-    publishedAt: ReleaseTimestampSchema,
-    contentHash: ReleaseHashSchema,
-  })
-  .strict();
-
-export const SignedWorkerCatalogSchema = SignedWorkerCatalogContentSchema.extend(
-  {
-    signature: z.string().trim().min(32).max(10_000),
-    signingKeyId: ReleaseIdSchema,
-  },
-).strict();
-
 export const TrainingPreparationStateSchema = z.enum([
   "ready",
   "model_download_required",
-  "worker_download_required",
   "compute_setup_required",
   "provider_managed",
   "unsupported",
@@ -438,7 +318,6 @@ export const TrainingCatalogSchema = z
     compute: z.array(ComputeTargetCapabilitiesSchema),
     runtimes: z.array(HarnessRuntimeCapabilitiesSchema),
     targets: z.array(TrainingCatalogTargetSchema),
-    workers: z.array(WorkerCatalogEntrySchema),
     generatedAt: ReleaseTimestampSchema,
     contentHash: ReleaseHashSchema,
   })
@@ -456,7 +335,7 @@ export const TrainingPreparationPlanSchema = z
     downloads: z.array(
       z
         .object({
-          kind: z.enum(["model", "worker"]),
+          kind: z.literal("model"),
           label: z.string().trim().min(1).max(500),
           expectedBytes: z.number().int().nonnegative(),
           digest: z.string().trim().min(8).max(500),
@@ -509,17 +388,6 @@ export type TrainingExecutionStatus = z.infer<
   typeof TrainingExecutionStatusSchema
 >;
 export type TrainingArtifacts = z.infer<typeof TrainingArtifactsSchema>;
-export type WorkerEvidenceReference = z.infer<
-  typeof WorkerEvidenceReferenceSchema
->;
-export type WorkerImageAttestation = z.infer<
-  typeof WorkerImageAttestationSchema
->;
-export type WorkerConformanceReceipt = z.infer<
-  typeof WorkerConformanceReceiptSchema
->;
-export type WorkerCatalogEntry = z.infer<typeof WorkerCatalogEntrySchema>;
-export type SignedWorkerCatalog = z.infer<typeof SignedWorkerCatalogSchema>;
 export type TrainingPreparationState = z.infer<
   typeof TrainingPreparationStateSchema
 >;

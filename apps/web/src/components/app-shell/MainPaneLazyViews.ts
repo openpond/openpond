@@ -9,16 +9,6 @@ export const AppsView = lazy(() =>
 export const GetStartedView = lazy(() =>
   import("../get-started/GetStartedView").then((module) => ({ default: module.GetStartedView })),
 );
-export const PostTrainingLearningPanel = lazy(() =>
-  import("../get-started/PostTrainingLearningPanel").then((module) => ({
-    default: module.PostTrainingLearningPanel,
-  })),
-);
-export const MakeAgentTutorialLearningPanel = lazy(() =>
-  import("../get-started/MakeAgentTutorialLearningPanel").then((module) => ({
-    default: module.MakeAgentTutorialLearningPanel,
-  })),
-);
 export const LabsRoute = lazy(() =>
   import("../labs/LabsRoute").then((module) => ({ default: module.LabsRoute })),
 );
