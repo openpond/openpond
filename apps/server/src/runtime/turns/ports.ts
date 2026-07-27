@@ -31,7 +31,6 @@ import type {
   HostedChatToolChoice,
   HostedChatContinuation,
   ProfileSkillCommandResult,
-  ProfileSkillGoalCommandInput,
 } from "@openpond/cloud";
 import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { BrowserHarnessToolExecutor } from "../../openpond/browser-tool-registry.js";
@@ -48,7 +47,6 @@ import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
 import type { CreateImprovePlanner } from "../create-pipeline-planner.js";
-import type { LocalCreatePipelineCheckInput, LocalCreatePipelineCheckResult } from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
 
 export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
@@ -326,10 +324,6 @@ export type TurnRunnerDependencies = {
     prompt: string;
     profileRef: OpenPondProfileRef | null;
   }) => Promise<ProfileSkillCommandResult | null>;
-  executeProfileSkillGoal?: (input: {
-    request: ProfileSkillGoalCommandInput;
-    profileRef: OpenPondProfileRef | null;
-  }) => Promise<ProfileSkillCommandResult>;
   executeWebSearch?: WebSearchExecutor;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
@@ -371,7 +365,6 @@ export type TurnRunnerDependencies = {
   appendHostedContextUsage: TurnEventSink["appendHostedContextUsage"];
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
-  runLocalCreatePipelineChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
   planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;

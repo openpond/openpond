@@ -15,10 +15,6 @@ import {
 } from "./tasksets.js";
 import { TaskCandidateSchema, TaskMinerConfigSchema, TaskMinerRunSchema } from "./task-mining.js";
 import { CrossSystemFrontierBaselineRunSchema } from "./cross-system-frontier-baseline.js";
-import {
-  CrossSystemTrajectorySchema,
-  CrossSystemVerifierResultSchema,
-} from "./cross-system-operations.js";
 import { DatasetArtifactSummarySchema } from "./dataset-artifacts.js";
 import { DatasetImportJobSchema } from "./dataset-imports.js";
 import {
@@ -37,6 +33,22 @@ import {
   RftLossMethodSchema,
   TrainingModelRefSchema,
 } from "./training-policy-optimization.js";
+import {
+  DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION,
+  LocalModelChatConfigurationSchema,
+  ManagedAdapterServingProjectionSchema,
+} from "./training-managed-adapter.js";
+import {
+  TrainingHashSchema as HashSchema,
+  TrainingIdSchema as IdSchema,
+  TrainingMetadataSchema as MetadataSchema,
+  TrainingTimestampSchema as TimestampSchema,
+} from "./training-schema-primitives.js";
+import {
+  RolloutTrajectoryReceiptSchema,
+} from "./training-trajectories.js";
+export * from "./training-managed-adapter.js";
+export * from "./training-trajectories.js";
 export {
   GrpoOptimizerSchema,
   PolicyOptimizationBudgetSchema,
@@ -46,11 +58,6 @@ export {
   RftLossMethodSchema,
   TrainingModelRefSchema,
 } from "./training-policy-optimization.js";
-
-const IdSchema = z.string().trim().min(1).max(240);
-const TimestampSchema = z.string().trim().min(1);
-const HashSchema = z.string().trim().min(8).max(256);
-const MetadataSchema = z.record(z.string(), z.unknown()).default({});
 
 export const DATASET_EXACT_ANSWER_ENVIRONMENT_ID =
   "dataset-exact-answer" as const;
@@ -626,213 +633,6 @@ export const TrainingArtifactSchema = z.object({
   metadata: MetadataSchema,
 });
 
-export const LocalModelChatConfigurationSchema = z.object({
-  schemaVersion: z.literal("openpond.localModelChatConfiguration.v1").default("openpond.localModelChatConfiguration.v1"),
-  profile: z.enum(["efficient", "full_harness", "custom"]).default("efficient"),
-  systemPromptMode: z.enum(["lean", "full_harness", "custom"]).default("lean"),
-  customSystemPrompt: z.string().max(20_000).nullable().default(null),
-  contextWindowTokens: z.number().int().min(128).max(32_768).default(1_024),
-  maxOutputTokens: z.number().int().min(1).max(512).default(64),
-  temperature: z.number().min(0).max(2).default(0),
-  repetitionPenalty: z.number().min(0.5).max(2).default(1.1),
-  noRepeatNgramSize: z.number().int().min(0).max(10).default(3),
-  compaction: z.enum(["off", "when_needed"]).default("when_needed"),
-  keepWarmSeconds: z.number().int().min(0).max(3_600).default(300),
-  updatedAt: TimestampSchema.nullable().default(null),
-});
-
-export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION = LocalModelChatConfigurationSchema.parse({});
-
-export const ManagedAdapterEvaluationEvidenceSchema = z.object({
-  schemaVersion: z.literal("openpond.modelAdapterEvaluation.v1"),
-  evaluationId: IdSchema,
-  role: z.enum(["chat_manual", "agent", "extension", "authoring_optimizer"]),
-  policyId: IdSchema,
-  policyRevision: z.number().int().positive(),
-  policyHash: HashSchema,
-  tasksetId: IdSchema,
-  tasksetHash: HashSchema,
-  baselineScore: z.number().finite().min(0).max(1),
-  candidateScore: z.number().finite().min(0).max(1),
-  threshold: z.number().finite().min(0).max(1),
-  minimumCandidateScore: z.number().finite().min(0).max(1),
-  passed: z.boolean(),
-  frozenEvaluatorHash: HashSchema,
-  compatibility: z.object({
-    passed: z.boolean(),
-    workerImageDigest: z.string().trim().min(1).max(512),
-    baseProfileHash: HashSchema,
-    diagnosticSetHash: HashSchema,
-    testedAt: TimestampSchema,
-  }),
-  resultHashes: z.object({
-    baselineOutputsHash: HashSchema,
-    candidateOutputsHash: HashSchema,
-    diagnosticOutputsHash: HashSchema,
-    resultSetHash: HashSchema,
-  }),
-  evidenceHash: HashSchema,
-  completedAt: TimestampSchema,
-}).passthrough();
-
-export const ManagedAdapterDeploymentEvidenceSchema = z.object({
-  schemaVersion: z.literal("openpond.adapterDeployment.v1"),
-  id: IdSchema,
-  artifactId: IdSchema,
-  provider: z.string().trim().min(1).max(128),
-  poolId: IdSchema.nullable(),
-  opaqueModelName: z.string().trim().min(1).max(240),
-  state: z.enum([
-    "requested",
-    "deploying",
-    "ready",
-    "degraded",
-    "deleting",
-    "deleted",
-    "failed",
-  ]),
-  providerConfigurationHash: HashSchema.nullable(),
-  lastVerifiedAt: TimestampSchema.nullable(),
-  failureCode: z.string().trim().min(1).max(512).nullable(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-}).passthrough();
-
-export const ManagedAdapterServingPoolEvidenceSchema = z.object({
-  id: IdSchema,
-  baseProfileId: IdSchema,
-  provider: z.string().trim().min(1).max(128),
-  state: z.string().trim().min(1).max(128),
-  workersMin: z.number().int().nonnegative(),
-  workersMax: z.number().int().nonnegative(),
-  idleTimeoutSeconds: z.number().int().nonnegative(),
-  providerConfigurationHash: HashSchema.nullable(),
-  leaseExpiresAt: TimestampSchema.nullable(),
-  estimatedHourlyUsd: z.string().trim().min(1).max(64).nullable(),
-  lastReconciledAt: TimestampSchema.nullable(),
-  failureCode: z.string().trim().min(1).max(512).nullable(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-}).passthrough();
-
-export const ManagedAdapterServingReceiptSchema = z.object({
-  schemaVersion: z.literal("openpond.modelAdapterServingReceipt.v1"),
-  correlation: z.object({
-    requestId: IdSchema,
-    providerJobId: IdSchema,
-    deploymentId: IdSchema,
-    poolId: IdSchema,
-    provider: z.string().trim().min(1).max(128),
-    providerEndpointId: IdSchema,
-  }).passthrough(),
-  identity: z.object({
-    logicalModelName: z.string().trim().min(1).max(240),
-    baseProfileId: IdSchema,
-    baseRepository: z.string().trim().min(1).max(512),
-    baseRevision: z.string().trim().min(1).max(256),
-    workerImage: z.string().trim().min(1).max(1_000),
-    workerBootId: IdSchema,
-    artifactId: IdSchema,
-    artifactContentHash: HashSchema,
-    requestedAlias: z.string().trim().min(1).max(240),
-    resolvedManifestSha256: HashSchema,
-    appliedVllmAdapterId: z.number().int().positive(),
-  }).passthrough(),
-  state: z.object({
-    requestTemperature: z.enum(["cold", "warm"]),
-    adapterCacheHit: z.boolean(),
-    baseEngineInitializationCount: z.number().int().positive(),
-    outcome: z.enum(["succeeded", "cancelled"]),
-  }).passthrough(),
-  timestamps: z.object({
-    requestStartedAt: TimestampSchema,
-    firstOutputAt: TimestampSchema,
-    completedAt: TimestampSchema,
-  }).passthrough(),
-  durationsMs: z.object({
-    adapterMaterialization: z.number().finite().nonnegative(),
-    timeToFirstToken: z.number().finite().nonnegative(),
-    generation: z.number().finite().nonnegative(),
-    totalRequest: z.number().finite().nonnegative(),
-  }).passthrough(),
-  usage: z.object({
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-    totalTokens: z.number().int().nonnegative(),
-    providerUsageSource: z.enum(["provider", "estimated"]),
-  }).passthrough(),
-  cost: z.object({
-    currency: z.literal("USD"),
-    providerReportedUsd: z.number().finite().nonnegative().nullable(),
-    estimatedUsd: z.number().finite().nonnegative(),
-    estimateMethodology: z.string().trim().min(1).max(240),
-  }).passthrough(),
-  rawWorkerTelemetrySha256: HashSchema,
-  contentHash: HashSchema,
-}).passthrough();
-
-export const ManagedAdapterServingReceiptRecordSchema = z.object({
-  schemaVersion: z.literal("openpond.modelAdapterServingReceiptRecord.v1"),
-  requestId: IdSchema,
-  state: z.enum([
-    "reserved",
-    "submitted",
-    "streaming",
-    "completed",
-    "cancelling",
-    "cancelled",
-    "failed",
-    "reconciled",
-    "rejected",
-  ]),
-  artifactId: IdSchema,
-  deploymentId: IdSchema,
-  poolId: IdSchema,
-  provider: z.string().trim().min(1).max(128),
-  receipt: ManagedAdapterServingReceiptSchema,
-  createdAt: TimestampSchema,
-  completedAt: TimestampSchema.nullable(),
-  reconciledAt: TimestampSchema.nullable(),
-});
-
-export const ManagedAdapterServingProjectionSchema = z.object({
-  schemaVersion: z.literal("openpond.managedAdapterServingProjection.v1"),
-  teamId: IdSchema.nullable().default(null),
-  source: z.enum(["openpond_fireworks", "openpond_training"]),
-  sourceRef: IdSchema,
-  canonicalArtifactId: IdSchema.nullable(),
-  canonicalArtifactState: z.enum([
-    "imported_unvalidated",
-    "evaluating",
-    "promotable",
-    "rejected",
-    "deleted",
-  ]).nullable(),
-  canonicalDeploymentId: IdSchema.nullable(),
-  canonicalDeploymentState: z.enum([
-    "requested",
-    "deploying",
-    "ready",
-    "degraded",
-    "deleting",
-    "deleted",
-    "failed",
-  ]).nullable(),
-  state: z.enum(["pending", "imported", "ready", "failed"]),
-  artifactContentHash: HashSchema.nullable().default(null),
-  baseProfileId: IdSchema.nullable().default(null),
-  evaluation: ManagedAdapterEvaluationEvidenceSchema.nullable().default(null),
-  deployment: ManagedAdapterDeploymentEvidenceSchema.nullable().default(null),
-  servingPool: ManagedAdapterServingPoolEvidenceSchema.nullable().default(null),
-  servingReceipts: z
-    .array(ManagedAdapterServingReceiptRecordSchema)
-    .max(20)
-    .default([]),
-  publishedAt: TimestampSchema.nullable(),
-  lastSyncedAt: TimestampSchema,
-  lastError: z.string().trim().min(1).max(5_000).nullable(),
-});
-
 export const ModelArtifactLineageSchema = z.object({
   schemaVersion: z.literal("openpond.modelArtifactLineage.v1"),
   id: IdSchema,
@@ -856,147 +656,6 @@ export const ModelArtifactLineageSchema = z.object({
   rejectionReason: z.string().trim().min(1).max(5_000).nullable().default(null),
   chatConfiguration: LocalModelChatConfigurationSchema.default(DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION),
   managedServing: ManagedAdapterServingProjectionSchema.nullable().default(null),
-});
-
-export const SingleTurnPolicyTrajectorySchema = z.object({
-  schemaVersion: z.literal("openpond.singleTurnPolicyTrajectory.v1"),
-  id: IdSchema,
-  taskId: IdSchema,
-  status: z.enum(["completed", "infrastructure_failure"]),
-  promptHash: HashSchema,
-  responseText: z.string().max(2_000_000),
-  infrastructureError: z.string().trim().min(1).max(10_000).nullable(),
-  startedAt: TimestampSchema,
-  completedAt: TimestampSchema,
-  metadata: MetadataSchema,
-});
-
-export const PpoTrajectorySchema = z.object({
-  schemaVersion: z.literal("openpond.ppoTrajectory.v1"),
-  id: IdSchema,
-  taskId: IdSchema,
-  policyModelId: IdSchema,
-  referenceModelId: IdSchema,
-  valueModelId: IdSchema,
-  steps: z.array(z.object({
-    index: z.number().int().nonnegative(),
-    observationHash: HashSchema,
-    actionTokenIds: z.array(z.number().int().nonnegative()).min(1),
-    terminated: z.boolean(),
-    truncated: z.boolean(),
-    reward: z.number(),
-    policyLogProbability: z.number(),
-    referenceLogProbability: z.number(),
-    valuePrediction: z.number(),
-    return: z.number(),
-    advantage: z.number(),
-    mask: z.number().min(0).max(1),
-  })).min(1).max(100_000),
-  createdAt: TimestampSchema,
-});
-
-export const ExactAnswerVerifierResultSchema = z.object({
-  schemaVersion: z.literal("openpond.exactAnswerVerifierResult.v1"),
-  outcome: z.enum([
-    "correct",
-    "incorrect",
-    "parse_failure",
-    "infrastructure_failure",
-  ]),
-  graderSetHash: HashSchema,
-  score: z.number().min(0).max(1).nullable(),
-  passed: z.boolean(),
-  rewardEligible: z.boolean(),
-  expectedAnswerHash: HashSchema,
-  extractedAnswer: z.string().max(20_000).nullable(),
-  feedback: z.array(z.string().trim().min(1).max(20_000)).max(1_000),
-});
-
-export const RolloutTrajectoryReceiptSchema = z.object({
-  schemaVersion: z.literal("openpond.rolloutTrajectoryReceipt.v1"),
-  id: IdSchema,
-  jobId: IdSchema,
-  planId: IdSchema,
-  tasksetId: IdSchema,
-  tasksetHash: HashSchema,
-  taskId: IdSchema,
-  split: z.literal("train"),
-  correlationId: IdSchema,
-  provider: IdSchema,
-  providerTrace: z.object({
-    invocationId: IdSchema,
-    experimentId: IdSchema,
-    rolloutId: IdSchema,
-    runId: IdSchema,
-    rowId: IdSchema,
-  }),
-  optimizerMethod: z.enum(["grpo", "ppo"]).default("grpo"),
-  evidenceLevels: z.object({
-    requested: z.enum(["trajectory", "aggregate", "provider_reported"]),
-    observed: z.enum(["trajectory", "aggregate", "provider_reported"]),
-    providerReported: z.enum(["trajectory", "aggregate", "provider_reported"]),
-  }).default({
-    requested: "trajectory",
-    observed: "trajectory",
-    providerReported: "provider_reported",
-  }),
-  budgetUsage: z.object({
-    rollouts: z.number().int().nonnegative(),
-    environmentExecutions: z.number().int().nonnegative(),
-    inputTokens: z.number().int().nonnegative(),
-    outputTokens: z.number().int().nonnegative(),
-    optimizerSteps: z.number().int().nonnegative(),
-    costUsd: z.number().nonnegative(),
-  }).default({
-    rollouts: 0,
-    environmentExecutions: 0,
-    inputTokens: 0,
-    outputTokens: 0,
-    optimizerSteps: 0,
-    costUsd: 0,
-  }),
-  environment: z.object({
-    id: IdSchema,
-    version: z.string().trim().min(1).max(256),
-    worldId: IdSchema,
-    worldHash: HashSchema,
-    toolContractHash: HashSchema,
-  }),
-  policy: z.object({
-    modelId: IdSchema,
-    checkpointId: IdSchema.nullable(),
-    completionParametersHash: HashSchema,
-  }),
-  status: z.enum(["received", "running", "succeeded", "failed"]),
-  failureClass: z.enum([
-    "policy_failure",
-    "parse_failure",
-    "tool_schema_violation",
-    "budget_exhausted",
-    "cancelled",
-    "environment_failure",
-    "infrastructure_failure",
-  ]).nullable(),
-  reward: z.object({
-    eligible: z.boolean(),
-    raw: z.number().min(0).max(1.15).nullable(),
-    normalized: z.number().min(0).max(1).nullable(),
-    components: z.record(z.string(), z.number()),
-  }),
-  trajectory: z.union([
-    CrossSystemTrajectorySchema,
-    SingleTurnPolicyTrajectorySchema,
-    PpoTrajectorySchema,
-  ]).nullable(),
-  verifier: z.union([
-    CrossSystemVerifierResultSchema,
-    ExactAnswerVerifierResultSchema,
-  ]).nullable(),
-  providerStatus: z.record(z.string(), z.unknown()).default({}),
-  receivedAt: TimestampSchema,
-  startedAt: TimestampSchema.nullable(),
-  completedAt: TimestampSchema.nullable(),
-  updatedAt: TimestampSchema,
 });
 
 export const ModelBindingRoleSchema = z.enum([
@@ -1161,28 +820,7 @@ export type TrainingEvaluationExample = z.infer<typeof TrainingEvaluationExample
 export type TrainingEvaluationSummary = z.infer<typeof TrainingEvaluationSummarySchema>;
 export type TrainingRunDetail = z.infer<typeof TrainingRunDetailSchema>;
 export type TrainingArtifact = z.infer<typeof TrainingArtifactSchema>;
-export type LocalModelChatConfiguration = z.infer<typeof LocalModelChatConfigurationSchema>;
-export type ManagedAdapterEvaluationEvidence = z.infer<
-  typeof ManagedAdapterEvaluationEvidenceSchema
->;
-export type ManagedAdapterDeploymentEvidence = z.infer<
-  typeof ManagedAdapterDeploymentEvidenceSchema
->;
-export type ManagedAdapterServingPoolEvidence = z.infer<
-  typeof ManagedAdapterServingPoolEvidenceSchema
->;
-export type ManagedAdapterServingReceipt = z.infer<
-  typeof ManagedAdapterServingReceiptSchema
->;
-export type ManagedAdapterServingReceiptRecord = z.infer<
-  typeof ManagedAdapterServingReceiptRecordSchema
->;
 export type ModelArtifactLineage = z.infer<typeof ModelArtifactLineageSchema>;
-export type ManagedAdapterServingProjection = z.infer<
-  typeof ManagedAdapterServingProjectionSchema
->;
-export type RolloutTrajectoryReceipt = z.infer<typeof RolloutTrajectoryReceiptSchema>;
-export type PpoTrajectory = z.infer<typeof PpoTrajectorySchema>;
 export type ModelBindingRole = z.infer<typeof ModelBindingRoleSchema>;
 export type ModelBinding = z.infer<typeof ModelBindingSchema>;
 export type FireworksModelServingSession = z.infer<

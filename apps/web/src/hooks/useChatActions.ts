@@ -916,21 +916,6 @@ export function useChatActions({
           throw preflightError;
         }
       }
-      const parsedCreateImproveCommand = parsedSlashCommandForTurn;
-      const createImproveRun = parsedCreateImproveCommand
-        ? (await import("../lib/create-pipeline-request")).buildComposerCreateImproveRun({
-            parsed: parsedCreateImproveCommand,
-            prompt: value,
-            payload: bootstrap,
-            session,
-            messages: turnChatMessages,
-            attachments,
-            apps: mentionedSandboxApp ? [mentionedSandboxApp] : [],
-          })
-        : null;
-      if (parsedCreateImproveCommand?.command === "edit" && !createImproveRun) {
-        throw new Error("Select an agent-backed chat before using /edit.");
-      }
       pendingUserMessage = createPendingUserChatMessage({
         afterMessageId: turnChatMessages.at(-1)?.id ?? null,
         attachments,
@@ -972,7 +957,6 @@ export function useChatActions({
         mentionedConnectedApps: mentionedConnectedApps.length > 0 ? mentionedConnectedApps : undefined,
         openPondActionCatalog:
           openPondActionCatalog.length > 0 ? openPondActionCatalog : undefined,
-        createImproveRun,
         usageAttribution: usageAttributionForTurn,
         ...turnModelPayload,
         ...codexTurnPermissions,

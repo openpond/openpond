@@ -1,7 +1,6 @@
 import { readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import {
-  LocalModelChatConfigurationSchema,
   ModelBindingRoleSchema,
   ModelBindingSchema,
   resolveModelBindingPromotionGate,
@@ -60,6 +59,10 @@ import { createPortableDestinationAdapterRegistry } from "./portable-destination
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
 import { createPortableTrainingServiceSupport } from "./portable-training-service-support.js";
+import {
+  createTrainingModelConfigurationService,
+  stopActiveFireworksServingSessions,
+} from "./training-model-controls.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -110,6 +113,10 @@ export function createTrainingService(deps: {
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
+  const {
+    setModelPinned,
+    updateModelConfiguration,
+  } = createTrainingModelConfigurationService(deps.store);
   const resolveTaskset = (id: string) => deps.store.getTaskset(id);
   const {
     projectArtifactRows,
@@ -335,7 +342,7 @@ export function createTrainingService(deps: {
     const relatedJobs = jobs.filter((job) => planIds.has(job.planId));
     const activeJob = relatedJobs.find((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status));
     if (activeJob) throw new Error("Cancel the active training job before deleting this model.");
-    await stopActiveModelServingSessions({
+    await stopActiveFireworksServingSessions(fireworksServing, {
       tasksetId,
       reason: "Delete this model",
     });
@@ -687,7 +694,7 @@ export function createTrainingService(deps: {
     if (activeBindings.length) {
       throw new Error("Roll back every active Model binding before rejecting this artifact.");
     }
-    await stopActiveModelServingSessions({
+    await stopActiveFireworksServingSessions(fireworksServing, {
       modelArtifactLineageId: model.id,
       reason: "Reject this Model",
     });
@@ -915,35 +922,6 @@ export function createTrainingService(deps: {
     };
   }
 
-  async function updateModelConfiguration(input: { modelId: string; configuration: unknown }) {
-    const model = await deps.store.getModelArtifactLineage(input.modelId);
-    if (!model || model.status !== "imported") throw new Error("Imported model not found.");
-    const configuration = LocalModelChatConfigurationSchema.parse({
-      ...(input.configuration as Record<string, unknown>),
-      updatedAt: new Date().toISOString(),
-    });
-    return deps.store.saveModelArtifactLineage({ ...model, chatConfiguration: configuration });
-  }
-
-  async function setModelPinned(input: { modelId: string; pinned: boolean }) {
-    const model = await deps.store.getModelArtifactLineage(input.modelId);
-    if (!model) throw new Error("Model version not found.");
-    if (!input.pinned) {
-      const activeBinding = (await deps.store.listModelBindings()).find(
-        (binding) =>
-          binding.status === "active" &&
-          binding.modelArtifactLineageId === model.id,
-      );
-      if (activeBinding) {
-        throw new Error("Current Model versions stay pinned.");
-      }
-    }
-    return deps.store.saveModelArtifactLineage({
-      ...model,
-      pinned: input.pinned,
-    });
-  }
-
   async function saveCredential(input: { destinationId: string; value: string }) {
     if (input.destinationId === "openpond_managed") throw new Error("OpenPond Managed uses account authentication, not a local BYOK credential.");
     if (input.destinationId === "fireworks") throw new Error("Fireworks training uses the saved Settings > Providers credential; it does not use a second training credential.");
@@ -973,28 +951,6 @@ export function createTrainingService(deps: {
 
   async function close(): Promise<void> {
     await Promise.all([localCpu.close(), fireworksServing.close()]);
-  }
-
-  async function stopActiveModelServingSessions(input: {
-    tasksetId?: string;
-    modelArtifactLineageId?: string;
-    reason: string;
-  }): Promise<void> {
-    const sessions = (await fireworksServing.list()).filter((session) =>
-      ["starting", "ready", "stopping"].includes(session.state)
-      && (!input.tasksetId || session.tasksetId === input.tasksetId)
-      && (
-        !input.modelArtifactLineageId
-        || session.modelArtifactLineageId === input.modelArtifactLineageId
-      ));
-    for (const session of sessions) {
-      const stopped = await fireworksServing.stop(session.id, "user");
-      if (stopped.state !== "stopped") {
-        throw new Error(
-          `${input.reason} could not confirm Fireworks cleanup: ${stopped.error ?? stopped.state}.`,
-        );
-      }
-    }
   }
 
   return {

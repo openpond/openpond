@@ -17,10 +17,8 @@ export function rightChatCommandPolicy(
 ): RightChatCommandPolicy {
   const args = prompt.trim();
   switch (command.id) {
-    case "create":
-      return { kind: "send_prompt", prompt: `/create ${args}`, requiresInstructions: true };
-    case "edit":
-      return { kind: "send_prompt", prompt: `/edit ${args}`, requiresInstructions: true };
+    case "agent":
+      return { kind: "send_prompt", prompt: `/agent ${args}`, requiresInstructions: true };
     case "skill":
       return { kind: "send_prompt", prompt: `/skill ${args}`, requiresInstructions: false };
     case "goal":

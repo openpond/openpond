@@ -1,6 +1,5 @@
 import type {
   ChatModelRef,
-  CreateImproveRun,
   SubagentIsolationMode,
   SubagentPeerMessages,
   SubagentProgress,
@@ -16,40 +15,12 @@ import type {
   ModelToolExecutionContext,
 } from "./model-tool-registry.js";
 import type { NativeModelToolResult } from "./native-tool-calls.js";
+import {
+  createDatasetBuilderModelToolDefinitions,
+  type OpenPondDatasetBuilderAction,
+} from "./dataset-builder-tool-definitions.js";
 
-export type OpenPondCreatePipelineToolInput = {
-  operation: "create" | "edit";
-  objective: string;
-  targetAgentId?: string | null;
-  source?: "natural_language" | "model_tool" | null;
-};
-
-export type OpenPondCreatePipelineToolResult = {
-  runId: string;
-  operation: CreateImproveRun["operation"];
-  state: CreateImproveRun["state"];
-  nextStep: string;
-};
-
-export type OpenPondProfileSkillGoalToolInput = {
-  operation: "create" | "edit";
-  objective: string;
-  skillName?: string | null;
-  changeRequest?: string | null;
-  source?: "natural_language" | "model_tool" | null;
-};
-
-export type OpenPondProfileSkillGoalToolResult = {
-  goalId: string;
-  operation: "create" | "edit";
-  targetSkillName: string | null;
-  targetSkillPath: string | null;
-  status: string;
-  nextStep: string;
-  validationStatus?: string;
-  validationMessages?: string[];
-  invocation?: string;
-};
+export type { OpenPondDatasetBuilderAction } from "./dataset-builder-tool-definitions.js";
 
 export type OpenPondGoalControlToolInput = {
   action: "start" | "restart" | "pause" | "resume" | "complete" | "stop";
@@ -154,28 +125,7 @@ export type ManageSidebarFileToolResult = {
   nextStep: string;
 };
 
-export type OpenPondDatasetBuilderAction =
-  | "start"
-  | "revise"
-  | "answer_questions"
-  | "approve_disclosure"
-  | "materialize"
-  | "cancel"
-  | "status"
-  | "audit_graders"
-  | "calibrate_judges"
-  | "baseline"
-  | "readiness";
-
 export function createOpenPondCapabilityModelToolDefinitions(deps: {
-  startCreateImprove: (
-    context: ModelToolExecutionContext,
-    input: OpenPondCreatePipelineToolInput,
-  ) => Promise<OpenPondCreatePipelineToolResult>;
-  startProfileSkillGoal?: (
-    context: ModelToolExecutionContext,
-    input: OpenPondProfileSkillGoalToolInput,
-  ) => Promise<OpenPondProfileSkillGoalToolResult>;
   startGoalControl: (
     context: ModelToolExecutionContext,
     input: OpenPondGoalControlToolInput,
@@ -217,43 +167,6 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
 }): ModelToolDefinition[] {
   const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
   const definitions: ModelToolDefinition[] = [
-    {
-      name: "openpond_create_improve",
-      description:
-        "Start the OpenPond Create/Improve workflow for a source-backed workproduct after interpreting the user's request.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          operation: {
-            type: "string",
-            enum: ["create", "edit"],
-            description: "Use create for new agents/workflows and edit for an existing selected or targeted agent.",
-          },
-          objective: {
-            type: "string",
-            minLength: 1,
-            description: "The user-facing Create/Improve objective to plan.",
-          },
-          targetAgentId: {
-            type: "string",
-            minLength: 1,
-            description: "Required for edit unless the current chat has exactly one selected target agent.",
-          },
-          source: {
-            type: "string",
-            enum: ["natural_language", "model_tool"],
-            description: "Optional routing source for diagnostics.",
-          },
-        },
-        required: ["operation", "objective"],
-      },
-      execute: async (context) => {
-        const input = createPipelineToolInput(context.args);
-        const result = await deps.startCreateImprove(context, input);
-        return createPipelineToolResult(context.callId, result);
-      },
-    },
     {
       name: "openpond_goal_control",
       description:
@@ -524,200 +437,12 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
       },
     });
   }
-  if (deps.startProfileSkillGoal) {
-    definitions.push({
-      name: "openpond_profile_skill_goal",
-      description:
-        "Start the OpenPond profile-skill goal workflow to create or edit a profile-backed skill package after deciding that a reusable skill is appropriate. Every package has SKILL.md and may include focused scripts, references, and assets.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          operation: {
-            type: "string",
-            enum: ["create", "edit"],
-            description: "Use create for a new profile skill and edit for an existing profile skill.",
-          },
-          objective: {
-            type: "string",
-            minLength: 1,
-            description: "The user-facing skill creation or edit objective.",
-          },
-          skillName: {
-            type: "string",
-            minLength: 1,
-            description: "Lowercase kebab-case skill name. Required for edit; optional for create.",
-          },
-          changeRequest: {
-            type: "string",
-            minLength: 1,
-            description: "Specific edit request for an existing skill. Defaults to objective for edit.",
-          },
-          source: {
-            type: "string",
-            enum: ["natural_language", "model_tool"],
-            description: "Optional routing source for diagnostics.",
-          },
-        },
-        required: ["operation", "objective"],
-      },
-      execute: async (context) => {
-        const input = profileSkillGoalToolInput(context.args);
-        const result = await deps.startProfileSkillGoal!(context, input);
-        return profileSkillGoalToolResult(context.callId, result);
-      },
-    });
-  }
   if (deps.runDatasetBuilder) {
     definitions.push(
-      {
-        name: "openpond_dataset_design",
-        description:
-          "Use the built-in Dataset Builder Agent to start or revise a Dataset design, answer its blocking questions, approve disclosure, read status, or cancel. This does not materialize a Dataset or start training.",
-        parameters: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            action: {
-              type: "string",
-              enum: ["start", "revise", "answer_questions", "approve_disclosure", "status", "cancel"],
-            },
-            creationId: { type: "string", minLength: 1 },
-            objective: { type: "string", minLength: 1 },
-            message: { type: "string", minLength: 1 },
-            answers: { type: "object", additionalProperties: { type: "string" } },
-            approved: { type: "boolean" },
-            buildIntent: {
-              type: "string",
-              enum: ["demonstrations", "preferences", "verifiable_reward", "rubric", "discovery"],
-            },
-            buildSpecification: {
-              type: "object",
-              additionalProperties: true,
-              description:
-                "Typed build contract. For the built-in marketing GRPO benchmark, use kind=agent_benchmark, benchmarkId=marketing-portfolio-v1, the marketing-portfolio-manager Agent with its ordered snapshot and decision actions, split-isolated prompt families, and exact 24/8/8 split counts. Do not include private cases or expected decisions.",
-            },
-            sourceIds: { type: "array", items: { type: "string" }, maxItems: 500 },
-            methodHint: { type: "string", enum: ["sft", "dpo", "grpo", "ppo"] },
-            mode: { type: "string", enum: ["defaults", "customize"] },
-          },
-          required: ["action"],
-        },
-        execute: async (context) => datasetBuilderToolResult(
-          context.callId,
-          "openpond_dataset_design",
-          await deps.runDatasetBuilder!(
-            context,
-            datasetDesignAction(context.args.action),
-            context.args,
-          ),
-        ),
-      },
-      {
-        name: "openpond_dataset_materialize",
-        description:
-          "Materialize an approved Dataset design into an immutable Dataset revision. Call only after the user explicitly approves the proposed design and materialization. This does not start training.",
-        parameters: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            creationId: { type: "string", minLength: 1 },
-            approved: {
-              type: "boolean",
-              const: true,
-              description: "Must be true and must reflect explicit user approval in this conversation.",
-            },
-          },
-          required: ["creationId", "approved"],
-        },
-        execute: async (context) => {
-          if (context.args.approved !== true) {
-            throw new Error("Materialization requires approved=true after explicit user approval.");
-          }
-          return datasetBuilderToolResult(
-            context.callId,
-            "openpond_dataset_materialize",
-            await deps.runDatasetBuilder!(context, "materialize", context.args),
-          );
-        },
-      },
-      {
-        name: "openpond_dataset_test",
-        description:
-          "Inspect or test a materialized Dataset with grader audit, model-judge calibration, a bounded train-signal baseline, or readiness. Baselines are evaluations only and never launch training.",
-        parameters: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            action: {
-              type: "string",
-              enum: ["audit_graders", "calibrate_judges", "baseline", "readiness"],
-            },
-            tasksetId: { type: "string", minLength: 1 },
-            split: { type: "string", enum: ["train", "validation", "frozen_eval"] },
-            taskLimit: { type: "integer", minimum: 1, maximum: 100 },
-            attemptsPerTask: { type: "integer", minimum: 1, maximum: 16 },
-          },
-          required: ["action", "tasksetId"],
-        },
-        execute: async (context) => datasetBuilderToolResult(
-          context.callId,
-          "openpond_dataset_test",
-          await deps.runDatasetBuilder!(
-            context,
-            datasetTestAction(context.args.action),
-            context.args,
-          ),
-        ),
-      },
+      ...createDatasetBuilderModelToolDefinitions(deps.runDatasetBuilder),
     );
   }
   return definitions;
-}
-
-function datasetDesignAction(value: unknown): OpenPondDatasetBuilderAction {
-  if (
-    value === "start" ||
-    value === "revise" ||
-    value === "answer_questions" ||
-    value === "approve_disclosure" ||
-    value === "status" ||
-    value === "cancel"
-  ) {
-    return value;
-  }
-  throw new Error("Unsupported Dataset design action.");
-}
-
-function datasetTestAction(value: unknown): OpenPondDatasetBuilderAction {
-  if (
-    value === "audit_graders" ||
-    value === "calibrate_judges" ||
-    value === "baseline" ||
-    value === "readiness"
-  ) {
-    return value;
-  }
-  throw new Error("Unsupported Dataset test action.");
-}
-
-function datasetBuilderToolResult(
-  callId: string,
-  name: string,
-  result: unknown,
-): NativeModelToolResult {
-  return {
-    toolCallId: callId,
-    name,
-    ok: true,
-    contentText: JSON.stringify({
-      ok: true,
-      action: name,
-      output: "Dataset Builder Agent action completed.",
-      data: { result },
-    }, null, 2),
-    data: { result },
-  };
 }
 
 function goalControlToolInput(args: Record<string, unknown>): OpenPondGoalControlToolInput {
@@ -952,90 +677,6 @@ function subagentMessageToolResult(
       {
         ok: true,
         action: "openpond_subagent_send_message",
-        output: result.nextStep,
-        data: result,
-      },
-      null,
-      2,
-    ),
-    data: result,
-  };
-}
-
-function createPipelineToolInput(args: Record<string, unknown>): OpenPondCreatePipelineToolInput {
-  const operation = args.operation;
-  if (operation !== "create" && operation !== "edit") {
-    throw new Error("operation must be create or edit");
-  }
-  const objective = stringArg(args, "objective");
-  const targetAgentId = optionalStringArg(args, "targetAgentId");
-  const source = args.source;
-  if (source !== undefined && source !== null && source !== "natural_language" && source !== "model_tool") {
-    throw new Error("source must be natural_language or model_tool");
-  }
-  return {
-    operation,
-    objective,
-    ...(targetAgentId ? { targetAgentId } : {}),
-    ...(source ? { source } : {}),
-  };
-}
-
-function createPipelineToolResult(
-  callId: string,
-  result: OpenPondCreatePipelineToolResult,
-): NativeModelToolResult {
-  return {
-    toolCallId: callId,
-    name: "openpond_create_improve",
-    ok: true,
-    contentText: JSON.stringify(
-      {
-        ok: true,
-        action: "openpond_create_improve",
-        output: result.nextStep,
-        data: result,
-      },
-      null,
-      2,
-    ),
-    data: result,
-  };
-}
-
-function profileSkillGoalToolInput(args: Record<string, unknown>): OpenPondProfileSkillGoalToolInput {
-  const operation = args.operation;
-  if (operation !== "create" && operation !== "edit") {
-    throw new Error("operation must be create or edit");
-  }
-  const objective = stringArg(args, "objective");
-  const skillName = optionalStringArg(args, "skillName");
-  const changeRequest = optionalStringArg(args, "changeRequest");
-  const source = args.source;
-  if (source !== undefined && source !== null && source !== "natural_language" && source !== "model_tool") {
-    throw new Error("source must be natural_language or model_tool");
-  }
-  return {
-    operation,
-    objective,
-    ...(skillName ? { skillName } : {}),
-    ...(changeRequest ? { changeRequest } : {}),
-    ...(source ? { source } : {}),
-  };
-}
-
-function profileSkillGoalToolResult(
-  callId: string,
-  result: OpenPondProfileSkillGoalToolResult,
-): NativeModelToolResult {
-  return {
-    toolCallId: callId,
-    name: "openpond_profile_skill_goal",
-    ok: true,
-    contentText: JSON.stringify(
-      {
-        ok: true,
-        action: "openpond_profile_skill_goal",
         output: result.nextStep,
         data: result,
       },

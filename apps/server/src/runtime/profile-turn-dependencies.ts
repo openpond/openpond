@@ -1,7 +1,6 @@
 import {
   loadOpenPondProfileStateForRef,
   runProfileSkillCommand,
-  runProfileSkillGoalCommand,
 } from "@openpond/cloud";
 
 export function createProfileTurnDependencies() {
@@ -11,15 +10,6 @@ export function createProfileTurnDependencies() {
       prompt: string;
       profileRef: Parameters<typeof loadOpenPondProfileStateForRef>[0];
     }) => runProfileSkillCommand(prompt, {
-      loadProfileState: () => loadOpenPondProfileStateForRef(profileRef),
-    }),
-    executeProfileSkillGoal: ({
-      request,
-      profileRef,
-    }: {
-      request: Parameters<typeof runProfileSkillGoalCommand>[0];
-      profileRef: Parameters<typeof loadOpenPondProfileStateForRef>[0];
-    }) => runProfileSkillGoalCommand(request, {
       loadProfileState: () => loadOpenPondProfileStateForRef(profileRef),
     }),
   };

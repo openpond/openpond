@@ -129,9 +129,22 @@ import {
   loadTasksetAuthoringSkillBundle,
   readTasksetAuthoringProfileSkill,
 } from "./training/task-authoring-skill.js";
+import {
+  isBundledAuthoringSkillName,
+  loadBundledAuthoringSkills,
+  readBundledAuthoringProfileSkill,
+} from "./runtime/bundled-authoring-skills.js";
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
+import {
+  createImproveLimit,
+  createImproveTargetKind,
+  findRecentCodexCompactionCompleted,
+  isInsightEvidenceSourceFilter,
+  parseModelJudgeResult,
+  resolveMaxHostedWorkspaceToolRounds,
+} from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
@@ -143,7 +156,9 @@ import { createComputeService } from "./compute/compute-service.js";
 import { createPrimeComputeProviderSetup } from "./compute/prime-provider-setup.js";
 import { createPrimeRolloutSmokeService } from "./training/prime-rollout-smoke-service.js";
 import { createPrimeGrpoModelRunService } from "./training/prime-grpo-model-run-service.js";
+import { createPrimeTrainingPayload } from "./training/prime-training-payload.js";
 import { createPrimeEvaluationSessionService } from "./training/prime-evaluation-session.js";
+import { createCrossSystemFrontierModelStream } from "./training/cross-system-frontier-model-stream.js";
 import { createMarketingBenchmarkRunService } from "./training/marketing-benchmark-run-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
@@ -168,7 +183,6 @@ import {
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
-const DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 64;
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export async function createOpenPondServer(
@@ -781,109 +795,21 @@ export async function createOpenPondServer(
       (await computeService.settings()).datasetStorePath,
   });
   await datasetImportService.reconcile();
-  const crossSystemFrontierModelStream: CrossSystemFrontierModelStream =
-    async function* (input) {
-      if (primeEvaluationSessions.applies(input.model)) {
-        yield* primeEvaluationSessions.stream(input);
-        return;
-      }
-      if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        for await (const delta of trainedAdapterChatRuntime.stream({
-          modelId: input.model.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          signal: input.signal,
-        })) {
-          yield { text: delta.text, toolCalls: delta.toolCalls };
-        }
-        return;
-      }
-      if (input.model.providerId === "openpond") {
-        for await (const delta of streamOpenPondHostedChatTurn({
-          model: input.model.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          signal: input.signal,
-        })) {
-          if (delta.type === "text_delta") yield { text: delta.text };
-          if (delta.type === "continuation")
-            yield { continuation: delta.continuation };
-          if (delta.type === "tool_call_delta")
-            yield { toolCalls: delta.toolCalls };
-        }
-        return;
-      }
-      const state = await localByokRuntimeState();
-      const chatGptSubscription =
-        input.model.providerId === "openai"
-        && state.secrets.providers.openai?.source === "chatgpt_subscription";
-      let providerResponseId: string | null = null;
-      let providerResponseModel: string | null = null;
-      let providerPromptTokens: number | null = null;
-      let providerGeneratedTokens: number | null = null;
-      for await (const delta of streamOpenAiCompatibleChatCompletion({
-        providerId: input.model.providerId,
-        settings: state.settings,
-        secrets: state.secrets,
-        modelId: input.model.modelId,
-        messages: input.messages,
-        tools: input.tools,
-        toolChoice: input.toolChoice,
-        requestId: input.requestId,
-        reasoningEffort: input.reasoningEffort,
-        signal: input.signal,
-        reasoningEffort: input.reasoningEffort,
-        maxOutputTokens: input.maxOutputTokens,
-        temperature: input.temperature,
-        topP: input.topP,
-        seed: input.seed,
-        saveChatGptSubscriptionCredential: async (providerId, credential) => {
-          await writeProviderChatGptSubscriptionCredential({
-            paths: providerSecretPaths,
-            providerId,
-            credential,
-            timestamp: now(),
-          });
-        },
-      })) {
-        const facts = providerResponseFactsFromRaw(delta.raw);
-        providerResponseId =
-          facts.responseId ?? providerResponseId;
-        providerResponseModel =
-          facts.responseModel ?? providerResponseModel;
-        providerPromptTokens =
-          facts.promptTokens ?? providerPromptTokens;
-        providerGeneratedTokens =
-          facts.generatedTokens ?? providerGeneratedTokens;
-        if (delta.type === "text_delta") yield { text: delta.text };
-        if (delta.type === "continuation")
-          yield { continuation: delta.continuation };
-        if (delta.type === "tool_call_delta")
-          yield { toolCalls: delta.toolCalls };
-      }
-      if (providerResponseModel) {
-        yield {
-          responseFacts: {
-            providerResponseIdentity: JSON.stringify({
-              providerId: input.model.providerId,
-              responseId: providerResponseId,
-              responseModel: providerResponseModel,
-            }),
-            promptTokens: providerPromptTokens,
-            generatedTokens: providerGeneratedTokens,
-            samplingSupport: {
-              seed: false,
-              temperature: !chatGptSubscription,
-              topP: !chatGptSubscription,
-            },
-          },
-        };
-      }
-    };
+  const crossSystemFrontierModelStream =
+    createCrossSystemFrontierModelStream({
+      primeEvaluationSessions,
+      trainedAdapterChatRuntime,
+      streamOpenPondHostedChatTurn,
+      localByokRuntimeState,
+      saveChatGptSubscriptionCredential: async (providerId, credential) => {
+        await writeProviderChatGptSubscriptionCredential({
+          paths: providerSecretPaths,
+          providerId,
+          credential,
+          timestamp: now(),
+        });
+      },
+    });
   trainingBaselineAttemptRunner = createTrainingBaselineAttemptRunner({
     store,
     storeDir,
@@ -976,69 +902,10 @@ export async function createOpenPondServer(
       primeGrpoReconciliation,
     );
   }
-  const trainingPayload = async (
-    action: string,
-    payload: unknown,
-    requestUrl?: URL,
-  ) => {
-    const record =
-      payload && typeof payload === "object" && !Array.isArray(payload)
-        ? payload as Record<string, unknown>
-        : {};
-    const modelRunId =
-      typeof record.modelRunId === "string"
-        ? record.modelRunId
-        : null;
-    if (
-      modelRunId
-      && await primeGrpoModelRuns.applies(modelRunId)
-    ) {
-      if (action === "prepare_model_run") {
-        return primeGrpoModelRuns.prepare({
-          modelRunId,
-          maximumSpendUsd:
-            typeof record.maximumSpendUsd === "number"
-              ? record.maximumSpendUsd
-              : null,
-          retentionDays:
-            typeof record.retentionDays === "number"
-              ? record.retentionDays
-              : null,
-        });
-      }
-      if (action === "start_model_run") {
-        return primeGrpoModelRuns.start({
-          modelRunId,
-          maximumSpendUsd:
-            typeof record.maximumSpendUsd === "number"
-              ? record.maximumSpendUsd
-              : null,
-          retentionDays:
-            typeof record.retentionDays === "number"
-              ? record.retentionDays
-              : null,
-          manifest: record.manifest,
-        });
-      }
-      if (action === "model_run_status") {
-        return primeGrpoModelRuns.status(modelRunId);
-      }
-      if (action === "model_run_events") {
-        return primeGrpoModelRuns.events(modelRunId);
-      }
-      if (action === "model_run_logs") {
-        return primeGrpoModelRuns.logs(modelRunId);
-      }
-      if (action === "model_run_artifacts") {
-        return primeGrpoModelRuns.artifacts(modelRunId);
-      }
-      if (action === "cancel_model_run") {
-        return primeGrpoModelRuns.cancel(modelRunId);
-      }
-    }
-    return trainingApi.request(action, payload, requestUrl);
-  };
-
+  const trainingPayload = createPrimeTrainingPayload({
+    primeGrpoModelRuns,
+    trainingApi,
+  });
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -1187,12 +1054,14 @@ export async function createOpenPondServer(
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
-    loadBuiltInOpenPondSkills: async () => [await loadTasksetAuthoringProfileSkill()],
+    loadBuiltInOpenPondSkills: async () => [
+      await loadTasksetAuthoringProfileSkill(),
+      ...await loadBundledAuthoringSkills(),
+    ],
     readBuiltInOpenPondSkill: async (name) => {
-      if (name !== "openpond-taskset-authoring") {
-        throw new Error(`Built-in OpenPond skill not found: ${name}`);
-      }
-      return readTasksetAuthoringProfileSkill();
+      if (name === "openpond-taskset-authoring") return readTasksetAuthoringProfileSkill();
+      if (isBundledAuthoringSkillName(name)) return readBundledAuthoringProfileSkill(name);
+      throw new Error(`Built-in OpenPond skill not found: ${name}`);
     },
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
@@ -2187,178 +2056,6 @@ export async function createOpenPondServer(
       workQueueReceipts: workQueues.receipts,
     },
   };
-}
-
-function parseModelJudgeResult(
-  raw: string
-): {
-  score: number;
-  passed: boolean;
-  feedback: string;
-  evidenceRefs: string[];
-} | null {
-  const normalized = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/```\s*$/, "");
-  try {
-    const value = JSON.parse(normalized) as Record<string, unknown>;
-    if (typeof value.score !== "number" || typeof value.passed !== "boolean")
-      return null;
-    return {
-      score: Math.max(0, Math.min(1, value.score)),
-      passed: value.passed,
-      feedback:
-        typeof value.feedback === "string"
-          ? value.feedback.slice(0, 20_000)
-          : "Model judge completed.",
-      evidenceRefs: [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function resolveMaxHostedWorkspaceToolRounds(
-  optionValue: number | undefined
-): number {
-  if (
-    typeof optionValue === "number" &&
-    Number.isFinite(optionValue) &&
-    optionValue > 0
-  ) {
-    return Math.floor(optionValue);
-  }
-  const envValue = process.env.OPENPOND_HOSTED_WORKSPACE_TOOL_ROUNDS?.trim();
-  if (!envValue) return DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
-  if (/^(unlimited|infinite|infinity)$/i.test(envValue))
-    return Number.POSITIVE_INFINITY;
-  const parsed = Number.parseInt(envValue, 10);
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
-}
-
-function isInsightEvidenceSourceFilter(
-  value: string | null
-): value is
-  | "all"
-  | "create_edit"
-  | "stuck_turn"
-  | "tool_failure"
-  | "abandoned_goal"
-  | "user_correction"
-  | "unresolved_conversation"
-  | "usage_anomaly" {
-  return (
-    value === "all" ||
-    value === "create_edit" ||
-    value === "stuck_turn" ||
-    value === "tool_failure" ||
-    value === "abandoned_goal" ||
-    value === "user_correction" ||
-    value === "unresolved_conversation" ||
-    value === "usage_anomaly"
-  );
-}
-
-function findRecentCodexCompactionCompleted(
-  events: RuntimeEvent[],
-  sessionId: string,
-  codexThreadId: string
-): RuntimeEvent | null {
-  const cutoff = Date.now() - 60_000;
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const item = events[index]!;
-    const timestamp = Date.parse(item.timestamp);
-    if (Number.isFinite(timestamp) && timestamp < cutoff) return null;
-    if (
-      item.sessionId !== sessionId ||
-      item.name !== "session.compaction.completed"
-    )
-      continue;
-    const data =
-      item.data && typeof item.data === "object"
-        ? (item.data as Record<string, unknown>)
-        : null;
-    if (data?.provider === "codex" && data.codexThreadId === codexThreadId)
-      return item;
-  }
-  return null;
-}
-
-function createImproveTargetKind(
-  value: string | null
-): "agent" | "skill" | "extension" | "model" | "configuration" | null {
-  return value === "agent" ||
-    value === "skill" ||
-    value === "extension" ||
-    value === "model" ||
-    value === "configuration"
-    ? value
-    : null;
-}
-
-function createImproveLimit(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined;
-}
-
-function providerResponseFactsFromRaw(value: unknown): {
-  responseId: string | null;
-  responseModel: string | null;
-  promptTokens: number | null;
-  generatedTokens: number | null;
-} {
-  const root =
-    value && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : {};
-  const nested =
-    root.response
-    && typeof root.response === "object"
-    && !Array.isArray(root.response)
-      ? root.response as Record<string, unknown>
-      : {};
-  const usageValue =
-    nested.usage
-    && typeof nested.usage === "object"
-    && !Array.isArray(nested.usage)
-      ? nested.usage
-      : root.usage;
-  const usage =
-    usageValue
-    && typeof usageValue === "object"
-    && !Array.isArray(usageValue)
-      ? usageValue as Record<string, unknown>
-      : {};
-  return {
-    responseId:
-      stringFact(nested.id) ?? stringFact(root.id),
-    responseModel:
-      stringFact(nested.model) ?? stringFact(root.model),
-    promptTokens:
-      tokenFact(usage.prompt_tokens)
-      ?? tokenFact(usage.input_tokens),
-    generatedTokens:
-      tokenFact(usage.completion_tokens)
-      ?? tokenFact(usage.output_tokens),
-  };
-}
-
-function stringFact(value: unknown): string | null {
-  return typeof value === "string" && value.trim()
-    ? value.trim()
-    : null;
-}
-
-function tokenFact(value: unknown): number | null {
-  return typeof value === "number"
-    && Number.isInteger(value)
-    && value >= 0
-    ? value
-    : null;
 }
 
 if (isCliEntrypoint(import.meta.url)) {

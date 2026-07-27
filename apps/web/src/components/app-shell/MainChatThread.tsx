@@ -22,6 +22,7 @@ export function MainChatThread({
   onOpenBrowserLink,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onResolveUserQuestion,
   onOpenSession,
   onScroll,
   preparingInitialScroll,
@@ -38,6 +39,7 @@ export function MainChatThread({
   onOpenBrowserLink: MessageRowProps["onOpenBrowserLink"];
   onOpenFileInSidebar: MessageRowProps["onOpenFileInSidebar"];
   onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
+  onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
   onOpenSession: MessageRowProps["onOpenSession"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
   preparingInitialScroll: boolean;
@@ -66,6 +68,7 @@ export function MainChatThread({
           onOpenFileInSidebar={onOpenFileInSidebar}
           onOpenBrowserLink={onOpenBrowserLink}
           onOpenProfileSettings={onOpenProfileSettings}
+          onResolveUserQuestion={onResolveUserQuestion}
           onOpenSession={onOpenSession}
           workspaceRootPath={workspaceRootPath}
           showFooter={row.showFooter}

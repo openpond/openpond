@@ -188,7 +188,6 @@ export function createHostedToolLoopRuntime(deps: {
     invalidRequestCounts: Map<string, number>;
     toolCalls: import("../../openpond/native-tool-calls.js").NativeModelToolCall[];
   }): Promise<NativeModelToolResult[]>;
-  applyNativeToolUsageAttribution(turn: Turn, results: NativeModelToolResult[]): Promise<void>;
   readProfileSkillForModel(input: {
     session: Session;
     turnId: string;
@@ -211,7 +210,6 @@ export function createHostedToolLoopRuntime(deps: {
   const appendRuntimeEvent = deps.appendRuntimeEvent;
   const safeUpsertModelUsageRecord = deps.upsertModelUsageRecord;
   const executeNativeToolCalls = deps.executeNativeToolCalls;
-  const applyNativeToolUsageAttribution = deps.applyNativeToolUsageAttribution;
   const readProfileSkillForModel = deps.readProfileSkillForModel;
   const executeWorkspaceTool = deps.executeWorkspaceTool;
   const appendAssistantText = deps.appendAssistantText;
@@ -445,9 +443,15 @@ export function createHostedToolLoopRuntime(deps: {
           toolCalls: nativeToolCalls,
         });
         workspaceToolResultCount += nativeResults.length;
-        await applyNativeToolUsageAttribution(params.turn, nativeResults);
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
+        }
+        const blockingQuestion = nativeResults.find(
+          (result) => result.turnControl === "await_user_input",
+        );
+        if (blockingQuestion) {
+          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          return session;
         }
         if (
           trainingHarnessRound?.requiredToolName &&

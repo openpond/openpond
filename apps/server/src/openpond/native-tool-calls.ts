@@ -13,6 +13,7 @@ export type NativeModelToolResult = {
   ok: boolean;
   contentText: string;
   data?: unknown;
+  turnControl?: "continue" | "await_user_input";
 };
 
 type AccumulatedToolCall = {

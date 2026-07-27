@@ -1,15 +1,12 @@
 import type {
-  BootstrapPayload,
   CloudProject,
   CloudWorkItem,
   CloudWorkItemDetail,
   UsageRequestAttribution,
-  WorkspaceKind,
 } from "@openpond/contracts";
-import type { AppView, ChatMessage } from "../../lib/app-models";
+import type { ChatMessage } from "../../lib/app-models";
 import type { ParsedComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runtime";
-import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
 
 const CHAT_AUTOSCROLL_THRESHOLD_PX = 72;
@@ -140,8 +137,7 @@ export function cloudProjectIdFromComposerTarget(value: string): string | null {
 }
 
 export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
-  if (command.command === "create") return `/create ${command.args}`;
-  if (command.command === "edit") return `/edit ${command.args}`;
+  if (command.command === "agent") return command.args ? `/agent ${command.args}` : "/agent";
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
   if (command.command === "sync-cloud") return command.args ? `/sync-cloud ${command.args}` : "/sync-cloud";
   return command.args ? `/${command.command} ${command.args}` : `/${command.command}`;
@@ -163,23 +159,10 @@ export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSl
   return (
     command.command === "goal" ||
     command.command === "goal-local" ||
+    command.command === "agent" ||
     command.command === "skill" ||
     command.command === "sync-cloud"
   );
-}
-
-export function shouldRunCreateImproveCommandLocally(input: {
-  command: ParsedComposerSlashCommand;
-  profile: BootstrapPayload["profile"] | null | undefined;
-  activeWorkspaceKind: WorkspaceKind | null;
-  view: AppView;
-}): boolean {
-  if (input.command.command !== "create" && input.command.command !== "edit") {
-    return false;
-  }
-  if (input.profile?.mode !== "local") return false;
-  if (input.view === "cloud") return false;
-  return !isCloudWorkspaceKind(input.activeWorkspaceKind);
 }
 
 export function cloudWorkItemSandboxId(

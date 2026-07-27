@@ -14,6 +14,7 @@ import type {
   ProviderModel,
   ProviderSettings,
   Session,
+  SessionUserQuestion,
   SidebarFileBookmark,
   SubagentRoleId,
   SubagentRoleSettings,
@@ -217,6 +218,7 @@ export type ChatMessage = {
   actionRun?: ActionRunSummary;
   insightsRunPrompt?: InsightsRunPromptSummary;
   createImproveRun?: CreateImproveRun | null;
+  userQuestion?: SessionUserQuestion;
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

@@ -175,6 +175,19 @@ export function RightChatPane({
     },
     [onShowBrowserPanel, panel.id, panel.sessionId],
   );
+  const handleResolveUserQuestion = useCallback<NonNullable<
+    import("react").ComponentProps<typeof MessageRow>["onResolveUserQuestion"]
+  >>(async (_question, resolution) => {
+    const displayPrompt = resolution.action === "answer"
+      ? resolution.text
+      : "Dismiss this question";
+    const sent = await onSubmit([], null, null, {
+      displayPrompt,
+      promptOverride: displayPrompt,
+      turnMetadata: { userQuestionResolution: resolution },
+    });
+    if (!sent) throw new Error("The question response could not be sent.");
+  }, [onSubmit]);
 
   return (
     <section
@@ -210,6 +223,7 @@ export function RightChatPane({
             onOpenBrowserLink={handleOpenBrowserLink}
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
+            onResolveUserQuestion={handleResolveUserQuestion}
             onOpenSession={onOpenSession}
             workspaceRootPath={panel.workspaceRootPath}
             showFooter={row.showFooter}

@@ -87,7 +87,6 @@ import {
   nextUserMessageTarget,
   promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
-  shouldRunCreateImproveCommandLocally,
   shouldSubmitComposerSlashCommandToChat,
   usageAttributionForComposerSlashCommand,
   userMessageNavigationState,
@@ -837,15 +836,7 @@ export function MainPane({
               ),
             });
           }
-          if (
-            shouldSubmitComposerSlashCommandToChat(command) ||
-            shouldRunCreateImproveCommandLocally({
-              command,
-              profile: bootstrap?.profile,
-              activeWorkspaceKind,
-              view,
-            })
-          ) {
+          if (shouldSubmitComposerSlashCommandToChat(command)) {
             const skillPrompt = command.command === "skill"
               ? skillPromptForComposer(
                   command.args,
@@ -878,6 +869,7 @@ export function MainPane({
       return sendPrompt(attachments, action, options.promptOverride, {
         clearPrompt: options.preservePrompt ? () => undefined : undefined,
         displayPrompt: options.displayPrompt,
+        turnMetadata: options.turnMetadata,
       });
     },
     [
@@ -1632,7 +1624,7 @@ export function MainPane({
           <Suspense fallback={null}>
             <GetStartedView
               onCreateAgent={() => {
-                composerDraftStore.set("/create ");
+                composerDraftStore.set("/agent create ");
                 setMentionedAppId(null);
                 setView("chat");
               }}
@@ -1784,6 +1776,16 @@ export function MainPane({
               onOpenBrowserLink={handleOpenBrowserLink}
               onOpenFileInSidebar={handleOpenFileInSidebar}
               onOpenProfileSettings={onOpenProfileSettings}
+              onResolveUserQuestion={async (_question, resolution) => {
+                const displayPrompt = resolution.action === "answer"
+                  ? resolution.text
+                  : "Dismiss this question";
+                const sent = await sendPrompt([], null, displayPrompt, {
+                  displayPrompt,
+                  turnMetadata: { userQuestionResolution: resolution },
+                });
+                if (!sent) throw new Error("The question response could not be sent.");
+              }}
               onOpenSession={onOpenInsightsSession}
               onScroll={(event) => handleChatScroll(event.currentTarget)}
               preparingInitialScroll={chatThreadPreparingInitialScroll}

@@ -17,13 +17,12 @@ import {
   type Session,
 } from "@openpond/contracts";
 import type { ChatMessage } from "./app-models";
-import type { ParsedComposerSlashCommand } from "./composer-slash-commands";
 
 const MAX_CAPTURED_CHAT_EXCERPTS = 6;
 const MAX_CAPTURED_CHAT_EXCERPT_CHARS = 1200;
 
 export function buildComposerCreateImproveRun(input: {
-  parsed: ParsedComposerSlashCommand;
+  parsed: { command: "create" | "edit"; args: string };
   prompt: string;
   payload: BootstrapPayload | null;
   session: Session | null;

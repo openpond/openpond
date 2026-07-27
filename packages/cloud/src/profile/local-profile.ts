@@ -206,7 +206,7 @@ function profileConfigEntries(
 }
 
 export type RunProfileCommandInput = {
-  command: "inspect" | "build" | "validate" | "eval" | "run";
+  command: "inspect" | "build" | "validate" | "eval" | "traces" | "run";
   args?: string[];
   cwd?: string;
   inherit?: boolean;
@@ -214,7 +214,7 @@ export type RunProfileCommandInput = {
   maxOutputBytes?: number;
 };
 
-type ProfileCheckCommand = Exclude<RunProfileCommandInput["command"], "run">;
+type ProfileCheckCommand = "inspect" | "build" | "validate" | "eval";
 
 const require = createRequire(import.meta.url);
 
@@ -694,7 +694,14 @@ export async function runProfileSdkCommand(
     inherit: input.inherit,
     throwOnFailure: false,
   });
-  await saveProfileCheckStatus(input.command, result.code);
+  if (
+    input.command === "inspect" ||
+    input.command === "build" ||
+    input.command === "validate" ||
+    input.command === "eval"
+  ) {
+    await saveProfileCheckStatus(input.command, result.code);
+  }
   if (result.code !== 0) {
     const detail = result.stderr.trim() || result.stdout.trim();
     throw new Error(

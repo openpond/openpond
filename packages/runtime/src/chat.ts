@@ -188,6 +188,7 @@ export async function* streamOpenPondHostedChatTurn(
     tools: input.tools,
     toolChoice: input.toolChoice,
     requestId: input.requestId,
+    reasoningEffort: input.reasoningEffort,
     signal: input.signal,
   });
 }
@@ -294,6 +295,7 @@ function buildOpChatBody(options: {
   messages: HostedChatTurnInput["messages"];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
+  reasoningEffort?: HostedChatTurnInput["reasoningEffort"];
 }): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
@@ -305,6 +307,9 @@ function buildOpChatBody(options: {
   }
   if (options.toolChoice !== undefined) {
     body.tool_choice = options.toolChoice;
+  }
+  if (options.reasoningEffort) {
+    body.reasoning_effort = options.reasoningEffort;
   }
   return body;
 }

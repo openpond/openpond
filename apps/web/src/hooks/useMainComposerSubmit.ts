@@ -128,7 +128,10 @@ export function useMainComposerSubmit({
         onSessionCreated(session);
         if (trainingTurn.metadata) bindTrainingSession(session.id);
       },
-      turnMetadata: trainingTurn.metadata ?? undefined,
+      turnMetadata:
+        trainingTurn.metadata || options.turnMetadata
+          ? { ...(trainingTurn.metadata ?? {}), ...(options.turnMetadata ?? {}) }
+          : undefined,
     });
     if (sent && trainingTurn.metadata) advanceTrainingTurn();
     return sent;

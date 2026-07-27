@@ -3,7 +3,7 @@ import { OpenPondActionCatalogEntrySchema } from "./action-catalog.js";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
 
 export const LocalOpenPondProfileCheckStatusSchema = z.object({
-  command: z.enum(["inspect", "build", "validate", "eval", "run"]),
+  command: z.enum(["inspect", "build", "validate", "eval", "traces", "run"]),
   status: z.enum(["passed", "failed"]),
   checkedAt: z.string(),
   exitCode: z.number().nullable().optional(),

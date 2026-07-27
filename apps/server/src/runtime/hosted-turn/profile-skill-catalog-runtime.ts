@@ -177,12 +177,26 @@ export function createProfileSkillCatalogRuntime(deps: {
     session: Session;
     turnId: string;
     prompt: string;
+    selectedSkillNames?: readonly string[];
     runtime: ProfileSkillRuntime;
     signal: AbortSignal;
   }): Promise<HostedProfileSkillBody[]> {
-    if (!input.runtime.readSkill || input.runtime.skills.length === 0) return [];
+    const requiredNames = input.selectedSkillNames ?? [];
+    if (!input.runtime.readSkill || input.runtime.skills.length === 0) {
+      if (requiredNames.length > 0) {
+        throw new Error(`Required bundled authoring skill is unavailable: ${requiredNames.join(", ")}`);
+      }
+      return [];
+    }
     const skillByName = new Map(input.runtime.skills.map((skill) => [skill.name, skill]));
-    const names = explicitProfileSkillNames(input.prompt).filter((name) => skillByName.has(name));
+    const missingRequired = requiredNames.filter((name) => !skillByName.has(name));
+    if (missingRequired.length > 0) {
+      throw new Error(`Required bundled authoring skill is unavailable: ${missingRequired.join(", ")}`);
+    }
+    const names = [
+      ...(input.selectedSkillNames ?? []),
+      ...explicitProfileSkillNames(input.prompt),
+    ].filter((name, index, all) => skillByName.has(name) && all.indexOf(name) === index);
     const loaded: HostedProfileSkillBody[] = [];
     for (const name of names.slice(0, 5)) {
       throwIfInterrupted(input.signal);
@@ -218,6 +232,7 @@ export function createProfileSkillCatalogRuntime(deps: {
           skillName: name,
           source: "server",
         });
+        if (requiredNames.includes(name)) throw error;
       }
     }
     return loaded;

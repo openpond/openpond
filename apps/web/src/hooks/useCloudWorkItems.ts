@@ -193,38 +193,9 @@ export function useCloudWorkItems({
       }
       const title = input.prompt.split(/\s+/).slice(0, 12).join(" ").slice(0, 120) || "Cloud task";
       const parsed = parseComposerSlashCommandPrompt(input.prompt);
-      const createImproveRequest =
-        parsed && (parsed.command === "create" || parsed.command === "edit")
-          ? await import("../lib/create-pipeline-request")
-          : null;
-      const proposedCreateImproveRun =
-        createImproveRequest && parsed && (parsed.command === "create" || parsed.command === "edit")
-          ? createImproveRequest.buildHostedCloudWorkCreateImproveRun({
-              command: parsed.command,
-              objective: parsed.args || input.prompt,
-              payload: bootstrap,
-              project,
-              source: "cloud_work_home",
-            })
-          : null;
-      if (parsed?.command === "edit" && !proposedCreateImproveRun) {
-        const message = "Select an agent-backed Cloud work item before using /edit.";
-        setCloudError(message);
-        setError(message);
-        return false;
-      }
-      const createImproveRun = proposedCreateImproveRun
-        ? createImproveRequest?.buildInitialCreateImproveRun(proposedCreateImproveRun) ?? null
-        : null;
       const usageAttribution = cloudSlashUsageAttribution(parsed);
-      const sourceRef =
-        createImproveRun?.adapter.kind === "hosted"
-          ? createImproveRun.adapter.sourceRef
-          : input.sourceRef ?? project.defaultBranch ?? null;
-      const baseSha =
-        createImproveRun?.adapter.kind === "hosted"
-          ? createImproveRun.adapter.baseSha
-          : input.baseSha ?? null;
+      const sourceRef = input.sourceRef ?? project.defaultBranch ?? null;
+      const baseSha = input.baseSha ?? null;
       const shouldSelectWorkItem = input.select ?? true;
       setCloudBusy(true);
       setCloudError(null);
@@ -232,7 +203,7 @@ export function useCloudWorkItems({
         const detail = await api.createCloudWorkItem(connection, {
           teamId: project.teamId,
           projectId: project.id,
-          title: createImproveRun?.objective ?? title,
+          title,
           initialMessage: input.prompt,
           sourceRef,
           baseSha,
@@ -240,7 +211,6 @@ export function useCloudWorkItems({
           localProjectName: input.localProjectName ?? null,
           localWorkspacePath: input.localWorkspacePath ?? null,
           requestedExecutionTarget: input.requestedExecutionTarget ?? null,
-          createImproveRun,
           usageAttribution,
         });
         setCloudWorkItemDetail(detail);
@@ -251,10 +221,6 @@ export function useCloudWorkItems({
           setSelectedProjectId(projectSelectionKey("cloud", project.id));
           setSelectedSessionId(null);
           setView("cloud");
-        }
-        if (createImproveRun) {
-          showToast("Agent plan is ready for review.", "info");
-          return true;
         }
         await api.handleCloudWorkItemInBackground(connection, detail.workItem.id, {
           teamId: project.teamId,

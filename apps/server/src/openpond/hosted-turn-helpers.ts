@@ -199,13 +199,10 @@ function buildOpenPondCapabilityIndexContext(
   return [
     "OpenPond capabilities:",
     "- workspace_context: use resource_search and resource_read for workspace, session, artifact, goal, sandbox, and git context.",
-    "- create_pipeline: create or edit source-backed agents and workflows through Create Pipeline when the matching capability is available.",
+    "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn. For matching natural-language authoring requests, load the relevant bundled profile skill from the catalog.",
     ...(input.hybridWorkspace
-      ? [
-          "- In Hybrid workspace mode, ordinary project file edits are sandbox workspace work. Use create_pipeline only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
-        ]
+      ? ["- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority."]
       : []),
-    "- profile_skill_goal: create or edit profile-backed skill packages through the profile-skill goal workflow when the matching capability is available.",
     "- goal_control: start, restart, pause, resume, or stop OpenPond goals after resolving the current target goal and execution mode.",
     ...(input.browserControlAvailable
       ? [

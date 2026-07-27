@@ -4,9 +4,9 @@ import {
   type OpenPondApp,
   type OpenPondProfileSkill,
   type RuntimeEvent,
+  SessionUserQuestionSchema,
   type Session,
   type Turn,
-  type UsageRequestAttribution,
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 import {
@@ -39,13 +39,11 @@ export type ProfileSkillRuntime = {
 export function createNativeToolRuntime(deps: {
   maxRepeatedInvalidToolRequests: number;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
-  updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
   throwIfInterrupted(signal: AbortSignal): void;
 }) {
   const maxImageInspectionsPerTurn = 12;
   const maxRepeatedInvalidToolRequests = deps.maxRepeatedInvalidToolRequests;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
-  const updateStoredTurn = deps.updateTurn;
   const throwIfInterrupted = deps.throwIfInterrupted;
   async function executeNativeToolCalls(params: {
     session: Session;
@@ -63,8 +61,27 @@ export function createNativeToolRuntime(deps: {
     toolCalls: NativeModelToolCall[];
   }): Promise<NativeModelToolResult[]> {
     const results: NativeModelToolResult[] = [];
+    const blockingQuestionCall = params.toolCalls.find((toolCall) => toolCall.name === "ask_user") ?? null;
     for (const toolCall of params.toolCalls) {
       throwIfInterrupted(params.signal);
+      if (blockingQuestionCall && toolCall.id !== blockingQuestionCall.id) {
+        const result: NativeModelToolResult = {
+          toolCallId: toolCall.id,
+          name: toolCall.name,
+          ok: false,
+          contentText: JSON.stringify({
+            ok: false,
+            action: toolCall.name,
+            output: "Skipped because ask_user must be the only executed call in its tool batch.",
+            data: { skipped: true, reason: "ask_user_requires_exclusive_batch" },
+          }, null, 2),
+          data: { skipped: true, reason: "ask_user_requires_exclusive_batch" },
+        };
+        await appendNativeToolStarted(params.session, params.turnId, toolCall, {});
+        await appendNativeToolCompleted(params.session, params.turnId, result);
+        results.push(result);
+        continue;
+      }
       const definition = params.toolDefinitions.get(toolCall.name);
       if (!definition) {
         const result = unknownNativeToolResult(toolCall);
@@ -227,76 +244,6 @@ export function createNativeToolRuntime(deps: {
       }
     }
     return results;
-  }
-
-  async function applyNativeToolUsageAttribution(
-    turn: Turn,
-    results: NativeModelToolResult[],
-  ): Promise<void> {
-    const attribution = profileSkillGoalUsageAttribution(results);
-    if (!attribution) return;
-    const metadata = {
-      ...(turn.metadata ?? {}),
-      usageAttribution: attribution.usageAttribution,
-      threadGoal: {
-        ...threadGoalRecord(turn.metadata?.threadGoal),
-        ...attribution.threadGoal,
-      },
-    };
-    turn.metadata = metadata;
-    const updated = await updateStoredTurn(turn.id, (current) => ({
-      ...current,
-      metadata: {
-        ...(current.metadata ?? {}),
-        ...metadata,
-      },
-    }));
-    if (updated) Object.assign(turn, updated);
-  }
-
-  function profileSkillGoalUsageAttribution(
-    results: NativeModelToolResult[],
-  ): {
-    usageAttribution: UsageRequestAttribution;
-    threadGoal: Record<string, unknown>;
-  } | null {
-    for (const result of results) {
-      if (!result.ok || result.name !== "openpond_profile_skill_goal") continue;
-      if (!result.data || typeof result.data !== "object" || Array.isArray(result.data)) continue;
-      const data = result.data as Record<string, unknown>;
-      const goalId = stringFromRecord(data, "goalId");
-      if (!goalId) continue;
-      const operation = stringFromRecord(data, "operation");
-      const targetSkillName = stringFromRecord(data, "targetSkillName");
-      const targetSkillPath = stringFromRecord(data, "targetSkillPath");
-      const status = stringFromRecord(data, "status");
-      return {
-        usageAttribution: {
-          surface: "goal",
-          workflowKind: "goal_control",
-          goalId,
-          commandName: "/skill",
-          commandSource: "model_tool",
-        },
-        threadGoal: {
-          id: goalId,
-          provider: "openpond",
-          kind: operation === "edit" ? "profile_skill_edit" : "profile_skill_create",
-          source: "native_model_tool",
-          ...(operation ? { operation } : {}),
-          ...(targetSkillName ? { targetSkillName } : {}),
-          ...(targetSkillPath ? { targetSkillPath } : {}),
-          ...(status ? { status } : {}),
-        },
-      };
-    }
-    return null;
-  }
-
-  function threadGoalRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : {};
   }
 
   async function readProfileSkillForModel(input: {
@@ -604,6 +551,38 @@ export function createNativeToolRuntime(deps: {
         },
       }),
     );
+    if (result.name === "ask_user" && result.ok) {
+      const data = result.data && typeof result.data === "object" && !Array.isArray(result.data)
+        ? result.data as Record<string, unknown>
+        : {};
+      const question = SessionUserQuestionSchema.parse({
+        id: data.questionId,
+        sessionId: session.id,
+        turnId,
+        toolCallId: result.toolCallId,
+        question: data.question,
+        reason: data.reason ?? null,
+        options: data.options ?? [],
+        allowFreeform: data.allowFreeform !== false,
+        status: "pending",
+        answer: null,
+        createdAt: new Date().toISOString(),
+        answeredAt: null,
+      });
+      await appendRuntimeEvent(
+        event({
+          sessionId: session.id,
+          turnId,
+          name: "user_question.asked",
+          source: "provider",
+          action: "ask_user",
+          appId: session.appId,
+          status: "pending",
+          output: question.question,
+          data: { question },
+        }),
+      );
+    }
   }
 
   function nativeToolResultResourceRefs(result: NativeModelToolResult): string[] {
@@ -650,7 +629,6 @@ export function createNativeToolRuntime(deps: {
 
   return {
     appendProfileSkillEvent,
-    applyNativeToolUsageAttribution,
     executeNativeToolCalls,
     explicitProfileSkillNames,
     profileSkillBodyFromReadResult,

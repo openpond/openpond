@@ -1,6 +1,5 @@
 export type ComposerSlashCommandId =
-  | "create"
-  | "edit"
+  | "agent"
   | "skill"
   | "goal"
   | "goal-local"
@@ -29,10 +28,11 @@ export type ParsedComposerDirectCommand = {
 
 export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
   {
-    id: "create",
-    command: "/create",
-    label: "Make Agent",
-    description: "Start the guided Agent creation flow.",
+    id: "agent",
+    command: "/agent",
+    label: "Author Agent",
+    description: "Create or improve a Profile Agent in a normal skill-backed turn.",
+    subcommands: ["create", "improve", "help"],
   },
   {
     id: "skill",
@@ -58,12 +58,6 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     command: "/submit-issue",
     label: "Submit issue",
     description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
-  },
-  {
-    id: "edit",
-    command: "/edit",
-    label: "Edit selected agent",
-    description: "Refine the current project agent or workflow.",
   },
   {
     id: "goal-remote",

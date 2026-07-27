@@ -67,14 +67,14 @@ export type LabsRouteProps = {
     objective: string,
     authoringRunId?: string | null,
     authoringModel?: ChatModelRef | null,
-  ) => Promise<CreateImproveRun>;
+  ) => Promise<void>;
   onImproveAgent: (
     agentId: string,
     objective: string,
     agentName?: string | null,
     authoringRunId?: string | null,
     authoringModel?: ChatModelRef | null,
-  ) => Promise<CreateImproveRun>;
+  ) => Promise<void>;
   onOpenRunConversation: (conversationId: string) => void;
   onDetailOpenChange: (location: LabDetailLocation | null) => void;
   onSkillSelectionChange: (selection: LabSkillSourceSelection | null) => void;
@@ -656,10 +656,7 @@ export function LabsRoute({
           localProjects={training.localProjects ?? []}
           onClose={() => setAgentCreateOpen(false)}
           onAgentPromptSubmitted={async ({ analysisModel, objective }) => {
-            const run = await onCreateAgent(objective, null, analysisModel);
-            await createImprove.refresh();
-            setActiveTab("workproducts");
-            setSelectedKey(workproductKey("agent", run.target.id ?? run.id));
+            await onCreateAgent(objective, null, analysisModel);
             setAgentCreateOpen(false);
           }}
           onOpenComputeSettings={training.onOpenComputeSettings}
@@ -668,14 +665,11 @@ export function LabsRoute({
               creation,
               "Create a useful Agent from the approved Taskset."
             );
-            const run = await onCreateAgent(
+            await onCreateAgent(
               objective,
               creation.request.createImproveRunId,
               creation.request.analysisModel,
             );
-            await createImprove.refresh();
-            setActiveTab("workproducts");
-            setSelectedKey(workproductKey("agent", run.target.id ?? run.id));
             setAgentCreateOpen(false);
           }}
           preferences={training.preferences}
@@ -728,9 +722,6 @@ export function LabsRoute({
               null,
               analysisModel,
             );
-            await createImprove.refresh();
-            setActiveTab("workproducts");
-            setSelectedKey(workproductKey("agent", agentImprove.agentId));
             setAgentImprove(null);
           }}
           onOpenComputeSettings={training.onOpenComputeSettings}
@@ -746,9 +737,6 @@ export function LabsRoute({
               creation.request.createImproveRunId,
               creation.request.analysisModel,
             );
-            await createImprove.refresh();
-            setActiveTab("workproducts");
-            setSelectedKey(workproductKey("agent", agentImprove.agentId));
             setAgentImprove(null);
           }}
           preferences={training.preferences}

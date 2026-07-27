@@ -8,7 +8,6 @@ import {
   Check,
   FileText,
   Paperclip,
-  Plus,
   Workflow,
 } from "../icons";
 import {
@@ -189,7 +188,7 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
   if (item.kind === "slash") {
     const slashItem = item.item;
     if (slashItem.kind === "command") {
-      if (slashItem.command.id === "create") return <Plus size={14} />;
+      if (slashItem.command.id === "agent") return <Bot size={14} />;
       if (slashItem.command.id === "skill") return <BookOpenText size={14} />;
       return <Workflow size={14} />;
     }

@@ -36,6 +36,12 @@ export async function stageDesktopRuntime(
     path.join(options.root, "apps", "cli", "skills", "openpond-taskset-authoring"),
     path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring"),
   );
+  for (const skillName of ["openpond-skill-authoring", "openpond-agent-authoring"]) {
+    await copyTree(
+      path.join(options.root, "apps", "cli", "skills", skillName),
+      path.join(runtimeRoot, "server", "skills", skillName),
+    );
+  }
   await copyTree(path.join(options.root, "apps", "web", "dist"), path.join(runtimeRoot, "web"));
   await stageNodePtyRuntime(options.root, runtimeRoot, platform, arch);
 
