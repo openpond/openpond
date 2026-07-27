@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .canonical_json import canonical_json, content_hash
-from .prime_rollout_smoke_coordinator import (
+from .vllm_runtime import (
     TORCH_WHEEL_URL,
     TORCHAUDIO_WHEEL_URL,
     TORCHVISION_WHEEL_URL,

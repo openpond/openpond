@@ -691,7 +691,7 @@ function primeHarness(input: {
   const evaluation: TrainingArtifact = {
     ...primeArtifact(
       "evaluation-artifact",
-      "marketing-benchmark-receipt.json",
+      "evaluation-receipt.json",
       "evaluation",
     ),
     sha256: hash("7"),
@@ -710,7 +710,15 @@ function primeHarness(input: {
     getTrainingJob: vi.fn(async () => ({
       id: "job-qa",
       planId: "plan-qa",
-      metadata: { finalPolicyVersion: 1 },
+      metadata: {
+        finalPolicyVersion: 1,
+        portableAdapterBindings: {
+          engine: {
+            upstreamRevision:
+              "e0d60e4d85ea636873acb2e7083e794740d20226",
+          },
+        },
+      },
     })),
     getTrainingPlan: vi.fn(async () => ({
       id: "plan-qa",

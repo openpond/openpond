@@ -20,16 +20,16 @@ import { scanSshHostFingerprint } from "@openpond/trainer-connected";
 
 import {
   materializeRemotePythonProject,
-} from "./prime-grpo-model-run-service.js";
+} from "./python-project-staging.js";
 import {
   PRIME_GRPO_QWEN3_0_6B_PROFILE,
   primeGrpoBaseProfileForModel,
   type PrimeGrpoBaseProfile,
 } from "./prime-grpo-base-profiles.js";
 import {
-  choosePrimeGrpoQuote,
-  type PrimeQuoteCandidate,
-} from "./prime-grpo-plan.js";
+  choosePrimeComputeQuote,
+  type PrimeComputeQuoteCandidate,
+} from "./prime-compute-quote.js";
 import {
   createPrimeRolloutSshTransport,
   resolvePrimeSshIdentity,
@@ -222,7 +222,7 @@ export function createPrimeEvaluationSessionService(input: {
       status: "starting" | "failed" | "ready";
       error: string | null;
     }> = [];
-    let quoted: PrimeQuoteCandidate | null = null;
+    let quoted: PrimeComputeQuoteCandidate | null = null;
     let selectedWallet = wallet;
     try {
       for (const [index, device] of orderedDevices
@@ -232,9 +232,9 @@ export function createPrimeEvaluationSessionService(input: {
         const currentWallet = index === 0
           ? wallet
           : await provider.client.walletBalance();
-        let candidate: PrimeQuoteCandidate;
+        let candidate: PrimeComputeQuoteCandidate;
         try {
-          candidate = choosePrimeGrpoQuote({
+          candidate = choosePrimeComputeQuote({
             devices: [{
               id: device.id,
               name: device.name,

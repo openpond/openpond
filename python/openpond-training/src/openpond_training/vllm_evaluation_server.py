@@ -13,7 +13,7 @@ from .prime_grpo_runner import (
     claim_runner,
     release_runner,
 )
-from .prime_rollout_smoke_coordinator import (
+from .vllm_runtime import (
     start_vllm,
     terminate_process,
     wait_for_vllm,

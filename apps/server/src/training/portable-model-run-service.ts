@@ -25,6 +25,16 @@ import {
 
 import type { SqliteStore } from "../store/store.js";
 import { PortableDestinationEngineBridge } from "./portable-destination-engine.js";
+import { readRecoveredPortableArtifacts } from "./portable-model-run-artifacts.js";
+import {
+  failPreparedPortableModelRun,
+  markPortableModelRunRunning,
+  portableModelVersionMetadata,
+  portableReleaseGraphMetadata,
+  portableStatusFromModelRun,
+  preparePortableModelRunLifecycle,
+  reconcilePortableModelRunLifecycle,
+} from "./portable-model-run-lifecycle.js";
 import { resolvePortableBindings } from "./portable-training-catalog.js";
 
 export function createPortableModelRunService(deps: {
@@ -208,9 +218,45 @@ export function createPortableModelRunService(deps: {
           .join("; ")}`
       );
     }
-    const executionRef = TrainingExecutionRefSchema.parse(
-      await engineAdapter.launch(resolvedPlan)
-    );
+    const grader = taskset.graders[0];
+    const profileRelease = graph.harnessRelease.profileRelease;
+    if (!grader || !profileRelease) {
+      throw new Error(
+        "Portable training requires released Profile and grader identity.",
+      );
+    }
+    const portableReleaseGraph = portableReleaseGraphMetadata({
+      resolvedBundleHash: graph.resolvedBundleManifest.contentHash,
+      profileRelease,
+      harnessRelease: graph.manifest.harnessRelease,
+      agentRelease:
+        taskset.environment.actionBindings?.[0]?.agentRelease ?? null,
+      grader: {
+        id: grader.id,
+        contentHash: contentHash(grader),
+      },
+    });
+    const lifecycle = await preparePortableModelRunLifecycle({
+      store: deps.store,
+      draft: modelRun,
+      taskset,
+      releaseGraph: portableReleaseGraph,
+      maximumSpendUsd: approval.maximumCostUsd,
+      startedAt: approval.approvedAt,
+    });
+    let executionRef;
+    try {
+      executionRef = TrainingExecutionRefSchema.parse(
+        await engineAdapter.launch(resolvedPlan)
+      );
+    } catch (error) {
+      await failPreparedPortableModelRun({
+        store: deps.store,
+        modelRunId: modelRun.id,
+        error,
+      });
+      throw error;
+    }
     const launched =
       (await deps.store.getTrainingJob(executionRef.runId)) ??
       TrainingJobSchema.parse({
@@ -221,7 +267,8 @@ export function createPortableModelRunService(deps: {
         approvalId: approval.id,
         destinationId: modelRun.destinationId,
         status: "queued",
-        nonProduction: true,
+        nonProduction:
+          modelRun.destinationId === "local_cpu_fixture",
         workerPid: null,
         startedAt: null,
         completedAt: null,
@@ -245,7 +292,16 @@ export function createPortableModelRunService(deps: {
         portableAdapterBindings: bindings,
         portableExecutionRef: executionRef,
         portableValidationReceipt: validation,
+        portableModelVersion: portableModelVersionMetadata(
+          lifecycle.targetVersion,
+        ),
+        portableReleaseGraph,
       },
+    });
+    await markPortableModelRunRunning({
+      store: deps.store,
+      modelRunId: modelRun.id,
+      startedAt: executionRef.createdAt,
     });
     await deps.store.saveModelRunDraft({
       ...modelRun,
@@ -291,10 +347,95 @@ export function createPortableModelRunService(deps: {
   }
 
   async function status(modelRunId: string) {
+    const canonical = await deps.store.getModelRun(modelRunId);
+    if (
+      canonical
+      && ["succeeded", "failed", "cancelled"].includes(canonical.status)
+    ) {
+      return portableStatusFromModelRun(canonical);
+    }
     const job = await execution(modelRunId);
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
-      return deps.adapters.engine(parsed.data.adapterId).status(parsed.data);
+      const adapter = deps.adapters.engine(parsed.data.adapterId);
+      let executionStatus;
+      try {
+        executionStatus = await adapter.status(parsed.data);
+      } catch (error) {
+        const recovered = await readRecoveredPortableArtifacts({
+          storeDir: deps.storeDir,
+          runId: parsed.data.runId,
+        });
+        if (!recovered) throw error;
+        const recoveredAt = new Date().toISOString();
+        const modelRun = await reconcilePortableModelRunLifecycle({
+          store: deps.store,
+          storeDir: deps.storeDir,
+          modelRunId,
+          job,
+          executionRef: parsed.data,
+          status: {
+            runId: parsed.data.runId,
+            state: "succeeded",
+            phase: "artifact_recovery",
+            progress: 1,
+            updatedAt: recoveredAt,
+            errorCode: null,
+          },
+          artifacts: recovered,
+        });
+        return portableStatusFromModelRun(modelRun);
+      }
+      if (
+        !["succeeded", "failed", "cancelled"].includes(
+          executionStatus.state,
+        )
+      ) {
+        await reconcilePortableModelRunLifecycle({
+          store: deps.store,
+          storeDir: deps.storeDir,
+          modelRunId,
+          job,
+          executionRef: parsed.data,
+          status: executionStatus,
+        });
+        return executionStatus;
+      }
+      let artifacts = null;
+      try {
+        artifacts = await adapter.collect(parsed.data);
+      } catch (error) {
+        const failedStatus = {
+          ...executionStatus,
+          state: "failed" as const,
+          phase:
+            executionStatus.state === "succeeded"
+              ? "artifact_collection_failed"
+              : executionStatus.phase,
+          errorCode:
+            executionStatus.errorCode ?? "artifact_collection_failed",
+        };
+        const modelRun = await reconcilePortableModelRunLifecycle({
+          store: deps.store,
+          storeDir: deps.storeDir,
+          modelRunId,
+          job,
+          executionRef: parsed.data,
+          status: failedStatus,
+          failure: error instanceof Error ? error.message : String(error),
+        });
+        return portableStatusFromModelRun(modelRun);
+      }
+      const modelRun = await reconcilePortableModelRunLifecycle({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        modelRunId,
+        job,
+        executionRef: parsed.data,
+        status: executionStatus,
+        artifacts,
+      });
+      return portableStatusFromModelRun(modelRun);
     }
     try {
       return await deps.destinations.get(job.destinationId).status(job.id);
@@ -320,20 +461,26 @@ export function createPortableModelRunService(deps: {
 
   async function artifacts(modelRunId: string) {
     const job = await execution(modelRunId);
+    const canonical = await deps.store.getModelRun(modelRunId);
+    if (
+      canonical
+      && ["succeeded", "failed", "cancelled"].includes(canonical.status)
+    ) {
+      return deps.store.listTrainingArtifacts(job.id);
+    }
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
-      const artifacts = await deps.adapters
-        .engine(parsed.data.adapterId)
-        .collect(parsed.data);
+      await status(modelRunId);
+      const reconciled = await deps.store.getModelRun(modelRunId);
       if (
-        typeof job.metadata.harnessRunManifestHash !== "string" ||
-        artifacts.manifestHash !== job.metadata.harnessRunManifestHash
+        reconciled
+        && ["succeeded", "failed", "cancelled"].includes(reconciled.status)
       ) {
-        throw new Error(
-          "Portable training artifacts do not match the saved Harness Run Manifest."
-        );
+        return deps.store.listTrainingArtifacts(job.id);
       }
-      return artifacts;
+      throw new Error(
+        "Portable training artifacts are available only after terminal reconciliation.",
+      );
     }
     return deps.store.listTrainingArtifacts(job.id);
   }
@@ -343,7 +490,23 @@ export function createPortableModelRunService(deps: {
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       await deps.adapters.engine(parsed.data.adapterId).cancel(parsed.data);
-      return status(modelRunId);
+      const timestamp = new Date().toISOString();
+      const modelRun = await reconcilePortableModelRunLifecycle({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        modelRunId,
+        job,
+        executionRef: parsed.data,
+        status: {
+          runId: parsed.data.runId,
+          state: "cancelled",
+          phase: "cancelled",
+          progress: 1,
+          updatedAt: timestamp,
+          errorCode: null,
+        },
+      });
+      return portableStatusFromModelRun(modelRun);
     }
     return deps.destinations.get(job.destinationId).cancel(job.id);
   }

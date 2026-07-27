@@ -8,7 +8,7 @@ description: Create, improve, inspect, test, or prepare an OpenPond Taskset from
 Turn a normal chat request into a tested, reusable Taskset. The user should only
 need a short sentence, for example:
 
-> Build a Taskset that teaches the marketing portfolio agent to make defensible budget decisions.
+> Build a Taskset that teaches a support triage agent to make consistent routing decisions.
 
 Do not ask the user to provide internal names, IDs, schema fields, split-family
 IDs, action names, approval booleans, or orchestration instructions. Infer

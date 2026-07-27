@@ -152,12 +152,8 @@ import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-at
 import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
 import { createPrimeComputeProviderSetup } from "./compute/prime-provider-setup.js";
-import { createPrimeRolloutSmokeService } from "./training/prime-rollout-smoke-service.js";
-import { createPrimeGrpoModelRunService } from "./training/prime-grpo-model-run-service.js";
-import { createPrimeTrainingPayload } from "./training/prime-training-payload.js";
 import { createPrimeEvaluationSessionService } from "./training/prime-evaluation-session.js";
 import { createCrossSystemFrontierModelStream } from "./training/cross-system-frontier-model-stream.js";
-import { createMarketingBenchmarkRunService } from "./training/marketing-benchmark-run-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
@@ -747,28 +743,8 @@ export async function createOpenPondServer(
     storeDir,
     modelText: trainingModelText,
     crossSystemStream: crossSystemFrontierModelStream,
-    resolveProfile: loadOpenPondProfileState,
     timestamp: now,
   });
-  const marketingBenchmarkRuns =
-    createMarketingBenchmarkRunService({
-      store,
-      storeDir,
-      runAttempt: trainingBaselineAttemptRunner,
-      primeEvaluation: primeEvaluationSessions,
-      now: () => new Date(now()),
-    });
-  const marketingBenchmarkReconciliation =
-    await marketingBenchmarkRuns.reconcile();
-  if (
-    marketingBenchmarkReconciliation.failedRunIds.length
-    > 0
-  ) {
-    logger.warn(
-      "Frozen marketing benchmark reconciliation found interrupted runs",
-      marketingBenchmarkReconciliation,
-    );
-  }
   const crossSystemFrontierBaselineService =
     createCrossSystemFrontierBaselineService({
       store,
@@ -802,42 +778,9 @@ export async function createOpenPondServer(
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
-    marketingBenchmarkRuns,
     frontierBaseline: crossSystemFrontierBaselineService,
   });
-  const primeRolloutSmoke = createPrimeRolloutSmokeService({
-    store,
-    storeDir,
-    resolvePrimeCredential: primeComputeProvider.resolveCredential,
-    resolveProfile: loadOpenPondProfileState,
-    openpondRelease: version,
-  });
-  const primeRolloutReconciliation = await primeRolloutSmoke.reconcile();
-  if (primeRolloutReconciliation.errors.length > 0) {
-    logger.warn("Prime rollout Model reconciliation found invalid reports", {
-      errors: primeRolloutReconciliation.errors,
-    });
-  }
-  const primeGrpoModelRuns = createPrimeGrpoModelRunService({
-    store,
-    storeDir,
-    training: trainingService,
-    resolvePrimeCredential: primeComputeProvider.resolveCredential,
-    resolveProfile: loadOpenPondProfileState,
-    openpondRelease: version,
-  });
-  const primeGrpoReconciliation =
-    await primeGrpoModelRuns.reconcile();
-  if (primeGrpoReconciliation.errors.length > 0) {
-    logger.warn(
-      "Prime GRPO Model Run reconciliation found interrupted runs",
-      primeGrpoReconciliation,
-    );
-  }
-  const trainingPayload = createPrimeTrainingPayload({
-    primeGrpoModelRuns,
-    trainingApi,
-  });
+  const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -1965,7 +1908,6 @@ export async function createOpenPondServer(
       managedAdapterSyncService.close,
       crossSystemChatToolRuntime.close,
       crossSystemFrontierBaselineService.close,
-      marketingBenchmarkRuns.close,
       taskMinerService.close,
       taskEvaluationService.close,
       trainingService.close,

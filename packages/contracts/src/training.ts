@@ -22,10 +22,6 @@ import {
   ModelVersionSchema,
 } from "./model-lifecycle.js";
 import {
-  MarketingBenchmarkRunSchema,
-  MarketingBenchmarkSpecificationSchema,
-} from "./training-benchmark.js";
-import {
   PolicyOptimizationBudgetSchema,
   PolicyOptimizationContractSchema,
   PolicyOptimizerSchema,
@@ -763,10 +759,6 @@ export const TrainingStateResponseSchema = z.object({
   modelVersions: z.array(ModelVersionSchema).default([]),
   modelRuns: z.array(ModelRunSchema).default([]),
   modelTasksets: z.array(TasksetSchema).default([]),
-  marketingBenchmarkSpecifications: z
-    .array(MarketingBenchmarkSpecificationSchema)
-    .default([]),
-  marketingBenchmarkRuns: z.array(MarketingBenchmarkRunSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
   jobs: z.array(TrainingJobSchema),

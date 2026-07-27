@@ -26,7 +26,7 @@ from .prime_rl_execution import (
     resolve_prime_rl_settings,
 )
 from .prime_rl_runtime import ensure_prime_grpo_runtime
-from .prime_rollout_smoke_coordinator import (
+from .vllm_runtime import (
     start_vllm,
     terminate_process,
     wait_for_vllm,

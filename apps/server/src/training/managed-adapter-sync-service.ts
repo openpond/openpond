@@ -24,7 +24,6 @@ import type {
 import {
   isManagedAdapterControlRuntimeEnabled,
 } from "../openpond/hosted-api-access.js";
-import { PRIME_RL_UPSTREAM_REVISION } from "./prime-grpo-plan.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
@@ -780,7 +779,7 @@ async function openPondTrainingProvenance(input: {
     modelProjectId: modelVersion.modelId,
     modelRunId: modelRun.id,
     modelVersionId: modelVersion.id,
-    primeRlRevision: PRIME_RL_UPSTREAM_REVISION,
+    primeRlRevision: portableEngineRevision(input.job),
     rawPrimeComputeReceiptSha256:
       modelRun.receipt.traceHash
       ?? modelRun.receipt.resultHash,
@@ -807,6 +806,30 @@ function metadataHash(
     && /^[a-f0-9]{64}$/.test(value)
     ? value
     : null;
+}
+
+function portableEngineRevision(
+  job: NonNullable<
+    Awaited<ReturnType<SqliteStore["getTrainingJob"]>>
+  >,
+): string {
+  const bindings = objectValue(
+    job.metadata.portableAdapterBindings,
+  );
+  const engine = objectValue(bindings.engine);
+  const revision = engine.upstreamRevision;
+  if (typeof revision !== "string" || !revision.trim()) {
+    throw new Error(
+      "OpenPond training publication requires its portable engine revision.",
+    );
+  }
+  return revision;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function saveProjection(

@@ -112,12 +112,6 @@ export function trainingRecipe(input: {
     };
   }
   if (input.method === "grpo" && input.executionMode === "connected_worker") {
-    const benchmark = input.taskset.environment.metadata.benchmark;
-    const marketingPortfolio =
-      benchmark !== null &&
-      typeof benchmark === "object" &&
-      !Array.isArray(benchmark) &&
-      (benchmark as Record<string, unknown>).id === "marketing-portfolio-v1";
     const grader = input.taskset.graders.find(
       (candidate) => candidate.rewardEligible,
     );
@@ -144,7 +138,7 @@ export function trainingRecipe(input: {
       rollout: {
         groupSize: input.rolloutGroupSize,
         concurrency: input.rolloutConcurrency,
-        maxTurns: marketingPortfolio ? 8 : 1,
+        maxTurns: input.taskset.environment.stateful ? 8 : 1,
         maxOutputTokens: input.rolloutMaxOutputTokens,
         temperature: 0.8,
         topP: 0.95,

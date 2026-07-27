@@ -68,7 +68,7 @@ export function createDatasetBuilderModelToolDefinitions(
             type: "object",
             additionalProperties: true,
             description:
-              "Typed build contract. For the built-in marketing GRPO benchmark, use kind=agent_benchmark, benchmarkId=marketing-portfolio-v1, the marketing-portfolio-manager Agent with its ordered snapshot and decision actions, split-isolated prompt families, and exact 24/8/8 split counts. Do not include private cases or expected decisions.",
+              "Typed build contract for demonstrations, preferences, verifiable rewards, or rubric datasets.",
           },
           sourceIds: {
             type: "array",

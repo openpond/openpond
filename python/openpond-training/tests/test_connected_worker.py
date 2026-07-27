@@ -370,7 +370,8 @@ def test_connected_prime_worker_dispatches_to_upstream_runner(
         return Process()
 
     monkeypatch.setattr(
-        "openpond_training.connected_worker.subprocess.Popen", popen
+        "openpond_training.connected_worker_execution.subprocess.Popen",
+        popen,
     )
     executor = SubprocessTrainingExecutor(tmp_path / "state")
     result = executor.launch(
@@ -420,7 +421,8 @@ def test_connected_worker_launch_is_idempotent_and_single_gpu_bounded(
         return Process()
 
     monkeypatch.setattr(
-        "openpond_training.connected_worker.subprocess.Popen", popen
+        "openpond_training.connected_worker_execution.subprocess.Popen",
+        popen,
     )
     executor = SubprocessTrainingExecutor(tmp_path / "state")
     plan = {
@@ -501,7 +503,8 @@ def test_connected_worker_recovers_an_interrupted_persisted_run(
         return process
 
     monkeypatch.setattr(
-        "openpond_training.connected_worker.subprocess.Popen", popen
+        "openpond_training.connected_worker_execution.subprocess.Popen",
+        popen,
     )
     root = tmp_path / "state"
     exact_plan = {
@@ -550,7 +553,7 @@ def test_connected_worker_bounds_recovery_and_persists_failure(
             return None
 
     monkeypatch.setattr(
-        "openpond_training.connected_worker.subprocess.Popen",
+        "openpond_training.connected_worker_execution.subprocess.Popen",
         lambda _arguments, **_kwargs: Process(),
     )
     root = tmp_path / "state"

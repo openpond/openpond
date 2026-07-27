@@ -1,9 +1,7 @@
-"""Prime-side coordinator for one OpenPond Harness rollout smoke test."""
+"""Pinned vLLM bootstrap and process lifecycle utilities."""
 
 from __future__ import annotations
 
-import argparse
-import json
 import os
 import shutil
 import signal
@@ -14,8 +12,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
-
-from .canonical_json import canonical_json, content_hash
 
 VLLM_VERSION = "0.24.0"
 VLLM_WHEEL_URL = (
@@ -223,56 +219,6 @@ def vllm_bootstrap_command() -> list[str]:
     ]
 
 
-def create_assignment(launch: dict[str, Any]) -> dict[str, Any]:
-    task_ids = launch.get("taskIds")
-    if not isinstance(task_ids, list) or not task_ids:
-        raise RuntimeError("Launch bundle has no train task IDs.")
-    assignment = {
-        **launch["assignment"],
-        "taskId": task_ids[0],
-        "createdAt": timestamp(),
-    }
-    assignment["assignmentHash"] = content_hash(assignment)
-    return assignment
-
-
-def dispatch_assignment(
-    assignment: dict[str, Any],
-    callback_port: int,
-    timeout: float,
-) -> dict[str, Any]:
-    payload = canonical_json(assignment).encode("utf-8")
-    request = urllib.request.Request(
-        f"http://127.0.0.1:{callback_port}/assignment",
-        data=payload,
-        method="POST",
-        headers={"content-type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            body = response.read(4 * 1024 * 1024)
-            if response.status != 200:
-                raise RuntimeError(
-                    f"OpenPond Harness returned HTTP {response.status}: "
-                    + body[:1000].decode("utf-8", errors="replace")
-                )
-    except urllib.error.HTTPError as error:
-        detail = error.read(1000).decode("utf-8", errors="replace")
-        raise RuntimeError(
-            f"OpenPond Harness returned HTTP {error.code}: {detail}"
-        ) from error
-    value = json.loads(body)
-    if not isinstance(value, dict):
-        raise RuntimeError(  # noqa: TRY004 - remote protocol contract failure
-            "OpenPond Harness result is not an object."
-        )
-    if value.get("runId") != assignment["runId"]:
-        raise RuntimeError("OpenPond Harness result changed the run ID.")
-    if value.get("assignmentHash") != assignment["assignmentHash"]:
-        raise RuntimeError("OpenPond Harness result changed the assignment hash.")
-    return value
-
-
 def terminate_process(process: subprocess.Popen[bytes] | None) -> None:
     if process is None or process.poll() is not None:
         return
@@ -285,49 +231,3 @@ def terminate_process(process: subprocess.Popen[bytes] | None) -> None:
         except ProcessLookupError:
             pass
         process.wait(timeout=10)
-
-
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--run-dir", required=True)
-    parser.add_argument("--callback-port", type=int, required=True)
-    parser.add_argument("--model-timeout-seconds", type=int, default=900)
-    parser.add_argument("--rollout-timeout-seconds", type=int, default=600)
-    args = parser.parse_args()
-
-    run_dir = Path(args.run_dir).resolve()
-    launch = json.loads((run_dir / "launch.json").read_text("utf-8"))
-    assignment = create_assignment(launch)
-    (run_dir / "assignment.json").write_text(
-        canonical_json(assignment),
-        encoding="utf-8",
-    )
-    vllm_process: subprocess.Popen[bytes] | None = None
-    vllm_log = None
-    try:
-        vllm_process, vllm_log = start_vllm(launch, run_dir)
-        wait_for_vllm(
-            int(assignment["inferencePort"]),
-            vllm_process,
-            args.model_timeout_seconds,
-            run_dir / "vllm.log",
-        )
-        result = dispatch_assignment(
-            assignment,
-            args.callback_port,
-            args.rollout_timeout_seconds,
-        )
-        (run_dir / "result.json").write_text(
-            canonical_json(result),
-            encoding="utf-8",
-        )
-        print(canonical_json({"assignment": assignment, "result": result}), end="")
-        return 0
-    finally:
-        terminate_process(vllm_process)
-        if vllm_log is not None:
-            vllm_log.close()
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -58,7 +58,7 @@ describe("Profile Agent action catalog", () => {
 
       const loaded = await loadProfileActionCatalogForSources([
         {
-          agentId: "marketing-portfolio-manager",
+          agentId: "support-triage-agent",
           sourcePath,
           preferred: true,
         },
@@ -71,7 +71,7 @@ describe("Profile Agent action catalog", () => {
       });
       expect(loaded.actionCatalog[0]).toMatchObject({
         id: "submit-budget-decision",
-        agentId: "marketing-portfolio-manager",
+        agentId: "support-triage-agent",
         sourceActionId: "submit-budget-decision",
         inputSchema: {
           type: "object",
@@ -87,9 +87,9 @@ describe("Profile Agent action catalog", () => {
         actionCatalog: loaded.actionCatalog,
         agents: [
           {
-            id: "marketing-portfolio-manager",
-            name: "Marketing Portfolio Manager",
-            path: "agents/marketing-portfolio-manager",
+            id: "support-triage-agent",
+            name: "Support Triage Agent",
+            path: "agents/support-triage-agent",
             enabled: true,
           },
         ],

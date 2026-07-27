@@ -112,13 +112,6 @@ export function capabilitiesForBuildSpecification(
       rewardKinds: ["none"],
     };
   }
-  if (specification.kind === "agent_benchmark") {
-    return {
-      supportedSignals: ["reward"],
-      compatibleMethods: ["grpo"],
-      rewardKinds: ["deterministic"],
-    };
-  }
   return {
     supportedSignals: ["label"],
     compatibleMethods: ["none"],
@@ -234,40 +227,6 @@ export function learningSignalsForBuildSpecification(
         executable: false,
         metadata: {
           executionStatus: "needs_verifier_implementation",
-          approvedBy: "local_user",
-        },
-      }],
-      labels: [],
-    };
-  }
-  if (specification.kind === "agent_benchmark") {
-    const trainTask = tasks.find((task) => task.split === "train");
-    return {
-      demonstrations: [],
-      preferences: [],
-      corrections: [],
-      feedback: [],
-      rewards: [{
-        id: `reward_${contentHash([source.id, specification]).slice(0, 20)}`,
-        kind: "reward",
-        taskId: trainTask?.id ?? null,
-        sourceRefs: [source.id],
-        artifactRef: `profile_agent_reward_${source.id}`,
-        approved: true,
-        confidence: 1,
-        task: specification.task,
-        rules: [{
-          id: "marketing_portfolio_reward",
-          points: 1,
-          condition:
-            "The pinned private deterministic scorer evaluates the terminal submitted decision.",
-        }],
-        otherwisePoints: 0,
-        executable: true,
-        metadata: {
-          benchmarkId: specification.benchmarkId,
-          agentId: specification.agentId,
-          actionIds: specification.actionIds,
           approvedBy: "local_user",
         },
       }],

@@ -32,12 +32,6 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS taskset_baseline_runs_profile_updated_idx ON taskset_baseline_runs(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS taskset_baseline_runs_taskset_updated_idx ON taskset_baseline_runs(taskset_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS taskset_baseline_runs_status_updated_idx ON taskset_baseline_runs(status, updated_at DESC);
-  CREATE TABLE IF NOT EXISTS marketing_benchmark_specifications (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, taskset_id TEXT NOT NULL, content_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
-  CREATE UNIQUE INDEX IF NOT EXISTS marketing_benchmark_specifications_hash_idx ON marketing_benchmark_specifications(content_hash);
-  CREATE INDEX IF NOT EXISTS marketing_benchmark_specifications_taskset_idx ON marketing_benchmark_specifications(taskset_id, created_at DESC);
-  CREATE TABLE IF NOT EXISTS marketing_benchmark_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, taskset_id TEXT NOT NULL, specification_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-  CREATE INDEX IF NOT EXISTS marketing_benchmark_runs_taskset_idx ON marketing_benchmark_runs(taskset_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS marketing_benchmark_runs_status_idx ON marketing_benchmark_runs(status, updated_at DESC);
   CREATE TABLE IF NOT EXISTS readiness_reports (taskset_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS task_miner_configs (profile_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS task_miner_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);

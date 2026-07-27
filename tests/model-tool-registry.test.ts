@@ -1135,7 +1135,7 @@ describe("model tool registry", () => {
     const profilePayloads: unknown[] = [];
     const action = {
       id: "get-portfolio-snapshot",
-      agentId: "marketing-portfolio-manager",
+      agentId: "support-triage-agent",
       label: "Get portfolio snapshot",
       inputSchema: {
         type: "object",

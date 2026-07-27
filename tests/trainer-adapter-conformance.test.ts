@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { access, mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -97,14 +97,25 @@ describe("trainer package conformance", () => {
       expect(connectedResult.passed).toBe(true);
       expect(connectedTransport.sendSignals).toHaveBeenCalledTimes(1);
       expect(connectedTransport.releaseLease).toHaveBeenCalledTimes(1);
-      expect(
-        await readdir(
+      const collectedDirectory = path.join(
+        artifactDirectory,
+        sha256(createManifestFixture().id),
+      );
+      const artifactObjectDirectory =
+        `0-${sha256("metrics").slice(0, 12)}`;
+      expect(await readdir(collectedDirectory)).toEqual([
+        artifactObjectDirectory,
+        "portable-artifacts.json",
+      ]);
+      await expect(
+        access(
           path.join(
-            artifactDirectory,
-            sha256(createManifestFixture().id),
+            collectedDirectory,
+            artifactObjectDirectory,
+            "metrics.json",
           ),
         ),
-      ).toHaveLength(1);
+      ).resolves.toBeUndefined();
     } finally {
       await rm(artifactDirectory, { recursive: true, force: true });
     }

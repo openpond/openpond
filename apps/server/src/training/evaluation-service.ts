@@ -38,9 +38,6 @@ import {
   isActiveBaselineRun,
   summarizeRftSignal,
 } from "./evaluation-helpers.js";
-import {
-  MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH,
-} from "./marketing-portfolio-constraint-repair.js";
 
 const MAX_BASELINE_TASKS = 32;
 const MAX_BASELINE_ATTEMPTS_PER_TASK = 8;
@@ -261,14 +258,8 @@ export function createTaskEvaluationService(deps: {
   }
 
   function baselineHarnessContractHash(taskset: Taskset): string | null {
-    const benchmark = taskset.environment.metadata.benchmark;
-    return benchmark
-      && typeof benchmark === "object"
-      && !Array.isArray(benchmark)
-      && (benchmark as Record<string, unknown>).id
-        === "marketing-portfolio-v1"
-      ? MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH
-      : null;
+    const hash = taskset.environment.metadata.toolContractHash;
+    return typeof hash === "string" && hash.trim() ? hash : null;
   }
 
   async function artifactBaselineTasks(input: {

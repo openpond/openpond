@@ -46,7 +46,7 @@ describe("baseline evaluator", () => {
           ],
         },
         metadata: {
-          execution: "marketing_portfolio_tool_loop",
+          execution: "stateful_tool_loop",
           validToolTrace: true,
         },
       }));

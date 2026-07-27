@@ -3,9 +3,11 @@ import { createReadStream } from "node:fs";
 import {
   mkdir,
   open,
+  readFile,
   rename,
   rm,
   stat,
+  writeFile,
 } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -177,10 +179,19 @@ export class ConnectedTrainingEngineAdapter
     await mkdir(runDirectory, { recursive: true, mode: 0o700 });
     const artifacts: TrainingArtifacts["artifacts"] = [];
     for (const [index, artifact] of remote.artifacts.entries()) {
+      const providerPath = safeArtifactRelativePath(
+        artifact.objectRef,
+        artifact.kind,
+      );
       const destination = path.join(
         runDirectory,
-        `${index}-${artifact.kind}-${artifact.sha256}.bin`,
+        `${index}-${artifact.sha256.slice(0, 12)}`,
+        providerPath,
       );
+      await mkdir(path.dirname(destination), {
+        recursive: true,
+        mode: 0o700,
+      });
       if (await verifiedExistingArtifact(destination, artifact)) {
         artifacts.push({
           ...artifact,
@@ -255,7 +266,9 @@ export class ConnectedTrainingEngineAdapter
       manifestHash: remote.manifestHash,
       artifacts,
     };
-    return { ...base, contentHash: contentHash(base) };
+    const collected = { ...base, contentHash: contentHash(base) };
+    await writeImmutableArtifactReceipt(runDirectory, collected);
+    return collected;
   }
 
   private async ensureLease(
@@ -284,6 +297,66 @@ export class ConnectedTrainingEngineAdapter
     this.leases.set(ref.runId, recovered);
     return recovered;
   }
+}
+
+function safeArtifactRelativePath(
+  objectRef: string,
+  kind: TrainingArtifacts["artifacts"][number]["kind"],
+): string {
+  let candidate = objectRef.replaceAll("\\", "/");
+  try {
+    const url = new URL(objectRef);
+    candidate = decodeURIComponent(url.pathname.replaceAll("\\", "/"));
+  } catch {
+    // Plain filesystem references are accepted by non-HTTP transports.
+  }
+  const segments = candidate.split("/").filter(Boolean);
+  const outputIndex = segments.lastIndexOf("output");
+  const selected = (
+    outputIndex >= 0 ? segments.slice(outputIndex + 1) : segments.slice(-1)
+  ).slice(-8);
+  const safe = selected
+    .map((segment) =>
+      segment
+        .replace(/[^A-Za-z0-9._-]+/g, "-")
+        .replace(/^[.-]+/, "")
+        .slice(-120)
+    )
+    .filter(Boolean);
+  return safe.length > 0 ? path.join(...safe) : `${kind}.bin`;
+}
+
+async function writeImmutableArtifactReceipt(
+  directory: string,
+  artifacts: TrainingArtifacts,
+): Promise<void> {
+  const target = path.join(directory, "portable-artifacts.json");
+  const serialized = `${JSON.stringify(artifacts, null, 2)}\n`;
+  const existing = await readFile(target, "utf8").catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return null;
+      throw error;
+    },
+  );
+  if (existing !== null) {
+    if (existing !== serialized) {
+      throw new Error(
+        "Connected worker artifact receipt changed after collection.",
+      );
+    }
+    return;
+  }
+  const temporary = `${target}.partial-${process.pid}-${randomUUID()}`;
+  await writeFile(temporary, serialized, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  await rename(temporary, target).catch(async (error) => {
+    await rm(temporary, { force: true });
+    if ((await readFile(target, "utf8").catch(() => null)) !== serialized) {
+      throw error;
+    }
+  });
 }
 
 function isTerminal(

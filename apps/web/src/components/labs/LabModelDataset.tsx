@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   isTrainingSourceRef,
-  MARKETING_BENCHMARK_MINIMUM_CANDIDATE_SCORE,
-  MARKETING_BENCHMARK_MINIMUM_IMPROVEMENT,
   TaskDataRecordSchema,
   type ChatModelRef,
   type DatasetArtifactSummary,
@@ -27,11 +25,6 @@ const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
   { id: "frozen_eval", label: "Frozen Eval" },
 ];
 const EXAMPLE_PAGE_SIZE = 10;
-const PRIME_GRPO_BASE_MODEL: ChatModelRef = {
-  providerId: "custom-openai-compatible",
-  modelId: "Qwen/Qwen3-0.6B",
-};
-
 export function LabModelDataset({
   artifact,
   defaultModel,
@@ -141,59 +134,9 @@ export function LabModelDataset({
   ).length;
   const baselineRuns = training.payload?.baselineRuns.filter((run) =>
     run.tasksetId === taskset.id) ?? [];
-  const benchmarkSpecifications =
-    training.payload?.marketingBenchmarkSpecifications?.filter(
-      (specification) => specification.taskset.id === taskset.id,
-    ) ?? [];
-  const benchmarkRuns =
-    training.payload?.marketingBenchmarkRuns?.filter(
-      (run) => run.tasksetId === taskset.id,
-    ) ?? [];
-  const benchmarkArtifactByRunId = new Map(
-    (training.payload?.artifacts ?? [])
-      .filter(
-        (artifact) =>
-          artifact.kind === "evaluation"
-          && typeof artifact.metadata.benchmarkRunId
-            === "string",
-      )
-      .map((artifact) => [
-        artifact.metadata.benchmarkRunId as string,
-        artifact,
-      ]),
-  );
-  const activeBenchmark = benchmarkSpecifications[0] ?? null;
-  const benchmarkCandidate =
-    training.payload?.modelVersions?.find(
-      (version) =>
-        version.kind === "lora_adapter"
-        && version.version === 1
-        && version.status === "available"
-        && version.taskset.id === taskset.id
-        && version.taskset.revision === taskset.revision
-        && version.taskset.contentHash
-          === taskset.contentHash,
-    ) ?? null;
-  const activeBenchmarkRun = benchmarkRuns.find(
-    (run) =>
-      run.status === "prepared"
-      || run.status === "running",
-  ) ?? null;
   const latestBaselineReport = [...(training.payload?.baselineReports ?? [])]
     .reverse()
     .find((report) => report.tasksetId === taskset.id) ?? null;
-  const latestPassingSignalReport = [
-    ...(training.payload?.baselineReports ?? []),
-  ].reverse().find((report) =>
-    report.tasksetId === taskset.id
-    && report.tasksetHash === taskset.contentHash
-    && report.scope?.split === "train"
-    && report.scope.taskCount === 8
-    && report.scope.attemptsPerTask === 4
-    && report.rftSignal?.passed === true
-    && report.reward.mean !== null
-    && report.reward.variance !== null
-  ) ?? null;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
 
   async function runCheck(
@@ -368,205 +311,6 @@ export function LabModelDataset({
           taskset={taskset}
           onCancel={training.actions.cancelBaselineRun}
         />
-        <DetailSection title="Frozen three-arm benchmark">
-          <p className="labs-detail-copy">
-            The same eight frozen tasks run four times against the pinned base,
-            the candidate LoRA, and GPT-5.6 Sol through the exact two-action
-            Profile Harness. Text-only attempts are recorded as policy
-            failures, not benchmark completions.
-          </p>
-          <dl className="labs-inline-facts">
-            <Fact
-              label="Definition"
-              value={activeBenchmark
-                ? `Frozen · ${activeBenchmark.contentHash.slice(0, 12)}`
-                : "Pending base-signal preregistration"}
-            />
-            <Fact label="Unique tasks" value="8 frozen" />
-            <Fact label="Attempts" value="4 per task · 96 total" />
-            <Fact
-              label="Primary metric"
-              value={activeBenchmark
-                ? "Unique-task mean reward"
-                : "Unique-task mean reward (planned)"}
-            />
-            <Fact
-              label="Promotion gate"
-              value={activeBenchmark
-                ? `≥ ${activeBenchmark.promotionGate.minimumCandidateScore.toFixed(3)} and +${activeBenchmark.promotionGate.minimumImprovement.toFixed(3)} vs base`
-                : `Planned ≥ ${MARKETING_BENCHMARK_MINIMUM_CANDIDATE_SCORE.toFixed(3)} and +${MARKETING_BENCHMARK_MINIMUM_IMPROVEMENT.toFixed(3)} vs base`}
-            />
-          </dl>
-          {activeBenchmark ? (
-            <p className="labs-detail-copy">
-              Arms: {activeBenchmark.arms.map((arm) =>
-                `${arm.arm.replaceAll("_", " ")} · ${arm.model.providerId}/${arm.model.modelId}`,
-              ).join(" · ")}
-            </p>
-          ) : null}
-          {!activeBenchmark ? (
-            <div className="labs-dataset-detail-actions">
-              <button
-                className="training-button"
-                disabled={
-                  training.busyAction !== null
-                  || latestPassingSignalReport === null
-                }
-                type="button"
-                onClick={() => latestPassingSignalReport
-                  ? void runCheck(
-                      "Benchmark preregistration",
-                      () => training.actions.preregisterMarketingBenchmark(
-                        taskset.id,
-                        latestPassingSignalReport.id,
-                        {
-                          minimumCandidateScore:
-                            MARKETING_BENCHMARK_MINIMUM_CANDIDATE_SCORE,
-                          minimumImprovement:
-                            MARKETING_BENCHMARK_MINIMUM_IMPROVEMENT,
-                        },
-                      ),
-                    )
-                  : undefined}
-              >
-                Lock benchmark definition
-              </button>
-            </div>
-          ) : null}
-          {!activeBenchmark && !latestPassingSignalReport ? (
-            <p className="labs-detail-copy">
-              A passing 8-task × 4-attempt train-signal check on the exact base
-              model is required before thresholds can be locked.
-            </p>
-          ) : null}
-          {activeBenchmark && benchmarkCandidate ? (
-            <div className="labs-dataset-detail-actions">
-              <button
-                className="training-button"
-                disabled={
-                  training.busyAction !== null
-                  || activeBenchmarkRun !== null
-                  || benchmarkRuns.some(
-                    (run) =>
-                      run.status === "succeeded"
-                      && run.candidateModelVersionId
-                        === benchmarkCandidate.id,
-                  )
-                }
-                type="button"
-                onClick={() => void runCheck(
-                  "Frozen benchmark",
-                  () => training.actions.runMarketingBenchmark(
-                    activeBenchmark.id,
-                    benchmarkCandidate.id,
-                  ),
-                )}
-              >
-                Run 96-trajectory frozen benchmark
-              </button>
-              {activeBenchmarkRun ? (
-                <button
-                  className="training-button"
-                  disabled={training.busyAction !== null}
-                  type="button"
-                  onClick={() => void runCheck(
-                    "Benchmark cancellation",
-                    () => training.actions
-                      .cancelMarketingBenchmark(
-                        activeBenchmarkRun.id,
-                      ),
-                  )}
-                >
-                  Cancel benchmark
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-          {activeBenchmark && !benchmarkCandidate ? (
-            <p className="labs-detail-copy">
-              The benchmark is locked. It becomes runnable when the exact
-              Qwen3-0.6B LoRA Model version 1 is available.
-            </p>
-          ) : null}
-          <div className="labs-dataset-grader-list">
-            {benchmarkRuns.length ? benchmarkRuns.map((run) => (
-              <article className="labs-dataset-grader-card" key={run.id}>
-                <div>
-                  <strong>{run.status.replaceAll("_", " ")}</strong>
-                  <p>
-                    {run.progress.completedTrajectories} of 96 trajectories ·{" "}
-                    {run.updatedAt}
-                  </p>
-                  {run.receipt ? (
-                    <>
-                      <p>
-                        Base {run.receipt.aggregate.base.meanReward.toFixed(3)}
-                        {" · "}Trained{" "}
-                        {run.receipt.aggregate.candidate.meanReward.toFixed(3)}
-                        {" · "}GPT-5.6 Sol{" "}
-                        {run.receipt.aggregate.frontier_reference.meanReward.toFixed(3)}
-                      </p>
-                      <p>
-                        Promotion{" "}
-                        {run.receipt.pairedComparison.candidatePromotionPassed
-                          ? "passed"
-                          : "rejected"}
-                        {" · "}paired SE{" "}
-                        {run.receipt.pairedComparison.taskLevelStandardError.toFixed(4)}
-                      </p>
-                      <details>
-                        <summary>
-                          Tool trajectories and disclosure
-                        </summary>
-                        <p>{run.receipt.disclosure}</p>
-                        <ol>
-                          {run.receipt.trajectories.map((trajectory) => (
-                            <li key={`${trajectory.arm}:${trajectory.taskId}:${trajectory.attempt}`}>
-                              {trajectory.arm.replaceAll("_", " ")} ·{" "}
-                              {trajectory.taskId} · attempt{" "}
-                              {trajectory.attempt + 1} · reward{" "}
-                              {trajectory.reward?.toFixed(3) ?? "n/a"} ·{" "}
-                              {trajectory.toolSequence.join(" → ") || trajectory.failureClass}
-                            </li>
-                          ))}
-                        </ol>
-                      </details>
-                      {benchmarkArtifactByRunId.get(run.id) ? (
-                        <button
-                          className="training-button"
-                          disabled={
-                            training.busyAction !== null
-                          }
-                          type="button"
-                          onClick={() => {
-                            const artifact =
-                              benchmarkArtifactByRunId.get(
-                                run.id,
-                              );
-                            if (artifact) {
-                              void training.actions
-                                .downloadArtifact(
-                                  artifact.id,
-                                );
-                            }
-                          }}
-                        >
-                          Download canonical benchmark receipt
-                        </button>
-                      ) : null}
-                    </>
-                  ) : null}
-                </div>
-                <LabStatusBadge label={run.status.replaceAll("_", " ")} />
-              </article>
-            )) : (
-              <p className="labs-detail-copy">
-                No frozen benchmark runs yet. Train-signal and grader checks
-                remain separate from this immutable comparison.
-              </p>
-            )}
-          </div>
-        </DetailSection>
         <DetailSection title="Graders">
           <div className="labs-dataset-grader-list">
             {taskset.graders.map((grader) => (
@@ -700,18 +444,10 @@ export function tasksetBaselineSelectionStrategy(
 }
 
 export function tasksetBaselineModel(
-  taskset: Taskset,
+  _taskset: Taskset,
   defaultModel: ChatModelRef,
 ): ChatModelRef {
-  const benchmark = taskset.environment.metadata.benchmark;
-  return (
-    benchmark
-    && typeof benchmark === "object"
-    && !Array.isArray(benchmark)
-    && (benchmark as Record<string, unknown>).id === "marketing-portfolio-v1"
-  )
-    ? PRIME_GRPO_BASE_MODEL
-    : defaultModel;
+  return defaultModel;
 }
 
 function formatMetric(value: number | null): string {

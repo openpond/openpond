@@ -55,28 +55,14 @@ describe("Lab Phase 1", () => {
     ).toBe("rft_easy_curriculum_v1");
   });
 
-  test("runs marketing train-signal checks against the exact raw-Prime base", () => {
-    const base = tasksetFixture();
-    const marketing = {
-      ...base,
-      environment: {
-        ...base.environment,
-        metadata: {
-          ...base.environment.metadata,
-          benchmark: { id: "marketing-portfolio-v1" },
-        },
-      },
-    };
+  test("uses the selected baseline model for every Taskset", () => {
+    const taskset = tasksetFixture();
     const fallback = {
       providerId: "openpond",
       modelId: "openpond-chat",
     };
 
-    expect(tasksetBaselineModel(marketing, fallback)).toEqual({
-      providerId: "custom-openai-compatible",
-      modelId: "Qwen/Qwen3-0.6B",
-    });
-    expect(tasksetBaselineModel(base, fallback)).toEqual(fallback);
+    expect(tasksetBaselineModel(taskset, fallback)).toEqual(fallback);
   });
 
   test("keeps Taskset Lab focused on viewing and testing instead of embedding a builder", () => {

@@ -7,7 +7,7 @@ import json
 import ssl
 from typing import Any
 
-from .connected_worker import ConnectedWorkerService
+from .connected_worker_protocol import ConnectedWorkerService
 from .engine_adapters import (
     PRIME_RL_UPSTREAM_REVISION,
 )

@@ -89,30 +89,6 @@ export const DatasetBuildSpecificationSchema = z.discriminatedUnion("kind", [
     negativeExample: DatasetEvidenceTextSchema,
     boundaryExample: DatasetEvidenceTextSchema,
   }),
-  z.object({
-    kind: z.literal("agent_benchmark"),
-    benchmarkId: z.literal("marketing-portfolio-v1"),
-    agentId: IdSchema,
-    actionIds: z.array(IdSchema).min(1).max(10),
-    task: DatasetEvidenceTextSchema,
-    promptFamilies: z
-      .array(
-        z.object({
-          id: IdSchema,
-          split: z.enum(["train", "validation", "frozen_eval"]),
-          prompt: DatasetEvidenceTextSchema,
-        }),
-      )
-      .min(3)
-      .max(100),
-    splitCounts: z
-      .object({
-        train: z.number().int().positive().max(10_000),
-        validation: z.number().int().positive().max(10_000),
-        frozenEval: z.number().int().positive().max(10_000),
-      })
-      .strict(),
-  }),
 ]);
 
 export const TrainingSourceConsentSchema = z.object({

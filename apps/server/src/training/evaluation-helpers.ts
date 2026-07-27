@@ -103,7 +103,7 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
   let correctAttempts = 0;
   let incorrectAttempts = 0;
   let parseableAttempts = 0;
-  let marketingAttempts = 0;
+  let toolEligibleAttempts = 0;
   let validToolTraceAttempts = 0;
   let terminalDecisionAttempts = 0;
   for (const attempt of attempts) {
@@ -121,13 +121,14 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
       else incorrectAttempts += 1;
     }
     const text = typeof attempt.output.text === "string" ? attempt.output.text : "";
-    const isMarketingAttempt =
-      attempt.metadata.execution === "marketing_portfolio_tool_loop";
+    const isToolAttempt =
+      typeof attempt.metadata.validToolTrace === "boolean"
+      || typeof attempt.output.terminalDecision === "boolean";
     const validToolTrace =
-      isMarketingAttempt && attempt.metadata.validToolTrace === true;
+      isToolAttempt && attempt.metadata.validToolTrace === true;
     const terminalDecision =
-      isMarketingAttempt && attempt.output.terminalDecision === true;
-    if (isMarketingAttempt) marketingAttempts += 1;
+      isToolAttempt && attempt.output.terminalDecision === true;
+    if (isToolAttempt) toolEligibleAttempts += 1;
     if (validToolTrace) validToolTraceAttempts += 1;
     if (terminalDecision) terminalDecisionAttempts += 1;
     if (extractFinalAnswer(text) !== null || (validToolTrace && terminalDecision)) {
@@ -155,11 +156,11 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
     else if (incorrect > 0) allIncorrectRewardGroups += 1;
     else unscoredGroups += 1;
   }
-  const marketingToolGatePassed =
-    marketingAttempts === 0
+  const toolGatePassed =
+    toolEligibleAttempts === 0
     || (
-      validToolTraceAttempts === marketingAttempts
-      && terminalDecisionAttempts === marketingAttempts
+      validToolTraceAttempts === toolEligibleAttempts
+      && terminalDecisionAttempts === toolEligibleAttempts
     );
   return {
     requiredMixedRewardGroups: REQUIRED_MIXED_RFT_GROUPS,
@@ -172,13 +173,13 @@ export function summarizeRftSignal(attempts: TaskAttemptResult[], grades: GradeR
     correctAttempts,
     incorrectAttempts,
     parseableAttempts,
-    toolEligibleAttempts: marketingAttempts,
+    toolEligibleAttempts,
     validToolTraceAttempts,
     terminalDecisionAttempts,
     passed:
       mixedRewardGroups >= REQUIRED_MIXED_RFT_GROUPS
       && infrastructureFailures === 0
-      && marketingToolGatePassed,
+      && toolGatePassed,
   };
 }
 

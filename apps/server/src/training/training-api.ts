@@ -46,10 +46,6 @@ import {
 } from "./create-improve-taskset-lineage.js";
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
-import { preregisterMarketingBenchmark } from "./marketing-benchmark.js";
-import type {
-  createMarketingBenchmarkRunService,
-} from "./marketing-benchmark-run-service.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -59,9 +55,6 @@ type StartedTrainingResult = Awaited<ReturnType<Training["start"]>>;
 type TrainingChatSearch = ReturnType<typeof createTrainingChatSearchService>;
 type DatasetArtifacts = ReturnType<typeof createDatasetArtifactService>;
 type DatasetImports = ReturnType<typeof createDatasetImportService>;
-type MarketingBenchmarkRuns = ReturnType<
-  typeof createMarketingBenchmarkRunService
->;
 
 export function createTrainingApi(deps: {
   store: SqliteStore;
@@ -72,7 +65,6 @@ export function createTrainingApi(deps: {
   chatSearch: TrainingChatSearch;
   datasetArtifacts: DatasetArtifacts;
   datasetImports: DatasetImports;
-  marketingBenchmarkRuns: MarketingBenchmarkRuns;
   frontierBaseline: {
     startRun: (input: {
       profileId: string;
@@ -290,43 +282,6 @@ export function createTrainingApi(deps: {
       );
     }
     if (action === "regrade_baseline") return deps.evaluation.regradeBaseline({ tasksetId: requiredString(input.tasksetId, "tasksetId"), baselineReportId: requiredString(input.baselineReportId, "baselineReportId") });
-    if (action === "preregister_marketing_benchmark") {
-      return preregisterMarketingBenchmark({
-        store: deps.store,
-        tasksetId: requiredString(input.tasksetId, "tasksetId"),
-        baselineReportId: requiredString(
-          input.baselineReportId,
-          "baselineReportId",
-        ),
-        baseModelVersionId:
-          string(input.baseModelVersionId) ?? undefined,
-        minimumCandidateScore: optionalUnitNumber(
-          input.minimumCandidateScore,
-          "minimumCandidateScore",
-        ),
-        minimumImprovement: optionalUnitNumber(
-          input.minimumImprovement,
-          "minimumImprovement",
-        ),
-      });
-    }
-    if (action === "run_marketing_benchmark") {
-      return deps.marketingBenchmarkRuns.start({
-        specificationId: requiredString(
-          input.specificationId,
-          "specificationId",
-        ),
-        candidateModelVersionId: requiredString(
-          input.candidateModelVersionId,
-          "candidateModelVersionId",
-        ),
-      });
-    }
-    if (action === "cancel_marketing_benchmark") {
-      return deps.marketingBenchmarkRuns.cancel(
-        requiredString(input.runId, "runId"),
-      );
-    }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
@@ -499,8 +454,6 @@ export function createTrainingApi(deps: {
       minerRuns,
       frontierBaselineRuns,
       baselineRuns,
-      marketingBenchmarkSpecifications,
-      marketingBenchmarkRuns,
       modelProjects,
       modelRunDrafts,
       modelVersions,
@@ -518,8 +471,6 @@ export function createTrainingApi(deps: {
       deps.store.listTaskMinerRuns(profileId),
       deps.store.listCrossSystemFrontierBaselineRuns(profileId),
       deps.store.listTasksetBaselineRuns({ profileId }),
-      deps.store.listMarketingBenchmarkSpecifications({ profileId }),
-      deps.store.listMarketingBenchmarkRuns({ profileId }),
       deps.store.listModelProjects(),
       deps.store.listModelRunDrafts(),
       deps.store.listModelVersions(),
@@ -540,8 +491,6 @@ export function createTrainingApi(deps: {
       datasetArtifacts,
       baselineReports,
       baselineRuns,
-      marketingBenchmarkSpecifications,
-      marketingBenchmarkRuns,
       graderAuditReports,
       candidates,
       minerConfig,
@@ -810,17 +759,6 @@ function baselineSampling(value: unknown): { maxOutputTokens?: number; temperatu
     : undefined;
 }
 
-function optionalUnitNumber(
-  value: unknown,
-  label: string,
-): number | undefined {
-  if (value === undefined || value === null) return undefined;
-  const parsed = number(value);
-  if (parsed === undefined || parsed < 0 || parsed > 1) {
-    throw new Error(`${label} must be between 0 and 1.`);
-  }
-  return parsed;
-}
 function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
   return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"
     ? value

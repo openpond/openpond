@@ -82,6 +82,7 @@ docs/staging/
 jobs/
 tmp/
 .openpond/
+.local-examples/
 .openpond-negative/
 .openpond-test-fixtures/
 

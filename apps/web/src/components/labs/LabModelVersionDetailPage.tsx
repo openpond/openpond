@@ -94,18 +94,6 @@ export function LabModelVersionDetailPage({
         (run) => run.id === selectedJob.metadata.modelRunId
       ) ?? null
     : null;
-  const selectedLifecycleVersion = selectedVersion
-    ? state?.modelVersions.find(
-        (version) => version.artifactLineageId === selectedVersion.lineage.id
-      ) ?? null
-    : null;
-  const selectedBenchmarkRun = selectedLifecycleVersion
-    ? state?.marketingBenchmarkRuns.find(
-        (run) =>
-          run.candidateModelVersionId === selectedLifecycleVersion.id &&
-          run.status === "succeeded"
-      ) ?? null
-    : null;
   const selectedEvaluationArtifactId =
     selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
   const managedServing =
@@ -461,78 +449,25 @@ export function LabModelVersionDetailPage({
       {activeRunTab === "evals" ? (
         <>
           <DetailSection title="Product-quality evaluation">
-            {selectedBenchmarkRun?.receipt ? (
-              <div className="training-run-evaluation">
-                <div className="training-evaluation-facts">
-                  <Fact
-                    label="Base Qwen3-0.6B"
-                    value={selectedBenchmarkRun.receipt.aggregate.base.meanReward.toFixed(
-                      3
-                    )}
-                  />
-                  <Fact
-                    label="Trained LoRA"
-                    value={selectedBenchmarkRun.receipt.aggregate.candidate.meanReward.toFixed(
-                      3
-                    )}
-                  />
-                  <Fact
-                    label="GPT-5.6 Sol"
-                    value={selectedBenchmarkRun.receipt.aggregate.frontier_reference.meanReward.toFixed(
-                      3
-                    )}
-                  />
-                  <Fact
-                    label="Promotion"
-                    value={
-                      selectedBenchmarkRun.receipt.pairedComparison
-                        .candidatePromotionPassed
-                        ? "Passed"
-                        : "Rejected"
-                    }
-                  />
-                </div>
-                <p className="training-muted">
-                  {selectedBenchmarkRun.receipt.disclosure}
-                </p>
-                <details>
-                  <summary>96 paired tool trajectories</summary>
-                  <ol>
-                    {selectedBenchmarkRun.receipt.trajectories.map(
-                      (trajectory) => (
-                        <li
-                          key={`${trajectory.arm}:${trajectory.taskId}:${trajectory.attempt}`}
-                        >
-                          {trajectory.arm.replaceAll("_", " ")} ·{" "}
-                          {trajectory.taskId} · attempt {trajectory.attempt + 1} ·{" "}
-                          {trajectory.reward?.toFixed(3) ?? "n/a"} ·{" "}
-                          {trajectory.toolSequence.join(" → ") ||
-                            trajectory.failureClass}
-                        </li>
-                      )
-                    )}
-                  </ol>
-                </details>
-                {selectedEvaluationArtifactId ? (
-                  <button
-                    className="training-button secondary"
-                    type="button"
-                    onClick={() =>
-                      void training.actions.downloadArtifact(
-                        selectedEvaluationArtifactId
-                      )
-                    }
-                  >
-                    Download canonical receipt
-                  </button>
-                ) : null}
-              </div>
-            ) : (
+            <div className="training-run-evaluation">
               <TrainingRunEvaluation
                 detail={detail.detail}
                 loading={detail.loading}
               />
-            )}
+              {selectedEvaluationArtifactId ? (
+                <button
+                  className="training-button secondary"
+                  type="button"
+                  onClick={() =>
+                    void training.actions.downloadArtifact(
+                      selectedEvaluationArtifactId
+                    )
+                  }
+                >
+                  Download evaluation receipt
+                </button>
+              ) : null}
+            </div>
           </DetailSection>
           {managedServing?.evaluation ? (
             <DetailSection title="Sandbox compatibility and admission">

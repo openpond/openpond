@@ -7,9 +7,6 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
-import {
-  MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH,
-} from "./marketing-portfolio-constraint-repair.js";
 
 export function withAuthoritativeRecipeHashes(
   taskset: Taskset,
@@ -86,15 +83,13 @@ export function withAuthoritativeRecipeHashes(
     && !Array.isArray(candidate.reward)
       ? candidate.reward as Record<string, unknown>
       : {};
-  const benchmark = taskset.environment.metadata.benchmark;
-  const marketingPortfolio =
-    benchmark !== null &&
-    typeof benchmark === "object" &&
-    !Array.isArray(benchmark) &&
-    (benchmark as Record<string, unknown>).id === "marketing-portfolio-v1";
-  const authoritativeToolContractHash = marketingPortfolio
-    ? MARKETING_PORTFOLIO_HARNESS_CONTRACT_HASH
-    : reward.toolContractHash;
+  const metadataToolContractHash =
+    taskset.environment.metadata.toolContractHash;
+  const authoritativeToolContractHash =
+    typeof metadataToolContractHash === "string"
+    && metadataToolContractHash.trim()
+      ? metadataToolContractHash
+      : reward.toolContractHash;
   const baseModel = record(candidate.baseModel);
   const dataset = record(candidate.dataset);
   const rollout = record(candidate.rollout);
