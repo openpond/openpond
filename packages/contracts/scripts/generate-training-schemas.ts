@@ -8,11 +8,11 @@ import {
   PpoRecipeSchema,
   SftRecipeSchema,
   SftTrainingRecordSchema,
-  TasksetSchema,
   TrainingArtifactSchema,
   TrainingBundleManifestSchema,
   TrainingJobEventSchema,
-} from "../src/index.js";
+} from "../src/training.js";
+import { TasksetSchema } from "../src/tasksets.js";
 
 const outputDirectory = path.resolve(
   import.meta.dirname,
