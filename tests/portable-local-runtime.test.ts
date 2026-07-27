@@ -14,7 +14,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import {
-  createHarnessFixture,
   createManifestFixture,
   fixtureTimestamp,
 } from "./helpers/portable-training-fixtures.js";
@@ -55,13 +54,15 @@ const grade: HarnessGraderEvidence = hashed({
 });
 
 function lineage(): LearningSignalLineage {
-  const harness = createHarnessFixture().release;
   return {
     datasetRelease: {
       id: "dataset-release-1",
       contentHash: contentHash("dataset"),
     },
-    harnessRelease: { id: harness.id, contentHash: harness.contentHash },
+    harnessRelease: {
+      id: "harness-release-1",
+      contentHash: contentHash("harness"),
+    },
     evidenceSetRelease: null,
     profileRelease: null,
     model: {

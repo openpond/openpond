@@ -1,12 +1,5 @@
 import {
-  type AdapterValidationReceipt,
   type ComputeTargetCapabilities,
-  type LearningSignalBatch,
-  type ResolvedTrainingPlan,
-  type TrainingArtifacts,
-  type TrainingEngineCapabilities,
-  type TrainingExecutionRef,
-  type TrainingExecutionStatus,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -14,7 +7,6 @@ import {
   type ComputeQuote,
   type ComputeRequest,
   type ComputeTargetAdapter,
-  type TrainingEngineAdapter,
 } from "@openpond/training-sdk";
 
 export interface LocalCapabilityProbe {
@@ -90,68 +82,4 @@ export class LocalComputeTargetAdapter implements ComputeTargetAdapter {
   }
 
   async release(): Promise<void> {}
-}
-
-export interface LocalEngineWorker {
-  capabilities(): Promise<TrainingEngineCapabilities>;
-  validate(plan: ResolvedTrainingPlan): Promise<AdapterValidationReceipt>;
-  launch(plan: ResolvedTrainingPlan): Promise<TrainingExecutionRef>;
-  consumeSignals(
-    ref: TrainingExecutionRef,
-    batch: LearningSignalBatch,
-  ): Promise<void>;
-  status(ref: TrainingExecutionRef): Promise<TrainingExecutionStatus>;
-  logs(ref: TrainingExecutionRef, cursor?: string): Promise<{
-    cursor: string;
-    entries: Array<{ timestamp: string; level: string; message: string }>;
-  }>;
-  cancel(ref: TrainingExecutionRef): Promise<void>;
-  collect(ref: TrainingExecutionRef): Promise<TrainingArtifacts>;
-}
-
-export class LocalTrainingEngineAdapter implements TrainingEngineAdapter {
-  readonly id: string;
-
-  constructor(private readonly worker: LocalEngineWorker, id = "local-engine") {
-    this.id = id;
-  }
-
-  async capabilities(): Promise<TrainingEngineCapabilities> {
-    return this.worker.capabilities();
-  }
-
-  async validate(
-    plan: ResolvedTrainingPlan,
-  ): Promise<AdapterValidationReceipt> {
-    return this.worker.validate(plan);
-  }
-
-  async launch(plan: ResolvedTrainingPlan): Promise<TrainingExecutionRef> {
-    return this.worker.launch(plan);
-  }
-
-  async consumeSignals(
-    ref: TrainingExecutionRef,
-    batch: LearningSignalBatch,
-  ): Promise<void> {
-    await this.worker.consumeSignals(ref, batch);
-  }
-
-  async status(
-    ref: TrainingExecutionRef,
-  ): Promise<TrainingExecutionStatus> {
-    return this.worker.status(ref);
-  }
-
-  async logs(ref: TrainingExecutionRef, cursor?: string) {
-    return this.worker.logs(ref, cursor);
-  }
-
-  async cancel(ref: TrainingExecutionRef): Promise<void> {
-    await this.worker.cancel(ref);
-  }
-
-  async collect(ref: TrainingExecutionRef): Promise<TrainingArtifacts> {
-    return this.worker.collect(ref);
-  }
 }

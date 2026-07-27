@@ -14,13 +14,11 @@ import {
 import { contentHash } from "@openpond/taskset-sdk";
 import {
   TrainingAdapterRegistry,
-  TrainingDestinationRegistry,
   buildTasksetTrainingBundle,
   materializeResolvedTrainingBundle,
 } from "@openpond/training-sdk";
 
 import type { SqliteStore } from "../store/store.js";
-import { PortableDestinationEngineBridge } from "./portable-destination-engine.js";
 import { readRecoveredPortableArtifacts } from "./portable-model-run-artifacts.js";
 import {
   failPreparedPortableModelRun,
@@ -37,8 +35,6 @@ export function createPortableModelRunService(deps: {
   store: SqliteStore;
   storeDir: string;
   adapters: TrainingAdapterRegistry;
-  bridges: Map<string, PortableDestinationEngineBridge>;
-  destinations: TrainingDestinationRegistry;
   catalog(): Promise<TrainingCatalog>;
   prepare(input: {
     modelRunId: string;
@@ -48,7 +44,9 @@ export function createPortableModelRunService(deps: {
   prepareStart(input: {
     modelId: string;
     tasksetId: string;
-    destinationId: Parameters<TrainingDestinationRegistry["get"]>[0];
+    destinationId: NonNullable<
+      Awaited<ReturnType<SqliteStore["getModelRunDraft"]>>
+    >["destinationId"];
     recipe: unknown;
     retentionDays?: number | null;
   }): Promise<TrainingPreparedStart>;
@@ -150,6 +148,10 @@ export function createPortableModelRunService(deps: {
       runtime: bindings.runtime,
       compute: bindings.compute,
       engine: bindings.engine,
+      execution: {
+        trainingPlanId: prepared.plan.id,
+        approvalId: approval.id,
+      },
       maximumSpendUsd: approval.maximumCostUsd,
       approvalHash: contentHash(approval),
     };
@@ -163,13 +165,6 @@ export function createPortableModelRunService(deps: {
       graph,
     });
     const engineAdapter = deps.adapters.engine(bindings.engine.adapterId);
-    deps.bridges
-      .get(bindings.engine.adapterId)
-      ?.register(resolvedPlan.contentHash, {
-        plan: prepared.plan,
-        approval,
-        manifestHash: graph.manifest.contentHash,
-      });
     const validation = await engineAdapter.validate(resolvedPlan);
     if (!validation.valid) {
       throw new Error(
@@ -397,11 +392,7 @@ export function createPortableModelRunService(deps: {
       });
       return portableStatusFromModelRun(modelRun);
     }
-    try {
-      return await deps.destinations.get(job.destinationId).status(job.id);
-    } catch {
-      return job;
-    }
+    throw new Error("Training execution has no registered portable engine.");
   }
 
   async function events(modelRunId: string) {
@@ -414,9 +405,7 @@ export function createPortableModelRunService(deps: {
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       return deps.adapters.engine(parsed.data.adapterId).logs(parsed.data);
     }
-    return (await deps.store.listTrainingJobEvents(job.id)).filter((event) =>
-      ["log", "progress", "metric", "failure"].includes(event.type)
-    );
+    throw new Error("Training execution has no registered portable engine.");
   }
 
   async function artifacts(modelRunId: string) {
@@ -468,7 +457,7 @@ export function createPortableModelRunService(deps: {
       });
       return portableStatusFromModelRun(modelRun);
     }
-    return deps.destinations.get(job.destinationId).cancel(job.id);
+    throw new Error("Training execution has no registered portable engine.");
   }
 
   return { start, status, events, logs, artifacts, cancel };

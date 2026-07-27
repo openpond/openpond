@@ -28,7 +28,10 @@ export function createPortableTrainingServiceSupport(input: {
     query: string,
   ) => Promise<RegistryModelSearchResult[]>;
 }) {
-  async function catalog(query = "") {
+  async function catalog(
+    query = "",
+    preferredMethod?: "sft" | "dpo" | "grpo" | "ppo",
+  ) {
     const [
       destinationCapabilities,
       compute,
@@ -60,6 +63,7 @@ export function createPortableTrainingServiceSupport(input: {
       connectedWorkerImageDigest:
         input.connectedWorkerImageDigest ?? null,
       adapterCompute,
+      preferredMethod,
     });
   }
 

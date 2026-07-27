@@ -1,9 +1,5 @@
 import {
-  AdapterValidationReceiptSchema,
-  ComputeTargetCapabilitiesSchema,
-  TrainingArtifactsSchema,
   TrainingEngineCapabilitiesSchema,
-  TrainingExecutionStatusSchema,
   type AdapterValidationReceipt,
   type ComputeTargetCapabilities,
   type LearningSignalBatch,
@@ -308,77 +304,6 @@ function union<T extends string>(values: T[]): T[] {
   );
 }
 
-export async function runEngineAdapterConformance(input: {
-  adapter: TrainingEngineAdapter;
-  plan: ResolvedTrainingPlan;
-  signals: LearningSignalBatch;
-}): Promise<{ passed: boolean; checks: AdapterConformanceCheck[] }> {
-  const checks: AdapterConformanceCheck[] = [];
-  const capabilities = TrainingEngineCapabilitiesSchema.parse(
-    await input.adapter.capabilities(),
-  );
-  checks.push(check("capabilities", capabilities.adapterId === input.adapter.id));
-  const validation = AdapterValidationReceiptSchema.parse(
-    await input.adapter.validate(input.plan),
-  );
-  checks.push(check("validation", validation.valid));
-  if (!validation.valid) return result(checks);
-  const ref = await input.adapter.launch(input.plan);
-  checks.push(check("launch", ref.adapterId === input.adapter.id));
-  await input.adapter.consumeSignals(ref, input.signals);
-  checks.push(check("signals", true));
-  const status = TrainingExecutionStatusSchema.parse(
-    await input.adapter.status(ref),
-  );
-  checks.push(check("status", status.runId === ref.runId));
-  await input.adapter.logs(ref);
-  checks.push(check("logs", true));
-  await input.adapter.cancel(ref);
-  checks.push(check("cancel", true));
-  const artifacts = TrainingArtifactsSchema.parse(
-    await input.adapter.collect(ref),
-  );
-  checks.push(
-    check(
-      "artifacts",
-      artifacts.runId === ref.runId &&
-        artifacts.contentHash ===
-          contentHash({
-            runId: artifacts.runId,
-            manifestHash: artifacts.manifestHash,
-            artifacts: artifacts.artifacts,
-          }),
-    ),
-  );
-  return result(checks);
-}
-
-export async function runComputeAdapterConformance(input: {
-  adapter: ComputeTargetAdapter;
-  request: ComputeRequest;
-}): Promise<{ passed: boolean; checks: AdapterConformanceCheck[] }> {
-  const checks: AdapterConformanceCheck[] = [];
-  const capabilities = ComputeTargetCapabilitiesSchema.parse(
-    await input.adapter.discover(),
-  );
-  checks.push(check("discover", capabilities.adapterId === input.adapter.id));
-  const quote = await input.adapter.quote(input.request);
-  checks.push(check("quote", quote.adapterId === input.adapter.id));
-  const lease = await input.adapter.acquire(input.request);
-  checks.push(check("acquire", lease.adapterId === input.adapter.id));
-  const heartbeat = await input.adapter.heartbeat(lease);
-  checks.push(check("heartbeat", heartbeat.id === lease.id));
-  await input.adapter.release(heartbeat);
-  checks.push(check("release", true));
-  return result(checks);
-}
-
-type AdapterConformanceCheck = {
-  name: string;
-  passed: boolean;
-  detail: string;
-};
-
 function register<T extends { id: string }>(
   adapters: Map<string, T>,
   adapter: T,
@@ -397,15 +322,4 @@ function requireAdapter<T>(
   const adapter = adapters.get(id);
   if (!adapter) throw new Error(`Training ${kind} adapter ${id} is not registered.`);
   return adapter;
-}
-
-function check(name: string, passed: boolean): AdapterConformanceCheck {
-  return { name, passed, detail: passed ? "passed" : "failed" };
-}
-
-function result(checks: AdapterConformanceCheck[]): {
-  passed: boolean;
-  checks: AdapterConformanceCheck[];
-} {
-  return { passed: checks.every((item) => item.passed), checks };
 }

@@ -2,7 +2,6 @@ import {
   PrimeComputeTargetAdapter,
   PrimeRawComputeHttpClient,
 } from "../packages/compute-provider-prime/src/index.js";
-import { runComputeAdapterConformance } from "@openpond/training-sdk";
 import { describe, expect, test, vi } from "vitest";
 
 const NOW = new Date("2026-07-24T12:00:00.000Z");
@@ -78,22 +77,25 @@ describe("Prime raw compute HTTP client", () => {
     const adapter = new PrimeComputeTargetAdapter(client);
     const inventory = await adapter.discover();
     const deviceOrPool = inventory.devices[0]!.id;
-    const result = await runComputeAdapterConformance({
-      adapter,
-      request: {
-        runId: "prime-run-1",
-        deviceOrPool,
-        workerImageDigest: `sha256:${"a".repeat(64)}`,
-        maximumSpendUsd: 5,
-        deadline: "2026-07-24T13:00:00.000Z",
-      },
-    });
+    const computeRequest = {
+      runId: "prime-run-1",
+      deviceOrPool,
+      workerImageDigest: `sha256:${"a".repeat(64)}`,
+      maximumSpendUsd: 5,
+      deadline: "2026-07-24T13:00:00.000Z",
+    };
+    const quote = await adapter.quote(computeRequest);
+    const lease = await adapter.acquire(computeRequest);
+    const heartbeat = await adapter.heartbeat(lease);
+    await adapter.release(heartbeat);
     const reconnected = await client.connect(
       "prime-node-1",
       "2026-07-24T13:00:00.000Z"
     );
 
-    expect(result.passed).toBe(true);
+    expect(quote.adapterId).toBe(adapter.id);
+    expect(lease.adapterId).toBe(adapter.id);
+    expect(heartbeat.id).toBe(lease.id);
     expect(reconnected).toMatchObject({
       nodeId: "prime-node-1",
       acquiredAt: NOW.toISOString(),

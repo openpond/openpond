@@ -86,6 +86,7 @@ export function createPortableTrainingCatalog(input: {
   primeRawConfigured?: boolean;
   connectedWorkerImageDigest?: string | null;
   adapterCompute?: ComputeTargetCapabilities[];
+  preferredMethod?: "sft" | "dpo" | "grpo" | "ppo";
   now?: string;
 }): TrainingCatalog {
   const generatedAt = input.now ?? new Date().toISOString();
@@ -112,6 +113,7 @@ export function createPortableTrainingCatalog(input: {
     engines,
     runtimes,
     destinations: input.destinations,
+    preferredMethod: input.preferredMethod,
   });
   const models: TrainingCatalog["models"] = input.candidates.map((candidate) => {
     const asset = input.inventory?.models.find(
@@ -274,41 +276,9 @@ function trainingTargets(input: {
   engines: TrainingEngineCapabilities[];
   runtimes: HarnessRuntimeCapabilities[];
   destinations: TrainingDestinationCapabilities[];
+  preferredMethod?: "sft" | "dpo" | "grpo" | "ppo";
 }): TrainingCatalog["targets"] {
   const definitions = [
-    {
-      id: "automatic",
-      label: "Automatic (recommended)",
-      description: "Use the best available compatible training target.",
-      destinationId: "local_cpu_fixture",
-      computeAdapterId: "local-cpu",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "local-trl",
-      capabilityPills: ["Local"],
-      ...LOCAL_TARGET_POLICY,
-    },
-    {
-      id: "this-device-cpu",
-      label: "This device · CPU",
-      description: "Keep the Harness and reference worker on this device.",
-      destinationId: "local_cpu_fixture",
-      computeAdapterId: "local-cpu",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "local-trl",
-      capabilityPills: ["Local"],
-      ...LOCAL_TARGET_POLICY,
-    },
-    {
-      id: "connected-gpu",
-      label: "Connected GPU",
-      description: "Use the authenticated LAN/SSH/BYOC worker protocol.",
-      destinationId: "ssh_gpu",
-      computeAdapterId: "ssh-worker",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["LAN/SSH GPU"],
-      ...CONNECTED_TARGET_POLICY,
-    },
     {
       id: "prime-gpu",
       label: "Prime Raw GPU",
@@ -322,6 +292,17 @@ function trainingTargets(input: {
       ...CONNECTED_TARGET_POLICY,
     },
     {
+      id: "connected-gpu",
+      label: "Connected GPU",
+      description: "Use the authenticated LAN/SSH/BYOC worker protocol.",
+      destinationId: "ssh_gpu",
+      computeAdapterId: "ssh-worker",
+      runtimeAdapterId: "local-harness",
+      engineAdapterId: "connected-prime-rl",
+      capabilityPills: ["LAN/SSH GPU"],
+      ...CONNECTED_TARGET_POLICY,
+    },
+    {
       id: "fireworks-managed",
       label: "Fireworks",
       description: "Use provider-managed training after quote and approval.",
@@ -332,8 +313,19 @@ function trainingTargets(input: {
       capabilityPills: ["Fireworks"],
       ...FIREWORKS_TARGET_POLICY,
     },
+    {
+      id: "this-device-cpu",
+      label: "This device · CPU",
+      description: "Keep the Harness and reference worker on this device.",
+      destinationId: "local_cpu_fixture",
+      computeAdapterId: "local-cpu",
+      runtimeAdapterId: "local-harness",
+      engineAdapterId: "local-trl",
+      capabilityPills: ["Local"],
+      ...LOCAL_TARGET_POLICY,
+    },
   ] as const;
-  return definitions.map((definition) => {
+  const resolved = definitions.map((definition) => {
     const compute = input.compute.find(
       (item) => item.adapterId === definition.computeAdapterId,
     );
@@ -366,6 +358,30 @@ function trainingTargets(input: {
           "This training target is not configured.",
     };
   });
+  const selected =
+    resolved.find(
+      (target) =>
+        target.available &&
+        (!input.preferredMethod ||
+          target.methods.includes(input.preferredMethod)),
+    ) ??
+    resolved.find(
+      (target) =>
+        !input.preferredMethod ||
+        target.methods.includes(input.preferredMethod),
+    ) ??
+    resolved[0]!;
+  return [
+    {
+      ...selected,
+      id: "automatic",
+      label: "Automatic",
+      description: selected.available
+        ? `Backend selected ${selected.label}. ${selected.description}`
+        : "No compatible training provider is currently available.",
+      capabilityPills: ["Backend selected"],
+    },
+  ];
 }
 
 export function preparePortableModelRun(input: {

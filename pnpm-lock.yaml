@@ -162,9 +162,6 @@ importers:
       '@openpond/trainer-connected':
         specifier: workspace:*
         version: link:../../packages/trainer-connected
-      '@openpond/trainer-fireworks':
-        specifier: workspace:*
-        version: link:../../packages/trainer-fireworks
       '@openpond/trainer-local':
         specifier: workspace:*
         version: link:../../packages/trainer-local
@@ -370,22 +367,6 @@ importers:
       undici:
         specifier: ^7.28.0
         version: 7.28.0
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.13.3
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/trainer-fireworks:
-    dependencies:
-      '@openpond/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@openpond/training-sdk':
-        specifier: workspace:*
-        version: link:../training-sdk
     devDependencies:
       '@types/node':
         specifier: ^24.10.1

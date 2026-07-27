@@ -119,15 +119,13 @@ export function TrainingStartDialog({
     catalogTargets,
     visibleCatalogModels,
     computeTargetId,
-    setComputeTargetId,
     modelSearch,
     setModelSearch,
-    deviceId,
-    setDeviceId,
   } = useTrainingCatalogState({
     connection,
     destinations,
     initialDestination,
+    method,
   });
   const destination = destinations.find((item) => item.destinationId === destinationId) ?? null;
   const isBootstrap = method === "sft" && primaryMethod !== "sft" && bootstrap?.method === "sft";
@@ -135,7 +133,6 @@ export function TrainingStartDialog({
     ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
     : taskset.learningSignals.demonstrations.filter((example) => example.approved).length;
   const evaluationExamples = trainingSplitCount(taskset, "frozen_eval");
-  const selectableDevices = useMemo(() => compute?.inventory?.devices.filter((device) => device.available) ?? [], [compute?.inventory?.devices]);
   const trainableModels = useMemo(() => compute?.inventory?.models.filter((model) => model.trainingCompatible && model.modelId && model.revision && model.tokenizerRevision && model.chatTemplateHash) ?? [], [compute?.inventory?.models]);
   const selectedBaseModel = baseModelCandidates.find((candidate) =>
     candidate.selectionKey === baseModelKey) ?? null;
@@ -357,13 +354,6 @@ export function TrainingStartDialog({
     }
   }
 
-  function selectComputeTarget(next: string) {
-    const target = catalogTargets.find((candidate) => candidate.id === next);
-    if (!target) return;
-    setComputeTargetId(target.id);
-    selectDestination(target.destinationId as TrainingDestinationId, target);
-  }
-
   function selectMethod(next: "sft" | "dpo" | "grpo" | "ppo") {
     setMethod(next);
     setPrepared(null);
@@ -428,6 +418,18 @@ export function TrainingStartDialog({
       : compatible;
   const readinessActionLabel =
     approvalPresentation === "dialog" && approvalPolicy ? "Run" : actionLabel;
+
+  useEffect(() => {
+    if (
+      selectedComputeTarget &&
+      selectedComputeTarget.destinationId !== destinationId
+    ) {
+      selectDestination(
+        selectedComputeTarget.destinationId as TrainingDestinationId,
+        selectedComputeTarget,
+      );
+    }
+  }, [destinationId, selectedComputeTarget?.destinationId]);
 
   useEffect(() => {
     onReadinessChange?.({
@@ -503,10 +505,7 @@ export function TrainingStartDialog({
         busy={busy}
         catalog={catalog}
         catalogError={catalogError}
-        catalogTargets={catalogTargets}
         selectedComputeTarget={selectedComputeTarget}
-        computeTargetId={computeTargetId}
-        onComputeTargetChange={selectComputeTarget}
         modelSearch={modelSearch}
         onModelSearchChange={setModelSearch}
         baseModelKey={baseModelKey}
@@ -518,9 +517,6 @@ export function TrainingStartDialog({
           setLearningRate(defaultLearningRate(selectedModelId));
         }}
         visibleCatalogModels={visibleCatalogModels}
-        deviceId={deviceId}
-        selectableDevices={selectableDevices}
-        onDeviceChange={setDeviceId}
         selectedCatalogCompatibility={selectedCatalogCompatibility}
         selectedCatalogModel={selectedCatalogModel}
         configurationContent={configurationContent}

@@ -29,7 +29,7 @@ import {
   type ProjectDatasetArtifact,
 } from "./training-dataset-selection.js";
 import { isInside } from "./training-service-helpers.js";
-import { createPortableDestinationAdapterRegistry } from "./portable-destination-engine.js";
+import { createDestinationTrainingEngineRegistry } from "./destination-training-engine-adapter.js";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
 import { createPortableTrainingServiceSupport } from "./portable-training-service-support.js";
@@ -182,10 +182,7 @@ export function createTrainingService(deps: {
         ),
   );
   deps.registerDestinations?.(registry);
-  const {
-    adapters: portableAdapters,
-    bridges: portableDestinationBridges,
-  } = createPortableDestinationAdapterRegistry({
+  const portableAdapters = createDestinationTrainingEngineRegistry({
     destinations: registry,
     store: deps.store,
     catalog: () => portableCatalog(),
@@ -261,8 +258,6 @@ export function createTrainingService(deps: {
     store: deps.store,
     storeDir: deps.storeDir,
     adapters: portableAdapters,
-    bridges: portableDestinationBridges,
-    destinations: registry,
     catalog: portableCatalog,
     prepare: prepareModelRun,
     prepareStart,

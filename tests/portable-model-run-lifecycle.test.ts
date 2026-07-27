@@ -8,8 +8,8 @@ import {
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import {
+  buildTasksetTrainingBundle,
   createTrainingPlan,
-  publishTasksetTrainingGraph,
 } from "@openpond/training-sdk";
 import { describe, expect, test } from "vitest";
 
@@ -75,7 +75,7 @@ describe("portable Model Run lifecycle", () => {
       await store.upsertTaskset(taskset);
       await store.saveModelRunDraft(draft);
       const capabilityReceipt = sha256("portable-lifecycle-capability");
-      const graph = publishTasksetTrainingGraph({
+      const graph = buildTasksetTrainingBundle({
         taskset,
         modelRun: draft,
         runtime: {
@@ -107,8 +107,7 @@ describe("portable Model Run lifecycle", () => {
         openpondRelease: "0.0.38",
         workerProtocol: "openpond.connectedWorker.v1",
       });
-      const profileRelease = graph.harnessRelease.profileRelease;
-      expect(profileRelease).not.toBeNull();
+      const profileRelease = graph.profileRelease;
       const releaseGraph = portableReleaseGraphMetadata({
         resolvedBundleHash: graph.resolvedBundleManifest.contentHash,
         profileRelease: profileRelease!,

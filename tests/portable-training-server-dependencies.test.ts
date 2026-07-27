@@ -4,7 +4,6 @@ import path from "node:path";
 
 import {
   TrainingAdapterRegistry,
-  type HarnessRuntimeAdapter,
   type TrainingEngineAdapter,
 } from "@openpond/training-sdk";
 import { sha256 } from "@openpond/taskset-sdk";
@@ -25,8 +24,6 @@ describe("portable training server composition", () => {
 
     expect(registry.computeTargetIds()).toEqual([
       "local-cpu",
-      "local-cuda",
-      "local-mlx",
     ]);
     await expect(
       registry.computeTarget("local-cpu").discover(),
@@ -35,17 +32,10 @@ describe("portable training server composition", () => {
       available: true,
       devices: [{ id: "cpu", runtime: "cpu" }],
     });
-    await expect(
-      registry.computeTarget("local-cuda").discover(),
-    ).resolves.toMatchObject({
-      adapterId: "local-cuda",
-      available: false,
-      devices: [],
-    });
     expect(registry.engineIds()).toEqual([]);
   });
 
-  test("composes injected compute, runtime, and routed engine packages", async () => {
+  test("composes injected compute and routed engine packages", async () => {
     const registry = new TrainingAdapterRegistry();
     const engine = {
       id: "remote-transport",
@@ -58,29 +48,16 @@ describe("portable training server composition", () => {
       cancel: vi.fn(),
       collect: vi.fn(),
     } satisfies TrainingEngineAdapter;
-    const runtime = {
-      id: "remote-runtime",
-      capabilities: vi.fn(),
-      materialize: vi.fn(),
-      create: vi.fn(),
-      reset: vi.fn(),
-      step: vi.fn(),
-      grade: vi.fn(),
-      collect: vi.fn(),
-      destroy: vi.fn(),
-    } satisfies HarnessRuntimeAdapter;
     const dependencies = createPortableTrainingServerDependencies({
       storeDir: "/tmp/openpond-portable-training-test",
       environment: {},
       adapters: {
-        runtimes: [runtime],
         engineRoutes: [
           {
             canonicalEngineId: "connected-prime-rl",
             route: {
               id: "remote",
-              matches: (plan) =>
-                plan.runtime.adapterId === "remote-runtime",
+              matches: () => true,
               adapter: engine,
             },
           },
@@ -90,7 +67,6 @@ describe("portable training server composition", () => {
 
     dependencies.registerPortableAdapters(registry);
 
-    expect(registry.runtimeIds()).toEqual(["remote-runtime"]);
     expect(registry.engineIds()).toEqual(["connected-prime-rl"]);
   });
 

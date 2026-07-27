@@ -67,6 +67,7 @@ describe("portable connected worker bundle resolution", () => {
         runtime: manifest.runtimeTarget,
         compute: manifest.computeTarget,
         engine: manifest.engine,
+        execution: null,
         maximumSpendUsd: manifest.approval.maximumSpendUsd,
         approvalHash: manifest.approval.approvalHash,
       };

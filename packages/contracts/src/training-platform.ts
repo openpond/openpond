@@ -95,6 +95,13 @@ export const ResolvedTrainingPlanSchema = z
     runtime: HarnessRuntimeTargetBindingSchema,
     compute: ComputeTargetBindingSchema,
     engine: TrainingEngineBindingSchema,
+    execution: z
+      .object({
+        trainingPlanId: ReleaseIdSchema,
+        approvalId: ReleaseIdSchema,
+      })
+      .strict()
+      .nullable(),
     maximumSpendUsd: z.number().nonnegative().nullable(),
     approvalHash: ReleaseHashSchema,
     contentHash: ReleaseHashSchema,

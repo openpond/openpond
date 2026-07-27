@@ -637,9 +637,14 @@ export const api = {
       connection,
       `/v1/training?profileId=${encodeURIComponent(profileId)}`
     ),
-  portableTrainingCatalog: (connection: ClientConnection, query = "") => {
+  portableTrainingCatalog: (
+    connection: ClientConnection,
+    query = "",
+    method?: "sft" | "dpo" | "grpo" | "ppo",
+  ) => {
     const params = new URLSearchParams();
     if (query.trim()) params.set("query", query.trim());
+    if (method) params.set("method", method);
     return apiFetch<TrainingCatalog>(
       connection,
       `/v1/training/catalog${params.size ? `?${params.toString()}` : ""}`,

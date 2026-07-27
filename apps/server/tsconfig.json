@@ -15,7 +15,6 @@
     ,{ "path": "../../packages/taskset-sdk" }
     ,{ "path": "../../packages/training-sdk" }
     ,{ "path": "../../packages/trainer-connected" }
-    ,{ "path": "../../packages/trainer-fireworks" }
     ,{ "path": "../../packages/trainer-local" }
   ],
   "include": ["src/**/*.ts"]

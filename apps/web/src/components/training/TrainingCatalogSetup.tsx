@@ -19,10 +19,7 @@ export function TrainingCatalogSetup({
   busy,
   catalog,
   catalogError,
-  catalogTargets,
   selectedComputeTarget,
-  computeTargetId,
-  onComputeTargetChange,
   modelSearch,
   onModelSearchChange,
   baseModelKey,
@@ -31,9 +28,6 @@ export function TrainingCatalogSetup({
   method,
   onBaseModelChange,
   visibleCatalogModels,
-  deviceId,
-  selectableDevices,
-  onDeviceChange,
   selectedCatalogCompatibility,
   selectedCatalogModel,
   configurationContent,
@@ -42,10 +36,7 @@ export function TrainingCatalogSetup({
   busy: boolean;
   catalog: TrainingCatalog | null;
   catalogError: string | null;
-  catalogTargets: CatalogTarget[];
   selectedComputeTarget: CatalogTarget | null;
-  computeTargetId: string;
-  onComputeTargetChange: (targetId: string) => void;
   modelSearch: string;
   onModelSearchChange: (query: string) => void;
   baseModelKey: string;
@@ -54,9 +45,6 @@ export function TrainingCatalogSetup({
   method: PortableTrainingMethod;
   onBaseModelChange: (selectionKey: string, modelId: string) => void;
   visibleCatalogModels: CatalogModel[];
-  deviceId: string;
-  selectableDevices: Array<{ id: string; name: string }>;
-  onDeviceChange: (deviceId: string) => void;
   selectedCatalogCompatibility: CatalogCompatibility | null;
   selectedCatalogModel: CatalogModel | null;
   configurationContent?: ReactNode;
@@ -69,48 +57,13 @@ export function TrainingCatalogSetup({
           className="training-catalog-setup"
           aria-label="Training compute and Model catalog"
         >
-          <label className="training-catalog-field">
+          <div className="training-catalog-field">
             <span>Compute</span>
-            <select
-              aria-label="Training compute"
-              value={computeTargetId}
-              disabled={busy || !catalog}
-              onChange={(event) => onComputeTargetChange(event.target.value)}
-            >
-              <option value="" disabled>
-                {catalog
-                  ? "Choose training compute"
-                  : "Loading compute catalog…"}
-              </option>
-              {catalogTargets.map((target) => (
-                <option key={target.id} value={target.id}>
-                  {target.label}
-                  {target.available
-                    ? ""
-                    : ` — ${target.unavailableReason ?? "Setup required"}`}
-                </option>
-              ))}
-            </select>
+            <strong>{catalog ? "Automatic" : "Resolving…"}</strong>
             <small>
               {selectedComputeTarget?.description ??
-                "The server resolves devices, workers, runtimes, and engines."}
+                "The backend selects the available provider, device, runtime, and engine."}
             </small>
-          </label>
-          <div
-            className="training-capability-pills"
-            aria-label="Training target capabilities"
-          >
-            {catalogTargets
-              .filter((target) => target.id !== "automatic")
-              .map((target) => (
-                <span
-                  className={target.available ? "available" : "unavailable"}
-                  key={target.id}
-                  title={target.unavailableReason ?? target.description}
-                >
-                  {target.capabilityPills[0]}
-                </span>
-              ))}
           </div>
           {catalogError ? (
             <p className="training-catalog-error">{catalogError}</p>
@@ -220,21 +173,6 @@ export function TrainingCatalogSetup({
           )}
           <div className="training-start-fields training-resolved-device">
             <label>
-              <span>Device</span>
-              <select
-                value={deviceId}
-                disabled={busy || destinationId !== "local_cpu_fixture"}
-                onChange={(event) => onDeviceChange(event.target.value)}
-              >
-                <option value="automatic">Automatic</option>
-                {selectableDevices.map((device) => (
-                  <option key={device.id} value={device.id}>
-                    {device.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
               <span>Training engine</span>
               <input
                 readOnly
@@ -245,8 +183,8 @@ export function TrainingCatalogSetup({
             </label>
           </div>
           <p className="training-start-note">
-            Inference runtime remains independent; this selection controls only
-            student training compute.
+            The backend can change providers as availability changes. The exact
+            provider and spend are shown before launch.
           </p>
         </section>
       </div>

@@ -68,6 +68,7 @@ export function createTrainingApi(deps: {
     if (action === "portable_catalog") {
       return deps.training.portableCatalog(
         requestUrl?.searchParams.get("query") ?? "",
+        portableMethod(requestUrl?.searchParams.get("method")),
       );
     }
     if (action === "dataset_catalog") {
@@ -659,6 +660,14 @@ export function createTrainingApi(deps: {
   }
 
   return { request, state };
+}
+
+function portableMethod(
+  value: string | null | undefined,
+): "sft" | "dpo" | "grpo" | "ppo" | undefined {
+  return value === "sft" || value === "dpo" || value === "grpo" || value === "ppo"
+    ? value
+    : undefined;
 }
 
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

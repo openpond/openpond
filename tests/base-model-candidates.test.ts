@@ -5,6 +5,7 @@ import {
   type TrainingDestinationId,
 } from "../packages/contracts/src";
 import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates";
+import { createPortableTrainingCatalog } from "../apps/server/src/training/portable-training-catalog";
 
 const checkedAt = "2026-07-19T12:00:00.000Z";
 
@@ -103,6 +104,66 @@ describe("provider-neutral base-model candidates", () => {
           "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
       }),
     ]);
+  });
+
+  test("returns one backend-selected target for the requested method", () => {
+    const destinations = [
+      destination("prime_hosted", {
+        modelAllowlist: ["Qwen/Qwen3-0.6B"],
+        methods: ["grpo"],
+      }),
+      destination("fireworks", {
+        modelAllowlist: ["accounts/fireworks/models/qwen3-8b"],
+        methods: ["sft", "grpo"],
+        nonProduction: false,
+      }),
+      destination("local_cpu_fixture", {
+        modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture"],
+      }),
+    ];
+    const candidates = projectBaseModelCandidates({
+      destinations,
+      inventory: null,
+    });
+    const shared = {
+      candidates,
+      destinations,
+      inventory: null,
+      registeredEngineIds: [
+        "connected-prime-rl",
+        "fireworks-native",
+        "local-trl",
+      ],
+      connectedEngineConfigured: true,
+      primeRawConfigured: true,
+      connectedWorkerImageDigest: `sha256:${"a".repeat(64)}`,
+      now: checkedAt,
+    };
+
+    expect(
+      createPortableTrainingCatalog({
+        ...shared,
+        preferredMethod: "grpo",
+      }).targets,
+    ).toEqual([
+      expect.objectContaining({
+        id: "automatic",
+        destinationId: "prime_hosted",
+        computeAdapterId: "prime-raw",
+        available: true,
+      }),
+    ]);
+    expect(
+      createPortableTrainingCatalog({
+        ...shared,
+        preferredMethod: "sft",
+      }).targets[0],
+    ).toMatchObject({
+      id: "automatic",
+      destinationId: "fireworks",
+      computeAdapterId: "fireworks-managed",
+      available: true,
+    });
   });
 });
 
