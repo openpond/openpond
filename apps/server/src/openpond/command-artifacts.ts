@@ -14,23 +14,33 @@ export type CommandArtifact = {
 const ARTIFACT_CONTENT_TYPES = new Map<string, string>([
   [".avif", "image/avif"],
   [".csv", "text/csv"],
-  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  [
+    ".docx",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
   [".gif", "image/gif"],
   [".jpeg", "image/jpeg"],
   [".jpg", "image/jpeg"],
   [".json", "application/json"],
   [".m4a", "audio/mp4"],
+  [".md", "text/markdown"],
   [".mov", "video/quicktime"],
   [".mp3", "audio/mpeg"],
   [".mp4", "video/mp4"],
   [".pdf", "application/pdf"],
   [".png", "image/png"],
-  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
+  [
+    ".pptx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ],
   [".tsv", "text/tab-separated-values"],
   [".wav", "audio/wav"],
   [".webm", "video/webm"],
   [".webp", "image/webp"],
-  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+  [
+    ".xlsx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ],
   [".zip", "application/zip"],
 ]);
 
@@ -39,16 +49,16 @@ const ARTIFACT_EXTENSION_PATTERN = [...ARTIFACT_CONTENT_TYPES.keys()]
   .join("|");
 const ABSOLUTE_ARTIFACT_PATTERN = new RegExp(
   `((?:/|[A-Za-z]:[\\\\/])[^\\n\\r\"'<>|]*?\\.(?:${ARTIFACT_EXTENSION_PATTERN}))(?=$|[\\s\"',;})\\]])`,
-  "gi",
+  "gi"
 );
 const RELATIVE_ARTIFACT_PATTERN = new RegExp(
   `(?:^|[\\s\"'=:])((?:\\.{0,2}[\\\\/])?[A-Za-z0-9_.-][^\\n\\r\"'<>|]*?\\.(?:${ARTIFACT_EXTENSION_PATTERN}))(?=$|[\\s\"',;})\\]])`,
-  "gi",
+  "gi"
 );
 
 export async function discoverCommandArtifacts(
   result: Pick<OpenPondCommandRunResult, "cwd" | "stdout" | "stderr">,
-  limit = 12,
+  limit = 12
 ): Promise<CommandArtifact[]> {
   const candidates = new Set<string>();
   collectJsonPaths(result.stdout, candidates);
@@ -60,10 +70,12 @@ export async function discoverCommandArtifacts(
     const resolved = path.isAbsolute(candidate)
       ? path.resolve(candidate)
       : result.cwd
-        ? path.resolve(result.cwd, candidate)
-        : null;
+      ? path.resolve(result.cwd, candidate)
+      : null;
     if (!resolved || seen.has(resolved)) continue;
-    const contentType = ARTIFACT_CONTENT_TYPES.get(path.extname(resolved).toLowerCase());
+    const contentType = ARTIFACT_CONTENT_TYPES.get(
+      path.extname(resolved).toLowerCase()
+    );
     if (!contentType) continue;
     try {
       const stat = await fs.stat(resolved);
@@ -86,7 +98,10 @@ export async function discoverCommandArtifacts(
 }
 
 function collectTextPaths(value: string, output: Set<string>): void {
-  for (const pattern of [ABSOLUTE_ARTIFACT_PATTERN, RELATIVE_ARTIFACT_PATTERN]) {
+  for (const pattern of [
+    ABSOLUTE_ARTIFACT_PATTERN,
+    RELATIVE_ARTIFACT_PATTERN,
+  ]) {
     pattern.lastIndex = 0;
     for (const match of value.matchAll(pattern)) {
       const candidate = match[1]?.trim().replace(/[.,:]+$/, "");
@@ -96,9 +111,16 @@ function collectTextPaths(value: string, output: Set<string>): void {
 }
 
 function collectJsonPaths(value: string, output: Set<string>): void {
-  const candidates = [value.trim(), ...value.split(/\r?\n/).map((line) => line.trim())];
+  const candidates = [
+    value.trim(),
+    ...value.split(/\r?\n/).map((line) => line.trim()),
+  ];
   for (const candidate of candidates) {
-    if (!candidate || (!candidate.startsWith("{") && !candidate.startsWith("["))) continue;
+    if (
+      !candidate ||
+      (!candidate.startsWith("{") && !candidate.startsWith("["))
+    )
+      continue;
     try {
       collectJsonStrings(JSON.parse(candidate), output);
     } catch {
@@ -107,7 +129,11 @@ function collectJsonPaths(value: string, output: Set<string>): void {
   }
 }
 
-function collectJsonStrings(value: unknown, output: Set<string>, depth = 0): void {
+function collectJsonStrings(
+  value: unknown,
+  output: Set<string>,
+  depth = 0
+): void {
   if (depth > 8 || value == null) return;
   if (typeof value === "string") {
     const extension = path.extname(value).toLowerCase();

@@ -1,10 +1,11 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { OpenPondApp } from "@openpond/contracts";
+import type { Experience, OpenPondApp } from "@openpond/contracts";
 import { BookOpenText, Duck, Plug, SquarePen } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
 
 export function SidebarNavigation({
+  experience = "development",
   beginNewChat,
   setSectionMenuOpen,
   setSelectedAppId,
@@ -13,6 +14,7 @@ export function SidebarNavigation({
   setView,
   view,
 }: {
+  experience: Experience;
   beginNewChat: (app?: OpenPondApp | null) => void;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
@@ -32,7 +34,7 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       <button className="nav-command" onClick={() => beginNewChat(null)}>
         <SquarePen size={16} />
-        <span>New task</span>
+        <span>{experience === "chat" ? "New chat" : "New task"}</span>
       </button>
       <button
         className={`nav-command ${view === "get-started" ? "active" : ""}`}
@@ -45,27 +47,33 @@ export function SidebarNavigation({
         <BookOpenText size={16} />
         <span>Get started</span>
       </button>
-      <button
-        className={`nav-command nav-profile-command ${view === "labs" ? "active" : ""}`}
-        aria-label="Lab"
-        onClick={() => {
-          clearWorkspaceSelection();
-          setView("labs");
-        }}
-      >
-        <Duck size={16} />
-        <span>Lab</span>
-      </button>
-      <button
-        className={`nav-command ${view === "apps" ? "active" : ""}`}
-        onClick={() => {
-          setView("apps");
-          clearWorkspaceSelection();
-        }}
-      >
-        <Plug size={16} />
-        <span>Apps</span>
-      </button>
+      {experience === "development" ? (
+        <button
+          className={`nav-command nav-profile-command ${
+            view === "labs" ? "active" : ""
+          }`}
+          aria-label="Lab"
+          onClick={() => {
+            clearWorkspaceSelection();
+            setView("labs");
+          }}
+        >
+          <Duck size={16} />
+          <span>Lab</span>
+        </button>
+      ) : null}
+      {experience !== "chat" ? (
+        <button
+          className={`nav-command ${view === "apps" ? "active" : ""}`}
+          onClick={() => {
+            setView("apps");
+            clearWorkspaceSelection();
+          }}
+        >
+          <Plug size={16} />
+          <span>Apps</span>
+        </button>
+      ) : null}
     </nav>
   );
 }

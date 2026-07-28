@@ -116,6 +116,71 @@
   app-region: drag;
 }
 
+.app-titlebar.has-experience {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.experience-selector {
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+  min-width: 0;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.experience-handoff-bar {
+  align-items: center;
+  background: color-mix(in srgb, var(--panel-soft) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--muted);
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  justify-content: space-between;
+  margin: 0 auto 8px;
+  max-width: min(760px, calc(100% - 24px));
+  padding: 8px 10px;
+}
+
+.experience-handoff-bar button {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  padding: 5px 8px;
+}
+
+.experience-selector button {
+  min-width: 58px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.experience-selector button:hover {
+  color: var(--text);
+}
+
+.experience-selector button.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
 .platform-macos.sidebar-closed .app-titlebar {
   padding-left: 78px;
 }

@@ -27,7 +27,10 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
 import { CodexModelReasoningMenu } from "./ComposerControls";
-import { ComposerProfileTargetControl, type ComposerProfileTargetState } from "./ComposerControls";
+import {
+  ComposerProfileTargetControl,
+  type ComposerProfileTargetState,
+} from "./ComposerControls";
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
@@ -66,6 +69,7 @@ export function ComposerPrimaryControls({
   modelValue,
   modelOptions = [],
   openPondCommandAccessMode,
+  showCommandAccess = true,
   profileTarget,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
@@ -113,6 +117,7 @@ export function ComposerPrimaryControls({
   modelValue: string;
   modelOptions?: DropdownOption[];
   openPondCommandAccessMode: OpenPondCommandAccessMode;
+  showCommandAccess?: boolean;
   profileTarget?: ComposerProfileTargetState | null;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
@@ -139,7 +144,11 @@ export function ComposerPrimaryControls({
   stopLabel?: string;
   steering: boolean;
 }) {
-  const showModelReasoningMenu = providerModelSupportsReasoning(provider, modelValue, providerSettings);
+  const showModelReasoningMenu = providerModelSupportsReasoning(
+    provider,
+    modelValue,
+    providerSettings
+  );
   if (surface === "team") {
     return (
       <div className="composer-primary-controls team-chat-composer-controls">
@@ -168,7 +177,9 @@ export function ComposerPrimaryControls({
             type="checkbox"
             checked={teamUseModel}
             disabled={busy || teamUseModelLocked}
-            onChange={(event) => onTeamUseModelChange?.(event.currentTarget.checked)}
+            onChange={(event) =>
+              onTeamUseModelChange?.(event.currentTarget.checked)
+            }
           />
           <span>Use model</span>
         </label>
@@ -180,7 +191,9 @@ export function ComposerPrimaryControls({
               placement={dropdownPlacement}
               label="Provider"
               value={provider}
-              options={providerOptions.filter((option) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(option.value))}
+              options={providerOptions.filter((option) =>
+                TEAM_CHAT_LOCAL_PROVIDER_IDS.has(option.value)
+              )}
               disabled={busy}
               onChange={(value) => {
                 if (value === "setup-provider") {
@@ -273,39 +286,55 @@ export function ComposerPrimaryControls({
           }}
         />
       </div>
-      {provider === "codex" ? (
+      {showCommandAccess && provider === "codex" ? (
         <DropdownSelect
           compact
           className="permission-select"
           icon={<Shield size={14} />}
           placement={dropdownPlacement}
           label="Codex permissions"
-          tooltip={CODEX_PERMISSION_MODE_OPTIONS.find(
-            (option) => option.value === codexPermissionMode,
-          )?.label}
+          tooltip={
+            CODEX_PERMISSION_MODE_OPTIONS.find(
+              (option) => option.value === codexPermissionMode
+            )?.label
+          }
           value={codexPermissionMode}
           options={CODEX_PERMISSION_MODE_OPTIONS}
           disabled={busy}
-          onChange={(value) => onCodexPermissionModeChange(value as CodexPermissionMode)}
+          onChange={(value) =>
+            onCodexPermissionModeChange(value as CodexPermissionMode)
+          }
         />
-      ) : (
+      ) : showCommandAccess ? (
         <DropdownSelect
           compact
           className="permission-select"
           icon={<SquareTerminal size={14} />}
           placement={dropdownPlacement}
           label="Command access"
-          tooltip={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS.find(
-            (option) =>
-              option.value ===
-              (openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode),
-          )?.label}
-          value={openPondCommandAccessMode === "disabled" ? "ask" : openPondCommandAccessMode}
+          tooltip={
+            OPENPOND_COMMAND_ACCESS_MODE_OPTIONS.find(
+              (option) =>
+                option.value ===
+                (openPondCommandAccessMode === "disabled"
+                  ? "ask"
+                  : openPondCommandAccessMode)
+            )?.label
+          }
+          value={
+            openPondCommandAccessMode === "disabled"
+              ? "ask"
+              : openPondCommandAccessMode
+          }
           options={OPENPOND_COMMAND_ACCESS_MODE_OPTIONS}
           disabled={busy}
-          onChange={(value) => onOpenPondCommandAccessModeChange(value as OpenPondCommandAccessMode)}
+          onChange={(value) =>
+            onOpenPondCommandAccessModeChange(
+              value as OpenPondCommandAccessMode
+            )
+          }
         />
-      )}
+      ) : null}
       {profileTarget && onProfileTargetChange ? (
         <ComposerProfileTargetControl
           busy={busy}
@@ -315,7 +344,10 @@ export function ComposerPrimaryControls({
         />
       ) : null}
       <div className="composer-spacer" />
-      <span className={`context-status-shell ${contextWindowStatus.tone}`} style={contextStatusStyle}>
+      <span
+        className={`context-status-shell ${contextWindowStatus.tone}`}
+        style={contextStatusStyle}
+      >
         <span
           className={`composer-status ${contextWindowStatus.tone}`}
           role={contextWindowStatus.maxTokens === null ? "img" : "meter"}
@@ -323,10 +355,18 @@ export function ComposerPrimaryControls({
           aria-describedby={contextStatusTooltipId}
           aria-valuemin={contextWindowStatus.maxTokens === null ? undefined : 0}
           aria-valuemax={contextWindowStatus.maxTokens ?? undefined}
-          aria-valuenow={contextWindowStatus.maxTokens === null ? undefined : contextWindowStatus.usedTokens}
+          aria-valuenow={
+            contextWindowStatus.maxTokens === null
+              ? undefined
+              : contextWindowStatus.usedTokens
+          }
           tabIndex={0}
         />
-        <span className="context-status-tooltip" id={contextStatusTooltipId} role="tooltip">
+        <span
+          className="context-status-tooltip"
+          id={contextStatusTooltipId}
+          role="tooltip"
+        >
           <span className="context-status-tooltip-title">Context window</span>
           <span className="context-status-tooltip-main">
             <span>{contextWindowStatus.summary}</span>
@@ -338,7 +378,9 @@ export function ComposerPrimaryControls({
             </span>
           )}
           {contextWindowStatus.detail ? (
-            <span className="context-status-tooltip-detail">{contextWindowStatus.detail}</span>
+            <span className="context-status-tooltip-detail">
+              {contextWindowStatus.detail}
+            </span>
           ) : null}
         </span>
       </span>
@@ -409,15 +451,29 @@ export function ComposerPrimaryControls({
           aria-label={stopLabel}
           onClick={onStop}
         >
-          {stopIcon === "pause" ? <Pause size={15} /> : <Square size={13} fill="currentColor" />}
+          {stopIcon === "pause" ? (
+            <Pause size={15} />
+          ) : (
+            <Square size={13} fill="currentColor" />
+          )}
         </button>
       ) : steering ? (
-        <button className="send-button steer-button" disabled={sendDisabled} data-tooltip="Steer" aria-label="Steer">
+        <button
+          className="send-button steer-button"
+          disabled={sendDisabled}
+          data-tooltip="Steer"
+          aria-label="Steer"
+        >
           <ArrowUpRight size={13} />
           <span>Steer</span>
         </button>
       ) : (
-        <button className="send-button" disabled={sendDisabled} data-tooltip={sendTooltip} aria-label={sendTooltip}>
+        <button
+          className="send-button"
+          disabled={sendDisabled}
+          data-tooltip={sendTooltip}
+          aria-label={sendTooltip}
+        >
           <ArrowUp size={18} />
         </button>
       )}

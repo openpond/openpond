@@ -35,6 +35,7 @@ import { SidebarAppPreferenceSchema } from "./workspaces.js";
 import { UsageRequestAttributionSchema } from "./usage.js";
 import { OpenPondProfileRefSchema } from "./profile-ref.js";
 import { OpenPondActionCatalogEntrySchema } from "./action-catalog.js";
+import { ExperienceSchema } from "./experiences.js";
 
 const ConnectedAppProviderFamilyIdSchema = z.enum([
   "slack",
@@ -71,7 +72,9 @@ export const MentionedConnectedAppRefSchema = z
   })
   .strict();
 
-export type MentionedConnectedAppRef = z.infer<typeof MentionedConnectedAppRefSchema>;
+export type MentionedConnectedAppRef = z.infer<
+  typeof MentionedConnectedAppRefSchema
+>;
 
 export const CHAT_ATTACHMENT_LIMITS = {
   maxAttachments: 10,
@@ -94,10 +97,18 @@ export const ChatAttachmentSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).max(240),
   mediaType: z.string().trim().min(1).max(160),
-  sizeBytes: z.number().int().nonnegative().max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes),
+  sizeBytes: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes),
   kind: ChatAttachmentKindSchema,
+  relativePath: z.string().trim().min(1).max(1_024).optional(),
   text: z.string().max(CHAT_ATTACHMENT_LIMITS.maxTextChars).optional(),
-  contentsBase64: z.string().max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBase64Chars).optional(),
+  contentsBase64: z
+    .string()
+    .max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBase64Chars)
+    .optional(),
 });
 
 export type ChatAttachment = z.infer<typeof ChatAttachmentSchema>;
@@ -112,6 +123,7 @@ export const ChatAttachmentSummarySchema = ChatAttachmentSchema.omit({
 export type ChatAttachmentSummary = z.infer<typeof ChatAttachmentSummarySchema>;
 
 export const CreateSessionRequestSchema = z.object({
+  experience: ExperienceSchema.optional(),
   provider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   modelRef: ChatModelRefSchema.optional(),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
@@ -166,12 +178,25 @@ export const SendTurnRequestSchema = z.object({
   model: z.string().nullable().optional(),
   modelRef: ChatModelRefSchema.optional(),
   mentionedAppIds: z.array(z.string().trim().min(1)).max(8).optional(),
-  mentionedConnectedApps: z.array(MentionedConnectedAppRefSchema).max(8).optional(),
-  openPondActionCatalog: z.array(OpenPondActionCatalogEntrySchema).max(100).optional(),
-  attachments: z.array(ChatAttachmentSchema).max(CHAT_ATTACHMENT_LIMITS.maxAttachments).optional(),
+  mentionedConnectedApps: z
+    .array(MentionedConnectedAppRefSchema)
+    .max(8)
+    .optional(),
+  openPondActionCatalog: z
+    .array(OpenPondActionCatalogEntrySchema)
+    .max(100)
+    .optional(),
+  attachments: z
+    .array(ChatAttachmentSchema)
+    .max(CHAT_ATTACHMENT_LIMITS.maxAttachments)
+    .optional(),
   createImproveRun: CreateImproveRunSchema.optional().nullable(),
-  approvalPolicy: z.enum(["untrusted", "on-failure", "on-request", "never"]).default("on-request"),
-  sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).default("workspace-write"),
+  approvalPolicy: z
+    .enum(["untrusted", "on-failure", "on-request", "never"])
+    .default("on-request"),
+  sandbox: z
+    .enum(["read-only", "workspace-write", "danger-full-access"])
+    .default("workspace-write"),
   codexPermissionMode: CodexPermissionModeSchema.default("default"),
   codexReasoningEffort: CodexReasoningEffortSchema.optional(),
 });
@@ -188,7 +213,8 @@ export type RecordPreflightTurnFailureRequest = z.infer<
   typeof RecordPreflightTurnFailureRequestSchema
 >;
 
-export const ApplyCreateImproveRunActionRequestSchema = CreateImproveRunActionSchema;
+export const ApplyCreateImproveRunActionRequestSchema =
+  CreateImproveRunActionSchema;
 
 export type ApplyCreateImproveRunActionRequest = z.infer<
   typeof ApplyCreateImproveRunActionRequestSchema
@@ -203,6 +229,7 @@ export const CompactSessionRequestSchema = z.object({
 export type CompactSessionRequest = z.infer<typeof CompactSessionRequestSchema>;
 
 export const PatchSessionRequestSchema = z.object({
+  experience: ExperienceSchema.optional(),
   provider: ChatProviderSchema.optional(),
   modelRef: ChatModelRefSchema.nullable().optional(),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
@@ -237,17 +264,24 @@ export const RunSessionCommandRequestSchema = z.object({
   timeoutSeconds: z.number().int().min(1).max(3600).optional(),
 });
 
-export type RunSessionCommandRequest = z.infer<typeof RunSessionCommandRequestSchema>;
+export type RunSessionCommandRequest = z.infer<
+  typeof RunSessionCommandRequestSchema
+>;
 
-export const PatchSidebarAppPreferenceRequestSchema = SidebarAppPreferenceSchema;
+export const PatchSidebarAppPreferenceRequestSchema =
+  SidebarAppPreferenceSchema;
 
-export type PatchSidebarAppPreferenceRequest = z.infer<typeof PatchSidebarAppPreferenceRequestSchema>;
+export type PatchSidebarAppPreferenceRequest = z.infer<
+  typeof PatchSidebarAppPreferenceRequestSchema
+>;
 
 export const ReorderSidebarAppsRequestSchema = z.object({
   appIds: z.array(z.string()).min(1),
 });
 
-export type ReorderSidebarAppsRequest = z.infer<typeof ReorderSidebarAppsRequestSchema>;
+export type ReorderSidebarAppsRequest = z.infer<
+  typeof ReorderSidebarAppsRequestSchema
+>;
 
 export const UpdateAppPreferencesRequestSchema = z.object({
   defaultChatProvider: ChatProviderSchema.optional(),
@@ -269,11 +303,15 @@ export const UpdateAppPreferencesRequestSchema = z.object({
   editor: WorkspaceEditorPreferencesSchema.optional(),
 });
 
-export type UpdateAppPreferencesRequest = z.infer<typeof UpdateAppPreferencesRequestSchema>;
+export type UpdateAppPreferencesRequest = z.infer<
+  typeof UpdateAppPreferencesRequestSchema
+>;
 
 export const UpdateProviderSettingsRequestSchema = ProviderSettingsUpdateSchema;
 
-export type UpdateProviderSettingsRequest = z.infer<typeof UpdateProviderSettingsRequestSchema>;
+export type UpdateProviderSettingsRequest = z.infer<
+  typeof UpdateProviderSettingsRequestSchema
+>;
 
 export const RecordClientDiagnosticRequestSchema = z
   .object({
@@ -284,27 +322,42 @@ export const RecordClientDiagnosticRequestSchema = z
   })
   .strict();
 
-export type RecordClientDiagnosticRequest = z.infer<typeof RecordClientDiagnosticRequestSchema>;
+export type RecordClientDiagnosticRequest = z.infer<
+  typeof RecordClientDiagnosticRequestSchema
+>;
 
-export const SetProviderCredentialRequestSchema = ProviderCredentialWriteRequestSchema;
+export const SetProviderCredentialRequestSchema =
+  ProviderCredentialWriteRequestSchema;
 
-export type SetProviderCredentialRequest = z.infer<typeof SetProviderCredentialRequestSchema>;
+export type SetProviderCredentialRequest = z.infer<
+  typeof SetProviderCredentialRequestSchema
+>;
 
-export const DeleteProviderCredentialRequestSchema = ProviderCredentialDeleteRequestSchema;
+export const DeleteProviderCredentialRequestSchema =
+  ProviderCredentialDeleteRequestSchema;
 
-export type DeleteProviderCredentialRequest = z.infer<typeof DeleteProviderCredentialRequestSchema>;
+export type DeleteProviderCredentialRequest = z.infer<
+  typeof DeleteProviderCredentialRequestSchema
+>;
 
 export const ValidateProviderRequestSchema = ProviderValidationRequestSchema;
 
-export type ValidateProviderRequest = z.infer<typeof ValidateProviderRequestSchema>;
+export type ValidateProviderRequest = z.infer<
+  typeof ValidateProviderRequestSchema
+>;
 
 export const ListProviderModelsRequestSchema = ProviderModelsRequestSchema;
 
-export type ListProviderModelsRequest = z.infer<typeof ListProviderModelsRequestSchema>;
+export type ListProviderModelsRequest = z.infer<
+  typeof ListProviderModelsRequestSchema
+>;
 
-export const RefreshProviderModelsRequestSchema = ProviderModelsRefreshRequestSchema;
+export const RefreshProviderModelsRequestSchema =
+  ProviderModelsRefreshRequestSchema;
 
-export type RefreshProviderModelsRequest = z.infer<typeof RefreshProviderModelsRequestSchema>;
+export type RefreshProviderModelsRequest = z.infer<
+  typeof RefreshProviderModelsRequestSchema
+>;
 
 export const UpdatePersonalizationRequestSchema = z.object({
   activeTemplateId: PersonalizationTemplateIdSchema,
@@ -313,20 +366,26 @@ export const UpdatePersonalizationRequestSchema = z.object({
   saveAsNew: z.boolean().optional().default(false),
 });
 
-export type UpdatePersonalizationRequest = z.infer<typeof UpdatePersonalizationRequestSchema>;
+export type UpdatePersonalizationRequest = z.infer<
+  typeof UpdatePersonalizationRequestSchema
+>;
 
 export const ResolveApprovalRequestSchema = z.object({
   decision: z.enum(["accept", "acceptForSession", "decline", "cancel"]),
 });
 
-export type ResolveApprovalRequest = z.infer<typeof ResolveApprovalRequestSchema>;
+export type ResolveApprovalRequest = z.infer<
+  typeof ResolveApprovalRequestSchema
+>;
 
 export const EnsureCloudWorkspaceReadyRequestSchema = z.object({
   branch: z.string().trim().min(1).max(240).nullable().optional(),
   surface: z.enum(["desktop", "terminal"]),
 });
 
-export type EnsureCloudWorkspaceReadyRequest = z.infer<typeof EnsureCloudWorkspaceReadyRequestSchema>;
+export type EnsureCloudWorkspaceReadyRequest = z.infer<
+  typeof EnsureCloudWorkspaceReadyRequestSchema
+>;
 
 export type CloudWorkspaceReadyStatus =
   | "already_running"
@@ -347,7 +406,9 @@ export const SwitchOpenPondAccountRequestSchema = z.object({
   baseUrl: z.string().nullable().optional(),
 });
 
-export type SwitchOpenPondAccountRequest = z.infer<typeof SwitchOpenPondAccountRequestSchema>;
+export type SwitchOpenPondAccountRequest = z.infer<
+  typeof SwitchOpenPondAccountRequestSchema
+>;
 
 export const SaveOpenPondAccountRequestSchema = z.object({
   handle: z.string().min(1).optional(),
@@ -359,7 +420,9 @@ export const SaveOpenPondAccountRequestSchema = z.object({
   setActive: z.boolean().optional(),
 });
 
-export type SaveOpenPondAccountRequest = z.infer<typeof SaveOpenPondAccountRequestSchema>;
+export type SaveOpenPondAccountRequest = z.infer<
+  typeof SaveOpenPondAccountRequestSchema
+>;
 
 export const UpdateOpenPondAccountConfigRequestSchema = z.object({
   handle: z.string().min(1),

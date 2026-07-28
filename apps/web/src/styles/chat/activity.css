@@ -52,9 +52,7 @@
   flex: 0 0 auto;
   opacity: 0;
   transform: rotate(-90deg);
-  transition:
-    opacity 120ms ease,
-    transform 160ms ease;
+  transition: opacity 120ms ease, transform 160ms ease;
 }
 
 .activity-summary:hover .activity-summary-toggle,
@@ -446,6 +444,15 @@
   background: rgba(255, 255, 255, 0.035);
   padding: 8px 9px;
   grid-column: 1 / -1;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.activity-artifact:hover {
+  border-color: rgba(255, 255, 255, 0.17);
+  background: rgba(255, 255, 255, 0.055);
 }
 
 .activity-artifact > span {

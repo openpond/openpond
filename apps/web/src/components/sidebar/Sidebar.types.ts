@@ -9,6 +9,7 @@ import type {
   TeamChatThread,
   CommunityChannel,
   CommunitySummary,
+  Experience,
   WorkspaceState,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -26,6 +27,7 @@ import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 
 export type SidebarProps = {
+  experience: Experience;
   view: AppView;
   selectedAppId: string | null;
   selectedProjectId: string | null;
@@ -108,7 +110,10 @@ export type SidebarProps = {
   startProjectFromScratch: () => void;
   startCloudProjectFromScratch: () => void;
   moveProjectToCloud: (item: SidebarProjectItem) => void;
-  switchProjectWorkspaceTarget: (projectId: string, target: WorkspaceTargetValue) => void;
+  switchProjectWorkspaceTarget: (
+    projectId: string,
+    target: WorkspaceTargetValue
+  ) => void;
   removeProject: (item: SidebarProjectItem) => void;
   toggleProjectPinned: (item: SidebarProjectItem) => void;
   toggleSessionPinned: (session: Session) => void;
@@ -116,16 +121,25 @@ export type SidebarProps = {
   openSidebarFile: (file: SidebarFileBookmark) => void;
   setSidebarFileStatus: (
     file: SidebarFileBookmark,
-    status: "pinned" | "saved_for_later" | "none",
+    status: "pinned" | "saved_for_later" | "none"
   ) => void;
   archiveSession: (session: Session) => void;
   restoreSession: (session: Session) => void;
   renameSession: (session: Session, title: string) => void;
   expandProject: (projectId: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
-  startPinnedDrag: (event: DragEvent<HTMLDivElement>, item: SidebarDragItem) => void;
+  startPinnedDrag: (
+    event: DragEvent<HTMLDivElement>,
+    item: SidebarDragItem
+  ) => void;
   clearSidebarDrag: () => void;
-  previewPinnedDrop: (event: DragEvent<HTMLDivElement>, target: SidebarDragItem) => void;
-  commitPinnedDrop: (event: DragEvent<HTMLDivElement>, target: SidebarDragItem) => void;
+  previewPinnedDrop: (
+    event: DragEvent<HTMLDivElement>,
+    target: SidebarDragItem
+  ) => void;
+  commitPinnedDrop: (
+    event: DragEvent<HTMLDivElement>,
+    target: SidebarDragItem
+  ) => void;
   commitPinnedPreviewDrop: () => void;
 };

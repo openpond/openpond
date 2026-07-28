@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
+  DEFAULT_SESSION_EXPERIENCE,
   OPENPOND_MANIFEST_FILE_NAME,
   type ChatProvider,
   type OpenPondApp,
@@ -21,9 +22,16 @@ import {
 } from "./connected-app-context.js";
 import { buildPersonalizedSystemPrompt } from "./personalization.js";
 import { event } from "../utils.js";
+import { experienceUsesWorkspaceToolProtocol } from "../runtime/experience-policy.js";
 
-export type ActionCatalogInstructionMode = "text_fallback" | "native_tool" | "none";
-export type ProfileSkillInstructionMode = "text_fallback" | "native_tool" | "none";
+export type ActionCatalogInstructionMode =
+  | "text_fallback"
+  | "native_tool"
+  | "none";
+export type ProfileSkillInstructionMode =
+  | "text_fallback"
+  | "native_tool"
+  | "none";
 
 export type HostedProfileSkillBody = {
   name: string;
@@ -36,7 +44,11 @@ export type HostedProfileSkillBody = {
 };
 
 export type HostedTurnHelpers = {
-  maybeCreateScaffoldForTurn(session: Session, turnId: string, prompt: string): Promise<Session>;
+  maybeCreateScaffoldForTurn(
+    session: Session,
+    turnId: string,
+    prompt: string
+  ): Promise<Session>;
   hostedSystemPrompt(
     basePrompt: string,
     personalizationSoul: string,
@@ -54,7 +66,11 @@ export type HostedTurnHelpers = {
       extraSystemContext?: string | null;
     }
   ): Promise<string>;
-  appendAssistantText(session: Session, turnId: string, text: string): Promise<void>;
+  appendAssistantText(
+    session: Session,
+    turnId: string,
+    text: string
+  ): Promise<void>;
   appendHostedContextUsage(input: {
     session: Session;
     turnId: string;
@@ -72,7 +88,11 @@ export function createHostedTurnHelpers(deps: {
 }): HostedTurnHelpers {
   const { appendRuntimeEvent } = deps;
 
-  async function maybeCreateScaffoldForTurn(session: Session, turnId: string, prompt: string): Promise<Session> {
+  async function maybeCreateScaffoldForTurn(
+    session: Session,
+    turnId: string,
+    prompt: string
+  ): Promise<Session> {
     void turnId;
     void prompt;
     return session;
@@ -95,21 +115,44 @@ export function createHostedTurnHelpers(deps: {
       extraSystemContext?: string | null;
     } = {}
   ): Promise<string> {
+    const experience = session.experience ?? DEFAULT_SESSION_EXPERIENCE;
+    const requestedToolInstructionMode =
+      options.toolInstructionMode ?? "full_text_fallback";
+    const toolInstructionMode = experienceUsesWorkspaceToolProtocol(experience)
+      ? requestedToolInstructionMode
+      : "none";
     const isHybridSession = isHybridWorkspaceSession(session);
     const workspaceContext =
-      session.workspaceKind === "local_project"
-          ? (await looksLikeSandboxTemplateRepo(session.cwd))
-            ? buildLocalSandboxTemplateTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback")
-            : buildLocalProjectTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback")
-        : session.workspaceKind === "sandbox" || session.workspaceKind === "sandbox_template"
-          ? isHybridSession
-            ? buildHybridSandboxTurnContext(session.workspaceId, session.workspaceName, options.toolInstructionMode ?? "full_text_fallback")
-            : buildSandboxTurnContext(session.workspaceId, session.workspaceName, options.toolInstructionMode ?? "full_text_fallback")
-          : buildGeneralWorkspaceTurnContext(session.cwd, options.toolInstructionMode ?? "full_text_fallback");
-    const toolProtocol = hostedToolProtocolForInstructionMode(options.toolInstructionMode ?? "full_text_fallback");
+      experience === "chat"
+        ? buildChatExperienceContext()
+        : experience === "work"
+        ? buildWorkExperienceContext(session)
+        : session.workspaceKind === "local_project"
+        ? (await looksLikeSandboxTemplateRepo(session.cwd))
+          ? buildLocalSandboxTemplateTurnContext(
+              session.cwd,
+              toolInstructionMode
+            )
+          : buildLocalProjectTurnContext(session.cwd, toolInstructionMode)
+        : session.workspaceKind === "sandbox" ||
+          session.workspaceKind === "sandbox_template"
+        ? isHybridSession
+          ? buildHybridSandboxTurnContext(
+              session.workspaceId,
+              session.workspaceName,
+              toolInstructionMode
+            )
+          : buildSandboxTurnContext(
+              session.workspaceId,
+              session.workspaceName,
+              toolInstructionMode
+            )
+        : buildGeneralWorkspaceTurnContext(session.cwd, toolInstructionMode);
+    const toolProtocol =
+      hostedToolProtocolForInstructionMode(toolInstructionMode);
     const actionCatalogContext = buildActionCatalogContext(
       options.openPondActionCatalog ?? [],
-      options.actionCatalogInstructionMode ?? "text_fallback",
+      options.actionCatalogInstructionMode ?? "text_fallback"
     );
     const profileSkillContext = buildProfileSkillContext({
       skills: options.openPondProfileSkills ?? [],
@@ -118,9 +161,12 @@ export function createHostedTurnHelpers(deps: {
     });
     const capabilityIndexContext = buildOpenPondCapabilityIndexContext({
       browserControlAvailable: options.browserControlAvailable === true,
+      experience,
       hybridWorkspace: isHybridSession,
     });
-    const connectedAppContext = buildConnectedAppIndexContext(options.connectedApps ?? []);
+    const connectedAppContext = buildConnectedAppIndexContext(
+      options.connectedApps ?? []
+    );
     return buildPersonalizedSystemPrompt(
       personalizationSoul,
       [
@@ -138,7 +184,11 @@ export function createHostedTurnHelpers(deps: {
     );
   }
 
-  async function appendAssistantText(session: Session, turnId: string, text: string): Promise<void> {
+  async function appendAssistantText(
+    session: Session,
+    turnId: string,
+    text: string
+  ): Promise<void> {
     if (!text) return;
     await appendRuntimeEvent(
       event({
@@ -194,19 +244,29 @@ const PROFILE_SKILL_DESCRIPTION_MAX_CHARS = 280;
 const PROFILE_SKILL_BODY_MAX_CHARS = 80000;
 
 function buildOpenPondCapabilityIndexContext(
-  input: { browserControlAvailable?: boolean; hybridWorkspace?: boolean } = {},
+  input: {
+    browserControlAvailable?: boolean;
+    experience?: Session["experience"];
+    hybridWorkspace?: boolean;
+  } = {}
 ): string {
   return [
     "OpenPond capabilities:",
     "- workspace_context: use resource_search and resource_read for workspace, session, artifact, goal, sandbox, and git context.",
     "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn. For matching natural-language authoring requests, load the relevant bundled profile skill from the catalog.",
     ...(input.hybridWorkspace
-      ? ["- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority."]
+      ? [
+          "- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority.",
+        ]
       : []),
     ...(input.browserControlAvailable
-      ? [
+      ? input.experience === "work"
+        ? [
+            "- browser_control: Work may open, snapshot, move over, and scroll the desktop in-app browser for read-only inspection. Browser clicks, typing, key presses, account changes, and publication are not available through this boundary.",
+          ]
+        : [
           "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",
-        ]
+          ]
       : []),
     "- web_fetch: fetch and read a known HTTP(S) URL when the user provides a link or exact page; use web_search for discovery by query.",
     "- web_search: search current or external information when web search is available and the answer depends on current facts.",
@@ -224,7 +284,9 @@ function buildProfileSkillContext(input: {
   const skills = input.skills
     .filter((skill) => skill.enabled && skill.validationStatus === "valid")
     .sort((left, right) => left.name.localeCompare(right.name));
-  const loadedSkills = input.loadedSkills.filter((skill) => skill.body.trim().length > 0);
+  const loadedSkills = input.loadedSkills.filter(
+    (skill) => skill.body.trim().length > 0
+  );
   if (skills.length === 0 && loadedSkills.length === 0) return null;
 
   const modeInstructions =
@@ -234,14 +296,14 @@ function buildProfileSkillContext(input: {
           "- If the user explicitly references $skill-name and that skill is already loaded below, follow the loaded instructions.",
         ]
       : input.mode === "text_fallback"
-        ? [
-            "- Load a profile skill before following it by responding with exactly one fenced block labelled openpond_skill and no other prose.",
-            '- The block must contain JSON such as {"name":"release-notes"}.',
-            "- If the user explicitly references $skill-name and that skill is already loaded below, follow the loaded instructions.",
-          ]
-        : [
-            "- Profile skill bodies are not loadable in this turn. Use only already loaded profile skill instructions below.",
-          ];
+      ? [
+          "- Load a profile skill before following it by responding with exactly one fenced block labelled openpond_skill and no other prose.",
+          '- The block must contain JSON such as {"name":"release-notes"}.',
+          "- If the user explicitly references $skill-name and that skill is already loaded below, follow the loaded instructions.",
+        ]
+      : [
+          "- Profile skill bodies are not loadable in this turn. Use only already loaded profile skill instructions below.",
+        ];
 
   const lines = [
     "OpenPond profile skills:",
@@ -259,7 +321,10 @@ function buildProfileSkillContext(input: {
     let budget = PROFILE_SKILL_INDEX_BUDGET_CHARS;
     let included = 0;
     for (const skill of skills) {
-      const description = truncateSingleLine(skill.description, PROFILE_SKILL_DESCRIPTION_MAX_CHARS);
+      const description = truncateSingleLine(
+        skill.description,
+        PROFILE_SKILL_DESCRIPTION_MAX_CHARS
+      );
       const line = `- ${skill.name}: ${description}`;
       if (line.length > budget && included > 0) break;
       lines.push(line);
@@ -267,21 +332,30 @@ function buildProfileSkillContext(input: {
       included += 1;
     }
     if (included < skills.length) {
-      lines.push(`- ${skills.length - included} additional profile skill(s) omitted from this context budget.`);
+      lines.push(
+        `- ${
+          skills.length - included
+        } additional profile skill(s) omitted from this context budget.`
+      );
     }
   }
   for (const skill of loadedSkills) {
     lines.push(
       [
         `Loaded profile skill: ${skill.name}`,
-        `description: ${truncateSingleLine(skill.description, PROFILE_SKILL_DESCRIPTION_MAX_CHARS)}`,
+        `description: ${truncateSingleLine(
+          skill.description,
+          PROFILE_SKILL_DESCRIPTION_MAX_CHARS
+        )}`,
         `path: ${skill.path}`,
         ...(skill.packagePath ? [`packagePath: ${skill.packagePath}`] : []),
-        ...(skill.resourceFiles?.length ? [`resources: ${skill.resourceFiles.join(", ")}`] : []),
+        ...(skill.resourceFiles?.length
+          ? [`resources: ${skill.resourceFiles.join(", ")}`]
+          : []),
         `sourceHash: ${skill.sourceHash}`,
         "instructions:",
         truncateBlock(skill.body, PROFILE_SKILL_BODY_MAX_CHARS),
-      ].join("\n"),
+      ].join("\n")
     );
   }
   return lines.join("\n");
@@ -289,7 +363,7 @@ function buildProfileSkillContext(input: {
 
 function buildActionCatalogContext(
   actions: OpenPondActionCatalogEntry[],
-  mode: ActionCatalogInstructionMode,
+  mode: ActionCatalogInstructionMode
 ): string | null {
   if (mode === "none") return null;
   if (actions.length === 0) return null;
@@ -315,7 +389,11 @@ function buildActionCatalogContext(
       const description = action.description ? ` - ${action.description}` : "";
       const inputSchema = schemaContext("input", action.inputSchema);
       const outputSchema = schemaContext("output", action.outputSchema);
-      return [`- ${action.id}: ${label}${description}`, inputSchema, outputSchema]
+      return [
+        `- ${action.id}: ${label}${description}`,
+        inputSchema,
+        outputSchema,
+      ]
         .filter(Boolean)
         .join("\n  ");
     }),
@@ -330,25 +408,58 @@ function truncateSingleLine(value: string, maxChars: number): string {
 
 function truncateBlock(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
-  return `${value.slice(0, Math.max(0, maxChars - 30)).trimEnd()}\n\n[profile skill truncated]`;
+  return `${value
+    .slice(0, Math.max(0, maxChars - 30))
+    .trimEnd()}\n\n[profile skill truncated]`;
 }
 
-function schemaContext(label: string, schema: OpenPondActionCatalogEntry["inputSchema"]): string | null {
+function schemaContext(
+  label: string,
+  schema: OpenPondActionCatalogEntry["inputSchema"]
+): string | null {
   if (!schema) return null;
-  const serialized = typeof schema === "string" ? schema : JSON.stringify(schema);
+  const serialized =
+    typeof schema === "string" ? schema : JSON.stringify(schema);
   return serialized ? `${label}Schema: ${serialized.slice(0, 1200)}` : null;
+}
+
+function buildChatExperienceContext(): string {
+  return [
+    "Chat experience:",
+    "- Answer conversationally using the supplied prompt, attachments, and available web tools.",
+    "- General workspace compute, plugins, local commands, repository tools, deployment tools, and sandbox tools are not available.",
+    "- If the user asks for multi-step workspace work or a durable generated file, explain that they should start a Work task.",
+  ].join("\n");
+}
+
+function buildWorkExperienceContext(session: Session): string {
+  return [
+    "Work experience:",
+    "- Carry multi-step everyday work to a reviewable result using the Work, web, plugin/connector, and approval tools actually available in this turn.",
+    "- Work compute is lazy. Do not start a sandbox when the request can be completed directly.",
+    session.workspaceId
+      ? `- Active managed workspace: ${session.workspaceId}.`
+      : "- No managed workspace is active yet. A Work tool will create one when compute is actually needed.",
+    "- The managed workspace layout is /workspace/inputs, /workspace/work, and /workspace/outputs; ordinary commands run from /workspace/work.",
+    "- Use work_capabilities before promising an unfamiliar file type or destination; it does not start compute.",
+    "- Treat supplied files and folders as authoritative references: inspect them before drafting, preserve requested structure and style, and create a new output revision instead of overwriting a saved result.",
+    "- Place completed file candidates in /workspace/outputs and call work_save_output so the result survives sandbox cleanup.",
+    "- When an approved connected write or deployment already created the durable result elsewhere, call work_register_external_output with its stable provider id or URL instead of copying it through the sandbox.",
+    "- Connected writes, sharing, and publication require explicit user intent and provider readback. Otherwise create a reviewable local draft.",
+    "- Repository, git, interactive terminal, source-promotion, and deployment capabilities belong to Development and are not available here.",
+  ].join("\n");
 }
 
 function buildLocalProjectTurnContext(
   workspacePath: string | null | undefined,
-  toolInstructionMode: HostedToolInstructionMode,
+  toolInstructionMode: HostedToolInstructionMode
 ): string {
   if (toolInstructionMode !== "full_text_fallback") {
     return [
       "Local project workspace context:",
       workspacePath ? `workspace: ${workspacePath}` : null,
       "- The active workspace is a user-selected local project folder.",
-      "- Use available native resource tools for workspace inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode=\"path\" for file/path lookup, and use filters.mode=\"ranked\" for broad multi-term retrieval.",
+      '- Use available native resource tools for workspace inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode="path" for file/path lookup, and use filters.mode="ranked" for broad multi-term retrieval.',
       "- Keep resource refs and file paths relative to the project workspace root.",
       "- Do not claim local file changes, git changes, or command execution unless an available tool result confirms them.",
     ]
@@ -370,14 +481,14 @@ function buildLocalProjectTurnContext(
 
 function buildLocalSandboxTemplateTurnContext(
   workspacePath: string | null | undefined,
-  toolInstructionMode: HostedToolInstructionMode,
+  toolInstructionMode: HostedToolInstructionMode
 ): string {
   if (toolInstructionMode !== "full_text_fallback") {
     return [
       "Local sandbox template workspace context:",
       workspacePath ? `workspace: ${workspacePath}` : null,
       "- The active workspace is a user-selected local sandbox-template project with openpond.yaml.",
-      "- Use available native resource tools for inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode=\"path\" for file/path lookup, and use filters.mode=\"ranked\" for broad multi-term retrieval.",
+      '- Use available native resource tools for inspection, especially resource_search and resource_read. Prefer targeted path or identifier queries with limit 5-10, then read likely refs. Avoid repeated broad one-word searches unless the word is an exact component/function/file identifier. For workspace resource_search, omit filters.mode for exact literal path/text search, use filters.mode="path" for file/path lookup, and use filters.mode="ranked" for broad multi-term retrieval.',
       "- Keep resource refs and file paths relative to the project workspace root.",
       "- Do not claim validation, publishing, file changes, git changes, or sandbox execution unless an available tool result confirms them.",
     ]
@@ -401,7 +512,7 @@ function buildLocalSandboxTemplateTurnContext(
 function buildSandboxTurnContext(
   sandboxId: string | null | undefined,
   sandboxName: string | null | undefined,
-  toolInstructionMode: HostedToolInstructionMode,
+  toolInstructionMode: HostedToolInstructionMode
 ): string {
   if (toolInstructionMode !== "full_text_fallback") {
     return [
@@ -436,9 +547,13 @@ function buildSandboxTurnContext(
 function buildHybridSandboxTurnContext(
   sandboxId: string | null | undefined,
   sandboxName: string | null | undefined,
-  toolInstructionMode: HostedToolInstructionMode,
+  toolInstructionMode: HostedToolInstructionMode
 ): string {
-  const context = buildSandboxTurnContext(sandboxId, sandboxName, toolInstructionMode);
+  const context = buildSandboxTurnContext(
+    sandboxId,
+    sandboxName,
+    toolInstructionMode
+  );
   const hybridRules = [
     "Hybrid workspace context:",
     "- The selected Project is backed by a hosted sandbox. Treat normal requests to inspect, edit, test, or diff project files as sandbox workspace work.",
@@ -451,7 +566,7 @@ function buildHybridSandboxTurnContext(
 
 function buildGeneralWorkspaceTurnContext(
   workspacePath: string | null | undefined,
-  toolInstructionMode: HostedToolInstructionMode,
+  toolInstructionMode: HostedToolInstructionMode
 ): string {
   if (toolInstructionMode !== "full_text_fallback") {
     return [
@@ -477,7 +592,9 @@ function isHybridWorkspaceSession(session: Session): boolean {
   return session.metadata?.workspaceTarget === "hybrid";
 }
 
-async function looksLikeSandboxTemplateRepo(repoPath?: string | null): Promise<boolean> {
+async function looksLikeSandboxTemplateRepo(
+  repoPath?: string | null
+): Promise<boolean> {
   if (!repoPath) return false;
   try {
     await fs.access(path.join(repoPath, OPENPOND_MANIFEST_FILE_NAME));

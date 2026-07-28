@@ -7,16 +7,26 @@ import {
   WorkspaceKindSchema,
 } from "./settings.js";
 import { ChatModelRefSchema } from "./providers.js";
-import { SubagentDelegationModeSchema, SubagentRoleIdSchema } from "./subagents.js";
-import { OpenPondProfileRefSchema, OpenPondTurnProfileSnapshotSchema } from "./profile-ref.js";
+import {
+  SubagentDelegationModeSchema,
+  SubagentRoleIdSchema,
+} from "./subagents.js";
+import {
+  OpenPondProfileRefSchema,
+  OpenPondTurnProfileSnapshotSchema,
+} from "./profile-ref.js";
+import { DEFAULT_SESSION_EXPERIENCE, ExperienceSchema } from "./experiences.js";
 
 export const SystemSessionKindSchema = z.enum(["openpond.lab"]);
 
 export const SessionSchema = z.object({
   id: z.string(),
+  experience: ExperienceSchema.default(DEFAULT_SESSION_EXPERIENCE),
   provider: ChatProviderSchema,
   modelRef: ChatModelRefSchema.nullable().optional(),
-  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
+  openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(
+    DEFAULT_OPENPOND_COMMAND_ACCESS_MODE
+  ),
   systemKind: SystemSessionKindSchema.nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   parentSessionId: z.string().nullable().optional(),

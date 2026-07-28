@@ -1,24 +1,43 @@
 import { useCallback, useEffect, useState, type CSSProperties } from "react";
-import type {
+import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_CHAT_PROVIDER,
+  type Experience,
   OpenPondExtension,
+  type OutputRef,
   SidebarFileBookmark,
   TerminalScope,
 } from "@openpond/contracts";
-import { AppSettingsController, AppShellController } from "../components/app-shell/AppControllers";
-import { isDesktopShell, isMacPlatform } from "../components/app-shell/WindowControls";
+import { api } from "../api";
+import {
+  AppSettingsController,
+  AppShellController,
+} from "../components/app-shell/AppControllers";
+import {
+  isDesktopShell,
+  isMacPlatform,
+} from "../components/app-shell/WindowControls";
 import { AppSplash } from "../components/splash/AppSplash";
-import { mergeLiveRuntimeEventLists, oldestRuntimeEventSequence } from "../lib/runtime-event-lists";
+import {
+  mergeLiveRuntimeEventLists,
+  oldestRuntimeEventSequence,
+} from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { runtimeEventsForSession } from "../lib/runtime-indexes";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { AppSecondaryRuntime } from "./useAppSecondaryRuntime";
-import { projectSelectionKey } from "../lib/app-models";
+import {
+  defaultModelForProvider,
+  projectSelectionKey,
+  providerOptionsFromSettings,
+} from "../lib/app-models";
 import type { SidebarFileOpenRequest } from "../lib/sidebar-files";
 import type { SkillSourceDocument } from "../components/app-shell/skill-source-document";
 import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
 import { composerSkillsForProfile } from "../lib/profile-selection";
+import { buildExperienceHandoffMetadata } from "../lib/experience-handoff";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -27,78 +46,395 @@ interface AppRuntimeViewProps {
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const {
-    composerDraftStore, appDispatch, pendingTerminalCommand, setPendingTerminalCommand, terminalTabs, setTerminalTabs,
-    trainingDetailTasksetId, setTrainingDetailTasksetId, mentionedAppId, setMentionedAppId, cloudSetupDialog, setCloudSetupDialog,
-    rightPanelTabRequest, workspaceDiffPanelViewState, mainComposerFocusRequestId, projectConfirmDialog, resolveProjectConfirmDialog,
-    query, searchOpen, archivedChatsOpen, sectionMenuOpen, projectsExpanded, cloudProjectsExpanded,
-    sidebarOpen, view, selectedAppId, selectedProjectId, selectedSessionId, codexPermissionMode,
-    codexReasoningEffort, busy, diffPanelOpen, diffPanelExpanded, rightPanelMode,
-    terminalOpen, settingsSection, newProjectDialogOpen, newProjectMode, newProjectName,
-    newProjectPath, newProjectBusy, commitDialogOpen, commitMessage, commitIncludeUnstaged, commitNextStep,
-    commitDraft, branchDialogOpen, branchDialogName, toast, labDetailNavigation,
-    setQuery, setSearchOpen, setArchivedChatsOpen, setSectionMenuOpen, setProjectsExpanded, setCloudProjectsExpanded,
-    setChatRowsVisibleCount, setSidebarOpen, setView, setSelectedAppId, setSelectedProjectId, setSelectedSessionId,
-    setPrompt, setDraftProvider, setDraftModel, setDiffPanelOpen, setDiffPanelExpanded, setRightPanelMode,
-    setTerminalOpen, setSettingsSection, setNewProjectDialogOpen, setNewProjectMode, setNewProjectName, setNewProjectPath,
-    setCommitDialogOpen, setCommitMessage, setCommitIncludeUnstaged, setCommitNextStep, setCommitDraft, setBranchDialogOpen,
-    setBranchDialogName, setError, showToast, applyBootstrapPayload, bootstrap, connection,
-    startup, training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed,
-    chatsCollapsed, savedForLaterCollapsed, sidebarWidth, sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed,
-    toggleProjectsCollapsed, toggleCloudProjectsCollapsed, toggleChatsCollapsed, toggleSavedForLaterCollapsed, startSidebarResize, startDiffPanelResize, selectedApp,
-    selectedProject, selectedProjectLinkedApp, selectedSession, sidebarSessions, runtimeIndexes, chatMentionApps,
-    connectedAppMentions, pendingApproval, account, activeModel, activeProvider,
-    appDefaults, startMessage, teamChatOrganization,
-    teamChatTeamId, teamChat, publishTeamProfileAgent, communitySidebar, communityView, teamAiThreadId,
-    toggleTeamAiSidebar, activeOpenPondCommandAccessMode, profileWorkspaceId, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind,
-    viewWorkspaceName, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded,
-    changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
-    resolveApproval, beginNewChat, beginNewChatWithTrainingModel, dismissTrainingChatHandoff, trainingChatHandoff, selectTrainingChatTaskForComposer,
-    chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
-    localProjectRows, visibleProjectRows, cloudProjectRows, projectSessionRowsByProjectId, childSessionRowsByParentId,
-    sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, goalRuntime,
-    subagentRuntime, visibleChatMessages, activeTerminalScope, terminalSummaries, runningSessionIds, selectedSessionRunning,
-    selectedSteerAutoDispatchBlocked, selectedSteerAutoDispatchReady, sidebarGoalRuntimeBySessionId, sidebarSubagentRuntimeBySessionId, dragItem, startPinnedDrag,
-    clearSidebarDrag, previewPinnedDrop, commitPinnedDrop, commitPinnedPreviewDrop, commandProjectRows, contextWindowStatus,
-    pinnedRows, workspaceStates, workspaceBusy, diffBusy, visibleWorkspaceState, visibleWorkspaceDiff,
-    refreshVisibleWorkspaceDiff, managedWorkspace, canSyncActiveWorkspace, canPublishOpenPondProject, projectTarget,
+    composerDraftStore,
+    appDispatch,
+    pendingTerminalCommand,
+    setPendingTerminalCommand,
+    terminalTabs,
+    setTerminalTabs,
+    trainingDetailTasksetId,
+    setTrainingDetailTasksetId,
+    mentionedAppId,
+    setMentionedAppId,
+    cloudSetupDialog,
+    setCloudSetupDialog,
+    rightPanelTabRequest,
+    workspaceDiffPanelViewState,
+    mainComposerFocusRequestId,
+    projectConfirmDialog,
+    resolveProjectConfirmDialog,
+    query,
+    searchOpen,
+    archivedChatsOpen,
+    sectionMenuOpen,
+    projectsExpanded,
+    cloudProjectsExpanded,
+    sidebarOpen,
+    view,
+    selectedAppId,
+    selectedProjectId,
+    selectedSessionId,
+    codexPermissionMode,
+    codexReasoningEffort,
+    busy,
+    diffPanelOpen,
+    diffPanelExpanded,
+    rightPanelMode,
+    activeExperience,
+    changeExperience,
+    terminalOpen,
+    settingsSection,
+    newProjectDialogOpen,
+    newProjectMode,
+    newProjectName,
+    newProjectPath,
+    newProjectBusy,
+    commitDialogOpen,
+    commitMessage,
+    commitIncludeUnstaged,
+    commitNextStep,
+    commitDraft,
+    branchDialogOpen,
+    branchDialogName,
+    toast,
+    labDetailNavigation,
+    setQuery,
+    setSearchOpen,
+    setArchivedChatsOpen,
+    setSectionMenuOpen,
+    setProjectsExpanded,
+    setCloudProjectsExpanded,
+    setChatRowsVisibleCount,
+    setSidebarOpen,
+    setView,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+    setPrompt,
+    setDraftProvider,
+    setDraftModel,
+    setDraftExperience,
+    setDiffPanelOpen,
+    setDiffPanelExpanded,
+    setRightPanelMode,
+    setTerminalOpen,
+    setSettingsSection,
+    setNewProjectDialogOpen,
+    setNewProjectMode,
+    setNewProjectName,
+    setNewProjectPath,
+    setCommitDialogOpen,
+    setCommitMessage,
+    setCommitIncludeUnstaged,
+    setCommitNextStep,
+    setCommitDraft,
+    setBranchDialogOpen,
+    setBranchDialogName,
+    setError,
+    showToast,
+    applyBootstrapPayload,
+    bootstrap,
+    connection,
+    startup,
+    training,
+    pinnedCollapsed,
+    projectsCollapsed,
+    cloudProjectsCollapsed,
+    chatsCollapsed,
+    savedForLaterCollapsed,
+    sidebarWidth,
+    sidebarResizing,
+    diffPanelWidth,
+    diffPanelResizing,
+    togglePinnedCollapsed,
+    toggleProjectsCollapsed,
+    toggleCloudProjectsCollapsed,
+    toggleChatsCollapsed,
+    toggleSavedForLaterCollapsed,
+    startSidebarResize,
+    startDiffPanelResize,
+    selectedApp,
+    selectedProject,
+    selectedProjectLinkedApp,
+    selectedSession,
+    sidebarSessions,
+    runtimeIndexes,
+    chatMentionApps,
+    connectedAppMentions,
+    pendingApproval,
+    account,
+    activeModel,
+    activeProvider,
+    appDefaults,
+    startMessage,
+    teamChatOrganization,
+    teamChatTeamId,
+    teamChat,
+    publishTeamProfileAgent,
+    communitySidebar,
+    communityView,
+    teamAiThreadId,
+    toggleTeamAiSidebar,
+    activeOpenPondCommandAccessMode,
+    profileWorkspaceId,
+    viewWorkspaceAppId,
+    viewWorkspaceId,
+    viewWorkspaceKind,
+    viewWorkspaceName,
+    selectedActionCatalog,
+    expandedProjectIds,
+    expandProject,
+    toggleProjectExpanded,
+    changeCodexPermissionMode,
+    changeCodexReasoningEffort,
+    changeOpenPondCommandAccessMode,
+    resolveApproval,
+    beginNewChat,
+    beginNewChatWithTrainingModel,
+    dismissTrainingChatHandoff,
+    trainingChatHandoff,
+    selectTrainingChatTaskForComposer,
+    chatHistoryLoadStates,
+    loadMoreSelectedChatHistory,
+    selectedPagedSessionEvents,
+    activeSessions,
+    pinnedSessions,
+    savedForLaterSessions,
+    savedForLaterFiles,
+    sidebarFileBookmarks,
+    setSidebarFileStatus,
+    setSessions,
+    projectRows,
+    localProjectRows,
+    visibleProjectRows,
+    cloudProjectRows,
+    projectSessionRowsByProjectId,
+    childSessionRowsByParentId,
+    sidebarProjectIdBySessionId,
+    chatRows,
+    visibleChatRows,
+    sessionEvents,
+    goalRuntime,
+    subagentRuntime,
+    visibleChatMessages,
+    activeTerminalScope,
+    terminalSummaries,
+    runningSessionIds,
+    selectedSessionRunning,
+    selectedSteerAutoDispatchBlocked,
+    selectedSteerAutoDispatchReady,
+    sidebarGoalRuntimeBySessionId,
+    sidebarSubagentRuntimeBySessionId,
+    dragItem,
+    startPinnedDrag,
+    clearSidebarDrag,
+    previewPinnedDrop,
+    commitPinnedDrop,
+    commitPinnedPreviewDrop,
+    commandProjectRows,
+    contextWindowStatus,
+    pinnedRows,
+    workspaceStates,
+    workspaceBusy,
+    diffBusy,
+    visibleWorkspaceState,
+    visibleWorkspaceDiff,
+    refreshVisibleWorkspaceDiff,
+    managedWorkspace,
+    canSyncActiveWorkspace,
+    canPublishOpenPondProject,
+    projectTarget,
     workspaceTarget,
   } = primary;
   const {
-    title, browserConversationId, handleWorkspaceDiffPanelViewStateChange, openSessionInChat,
-    openExistingProjectPathDialog, addProjectFolder, removeProject,
-    changeProjectTarget, submitNewProjectDialog, changeWorkspaceBranch, openCommitDialog, openCreateWorkspaceBranchDialog,
-    openDefaultsSettingsFromBranchDialog, runWorkspaceTool, submitCommitDialog, submitCreateWorkspaceBranch, syncWorkspaceLocally,
+    title,
+    browserConversationId,
+    handleWorkspaceDiffPanelViewStateChange,
+    openSessionInChat,
+    openExistingProjectPathDialog,
+    addProjectFolder,
+    removeProject,
+    changeProjectTarget,
+    submitNewProjectDialog,
+    changeWorkspaceBranch,
+    openCommitDialog,
+    openCreateWorkspaceBranchDialog,
+    openDefaultsSettingsFromBranchDialog,
+    runWorkspaceTool,
+    submitCommitDialog,
+    submitCreateWorkspaceBranch,
+    syncWorkspaceLocally,
     answerCreateImproveQuestion,
-    applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
-    reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
-    stopTurn, archiveSession, restoreSession, renameSession,
-    toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
-    switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
-    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
-    rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
-    closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
-    showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
-    updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
-    openProfileSettings, diagnosticEvents, toggleRightSidebar,
+    applyCreateImproveCandidate,
+    approveCreateImproveRun,
+    cancelCreateImproveRun,
+    changeDraftProvider,
+    openCreateImprovePullRequest,
+    reconcileCreateImprovePullRequest,
+    rejectCreateImproveCandidate,
+    pauseCreateImproveRun,
+    resumeCreateImproveRun,
+    reviseCreateImproveRun,
+    stopTurn,
+    archiveSession,
+    restoreSession,
+    renameSession,
+    toggleProjectPinned,
+    toggleSessionPinned,
+    toggleSessionSavedForLater,
+    moveProjectToCloud,
+    startCloudSetupUpload,
+    changeWorkspaceTarget,
+    switchProjectWorkspaceTarget,
+    sendPromptFromMainComposer,
+    openSandboxWorkspace,
+    createCloudEnvironmentFromSidebar,
+    openCloudProjectDialog,
+    openUrlInBrowserPanel,
+    showBrowserPanel,
+    showChangesPanel,
+    showGoalSidebarTab,
+    rightChatTrainingLaunchRequest,
+    setRightChatTrainingLaunchRequest,
+    closeRightChatPanel,
+    openRightChatPanel,
+    rightChatPanelViews,
+    showRightChatPanel,
+    showRightPanelDiffTab,
+    submitRightChatPrompt,
+    activateRightChatPanel,
+    updateRightChatModel,
+    updateRightChatPrompt,
+    updateRightChatProvider,
+    updateRightChatScrollState,
+    openProfileSettings,
+    diagnosticEvents,
+    toggleRightSidebar,
   } = secondary;
-  const [nativeSkillSidebar, setNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
-  const [extensionSkillSidebar, setExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const harnessSkills = composerSkillsForProfile(bootstrap?.profile, bootstrap?.extensionCatalog);
-  const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
-  const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const [sidebarFileOpenRequest, setSidebarFileOpenRequest] = useState<SidebarFileOpenRequest | null>(null);
-  const openSkillFromSettings = useCallback((skill: SkillSourceDocument) => {
-    setPendingNativeSkillSidebar(skill);
-    setPendingExtensionSkillSidebar(null);
-    beginNewChat(null);
-    setSidebarOpen(true);
-  }, [beginNewChat, setSidebarOpen]);
-  const openExtensionFromSettings = useCallback((extension: OpenPondExtension) => {
-    setPendingExtensionSkillSidebar(extensionSourceSelection(extension));
-    setPendingNativeSkillSidebar(null);
-    beginNewChat(null);
-    setSidebarOpen(true);
-  }, [beginNewChat, setSidebarOpen]);
+  const [nativeSkillSidebar, setNativeSkillSidebar] =
+    useState<SkillSourceDocument | null>(null);
+  const [extensionSkillSidebar, setExtensionSkillSidebar] =
+    useState<SkillPackageSourceSelection | null>(null);
+  const harnessSkills = composerSkillsForProfile(
+    bootstrap?.profile,
+    bootstrap?.extensionCatalog
+  );
+  const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] =
+    useState<SkillSourceDocument | null>(null);
+  const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] =
+    useState<SkillPackageSourceSelection | null>(null);
+  const [sidebarFileOpenRequest, setSidebarFileOpenRequest] =
+    useState<SidebarFileOpenRequest | null>(null);
+  const handoffExperience = useCallback(
+    async (input: {
+      target: Experience;
+      sourceSessionId: string;
+      sourceMessageIds?: string[];
+      sourceContext?: string;
+      output?: OutputRef;
+      prompt: string;
+    }) => {
+      if (!connection) throw new Error("OpenPond is not connected.");
+      let provider = activeProvider;
+      let model = activeModel;
+      if (input.target !== "development" && provider === "codex") {
+        provider =
+          providerOptionsFromSettings(bootstrap?.providers, {
+            enabledOnly: true,
+          }).find((option) => option.value !== "codex")?.value ??
+          DEFAULT_CHAT_PROVIDER;
+        model =
+          defaultModelForProvider(provider, bootstrap?.providers) ??
+          DEFAULT_CHAT_MODEL;
+      }
+      const sourceSession = sidebarSessions.find(
+        (session) => session.id === input.sourceSessionId
+      );
+      const session = await api.createSession(connection, {
+        experience: input.target,
+        provider,
+        modelRef: { providerId: provider, modelId: model },
+        openPondCommandAccessMode: activeOpenPondCommandAccessMode,
+        appId: null,
+        appName: null,
+        workspaceId: null,
+        workspaceName: null,
+        localProjectId: null,
+        cloudProjectId: null,
+        cloudTeamId: null,
+        cwd: null,
+        title: `Continue ${sourceSession?.title ?? "task"}`.slice(0, 120),
+        metadata: {
+          experienceHandoff: buildExperienceHandoffMetadata({
+            sourceTaskId: input.sourceSessionId,
+            sourceExperience: sourceSession?.experience ?? null,
+            targetExperience: input.target,
+            sourceMessageIds: input.sourceMessageIds ?? [],
+            sourceContext: input.sourceContext,
+            output: input.output,
+          }),
+        },
+      });
+      setSessions((current) => [session, ...current]);
+      setDraftExperience(input.target);
+      setDraftProvider(provider);
+      setDraftModel(model);
+      composerDraftStore.set(input.prompt);
+      appDispatch({
+        type: "selectSession",
+        sessionId: session.id,
+        appId: null,
+        projectId: null,
+      });
+      setSelectedAppId(null);
+      setSelectedProjectId(null);
+      setTerminalOpen(false);
+      setView("chat");
+      setRightPanelMode("home");
+      setDiffPanelOpen(input.target === "work");
+      setDiffPanelExpanded(false);
+      return session;
+    },
+    [
+      activeModel,
+      activeOpenPondCommandAccessMode,
+      activeProvider,
+      appDispatch,
+      bootstrap?.providers,
+      composerDraftStore,
+      connection,
+      setDiffPanelExpanded,
+      setDiffPanelOpen,
+      setDraftExperience,
+      setDraftModel,
+      setDraftProvider,
+      setRightPanelMode,
+      setSelectedAppId,
+      setSelectedProjectId,
+      setSessions,
+      setTerminalOpen,
+      setView,
+      sidebarSessions,
+    ]
+  );
+  const openSkillFromSettings = useCallback(
+    (skill: SkillSourceDocument) => {
+      setPendingNativeSkillSidebar(skill);
+      setPendingExtensionSkillSidebar(null);
+      beginNewChat(null);
+      setSidebarOpen(true);
+    },
+    [beginNewChat, setSidebarOpen]
+  );
+  const openExtensionFromSettings = useCallback(
+    (extension: OpenPondExtension) => {
+      setPendingExtensionSkillSidebar(extensionSourceSelection(extension));
+      setPendingNativeSkillSidebar(null);
+      beginNewChat(null);
+      setSidebarOpen(true);
+    },
+    [beginNewChat, setSidebarOpen]
+  );
   useEffect(() => {
     if (
       (!pendingNativeSkillSidebar && !pendingExtensionSkillSidebar) ||
@@ -106,7 +442,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       selectedSessionId ||
       selectedProjectId ||
       selectedAppId
-    ) return;
+    )
+      return;
     setNativeSkillSidebar(pendingNativeSkillSidebar);
     setExtensionSkillSidebar(pendingExtensionSkillSidebar);
     setPendingNativeSkillSidebar(null);
@@ -130,47 +467,61 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     if (view === "chat" && diffPanelOpen && rightPanelMode === "home") return;
     setNativeSkillSidebar(null);
     setExtensionSkillSidebar(null);
-  }, [diffPanelOpen, extensionSkillSidebar, nativeSkillSidebar, rightPanelMode, view]);
+  }, [
+    diffPanelOpen,
+    extensionSkillSidebar,
+    nativeSkillSidebar,
+    rightPanelMode,
+    view,
+  ]);
   const closeNativeSkillSidebar = useCallback(() => {
     setNativeSkillSidebar(null);
     setExtensionSkillSidebar(null);
     setDiffPanelExpanded(false);
     setDiffPanelOpen(false);
   }, [setDiffPanelExpanded, setDiffPanelOpen]);
-  const openSidebarFile = useCallback((file: SidebarFileBookmark) => {
-    if (file.workspaceKind === "local") {
-      const projectId = projectSelectionKey("local", file.workspaceId);
-      setSelectedAppId(null);
-      setSelectedProjectId(projectId);
-      setSelectedSessionId(null);
-      expandProject(projectId);
-      setView("chat");
-    } else {
-      const sourceSession = sidebarSessions.find((session) =>
-        session.id === file.sourceSessionId || session.workspaceId === file.workspaceId
-      );
-      if (!sourceSession) {
-        showToast("This saved file's cloud chat is no longer available.", "error");
-        return;
+  const openSidebarFile = useCallback(
+    (file: SidebarFileBookmark) => {
+      if (file.workspaceKind === "local") {
+        const projectId = projectSelectionKey("local", file.workspaceId);
+        setSelectedAppId(null);
+        setSelectedProjectId(projectId);
+        setSelectedSessionId(null);
+        expandProject(projectId);
+        setView("chat");
+      } else {
+        const sourceSession = sidebarSessions.find(
+          (session) =>
+            session.id === file.sourceSessionId ||
+            session.workspaceId === file.workspaceId
+        );
+        if (!sourceSession) {
+          showToast(
+            "This saved file's cloud chat is no longer available.",
+            "error"
+          );
+          return;
+        }
+        openSessionInChat(sourceSession.id);
       }
-      openSessionInChat(sourceSession.id);
-    }
-    setRightPanelMode("changes");
-    setDiffPanelOpen(true);
-    setSidebarFileOpenRequest({ id: Date.now(), file });
-    if (!file.available) showToast(`File unavailable: ${file.path}`, "error");
-  }, [
-    expandProject,
-    openSessionInChat,
-    setDiffPanelOpen,
-    setRightPanelMode,
-    setSelectedAppId,
-    setSelectedProjectId,
-    setSelectedSessionId,
-    setView,
-    showToast,
-    sidebarSessions,
-  ]);
+      setRightPanelMode("changes");
+      setDiffPanelOpen(true);
+      setSidebarFileOpenRequest({ id: Date.now(), file });
+      if (!file.available) showToast(`File unavailable: ${file.path}`, "error");
+    },
+    [
+      expandProject,
+      openSessionInChat,
+      setDiffPanelOpen,
+      setRightPanelMode,
+      setSelectedAppId,
+      setSelectedProjectId,
+      setSelectedSessionId,
+      setView,
+      showToast,
+      sidebarSessions,
+    ]
+  );
   useEffect(() => {
     if (!sidebarFileOpenRequest) return;
     const timer = window.setTimeout(() => {
@@ -217,7 +568,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           }}
           toast={{
             toast,
-            onDismiss: () => appDispatch({ type: "field", key: "toast", value: null }),
+            onDismiss: () =>
+              appDispatch({ type: "field", key: "toast", value: null }),
           }}
         />
       </AppToastProvider>
@@ -232,13 +584,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     : activeTerminalScope;
   const terminalCwd = visibleWorkspaceState?.initialized
     ? visibleWorkspaceState.repoPath
-    : (selectedSession?.cwd ?? null);
+    : selectedSession?.cwd ?? null;
   const appShellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--diff-panel-width": `${diffPanelWidth}px`,
   } as CSSProperties;
   const rightSidebarAvailableForView =
-    view === "chat" ||
+    (view === "chat" && activeExperience !== "chat") ||
     view === "labs" ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
@@ -254,443 +606,474 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     ? chatHistoryLoadStates[selectedSessionId]
     : null;
   const selectedChatHistoryCursor = selectedSessionId
-    ? (selectedChatHistoryLoadState?.cursorSequence ??
+    ? selectedChatHistoryLoadState?.cursorSequence ??
       oldestRuntimeEventSequence(
         mergeLiveRuntimeEventLists(
           selectedPagedSessionEvents,
-          runtimeEventsForSession(runtimeIndexes, selectedSessionId),
-        ),
-      ))
+          runtimeEventsForSession(runtimeIndexes, selectedSessionId)
+        )
+      )
     : null;
   const selectedChatHistoryCanPage =
     Boolean(selectedSessionId) &&
     Boolean(connection) &&
     (isCodexHistorySessionId(selectedSessionId)
       ? true
-      : Boolean(bootstrap?.eventWindow?.hasMoreBefore) && Boolean(selectedChatHistoryCursor));
+      : Boolean(bootstrap?.eventWindow?.hasMoreBefore) &&
+        Boolean(selectedChatHistoryCursor));
   const selectedChatHistoryHasMore =
-    selectedChatHistoryCanPage && (selectedChatHistoryLoadState?.hasMore ?? true);
-  const selectedChatHistoryLoading = Boolean(selectedChatHistoryLoadState?.loading);
+    selectedChatHistoryCanPage &&
+    (selectedChatHistoryLoadState?.hasMore ?? true);
+  const selectedChatHistoryLoading = Boolean(
+    selectedChatHistoryLoadState?.loading
+  );
 
   return (
     <AppToastProvider showToast={showToast}>
       <AppShellController
-      className={appShellClassName}
-      style={appShellStyle}
-      sidebar={{
-        view,
-        selectedAppId,
-        selectedProjectId,
-        selectedSessionId,
-        selectedTeamThreadId: teamChat.selectedThreadId,
-        teamChatEnabled: teamChatTeamId !== null,
-        teamChatOrganization,
-        teamChatLoading: teamChat.loading,
-        currentUserId: teamChat.currentUserId,
-        teamMembers: teamChat.members,
-        teamThreads: teamChat.threads,
-        ...communitySidebar,
-        account,
-        profile: bootstrap?.profile,
-        pinnedCollapsed,
-        projectsCollapsed,
-        cloudProjectsCollapsed,
-        chatsCollapsed,
-        savedForLaterCollapsed,
-        archivedChatsOpen,
-        projectsExpanded,
-        cloudProjectsExpanded,
-        sectionMenuOpen,
-        dragItem,
-        pinnedRows,
-        pinnedSessions,
-        savedForLaterSessions,
-        savedForLaterFiles,
-        projectRows,
-        visibleProjectRows,
-        localProjectRows,
-        cloudProjectRows,
-        workspaceStates,
-        projectSessionRowsByProjectId,
-        childSessionRowsByParentId,
-        sidebarProjectIdBySessionId,
-        terminalSummaries,
-        runningSessionIds,
-        goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
-        subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
-        visibleChatRows,
-        chatRows,
-        expandedProjectIds,
-        currentVersion: bootstrap?.server.version ?? null,
-        platform,
-        arch: connection?.arch ?? null,
-        onSidebarResizeStart: startSidebarResize,
-        setSidebarOpen,
-        setView,
-        setSelectedAppId,
-        setSelectedProjectId,
-        setSelectedSessionId,
-        setSearchOpen,
-        setSectionMenuOpen,
-        setSettingsSection,
-        onTogglePinnedCollapsed: togglePinnedCollapsed,
-        onToggleProjectsCollapsed: toggleProjectsCollapsed,
-        onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
-        onToggleChatsCollapsed: toggleChatsCollapsed,
-        onToggleSavedForLaterCollapsed: toggleSavedForLaterCollapsed,
-        setArchivedChatsOpen,
-        setProjectsExpanded,
-        setCloudProjectsExpanded,
-        setChatRowsVisibleCount,
-        beginNewChat,
-        dockSessionRight: openRightChatPanel,
-        createCloudEnvironment: createCloudEnvironmentFromSidebar,
-        selectTeamThread: (threadId) => {
-          setView("team");
-          void teamChat.selectThread(threadId);
-        },
-        openTeamDm: (userId) => {
-          setView("team");
-          void teamChat.openDm(userId);
-        },
-        addProjectFolder: () => void addProjectFolder(),
-        startExistingProjectFromPath: openExistingProjectPathDialog,
-        startProjectFromScratch: () => {
-          setNewProjectMode("local");
-          setNewProjectName("");
-          setNewProjectPath("");
-          setNewProjectDialogOpen(true);
-        },
-        startCloudProjectFromScratch: openCloudProjectDialog,
-        moveProjectToCloud,
-        switchProjectWorkspaceTarget,
-        removeProject: (project) => void removeProject(project),
-        toggleProjectPinned,
-        toggleSessionPinned,
-        toggleSessionSavedForLater,
-        openSidebarFile,
-        setSidebarFileStatus: (file, status) => void setSidebarFileStatus(file, status),
-        archiveSession,
-        restoreSession,
-        renameSession,
-        expandProject,
-        toggleProjectExpanded,
-        startPinnedDrag,
-        clearSidebarDrag,
-        previewPinnedDrop,
-        commitPinnedDrop,
-        commitPinnedPreviewDrop,
-      }}
-      topBar={{
-        sidebarOpen,
-        title,
-        backAction: labDetailNavigation.backAction,
-        breadcrumbs: labDetailNavigation.breadcrumbs,
-        conversationId: view === "chat" ? selectedSessionId : null,
-        workspaceName: viewWorkspaceName,
-        workspaceId: viewWorkspaceId,
-        busy,
-        workspaceState: visibleWorkspaceState,
-        workspaceKind: viewWorkspaceKind,
-        selectedApp: profileWorkspaceId ? null : (selectedProjectLinkedApp ?? selectedApp),
-        selectedProject: profileWorkspaceId ? null : selectedProject,
-        workspaceDiff: visibleWorkspaceDiff,
-        managedWorkspace,
-        workspaceBusy,
-        defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat",
-        diffPanelOpen,
-        terminalOpen,
-        rightSidebarAvailable: rightSidebarAvailableForView,
-        rightSidebarOpen: diffPanelOpen,
-        onToggleDiffPanel: toggleRightSidebar,
-        onToggleRightSidebar: view === "team" && Boolean(teamAiThreadId)
-          ? toggleTeamAiSidebar
-          : toggleRightSidebar,
-        onOpenSearch: () => {
-          setSectionMenuOpen(null);
-          setSearchOpen(true);
-        },
-        onToggleTerminal: () => setTerminalOpen((open) => !open),
-        onRunTerminalCommand: (command) => {
-          setPendingTerminalCommand({ id: Date.now(), scope: viewTerminalScope, command });
-          setTerminalOpen(true);
-        },
-        onWorkspaceToolAction: runWorkspaceTool,
-        onOpenCommitDialog: openCommitDialog,
-        onWorkspaceBranchChange: changeWorkspaceBranch,
-        onWorkspaceBranchCreate: openCreateWorkspaceBranchDialog,
-        connection,
-        onBootstrap: applyBootstrapPayload,
-        onOpenSandboxWorkspace: openSandboxWorkspace,
-        onShowSidebar: () => setSidebarOpen(true),
-        platform,
-        showWorkspaceControls: view !== "team" && view !== "community" && view !== "labs",
-      }}
-      mainPane={{
-        view,
-        teamChat: {
+        className={appShellClassName}
+        style={appShellStyle}
+        sidebar={{
+          experience: activeExperience,
+          view,
+          selectedAppId,
+          selectedProjectId,
+          selectedSessionId,
+          selectedTeamThreadId: teamChat.selectedThreadId,
+          teamChatEnabled: teamChatTeamId !== null,
+          teamChatOrganization,
+          teamChatLoading: teamChat.loading,
           currentUserId: teamChat.currentUserId,
-          members: teamChat.members,
-          agents: teamChat.agents,
-          profile: bootstrap?.profile ?? null,
-          teamId: teamChatTeamId,
-          teamName: teamChatOrganization?.displayName ?? null,
-          detail: teamChat.detail,
-          aiThread: teamChat.aiThread,
-          agentConversation: teamChat.agentConversation,
-          loading: teamChat.loading,
-          busy: teamChat.busy,
-          error: teamChat.error,
+          teamMembers: teamChat.members,
+          teamThreads: teamChat.threads,
+          ...communitySidebar,
+          account,
+          profile: bootstrap?.profile,
+          pinnedCollapsed,
+          projectsCollapsed,
+          cloudProjectsCollapsed,
+          chatsCollapsed,
+          savedForLaterCollapsed,
+          archivedChatsOpen,
+          projectsExpanded,
+          cloudProjectsExpanded,
+          sectionMenuOpen,
+          dragItem,
+          pinnedRows,
+          pinnedSessions,
+          savedForLaterSessions,
+          savedForLaterFiles,
+          projectRows,
+          visibleProjectRows,
+          localProjectRows,
+          cloudProjectRows,
+          workspaceStates,
+          projectSessionRowsByProjectId,
+          childSessionRowsByParentId,
+          sidebarProjectIdBySessionId,
+          terminalSummaries,
+          runningSessionIds,
+          goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
+          subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
+          visibleChatRows,
+          chatRows,
+          expandedProjectIds,
+          currentVersion: bootstrap?.server.version ?? null,
+          platform,
+          arch: connection?.arch ?? null,
+          onSidebarResizeStart: startSidebarResize,
+          setSidebarOpen,
+          setView,
+          setSelectedAppId,
+          setSelectedProjectId,
+          setSelectedSessionId,
+          setSearchOpen,
+          setSectionMenuOpen,
+          setSettingsSection,
+          onTogglePinnedCollapsed: togglePinnedCollapsed,
+          onToggleProjectsCollapsed: toggleProjectsCollapsed,
+          onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
+          onToggleChatsCollapsed: toggleChatsCollapsed,
+          onToggleSavedForLaterCollapsed: toggleSavedForLaterCollapsed,
+          setArchivedChatsOpen,
+          setProjectsExpanded,
+          setCloudProjectsExpanded,
+          setChatRowsVisibleCount,
+          beginNewChat,
+          dockSessionRight: openRightChatPanel,
+          createCloudEnvironment: createCloudEnvironmentFromSidebar,
+          selectTeamThread: (threadId) => {
+            setView("team");
+            void teamChat.selectThread(threadId);
+          },
+          openTeamDm: (userId) => {
+            setView("team");
+            void teamChat.openDm(userId);
+          },
+          addProjectFolder: () => void addProjectFolder(),
+          startExistingProjectFromPath: openExistingProjectPathDialog,
+          startProjectFromScratch: () => {
+            setNewProjectMode("local");
+            setNewProjectName("");
+            setNewProjectPath("");
+            setNewProjectDialogOpen(true);
+          },
+          startCloudProjectFromScratch: openCloudProjectDialog,
+          moveProjectToCloud,
+          switchProjectWorkspaceTarget,
+          removeProject: (project) => void removeProject(project),
+          toggleProjectPinned,
+          toggleSessionPinned,
+          toggleSessionSavedForLater,
+          openSidebarFile,
+          setSidebarFileStatus: (file, status) =>
+            void setSidebarFileStatus(file, status),
+          archiveSession,
+          restoreSession,
+          renameSession,
+          expandProject,
+          toggleProjectExpanded,
+          startPinnedDrag,
+          clearSidebarDrag,
+          previewPinnedDrop,
+          commitPinnedDrop,
+          commitPinnedPreviewDrop,
+        }}
+        topBar={{
+          sidebarOpen,
+          title,
+          backAction: labDetailNavigation.backAction,
+          breadcrumbs: labDetailNavigation.breadcrumbs,
+          conversationId: view === "chat" ? selectedSessionId : null,
+          workspaceName: viewWorkspaceName,
+          workspaceId: viewWorkspaceId,
+          busy,
+          workspaceState: visibleWorkspaceState,
+          workspaceKind: viewWorkspaceKind,
+          selectedApp: profileWorkspaceId
+            ? null
+            : selectedProjectLinkedApp ?? selectedApp,
+          selectedProject: profileWorkspaceId ? null : selectedProject,
+          workspaceDiff: visibleWorkspaceDiff,
+          managedWorkspace,
+          workspaceBusy,
+          defaultTeamId: appDefaults.defaultTeamId,
+          showDiffControls:
+            view === "chat" && activeExperience === "development",
+          diffPanelOpen,
+          terminalOpen,
+          rightSidebarAvailable: rightSidebarAvailableForView,
+          rightSidebarOpen: diffPanelOpen,
+          onToggleDiffPanel: toggleRightSidebar,
+          onToggleRightSidebar:
+            view === "team" && Boolean(teamAiThreadId)
+              ? toggleTeamAiSidebar
+              : toggleRightSidebar,
+          onOpenSearch: () => {
+            setSectionMenuOpen(null);
+            setSearchOpen(true);
+          },
+          onToggleTerminal: () => setTerminalOpen((open) => !open),
+          onRunTerminalCommand: (command) => {
+            setPendingTerminalCommand({
+              id: Date.now(),
+              scope: viewTerminalScope,
+              command,
+            });
+            setTerminalOpen(true);
+          },
+          onWorkspaceToolAction: runWorkspaceTool,
+          onOpenCommitDialog: openCommitDialog,
+          onWorkspaceBranchChange: changeWorkspaceBranch,
+          onWorkspaceBranchCreate: openCreateWorkspaceBranchDialog,
           connection,
-          providerSettings: bootstrap?.providers ?? null,
-          provider: activeProvider,
-          model: activeModel,
+          onBootstrap: applyBootstrapPayload,
+          onOpenSandboxWorkspace: openSandboxWorkspace,
+          onShowSidebar: () => setSidebarOpen(true),
+          platform,
+          showWorkspaceControls:
+            view !== "team" &&
+            view !== "community" &&
+            view !== "labs" &&
+            activeExperience === "development",
+          experience: view === "chat" ? activeExperience : null,
+          onExperienceChange: changeExperience,
+        }}
+        mainPane={{
+          experience: activeExperience,
+          view,
+          teamChat: {
+            currentUserId: teamChat.currentUserId,
+            members: teamChat.members,
+            agents: teamChat.agents,
+            profile: bootstrap?.profile ?? null,
+            teamId: teamChatTeamId,
+            teamName: teamChatOrganization?.displayName ?? null,
+            detail: teamChat.detail,
+            aiThread: teamChat.aiThread,
+            agentConversation: teamChat.agentConversation,
+            loading: teamChat.loading,
+            busy: teamChat.busy,
+            error: teamChat.error,
+            connection,
+            providerSettings: bootstrap?.providers ?? null,
+            provider: activeProvider,
+            model: activeModel,
+            codexPermissionMode,
+            codexReasoningEffort,
+            openPondCommandAccessMode: activeOpenPondCommandAccessMode,
+            contextWindowStatus,
+            showToast,
+            onProviderChange: changeDraftProvider,
+            onModelChange: setDraftModel,
+            onCodexPermissionModeChange: changeCodexPermissionMode,
+            onCodexReasoningEffortChange: changeCodexReasoningEffort,
+            onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
+            onOpenProviderSettings: () => {
+              setSettingsSection("providers");
+              setView("settings");
+            },
+            onSendMessage: teamChat.sendMessage,
+            onPublishProfileAgent: publishTeamProfileAgent,
+            onOpenAiThread: async (conversationId) => {
+              await teamChat.openAiThread(conversationId);
+              setRightPanelMode("chat");
+              setDiffPanelOpen(true);
+            },
+            onOpenAgentConversation: async (agentRunId) => {
+              await teamChat.openAgentConversation(agentRunId);
+              setRightPanelMode("chat");
+              setDiffPanelOpen(true);
+            },
+            onCloseAiThread: () => setDiffPanelOpen(false),
+            onCloseAgentConversation: () => {
+              teamChat.closeAgentConversation();
+              setDiffPanelOpen(false);
+            },
+            onSendAgentTurn: teamChat.sendAgentTurn,
+            onSendAiTurn: teamChat.sendAiTurn,
+            onStopAiTurn: teamChat.stopAiTurn,
+            onEditMessage: teamChat.editMessage,
+            onDeleteMessage: teamChat.deleteMessage,
+            onRetryMessage: teamChat.retryMessage,
+            onDismissFailedMessage: teamChat.dismissFailedMessage,
+            onLoadMoreMessages: teamChat.loadMoreMessages,
+            onRetryLoad: teamChat.refresh,
+          },
+          community: communityView,
+          bootstrap,
+          runtimeEvents: sessionEvents,
+          chatMessages: visibleChatMessages,
+          contextWindowStatus,
+          goalRuntime,
+          subagentRuntime,
+          selectedSessionId,
+          composerDraftStore,
+          mainComposerFocusRequestId,
+          labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
+          labCloseDetailKind: labDetailNavigation.closeDetailKind,
+          sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
+          onSideChatTrainingLaunchHandled: (id) =>
+            setRightChatTrainingLaunchRequest((current) =>
+              current?.id === id ? null : current
+            ),
+          steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
+          steerAutoDispatchReady: selectedSteerAutoDispatchReady,
+          mentionApps: chatMentionApps,
+          connectedAppMentions,
+          profileSkills: harnessSkills,
+          selectedMentionAppId: mentionedAppId,
+          busy,
+          turnRunning: selectedSessionRunning,
+          activeProvider,
+          activeModel,
           codexPermissionMode,
           codexReasoningEffort,
           openPondCommandAccessMode: activeOpenPondCommandAccessMode,
-          contextWindowStatus,
-          showToast,
-          onProviderChange: changeDraftProvider,
-          onModelChange: setDraftModel,
-          onCodexPermissionModeChange: changeCodexPermissionMode,
-          onCodexReasoningEffortChange: changeCodexReasoningEffort,
-          onOpenPondCommandAccessModeChange: changeOpenPondCommandAccessMode,
+          pendingApproval,
+          activeWorkspaceAppId: viewWorkspaceAppId,
+          activeWorkspaceId: viewWorkspaceId,
+          activeWorkspaceKind: viewWorkspaceKind,
+          projectTarget,
+          actionCatalog: selectedActionCatalog,
+          workspaceTarget,
+          connection,
+          workspaceName: viewWorkspaceName,
+          workspaceState: visibleWorkspaceState,
+          workspaceDiff: visibleWorkspaceDiff,
+          workspaceBusy,
+          diffBusy,
+          forceChatThread: isCodexHistorySessionId(selectedSessionId),
+          diffPanelOpen,
+          diffPanelExpanded,
+          rightPanelMode,
+          rightPanelTabRequest,
+          rightChatPanels: rightChatPanelViews,
+          nativeSkillSidebar,
+          extensionSkillSidebar,
+          workspaceDiffPanelViewState,
+          sidebarFileOpenRequest,
+          sidebarFileBookmarks,
+          onSetSidebarFileStatus: (file, status) =>
+            void setSidebarFileStatus(file, status),
+          browserConversationId,
+          terminalScope: viewTerminalScope,
+          terminalTabs,
+          terminalCwd,
+          pendingTerminalCommand,
+          terminalOpen,
+          onToggleTerminal: () => setTerminalOpen((open) => !open),
+          onWorkspaceDiffPanelViewStateChange:
+            handleWorkspaceDiffPanelViewStateChange,
+          training,
+          trainingSessions: sidebarSessions,
+          trainingChatHandoff,
+          trainingDetailTasksetId,
+          onTrainingDetailTasksetIdChange: setTrainingDetailTasksetId,
+          onTrainingChatTaskSelect: selectTrainingChatTaskForComposer,
+          onTrainingChatHandoffDismiss: dismissTrainingChatHandoff,
+          onOpenSession: openSessionInChat,
+          onExperienceHandoff: handoffExperience,
+          cloudProjects: bootstrap?.cloudProjects ?? [],
+          chatHistoryHasMore: selectedChatHistoryHasMore,
+          chatHistoryLoading: selectedChatHistoryLoading,
+          onDiffPanelResizeStart: startDiffPanelResize,
+          onToggleDiffPanelExpanded: () =>
+            setDiffPanelExpanded((expanded) => !expanded),
+          onShowDiffPanel: showChangesPanel,
+          onShowBrowserPanel: showBrowserPanel,
+          onShowFilesPanel: () => showRightPanelDiffTab("files"),
+          onShowGoalSidebarTab: showGoalSidebarTab,
+          onShowTrainingDraftPanel: () => {
+            setRightPanelMode("training");
+            setDiffPanelOpen(true);
+          },
+          onShowRightChatPanel: showRightChatPanel,
+          onAddRightChat: () => openRightChatPanel(null),
+          onOpenRightChatForSession: (sessionId, providedSession) => {
+            const session =
+              providedSession ??
+              sidebarSessions.find((candidate) => candidate.id === sessionId) ??
+              null;
+            if (session) openRightChatPanel(session, { preserveView: true });
+          },
+          onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
+          onTerminalTabsChange: setTerminalTabs,
+          onCloseRightChatPanel: closeRightChatPanel,
+          onCloseNativeSkillSidebar: closeNativeSkillSidebar,
+          onActivateRightChatPanel: activateRightChatPanel,
+          onRightChatModelChange: updateRightChatModel,
+          onRightChatPromptChange: updateRightChatPrompt,
+          onRightChatScrollStateChange: updateRightChatScrollState,
+          onRightChatProviderChange: updateRightChatProvider,
+          onSubmitRightChat: submitRightChatPrompt,
+          onStopRightChat: (sessionId) => stopTurn(sessionId),
+          onCloseTerminal: () => setTerminalOpen(false),
+          onLoadMoreChatHistory: loadMoreSelectedChatHistory,
+          canSyncWorkspace: canSyncActiveWorkspace,
+          startMessage,
+          onPayload: applyBootstrapPayload,
+          onError: setError,
+          setView,
+          onOpenProfileSettings: openProfileSettings,
           onOpenProviderSettings: () => {
             setSettingsSection("providers");
             setView("settings");
           },
-          onSendMessage: teamChat.sendMessage,
-          onPublishProfileAgent: publishTeamProfileAgent,
-          onOpenAiThread: async (conversationId) => {
-            await teamChat.openAiThread(conversationId);
-            setRightPanelMode("chat");
-            setDiffPanelOpen(true);
+          onOpenComputeSettings: () => {
+            setSettingsSection("compute");
+            setView("settings");
           },
-          onOpenAgentConversation: async (agentRunId) => {
-            await teamChat.openAgentConversation(agentRunId);
-            setRightPanelMode("chat");
-            setDiffPanelOpen(true);
+          onOpenDatasetStorageSettings: () => {
+            setSettingsSection("dataset-storage");
+            setView("settings");
           },
-          onCloseAiThread: () => setDiffPanelOpen(false),
-          onCloseAgentConversation: () => {
-            teamChat.closeAgentConversation();
-            setDiffPanelOpen(false);
-          },
-          onSendAgentTurn: teamChat.sendAgentTurn,
-          onSendAiTurn: teamChat.sendAiTurn,
-          onStopAiTurn: teamChat.stopAiTurn,
-          onEditMessage: teamChat.editMessage,
-          onDeleteMessage: teamChat.deleteMessage,
-          onRetryMessage: teamChat.retryMessage,
-          onDismissFailedMessage: teamChat.dismissFailedMessage,
-          onLoadMoreMessages: teamChat.loadMoreMessages,
-          onRetryLoad: teamChat.refresh,
-        },
-        community: communityView,
-        bootstrap,
-        runtimeEvents: sessionEvents,
-        chatMessages: visibleChatMessages,
-        contextWindowStatus,
-        goalRuntime,
-        subagentRuntime,
-        selectedSessionId,
-        composerDraftStore,
-        mainComposerFocusRequestId,
-        labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
-        labCloseDetailKind: labDetailNavigation.closeDetailKind,
-        sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
-        onSideChatTrainingLaunchHandled: (id) => setRightChatTrainingLaunchRequest((current) =>
-          current?.id === id ? null : current),
-        steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
-        steerAutoDispatchReady: selectedSteerAutoDispatchReady,
-        mentionApps: chatMentionApps,
-        connectedAppMentions,
-        profileSkills: harnessSkills,
-        selectedMentionAppId: mentionedAppId,
-        busy,
-        turnRunning: selectedSessionRunning,
-        activeProvider,
-        activeModel,
-        codexPermissionMode,
-        codexReasoningEffort,
-        openPondCommandAccessMode: activeOpenPondCommandAccessMode,
-        pendingApproval,
-        activeWorkspaceAppId: viewWorkspaceAppId,
-        activeWorkspaceId: viewWorkspaceId,
-        activeWorkspaceKind: viewWorkspaceKind,
-        projectTarget,
-        actionCatalog: selectedActionCatalog,
-        workspaceTarget,
-        connection,
-        workspaceName: viewWorkspaceName,
-        workspaceState: visibleWorkspaceState,
-        workspaceDiff: visibleWorkspaceDiff,
-        workspaceBusy,
-        diffBusy,
-        forceChatThread: isCodexHistorySessionId(selectedSessionId),
-        diffPanelOpen,
-        diffPanelExpanded,
-        rightPanelMode,
-        rightPanelTabRequest,
-        rightChatPanels: rightChatPanelViews,
-        nativeSkillSidebar,
-        extensionSkillSidebar,
-        workspaceDiffPanelViewState,
-        sidebarFileOpenRequest,
-        sidebarFileBookmarks,
-        onSetSidebarFileStatus: (file, status) => void setSidebarFileStatus(file, status),
-        browserConversationId,
-        terminalScope: viewTerminalScope,
-        terminalTabs,
-        terminalCwd,
-        pendingTerminalCommand,
-        terminalOpen,
-        onToggleTerminal: () => setTerminalOpen((open) => !open),
-        onWorkspaceDiffPanelViewStateChange: handleWorkspaceDiffPanelViewStateChange,
-        training,
-        trainingSessions: sidebarSessions,
-        trainingChatHandoff,
-        trainingDetailTasksetId,
-        onTrainingDetailTasksetIdChange: setTrainingDetailTasksetId,
-        onTrainingChatTaskSelect: selectTrainingChatTaskForComposer,
-        onTrainingChatHandoffDismiss: dismissTrainingChatHandoff,
-        onOpenSession: openSessionInChat,
-        cloudProjects: bootstrap?.cloudProjects ?? [],
-        chatHistoryHasMore: selectedChatHistoryHasMore,
-        chatHistoryLoading: selectedChatHistoryLoading,
-        onDiffPanelResizeStart: startDiffPanelResize,
-        onToggleDiffPanelExpanded: () => setDiffPanelExpanded((expanded) => !expanded),
-        onShowDiffPanel: showChangesPanel,
-        onShowBrowserPanel: showBrowserPanel,
-        onShowFilesPanel: () => showRightPanelDiffTab("files"),
-        onShowGoalSidebarTab: showGoalSidebarTab,
-        onShowTrainingDraftPanel: () => {
-          setRightPanelMode("training");
-          setDiffPanelOpen(true);
-        },
-        onShowRightChatPanel: showRightChatPanel,
-        onAddRightChat: () => openRightChatPanel(null),
-        onOpenRightChatForSession: (sessionId, providedSession) => {
-          const session = providedSession
-            ?? sidebarSessions.find((candidate) => candidate.id === sessionId)
-            ?? null;
-          if (session) openRightChatPanel(session, { preserveView: true });
-        },
-        onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
-        onTerminalTabsChange: setTerminalTabs,
-        onCloseRightChatPanel: closeRightChatPanel,
-        onCloseNativeSkillSidebar: closeNativeSkillSidebar,
-        onActivateRightChatPanel: activateRightChatPanel,
-        onRightChatModelChange: updateRightChatModel,
-        onRightChatPromptChange: updateRightChatPrompt,
-        onRightChatScrollStateChange: updateRightChatScrollState,
-        onRightChatProviderChange: updateRightChatProvider,
-        onSubmitRightChat: submitRightChatPrompt,
-        onStopRightChat: (sessionId) => stopTurn(sessionId),
-        onCloseTerminal: () => setTerminalOpen(false),
-        onLoadMoreChatHistory: loadMoreSelectedChatHistory,
-        canSyncWorkspace: canSyncActiveWorkspace,
-        startMessage,
-        onPayload: applyBootstrapPayload,
-        onError: setError,
-        setView,
-        onOpenProfileSettings: openProfileSettings,
-        onOpenProviderSettings: () => {
-          setSettingsSection("providers");
-          setView("settings");
-        },
-        onOpenComputeSettings: () => {
-          setSettingsSection("compute");
-          setView("settings");
-        },
-        onOpenDatasetStorageSettings: () => {
-          setSettingsSection("dataset-storage");
-          setView("settings");
-        },
-        changeDraftProvider,
-        changeProjectTarget,
-        changeWorkspaceTarget,
-        setDraftProvider,
-        setDraftModel,
-        onBeginNewChatWithModel: beginNewChatWithTrainingModel,
-        changeCodexPermissionMode,
-        changeCodexReasoningEffort,
-        changeOpenPondCommandAccessMode,
-        resolveApproval,
-        answerCreateImproveQuestion,
-        applyCreateImproveCandidate,
-        approveCreateImproveRun,
-        cancelCreateImproveRun,
-        openCreateImprovePullRequest, reconcileCreateImprovePullRequest, rejectCreateImproveCandidate,
-        pauseCreateImproveRun,
-        resumeCreateImproveRun,
-        reviseCreateImproveRun,
-        setMentionedAppId,
-        showToast,
-        sendPrompt: sendPromptFromMainComposer,
-        stopTurn,
-        syncWorkspaceLocally,
-        refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,
-      }}
-      cloudSetup={{
-        state: cloudSetupDialog,
-        onClose: () => setCloudSetupDialog(null),
-        onOpenBrowserUrl: openUrlInBrowserPanel,
-        onStart: () => void startCloudSetupUpload(),
-      }}
-      projectConfirm={{
-        state: projectConfirmDialog,
-        onResolve: resolveProjectConfirmDialog,
-      }}
-      lazyPanels={{
-        activeSessions,
-        branchDialogName,
-        branchDialogOpen,
-        commitDialogOpen,
-        commitDraft,
-        commitIncludeUnstaged,
-        commitMessage,
-        commitNextStep,
-        canPublishOpenPondProject,
-        connection,
-        expandProject,
-        newProjectBusy,
-        newProjectDialogOpen,
-        newProjectDirectory: appDefaults.defaultNewProjectDirectory,
-        newProjectMode,
-        newProjectName,
-        newProjectPath,
-        projectRows: commandProjectRows,
-        query,
-        searchOpen,
-        visibleWorkspaceDiff,
-        visibleWorkspaceState,
-        workspaceBusy,
-        appDispatch,
-        beginNewChat: () => beginNewChat(null),
-        openDefaultsSettingsFromBranchDialog,
-        setBranchDialogName,
-        setBranchDialogOpen,
-        setCommitDialogOpen,
-        setCommitDraft,
-        setCommitIncludeUnstaged,
-        setCommitMessage,
-        setCommitNextStep,
-        setNewProjectDialogOpen,
-        setNewProjectName,
-        setNewProjectPath,
-        setPrompt,
-        setQuery,
-        setSearchOpen,
-        submitCommitDialog,
-        submitCreateWorkspaceBranch,
-        submitNewProjectDialog,
-      }}
-      toast={{
-        toast,
-        onDismiss: () => appDispatch({ type: "field", key: "toast", value: null }),
-      }}
+          changeDraftProvider,
+          changeProjectTarget,
+          changeWorkspaceTarget,
+          setDraftProvider,
+          setDraftModel,
+          onBeginNewChatWithModel: beginNewChatWithTrainingModel,
+          changeCodexPermissionMode,
+          changeCodexReasoningEffort,
+          changeOpenPondCommandAccessMode,
+          resolveApproval,
+          answerCreateImproveQuestion,
+          applyCreateImproveCandidate,
+          approveCreateImproveRun,
+          cancelCreateImproveRun,
+          openCreateImprovePullRequest,
+          reconcileCreateImprovePullRequest,
+          rejectCreateImproveCandidate,
+          pauseCreateImproveRun,
+          resumeCreateImproveRun,
+          reviseCreateImproveRun,
+          setMentionedAppId,
+          showToast,
+          sendPrompt: sendPromptFromMainComposer,
+          stopTurn,
+          syncWorkspaceLocally,
+          refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,
+        }}
+        cloudSetup={{
+          state: cloudSetupDialog,
+          onClose: () => setCloudSetupDialog(null),
+          onOpenBrowserUrl: openUrlInBrowserPanel,
+          onStart: () => void startCloudSetupUpload(),
+        }}
+        projectConfirm={{
+          state: projectConfirmDialog,
+          onResolve: resolveProjectConfirmDialog,
+        }}
+        lazyPanels={{
+          activeSessions,
+          branchDialogName,
+          branchDialogOpen,
+          commitDialogOpen,
+          commitDraft,
+          commitIncludeUnstaged,
+          commitMessage,
+          commitNextStep,
+          canPublishOpenPondProject,
+          connection,
+          expandProject,
+          newProjectBusy,
+          newProjectDialogOpen,
+          newProjectDirectory: appDefaults.defaultNewProjectDirectory,
+          newProjectMode,
+          newProjectName,
+          newProjectPath,
+          projectRows: commandProjectRows,
+          query,
+          searchOpen,
+          visibleWorkspaceDiff,
+          visibleWorkspaceState,
+          workspaceBusy,
+          appDispatch,
+          beginNewChat: () => beginNewChat(null),
+          openDefaultsSettingsFromBranchDialog,
+          setBranchDialogName,
+          setBranchDialogOpen,
+          setCommitDialogOpen,
+          setCommitDraft,
+          setCommitIncludeUnstaged,
+          setCommitMessage,
+          setCommitNextStep,
+          setNewProjectDialogOpen,
+          setNewProjectName,
+          setNewProjectPath,
+          setPrompt,
+          setQuery,
+          setSearchOpen,
+          submitCommitDialog,
+          submitCreateWorkspaceBranch,
+          submitNewProjectDialog,
+        }}
+        toast={{
+          toast,
+          onDismiss: () =>
+            appDispatch({ type: "field", key: "toast", value: null }),
+        }}
       />
     </AppToastProvider>
   );

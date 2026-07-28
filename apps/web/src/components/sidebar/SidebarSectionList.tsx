@@ -10,10 +10,17 @@ import {
   SquarePen,
 } from "../icons";
 import type { AppView, SidebarProjectItem } from "../../lib/app-models";
-import { SIDEBAR_CHAT_PAGE_SIZE, SIDEBAR_SECTION_LIMIT } from "../../lib/app-models";
+import {
+  SIDEBAR_CHAT_PAGE_SIZE,
+  SIDEBAR_SECTION_LIMIT,
+} from "../../lib/app-models";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
-import { sidebarTerminalIndicator, terminalScopeKey, type TerminalScopeSummary } from "../terminal/terminal-state";
+import {
+  sidebarTerminalIndicator,
+  terminalScopeKey,
+  type TerminalScopeSummary,
+} from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import { SidebarTeamSection } from "./SidebarTeamSection";
 import { SidebarCommunitySection } from "./SidebarCommunitySection";
@@ -28,26 +35,50 @@ import {
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
-const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<string, SubagentRuntimeStatus>();
+const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<
+  string,
+  SubagentRuntimeStatus
+>();
 
-export type SidebarProjectClickAction = "select_draft_project" | "toggle_project";
+export type SidebarProjectClickAction =
+  | "select_draft_project"
+  | "toggle_project";
 
 export function sidebarProjectClickAction(input: {
   selectedSessionId: string | null;
   view: AppView;
 }): SidebarProjectClickAction {
-  return input.view === "chat" && !input.selectedSessionId ? "select_draft_project" : "toggle_project";
+  return input.view === "chat" && !input.selectedSessionId
+    ? "select_draft_project"
+    : "toggle_project";
 }
 
-export function nextSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
-  return Math.min(Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE, totalCount);
+export function nextSidebarChatVisibleCount(
+  currentCount: number,
+  totalCount: number
+): number {
+  return Math.min(
+    Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE,
+    totalCount
+  );
 }
 
-export function previousSidebarChatVisibleCount(currentCount: number, totalCount: number): number {
-  const boundedCount = Math.max(SIDEBAR_SECTION_LIMIT, Math.min(currentCount, totalCount));
+export function previousSidebarChatVisibleCount(
+  currentCount: number,
+  totalCount: number
+): number {
+  const boundedCount = Math.max(
+    SIDEBAR_SECTION_LIMIT,
+    Math.min(currentCount, totalCount)
+  );
   if (boundedCount <= SIDEBAR_SECTION_LIMIT) return SIDEBAR_SECTION_LIMIT;
-  const pageCount = Math.ceil((boundedCount - SIDEBAR_SECTION_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE);
-  return Math.max(SIDEBAR_SECTION_LIMIT, SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE);
+  const pageCount = Math.ceil(
+    (boundedCount - SIDEBAR_SECTION_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE
+  );
+  return Math.max(
+    SIDEBAR_SECTION_LIMIT,
+    SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE
+  );
 }
 
 export function SidebarSectionList({
@@ -66,6 +97,7 @@ export function SidebarSectionList({
   dragItem,
   dockSessionRight,
   expandedProjectIds,
+  experience = "development",
   expandProject,
   onToggleChatsCollapsed,
   onTogglePinnedCollapsed,
@@ -137,33 +169,56 @@ export function SidebarSectionList({
   visibleProjectRows,
   view,
 }: SidebarProps) {
-  const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<Record<string, number>>({});
-  const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] = useState<Set<string>>(() => new Set());
+  const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<
+    Record<string, number>
+  >({});
+  const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] =
+    useState<Set<string>>(() => new Set());
   const activeChildSessionExpansionKey = JSON.stringify(
     Object.entries(childSessionRowsByParentId)
       .filter(
         ([parentSessionId, childSessions]) =>
-          childSessions.length > 0 && (subagentRuntimeBySessionId.get(parentSessionId)?.activeCount ?? 0) > 0
+          childSessions.length > 0 &&
+          (subagentRuntimeBySessionId.get(parentSessionId)?.activeCount ?? 0) >
+            0
       )
       .flatMap(([parentSessionId, childSessions]) =>
-        childSessions.map((childSession) => [parentSessionId, childSession.id] as const)
+        childSessions.map(
+          (childSession) => [parentSessionId, childSession.id] as const
+        )
       )
       .sort(
         ([leftParent, leftChild], [rightParent, rightChild]) =>
-          leftParent.localeCompare(rightParent) || leftChild.localeCompare(rightChild)
+          leftParent.localeCompare(rightParent) ||
+          leftChild.localeCompare(rightChild)
       )
   );
 
   useEffect(() => {
-    const activeChildren = JSON.parse(activeChildSessionExpansionKey) as Array<[string, string]>;
+    const activeChildren = JSON.parse(activeChildSessionExpansionKey) as Array<
+      [string, string]
+    >;
     if (activeChildren.length === 0) return;
-    const parentSessionIds = new Set(activeChildren.map(([parentSessionId]) => parentSessionId));
+    const parentSessionIds = new Set(
+      activeChildren.map(([parentSessionId]) => parentSessionId)
+    );
     setExpandedChildSessionParentIds((current) => {
-      if ([...parentSessionIds].every((parentSessionId) => current.has(parentSessionId))) return current;
+      if (
+        [...parentSessionIds].every((parentSessionId) =>
+          current.has(parentSessionId)
+        )
+      )
+        return current;
       return new Set([...current, ...parentSessionIds]);
     });
   }, [activeChildSessionExpansionKey]);
-  const projectsSectionRows = projectRows ?? [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
+  const projectsSectionRows =
+    projectRows ??
+    [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
+  const visiblePinnedRows =
+    experience === "development"
+      ? pinnedRows
+      : pinnedRows.filter((row) => row.type === "session");
 
   function showMoreProjectChats(projectId: string, totalCount: number) {
     setProjectChatVisibleCounts((current) => {
@@ -177,7 +232,10 @@ export function SidebarSectionList({
   function showLessProjectChats(projectId: string, totalCount: number) {
     setProjectChatVisibleCounts((current) => {
       const currentCount = current[projectId] ?? SIDEBAR_SECTION_LIMIT;
-      const previousCount = previousSidebarChatVisibleCount(currentCount, totalCount);
+      const previousCount = previousSidebarChatVisibleCount(
+        currentCount,
+        totalCount
+      );
       if (previousCount === currentCount) return current;
       if (previousCount <= SIDEBAR_SECTION_LIMIT) {
         const next = { ...current };
@@ -201,7 +259,10 @@ export function SidebarSectionList({
   }
 
   function selectProjectRow(item: SidebarProjectItem) {
-    if (sidebarProjectClickAction({ selectedSessionId, view }) === "select_draft_project") {
+    if (
+      sidebarProjectClickAction({ selectedSessionId, view }) ===
+      "select_draft_project"
+    ) {
       selectDraftProject(item);
       return;
     }
@@ -229,7 +290,10 @@ export function SidebarSectionList({
     return childSessionRowsByParentId[session.id] ?? [];
   }
 
-  function childSessionsExpanded(parentSession: Session, childSessions: Session[]): boolean {
+  function childSessionsExpanded(
+    parentSession: Session,
+    childSessions: Session[]
+  ): boolean {
     return (
       expandedChildSessionParentIds.has(parentSession.id) ||
       childSessions.some((session) => session.id === selectedSessionId)
@@ -249,21 +313,29 @@ export function SidebarSectionList({
   }
 
   function terminalIndicatorForSession(sessionId: string) {
-    return sidebarTerminalIndicator(terminalSummaries[terminalScopeKey({ kind: "session", id: sessionId })]);
+    return sidebarTerminalIndicator(
+      terminalSummaries[terminalScopeKey({ kind: "session", id: sessionId })]
+    );
   }
 
   function terminalIndicatorForProject(projectId: string) {
-    return sidebarTerminalIndicator(terminalSummaries[terminalScopeKey({ kind: "project", id: projectId })]);
+    return sidebarTerminalIndicator(
+      terminalSummaries[terminalScopeKey({ kind: "project", id: projectId })]
+    );
   }
 
   function renderProjectChildren(item: SidebarProjectItem) {
     if (!expandedProjectIds.has(item.id)) return null;
     const sessions = projectSessionRowsByProjectId[item.id] ?? [];
     if (sessions.length === 0) return null;
-    const visibleCount = Math.max(SIDEBAR_SECTION_LIMIT, projectChatVisibleCounts[item.id] ?? SIDEBAR_SECTION_LIMIT);
+    const visibleCount = Math.max(
+      SIDEBAR_SECTION_LIMIT,
+      projectChatVisibleCounts[item.id] ?? SIDEBAR_SECTION_LIMIT
+    );
     const visibleSessions = sessions.slice(0, visibleCount);
     const canShowMoreProjectChats = visibleSessions.length < sessions.length;
-    const canShowLessProjectChats = visibleSessions.length > SIDEBAR_SECTION_LIMIT;
+    const canShowLessProjectChats =
+      visibleSessions.length > SIDEBAR_SECTION_LIMIT;
     return (
       <div className="sidebar-project-children">
         {visibleSessions.map((session) => (
@@ -275,10 +347,15 @@ export function SidebarSectionList({
               nested
               running={runningSessionIds.has(session.id)}
               goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+              subagentRuntime={
+                subagentRuntimeBySessionId.get(session.id) ?? null
+              }
               terminalIndicator={terminalIndicatorForSession(session.id)}
               childSessionCount={childSessionsFor(session).length}
-              childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+              childSessionsExpanded={childSessionsExpanded(
+                session,
+                childSessionsFor(session)
+              )}
               onToggleChildSessions={() => toggleChildSessions(session.id)}
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}
@@ -290,23 +367,28 @@ export function SidebarSectionList({
             {renderChildSessionRows(session, { nested: true })}
           </div>
         ))}
-        {sessions.length > SIDEBAR_SECTION_LIMIT && (canShowMoreProjectChats || canShowLessProjectChats) && (
-          <div
-            className="sidebar-pagination-controls"
-            aria-label={`Showing ${visibleSessions.length} of ${sessions.length} project chats`}
-          >
-            {canShowMoreProjectChats ? (
-              <SidebarShowMoreButton onClick={() => showMoreProjectChats(item.id, sessions.length)}>
-                Show more
-              </SidebarShowMoreButton>
-            ) : null}
-            {canShowLessProjectChats ? (
-              <SidebarShowMoreButton onClick={() => showLessProjectChats(item.id, sessions.length)}>
-                Show less
-              </SidebarShowMoreButton>
-            ) : null}
-          </div>
-        )}
+        {sessions.length > SIDEBAR_SECTION_LIMIT &&
+          (canShowMoreProjectChats || canShowLessProjectChats) && (
+            <div
+              className="sidebar-pagination-controls"
+              aria-label={`Showing ${visibleSessions.length} of ${sessions.length} project chats`}
+            >
+              {canShowMoreProjectChats ? (
+                <SidebarShowMoreButton
+                  onClick={() => showMoreProjectChats(item.id, sessions.length)}
+                >
+                  Show more
+                </SidebarShowMoreButton>
+              ) : null}
+              {canShowLessProjectChats ? (
+                <SidebarShowMoreButton
+                  onClick={() => showLessProjectChats(item.id, sessions.length)}
+                >
+                  Show less
+                </SidebarShowMoreButton>
+              ) : null}
+            </div>
+          )}
       </div>
     );
   }
@@ -315,17 +397,33 @@ export function SidebarSectionList({
   const canShowLessChats = visibleChatRows.length > SIDEBAR_SECTION_LIMIT;
 
   function showMoreChats() {
-    setChatRowsVisibleCount((count) => nextSidebarChatVisibleCount(count, chatRows.length));
+    setChatRowsVisibleCount((count) =>
+      nextSidebarChatVisibleCount(count, chatRows.length)
+    );
   }
 
   function showLessChats() {
-    setChatRowsVisibleCount((count) => previousSidebarChatVisibleCount(count, chatRows.length));
+    setChatRowsVisibleCount((count) =>
+      previousSidebarChatVisibleCount(count, chatRows.length)
+    );
   }
 
-  function renderChildSessionRows(parentSession: Session, options: { nested?: boolean } = {}) {
+  function renderChildSessionRows(
+    parentSession: Session,
+    options: { nested?: boolean } = {}
+  ) {
     const childSessions = childSessionsFor(parentSession);
-    if (childSessions.length === 0 || !childSessionsExpanded(parentSession, childSessions)) return null;
-    const groupClassName = ["sidebar-child-session-group", options.nested ? "nested" : ""].filter(Boolean).join(" ");
+    if (
+      childSessions.length === 0 ||
+      !childSessionsExpanded(parentSession, childSessions)
+    )
+      return null;
+    const groupClassName = [
+      "sidebar-child-session-group",
+      options.nested ? "nested" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
     return (
       <div className={groupClassName}>
@@ -378,9 +476,14 @@ export function SidebarSectionList({
         view={view}
       />
 
-      <SidebarSection label="Pinned" collapsed={pinnedCollapsed} onToggleCollapsed={onTogglePinnedCollapsed}>
-        {pinnedRows.map((row) => {
-          const isDraggedRow = dragItem?.type === row.type && dragItem.id === row.id;
+      <SidebarSection
+        label="Pinned"
+        collapsed={pinnedCollapsed}
+        onToggleCollapsed={onTogglePinnedCollapsed}
+      >
+        {visiblePinnedRows.map((row) => {
+          const isDraggedRow =
+            dragItem?.type === row.type && dragItem.id === row.id;
           if (row.type === "project") {
             return (
               <div key={row.key} className="sidebar-project-group">
@@ -388,20 +491,36 @@ export function SidebarSectionList({
                   kind={row.item.kind}
                   project={row.item.project}
                   pinned={row.item.pinned}
-                  selected={view === "chat" && selectedProjectId === row.id && !selectedSessionId}
+                  selected={
+                    view === "chat" &&
+                    selectedProjectId === row.id &&
+                    !selectedSessionId
+                  }
                   expanded={expandedProjectIds.has(row.id)}
-                  workspaceState={row.item.kind === "local" ? workspaceStates[row.item.project.id] ?? null : null}
+                  workspaceState={
+                    row.item.kind === "local"
+                      ? workspaceStates[row.item.project.id] ?? null
+                      : null
+                  }
                   cloudLinkTrusted={row.item.cloudLinkTrusted}
                   cloudLinkWarning={row.item.cloudLinkWarning}
                   placeholder={isDraggedRow}
                   terminalIndicator={terminalIndicatorForProject(row.item.id)}
                   onSelect={() => selectProjectRow(row.item)}
                   onNewChat={() => beginProjectChat(row.item)}
-                  onMoveToCloud={row.item.kind === "local" ? () => moveProjectToCloud(row.item) : undefined}
-                  onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(row.item.id, target)}
+                  onMoveToCloud={
+                    row.item.kind === "local"
+                      ? () => moveProjectToCloud(row.item)
+                      : undefined
+                  }
+                  onWorkspaceTargetSelect={(target) =>
+                    switchProjectWorkspaceTarget(row.item.id, target)
+                  }
                   onTogglePin={() => toggleProjectPinned(row.item)}
                   onRemove={() => removeProject(row.item)}
-                  onDragStart={(event) => startPinnedDrag(event, { type: "project", id: row.id })}
+                  onDragStart={(event) =>
+                    startPinnedDrag(event, { type: "project", id: row.id })
+                  }
                   onDragEnd={clearSidebarDrag}
                   onDragOver={(event) => {
                     if (isDraggedRow) return;
@@ -419,58 +538,82 @@ export function SidebarSectionList({
               </div>
             );
           }
-          if (row.type === "session") return (
-            <div key={row.key} className="sidebar-session-group">
-              <SidebarSessionRow
-                session={row.session}
-                selected={view === "chat" && selectedSessionId === row.id}
-                hideIcon
-                placeholder={isDraggedRow}
-                running={runningSessionIds.has(row.session.id)}
-                goalRuntime={goalRuntimeBySessionId.get(row.session.id) ?? null}
-                subagentRuntime={subagentRuntimeBySessionId.get(row.session.id) ?? null}
-                terminalIndicator={terminalIndicatorForSession(row.session.id)}
-                childSessionCount={childSessionsFor(row.session).length}
-                childSessionsExpanded={childSessionsExpanded(row.session, childSessionsFor(row.session))}
-                onToggleChildSessions={() => toggleChildSessions(row.session.id)}
-                onSelect={() => selectSession(row.session)}
-                onTogglePin={() => toggleSessionPinned(row.session)}
-                onToggleSaveForLater={() => toggleSessionSavedForLater(row.session)}
-                onDockRight={() => dockSessionRight(row.session)}
-                onArchive={() => archiveSession(row.session)}
-                onRename={renameSession}
-                onDragStart={(event) => startPinnedDrag(event, { type: "session", id: row.id })}
-                onDragEnd={clearSidebarDrag}
-                onDragOver={(event) => {
-                  if (isDraggedRow) return;
-                  previewPinnedDrop(event, { type: "session", id: row.id });
-                }}
-                onDrop={(event) => {
-                  if (isDraggedRow) {
-                    commitPinnedPreviewDrop();
-                    return;
+          if (row.type === "session")
+            return (
+              <div key={row.key} className="sidebar-session-group">
+                <SidebarSessionRow
+                  session={row.session}
+                  selected={view === "chat" && selectedSessionId === row.id}
+                  hideIcon
+                  placeholder={isDraggedRow}
+                  running={runningSessionIds.has(row.session.id)}
+                  goalRuntime={
+                    goalRuntimeBySessionId.get(row.session.id) ?? null
                   }
-                  commitPinnedDrop(event, { type: "session", id: row.id });
-                }}
-              />
-              {!isDraggedRow && renderChildSessionRows(row.session)}
-            </div>
-          );
+                  subagentRuntime={
+                    subagentRuntimeBySessionId.get(row.session.id) ?? null
+                  }
+                  terminalIndicator={terminalIndicatorForSession(
+                    row.session.id
+                  )}
+                  childSessionCount={childSessionsFor(row.session).length}
+                  childSessionsExpanded={childSessionsExpanded(
+                    row.session,
+                    childSessionsFor(row.session)
+                  )}
+                  onToggleChildSessions={() =>
+                    toggleChildSessions(row.session.id)
+                  }
+                  onSelect={() => selectSession(row.session)}
+                  onTogglePin={() => toggleSessionPinned(row.session)}
+                  onToggleSaveForLater={() =>
+                    toggleSessionSavedForLater(row.session)
+                  }
+                  onDockRight={() => dockSessionRight(row.session)}
+                  onArchive={() => archiveSession(row.session)}
+                  onRename={renameSession}
+                  onDragStart={(event) =>
+                    startPinnedDrag(event, { type: "session", id: row.id })
+                  }
+                  onDragEnd={clearSidebarDrag}
+                  onDragOver={(event) => {
+                    if (isDraggedRow) return;
+                    previewPinnedDrop(event, { type: "session", id: row.id });
+                  }}
+                  onDrop={(event) => {
+                    if (isDraggedRow) {
+                      commitPinnedPreviewDrop();
+                      return;
+                    }
+                    commitPinnedDrop(event, { type: "session", id: row.id });
+                  }}
+                />
+                {!isDraggedRow && renderChildSessionRows(row.session)}
+              </div>
+            );
           return (
             <SidebarFileRow
               key={row.key}
               file={row.file}
               placeholder={isDraggedRow}
               onSelect={() => openSidebarFile(row.file)}
-              onTogglePin={() => setSidebarFileStatus(
-                row.file,
-                row.file.status === "pinned" ? "none" : "pinned",
-              )}
-              onToggleSaveForLater={() => setSidebarFileStatus(
-                row.file,
-                row.file.status === "saved_for_later" ? "none" : "saved_for_later",
-              )}
-              onDragStart={(event) => startPinnedDrag(event, { type: "file", id: row.id })}
+              onTogglePin={() =>
+                setSidebarFileStatus(
+                  row.file,
+                  row.file.status === "pinned" ? "none" : "pinned"
+                )
+              }
+              onToggleSaveForLater={() =>
+                setSidebarFileStatus(
+                  row.file,
+                  row.file.status === "saved_for_later"
+                    ? "none"
+                    : "saved_for_later"
+                )
+              }
+              onDragStart={(event) =>
+                startPinnedDrag(event, { type: "file", id: row.id })
+              }
               onDragEnd={clearSidebarDrag}
               onDragOver={(event) => {
                 if (isDraggedRow) return;
@@ -488,122 +631,146 @@ export function SidebarSectionList({
         })}
       </SidebarSection>
 
-      <SidebarSection
-        label="Projects"
-        collapsed={projectsCollapsed}
-        onToggleCollapsed={onToggleProjectsCollapsed}
-        actions={
-          <>
-            <div className="section-menu">
-              <button
-                type="button"
-                className={`section-icon ${sectionMenuOpen === "projects" ? "active" : ""}`}
-                data-tooltip="Add project"
-                aria-label="Add project"
-                aria-haspopup="menu"
-                aria-expanded={sectionMenuOpen === "projects"}
-                onClick={() => setSectionMenuOpen((current) => (current === "projects" ? null : "projects"))}
-              >
-                <Plus size={14} />
-              </button>
-              {sectionMenuOpen === "projects" && (
-                <div className="section-menu-popover" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      startProjectFromScratch();
-                    }}
-                  >
-                    <FolderPlus size={13} />
-                    <span>New Local Project</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      addProjectFolder();
-                    }}
-                  >
-                    <FolderOpen size={13} />
-                    <span>Use existing folder</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      startExistingProjectFromPath();
-                    }}
-                  >
-                    <FolderOpen size={13} />
-                    <span>Use existing folder path</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      startCloudProjectFromScratch();
-                    }}
-                  >
-                    <Cloud size={13} />
-                    <span>New Cloud Project</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      createCloudEnvironment();
-                    }}
-                  >
-                    <Settings size={13} />
-                    <span>Create environment</span>
-                  </button>
-                </div>
-              )}
+      {experience === "development" ? (
+        <SidebarSection
+          label="Projects"
+          collapsed={projectsCollapsed}
+          onToggleCollapsed={onToggleProjectsCollapsed}
+          actions={
+            <>
+              <div className="section-menu">
+                <button
+                  type="button"
+                  className={`section-icon ${
+                    sectionMenuOpen === "projects" ? "active" : ""
+                  }`}
+                  data-tooltip="Add project"
+                  aria-label="Add project"
+                  aria-haspopup="menu"
+                  aria-expanded={sectionMenuOpen === "projects"}
+                  onClick={() =>
+                    setSectionMenuOpen((current) =>
+                      current === "projects" ? null : "projects"
+                    )
+                  }
+                >
+                  <Plus size={14} />
+                </button>
+                {sectionMenuOpen === "projects" && (
+                  <div className="section-menu-popover" role="menu">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSectionMenuOpen(null);
+                        startProjectFromScratch();
+                      }}
+                    >
+                      <FolderPlus size={13} />
+                      <span>New Local Project</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSectionMenuOpen(null);
+                        addProjectFolder();
+                      }}
+                    >
+                      <FolderOpen size={13} />
+                      <span>Use existing folder</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSectionMenuOpen(null);
+                        startExistingProjectFromPath();
+                      }}
+                    >
+                      <FolderOpen size={13} />
+                      <span>Use existing folder path</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSectionMenuOpen(null);
+                        startCloudProjectFromScratch();
+                      }}
+                    >
+                      <Cloud size={13} />
+                      <span>New Cloud Project</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setSectionMenuOpen(null);
+                        createCloudEnvironment();
+                      }}
+                    >
+                      <Settings size={13} />
+                      <span>Create environment</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          }
+        >
+          {visibleProjectRows.map((item) => (
+            <div key={item.id} className="sidebar-project-group">
+              <SidebarProjectRow
+                kind={item.kind}
+                project={item.project}
+                pinned={item.pinned}
+                selected={
+                  view === "chat" &&
+                  selectedProjectId === item.id &&
+                  !selectedSessionId
+                }
+                expanded={expandedProjectIds.has(item.id)}
+                workspaceState={
+                  item.kind === "local"
+                    ? workspaceStates[item.project.id] ?? null
+                    : null
+                }
+                cloudLinkTrusted={item.cloudLinkTrusted}
+                cloudLinkWarning={item.cloudLinkWarning}
+                terminalIndicator={terminalIndicatorForProject(item.id)}
+                onSelect={() => selectProjectRow(item)}
+                onNewChat={() => beginProjectChat(item)}
+                onMoveToCloud={
+                  item.kind === "local"
+                    ? () => moveProjectToCloud(item)
+                    : undefined
+                }
+                onWorkspaceTargetSelect={(target) =>
+                  switchProjectWorkspaceTarget(item.id, target)
+                }
+                onTogglePin={() => toggleProjectPinned(item)}
+                onRemove={() => removeProject(item)}
+              />
+              {renderProjectChildren(item)}
             </div>
-          </>
-        }
-      >
-        {visibleProjectRows.map((item) => (
-          <div key={item.id} className="sidebar-project-group">
-            <SidebarProjectRow
-              kind={item.kind}
-              project={item.project}
-              pinned={item.pinned}
-              selected={view === "chat" && selectedProjectId === item.id && !selectedSessionId}
-              expanded={expandedProjectIds.has(item.id)}
-              workspaceState={item.kind === "local" ? workspaceStates[item.project.id] ?? null : null}
-              cloudLinkTrusted={item.cloudLinkTrusted}
-              cloudLinkWarning={item.cloudLinkWarning}
-              terminalIndicator={terminalIndicatorForProject(item.id)}
-              onSelect={() => selectProjectRow(item)}
-              onNewChat={() => beginProjectChat(item)}
-              onMoveToCloud={item.kind === "local" ? () => moveProjectToCloud(item) : undefined}
-              onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(item.id, target)}
-              onTogglePin={() => toggleProjectPinned(item)}
-              onRemove={() => removeProject(item)}
+          ))}
+          {visibleProjectRows.length === 0 &&
+            localProjectRows.length === 0 &&
+            cloudProjectRows.length === 0 && (
+              <div className="empty-row">No projects</div>
+            )}
+          {projectsSectionRows.length > SIDEBAR_SECTION_LIMIT && (
+            <SidebarShowMoreButton
+              expanded={projectsExpanded}
+              onClick={() => setProjectsExpanded((expanded) => !expanded)}
             />
-            {renderProjectChildren(item)}
-          </div>
-        ))}
-        {visibleProjectRows.length === 0 && localProjectRows.length === 0 && cloudProjectRows.length === 0 && (
-          <div className="empty-row">No projects</div>
-        )}
-        {projectsSectionRows.length > SIDEBAR_SECTION_LIMIT && (
-          <SidebarShowMoreButton
-            expanded={projectsExpanded}
-            onClick={() => setProjectsExpanded((expanded) => !expanded)}
-          />
-        )}
-      </SidebarSection>
+          )}
+        </SidebarSection>
+      ) : null}
 
       <SidebarSection
-        label="Chats"
+        label={experience === "work" ? "Tasks" : "Chats"}
         collapsed={chatsCollapsed}
         onToggleCollapsed={onToggleChatsCollapsed}
         actions={
@@ -613,7 +780,11 @@ export function SidebarSectionList({
               open={sectionMenuOpen === "chats"}
               archivedOpen={archivedChatsOpen}
               archivedLabel="archived chats"
-              onToggleOpen={() => setSectionMenuOpen((current) => (current === "chats" ? null : "chats"))}
+              onToggleOpen={() =>
+                setSectionMenuOpen((current) =>
+                  current === "chats" ? null : "chats"
+                )
+              }
               onToggleArchived={() => {
                 setArchivedChatsOpen((open) => !open);
                 setSectionMenuOpen(null);
@@ -621,8 +792,12 @@ export function SidebarSectionList({
             />
             <button
               className="section-icon"
-              data-tooltip="Filter chats"
-              aria-label="Filter chats"
+              data-tooltip={
+                experience === "work" ? "Filter tasks" : "Filter chats"
+              }
+              aria-label={
+                experience === "work" ? "Filter tasks" : "Filter chats"
+              }
               onClick={() => {
                 setSectionMenuOpen(null);
                 setSearchOpen(true);
@@ -632,8 +807,8 @@ export function SidebarSectionList({
             </button>
             <button
               className="section-icon"
-              data-tooltip="New task"
-              aria-label="New task"
+              data-tooltip={experience === "chat" ? "New chat" : "New task"}
+              aria-label={experience === "chat" ? "New chat" : "New task"}
               onClick={() => beginNewChat(null)}
             >
               <SquarePen size={14} />
@@ -651,10 +826,15 @@ export function SidebarSectionList({
                 hideIcon
                 running={runningSessionIds.has(session.id)}
                 goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-                subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+                subagentRuntime={
+                  subagentRuntimeBySessionId.get(session.id) ?? null
+                }
                 terminalIndicator={terminalIndicatorForSession(session.id)}
                 childSessionCount={childSessionsFor(session).length}
-                childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+                childSessionsExpanded={childSessionsExpanded(
+                  session,
+                  childSessionsFor(session)
+                )}
                 onToggleChildSessions={() => toggleChildSessions(session.id)}
                 onSelect={() => {
                   restoreSession(session);
@@ -676,10 +856,15 @@ export function SidebarSectionList({
                 hideIcon
                 running={runningSessionIds.has(session.id)}
                 goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-                subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+                subagentRuntime={
+                  subagentRuntimeBySessionId.get(session.id) ?? null
+                }
                 terminalIndicator={terminalIndicatorForSession(session.id)}
                 childSessionCount={childSessionsFor(session).length}
-                childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+                childSessionsExpanded={childSessionsExpanded(
+                  session,
+                  childSessionsFor(session)
+                )}
                 onToggleChildSessions={() => toggleChildSessions(session.id)}
                 onSelect={() => selectSession(session)}
                 onTogglePin={() => toggleSessionPinned(session)}
@@ -692,16 +877,29 @@ export function SidebarSectionList({
             </div>
           )
         )}
-        {chatRows.length === 0 && <div className="empty-row">No chats</div>}
-        {chatRows.length > SIDEBAR_SECTION_LIMIT && (canShowMoreChats || canShowLessChats) && (
-          <div
-            className="sidebar-pagination-controls"
-            aria-label={`Showing ${visibleChatRows.length} of ${chatRows.length} chats`}
-          >
-            {canShowMoreChats ? <SidebarShowMoreButton onClick={showMoreChats}>Show more</SidebarShowMoreButton> : null}
-            {canShowLessChats ? <SidebarShowMoreButton onClick={showLessChats}>Show less</SidebarShowMoreButton> : null}
+        {chatRows.length === 0 && (
+          <div className="empty-row">
+            {experience === "work" ? "No tasks" : "No chats"}
           </div>
         )}
+        {chatRows.length > SIDEBAR_SECTION_LIMIT &&
+          (canShowMoreChats || canShowLessChats) && (
+            <div
+              className="sidebar-pagination-controls"
+              aria-label={`Showing ${visibleChatRows.length} of ${chatRows.length} chats`}
+            >
+              {canShowMoreChats ? (
+                <SidebarShowMoreButton onClick={showMoreChats}>
+                  Show more
+                </SidebarShowMoreButton>
+              ) : null}
+              {canShowLessChats ? (
+                <SidebarShowMoreButton onClick={showLessChats}>
+                  Show less
+                </SidebarShowMoreButton>
+              ) : null}
+            </div>
+          )}
       </SidebarSection>
 
       <SidebarSection
@@ -717,10 +915,15 @@ export function SidebarSectionList({
               hideIcon
               running={runningSessionIds.has(session.id)}
               goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+              subagentRuntime={
+                subagentRuntimeBySessionId.get(session.id) ?? null
+              }
               terminalIndicator={terminalIndicatorForSession(session.id)}
               childSessionCount={childSessionsFor(session).length}
-              childSessionsExpanded={childSessionsExpanded(session, childSessionsFor(session))}
+              childSessionsExpanded={childSessionsExpanded(
+                session,
+                childSessionsFor(session)
+              )}
               onToggleChildSessions={() => toggleChildSessions(session.id)}
               onSelect={() => selectSession(session)}
               onTogglePin={() => toggleSessionPinned(session)}
@@ -732,18 +935,21 @@ export function SidebarSectionList({
             {renderChildSessionRows(session)}
           </div>
         ))}
-        {savedForLaterFiles.map((file) => (
-          <SidebarFileRow
-            key={file.id}
-            file={file}
-            onSelect={() => openSidebarFile(file)}
-            onTogglePin={() => setSidebarFileStatus(file, "pinned")}
-            onToggleSaveForLater={() => setSidebarFileStatus(file, "none")}
-          />
-        ))}
-        {savedForLaterSessions.length === 0 && savedForLaterFiles.length === 0
-          ? <div className="empty-row">No saved items</div>
-          : null}
+        {(experience === "development" ? savedForLaterFiles : []).map(
+          (file) => (
+            <SidebarFileRow
+              key={file.id}
+              file={file}
+              onSelect={() => openSidebarFile(file)}
+              onTogglePin={() => setSidebarFileStatus(file, "pinned")}
+              onToggleSaveForLater={() => setSidebarFileStatus(file, "none")}
+            />
+          )
+        )}
+        {savedForLaterSessions.length === 0 &&
+        (experience !== "development" || savedForLaterFiles.length === 0) ? (
+          <div className="empty-row">No saved items</div>
+        ) : null}
       </SidebarSection>
     </div>
   );

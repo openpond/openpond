@@ -2,6 +2,7 @@ import type {
   AccountState,
   LocalProject,
   OpenPondApp,
+  OutputValidationEvidence,
   RuntimeEvent,
   Session,
   WorkspaceDiffSummary,
@@ -48,7 +49,10 @@ export type WorkspaceToolExecutorDeps = {
     options?: { baseline?: WorkspaceDiffSummary | null }
   ) => Promise<void>;
   getSession: (sessionId: string) => Promise<Session>;
-  updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
+  updateSession: (
+    sessionId: string,
+    patch: Partial<Session>
+  ) => Promise<Session>;
   findLocalWorkspace: (projectId: string) => Promise<LocalProject | null>;
   refreshLocalProjectWorkspace: (projectId: string) => Promise<LocalProject>;
   linkLocalProjectOpenPondApp: (
@@ -56,7 +60,9 @@ export type WorkspaceToolExecutorDeps = {
     app: OpenPondApp,
     options?: { repoPath?: string | null }
   ) => Promise<LocalProject>;
-  activeWorkspace: (session: Session) => Promise<{ app: OpenPondApp; state: WorkspaceState }>;
+  activeWorkspace: (
+    session: Session
+  ) => Promise<{ app: OpenPondApp; state: WorkspaceState }>;
   withWorkspaceLock: <T>(appId: string, fn: () => Promise<T>) => Promise<T>;
   runPostEditChecks: (
     session: Session,
@@ -67,6 +73,25 @@ export type WorkspaceToolExecutorDeps = {
   runPostEditWorkflow: (input: EditWorkflowInput) => Promise<WorkflowResult>;
   openPondCacheScope: (accountState: AccountState) => string;
   upsertScaffoldApp: (scope: string, app: OpenPondApp) => Promise<void>;
-  gitBaseUrlFromContext: (context: Awaited<ReturnType<typeof loadOpenPondAccountContext>>) => string | null;
+  gitBaseUrlFromContext: (
+    context: Awaited<ReturnType<typeof loadOpenPondAccountContext>>
+  ) => string | null;
   sandboxRequest: (payload: SandboxRequestAction) => Promise<unknown>;
+  saveWorkOutput: (input: {
+    session: Session;
+    sourceTurnId: string;
+    sandboxPath: string;
+    suggestedName?: string | null;
+    validation?: OutputValidationEvidence[];
+  }) => Promise<unknown>;
+  deleteWorkOutput?: (input: {
+    session: Session;
+    outputId: string;
+    revision?: number | null;
+  }) => Promise<unknown>;
+  readWorkOutput?: (input: {
+    session: Session;
+    outputId: string;
+    revision?: number | null;
+  }) => Promise<unknown>;
 };
