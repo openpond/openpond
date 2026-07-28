@@ -33,7 +33,6 @@ import { useAppState } from "../hooks/useAppState";
 import { useGitSetupNotifications } from "../hooks/useGitSetupNotifications";
 import { useLayoutPreferences } from "../hooks/useLayoutPreferences";
 import { useLabDetailNavigation } from "../hooks/useLabDetailNavigation";
-import { useInsights } from "../hooks/useInsights";
 import { useTraining } from "../hooks/useTraining";
 import { useTrainingModelChatHandoff } from "../hooks/useTrainingModelChatHandoff";
 import { useSelectedChatHistory } from "../hooks/useSelectedChatHistory";
@@ -78,7 +77,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     });
   }, []);
   const [mainComposerFocusRequestId, setMainComposerFocusRequestId] = useState(0);
-  const [labSuggestionsRequestId, setLabSuggestionsRequestId] = useState(0);
   const [draftSubagentDelegationMode, setDraftSubagentDelegationMode] =
     useState<SubagentDelegationMode | null>(null);
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
@@ -247,20 +245,10 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     }
   }, [connection, setError, sidebarFileBookmarks]);
   const connectedAppRows = useConnectedAppStatusRows(connection);
-  const insights = useInsights({ connection });
   const training = useTraining({
     connection,
     profileId: bootstrap?.profile?.activeProfile ?? "default",
   });
-  useEffect(() => {
-    const session = insights.systemSession;
-    if (!session) return;
-    setSessions((current) => {
-      const index = current.findIndex((item) => item.id === session.id);
-      if (index === -1) return [session, ...current];
-      return current.map((item) => (item.id === session.id ? session : item));
-    });
-  }, [insights.systemSession, setSessions]);
   const {
     pinnedCollapsed,
     projectsCollapsed,
@@ -785,7 +773,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     composerDraftStore, appDispatch, pendingTerminalCommand, setPendingTerminalCommand, terminalTabs, setTerminalTabs,
     trainingDetailTasksetId, setTrainingDetailTasksetId, mentionedAppId, setMentionedAppId, cloudSetupDialog, setCloudSetupDialog,
     rightPanelTabRequest, setRightPanelTabRequest, workspaceDiffPanelViewState, setWorkspaceDiffPanelViewState, rightChatHistoryEvents, setRightChatHistoryEvents,
-    locallyActiveCodexHistorySessionIds, setCodexHistoryTurnLocallyActive, mainComposerFocusRequestId, labSuggestionsRequestId, setLabSuggestionsRequestId, draftSubagentDelegationMode,
+    locallyActiveCodexHistorySessionIds, setCodexHistoryTurnLocallyActive, mainComposerFocusRequestId, draftSubagentDelegationMode,
     setDraftSubagentDelegationMode, confirmProjectAction, projectConfirmDialog, resolveProjectConfirmDialog, query, searchOpen,
     archivedChatsOpen, sectionMenuOpen, projectsExpanded, cloudProjectsExpanded, sidebarOpen, view,
     selectedAppId, selectedProjectId, selectedSessionId, draftProvider, draftModel, codexPermissionMode,
@@ -800,7 +788,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     setNewProjectName, setNewProjectPath, setNewProjectBusy, setCommitDialogOpen, setCommitMessage, setCommitIncludeUnstaged,
     setCommitNextStep, setCommitDraft, setBranchDialogOpen, setBranchDialogName, setError, showToast,
     appPreferences, applyBootstrapPayload, bootstrap, connection, events, sessions,
-    startup, setAppPreferences, setCodexHistorySessions, setEvents, setSessions, insights,
+    startup, setAppPreferences, setCodexHistorySessions, setEvents, setSessions,
     training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed, chatsCollapsed, savedForLaterCollapsed, sidebarWidth,
     sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed, toggleProjectsCollapsed, toggleCloudProjectsCollapsed,
     toggleChatsCollapsed, toggleSavedForLaterCollapsed, startSidebarResize, startDiffPanelResize, revealProjectsSection, cloudProjectById, localProjectById,

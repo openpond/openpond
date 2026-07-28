@@ -944,7 +944,6 @@
     min-width: 0;
   }
 
-  .labs-suggestions-body .insights-view,
   .labs-suggestions-body .training-page-body {
     width: calc(100% - 36px);
   }

@@ -4,7 +4,6 @@ import { createTurnRunner } from "../../apps/server/src/runtime/turn-runner";
 import {
   AppPreferencesSchema,
   ProviderSettingsSchema,
-  emptyOpenPondProfileState,
   type Approval,
   type AppPreferences,
   type ModelUsageRecord,
@@ -13,191 +12,9 @@ import {
   type Session,
   type Turn,
 } from "../../packages/contracts/src";
-import { runProfileSkillCommand } from "../../packages/cloud/src/profile/profile-skill-mutations";
-import { loadProfileSkills, readProfileSkill } from "../../packages/cloud/src/profile/profile-skills";
 import { withTurnRunnerTestStore } from "./turn-runner-test-harness";
 
-export function createNativeProfileSkillGoalHarness(input: {
-  repoPath: string;
-  profileSourcePath: string;
-  toolArgs: Record<string, unknown>;
-  finalText?: string;
-  sessionOverrides?: Partial<Session>;
-  usageByPass?: Record<number, unknown>;
-}) {
-  const sessions = new Map<string, Session>([
-    ["session_1", baseSession({ title: "Profile skill native tool", ...(input.sessionOverrides ?? {}) })],
-  ]);
-  const turns: Turn[] = [];
-  const events: RuntimeEvent[] = [];
-  const approvals: Approval[] = [];
-  const streamInputs: any[] = [];
-  const usageRecords: ModelUsageRecord[] = [];
-  let streamPass = 0;
-  const loadTempProfileState = async () => {
-    const skillResult = await loadProfileSkills(input.profileSourcePath);
-    return {
-      ...emptyOpenPondProfileState(),
-      mode: "local" as const,
-      repoPath: input.repoPath,
-      sourcePath: input.profileSourcePath,
-      activeProfile: "default",
-      skills: skillResult.skills,
-      skillCatalog: skillResult.skillCatalog,
-    };
-  };
-  const runner = createTurnRunner({
-    attachmentRootDir: "/tmp/openpond-test-attachments",
-    store: withTurnRunnerTestStore({
-      async snapshot() {
-        return { events, turns };
-      },
-      async getTurn(turnId) {
-        return turns.find((turn) => turn.id === turnId) ?? null;
-      },
-      async insertTurn(turn) {
-        turns.push(turn);
-      },
-      async updateTurn(turnId, updater) {
-        const index = turns.findIndex((turn) => turn.id === turnId);
-        if (index === -1) return null;
-        turns[index] = updater(turns[index]!);
-        return turns[index]!;
-      },
-      async getApproval(approvalId) {
-        return approvals.find((approval) => approval.id === approvalId) ?? null;
-      },
-      async upsertModelUsageRecord(record) {
-        const index = usageRecords.findIndex((candidate) => candidate.requestId === record.requestId);
-        if (index === -1) usageRecords.push(record);
-        else usageRecords[index] = record;
-        return record;
-      },
-    }),
-    upsertApproval: async (approval) => {
-      const index = approvals.findIndex((candidate) => candidate.id === approval.id);
-      if (index === -1) approvals.push(approval);
-      else approvals[index] = approval;
-    },
-    getSession: async (sessionId) => {
-      const session = sessions.get(sessionId);
-      if (!session) throw new Error(`unknown session ${sessionId}`);
-      return session;
-    },
-    updateSession: async (sessionId, patch) => {
-      const current = sessions.get(sessionId);
-      if (!current) throw new Error(`unknown session ${sessionId}`);
-      const next = { ...current, ...patch };
-      sessions.set(sessionId, next);
-      return next;
-    },
-    completeTurn: async (sessionId, turnId, providerTurnId = null) => {
-      const turn = turns.find((candidate) => candidate.id === turnId);
-      if (!turn) throw new Error("turn not found");
-      Object.assign(turn, {
-        providerTurnId,
-        completedAt: "2026-07-03T10:00:01.000Z",
-        status: "completed",
-      });
-      const current = sessions.get(sessionId);
-      if (current) sessions.set(sessionId, { ...current, status: "idle" });
-      return turn;
-    },
-    failTurn: async (_session, turnId, message) => {
-      const turn = turns.find((candidate) => candidate.id === turnId);
-      if (!turn) throw new Error("turn not found");
-      Object.assign(turn, { status: "failed", error: message });
-      return turn;
-    },
-    interruptTurn: async (_session, turnId) => {
-      const turn = turns.find((candidate) => candidate.id === turnId);
-      if (!turn) throw new Error("turn not found");
-      Object.assign(turn, { status: "interrupted" });
-      return turn;
-    },
-    defaultSessionCwd: () => "/tmp/openpond",
-    findOpenPondApp: async () => {
-      throw new Error("no app lookup expected");
-    },
-    resolveSessionWorkspaceCwd: async () => null,
-    ensureCodexRuntime: async () => {
-      throw new Error("Codex runtime should not be used for BYOK providers");
-    },
-    appendWorkspaceDiffEvent: async () => undefined,
-    workspaceDiffBaseline: async () => null,
-    appendRuntimeEvent: async (event) => {
-      events.push(event);
-    },
-    executeWorkspaceTool: async () => {
-      throw new Error("workspace tool execution should not be needed");
-    },
-    executeProfileSkillCommand: ({ prompt }) =>
-      runProfileSkillCommand(prompt, { loadProfileState: loadTempProfileState }),
-    loadOpenPondProfileState: loadTempProfileState,
-    readOpenPondProfileSkill: readProfileSkill,
-    loadPersonalizationSoul: async () => "",
-    maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
-    hostedSystemPrompt: async () => "System prompt",
-    appendAssistantText: async (nextSession, turnId, text) => {
-      events.push({
-        id: `assistant_${events.length}`,
-        sessionId: nextSession.id,
-        turnId,
-        name: "assistant.delta",
-        timestamp: "2026-07-03T10:00:00.000Z",
-        source: "provider",
-        output: text,
-      });
-    },
-    appendHostedContextUsage: async () => undefined,
-    streamLocalByokChatTurn: async function* (streamInput) {
-      streamInputs.push(streamInput);
-      streamPass += 1;
-      if (streamPass === 1) {
-        yield {
-          toolCalls: [
-            {
-              index: 0,
-              id: "call_profile_skill_goal",
-              type: "function",
-              function: {
-                name: "openpond_profile_skill_goal",
-                arguments: JSON.stringify(input.toolArgs),
-              },
-            },
-          ],
-          raw: { pass: 1 },
-        };
-        const usage = usageForPass(streamPass);
-        if (usage) yield { usage, raw: { pass: 1, usage: true } };
-        yield { finishReason: "tool_calls", raw: { pass: 1 } };
-        return;
-      }
-      yield { text: input.finalText ?? "Profile skill route handled.", raw: { pass: 2 } };
-      const usage = usageForPass(streamPass);
-      if (usage) yield { usage, raw: { pass: 2, usage: true } };
-    },
-    turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-profile-skill-native" }),
-    maxHostedWorkspaceToolRounds: 3,
-    maxRepeatedInvalidToolRequests: 2,
-  });
-  function usageForPass(pass: number): unknown {
-    return input.usageByPass && Object.prototype.hasOwnProperty.call(input.usageByPass, pass)
-      ? input.usageByPass[pass]
-      : undefined;
-  }
-  return {
-    runner,
-    sessions,
-    turns,
-    events,
-    approvals,
-    streamInputs,
-    usageRecords,
-  };
-}
-
-export function createNativeGoalControlHarness(input: {
+export function createByokTurnRunnerHarness(input: {
   providerId?: "local-adapter" | "openpond" | "openrouter" | "zai";
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
@@ -212,7 +29,6 @@ export function createNativeGoalControlHarness(input: {
   failure?: Error;
   preferences?: AppPreferences;
   providerSettings?: ProviderSettings;
-  enableGoalContinuations?: boolean;
   finalizeCrossSystemTurn?: NonNullable<Parameters<typeof createTurnRunner>[0]["finalizeCrossSystemTurn"]>;
 }) {
   const providerId = input.providerId ?? "openrouter";
@@ -221,7 +37,7 @@ export function createNativeGoalControlHarness(input: {
     [
       "session_1",
       baseSession({
-        title: "Goal control native tool",
+        title: "BYOK turn runner",
         provider: providerId,
         modelRef: { providerId, modelId },
         ...input.sessionOverrides,
@@ -233,7 +49,7 @@ export function createNativeGoalControlHarness(input: {
   const approvals: Approval[] = [];
   const streamInputs: any[] = [];
   const usageRecords: ModelUsageRecord[] = [];
-  const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up-goal-control-native" });
+  const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up-byok" });
   let streamPass = 0;
   const runner = createTurnRunner({
     attachmentRootDir: "/tmp/openpond-test-attachments",
@@ -379,7 +195,6 @@ export function createNativeGoalControlHarness(input: {
       yield* harnessStreamDeltas();
     },
     turnFollowUpQueue,
-    enableGoalContinuations: input.enableGoalContinuations ?? false,
     maxHostedWorkspaceToolRounds: 3,
     maxRepeatedInvalidToolRequests: 2,
   });
@@ -399,10 +214,10 @@ export function createNativeGoalControlHarness(input: {
         toolCalls: [
           {
             index: 0,
-            id: "call_goal_control",
+            id: "call_test_tool",
             type: "function",
             function: {
-              name: "openpond_goal_control",
+              name: "missing_test_tool",
               arguments: JSON.stringify(input.toolArgs),
             },
           },
@@ -414,7 +229,7 @@ export function createNativeGoalControlHarness(input: {
       yield { finishReason: "tool_calls", raw: { pass } };
       return;
     }
-    yield { text: input.finalText ?? "Goal control handled.", raw: { pass } };
+    yield { text: input.finalText ?? "Turn handled.", raw: { pass } };
     const usage = usageForPass(pass);
     if (usage) yield { usage, raw: { pass, usage: true } };
   }

@@ -17,12 +17,6 @@ export function isNearChatBottom(element: HTMLElement): boolean {
   return element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX;
 }
 
-export function insightsSystemSessionId(payload: unknown): string | null {
-  if (!payload || typeof payload !== "object") return null;
-  const value = (payload as { systemSessionId?: unknown }).systemSessionId;
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
 export type UserMessageNavigationState = {
   canGoPrevious: boolean;
   canGoNext: boolean;
@@ -127,7 +121,6 @@ export function latestCreatePipelineRuntime(
 export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
   if (command.command === "agent") return command.args ? `/agent ${command.args}` : "/agent";
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
-  if (command.command === "sync-cloud") return command.args ? `/sync-cloud ${command.args}` : "/sync-cloud";
   return command.args ? `/${command.command} ${command.args}` : `/${command.command}`;
 }
 
@@ -146,7 +139,6 @@ export function usageAttributionForComposerSlashCommand(
 export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSlashCommand): boolean {
   return (
     command.command === "goal" ||
-    command.command === "goal-local" ||
     command.command === "agent" ||
     command.command === "skill" ||
     command.command === "sync-cloud"

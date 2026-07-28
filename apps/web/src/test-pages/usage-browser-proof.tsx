@@ -129,17 +129,6 @@ function usageSummary(): UsageSummaryResponse {
         commandSource: "prompt_parse",
       },
     ],
-    insightRuns: [
-      {
-        ...breakdown(4200),
-        insightRunId: "insight_run_usage_browser",
-        status: "completed",
-        trigger: "manual",
-        findingCount: 3,
-        sessionId: "session_usage_browser_insights",
-        turnId: "turn_usage_browser_insights",
-      },
-    ],
     routes: [
       { ...breakdown(50_200), route: "local_byok" },
       { ...breakdown(14_640), route: "openpond_hosted" },
@@ -171,10 +160,9 @@ function usageRecords(): UsageRecordsResponse {
     hasMore: false,
     records: [
       usageRecord("model_usage_browser_1", "session_usage_browser_primary", "turn_usage_browser_1", "anthropic/claude-sonnet-4", 4200),
-      usageRecord("model_usage_browser_2", "session_usage_browser_insights", "turn_usage_browser_insights", "gpt-4.1", 3100, {
-        requestKind: "insights_scan",
+      usageRecord("model_usage_browser_2", "session_usage_browser_background", "turn_usage_browser_background", "gpt-4.1", 3100, {
+        requestKind: "tool_loop",
         visibility: "system",
-        insightRunId: "insight_run_usage_browser",
       }),
       usageRecord("model_usage_browser_3", null, null, "gemini-2.5-pro", null, {
         requestKind: "context_compaction",
@@ -222,11 +210,8 @@ function usageRecord(
   turnId: string | null,
   model: string,
   totalTokens: number | null,
-  patch: Partial<ModelUsageRecord> & {
-    insightRunId?: string | null;
-  } = {},
+  patch: Partial<ModelUsageRecord> = {},
 ): ModelUsageRecord {
-  const { insightRunId, ...recordPatch } = patch;
   return {
     id,
     requestId: `${turnId ?? id}:model:0`,
@@ -254,7 +239,6 @@ function usageRecord(
       workflowKind: "direct_chat",
       sessionId,
       turnId,
-      insightRunId: insightRunId ?? null,
       goalId: null,
       subagentRunId: null,
       subagentRoleId: null,
@@ -268,7 +252,7 @@ function usageRecord(
       cloudProjectId: null,
       sourceEventSequence: null,
     },
-    ...recordPatch,
+    ...patch,
   };
 }
 

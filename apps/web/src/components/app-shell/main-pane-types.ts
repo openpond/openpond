@@ -6,10 +6,6 @@ import type {
   CloudProject,
   CodexPermissionMode,
   CodexReasoningEffort,
-  InsightItem,
-  InsightRun,
-  InsightRunTrigger,
-  InsightStatus,
   OpenPondApp,
   OpenPondCommandAccessMode,
   OpenPondProfileSkill,
@@ -78,7 +74,6 @@ export type MainPaneProps = {
   mainComposerFocusRequestId: number;
   labCloseDetailRequestId: number;
   labCloseDetailKind: LabDetailLocation["kind"] | null;
-  labSuggestionsRequestId: number;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
   onSideChatTrainingLaunchHandled: (id: number) => void;
   steerAutoDispatchBlocked: boolean;
@@ -130,13 +125,6 @@ export type MainPaneProps = {
   terminalOpen: boolean;
   onToggleTerminal: () => void;
   onWorkspaceDiffPanelViewStateChange: (state: WorkspaceDiffPanelViewState) => void;
-  insightsItems: InsightItem[];
-  insightsRuns: InsightRun[];
-  insightsNextScanAt: string | null;
-  insightsScanRunning: boolean;
-  insightsScanStartedAt: string | null;
-  insightsScanning: boolean;
-  insightsError: string | null;
   training: ReturnType<typeof useTraining>;
   trainingSessions: Session[];
   trainingChatHandoff: TrainingModelChatHandoff | null;
@@ -144,10 +132,7 @@ export type MainPaneProps = {
   onTrainingDetailTasksetIdChange: (tasksetId: string | null) => void;
   onTrainingChatTaskSelect: (index: number) => void;
   onTrainingChatHandoffDismiss: () => void;
-  onRunInsightsScan: (input?: { trigger?: InsightRunTrigger }) => Promise<unknown>;
-  onAskInsightsQuestion: (question: string) => Promise<unknown>;
-  onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
-  onOpenInsightsSession: (sessionId: string) => void;
+  onOpenSession: (sessionId: string) => void;
   cloudProjects: CloudProject[];
   chatHistoryHasMore?: boolean;
   chatHistoryLoading?: boolean;
@@ -217,7 +202,6 @@ export type MainPaneProps = {
     },
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
-  pauseGoal: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
@@ -229,7 +213,6 @@ export type MainPaneProps = {
   onShowRightChatPanel: () => void;
   onAddRightChat: () => void;
   onOpenRightChatForSession: (sessionId: string, session?: Session) => void;
-  onOpenLabSuggestions: () => void;
   onLabDetailOpenChange: (location: LabDetailLocation | null) => void;
   onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;

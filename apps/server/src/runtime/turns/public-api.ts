@@ -8,7 +8,6 @@ export { resolveConnectedAppContextsForTurn } from "../hosted-turn/connected-app
 export { normalizeMentionedSandboxToolRequest } from "../create-pipeline/snapshots.js";
 export type {
   CreatePipelineRepository,
-  GoalRepository,
   ProviderRuntime,
   SessionWorkspaceResolver,
   SubagentRepository,

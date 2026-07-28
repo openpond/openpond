@@ -8,8 +8,6 @@ import {
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
-import type { InsightsViewProps } from "../insights/InsightsView";
-import { InsightsView } from "../insights/InsightsView";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
 import {
@@ -29,63 +27,23 @@ import type { LabsRouteProps } from "./LabsRoute";
 
 const PAGE_SIZE = 10;
 const EMPTY_TIMESTAMP = new Date(0).toISOString();
-type SuggestionsView = "observations" | "suggestions";
-
 export function SuggestionsTab({
-  insights,
-  suggestionsView,
   training,
-  onSuggestionsViewChange,
   onPlanStarted,
 }: {
-  insights: InsightsViewProps;
-  suggestionsView: SuggestionsView;
   training: LabsRouteProps["training"];
-  onSuggestionsViewChange: (view: SuggestionsView) => void;
   onPlanStarted: () => void;
 }) {
   return (
     <section className="labs-suggestions-page" aria-label="Suggestions">
-      <div
-        className="labs-subtabs"
-        role="tablist"
-        aria-label="Suggestion types"
-      >
-        <button
-          aria-selected={suggestionsView === "observations"}
-          className={suggestionsView === "observations" ? "active" : undefined}
-          role="tab"
-          type="button"
-          onClick={() => onSuggestionsViewChange("observations")}
-        >
-          Observations{" "}
-          <span>
-            {insights.items.filter((item) => item.status === "active").length}
-          </span>
-        </button>
-        <button
-          aria-selected={suggestionsView === "suggestions"}
-          className={suggestionsView === "suggestions" ? "active" : undefined}
-          role="tab"
-          type="button"
-          onClick={() => onSuggestionsViewChange("suggestions")}
-        >
-          AI suggestions{" "}
-          <span>{training.training.payload?.candidates.length ?? 0}</span>
-        </button>
-      </div>
       <div className="labs-suggestions-body">
-        {suggestionsView === "observations" ? (
-          <InsightsView {...insights} />
-        ) : (
-          <TrainingSuggestions
-            training={training.training}
-            defaultModel={training.defaultModel}
-            preferences={training.preferences}
-            reasoningEffort={training.reasoningEffort}
-            onPlanStarted={onPlanStarted}
-          />
-        )}
+        <TrainingSuggestions
+          training={training.training}
+          defaultModel={training.defaultModel}
+          preferences={training.preferences}
+          reasoningEffort={training.reasoningEffort}
+          onPlanStarted={onPlanStarted}
+        />
       </div>
     </section>
   );

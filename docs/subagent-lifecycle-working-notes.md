@@ -1,7 +1,13 @@
 # Subagent Lifecycle Working Notes
 
-Status: implemented and verified for the focused subagent bounded-worker, submission/review, heartbeat, stale-detection, cleanup/archive lifecycle slice.
-Latest checkpoint: 2026-07-09. Phase 9 desktop lifecycle coverage is complete for the current slice: Settings persistence/copy, progress-only no-wake behavior, thread-scoped watching without a goal, stale required/optional surfacing, watcher-submission parent wake, parent review/revision/acceptance loop, bounded copy-on-write coding-worker handoff, goal-scoped derived state, and the existing visible/running/handoff/blocked scenarios all pass in `bun run test:desktop:subagents` as a 12-scenario suite. Fresh completion-audit proof passed `bun run build:contracts`, `bun run typecheck`, `git diff --check`, the 185-test focused lifecycle unit suite, and the desktop suite report generated at `2026-07-09T07:33:32.504Z`. The proof exposed and fixed two root lifecycle bugs: watcher ticks were originally starved behind long-running child execution on the shared `subagent` worker queue, and the bounded-worker scripted proof initially reused the same native `exec_command` tool-call id for setup and validation, causing the runtime progress ledger to dedupe the validation event. The server now runs watcher ticks on a dedicated `subagent-lifecycle` queue, and scripted native tool calls use stable argument-derived ids. This pass also hardened patch-approval lifecycle behavior: accepted patches apply into the parent checkout and then clean the child worktree; declined and cancelled patch approvals keep the child worktree readable, record `applyResult.status`, and emit `subagent.workspace_retained`; cancelled approvals now emit `subagent.cancelled` instead of a revision receipt; apply conflicts keep the approval pending and preserve both parent and child workspace state for retry. Retained child workspaces now carry explicit 7-day retain-for-inspection metadata with an expiry, Goal details surfaces that expiry in compact child results, and the lifecycle watcher enforces `cleanupAfterExpiry` by calling the runner's `retention_expired` cleanup path even when no child runs are active. Retained workspaces now also emit a deduped `subagent.workspace_retention_expiring` operational warning 24 hours before automatic cleanup without waking the parent model by default. Child messages and non-workspace artifact refs now have an explicit default evidence-retention policy: retain with the parent thread/goal indefinitely, with no expiry cleanup. Packet quality is now structured on review state: missing final summary is an incomplete packet blocker, while missing requested validation or unvalidated workspace changes produce a weak submitted packet with low confidence and human review recommended. Packet quality also carries derived evidence counts for final-summary presence/length, requested validation, validation attempts and failures, tests run, changed files, patch/diff refs, artifacts, findings, blockers, and unvalidated workspace changes; watcher prompts and compact Goal details results now show those facts instead of forcing reviewers to infer them from prose. Blocked, failed, or cancelled required subagents now still block goal completion until the parent explicitly dismisses them through review; dismissal resolves goal gating without counting the child as accepted. Phase 2.6 is now implemented: independent-review recommendations are structured per-run review metadata derived from packet facts and projected into watcher prompts plus compact Goal details results, routing reasons are now a closed contract enum rather than arbitrary durable strings, and broad-edit/high-risk routing thresholds are role-configurable through typed review-routing policy defaults. Repeated-exploration steering strictness is also role-configurable through typed thresholds for repeated search, read, and command patterns while preserving the existing default of steering on the second repeat. The design treats the child model's "done" decision as authority to stop and submit a review packet, not authority to accept its own work; runtime determinism is limited to packet capture, status transitions, packet-quality facts, factual evidence, and advisory review-routing recommendations.
+**Status:** Implemented; OpenPond Goal-coupled portions superseded
+
+**Scope:** Preserve bounded child execution, parent review, messaging, watcher, workspace isolation, and cleanup while making the parent task the only OpenPond-owned scope
+
+## Latest checkpoint
+
+**2026-07-27:** Subagents are now parent-task scoped only. `parentSessionId` is the durable owner; `parentGoalId`, Goal-scoped messaging/query modes, Goal lifecycle coupling, and Goal-derived child projections have been removed. The watcher, parent wake, status/join/cancel/message tools, required review and revision states, worktree/sandbox handling, retained-workspace cleanup, and child-session lifecycle remain. The earlier Goal-aware sections below are retained as historical implementation context and are superseded by [Remove OpenPond Goals and Insights, Preserve Codex Goals](working-docs/agent-harness/2026-07-27-openpond-goal-insights-removal.md).
+
 Purpose: capture near-term direction for OpenPond subagents, especially in light of stronger agentic models such as GPT-5.6-class systems.
 
 Related docs:
@@ -9,7 +15,7 @@ Related docs:
 - [Subagent Orchestration Investigation](working-docs/agent-harness/2026-07-07-subagent-orchestration.md)
 - [Verifiable Desktop Harness](working-docs/agent-harness/2026-07-08-verifiable-desktop-harness.md)
 
-## Current read
+## Historical implementation read (pre-removal)
 
 OpenPond already has a substantial subagent implementation. The important primitives appear to exist:
 
@@ -27,7 +33,7 @@ OpenPond already has a substantial subagent implementation. The important primit
 
 The recommendation is not to add subagents as a new concept. The next improvement should be bounded worker execution plus lifecycle hygiene and product polish around the subagent system that already exists.
 
-## Decision snapshot
+## Historical decision snapshot (pre-removal)
 
 - Subagents should be goal-aware, not goal-backed. Every child run belongs to a parent session; `parentGoalId` is optional scope metadata when a goal exists.
 - The active orchestrator is the parent thread/session, not the goal object and not a hidden subagent-specific goal.
@@ -67,7 +73,7 @@ Keep three completion claims separate:
 | `packetQuality` and `reviewerRouting*` | Runtime | The submission has structured facts, evidence, risks, and advisory review routing. |
 | `accepted` or `dismissed` | Parent/reviewer | The work is accepted for synthesis/goal completion, or a blocked/failed/cancelled child is intentionally acknowledged without acceptance. |
 
-## Current code anchors
+## Historical code anchors (pre-removal)
 
 - `packages/contracts/src/subagents.ts`: owns subagent preferences, role/run/report/message schemas, status enum, `heartbeatIntervalSeconds`, `SubagentWorkerBriefSchema`, `SubagentProgressSchema`, `SubagentExplorationSteeringPolicySchema`, `SubagentEvidenceRetentionPolicySchema` with default `retain_with_parent` indefinite message/artifact retention, `SubagentReviewPacketQualityEvidenceSchema`, `SubagentReviewPacketQualitySchema`, `SubagentReviewRoutingPolicySchema` plus default high-risk path patterns, `SubagentReviewRoutingReasonSchema`, `SubagentReviewRoutingEvidenceSchema`, `SubagentReviewStateSchema` including dismissed review decisions plus `independentReviewRecommended`, typed `reviewerRoutingReasons`, and `reviewerRoutingEvidence`, `SubagentLifecycleActionRequestSchema`, typed subagent runtime events including `subagent.workspace_retained`, `subagent.workspace_retention_expiring`, `subagent.archived`, `subagent.superseded`, and `subagent.dismissed`, and exposed `SubagentRun.updatedAt`.
 - `apps/server/src/openpond/goal-control.ts`: owns OpenPond goal-control records and the optional `OpenPondGoalSubagentState` snapshot shape used for durable goal-visible child counts, cleanup state, and archive state.

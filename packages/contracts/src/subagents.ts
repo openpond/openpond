@@ -32,7 +32,7 @@ export const SubagentToolPolicySchema = z.enum(["read_only", "workspace_write", 
 
 export type SubagentToolPolicy = z.infer<typeof SubagentToolPolicySchema>;
 
-export const SubagentPeerMessagesSchema = z.enum(["disabled", "goal_scoped"]);
+export const SubagentPeerMessagesSchema = z.enum(["disabled", "parent_scoped"]);
 
 export type SubagentPeerMessages = z.infer<typeof SubagentPeerMessagesSchema>;
 
@@ -129,7 +129,7 @@ export const SubagentRoleSettingsSchema = z.object({
   maxConcurrentRuns: z.number().int().min(1).max(16).default(1),
   toolPolicy: SubagentToolPolicySchema.default("read_only"),
   background: z.boolean().default(true),
-  peerMessages: SubagentPeerMessagesSchema.default("goal_scoped"),
+  peerMessages: SubagentPeerMessagesSchema.default("parent_scoped"),
 });
 
 export type SubagentRoleSettings = z.infer<typeof SubagentRoleSettingsSchema>;
@@ -239,7 +239,6 @@ export const SubagentRunSchema = z.object({
   id: z.string().trim().min(1).max(200),
   parentSessionId: z.string().trim().min(1).max(200),
   parentTurnId: z.string().trim().min(1).max(200).nullable().default(null),
-  parentGoalId: z.string().trim().min(1).max(200).nullable().default(null),
   childSessionId: z.string().trim().min(1).max(200).nullable().default(null),
   roleId: SubagentRoleIdSchema,
   objective: z.string().trim().min(1).max(50_000),
@@ -247,7 +246,7 @@ export const SubagentRunSchema = z.object({
   isolationMode: SubagentIsolationModeSchema.default("none"),
   toolPolicy: SubagentToolPolicySchema.default("read_only"),
   background: z.boolean().default(true),
-  peerMessages: SubagentPeerMessagesSchema.default("goal_scoped"),
+  peerMessages: SubagentPeerMessagesSchema.default("parent_scoped"),
   status: SubagentRunStatusSchema.default("queued"),
   progress: SubagentProgressSchema,
   evidenceRetention: SubagentEvidenceRetentionPolicySchema,
@@ -318,7 +317,6 @@ export type SubagentMessageDelivery = z.infer<typeof SubagentMessageDeliverySche
 
 export const SubagentMessageSchema = z.object({
   id: z.string().trim().min(1).max(200),
-  parentGoalId: z.string().trim().min(1).max(200).nullable().default(null),
   fromRunId: z.string().trim().min(1).max(200),
   toRunId: z.string().trim().min(1).max(200).nullable().default(null),
   toRole: SubagentRoleIdSchema.nullable().default(null),

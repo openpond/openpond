@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Cloud,
   CircleAlert,
-  EyeOff,
   Folder,
   FolderGit2,
   FileText,
@@ -520,7 +519,6 @@ export function SidebarProjectRow({
   onNewChat,
   onMoveToCloud,
   onWorkspaceTargetSelect,
-  onToggleSystemVisibility,
   onTogglePin,
   onRemove,
   onDragStart,
@@ -542,7 +540,6 @@ export function SidebarProjectRow({
   onNewChat: () => void;
   onMoveToCloud?: () => void;
   onWorkspaceTargetSelect?: (target: WorkspaceTargetValue) => void;
-  onToggleSystemVisibility?: () => void;
   onTogglePin: () => void;
   onRemove: () => void;
   onDragStart?: (event: DragEvent<HTMLDivElement>) => void;
@@ -553,7 +550,7 @@ export function SidebarProjectRow({
   const [menuOpen, setMenuOpen] = useState(false);
   const rowShellRef = useRef<HTMLDivElement | null>(null);
   const [locationsStyle, setLocationsStyle] = useState<ProjectLocationsPopoverStyle>({});
-  const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onToggleSystemVisibility) || Boolean(onRemove);
+  const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onRemove);
   const linkedCloud =
     kind === "local" && cloudLinkTrusted !== false && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
   const updateLocationsPosition = useCallback(() => {
@@ -656,11 +653,6 @@ export function SidebarProjectRow({
             closeMenu();
             onMoveToCloud();
           } : undefined}
-          onToggleSystemVisibility={onToggleSystemVisibility ? () => {
-            closeMenu();
-            onToggleSystemVisibility();
-          } : undefined}
-          systemHidden={Boolean("hiddenFromDefaultSidebar" in project && project.hiddenFromDefaultSidebar)}
           onRemove={() => {
             closeMenu();
             onRemove();
@@ -931,14 +923,10 @@ function SidebarProjectMoreButton({
 function SidebarProjectMenuPopover({
   onClose,
   onMoveToCloud,
-  onToggleSystemVisibility,
-  systemHidden,
   onRemove,
 }: {
   onClose: () => void;
   onMoveToCloud?: () => void;
-  onToggleSystemVisibility?: () => void;
-  systemHidden: boolean;
   onRemove: () => void;
 }) {
   return (
@@ -964,19 +952,6 @@ function SidebarProjectMenuPopover({
           >
             <CloudMoveIcon size={13} />
             <span>Move to Cloud</span>
-          </button>
-        )}
-        {onToggleSystemVisibility && (
-          <button
-            type="button"
-            role="menuitem"
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleSystemVisibility();
-            }}
-          >
-            <EyeOff size={13} />
-            <span>{systemHidden ? "Show in Local Projects" : "Hide from Local Projects"}</span>
           </button>
         )}
         <button

@@ -52,7 +52,6 @@ import {
   createGithubExtensionManager, emptyProfileState, initLocalProfileRepo,
   loadOpenPondProfileLibrary, loadOpenPondProfileState,
 } from "@openpond/cloud";
-import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
@@ -119,7 +118,6 @@ import {
 } from "../workspace/local-project-source-upload.js";
 import { createServerWorkspacePayloads } from "../workspace/server-workspace-payloads.js";
 import {
-  hasObjectKey,
   fetchCloudProjects,
   asRecord,
   stringValue,
@@ -230,13 +228,7 @@ export function createServerPayloads(deps: {
 
   async function loadAppPreferences(): Promise<AppPreferences> {
     const entry = await store.getCacheEntry<unknown>(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY);
-    const preferences = normalizeAppPreferences(entry?.payload);
-    if (hasObjectKey(entry?.payload, "goalStorageLocation")) return preferences;
-    const global = await loadGlobalConfig().catch(() => null);
-    return normalizeAppPreferences({
-      ...preferences,
-      ...(global?.goalStorageLocation ? { goalStorageLocation: global.goalStorageLocation } : {}),
-    });
+    return normalizeAppPreferences(entry?.payload);
   }
 
   async function loadProvidersFile(): Promise<ProvidersFile> {
@@ -284,7 +276,6 @@ export function createServerPayloads(deps: {
 
   async function updateAppPreferencesPayload(payload: unknown): Promise<{ preferences: AppPreferences }> {
     const input = UpdateAppPreferencesRequestSchema.parse(payload);
-    const syncGoalStorageLocation = hasObjectKey(payload, "goalStorageLocation");
     let updatedPreferences: AppPreferences | null = null;
     const update = appPreferencesUpdateQueue.then(async () => {
       const current = await loadAppPreferences();
@@ -292,9 +283,6 @@ export function createServerPayloads(deps: {
       updatedPreferences = next;
       if (JSON.stringify(next) !== JSON.stringify(current)) {
         await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
-      }
-      if (syncGoalStorageLocation) {
-        await saveGlobalConfig({ goalStorageLocation: next.goalStorageLocation });
       }
     });
     appPreferencesUpdateQueue = update.catch(() => undefined);

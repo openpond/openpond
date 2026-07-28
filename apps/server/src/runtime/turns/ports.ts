@@ -98,8 +98,6 @@ export type TurnRepository = {
     },
   ): Promise<RuntimeEvent[]>;
   latestAssistantTextForSession(sessionId: string): Promise<string | null>;
-  currentOpenPondThreadGoal(sessionId: string): Promise<Record<string, unknown> | null>;
-  openPondThreadGoalById(sessionId: string, goalId: string): Promise<Record<string, unknown> | null>;
   latestTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
   latestPersistedTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
   countTurnsForSession(sessionId: string): Promise<number>;
@@ -147,24 +145,15 @@ export type TurnRepository = {
   }): Promise<SubagentRun[]>;
   appendSubagentMessage?(message: SubagentMessage): Promise<SubagentMessage>;
   listSubagentMessages?(query?: {
-    parentGoalId?: string | null;
     fromRunId?: string | null;
     toRunId?: string | null;
     toRole?: string | null;
     limit?: number;
   }): Promise<SubagentMessage[]>;
-  claimOpenPondThreadGoal?(input: {
-    sessionId: string;
-    goalId: string;
-    status: string;
-    updatedAt: string;
-  }): Promise<void>;
-  releaseOpenPondThreadGoalClaim?(sessionId: string, goalId: string): Promise<void>;
 };
 
 export type SubagentRunQuery = {
   parentSessionId?: string | null;
-  parentGoalId?: string | null;
   childSessionId?: string | null;
   status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
   limit?: number;
@@ -239,11 +228,6 @@ export type SubagentWorkspacePort = {
   forkSandboxForSubagent?(input: SubagentSandboxForkRequest): Promise<unknown>;
   cleanupSandboxForSubagent?(input: SubagentSandboxCleanupRequest): Promise<unknown>;
 };
-
-export type GoalRepository = Pick<
-  TurnRepository,
-  "claimOpenPondThreadGoal" | "releaseOpenPondThreadGoalClaim"
->;
 
 export type CreatePipelineRepository = Pick<
   TurnRepository,
@@ -369,7 +353,6 @@ export type TurnRunnerDependencies = {
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;
   notifySubagentRunStateChanged?: (run: SubagentRun) => void;
-  enableGoalContinuations?: boolean;
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
   hostedToolFlags?: Partial<HostedToolRolloutFlags>;
@@ -378,7 +361,6 @@ export type TurnRunnerDependencies = {
 export type TurnRunner = TurnDispatcherPort & {
   isSessionTurnActive(sessionId: string): boolean;
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
-  pauseSessionGoal(sessionId: string): Promise<unknown>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;
   applyCreateImproveAction(runId: string, payload: unknown): Promise<CreateImproveRun>;

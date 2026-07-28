@@ -26,8 +26,6 @@ export * from "./action-catalog.js";
 export * from "./skills.js";
 export * from "./extensions.js";
 export * from "./create-pipeline.js";
-export * from "./insights.js";
-export * from "./goal-status.js";
 export * from "./usage.js";
 export * from "./local-agent-schedules.js";
 export * from "./team-chat.js";

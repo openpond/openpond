@@ -484,19 +484,6 @@ Options:
   --workflow-mode <string>
   --work-item-id <string>
 ```
-## goal
-
-```text
-Usage:
-  openpond goal <command> [args]
-
-Options:
-  --agent-id <string>
-  --cwd <string>
-  --goal-id <string>
-  --goal-storage <string>
-  --json
-```
 ## harness
 
 ```text

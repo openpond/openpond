@@ -1065,8 +1065,7 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("/skill Manage skills");
     expect(markup).toContain("create, edit, list, help");
     expect(markup).not.toContain("Subcommands:");
-    expect(markup).toContain("/goal Run a goal");
-    expect(markup).toContain("/goal-local Run a local goal");
+    expect(markup).not.toContain("/goal");
     expect(markup).toContain("/submit-issue Submit issue");
     expect(markup).toContain("File a GitHub issue in openpond/openpond through the connected GitHub app.");
     expect(markup).toContain("/sync-cloud Upload/sync to Cloud");

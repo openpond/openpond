@@ -17,7 +17,7 @@ import type {
 } from "../../openpond/capability-tool-registry.js";
 import type { ModelToolExecutionContext } from "../../openpond/model-tool-registry.js";
 import { event, now, textFromUnknown } from "../../utils.js";
-import { recordFromUnknown, stringFromRecord } from "../turns/value-utils.js";
+import { recordFromUnknown } from "../turns/value-utils.js";
 
 type AppendSubagentReceipt = (input: {
   parentSession: Session;
@@ -51,13 +51,11 @@ export function createSubagentMessagingRuntime(deps: {
     upsertRun(run: SubagentRun): Promise<unknown>;
     listRuns(input: {
       parentSessionId?: string;
-      parentGoalId?: string;
       status?: SubagentRun["status"][];
       limit?: number;
     }): Promise<SubagentRun[]>;
     appendMessage(message: SubagentMessage): Promise<unknown>;
   };
-  currentGoal(sessionId: string): Promise<unknown>;
   getSession(sessionId: string): Promise<Session>;
   latestTurnForSession(sessionId: string): Promise<Turn | null>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
@@ -75,23 +73,15 @@ export function createSubagentMessagingRuntime(deps: {
     has: (sessionId: string) => Boolean(deps.getActiveTurn(sessionId)),
     get: (sessionId: string) => deps.getActiveTurn(sessionId),
   };
-  const store = {
-    currentOpenPondThreadGoal: async (sessionId: string) => recordFromUnknown(await deps.currentGoal(sessionId)),
-  };
   async function sendSubagentMessageFromModelTool(
     context: ModelToolExecutionContext,
     input: OpenPondSubagentMessageToolInput,
   ): Promise<OpenPondSubagentMessageToolResult> {
     const deps = requireSubagentDeps();
-    const parentGoalId = stringFromRecord(
-      (await store.currentOpenPondThreadGoal(context.session.parentSessionId ?? context.session.id)) ?? {},
-      "id",
-    );
     const fromRunId = context.session.subagentRunId ?? `parent:${context.session.id}`;
     const priority = input.priority ?? "normal";
     const deliveredParentSessionId = subagentMessageParentDeliveryTarget(context.session, input);
     const recipientRuns = await resolveSubagentMessageRecipients(context, {
-      parentGoalId,
       toRunId: input.toRunId ?? null,
       toRole: input.toRole ?? null,
     });
@@ -118,7 +108,6 @@ export function createSubagentMessagingRuntime(deps: {
     };
     let message = SubagentMessageSchema.parse({
       id: randomUUID(),
-      parentGoalId,
       fromRunId,
       toRunId: input.toRunId ?? null,
       toRole: input.toRole ?? null,
@@ -203,7 +192,6 @@ export function createSubagentMessagingRuntime(deps: {
     });
     const message = SubagentMessageSchema.parse({
       id: randomUUID(),
-      parentGoalId: input.run.parentGoalId,
       fromRunId: input.context.session.subagentRunId ?? `parent:${input.context.session.id}`,
       toRunId: input.run.id,
       toRole: input.run.roleId,
@@ -246,7 +234,6 @@ export function createSubagentMessagingRuntime(deps: {
   async function resolveSubagentMessageRecipients(
     context: ModelToolExecutionContext,
     input: {
-      parentGoalId: string | null;
       toRunId: string | null;
       toRole: string | null;
     },
@@ -258,7 +245,6 @@ export function createSubagentMessagingRuntime(deps: {
       : input.toRole
         ? await deps.listRuns({
             parentSessionId,
-            parentGoalId: input.parentGoalId ?? undefined,
             status: ["queued", "running", "needs_resume"],
             limit: 50,
           })
@@ -392,7 +378,7 @@ export function createSubagentMessagingRuntime(deps: {
   }): string {
     const deliveredToParent = Boolean(input.delivery.deliveredParentSessionId);
     if (input.deliveredRunIds.length === 0 && !deliveredToParent) {
-      return "Message persisted in the goal-scoped subagent mailbox.";
+      return "Message persisted in the parent-scoped subagent mailbox.";
     }
     const prefix = input.priority === "interrupt" ? "Interrupt message" : "Message";
     const childDelivery = input.deliveredRunIds.length > 0

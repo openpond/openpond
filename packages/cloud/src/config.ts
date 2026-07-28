@@ -154,13 +154,10 @@ export type LocalOpenPondProfileCatalogEntry = {
   lastPush?: LocalOpenPondProfilePushStatus;
 };
 
-export type LocalGoalStorageLocation = "global" | "workspace";
-
 export type LocalConfig = {
   accounts?: LocalAccountConfig[];
   activeProfile?: ActiveProfileSelector;
   openpondProfile?: LocalOpenPondProfileConfig;
-  goalStorageLocation?: LocalGoalStorageLocation;
   baseUrl?: string;
   apiBaseUrl?: string;
   chatApiBaseUrl?: string;
@@ -735,9 +732,6 @@ function extractLegacyAccount(
 function normalizeGlobalConfig(raw: LocalConfig): LocalConfig {
   const normalized: LocalConfig = {};
 
-  if (raw.goalStorageLocation === "global" || raw.goalStorageLocation === "workspace") {
-    normalized.goalStorageLocation = raw.goalStorageLocation;
-  }
   if (typeof raw.lspEnabled === "boolean")
     normalized.lspEnabled = raw.lspEnabled;
   if (raw.executionMode === "local" || raw.executionMode === "hosted") {
@@ -952,13 +946,6 @@ function applyAccountPatch(
 }
 
 function applyTopLevelPatch(global: LocalConfig, source: LocalConfig): void {
-  if (hasOwn(source, "goalStorageLocation")) {
-    if (source.goalStorageLocation === "global" || source.goalStorageLocation === "workspace") {
-      global.goalStorageLocation = source.goalStorageLocation;
-    } else if (source.goalStorageLocation === null) {
-      delete global.goalStorageLocation;
-    }
-  }
   if (hasOwn(source, "lspEnabled")) {
     if (typeof source.lspEnabled === "boolean") {
       global.lspEnabled = source.lspEnabled;

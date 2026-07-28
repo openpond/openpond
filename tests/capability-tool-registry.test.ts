@@ -9,15 +9,6 @@ import type {
 import { defaultSubagentPreferences, type Session } from "../packages/contracts/src";
 
 describe("OpenPond capability tool registry", () => {
-  test("describes Goal mode as explicitly opt-in", () => {
-    const definitions = createOpenPondCapabilityModelToolDefinitions(requiredHandlers());
-    const goalControl = requireTool(definitions, "openpond_goal_control");
-
-    expect(goalControl.description).toContain("Use start only when the current user message is an explicit");
-    expect(goalControl.description).toContain("/goal or /goal-local");
-    expect(goalControl.description).not.toContain("Goal:");
-  });
-
   test("adds subagent tools only when subagent handlers are supplied", () => {
     const withoutSubagents = createOpenPondCapabilityModelToolDefinitions(requiredHandlers());
     expect(withoutSubagents.map((definition) => definition.name)).not.toContain("openpond_subagent_start");
@@ -33,7 +24,6 @@ describe("OpenPond capability tool registry", () => {
     });
 
     expect(withSubagents.map((definition) => definition.name)).toEqual([
-      "openpond_goal_control",
       "openpond_subagent_start",
       "openpond_subagent_status",
       "openpond_subagent_join",
@@ -85,7 +75,7 @@ describe("OpenPond capability tool registry", () => {
       objective: "Fix the failing tests",
       context: "Use the current branch diff.",
     }));
-    const statusResult = await status.execute(context({ parentGoalId: "goal_1" }));
+    const statusResult = await status.execute(context({}));
     const joinResult = await join.execute(context({ runId: "run_1" }));
     const cancelResult = await cancel.execute(context({
       runId: "run_1",
@@ -112,7 +102,7 @@ describe("OpenPond capability tool registry", () => {
           context: "Use the current branch diff.",
         },
       },
-      { tool: "status", input: { parentGoalId: "goal_1" } },
+      { tool: "status", input: {} },
       { tool: "join", input: { runId: "run_1" } },
       {
         tool: "cancel",
@@ -346,14 +336,6 @@ function requiredHandlers() {
       state: "planning" as const,
       nextStep: "Started.",
     }),
-    startGoalControl: async () => ({
-      goalId: "goal_1",
-      action: "start" as const,
-      status: "active",
-      objective: "Ship subagents",
-      mode: "local" as const,
-      nextStep: "Goal started.",
-    }),
   };
 }
 
@@ -367,7 +349,7 @@ function subagentToolResult(status: "queued" | "completed" | "cancelled") {
     isolationMode: "copy_on_write" as const,
     toolPolicy: "workspace_write" as const,
     background: true,
-    peerMessages: "goal_scoped" as const,
+    peerMessages: "parent_scoped" as const,
     nextStep: status === "completed" ? "Completed." : "Queued.",
   };
 }

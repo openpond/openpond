@@ -106,7 +106,6 @@ describe("codex bridge usage ledger", () => {
         id: "run_child",
         parentSessionId: "session_parent",
         parentTurnId: "turn_parent",
-        parentGoalId: "goal_parent",
         childSessionId: "session_child",
         status: "running",
       }),
@@ -120,7 +119,6 @@ describe("codex bridge usage ledger", () => {
       title: "Research child",
       parentSessionId: "session_parent",
       parentTurnId: "turn_parent",
-      parentGoalId: "goal_parent",
       subagentRunId: "run_child",
       subagentRoleId: "research",
       hiddenFromDefaultSidebar: true,
@@ -178,7 +176,6 @@ describe("codex bridge usage ledger", () => {
       output: "Subagent research is waiting for approval: pnpm test tests/subagent-child-lifecycle.test.ts",
       data: {
         childSessionId: "session_child",
-        parentGoalId: "goal_parent",
       },
     });
 
@@ -249,7 +246,6 @@ function subagentRun(overrides: Partial<SubagentRun> = {}): SubagentRun {
     id: "run_child",
     parentSessionId: "session_parent",
     parentTurnId: "turn_parent",
-    parentGoalId: "goal_parent",
     childSessionId: "session_child",
     roleId: "research",
     objective: "Review approval behavior",
@@ -257,7 +253,7 @@ function subagentRun(overrides: Partial<SubagentRun> = {}): SubagentRun {
     isolationMode: "copy_on_write",
     toolPolicy: "read_only",
     background: true,
-    peerMessages: "goal_scoped",
+    peerMessages: "parent_scoped",
     status: "running",
     required: true,
     createdAt: "2026-07-04T10:00:00.000Z",

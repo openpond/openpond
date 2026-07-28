@@ -63,13 +63,11 @@ export function createSubagentToolRuntime(deps: {
     upsertRun(run: SubagentRun): Promise<unknown>;
     listRuns(input: {
       parentSessionId?: string;
-      parentGoalId?: string;
       status?: SubagentRun["status"][];
       limit?: number;
     }): Promise<SubagentRun[]>;
   };
   loadAppPreferences(): Promise<AppPreferences>;
-  currentGoal(sessionId: string): Promise<unknown>;
   getSession(sessionId: string): Promise<Session>;
   appendSubagentReceipt: AppendSubagentReceipt;
   subagentWorkspaceTargetKeyForSession(session: Session): Promise<string>;
@@ -140,9 +138,6 @@ export function createSubagentToolRuntime(deps: {
   const queueSubagentFollowupMessage = deps.queueSubagentFollowupMessage;
   const archiveSubagentChildSession = deps.archiveSubagentChildSession;
   const subagentLifecycleActionNextStep = deps.subagentLifecycleActionNextStep;
-  const store = {
-    currentOpenPondThreadGoal: async (sessionId: string) => recordFromUnknown(await deps.currentGoal(sessionId)),
-  };
   async function startSubagentFromModelTool(
     context: ModelToolExecutionContext,
     input: OpenPondSubagentStartToolInput,
@@ -207,14 +202,6 @@ export function createSubagentToolRuntime(deps: {
         );
       }
     }
-    const parentGoal = (await store.currentOpenPondThreadGoal(context.session.id)) ?? {};
-    const parentGoalId = stringFromRecord(parentGoal, "id");
-    const parentGoalStatus = stringFromRecord(parentGoal, "status");
-    if (parentGoalId && parentGoalStatus !== "running") {
-      throw new Error(
-        `Cannot start a subagent for goal ${parentGoalId} while it is ${parentGoalStatus ?? "not running"}. Resume the goal first.`,
-      );
-    }
     const runId = randomUUID();
     const createdAt = now();
     const childTurnPermissions = subagentChildTurnPermissions(context.turnPermissions, role);
@@ -238,7 +225,6 @@ export function createSubagentToolRuntime(deps: {
         roleId: role.id,
         parentSessionId: context.session.id,
         parentTurnId: context.turnId,
-        parentGoalId,
         toolPolicy: role.toolPolicy,
         requestedIsolationMode: role.isolationMode,
         effectiveIsolationMode: isolation.effectiveIsolationMode,
@@ -253,7 +239,6 @@ export function createSubagentToolRuntime(deps: {
       hiddenFromDefaultSidebar: true,
       parentSessionId: context.session.id,
       parentTurnId: context.turnId,
-      parentGoalId,
       subagentRunId: runId,
       subagentRoleId: role.id,
       appId: context.session.appId,
@@ -274,7 +259,6 @@ export function createSubagentToolRuntime(deps: {
       id: runId,
       parentSessionId: context.session.id,
       parentTurnId: context.turnId,
-      parentGoalId,
       childSessionId: childSession.id,
       roleId: role.id,
       objective: input.objective,
@@ -361,7 +345,6 @@ export function createSubagentToolRuntime(deps: {
       ? [(await deps.getRun(input.runId))].filter((run): run is SubagentRun => Boolean(run))
       : await deps.listRuns({
           parentSessionId: context.session.id,
-          parentGoalId: input.parentGoalId ?? undefined,
           limit: 50,
         });
     for (const run of runs) {

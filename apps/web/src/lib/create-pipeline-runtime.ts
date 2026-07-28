@@ -4,7 +4,7 @@ import {
   type RuntimeEvent,
 } from "@openpond/contracts";
 import type { GoalRuntimeStatus } from "./goal-runtime";
-import type { OpenPondGoalStatusTone } from "./openpond-goal-status";
+import type { RuntimeStatusTone } from "./runtime-status-tone";
 
 const ACTIVE_STATES = new Set<CreateImproveRun["state"]>([
   "planning",
@@ -83,7 +83,6 @@ function createImproveRuntimeStatus(run: CreateImproveRun): GoalRuntimeStatus | 
   return {
     objective: run.objective,
     status: run.state,
-    subagents: null,
     timeUsedSeconds,
     tokensUsed: null,
     tokenBudget: null,
@@ -97,7 +96,7 @@ function createImproveRuntimeStatus(run: CreateImproveRun): GoalRuntimeStatus | 
 }
 
 function presentationForState(run: CreateImproveRun): {
-  tone: OpenPondGoalStatusTone;
+  tone: RuntimeStatusTone;
   actionLabel: string;
 } | null {
   const state = run.state;

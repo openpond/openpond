@@ -22,7 +22,6 @@ import {
 } from "./chat-activities";
 import { classifyChatError } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
-import { insightsRunPromptSummaryFromTurnStarted } from "./chat-insights";
 import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
 
@@ -60,13 +59,11 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
           });
           continue;
         }
-        const insightsRunPrompt = insightsRunPromptSummaryFromTurnStarted(item.args, prompt);
         messages.push({
           id: item.id,
           role: "user",
-          content: insightsRunPrompt ? undefined : prompt,
+          content: prompt,
           attachments: extractAttachments(item.args),
-          ...(insightsRunPrompt ? { insightsRunPrompt } : {}),
           timestamp: item.timestamp,
           turnId: item.turnId,
         });

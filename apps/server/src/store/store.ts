@@ -1,8 +1,6 @@
 import type {
   Approval,
   ContextUsageSnapshot,
-  InsightItem,
-  InsightStatus,
   RuntimeEvent,
   Session,
   SidebarAppPreference,
@@ -37,8 +35,6 @@ import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
-  openPondThreadGoalMutationFromEvent,
-  isTerminalOpenPondGoalStatus,
   localAgentScheduleFromRow,
   subagentRunFromRow,
   subagentRunParams,
@@ -47,12 +43,9 @@ import {
   localAgentScheduleParams,
   localAgentScheduleRunFromRow,
   localAgentScheduleRunParams,
-  insightItemFromRow,
-  insightItemParams,
   modelUsageRecordFromRow,
   modelUsageRecordParams,
   runtimeEventWithSequence,
-  recordFromUnknown,
   threadDetailProjectionFromRow,
   type ThreadDetailProjection,
 } from "./store-codecs.js";
@@ -67,38 +60,6 @@ export type { TrainingChatSearchDocument } from "./store-training.js";
 
 type EventPagePayloadRow = PayloadRow & {
   sequence: number;
-};
-
-type OpenPondThreadGoalRow = {
-  session_id: string;
-  goal_id: string;
-  status: string;
-  provisional: number;
-  updated_at: string;
-};
-
-type OpenPondThreadGoalMutation =
-  | { kind: "clear"; sessionId: string }
-  | { kind: "upsert"; sessionId: string; goalId: string; status: string; updatedAt: string };
-
-type InsightItemRow = {
-  id: string;
-  scope_type: string;
-  scope_id: string;
-  severity: string;
-  type: string;
-  status: string;
-  fingerprint: string;
-  title: string;
-  summary: string;
-  payload: string;
-  last_run_id: string | null;
-  last_run_session_id: string | null;
-  last_run_turn_id: string | null;
-  created_at: string;
-  updated_at: string;
-  resolved_at: string | null;
-  dismissed_at: string | null;
 };
 
 type ModelUsageRecordRow = {
@@ -152,7 +113,6 @@ type SubagentRunRow = PayloadRow & {
   id: string;
   parent_session_id: string;
   parent_turn_id: string | null;
-  parent_goal_id: string | null;
   child_session_id: string | null;
   role_id: string;
   status: SubagentRun["status"];
@@ -160,14 +120,10 @@ type SubagentRunRow = PayloadRow & {
   updated_at: string;
 };
 
-type SubagentRunScopeRow = {
-  parent_session_id: string;
-  parent_goal_id: string | null;
-};
+type SubagentRunScopeRow = { parent_session_id: string };
 
 type SubagentMessageRow = PayloadRow & {
   id: string;
-  parent_goal_id: string | null;
   from_run_id: string;
   to_run_id: string | null;
   to_role: string | null;
@@ -309,11 +265,10 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     const database = openNodeSqliteConnection(this.storePath);
     try {
       database.run(
-        `INSERT INTO subagent_runs (
+         `INSERT INTO subagent_runs (
            id,
            parent_session_id,
            parent_turn_id,
-           parent_goal_id,
            child_session_id,
            role_id,
            status,
@@ -321,12 +276,11 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
            created_at,
            updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id)
          DO UPDATE SET
            parent_session_id = excluded.parent_session_id,
            parent_turn_id = excluded.parent_turn_id,
-           parent_goal_id = excluded.parent_goal_id,
            child_session_id = excluded.child_session_id,
            role_id = excluded.role_id,
            status = excluded.status,
@@ -562,39 +516,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     for (const row of rows) {
       const output = runtimeEventWithSequence(row.payload, row.sequence).output?.trim();
       if (output) return output;
-    }
-    return null;
-  }
-
-  async currentOpenPondThreadGoal(sessionId: string): Promise<Record<string, unknown> | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<OpenPondThreadGoalRow>(
-      "SELECT * FROM openpond_thread_goals WHERE session_id = ?",
-      [sessionId],
-    );
-    if (!row) return null;
-    return this.openPondThreadGoalById(sessionId, row.goal_id);
-  }
-
-  async openPondThreadGoalById(
-    sessionId: string,
-    goalId: string,
-  ): Promise<Record<string, unknown> | null> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<EventPagePayloadRow>(
-      `SELECT sequence, payload FROM events
-       WHERE session_id = ? AND name = ?
-       ORDER BY sequence DESC`,
-      [sessionId, "diagnostic"],
-    );
-    for (const row of rows) {
-      const runtimeEvent = runtimeEventWithSequence(row.payload, row.sequence);
-      const data = recordFromUnknown(runtimeEvent.data);
-      if (data?.kind !== "thread_goal") continue;
-      const goal = recordFromUnknown(data.goal);
-      if (goal?.id === goalId) return goal;
     }
     return null;
   }
@@ -838,123 +759,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     return null;
   }
 
-  async listInsights(query: {
-    status?: InsightStatus | "all" | null;
-    limit?: number;
-  } = {}): Promise<InsightItem[]> {
-    await this.ready;
-    await this.writeQueue;
-    const limit = Math.max(1, Math.min(500, Math.trunc(query.limit ?? 200)));
-    const status = query.status && query.status !== "all" ? query.status : null;
-    const rows = status
-      ? await this.all<InsightItemRow>(
-          `SELECT * FROM insight_items
-           WHERE status = ?
-           ORDER BY updated_at DESC
-           LIMIT ?`,
-          [status, limit],
-        )
-      : await this.all<InsightItemRow>(
-          `SELECT * FROM insight_items
-           ORDER BY
-             CASE status
-               WHEN 'active' THEN 0
-               WHEN 'resolved' THEN 1
-               ELSE 2
-             END,
-             updated_at DESC
-           LIMIT ?`,
-          [limit],
-        );
-    return rows.map(insightItemFromRow);
-  }
-
-  async upsertInsightItem(item: InsightItem): Promise<InsightItem> {
-    await this.ready;
-    const write = this.writeQueue.then(async () => {
-      await this.run(
-        `INSERT INTO insight_items (
-           id,
-           scope_type,
-           scope_id,
-           severity,
-           type,
-           status,
-           fingerprint,
-           title,
-           summary,
-           payload,
-           last_run_id,
-           last_run_session_id,
-           last_run_turn_id,
-           created_at,
-           updated_at,
-           resolved_at,
-           dismissed_at
-         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id)
-         DO UPDATE SET
-           scope_type = excluded.scope_type,
-           scope_id = excluded.scope_id,
-           severity = excluded.severity,
-           type = excluded.type,
-           fingerprint = excluded.fingerprint,
-           title = excluded.title,
-           summary = excluded.summary,
-           payload = excluded.payload,
-           last_run_id = excluded.last_run_id,
-           last_run_session_id = excluded.last_run_session_id,
-           last_run_turn_id = excluded.last_run_turn_id,
-           updated_at = excluded.updated_at,
-           status = CASE
-             WHEN insight_items.status = 'dismissed' THEN insight_items.status
-             ELSE excluded.status
-           END,
-           resolved_at = CASE
-             WHEN insight_items.status = 'dismissed' THEN insight_items.resolved_at
-             ELSE excluded.resolved_at
-           END,
-           dismissed_at = CASE
-             WHEN insight_items.status = 'dismissed' THEN insight_items.dismissed_at
-             ELSE excluded.dismissed_at
-           END`,
-        insightItemParams(item),
-      );
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-    return (await this.getInsightItem(item.id)) ?? item;
-  }
-
-  async getInsightItem(id: string): Promise<InsightItem | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<InsightItemRow>("SELECT * FROM insight_items WHERE id = ?", [id]);
-    return row ? insightItemFromRow(row) : null;
-  }
-
-  async patchInsightStatus(id: string, status: InsightStatus): Promise<InsightItem | null> {
-    await this.ready;
-    const updatedAt = now();
-    const resolvedAt = status === "resolved" ? updatedAt : null;
-    const dismissedAt = status === "dismissed" ? updatedAt : null;
-    const write = this.writeQueue.then(async () => {
-      await this.run(
-        `UPDATE insight_items
-         SET status = ?,
-             updated_at = ?,
-             resolved_at = ?,
-             dismissed_at = ?
-         WHERE id = ?`,
-        [status, updatedAt, resolvedAt, dismissedAt, id],
-      );
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-    return this.getInsightItem(id);
-  }
-
   async listLocalAgentSchedules(query: {
     localProjectId?: string | null;
     enabled?: boolean | null;
@@ -1182,7 +986,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
            id,
            parent_session_id,
            parent_turn_id,
-           parent_goal_id,
            child_session_id,
            role_id,
            status,
@@ -1190,12 +993,11 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
            created_at,
            updated_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id)
          DO UPDATE SET
            parent_session_id = excluded.parent_session_id,
            parent_turn_id = excluded.parent_turn_id,
-           parent_goal_id = excluded.parent_goal_id,
            child_session_id = excluded.child_session_id,
            role_id = excluded.role_id,
            status = excluded.status,
@@ -1251,7 +1053,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
 
   async listSubagentRuns(query: {
     parentSessionId?: string | null;
-    parentGoalId?: string | null;
     childSessionId?: string | null;
     status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
     limit?: number;
@@ -1263,10 +1064,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     if (query.parentSessionId) {
       where.push("parent_session_id = ?");
       params.push(query.parentSessionId);
-    }
-    if (query.parentGoalId) {
-      where.push("parent_goal_id = ?");
-      params.push(query.parentGoalId);
     }
     if (query.childSessionId) {
       where.push("child_session_id = ?");
@@ -1296,7 +1093,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
 
   async listActiveSubagentRuns(query: {
     parentSessionId?: string | null;
-    parentGoalId?: string | null;
     childSessionId?: string | null;
     status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
     limit?: number;
@@ -1311,7 +1107,7 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
     updatedAtFrom?: string | null;
     limit?: number;
-  } = {}): Promise<Array<{ parentSessionId: string; parentGoalId: string | null }>> {
+  } = {}): Promise<Array<{ parentSessionId: string }>> {
     await this.ready;
     await this.writeQueue;
     const where: string[] = [];
@@ -1333,25 +1129,21 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     const limitSql = query.limit === undefined ? "" : "LIMIT ?";
     if (query.limit !== undefined) params.push(Math.max(1, Math.min(1000, Math.trunc(query.limit))));
     const rows = await this.all<SubagentRunScopeRow>(
-      `SELECT parent_session_id, parent_goal_id
+      `SELECT parent_session_id
        FROM subagent_runs
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-       GROUP BY parent_session_id, parent_goal_id
+       GROUP BY parent_session_id
        ORDER BY MAX(updated_at) DESC
        ${limitSql}`,
       params,
     );
-    return rows.map((row) => ({
-      parentSessionId: row.parent_session_id,
-      parentGoalId: row.parent_goal_id,
-    }));
+    return rows.map((row) => ({ parentSessionId: row.parent_session_id }));
   }
 
   async listStaleSubagentRuns(query: {
     olderThanMs: number;
     nowIso?: string | null;
     parentSessionId?: string | null;
-    parentGoalId?: string | null;
     childSessionId?: string | null;
     status?: SubagentRun["status"] | readonly SubagentRun["status"][] | null;
     limit?: number;
@@ -1365,10 +1157,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     if (query.parentSessionId) {
       where.push("parent_session_id = ?");
       params.push(query.parentSessionId);
-    }
-    if (query.parentGoalId) {
-      where.push("parent_goal_id = ?");
-      params.push(query.parentGoalId);
     }
     if (query.childSessionId) {
       where.push("child_session_id = ?");
@@ -1405,7 +1193,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
       await this.run(
         `INSERT INTO subagent_messages (
            id,
-           parent_goal_id,
            from_run_id,
            to_run_id,
            to_role,
@@ -1413,7 +1200,7 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
            payload,
            created_at
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
         subagentMessageParams(parsed),
       );
     });
@@ -1423,7 +1210,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
   }
 
   async listSubagentMessages(query: {
-    parentGoalId?: string | null;
     fromRunId?: string | null;
     toRunId?: string | null;
     toRole?: string | null;
@@ -1433,10 +1219,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     await this.writeQueue;
     const where: string[] = [];
     const params: unknown[] = [];
-    if (query.parentGoalId) {
-      where.push("parent_goal_id = ?");
-      params.push(query.parentGoalId);
-    }
     if (query.fromRunId) {
       where.push("from_run_id = ?");
       params.push(query.fromRunId);
@@ -1797,7 +1579,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     const write = this.writeQueue.then(async () => {
       fn(this.data);
       await this.persist();
-      await this.createOpenPondThreadGoalTable();
       await this.rebuildReadModels();
       snapshot = structuredClone(this.data);
     });
@@ -1806,60 +1587,11 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     return snapshot;
   }
 
-  async claimOpenPondThreadGoal(input: {
-    sessionId: string;
-    goalId: string;
-    status: string;
-    updatedAt: string;
-  }): Promise<void> {
-    await this.ready;
-    const write = this.writeQueue.then(async () => {
-      await this.exec("BEGIN IMMEDIATE");
-      try {
-        await this.upsertOpenPondThreadGoal({
-          kind: "upsert",
-          sessionId: input.sessionId,
-          goalId: input.goalId,
-          status: input.status,
-          updatedAt: input.updatedAt,
-        }, true);
-        await this.exec("COMMIT");
-      } catch (error) {
-        await this.exec("ROLLBACK").catch(() => undefined);
-        throw error;
-      }
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-  }
-
-  async releaseOpenPondThreadGoalClaim(sessionId: string, goalId: string): Promise<void> {
-    await this.ready;
-    const write = this.writeQueue.then(async () => {
-      await this.run(
-        "DELETE FROM openpond_thread_goals WHERE session_id = ? AND goal_id = ? AND provisional = 1",
-        [sessionId, goalId],
-      );
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-  }
-
   async appendRuntimeEvent(runtimeEvent: StoreData["events"][number]): Promise<RuntimeEvent> {
     await this.ready;
     const write = this.writeQueue.then(async () => {
       const safeRuntimeEvent = sanitizeRuntimeEvent(runtimeEvent);
-      const goalMutation = openPondThreadGoalMutationFromEvent(safeRuntimeEvent);
-      let persistedRuntimeEvent: RuntimeEvent;
-      if (goalMutation) await this.exec("BEGIN IMMEDIATE");
-      try {
-        if (goalMutation) await this.upsertOpenPondThreadGoal(goalMutation, false);
-        persistedRuntimeEvent = await this.insertRuntimeEventRecord(safeRuntimeEvent);
-        if (goalMutation) await this.exec("COMMIT");
-      } catch (error) {
-        if (goalMutation) await this.exec("ROLLBACK").catch(() => undefined);
-        throw error;
-      }
+      const persistedRuntimeEvent = await this.insertRuntimeEventRecord(safeRuntimeEvent);
       this.data.events.push(persistedRuntimeEvent);
       return persistedRuntimeEvent;
     });
@@ -1888,48 +1620,6 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
       await this.updateThreadDetailProjectionForEvent(persistedRuntimeEvent, sequence);
     }
     return persistedRuntimeEvent;
-  }
-
-  private async upsertOpenPondThreadGoal(
-    mutation: OpenPondThreadGoalMutation,
-    provisional: boolean,
-  ): Promise<void> {
-    if (mutation.kind === "clear") {
-      await this.run("DELETE FROM openpond_thread_goals WHERE session_id = ?", [mutation.sessionId]);
-      return;
-    }
-    const existing = await this.get<OpenPondThreadGoalRow>(
-      "SELECT * FROM openpond_thread_goals WHERE session_id = ?",
-      [mutation.sessionId],
-    );
-    if (isTerminalOpenPondGoalStatus(mutation.status)) {
-      if (existing?.goal_id === mutation.goalId) {
-        await this.run("DELETE FROM openpond_thread_goals WHERE session_id = ? AND goal_id = ?", [
-          mutation.sessionId,
-          mutation.goalId,
-        ]);
-      }
-      return;
-    }
-    if (existing && existing.goal_id !== mutation.goalId) {
-      throw new Error(
-        `OpenPond goal ${existing.goal_id} is already ${existing.status} for session ${mutation.sessionId}. Complete, stop, or restart it before starting another current goal.`,
-      );
-    }
-    await this.run(
-      `INSERT INTO openpond_thread_goals (session_id, goal_id, status, provisional, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(session_id)
-       DO UPDATE SET
-         goal_id = excluded.goal_id,
-         status = excluded.status,
-         provisional = CASE
-           WHEN openpond_thread_goals.provisional = 0 THEN 0
-           ELSE excluded.provisional
-         END,
-         updated_at = excluded.updated_at`,
-      [mutation.sessionId, mutation.goalId, mutation.status, provisional ? 1 : 0, mutation.updatedAt],
-    );
   }
 
   async runtimeEventContext(

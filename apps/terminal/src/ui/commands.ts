@@ -47,7 +47,7 @@ export const SLASH_COMMANDS: SlashCommandDefinition[] = [
   { name: "agents", usage: "/agents", description: "list agents" },
   { name: "agent", usage: "/agent <id>", description: "select agent", requiresArgument: true },
   { name: "run", usage: "/run <action> [json]", description: "run profile action", requiresArgument: true },
-  { name: "settings", usage: "/settings [goal-storage global|workspace]", description: "show or update settings" },
+  { name: "settings", usage: "/settings", description: "show settings" },
   { name: "logs", usage: "/logs", description: "show recent events" },
   { name: "compact", usage: "/compact", description: "compact current session" },
   { name: "clear", usage: "/clear", description: "clear terminal transcript" },

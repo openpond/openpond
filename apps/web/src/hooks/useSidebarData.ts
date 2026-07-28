@@ -57,29 +57,16 @@ export function useSidebarData({
   chatRowsVisibleCount,
   sidebarFileBookmarks = [],
 }: UseSidebarDataInput) {
-  const selectedSession = useMemo(
-    () => sessions.find((session) => session.id === selectedSessionId) ?? null,
-    [selectedSessionId, sessions],
-  );
   const visibleLocalProjects = useMemo(
-    () =>
-      localProjects.filter(
-        (project) =>
-          !project.hiddenFromDefaultSidebar ||
-          (project.systemKind && selectedSession?.localProjectId === project.id),
-      ),
-    [localProjects, selectedSession?.localProjectId],
-  );
-  const visibleLocalProjectIds = useMemo(
-    () => new Set(visibleLocalProjects.map((project) => project.id)),
-    [visibleLocalProjects],
+    () => localProjects.filter((project) => !project.hiddenFromDefaultSidebar),
+    [localProjects],
   );
   const activeSessions = useMemo(
     () =>
       sessions.filter(
-        (session) => !session.archived && isVisibleActiveSidebarSession(session, visibleLocalProjectIds),
+        (session) => !session.archived && isVisibleActiveSidebarSession(session),
       ),
-    [sessions, visibleLocalProjectIds],
+    [sessions],
   );
   const pinnedSessions = useMemo(() => activeSessions.filter((session) => session.pinned), [activeSessions]);
   const savedForLaterSessions = useMemo(
@@ -311,10 +298,9 @@ export function useSidebarData({
   };
 }
 
-function isVisibleActiveSidebarSession(session: Session, visibleLocalProjectIds: ReadonlySet<string>): boolean {
+function isVisibleActiveSidebarSession(session: Session): boolean {
   if (isSubagentChildSession(session)) return false;
-  if (!session.hiddenFromDefaultSidebar) return true;
-  return Boolean(session.systemKind && session.localProjectId && visibleLocalProjectIds.has(session.localProjectId));
+  return !session.hiddenFromDefaultSidebar;
 }
 
 function isSubagentChildSession(session: Session): session is Session & { parentSessionId: string; subagentRunId: string } {

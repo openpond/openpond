@@ -51,7 +51,6 @@ export function createSubagentChildTurnRuntime(deps: {
     upsertRun(run: SubagentRun): Promise<unknown>;
     listRuns(input: {
       parentSessionId?: string;
-      parentGoalId?: string;
       status?: SubagentRun["status"][];
       limit?: number;
     }): Promise<SubagentRun[]>;
@@ -176,7 +175,6 @@ export function createSubagentChildTurnRuntime(deps: {
             subagentRunId: input.run.id,
             parentSessionId: input.parentSession.id,
             parentTurnId: input.parentTurnId,
-            parentGoalId: input.run.parentGoalId,
             subagentRoleId: input.run.roleId,
             subagentPermissions: input.childTurnPermissions,
             usageAttribution: subagentUsageAttribution(input.run),

@@ -655,7 +655,6 @@ export function createCodexBridge(deps: {
           run,
           approval: subagentApprovalReceipt(approval),
           childSessionId: context.childSession.id,
-          parentGoalId: run.parentGoalId,
         },
       }),
     );
@@ -705,7 +704,6 @@ export function createCodexBridge(deps: {
           run,
           approval: resolvedApproval,
           childSessionId: context.childSession.id,
-          parentGoalId: run.parentGoalId,
         },
       }),
     );
@@ -788,7 +786,6 @@ function codexContextUsageRecord(input: {
       workflowKind: "other",
       sessionId: input.session.id,
       turnId: input.turn?.id ?? null,
-      insightRunId: null,
       goalId: null,
       createImproveRunId: null,
       commandName: null,

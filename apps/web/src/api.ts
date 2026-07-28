@@ -6,14 +6,6 @@ import type {
   ChatAttachmentSummary,
   CreateLocalProjectRequest,
   CreateSessionRequest,
-  InsightStatus,
-  InsightEvidenceSource,
-  InsightRunStatus,
-  InsightRunTrigger,
-  InsightsListResponse,
-  InsightsScanResponse,
-  InsightsAskRequest,
-  InsightsAskResponse,
   TrainingStateResponse,
   TrainingCatalog,
   TrainingRunDetail,
@@ -556,62 +548,6 @@ export const api = {
       `/v1/subagents/${encodeURIComponent(runId)}/lifecycle`,
       {
         method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
-  insights: (
-    connection: ClientConnection,
-    input: {
-      status?: InsightStatus | "all";
-      limit?: number;
-      evidenceSource?: InsightEvidenceSource | "all";
-      runStatus?: InsightRunStatus | "all";
-      runTrigger?: InsightRunTrigger | "all";
-      runModel?: string | null;
-    } = {}
-  ) => {
-    const params = new URLSearchParams();
-    if (input.status) params.set("status", input.status);
-    if (input.limit !== undefined) params.set("limit", String(input.limit));
-    if (input.evidenceSource)
-      params.set("evidenceSource", input.evidenceSource);
-    if (input.runStatus) params.set("runStatus", input.runStatus);
-    if (input.runTrigger) params.set("runTrigger", input.runTrigger);
-    if (input.runModel?.trim()) params.set("runModel", input.runModel.trim());
-    const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<InsightsListResponse>(connection, `/v1/insights${query}`);
-  },
-  runInsightsScan: (
-    connection: ClientConnection,
-    input: { trigger?: InsightRunTrigger } = {}
-  ) => {
-    const params = new URLSearchParams();
-    if (input.trigger) params.set("trigger", input.trigger);
-    const query = params.size ? `?${params.toString()}` : "";
-    return apiFetch<InsightsScanResponse>(
-      connection,
-      `/v1/insights/scan${query}`,
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      }
-    );
-  },
-  askInsights: (connection: ClientConnection, input: InsightsAskRequest) =>
-    apiFetch<InsightsAskResponse>(connection, "/v1/insights/question", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  patchInsight: (
-    connection: ClientConnection,
-    insightId: string,
-    input: { status: InsightStatus }
-  ) =>
-    apiFetch<InsightsListResponse>(
-      connection,
-      `/v1/insights/${encodeURIComponent(insightId)}`,
-      {
-        method: "PATCH",
         body: JSON.stringify(input),
       }
     ),

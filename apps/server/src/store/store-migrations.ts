@@ -9,13 +9,13 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 1, run: (store) => store.createSchema() },
   { version: 2, run: (store) => store.createHotQueryIndexes() },
   { version: 3, run: (store) => store.createReadModelTables() },
-  { version: 4, run: (store) => store.createInsightTables() },
-  { version: 5, run: (store) => store.createInsightRunLinkColumns() },
-  { version: 6, run: (store) => store.createInsightRunLinkColumns() },
+  { version: 4, run: async () => undefined },
+  { version: 5, run: async () => undefined },
+  { version: 6, run: async () => undefined },
   { version: 7, run: (store) => store.createModelUsageTables() },
   { version: 8, run: (store) => store.createLocalAgentScheduleTables() },
   { version: 9, run: (store) => store.createSubagentTables() },
-  { version: 10, run: (store) => store.createOpenPondThreadGoalTable() },
+  { version: 10, run: async () => undefined },
   { version: 11, run: (store) => store.createTrainingTables() },
   { version: 12, run: (store) => store.createTaskCreationProjectionTables() },
   { version: 13, run: (store) => store.createGraderAuditTables() },
@@ -38,5 +38,9 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   {
     version: 32,
     run: (store) => store.createTrainingTables(),
+  },
+  {
+    version: 33,
+    run: (store) => store.retireGoalAndInsightsStorage(),
   },
 ];

@@ -49,6 +49,7 @@ import {
 import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
   COMPOSER_SLASH_COMMANDS,
+  composerSlashCommandsForProvider,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -350,9 +351,13 @@ export function Composer({
     () => actionCatalog.find((action) => action.id === selectedActionId) ?? null,
     [actionCatalog, selectedActionId],
   );
+  const availableSlashCommands = useMemo(
+    () => composerSlashCommandsForProvider(provider),
+    [provider],
+  );
   const selectedCommand = useMemo(
-    () => COMPOSER_SLASH_COMMANDS.find((command) => command.id === selectedCommandId) ?? null,
-    [selectedCommandId],
+    () => availableSlashCommands.find((command) => command.id === selectedCommandId) ?? null,
+    [availableSlashCommands, selectedCommandId],
   );
   const selectedDisplayPrompt = selectedActionDisplayPrompt({
     action: selectedAction,
@@ -566,9 +571,9 @@ export function Composer({
   }, [activeSlashContext, mentionApps, surface]);
   const commandMatches = useMemo(() => {
     return activeSlashContext && surface !== "team"
-      ? slashCommandMatchesForQuery(activeSlashContext.query)
+      ? slashCommandMatchesForQuery(activeSlashContext.query, availableSlashCommands)
       : [];
-  }, [activeSlashContext, surface]);
+  }, [activeSlashContext, availableSlashCommands, surface]);
   const slashSkillMatches = useMemo(() => {
     return activeSlashContext && surface !== "team"
       ? profileSkillInvocationMatchesForQuery(profileSkills, activeSlashContext.query)
@@ -591,8 +596,8 @@ export function Composer({
     actionMenuDismissedPrompt !== activeSlashKey,
   );
   const addMenuOpenPondItems = useMemo<SlashMenuItem[]>(() =>
-    COMPOSER_SLASH_COMMANDS.map((command) => ({ kind: "command" as const, command })),
-  []);
+    availableSlashCommands.map((command) => ({ kind: "command" as const, command })),
+  [availableSlashCommands]);
   const addMenuSlashItems = useMemo<SlashMenuItem[]>(() => [
     ...slashActionMatchesForQuery(actionCatalog, "")
       .map((action) => ({ kind: "action" as const, action })),
@@ -1744,7 +1749,7 @@ export function Composer({
               const completedCommand =
                 surface === "team"
                   ? null
-                  : completedTypedSlashCommand(nextValue, nextPromptCursor);
+                  : completedTypedSlashCommand(nextValue, nextPromptCursor, availableSlashCommands);
               if (completedCommand) {
                 const nextPrompt = `${nextValue.slice(0, completedCommand.start)}${nextValue.slice(completedCommand.end)}`;
                 const nextCursor = completedCommand.start;

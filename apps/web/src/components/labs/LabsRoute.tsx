@@ -7,7 +7,6 @@ import {
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 
-import type { InsightsViewProps } from "../insights/InsightsView";
 import type { ProfileViewProps } from "../profile/ProfileView";
 import { ProfileView } from "../profile/ProfileView";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
@@ -55,12 +54,9 @@ import {
 } from "./LabsRouteSections";
 
 const PAGE_SIZE = 10;
-type SuggestionsView = "observations" | "suggestions";
-
 export type LabsRouteProps = {
   closeDetailKind: LabDetailKind | null;
   closeDetailRequestId: number;
-  openSuggestionsRequestId: number;
   onNewModel: (initialTasksetId?: string) => void;
   onUseAgent: (actionId: string, agentName: string) => void;
   onCreateAgent: (
@@ -79,7 +75,6 @@ export type LabsRouteProps = {
   onDetailOpenChange: (location: LabDetailLocation | null) => void;
   onSkillSelectionChange: (selection: LabSkillSourceSelection | null) => void;
   profileView: ProfileViewProps;
-  insights: InsightsViewProps;
   training: TrainingWorkspaceProps;
   onAnswerQuestion: (
     input: { run: CreateImproveRun },
@@ -129,7 +124,6 @@ export type LabsRouteProps = {
 export function LabsRoute({
   closeDetailKind,
   closeDetailRequestId,
-  insights,
   onAnswerQuestion,
   onApplyCandidate,
   onApprove,
@@ -150,7 +144,6 @@ export function LabsRoute({
   onResume,
   onRevise,
   onUseAgent,
-  openSuggestionsRequestId,
   profileView,
   training,
 }: LabsRouteProps) {
@@ -178,8 +171,6 @@ export function LabsRoute({
     [createImprove.runs]
   );
   const [activeTab, setActiveTab] = useState<LabPrimaryTab>("workproducts");
-  const [suggestionsView, setSuggestionsView] =
-    useState<SuggestionsView>("observations");
   const [page, setPage] = useState(1);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(
@@ -252,9 +243,7 @@ export function LabsRoute({
     () => labSkillSourceSelection(selected),
     [selected],
   );
-  const suggestionCount =
-    insights.items.filter((item) => item.status === "active").length +
-    (training.training.payload?.candidates.length ?? 0);
+  const suggestionCount = training.training.payload?.candidates.length ?? 0;
 
   useEffect(() => {
     if (!profileView.connection) return;
@@ -292,11 +281,6 @@ export function LabsRoute({
       cancelled = true;
     };
   }, [profileAgentRunSyncKey, profileView.connection, profileView.onError, profileView.onPayload]);
-  useEffect(() => {
-    if (openSuggestionsRequestId <= 0) return;
-    setSuggestionsView("observations");
-    setActiveTab("suggestions");
-  }, [openSuggestionsRequestId]);
   useEffect(() => {
     if (
       selectedKey &&
@@ -476,10 +460,7 @@ export function LabsRoute({
     >
       {activeTab === "suggestions" ? (
         <SuggestionsTab
-          insights={insights}
-          suggestionsView={suggestionsView}
           training={training}
-          onSuggestionsViewChange={setSuggestionsView}
           onPlanStarted={() => setActiveTab("workproducts")}
         />
       ) : activeTab === "tasksets" ? (

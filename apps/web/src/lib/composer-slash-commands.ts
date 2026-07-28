@@ -1,9 +1,9 @@
+import type { ChatProvider } from "@openpond/contracts";
+
 export type ComposerSlashCommandId =
   | "agent"
   | "skill"
   | "goal"
-  | "goal-local"
-  | "insights"
   | "train"
   | "submit-issue"
   | "sync-cloud";
@@ -43,26 +43,14 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
   {
     id: "goal",
     command: "/goal",
-    label: "Run a goal",
-    description: "Run a durable task for OpenPond or Codex to pursue.",
-  },
-  {
-    id: "insights",
-    command: "/insights",
-    label: "Open insights",
-    description: "Scan agent flow health.",
+    label: "Codex goal",
+    description: "Use Codex-native Goal mode.",
   },
   {
     id: "submit-issue",
     command: "/submit-issue",
     label: "Submit issue",
     description: "File a GitHub issue in openpond/openpond through the connected GitHub app.",
-  },
-  {
-    id: "goal-local",
-    command: "/goal-local",
-    label: "Run a local goal",
-    description: "Keep the goal in the current local OpenPond workspace.",
   },
   {
     id: "train",
@@ -77,6 +65,14 @@ export const COMPOSER_SLASH_COMMANDS: ComposerSlashCommand[] = [
     description: "Start a chat-visible source upload for the selected Project.",
   },
 ];
+
+export function composerSlashCommandsForProvider(
+  provider: ChatProvider,
+): ComposerSlashCommand[] {
+  return COMPOSER_SLASH_COMMANDS.filter(
+    (command) => command.id !== "goal" || provider === "codex",
+  );
+}
 
 const COMPOSER_SLASH_COMMAND_IDS = new Set<ComposerSlashCommandId>(
   COMPOSER_SLASH_COMMANDS.map((command) => command.id),

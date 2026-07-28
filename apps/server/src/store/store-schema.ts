@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 32;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 33;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -31,14 +31,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS events_session_id_idx ON events(session_id);
   CREATE INDEX IF NOT EXISTS events_session_sequence_idx ON events(session_id, sequence);
   CREATE INDEX IF NOT EXISTS events_timestamp_idx ON events(timestamp);
-
-  CREATE TABLE IF NOT EXISTS openpond_thread_goals (
-    session_id TEXT PRIMARY KEY,
-    goal_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    provisional INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL
-  );
 
   CREATE TABLE IF NOT EXISTS approvals (
     id TEXT PRIMARY KEY,
@@ -126,32 +118,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
 
   CREATE INDEX IF NOT EXISTS sidebar_file_bookmarks_scope_status_order_idx
     ON sidebar_file_bookmarks(scope, status, sort_order, updated_at);
-
-  CREATE TABLE IF NOT EXISTS insight_items (
-    id TEXT PRIMARY KEY,
-    scope_type TEXT NOT NULL,
-    scope_id TEXT NOT NULL,
-    severity TEXT NOT NULL,
-    type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    fingerprint TEXT NOT NULL,
-    title TEXT NOT NULL,
-    summary TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    last_run_id TEXT,
-    last_run_session_id TEXT,
-    last_run_turn_id TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    resolved_at TEXT,
-    dismissed_at TEXT
-  );
-
-  CREATE INDEX IF NOT EXISTS insight_items_scope_status_idx
-    ON insight_items(scope_type, scope_id, status, updated_at);
-
-  CREATE INDEX IF NOT EXISTS insight_items_fingerprint_idx
-    ON insight_items(fingerprint);
 
   CREATE TABLE IF NOT EXISTS model_usage_records (
     id TEXT PRIMARY KEY,
@@ -276,7 +242,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     id TEXT PRIMARY KEY,
     parent_session_id TEXT NOT NULL,
     parent_turn_id TEXT,
-    parent_goal_id TEXT,
     child_session_id TEXT,
     role_id TEXT NOT NULL,
     status TEXT NOT NULL,
@@ -288,15 +253,11 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS subagent_runs_parent_session_status_idx
     ON subagent_runs(parent_session_id, status, updated_at DESC);
 
-  CREATE INDEX IF NOT EXISTS subagent_runs_parent_goal_status_idx
-    ON subagent_runs(parent_goal_id, status, updated_at DESC);
-
   CREATE INDEX IF NOT EXISTS subagent_runs_child_session_idx
     ON subagent_runs(child_session_id);
 
   CREATE TABLE IF NOT EXISTS subagent_messages (
     id TEXT PRIMARY KEY,
-    parent_goal_id TEXT,
     from_run_id TEXT NOT NULL,
     to_run_id TEXT,
     to_role TEXT,
@@ -304,9 +265,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
-
-  CREATE INDEX IF NOT EXISTS subagent_messages_parent_goal_created_idx
-    ON subagent_messages(parent_goal_id, created_at);
 
   CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
     ON subagent_messages(to_run_id, to_role, created_at);

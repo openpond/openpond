@@ -52,29 +52,6 @@ export function resolveMaxHostedWorkspaceToolRounds(
     : DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
 }
 
-export function isInsightEvidenceSourceFilter(
-  value: string | null
-): value is
-  | "all"
-  | "create_edit"
-  | "stuck_turn"
-  | "tool_failure"
-  | "abandoned_goal"
-  | "user_correction"
-  | "unresolved_conversation"
-  | "usage_anomaly" {
-  return (
-    value === "all" ||
-    value === "create_edit" ||
-    value === "stuck_turn" ||
-    value === "tool_failure" ||
-    value === "abandoned_goal" ||
-    value === "user_correction" ||
-    value === "unresolved_conversation" ||
-    value === "usage_anomaly"
-  );
-}
-
 export function findRecentCodexCompactionCompleted(
   events: RuntimeEvent[],
   sessionId: string,

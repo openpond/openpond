@@ -310,9 +310,9 @@ export function createSubagentContinuationRuntime(deps: {
 
   function subagentUsageAttribution(run: SubagentRun): UsageRequestAttribution {
     return {
-      surface: run.parentGoalId ? "goal" : "chat",
+      surface: "chat",
       workflowKind: "subagent",
-      goalId: run.parentGoalId,
+      goalId: null,
       subagentRunId: run.id,
       subagentRoleId: run.roleId,
     };

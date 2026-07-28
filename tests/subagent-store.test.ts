@@ -6,7 +6,7 @@ import type { SubagentMessage, SubagentRun } from "@openpond/contracts";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("subagent store", () => {
-  test("persists subagent runs and goal-scoped mailbox messages", async () => {
+  test("persists subagent runs and parent-scoped mailbox messages", async () => {
     const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-subagent-store-"));
     const store = new SqliteStore(storeDir);
 
@@ -42,9 +42,7 @@ describe("subagent store", () => {
         updatedAt: expect.any(String),
       });
       expect(await store.listSubagentRuns({ parentSessionId: "session-parent" })).toEqual([persistedCompleted]);
-      expect(await store.listSubagentRuns({ parentGoalId: "goal-1", status: "completed" })).toEqual([persistedCompleted]);
       expect(await store.listSubagentRuns({ childSessionId: "session-child-coding" })).toEqual([persistedCompleted]);
-      expect(await store.listSubagentRuns({ parentGoalId: "goal-1", status: ["running", "blocked"] })).toEqual([]);
 
       const warnedCompleted = await store.recordRetainedWorkspaceExpiryWarning("subagent-run-coding", {
         status: "warned",
@@ -92,16 +90,12 @@ describe("subagent store", () => {
       });
       const threadScoped = subagentRun({
         id: "subagent-run-thread",
-        parentGoalId: null,
         roleId: "research",
         status: "running",
       });
       await store.upsertSubagentRun(threadScoped);
       const activeScopes = await store.listSubagentRunScopes({ status: ["queued", "running"] });
-      expect(activeScopes).toEqual(expect.arrayContaining([
-        { parentSessionId: "session-parent", parentGoalId: "goal-1" },
-        { parentSessionId: "session-parent", parentGoalId: null },
-      ]));
+      expect(activeScopes).toEqual([{ parentSessionId: "session-parent" }]);
       const staleRuns = await store.listStaleSubagentRuns({
         parentSessionId: "session-parent",
         olderThanMs: 1000,
@@ -126,7 +120,6 @@ describe("subagent store", () => {
       await store.appendSubagentMessage(question);
       await store.appendSubagentMessage(answer);
 
-      expect(await store.listSubagentMessages({ parentGoalId: "goal-1" })).toEqual([question, answer]);
       expect(await store.listSubagentMessages({ toRunId: "subagent-run-coding" })).toEqual([question]);
       expect(await store.listSubagentMessages({ fromRunId: "subagent-run-coding" })).toEqual([answer]);
     } finally {
@@ -141,7 +134,6 @@ function subagentRun(patch: Partial<SubagentRun>): SubagentRun {
     id: "subagent-run-coding",
     parentSessionId: "session-parent",
     parentTurnId: "turn-parent",
-    parentGoalId: "goal-1",
     childSessionId: null,
     roleId: "coding",
     objective: "Implement the scoped change.",
@@ -149,7 +141,7 @@ function subagentRun(patch: Partial<SubagentRun>): SubagentRun {
     isolationMode: "copy_on_write",
     toolPolicy: "workspace_write",
     background: true,
-    peerMessages: "goal_scoped",
+    peerMessages: "parent_scoped",
     status: "queued",
     createdAt: "2026-07-07T10:00:00.000Z",
     startedAt: null,
@@ -164,7 +156,6 @@ function subagentRun(patch: Partial<SubagentRun>): SubagentRun {
 function subagentMessage(patch: Partial<SubagentMessage>): SubagentMessage {
   return {
     id: "subagent-message",
-    parentGoalId: "goal-1",
     fromRunId: "subagent-run-coding",
     toRunId: null,
     toRole: null,

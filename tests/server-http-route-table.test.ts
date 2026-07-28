@@ -169,24 +169,6 @@ describe("server HTTP route table", () => {
         name: "workspaceLspRuntimeStatusPayload",
       });
       await expect(
-        expectJsonRequest(origin, "GET", "/v1/insights?status=active", 200)
-      ).resolves.toMatchObject({
-        name: "listInsightsPayload",
-      });
-      await expect(
-        expectJsonRequest(origin, "POST", "/v1/insights/scan", 202)
-      ).resolves.toMatchObject({
-        name: "runInsightsScanPayload",
-      });
-      await expect(
-        expectJsonRequest(origin, "PATCH", "/v1/insights/insight-1", 200, {
-          status: "dismissed",
-        })
-      ).resolves.toMatchObject({
-        name: "patchInsightPayload",
-        args: ["insight-1", { status: "dismissed" }],
-      });
-      await expect(
         expectJsonRequest(origin, "POST", "/v1/lsp/restart", 200)
       ).resolves.toMatchObject({
         name: "restartWorkspaceLspPayload",
@@ -278,9 +260,6 @@ describe("server HTTP route table", () => {
         "recordClientDiagnosticPayload",
         "workspaceDiffPayload",
         "workspaceLspRuntimeStatusPayload",
-        "listInsightsPayload",
-        "runInsightsScanPayload",
-        "patchInsightPayload",
         "restartWorkspaceLspPayload",
         "sendTurn",
         "runSubagentLifecycleAction",

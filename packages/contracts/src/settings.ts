@@ -157,22 +157,6 @@ export const WorkspaceLspRuntimeStatusResponseSchema = z.object({
 
 export type WorkspaceLspRuntimeStatusResponse = z.infer<typeof WorkspaceLspRuntimeStatusResponseSchema>;
 
-export const GoalStorageLocationSchema = z.enum(["global", "workspace"]);
-
-export type GoalStorageLocation = z.infer<typeof GoalStorageLocationSchema>;
-
-export const InsightsEvidenceSourceSettingsSchema = z.object({
-  createEdit: z.boolean().default(true),
-  stuckTurns: z.boolean().default(true),
-  toolFailures: z.boolean().default(true),
-  abandonedGoals: z.boolean().default(true),
-  userCorrections: z.boolean().default(true),
-  unresolvedConversations: z.boolean().default(true),
-  usageAnomalies: z.boolean().default(true),
-});
-
-export type InsightsEvidenceSourceSettings = z.infer<typeof InsightsEvidenceSourceSettingsSchema>;
-
 export const ContextCompactionPreferencesSchema = z.object({
   autoEnabled: z.boolean().default(true),
   triggerPercent: z.number().int().min(50).max(95).default(85),
@@ -193,18 +177,12 @@ export const AppPreferencesSchema = z.object({
   defaultChatProvider: ChatProviderSchema.default(DEFAULT_CHAT_PROVIDER),
   defaultChatModel: z.string().min(1).default(DEFAULT_CHAT_MODEL),
   defaultChatModelRef: ChatModelRefSchema.nullable().optional(),
-  insightsEnabled: z.boolean().default(false),
-  insightsModelRef: ChatModelRefSchema.nullable().optional().default(null),
-  insightsEvidenceSources: InsightsEvidenceSourceSettingsSchema.optional().default(() =>
-    InsightsEvidenceSourceSettingsSchema.parse({}),
-  ),
   subagents: SubagentPreferencesSchema.optional().default(() => SubagentPreferencesSchema.parse({})),
   codexPermissionMode: CodexPermissionModeSchema.default(DEFAULT_CODEX_PERMISSION_MODE),
   codexReasoningEffort: CodexReasoningEffortSchema.default(DEFAULT_CODEX_REASONING_EFFORT),
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
   defaultBranchPrefix: z.string().trim().max(48).default("feat/"),
   defaultNewProjectDirectory: z.string().trim().max(4096).default(""),
-  goalStorageLocation: GoalStorageLocationSchema.default("global"),
   defaultTeamId: z.string().trim().max(191).nullable().default(null),
   advancedWorkspaceControls: z.boolean().default(false),
   contextCompaction: ContextCompactionPreferencesSchema.optional().default(() =>

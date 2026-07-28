@@ -1,10 +1,9 @@
 import type { RuntimeEvent } from "@openpond/contracts";
-import { openPondGoalStatusPresentation, type OpenPondGoalStatusTone } from "./openpond-goal-status";
+import type { RuntimeStatusTone } from "./runtime-status-tone";
 
 export type GoalRuntimeStatus = {
   objective: string;
   status: string;
-  subagents: GoalRuntimeSubagentState | null;
   timeUsedSeconds: number;
   tokensUsed: number | null;
   tokenBudget: number | null;
@@ -13,61 +12,14 @@ export type GoalRuntimeStatus = {
   label: string;
   detail: string;
   tooltip: string;
-  tone: OpenPondGoalStatusTone;
+  tone: RuntimeStatusTone;
   observedAt?: string | null;
-};
-
-export type GoalRuntimeSubagentRunSummary = {
-  id: string;
-  childSessionId: string | null;
-  roleId: string;
-  status: string;
-  required: boolean;
-  objective: string;
-  reviewStatus: string | null;
-  updatedAt: string | null;
-  cleanupStatus: string | null;
-  archiveStatus: string | null;
-  sessionArchived: boolean;
-  blockerCount: number;
-  validationAttemptCount: number;
-  changedFileCount: number;
-  followUpNeeded: boolean;
-};
-
-export type GoalRuntimeSubagentState = {
-  source: string;
-  updatedAt: string | null;
-  totalCount: number;
-  requiredCount: number;
-  optionalCount: number;
-  activeCount: number;
-  submittedForReviewCount: number;
-  needsRevisionCount: number;
-  needsUserInputCount: number;
-  acceptedCount: number;
-  blockingCount: number;
-  terminalCount: number;
-  cleanupNeededCount: number;
-  archivedCount: number;
-  unresolvedCount: number;
-  requiredActiveCount: number;
-  requiredSubmittedForReviewCount: number;
-  requiredNeedsRevisionCount: number;
-  requiredNeedsUserInputCount: number;
-  requiredAcceptedCount: number;
-  requiredBlockingCount: number;
-  requiredArchivedCount: number;
-  requiredUnresolvedCount: number;
-  runs: GoalRuntimeSubagentRunSummary[];
 };
 
 type ThreadGoalRecord = {
   objective: string;
-  provider: string | null;
   status: string;
   statusLabel: string;
-  subagents: GoalRuntimeSubagentState | null;
   timeUsedSeconds: number;
   tokensUsed: number | null;
   tokenBudget: number | null;
@@ -112,7 +64,7 @@ export function latestKnownActiveGoalRuntimeFromEvents(events: RuntimeEvent[]): 
     const item = events[index];
     const data = asRecord(item?.data);
     if (item?.name !== "diagnostic" || !data) continue;
-    if (data.kind === "thread_goal_cleared" && !booleanValue(data.synthetic)) return null;
+    if (data.kind === "thread_goal_cleared" && data.synthetic !== true) return null;
     if (data.kind === "thread_goal") {
       const goal = threadGoalFromRecord(asRecord(data.goal), stringValue(data.provider), observedAt);
       if (!goal) continue;
@@ -142,7 +94,7 @@ function isTerminalTurnEvent(item: RuntimeEvent | undefined): boolean {
 }
 
 function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
-  const presentation = goalStatusPresentation(goal.status, goal.provider);
+  const presentation = codexGoalStatusPresentation(goal.status);
   const timeLabel = formatDuration(goal.timeUsedSeconds);
   const label = `Goal ${timeLabel}`;
   const tokens =
@@ -155,7 +107,6 @@ function goalRuntimeStatus(goal: ThreadGoalRecord): GoalRuntimeStatus {
   return {
     objective: goal.objective,
     status: goal.status,
-    subagents: goal.subagents,
     timeUsedSeconds: goal.timeUsedSeconds,
     tokensUsed: goal.tokensUsed,
     tokenBudget: goal.tokenBudget,
@@ -197,13 +148,14 @@ function threadGoalFromRecord(
   const objective = stringValue(record.objective) ?? "Active goal";
   const status = stringValue(record.status) ?? "active";
   const normalizedProvider = normalizeProvider(provider) ?? normalizeProvider(stringValue(record.provider));
+  if (normalizedProvider !== "codex") return null;
   const observation = observedAt ??
     stringValue(record.updatedAt) ??
     stringValue(record.updated_at) ??
     null;
   const reportedTimeUsedSeconds = numberValue(record.timeUsedSeconds) ?? numberValue(record.time_used_seconds) ?? 0;
   const activeSinceAt = stringValue(record.activeSinceAt) ?? stringValue(record.active_since_at);
-  const projectedTimeUsedSeconds = goalStatusPresentation(status, normalizedProvider).tone === "active"
+  const projectedTimeUsedSeconds = codexGoalStatusPresentation(status).tone === "active"
     ? elapsedSecondsBetween(activeSinceAt ?? stringValue(record.createdAt) ?? stringValue(record.created_at), observation)
     : 0;
   const timeUsedSeconds = activeSinceAt
@@ -211,13 +163,10 @@ function threadGoalFromRecord(
     : Math.max(reportedTimeUsedSeconds, projectedTimeUsedSeconds);
   const tokensUsed = numberValue(record.tokensUsed) ?? numberValue(record.tokens_used);
   const tokenBudget = numberValue(record.tokenBudget) ?? numberValue(record.token_budget);
-  const subagents = goalSubagentStateFromRecord(asRecord(record.subagents));
   return {
     objective,
-    provider: normalizedProvider,
     status,
     statusLabel: statusLabel(status),
-    subagents,
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed: tokensUsed === null ? null : Math.max(0, Math.floor(tokensUsed)),
     tokenBudget: tokenBudget === null ? null : Math.max(0, Math.floor(tokenBudget)),
@@ -247,6 +196,7 @@ function threadGoalFromGoalContext(
   observedAt: string | null = null,
 ): ThreadGoalRecord | null {
   if (!value.trim()) return null;
+  if (normalizeProvider(provider) !== "codex") return null;
   const status = lineValue(value, "Status") ?? "active";
   const tokensUsed = numberFromLine(value, "Tokens used");
   const tokenBudget = numberFromLine(value, "Token budget");
@@ -258,10 +208,8 @@ function threadGoalFromGoalContext(
   const objective = xmlBlock(value, "objective") ?? xmlBlock(value, "untrusted_objective") ?? "Active goal";
   return {
     objective,
-    provider: normalizeProvider(provider),
     status,
     statusLabel: statusLabel(status),
-    subagents: null,
     timeUsedSeconds: Math.max(0, Math.floor(timeUsedSeconds)),
     tokensUsed,
     tokenBudget,
@@ -269,80 +217,7 @@ function threadGoalFromGoalContext(
   };
 }
 
-function goalSubagentStateFromRecord(record: Record<string, unknown> | null): GoalRuntimeSubagentState | null {
-  if (!record) return null;
-  return {
-    source: stringValue(record.source) ?? "subagent_runs",
-    updatedAt: stringValue(record.updatedAt),
-    totalCount: countValue(record.totalCount),
-    requiredCount: countValue(record.requiredCount),
-    optionalCount: countValue(record.optionalCount),
-    activeCount: countValue(record.activeCount),
-    submittedForReviewCount: countValue(record.submittedForReviewCount),
-    needsRevisionCount: countValue(record.needsRevisionCount),
-    needsUserInputCount: countValue(record.needsUserInputCount),
-    acceptedCount: countValue(record.acceptedCount),
-    blockingCount: countValue(record.blockingCount),
-    terminalCount: countValue(record.terminalCount),
-    cleanupNeededCount: countValue(record.cleanupNeededCount),
-    archivedCount: countValue(record.archivedCount),
-    unresolvedCount: countValue(record.unresolvedCount),
-    requiredActiveCount: countValue(record.requiredActiveCount),
-    requiredSubmittedForReviewCount: countValue(record.requiredSubmittedForReviewCount),
-    requiredNeedsRevisionCount: countValue(record.requiredNeedsRevisionCount),
-    requiredNeedsUserInputCount: countValue(record.requiredNeedsUserInputCount),
-    requiredAcceptedCount: countValue(record.requiredAcceptedCount),
-    requiredBlockingCount: countValue(record.requiredBlockingCount),
-    requiredArchivedCount: countValue(record.requiredArchivedCount),
-    requiredUnresolvedCount: countValue(record.requiredUnresolvedCount),
-    runs: Array.isArray(record.runs)
-      ? record.runs
-        .map((item) => goalSubagentRunSummaryFromRecord(asRecord(item)))
-        .filter((item): item is GoalRuntimeSubagentRunSummary => Boolean(item))
-      : [],
-  };
-}
-
-function goalSubagentRunSummaryFromRecord(
-  record: Record<string, unknown> | null,
-): GoalRuntimeSubagentRunSummary | null {
-  if (!record) return null;
-  const id = stringValue(record.id);
-  const roleId = stringValue(record.roleId);
-  const status = stringValue(record.status);
-  const objective = stringValue(record.objective);
-  if (!id || !roleId || !status || !objective) return null;
-  return {
-    id,
-    childSessionId: stringValue(record.childSessionId),
-    roleId,
-    status,
-    required: booleanValue(record.required),
-    objective,
-    reviewStatus: stringValue(record.reviewStatus),
-    updatedAt: stringValue(record.updatedAt),
-    cleanupStatus: stringValue(record.cleanupStatus),
-    archiveStatus: stringValue(record.archiveStatus),
-    sessionArchived: booleanValue(record.sessionArchived),
-    blockerCount: countValue(record.blockerCount),
-    validationAttemptCount: countValue(record.validationAttemptCount),
-    changedFileCount: countValue(record.changedFileCount),
-    followUpNeeded: booleanValue(record.followUpNeeded),
-  };
-}
-
-function goalStatusPresentation(
-  status: string,
-  provider: string | null,
-): { tone: OpenPondGoalStatusTone; actionLabel: string } {
-  if (provider === "codex") {
-    const codexPresentation = codexGoalStatusPresentation(status);
-    if (codexPresentation) return codexPresentation;
-  }
-  return openPondGoalStatusPresentation(status);
-}
-
-function codexGoalStatusPresentation(status: string): { tone: OpenPondGoalStatusTone; actionLabel: string } | null {
+function codexGoalStatusPresentation(status: string): { tone: RuntimeStatusTone; actionLabel: string } {
   switch (statusKey(status)) {
     case "active":
     case "running":
@@ -364,7 +239,7 @@ function codexGoalStatusPresentation(status: string): { tone: OpenPondGoalStatus
     case "budget_limited":
       return { tone: "limited", actionLabel: "Goal budget limited" };
     default:
-      return null;
+      return { tone: "active", actionLabel: "Goal status unknown" };
   }
 }
 
@@ -444,19 +319,10 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function booleanValue(value: unknown): boolean {
-  return value === true;
-}
-
 function normalizeProvider(value: string | null): string | null {
   return value?.trim().toLowerCase() || null;
 }
 
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function countValue(value: unknown): number {
-  const parsed = numberValue(value);
-  return parsed === null ? 0 : Math.max(0, Math.floor(parsed));
 }

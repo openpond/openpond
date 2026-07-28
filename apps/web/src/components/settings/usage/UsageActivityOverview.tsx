@@ -191,8 +191,8 @@ export function UsageActivityOverview({
       </section>
 
       <div className="usage-insight-grid">
-        <section className="usage-insight-section" aria-labelledby="usage-insights-title">
-          <h2 id="usage-insights-title">Activity insights</h2>
+        <section className="usage-insight-section" aria-labelledby="usage-summary-title">
+          <h2 id="usage-summary-title">Activity summary</h2>
           <div className="usage-insight-list">
             {insightRows.map((row) => (
               <div className="usage-insight-row" key={row.label}>

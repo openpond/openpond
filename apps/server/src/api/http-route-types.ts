@@ -64,13 +64,6 @@ export type HttpRouteDeps = {
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
-  listInsightsPayload: (requestUrl: URL) => Promise<unknown>;
-  runInsightsScanPayload: (requestUrl?: URL) => Promise<unknown>;
-  askInsightsPayload: (payload: unknown) => Promise<unknown>;
-  patchInsightPayload: (
-    insightId: string,
-    payload: unknown
-  ) => Promise<unknown>;
   trainingPayload: (
     action: string,
     payload: unknown,
@@ -264,7 +257,6 @@ export type HttpRouteDeps = {
     payload: unknown
   ) => Promise<unknown>;
   interruptSessionTurn: (sessionId: string) => Promise<unknown>;
-  pauseSessionGoal: (sessionId: string) => Promise<unknown>;
   compactSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   executeWorkspaceTool: (
     sessionId: string,

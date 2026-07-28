@@ -51,11 +51,12 @@ export function activeSlashCommandContext(
 export function completedTypedSlashCommand(
   input: string,
   cursor: number,
+  commands: ComposerSlashCommand[] = COMPOSER_SLASH_COMMANDS,
 ): { command: ComposerSlashCommand; end: number; start: number } | null {
   const beforeCursor = input.slice(0, Math.max(0, Math.min(cursor, input.length)));
   const match = /(?:^|\s)\/([a-z][a-z0-9_-]*)\s$/.exec(beforeCursor);
   if (!match) return null;
-  const command = COMPOSER_SLASH_COMMANDS.find((candidate) => candidate.id === match[1]);
+  const command = commands.find((candidate) => candidate.id === match[1]);
   if (!command) return null;
   const slashOffset = match[0].lastIndexOf("/");
   if (slashOffset < 0 || typeof match.index !== "number") return null;
@@ -66,8 +67,11 @@ export function completedTypedSlashCommand(
   };
 }
 
-export function slashCommandMatchesForQuery(query: string): ComposerSlashCommand[] {
-  return composerSlashCommandMatches({ prompt: `/${query}` });
+export function slashCommandMatchesForQuery(
+  query: string,
+  commands: ComposerSlashCommand[] = COMPOSER_SLASH_COMMANDS,
+): ComposerSlashCommand[] {
+  return composerSlashCommandMatches({ commands, prompt: `/${query}` });
 }
 
 export function slashActionMatchesForQuery(

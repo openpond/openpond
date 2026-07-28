@@ -1053,21 +1053,6 @@ export function useChatActions({
     }
   }
 
-  async function pauseGoal(sessionId?: string | null): Promise<boolean> {
-    const activeSessionId = sessionId ?? selectedSession?.id ?? null;
-    if (!connection || !activeSessionId || isCodexHistorySessionId(activeSessionId)) return false;
-    setError(null);
-    try {
-      await api.pauseGoal(connection, activeSessionId);
-      const payload = await api.bootstrap(connection);
-      applyBootstrapPayload(payload);
-      return true;
-    } catch (pauseError) {
-      setError(pauseError instanceof Error ? pauseError.message : String(pauseError));
-      return false;
-    }
-  }
-
   async function applyCreateImproveRunAction(
     run: CreateImproveRun,
     action:
@@ -1186,7 +1171,6 @@ export function useChatActions({
     resumeCreateImproveRun,
     reviseCreateImproveRun,
     sendPrompt,
-    pauseGoal,
     stopTurn,
   };
 }

@@ -44,7 +44,6 @@ export function createSessionStore(deps: {
       hiddenFromDefaultSidebar: input.hiddenFromDefaultSidebar ?? false,
       parentSessionId: input.parentSessionId ?? null,
       parentTurnId: input.parentTurnId ?? null,
-      parentGoalId: input.parentGoalId ?? null,
       subagentRunId: input.subagentRunId ?? null,
       subagentRoleId: input.subagentRoleId ?? null,
       subagentDelegationMode: input.subagentDelegationMode ?? null,

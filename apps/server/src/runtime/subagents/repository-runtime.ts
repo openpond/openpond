@@ -82,7 +82,6 @@ export function createSubagentRepositoryRuntime(deps: {
       data: {
         run: input.run,
         childSessionId: input.run.childSessionId,
-        parentGoalId: input.run.parentGoalId,
         ...(input.childSession ? { childSession: sessionShell(input.childSession) } : {}),
       },
     }));

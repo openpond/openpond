@@ -3,10 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import {
+  SubagentMessageSchema,
   SubagentRunSchema,
   nextCreateImproveRunRevision,
   type Approval,
-  type InsightItem,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -183,7 +183,6 @@ describe("SqliteStore hardening", () => {
       await store.upsertSubagentRun(SubagentRunSchema.parse({
         id: "legacy-subagent-run",
         parentSessionId: "session-parent",
-        parentGoalId: "goal-parent",
         roleId: "coding",
         objective: "Old lifecycle work",
         createdAt: "2026-07-15T13:00:00.000Z",
@@ -201,6 +200,7 @@ describe("SqliteStore hardening", () => {
       await store.close();
 
       const db = openTestDatabase(storePath);
+      await run(db, "ALTER TABLE subagent_messages ADD COLUMN parent_goal_id TEXT");
       await run(
         db,
         `INSERT INTO subagent_messages (
@@ -234,97 +234,296 @@ describe("SqliteStore hardening", () => {
     });
   });
 
-  test("atomically enforces one nonterminal current goal per session", async () => {
+  test("retires Goal and Insights storage while preserving parent-scoped subagents", async () => {
     await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
       const store = new SqliteStore(storeDir);
-      await store.snapshot();
-
-      const starts = await Promise.allSettled([
-        store.appendRuntimeEvent(threadGoalEvent("event-goal-1", "goal_1", "running")),
-        store.appendRuntimeEvent(threadGoalEvent("event-goal-2-rejected", "goal_2", "queued")),
-      ]);
-      expect(starts[0]?.status).toBe("fulfilled");
-      expect(starts[1]).toMatchObject({
-        status: "rejected",
-        reason: expect.objectContaining({ message: expect.stringContaining("goal_1 is already running") }),
-      });
-
-      await expect(
-        store.appendRuntimeEvent(threadGoalEvent("event-goal-1-paused", "goal_1", "paused")),
-      ).resolves.toMatchObject({
-        id: "event-goal-1-paused",
-        sequence: 2,
-      });
-      await expect(
-        store.claimOpenPondThreadGoal({
-          sessionId: "session-goals",
-          goalId: "goal_2",
-          status: "queued",
-          updatedAt: "2026-07-01T10:00:02.000Z",
-        }),
-      ).rejects.toThrow("goal_1 is already paused");
-
-      await store.appendRuntimeEvent(threadGoalEvent("event-goal-1-completed", "goal_1", "completed"));
-      await expect(
-        store.appendRuntimeEvent(threadGoalEvent("event-goal-2", "goal_2", "running")),
-      ).resolves.toMatchObject({
-        id: "event-goal-2",
-        sequence: 4,
-      });
-      await store.appendRuntimeEvent(threadGoalEvent("event-goal-2-completed", "goal_2", "completed"));
-
-      await store.claimOpenPondThreadGoal({
-        sessionId: "session-goals",
-        goalId: "goal_3",
-        status: "queued",
-        updatedAt: "2026-07-01T10:00:05.000Z",
-      });
-      await store.releaseOpenPondThreadGoalClaim("session-goals", "goal_3");
-
-      const eventIds = (await store.snapshot()).events.map((event) => event.id);
-      expect(eventIds).toEqual([
-        "event-goal-1",
-        "event-goal-1-paused",
-        "event-goal-1-completed",
-        "event-goal-2",
-        "event-goal-2-completed",
+      await store.upsertSubagentRun(SubagentRunSchema.parse({
+        id: "subagent-run-v32",
+        parentSessionId: "session-parent",
+        roleId: "coding",
+        objective: "Keep this lifecycle work",
+        createdAt: "2026-07-27T13:00:00.000Z",
+      }));
+      await store.appendSubagentMessage(SubagentMessageSchema.parse({
+        id: "subagent-message-v32",
+        fromRunId: "subagent-run-v32",
+        kind: "status",
+        body: "Keep this lifecycle message",
+        createdAt: "2026-07-27T13:00:01.000Z",
+      }));
+      await store.setCacheEntry("local.projects", "v1", [
+        { id: "project-keep", name: "Keep" },
+        {
+          id: "system_openpond_insights",
+          name: "OpenPond Insights",
+          systemKind: "openpond.insights",
+        },
       ]);
       await store.close();
 
-      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
-      try {
-        const rows = await all<OpenPondThreadGoalTestRow>(db, "SELECT * FROM openpond_thread_goals");
-        expect(rows).toEqual([]);
-      } finally {
-        await close(db);
-      }
-    });
-  });
-
-  test("backfills the current goal claim when migrating an existing event store", async () => {
-    await withStoreDir(async (storeDir) => {
-      const storePath = path.join(storeDir, "state.sqlite");
-      const initialStore = new SqliteStore(storeDir);
-      await initialStore.appendRuntimeEvent(threadGoalEvent("event-existing-goal", "goal_existing", "running"));
-      await initialStore.close();
-
       const db = openTestDatabase(storePath);
-      await run(db, "DROP TABLE openpond_thread_goals");
-      await run(db, "PRAGMA user_version = 9");
+      await run(db, "ALTER TABLE subagent_runs ADD COLUMN parent_goal_id TEXT");
+      await run(db, "ALTER TABLE subagent_messages ADD COLUMN parent_goal_id TEXT");
+      const runRow = await get<{ payload: string }>(
+        db,
+        "SELECT payload FROM subagent_runs WHERE id = 'subagent-run-v32'",
+      );
+      const messageRow = await get<{ payload: string }>(
+        db,
+        "SELECT payload FROM subagent_messages WHERE id = 'subagent-message-v32'",
+      );
+      await run(
+        db,
+        `UPDATE subagent_runs
+         SET parent_goal_id = ?, payload = ?
+         WHERE id = 'subagent-run-v32'`,
+        [
+          "goal-parent",
+          JSON.stringify({
+            ...JSON.parse(runRow.payload),
+            parentGoalId: "goal-parent",
+            peerMessages: "goal_scoped",
+          }),
+        ],
+      );
+      await run(
+        db,
+        `UPDATE subagent_messages
+         SET parent_goal_id = ?, payload = ?
+         WHERE id = 'subagent-message-v32'`,
+        [
+          "goal-parent",
+          JSON.stringify({
+            ...JSON.parse(messageRow.payload),
+            parentGoalId: "goal-parent",
+          }),
+        ],
+      );
+      await run(
+        db,
+        `CREATE TABLE openpond_thread_goals (
+          session_id TEXT PRIMARY KEY,
+          goal_id TEXT,
+          status TEXT,
+          provisional INTEGER,
+          updated_at TEXT
+        )`,
+      );
+      await run(db, "CREATE TABLE insight_items (id TEXT PRIMARY KEY)");
+      await run(
+        db,
+        `INSERT INTO sessions (id, sort_index, payload, updated_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+          "insights-session",
+          0,
+          JSON.stringify({
+            ...session("insights-session"),
+            systemKind: "openpond.insights",
+            hiddenFromDefaultSidebar: true,
+          }),
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO projection_session_shells (id, sort_index, payload, updated_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+          "insights-session",
+          0,
+          JSON.stringify(session("insights-session")),
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO projection_thread_details (
+           session_id, event_count, latest_event_sequence, latest_event_at,
+           latest_turn_id, latest_turn_status, pending_approval_count, payload, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "insights-session",
+          0,
+          0,
+          null,
+          null,
+          null,
+          0,
+          "{}",
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO projection_approvals (
+           id, session_id, status, sort_index, payload, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          "insights-approval",
+          "insights-session",
+          "pending",
+          0,
+          "{}",
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO projection_latest_turns (
+           session_id, turn_id, status, sort_index, payload, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          "insights-session",
+          "insights-turn",
+          "completed",
+          0,
+          "{}",
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO subagent_runs (
+           id, parent_session_id, parent_turn_id, parent_goal_id, child_session_id,
+           role_id, status, payload, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "insights-subagent-run",
+          "insights-session",
+          null,
+          "goal-insights",
+          null,
+          "coding",
+          "queued",
+          JSON.stringify({
+            ...JSON.parse(runRow.payload),
+            id: "insights-subagent-run",
+            parentSessionId: "insights-session",
+            parentGoalId: "goal-insights",
+          }),
+          "2026-07-27T13:00:00.000Z",
+          "2026-07-27T13:00:00.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO subagent_messages (
+           id, parent_goal_id, from_run_id, to_run_id, to_role, kind, payload, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "insights-subagent-message",
+          "goal-insights",
+          "insights-subagent-run",
+          null,
+          null,
+          "status",
+          JSON.stringify({
+            ...JSON.parse(messageRow.payload),
+            id: "insights-subagent-message",
+            fromRunId: "insights-subagent-run",
+            parentGoalId: "goal-insights",
+          }),
+          "2026-07-27T13:00:01.000Z",
+        ],
+      );
+      await run(
+        db,
+        `INSERT INTO model_usage_records (
+           id, request_id, request_ordinal, session_id, provider, model, route,
+           source, request_kind, visibility, status, started_at, attribution_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          "legacy-insights-usage",
+          "legacy-insights-request",
+          1,
+          "insights-session",
+          "openpond",
+          "openpond-chat",
+          "byok",
+          "insights",
+          "insights_scan",
+          "internal",
+          "completed",
+          "2026-07-27T13:00:00.000Z",
+          "{}",
+        ],
+      );
+      await run(db, "PRAGMA user_version = 32");
       await close(db);
 
-      const migratedStore = new SqliteStore(storeDir);
-      await migratedStore.snapshot();
-      await expect(
-        migratedStore.claimOpenPondThreadGoal({
-          sessionId: "session-goals",
-          goalId: "goal_new",
-          status: "queued",
-          updatedAt: "2026-07-01T10:01:00.000Z",
-        }),
-      ).rejects.toThrow("goal_existing is already running");
-      await migratedStore.close();
-      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      const migrated = new SqliteStore(storeDir);
+      const snapshot = await migrated.snapshot();
+      expect(snapshot.sessions.map((item) => item.id)).not.toContain("insights-session");
+      await expect(migrated.listSubagentRuns()).resolves.toMatchObject([
+        {
+          id: "subagent-run-v32",
+          peerMessages: "parent_scoped",
+        },
+      ]);
+      await expect(migrated.listSubagentMessages()).resolves.toMatchObject([
+        {
+          id: "subagent-message-v32",
+          body: "Keep this lifecycle message",
+        },
+      ]);
+      await expect(migrated.listModelUsageRecords()).resolves.toEqual([]);
+      await expect(migrated.getCacheEntry<Array<{ id: string }>>("local.projects", "v1"))
+        .resolves.toMatchObject({
+          payload: [{ id: "project-keep" }],
+        });
+      await migrated.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const retiredTables = await all<{ name: string }>(
+          migratedDb,
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table'
+             AND name IN ('openpond_thread_goals', 'insight_items')`,
+        );
+        expect(retiredTables).toEqual([]);
+        const staleInsightRows = await get<{
+          shells: number;
+          details: number;
+          approvals: number;
+          turns: number;
+        }>(
+          migratedDb,
+          `SELECT
+             (SELECT COUNT(*) FROM projection_session_shells
+              WHERE id = 'insights-session') AS shells,
+             (SELECT COUNT(*) FROM projection_thread_details
+              WHERE session_id = 'insights-session') AS details,
+             (SELECT COUNT(*) FROM projection_approvals
+              WHERE session_id = 'insights-session') AS approvals,
+             (SELECT COUNT(*) FROM projection_latest_turns
+              WHERE session_id = 'insights-session') AS turns`,
+        );
+        expect(staleInsightRows).toEqual({
+          shells: 0,
+          details: 0,
+          approvals: 0,
+          turns: 0,
+        });
+        const migratedRun = await get<{ payload: string }>(
+          migratedDb,
+          "SELECT payload FROM subagent_runs WHERE id = 'subagent-run-v32'",
+        );
+        const migratedMessage = await get<{ payload: string }>(
+          migratedDb,
+          "SELECT payload FROM subagent_messages WHERE id = 'subagent-message-v32'",
+        );
+        expect(JSON.parse(migratedRun.payload)).not.toHaveProperty("parentGoalId");
+        expect(JSON.parse(migratedRun.payload)).toMatchObject({
+          peerMessages: "parent_scoped",
+        });
+        expect(JSON.parse(migratedMessage.payload)).not.toHaveProperty("parentGoalId");
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
     });
   });
 
@@ -574,13 +773,13 @@ describe("SqliteStore hardening", () => {
           "projection_session_shells",
           "projection_thread_details",
         ]);
-        const insightTables = await all<{ name: string }>(
+        const retiredTables = await all<{ name: string }>(
           db,
           `SELECT name FROM sqlite_master
            WHERE type = 'table'
-             AND name = 'insight_items'`,
+             AND name IN ('openpond_thread_goals', 'insight_items')`,
         );
-        expect(insightTables.map((row) => row.name)).toEqual(["insight_items"]);
+        expect(retiredTables).toEqual([]);
       } finally {
         await close(db);
       }
@@ -687,7 +886,6 @@ describe("SqliteStore hardening", () => {
       const run = SubagentRunSchema.parse({
         id: "run-finalizing",
         parentSessionId: "session-parent",
-        parentGoalId: "goal-parent",
         roleId: "coding",
         objective: "Submit the completed child handoff",
         required: true,
@@ -754,45 +952,6 @@ describe("SqliteStore hardening", () => {
         expect(row.sequence).toBe(1);
         expect(persisted.output).toBe(event.output);
         expect(persisted.data).toEqual(event.data);
-      } finally {
-        await close(db);
-      }
-    });
-  });
-
-  test("persists and patches insight rows", async () => {
-    await withStoreDir(async (storeDir) => {
-      const store = new SqliteStore(storeDir);
-      const item = insightItem("insight-one", "active");
-      await store.upsertInsightItem(item);
-      await expect(store.listInsights({ status: "active" })).resolves.toMatchObject([
-        {
-          id: "insight-one",
-          status: "active",
-          payload: {
-            detector: "test",
-            createPipelineId: "create_pipeline_1",
-          },
-        },
-      ]);
-
-      const updated = await store.patchInsightStatus("insight-one", "resolved");
-      expect(updated?.status).toBe("resolved");
-      expect(updated?.resolvedAt).toBeTruthy();
-      await expect(store.listInsights({ status: "active" })).resolves.toEqual([]);
-      await expect(store.listInsights({ status: "resolved" })).resolves.toMatchObject([
-        { id: "insight-one", status: "resolved" },
-      ]);
-
-      await store.close();
-
-      const db = openTestDatabase(path.join(storeDir, "state.sqlite"));
-      try {
-        const row = await get<{ count: number }>(
-          db,
-          "SELECT COUNT(*) AS count FROM insight_items WHERE id = 'insight-one' AND status = 'resolved'",
-        );
-        expect(row.count).toBe(1);
       } finally {
         await close(db);
       }
@@ -939,38 +1098,6 @@ function runtimeEvent(id: string, sessionId: string, turnId: string): RuntimeEve
   };
 }
 
-type OpenPondThreadGoalTestRow = {
-  session_id: string;
-  goal_id: string;
-  status: string;
-  provisional: number;
-  updated_at: string;
-};
-
-function threadGoalEvent(id: string, goalId: string, status: string): RuntimeEvent {
-  return {
-    id,
-    sessionId: "session-goals",
-    turnId: "turn-goals",
-    name: "diagnostic",
-    timestamp: "2026-07-01T10:00:00.000Z",
-    source: "provider",
-    status: "completed",
-    output: goalId,
-    data: {
-      kind: "thread_goal",
-      provider: "openpond",
-      goal: {
-        id: goalId,
-        provider: "openpond",
-        objective: `Objective for ${goalId}`,
-        status,
-        updatedAt: "2026-07-01T10:00:00.000Z",
-      },
-    },
-  };
-}
-
 function approval(id: string, sessionId: string, status: Approval["status"]): Approval {
   return {
     id,
@@ -982,27 +1109,5 @@ function approval(id: string, sessionId: string, status: Approval["status"]): Ap
     detail: id,
     status,
     createdAt: "2026-07-01T10:00:00.000Z",
-  };
-}
-
-function insightItem(id: string, status: InsightItem["status"]): InsightItem {
-  return {
-    id,
-    scopeType: "session",
-    scopeId: "session-insights",
-    severity: "concern",
-    type: "create_edit.awaiting_plan_approval",
-    status,
-    fingerprint: `fingerprint:${id}`,
-    title: "Create agent is waiting for plan approval",
-    summary: "Review the generated plan.",
-    payload: {
-      detector: "test",
-      createPipelineId: "create_pipeline_1",
-    },
-    createdAt: "2026-07-01T10:00:00.000Z",
-    updatedAt: "2026-07-01T10:00:00.000Z",
-    resolvedAt: status === "resolved" ? "2026-07-01T10:00:00.000Z" : null,
-    dismissedAt: status === "dismissed" ? "2026-07-01T10:00:00.000Z" : null,
   };
 }

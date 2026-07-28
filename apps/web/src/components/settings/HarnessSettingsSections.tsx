@@ -2,7 +2,6 @@ import type { FormEvent } from "react";
 import type {
   BootstrapPayload,
   ChatProvider,
-  InsightsEvidenceSourceSettings,
   ProviderSettings,
   SubagentIsolationMode,
   SubagentDelegationMode,
@@ -12,7 +11,6 @@ import type {
 } from "@openpond/contracts";
 import { SUBAGENT_ROLE_PRESETS } from "@openpond/contracts";
 import {
-  chatModelLabel,
   chatProviderLabel,
   defaultModelForProvider,
   type DropdownOption,
@@ -26,28 +24,9 @@ type SharedHarnessSettingsProps = {
   saveDefaults: (event: FormEvent<HTMLFormElement>) => void;
 };
 
-type GoalsSettingsSectionProps = SharedHarnessSettingsProps & {
-  goalStorageLocation: BootstrapPayload["preferences"]["goalStorageLocation"];
-  setGoalStorageLocation: (value: BootstrapPayload["preferences"]["goalStorageLocation"]) => void;
-};
-
 type ContextSettingsSectionProps = SharedHarnessSettingsProps & {
   contextCompactionAutoEnabled: boolean;
   setContextCompactionAutoEnabled: (value: boolean) => void;
-};
-
-type InsightsSettingsSectionProps = SharedHarnessSettingsProps & {
-  insightsEnabled: boolean;
-  insightsUseDefaultModel: boolean;
-  insightsProvider: ChatProvider;
-  insightsModel: string;
-  insightsEvidenceSources: InsightsEvidenceSourceSettings;
-  providers: ProviderSettings | null;
-  changeInsightsProvider: (provider: ChatProvider) => void;
-  setInsightsEnabled: (value: boolean) => void;
-  setInsightsUseDefaultModel: (value: boolean) => void;
-  setInsightsModel: (value: string) => void;
-  setInsightsEvidenceSourceEnabled: (key: keyof InsightsEvidenceSourceSettings, enabled: boolean) => void;
 };
 
 type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
@@ -77,62 +56,6 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
   setSubagentRoleToolPolicy: (roleId: string, toolPolicy: SubagentToolPolicy) => void;
   changeSubagentRoleProvider: (roleId: string, provider: ChatProvider) => void;
 };
-
-export function GoalsSettingsSection({
-  goalStorageLocation,
-  preferences,
-  saving,
-  saveDefaults,
-  setGoalStorageLocation,
-}: GoalsSettingsSectionProps) {
-  return (
-    <section className="account-settings">
-      <h1>Goals</h1>
-      <form className="provider-settings-form" onSubmit={(event) => void saveDefaults(event)}>
-        <div className="account-list-heading">
-          <span>Storage</span>
-          <small>Controls where local goal state, plans, and artifacts are written</small>
-        </div>
-        <div className="settings-radio-group">
-          <label className="settings-radio-row">
-            <input
-              type="radio"
-              name="goal-storage-location"
-              checked={goalStorageLocation === "global"}
-              disabled={saving}
-              onChange={() => setGoalStorageLocation("global")}
-            />
-            <span>
-              <strong>User home</strong>
-              <small>Store goal files under ~/.openpond/goals.</small>
-            </span>
-          </label>
-          <label className="settings-radio-row">
-            <input
-              type="radio"
-              name="goal-storage-location"
-              checked={goalStorageLocation === "workspace"}
-              disabled={saving}
-              onChange={() => setGoalStorageLocation("workspace")}
-            />
-            <span>
-              <strong>Working directory</strong>
-              <small>Store goal files in the current workspace under .openpond/goals.</small>
-            </span>
-          </label>
-        </div>
-        <button className="settings-primary" disabled={saving || goalStorageLocation === preferences.goalStorageLocation}>
-          <span>{saving ? "Saving" : "Save goals"}</span>
-        </button>
-      </form>
-
-      <div className="settings-footnote">
-        <span>Goal storage</span>
-        <strong>{goalStorageLocation === "global" ? "~/.openpond/goals" : ".openpond/goals in the working directory"}</strong>
-      </div>
-    </section>
-  );
-}
 
 export function ContextSettingsSection({
   contextCompactionAutoEnabled,
@@ -168,139 +91,6 @@ export function ContextSettingsSection({
           <span>{saving ? "Saving" : "Save context"}</span>
         </button>
       </form>
-    </section>
-  );
-}
-
-export function InsightsSettingsSection({
-  insightsEnabled,
-  insightsUseDefaultModel,
-  insightsProvider,
-  insightsModel,
-  insightsEvidenceSources,
-  preferences,
-  providers,
-  saving,
-  saveDefaults,
-  changeInsightsProvider,
-  setInsightsEnabled,
-  setInsightsUseDefaultModel,
-  setInsightsModel,
-  setInsightsEvidenceSourceEnabled,
-}: InsightsSettingsSectionProps) {
-  const insightProviderOptions = providerOptionsFromSettings(providers, { enabledOnly: true });
-  const insightModelOptions = modelOptionsForProvider(insightsProvider, providers);
-  const insightModelDatalistId = "settings-insights-model-options";
-  const unchanged =
-    insightsEnabled === preferences.insightsEnabled &&
-    insightEvidenceSourcesEqual(insightsEvidenceSources, preferences.insightsEvidenceSources) &&
-    insightModelSettingsEqual(
-      {
-        useDefault: insightsUseDefaultModel,
-        provider: insightsProvider,
-        model: insightsModel,
-      },
-      preferences,
-    );
-
-  return (
-    <section className="account-settings insights-settings">
-      <h1>Insights</h1>
-      <form className="provider-settings-form" onSubmit={(event) => void saveDefaults(event)}>
-        <div className="account-list-heading">
-          <span>Background agent</span>
-          <small>Controls the background Insights agent</small>
-        </div>
-        <label className="settings-check-row">
-          <input
-            type="checkbox"
-            checked={insightsEnabled}
-            disabled={saving}
-            onChange={(event) => setInsightsEnabled(event.target.checked)}
-          />
-          <span>
-            <strong>Run background Insights</strong>
-            <small>Startup and interval scans run while the app is open.</small>
-          </span>
-        </label>
-        <label className="settings-check-row">
-          <input
-            type="checkbox"
-            checked={insightsUseDefaultModel}
-            disabled={saving}
-            onChange={(event) => setInsightsUseDefaultModel(event.target.checked)}
-          />
-          <span>
-            <strong>Use default chat model</strong>
-            <small>
-              {chatProviderLabel(preferences.defaultChatProvider, providers)} /{" "}
-              {chatModelLabel(preferences.defaultChatModel, providers, preferences.defaultChatProvider)}
-            </small>
-          </span>
-        </label>
-        {!insightsUseDefaultModel ? (
-          <div className="provider-settings-grid two">
-            <label className="settings-select-field">
-              <span>Insights provider</span>
-              <select
-                value={insightsProvider}
-                disabled={saving}
-                onChange={(event) => changeInsightsProvider(event.target.value as ChatProvider)}
-              >
-                {insightProviderOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-select-field">
-              <span>Insights model</span>
-              <input
-                value={insightsModel}
-                disabled={saving}
-                list={insightModelDatalistId}
-                onChange={(event) => setInsightsModel(event.target.value)}
-              />
-              <datalist id={insightModelDatalistId}>
-                {insightModelOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-          </div>
-        ) : null}
-        <div className="settings-check-grid" aria-label="Insights evidence sources">
-          {INSIGHTS_EVIDENCE_SOURCE_OPTIONS.map((option) => (
-            <label className="settings-check-row compact" key={option.key}>
-              <input
-                type="checkbox"
-                checked={insightsEvidenceSources[option.key]}
-                disabled={saving}
-                onChange={(event) => setInsightsEvidenceSourceEnabled(option.key, event.target.checked)}
-              />
-              <span>
-                <strong>{option.label}</strong>
-                <small>{option.description}</small>
-              </span>
-            </label>
-          ))}
-        </div>
-        <button className="settings-primary" disabled={saving || unchanged}>
-          <span>{saving ? "Saving" : "Save insights"}</span>
-        </button>
-      </form>
-
-      <div className="settings-footnote">
-        <span>Insights model</span>
-        <strong>
-          {insightsUseDefaultModel
-            ? "Default chat model"
-            : `${chatProviderLabel(insightsProvider, providers)} / ${insightsModel}`}
-        </strong>
-      </div>
     </section>
   );
 }
@@ -623,7 +413,7 @@ const SUBAGENT_TOOL_POLICY_OPTIONS: Array<{ value: SubagentToolPolicy; label: st
 ];
 
 const SUBAGENT_PEER_MESSAGE_OPTIONS: Array<{ value: SubagentPeerMessages; label: string }> = [
-  { value: "goal_scoped", label: "Scoped handoffs" },
+  { value: "parent_scoped", label: "Parent-scoped handoffs" },
   { value: "disabled", label: "Disabled" },
 ];
 
@@ -671,38 +461,6 @@ function combinedModelOptions(
     });
   }
   return options;
-}
-
-const INSIGHTS_EVIDENCE_SOURCE_OPTIONS: Array<{
-  key: keyof InsightsEvidenceSourceSettings;
-  label: string;
-  description: string;
-}> = [
-  { key: "createEdit", label: "Create/Improve", description: "Waiting, blocked, or failed Create/Improve runs." },
-  { key: "stuckTurns", label: "Stuck turns", description: "Failed or long-running active turns." },
-  { key: "toolFailures", label: "Tool failures", description: "Repeated tool or action failures." },
-  { key: "abandonedGoals", label: "Abandoned goals", description: "Goal loops left active too long." },
-  { key: "userCorrections", label: "Corrections", description: "Repeated correction-style prompts." },
-  { key: "unresolvedConversations", label: "Unresolved chats", description: "Long chats with unresolved recent work." },
-  { key: "usageAnomalies", label: "Usage", description: "Spikes, failures, missing usage, and latency changes." },
-];
-
-function insightEvidenceSourcesEqual(
-  current: InsightsEvidenceSourceSettings,
-  preferences: BootstrapPayload["preferences"]["insightsEvidenceSources"],
-): boolean {
-  return INSIGHTS_EVIDENCE_SOURCE_OPTIONS.every((option) => current[option.key] === preferences[option.key]);
-}
-
-function insightModelSettingsEqual(
-  current: { useDefault: boolean; provider: ChatProvider; model: string },
-  preferences: BootstrapPayload["preferences"],
-): boolean {
-  if (current.useDefault) return !preferences.insightsModelRef;
-  return (
-    preferences.insightsModelRef?.providerId === current.provider &&
-    preferences.insightsModelRef?.modelId === current.model.trim()
-  );
 }
 
 function nullableNumber(value: string): number | null {

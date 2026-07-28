@@ -18,7 +18,7 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("Longest request");
     expect(html).toContain("Current streak");
     expect(html).toContain("Token activity");
-    expect(html).toContain("Activity insights");
+    expect(html).toContain("Activity summary");
     expect(html).toContain("Model activity");
     expect(html).toContain("Model colors");
     expect(html).toContain("data-model-count=\"2\"");
@@ -34,7 +34,6 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("Usage thread");
     expect(html).toContain("Slash commands");
     expect(html).toContain("/skill");
-    expect(html).toContain("Insight runs");
     expect(html).toContain("Routes");
     expect(html).toContain("Local BYOK");
     expect(html).toContain("Sources");
@@ -64,7 +63,6 @@ describe("UsageSettingsContent", () => {
 
     expect(html).toContain("Open");
     expect(html).toContain("aria-label=\"Open thread\"");
-    expect(html).toContain("aria-label=\"Open Insight session\"");
     expect(html).toContain("aria-label=\"Open request source\"");
     expect(html).not.toContain("OPEN");
   });
@@ -222,28 +220,6 @@ function usageSummary(): UsageSummaryResponse {
         lastSeenAt: "2026-07-04T10:00:00.000Z",
       },
     ],
-    insightRuns: [
-      {
-        insightRunId: "insight_run_usage",
-        status: "completed",
-        trigger: "manual",
-        findingCount: 2,
-        sessionId: "session_usage",
-        turnId: "turn_usage",
-        requests: 1,
-        promptTokens: 220,
-        completionTokens: 80,
-        totalTokens: 300,
-        averageLatencyMs: 3000,
-        p95LatencyMs: 3000,
-        averageFirstTokenMs: 100,
-        p95FirstTokenMs: 120,
-        failures: 1,
-        failureRate: 1,
-        firstSeenAt: "2026-07-04T12:00:00.000Z",
-        lastSeenAt: "2026-07-04T12:00:00.000Z",
-      },
-    ],
     routes: [
       breakdown({
         route: "local_byok",
@@ -325,7 +301,6 @@ function emptySummary(): UsageSummaryResponse {
     models: [],
     threads: [],
     commands: [],
-    insightRuns: [],
     routes: [],
     statuses: [],
     sources: [],
@@ -368,7 +343,6 @@ function usageRecord(): ModelUsageRecord {
       workflowKind: "slash_command",
       sessionId: "session_usage",
       turnId: "turn_usage",
-      insightRunId: null,
       goalId: null,
       createImproveRunId: null,
       commandName: "/skill",

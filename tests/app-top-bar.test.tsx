@@ -26,7 +26,6 @@ function renderTopBar(overrides: Partial<Parameters<typeof AppTopBar>[0]> = {}):
     onToggleDiffPanel: noop,
     onOpenSearch: noop,
     onToggleTerminal: noop,
-    onOpenInsights: noop,
     onRunTerminalCommand: noop,
     onWorkspaceToolAction: async () => null,
     onOpenCommitDialog: noop,

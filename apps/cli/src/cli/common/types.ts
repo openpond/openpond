@@ -24,7 +24,6 @@ export type Command =
   | "repo"
   | "sandbox"
   | "training"
-  | "goal"
   | "harness"
   | "project"
   | "agent"

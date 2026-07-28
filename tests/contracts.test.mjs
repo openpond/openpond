@@ -510,7 +510,6 @@ describe("contracts", () => {
     assert.equal(payload.preferences.codexPermissionMode, "default");
     assert.equal(payload.preferences.defaultBranchPrefix, "feat/");
     assert.equal(payload.preferences.defaultNewProjectDirectory, "");
-    assert.equal(payload.preferences.goalStorageLocation, "global");
     assert.equal(payload.preferences.advancedWorkspaceControls, false);
     assert.deepEqual(payload.preferences.sidebarSectionsCollapsed, {
       pinned: false,

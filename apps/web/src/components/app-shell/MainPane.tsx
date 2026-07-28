@@ -78,7 +78,6 @@ import {
   billingTargetForContext,
   easeInOutCubic,
   easedChatScrollDuration,
-  insightsSystemSessionId,
   isNearChatBottom,
   latestCreatePipelineRuntime,
   messageScrollTop,
@@ -141,7 +140,6 @@ export function MainPane({
   mainComposerFocusRequestId,
   labCloseDetailRequestId,
   labCloseDetailKind,
-  labSuggestionsRequestId,
   sideChatTrainingLaunchRequest,
   onSideChatTrainingLaunchHandled,
   steerAutoDispatchBlocked,
@@ -190,13 +188,6 @@ export function MainPane({
   terminalOpen,
   onToggleTerminal,
   onWorkspaceDiffPanelViewStateChange,
-  insightsItems,
-  insightsRuns,
-  insightsNextScanAt,
-  insightsScanRunning,
-  insightsScanStartedAt,
-  insightsScanning,
-  insightsError,
   training,
   trainingSessions,
   trainingChatHandoff,
@@ -204,10 +195,7 @@ export function MainPane({
   onTrainingDetailTasksetIdChange,
   onTrainingChatTaskSelect,
   onTrainingChatHandoffDismiss,
-  onRunInsightsScan,
-  onAskInsightsQuestion,
-  onPatchInsightStatus,
-  onOpenInsightsSession,
+  onOpenSession,
   cloudProjects,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
@@ -245,7 +233,6 @@ export function MainPane({
   showToast,
   sendPrompt,
   stopTurn,
-  pauseGoal,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
@@ -256,7 +243,6 @@ export function MainPane({
   onShowRightChatPanel,
   onAddRightChat,
   onOpenRightChatForSession,
-  onOpenLabSuggestions,
   onLabDetailOpenChange,
   onTerminalTabsChange,
   onCloseRightChatPanel,
@@ -361,7 +347,6 @@ export function MainPane({
       showToast(message, "error");
     }
   }, [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]);
-  const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
   useEffect(() => {
     if (!sidebarFileOpenRequest) return;
     const { file, id } = sidebarFileOpenRequest;
@@ -500,20 +485,6 @@ export function MainPane({
     onOpenRightChatForSession,
     onPayload,
   });
-  const updateInsightsEnabled = useCallback(async (enabled: boolean) => {
-    if (!connection || !bootstrap || insightsPreferenceSaving) return;
-    setInsightsPreferenceSaving(true);
-    onError(null);
-    try {
-      const payload = await api.savePreferences(connection, { insightsEnabled: enabled });
-      onPayload({ ...bootstrap, preferences: payload.preferences });
-      showToast(enabled ? "Observation scanning enabled" : "Observation scanning disabled", "success");
-    } catch (preferenceError) {
-      onError(preferenceError instanceof Error ? preferenceError.message : String(preferenceError));
-    } finally {
-      setInsightsPreferenceSaving(false);
-    }
-  }, [bootstrap, connection, insightsPreferenceSaving, onError, onPayload, showToast]);
   const activeTrainingTasksetId = useMemo(() => {
     const tasksets = training.payload?.tasksets ?? [];
     return tasksets.some((taskset) => taskset.id === selectedTrainingTasksetId)
@@ -713,32 +684,6 @@ export function MainPane({
           ? { command: selectedCommand.id, args: promptForSubmit.trim() }
           : parseComposerSlashCommandPrompt(promptForSubmit);
         if (command) {
-          if (command.command === "insights") {
-            if (attachments.length > 0) {
-              showToast("/insights does not accept attachments.", "error");
-              return false;
-            }
-            clearMainPrompt();
-            if (command.args.trim()) {
-              const payload = await onAskInsightsQuestion(command.args.trim());
-              const sessionId = insightsSystemSessionId(payload);
-              if (sessionId) {
-                onOpenInsightsSession(sessionId);
-              } else {
-                onOpenLabSuggestions();
-              }
-              return true;
-            }
-            onOpenLabSuggestions();
-            const payload = await onRunInsightsScan({ trigger: "slash_command" });
-            if (payload && typeof payload === "object" && "summary" in payload) {
-              const summary = payload.summary as { activeCount?: number; highestActiveSeverity?: string | null };
-              const activeCount = summary.activeCount ?? 0;
-              const severity = summary.highestActiveSeverity ? ` Highest severity: ${summary.highestActiveSeverity}.` : "";
-              showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.${severity}`, "info");
-            }
-            return true;
-          }
           if (command.command === "train") {
             if (attachments.length > 0) {
               showToast("/train uses the selected chat; add other chats from Lab.", "error");
@@ -813,10 +758,6 @@ export function MainPane({
       activeWorkspaceKind,
       bootstrap?.profile,
       connectedAppMentions,
-      onAskInsightsQuestion,
-      onOpenLabSuggestions,
-      onOpenInsightsSession,
-      onRunInsightsScan,
       composerDraftStore,
       sendPrompt,
       selectedSessionId,
@@ -1375,7 +1316,7 @@ export function MainPane({
       onModelChange={onRightChatModelChange}
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
-      onOpenSession={onOpenInsightsSession}
+      onOpenSession={onOpenSession}
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
@@ -1510,7 +1451,6 @@ export function MainPane({
               <LabsRoute
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
-                openSuggestionsRequestId={labSuggestionsRequestId}
                 onNewModel={(initialTasksetId) => {
                   setTrainingLaunchRequest({
                     id: Date.now(),
@@ -1557,20 +1497,6 @@ export function MainPane({
                     setView("chat");
                   },
                 }}
-                insights={{
-                  enabled: appPreferences.insightsEnabled,
-                  items: insightsItems,
-                  runs: insightsRuns,
-                  nextScanAt: insightsNextScanAt,
-                  scanRunning: insightsScanRunning,
-                  scanStartedAt: insightsScanStartedAt,
-                  scanning: insightsScanning,
-                  savingEnabled: insightsPreferenceSaving,
-                  error: insightsError,
-                  onEnabledChange: updateInsightsEnabled,
-                  onPatchStatus: onPatchInsightStatus,
-                  onOpenSession: onOpenInsightsSession,
-                }}
                 training={{
                   training,
                   sessions: trainingSessions,
@@ -1585,7 +1511,7 @@ export function MainPane({
                   onOpenComputeSettings,
                   onOpenProviderSettings,
                   onOpenDatasetStorageSettings,
-                  onOpenChat: onOpenInsightsSession,
+                  onOpenChat: onOpenSession,
                   onChatWithModel: onBeginNewChatWithModel,
                   onOpenTasksetFiles: onShowFilesPanel,
                   launchRequest: sideChatTrainingLaunchRequest ?? trainingLaunchRequest,
@@ -1637,7 +1563,7 @@ export function MainPane({
                 });
                 if (!sent) throw new Error("The question response could not be sent.");
               }}
-              onOpenSession={onOpenInsightsSession}
+              onOpenSession={onOpenSession}
               onScroll={(event) => handleChatScroll(event.currentTarget)}
               preparingInitialScroll={chatThreadPreparingInitialScroll}
               rows={chatTimelineRows}
@@ -1714,7 +1640,6 @@ export function MainPane({
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
-                onPauseGoal={selectedSessionId && !isCodexHistorySessionId(selectedSessionId) ? pauseGoal : undefined}
               />
             </div>
           </div>

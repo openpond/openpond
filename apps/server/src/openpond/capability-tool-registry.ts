@@ -22,23 +22,6 @@ import {
 
 export type { OpenPondDatasetBuilderAction } from "./dataset-builder-tool-definitions.js";
 
-export type OpenPondGoalControlToolInput = {
-  action: "start" | "restart" | "pause" | "resume" | "complete" | "stop";
-  objective?: string | null;
-  targetGoalId?: string | null;
-  mode?: "local" | "remote" | "auto" | null;
-  reason: string;
-};
-
-export type OpenPondGoalControlToolResult = {
-  goalId: string;
-  action: "start" | "restart" | "pause" | "resume" | "complete" | "stop";
-  status: string;
-  objective: string;
-  mode: "local" | "remote";
-  nextStep: string;
-};
-
 export type OpenPondSubagentStartToolInput = {
   roleId: string;
   objective: string;
@@ -63,7 +46,6 @@ export type OpenPondSubagentToolResult = {
 
 export type OpenPondSubagentStatusToolInput = {
   runId?: string | null;
-  parentGoalId?: string | null;
 };
 
 export type OpenPondSubagentStatusToolResult = {
@@ -126,10 +108,6 @@ export type ManageSidebarFileToolResult = {
 };
 
 export function createOpenPondCapabilityModelToolDefinitions(deps: {
-  startGoalControl: (
-    context: ModelToolExecutionContext,
-    input: OpenPondGoalControlToolInput,
-  ) => Promise<OpenPondGoalControlToolResult>;
   startSubagent?: (
     context: ModelToolExecutionContext,
     input: OpenPondSubagentStartToolInput,
@@ -166,51 +144,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
   subagentRoles?: readonly SubagentRoleSettings[];
 }): ModelToolDefinition[] {
   const enabledSubagentRoles = (deps.subagentRoles ?? []).filter((role) => role.enabled);
-  const definitions: ModelToolDefinition[] = [
-    {
-      name: "openpond_goal_control",
-      description:
-        "Control OpenPond Goal mode. Use start only when the current user message is an explicit /goal or /goal-local command. Do not infer Goal mode from an ordinary request. Restart, pause, resume, complete, or stop the current goal when requested or required by an existing goal continuation. Never use start from a goal continuation; control the supplied goal id instead. Omit targetGoalId when action is start because a new goal has no id yet.",
-      parameters: {
-        type: "object",
-        additionalProperties: false,
-        properties: {
-          action: {
-            type: "string",
-            enum: ["start", "restart", "pause", "resume", "complete", "stop"],
-            description:
-              "Goal lifecycle action. Start is reserved for an explicit Goal command.",
-          },
-          objective: {
-            type: "string",
-            minLength: 1,
-            description: "Required for start. Optional replacement objective for restart.",
-          },
-          targetGoalId: {
-            type: "string",
-            minLength: 1,
-            description: "Goal id to control when the current chat context is not enough. Omit this field when action is start.",
-          },
-          mode: {
-            type: "string",
-            enum: ["local", "remote", "auto"],
-            description: "Use auto unless the user or current chat context clearly selects local or remote execution.",
-          },
-          reason: {
-            type: "string",
-            minLength: 1,
-            description: "Concise reason for this lifecycle control action.",
-          },
-        },
-        required: ["action", "reason"],
-      },
-      execute: async (context) => {
-        const input = goalControlToolInput(context.args);
-        const result = await deps.startGoalControl(context, input);
-        return goalControlToolResult(context.callId, result);
-      },
-    },
-  ];
+  const definitions: ModelToolDefinition[] = [];
   if (deps.manageSidebarFile) {
     definitions.push({
       name: "manage_sidebar_file",
@@ -267,7 +201,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
           },
           required: {
             type: "boolean",
-            description: "Whether parent goal completion should treat this child result as required.",
+            description: "Whether the parent task should treat this child result as required.",
           },
         },
         required: ["roleId", "objective"],
@@ -283,7 +217,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_status",
       description:
-        "Read current status for a subagent run or all child runs under a parent goal.",
+        "Read current status for a subagent run or all child runs under the parent chat.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -292,11 +226,6 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
             type: "string",
             minLength: 1,
             description: "Specific subagent run id to inspect.",
-          },
-          parentGoalId: {
-            type: "string",
-            minLength: 1,
-            description: "Goal id whose child runs should be listed.",
           },
         },
       },
@@ -397,7 +326,7 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
     definitions.push({
       name: "openpond_subagent_send_message",
       description:
-        "Send a typed runtime-mediated message to a sibling child run/role under the same goal, or from a child session back to the parent chat. From a child session, use this for blockers, decision requests, important findings, or final handoffs that should return control to the main agent.",
+        "Send a typed runtime-mediated message to a sibling child run or role under the same parent chat, or from a child session back to the parent chat. From a child session, use this for blockers, decision requests, important findings, or final handoffs that should return control to the main agent.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -445,33 +374,6 @@ export function createOpenPondCapabilityModelToolDefinitions(deps: {
   return definitions;
 }
 
-function goalControlToolInput(args: Record<string, unknown>): OpenPondGoalControlToolInput {
-  const action = args.action;
-  if (
-    action !== "start" &&
-    action !== "restart" &&
-    action !== "pause" &&
-    action !== "resume" &&
-    action !== "complete" &&
-    action !== "stop"
-  ) {
-    throw new Error("action must be start, restart, pause, resume, complete, or stop");
-  }
-  const objective = optionalStringArg(args, "objective");
-  const targetGoalId = optionalStringArg(args, "targetGoalId");
-  const mode = args.mode;
-  if (mode !== undefined && mode !== null && mode !== "local" && mode !== "remote" && mode !== "auto") {
-    throw new Error("mode must be local, remote, or auto");
-  }
-  return {
-    action,
-    ...(objective ? { objective } : {}),
-    ...(targetGoalId ? { targetGoalId } : {}),
-    ...(mode ? { mode } : {}),
-    reason: stringArg(args, "reason"),
-  };
-}
-
 function manageSidebarFileToolInput(args: Record<string, unknown>): ManageSidebarFileToolInput {
   const action = args.action;
   if (
@@ -499,28 +401,6 @@ function manageSidebarFileToolResult(
       {
         ok: true,
         action: "manage_sidebar_file",
-        output: result.nextStep,
-        data: result,
-      },
-      null,
-      2,
-    ),
-    data: result,
-  };
-}
-
-function goalControlToolResult(
-  callId: string,
-  result: OpenPondGoalControlToolResult,
-): NativeModelToolResult {
-  return {
-    toolCallId: callId,
-    name: "openpond_goal_control",
-    ok: true,
-    contentText: JSON.stringify(
-      {
-        ok: true,
-        action: "openpond_goal_control",
         output: result.nextStep,
         data: result,
       },
@@ -562,10 +442,8 @@ function subagentRoleCatalogDescription(roles: readonly SubagentRoleSettings[]):
 
 function subagentStatusToolInput(args: Record<string, unknown>): OpenPondSubagentStatusToolInput {
   const runId = optionalStringArg(args, "runId");
-  const parentGoalId = optionalStringArg(args, "parentGoalId");
   return {
     ...(runId ? { runId } : {}),
-    ...(parentGoalId ? { parentGoalId } : {}),
   };
 }
 
