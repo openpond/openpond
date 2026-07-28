@@ -366,7 +366,7 @@ Exit gate: Lab Suggestions operates entirely from Task Miner/training state and 
 - [x] Run focused and complete unit coverage. Done — Evidence: `pnpm test:unit` passed 315 server/web files with 1,557 tests and 10 skips, then 14 CLI files with 72 tests.
 - [x] Run remaining static, build, repository hygiene, and diff checks. Done — Evidence: `pnpm run verify:push` passed the locked install, TypeScript builds, application and CLI builds, runtime/package smoke checks, budgets, structure, reachability, dependency, hygiene, workflow, unit, integration, Python, Node-contract, Agent SDK, and release suites; `git diff --check` also passes.
 - [x] Run local application smoke proof. Done — Evidence: `OPENPOND_APP_HOME=<isolated-temp-dir> pnpm dev` reached server, renderer, and desktop readiness; the in-app browser showed `/agent` and `/skill` but no `/goal` for OpenPond, showed both bundled authoring skills, and showed only Task Miner AI Suggestions with no Observations/Insights surface.
-- [x] Record final line/file deletion count. Done — Evidence: the staged implementation changes 197 files, deletes 61 files and 17,878 lines, adds 5 focused files and 2,692 lines (including the combined working docs), for a net reduction of 15,186 lines.
+- [x] Record final line/file deletion count. Done — Evidence: the implementation changes 198 files, deletes 61 files and 17,879 lines, adds 6 focused files and 2,723 lines (including the combined working docs), for a net reduction of 15,156 lines.
 - [ ] Commit, publish the PR, and record the CI result.
 
 Exit gate: all surviving behavior passes, docs describe only the surviving architecture, and no OpenPond Goal or Insights code path remains.
@@ -473,4 +473,4 @@ The remaining provider-native scenarios are covered by automated tests because t
 - Removed Goal scope from subagent contracts, persistence, runtime, tests, and docs while retaining normal parent-task lifecycle, messaging, review, wake, and cleanup behavior.
 - Kept the PR #49 authoring architecture intact: `/skill` and `/agent` remain ordinary skill-backed turns using `openpond-skill-authoring` and `openpond-agent-authoring`, with no special mode, tool, or `agents/openai.yaml`.
 - Added schema v33 destructive cleanup for Goal/Insights tables, hidden Insights sessions/projects and associated records, legacy usage request kinds, and legacy subagent Goal fields; focused migration coverage proves parent-task subagent state survives.
-- Passed the complete `pnpm run verify:push` pipeline, the post-migration focused SQLite suite, repository diff checks, and isolated in-app desktop smoke proof; the final staged implementation is a net 15,186-line reduction across 197 files.
+- Passed the complete `pnpm run verify:push` pipeline, the post-migration focused SQLite suite, repository diff checks, and isolated in-app desktop smoke proof; the final implementation is a net 15,156-line reduction across 198 files.
