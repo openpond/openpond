@@ -147,7 +147,7 @@ export function HuggingFaceDatasetImportDialog({
 
   return (
     <AppDialog
-      ariaLabel="Import Hugging Face Dataset"
+      ariaLabel="Import Hugging Face data"
       className="training-dialog training-run-dialog training-run-workflow-step dataset-import-dialog"
       dismissDisabled={active}
       initialFocusKey={inspection ? "review" : "locator"}
@@ -156,7 +156,7 @@ export function HuggingFaceDatasetImportDialog({
         <div className="training-dialog-header">
           <div className="training-run-dialog-title">
             <button
-              aria-label="Back to Dataset sources"
+              aria-label="Back to Taskset sources"
               className="training-icon-button"
               type="button"
               onClick={onBack}
@@ -207,7 +207,7 @@ export function HuggingFaceDatasetImportDialog({
               sourceBytes={sourceBytes}
             />
             <label className="training-objective-field">
-              <span>Dataset name</span>
+              <span>Taskset name</span>
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
@@ -398,7 +398,7 @@ function DatasetImportProgress({ job }: { job: DatasetImportJob }) {
   return (
     <div className="training-dialog-scroll-body dataset-import-progress" role="status">
       <Loader2 className={job.status === "ready" ? "" : "spin"} size={22} />
-      <h3>{job.status === "ready" ? "Dataset saved" : "Importing Dataset"}</h3>
+      <h3>{job.status === "ready" ? "Taskset saved" : "Importing data"}</h3>
       <p>{job.progress.message}</p>
       <div className="dataset-import-progress-track">
         <span style={{ width: `${percent ?? 8}%` }} />

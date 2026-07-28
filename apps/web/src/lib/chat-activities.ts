@@ -21,19 +21,14 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
     });
     return;
   }
-  const existing = findLast(
-    messages,
-    (candidate) =>
-      candidate.role === "activity_group" &&
-      candidate.turnId === item.turnId &&
-      !candidate.activities?.some((entry) => entry.subagentMessage),
-  );
-  if (existing) {
-    existing.activities = appendActivityToList(existing.activities ?? [], item, activity);
-    existing.timestamp = item.timestamp;
+  const activityGroup = latestContiguousParentActivityGroup(messages, item.turnId);
+  if (activityGroup) {
+    activityGroup.activities = appendActivityToList(activityGroup.activities ?? [], item, activity);
+    activityGroup.timestamp = item.timestamp;
     return;
   }
 
+  settleLatestActivityGroup(messages, item);
   messages.push({
     id: item.id,
     role: "activity_group",
@@ -45,23 +40,61 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
   });
 }
 
+export function settleLatestActivityGroup(messages: ChatMessage[], item: RuntimeEvent): void {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const candidate = messages[index]!;
+    if (candidate.turnId !== item.turnId) return;
+    if (
+      candidate.role !== "activity_group" ||
+      candidate.activities?.some((activity) => activity.subagentMessage)
+    ) {
+      continue;
+    }
+    if (candidate.traceState !== "running") return;
+    candidate.traceState = "settled";
+    candidate.traceCompletedAt = item.timestamp;
+    return;
+  }
+}
+
+function latestContiguousParentActivityGroup(
+  messages: ChatMessage[],
+  turnId: string | undefined,
+): ChatMessage | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const candidate = messages[index]!;
+    if (candidate.turnId !== turnId || candidate.role !== "activity_group") return null;
+    if (candidate.activities?.some((activity) => activity.subagentMessage)) continue;
+    return candidate;
+  }
+  return null;
+}
+
 export function completeActivityGroup(
   messages: ChatMessage[],
   item: RuntimeEvent,
   traceState: NonNullable<ChatMessage["traceState"]>,
 ): void {
   if (!item.turnId) return;
-  const activityGroup = findLast(
-    messages,
-    (candidate) =>
+  const activityGroups = messages.filter(
+    (candidate): candidate is ChatMessage =>
       candidate.role === "activity_group" &&
       candidate.turnId === item.turnId &&
       !candidate.activities?.some((entry) => entry.subagentMessage),
   );
-  if (!activityGroup) return;
-  activityGroup.traceState = traceState;
-  activityGroup.traceCompletedAt = item.timestamp;
-  activityGroup.timestamp = item.timestamp;
+  const runningGroups = activityGroups.filter((activityGroup) => activityGroup.traceState === "running");
+  const terminalGroups = runningGroups.length > 0
+    ? runningGroups
+    : activityGroups.length > 0
+      ? [activityGroups[activityGroups.length - 1]!]
+      : [];
+  for (const activityGroup of terminalGroups) {
+    activityGroup.traceState = traceState;
+  }
+  const latestActivityGroup = terminalGroups.at(-1);
+  if (!latestActivityGroup) return;
+  latestActivityGroup.traceCompletedAt = item.timestamp;
+  latestActivityGroup.timestamp = item.timestamp;
 }
 
 export function appendInterruptionStatus(messages: ChatMessage[], item: RuntimeEvent): void {
@@ -194,7 +227,10 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     ...(kind ? { kind } : {}),
     ...(item.action ? { action: item.action } : {}),
     ...(controlKind ? { kind: "control" as const, controlKind } : {}),
-    ...(item.name === "tool.started" || item.name === "tool.completed" || kind === "command"
+    ...(item.name === "assistant.reasoning.delta" ||
+    item.name === "tool.started" ||
+    item.name === "tool.completed" ||
+    kind === "command"
       ? { callId: activityCallId(item) ?? undefined }
       : {}),
     ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
@@ -282,6 +318,8 @@ function mergeStreamedTextActivity(activities: ActivityItem[], item: RuntimeEven
   if (item.name !== "assistant.reasoning.delta") return false;
   const previous = activities[activities.length - 1];
   if (!previous || previous.kind !== "reasoning" || activity.kind !== "reasoning") return false;
+  if (previous.action !== activity.action) return false;
+  if ((previous.callId || activity.callId) && previous.callId !== activity.callId) return false;
   previous.content = `${previous.content}${activity.content}`;
   previous.timestamp = item.timestamp;
   return true;
@@ -325,7 +363,9 @@ function activityState(item: RuntimeEvent): ActivityItem["state"] {
 }
 
 function activityLabel(item: RuntimeEvent): string {
-  if (item.name === "assistant.reasoning.delta") return "Reasoning";
+  if (item.name === "assistant.reasoning.delta") {
+    return stringValue(asRecord(item.data), ["kind"]) === "commentary" ? "Update" : "Reasoning";
+  }
   if (isCodexGoalContextEvent(item)) return "Goal context";
   if (item.name === "turn.interrupted") return "Turn aborted";
   if (item.name === "subagent.started") return item.status === "started" ? "Subagent running" : "Started subagent";

@@ -12,7 +12,11 @@ import "../../styles/training/training.css";
 import "../../styles/labs/labs.css";
 import "../../styles/labs/labs-detail.css";
 
-export type LabPrimaryTab = "workproducts" | "datasets" | "suggestions";
+export type LabPrimaryTab =
+  | "workproducts"
+  | "tasksets"
+  | "models"
+  | "suggestions";
 
 export function LabsView({
   activeTab,
@@ -67,13 +71,22 @@ export function LabsView({
               Home
             </button>
             <button
-              aria-selected={activeTab === "datasets"}
-              className={activeTab === "datasets" ? "active" : undefined}
+              aria-selected={activeTab === "tasksets"}
+              className={activeTab === "tasksets" ? "active" : undefined}
               role="tab"
               type="button"
-              onClick={() => onTabChange("datasets")}
+              onClick={() => onTabChange("tasksets")}
             >
-              Datasets
+              Tasksets
+            </button>
+            <button
+              aria-selected={activeTab === "models"}
+              className={activeTab === "models" ? "active" : undefined}
+              role="tab"
+              type="button"
+              onClick={() => onTabChange("models")}
+            >
+              Models
             </button>
             <button
               aria-selected={activeTab === "suggestions"}
@@ -103,8 +116,7 @@ export function LabsView({
             </button>
             {createOpen ? (
               <div className="labs-create-menu" role="menu">
-                {activeTab !== "datasets" ? (
-                  <>
+                {activeTab === "workproducts" ? (
                     <button
                       type="button"
                       role="menuitem"
@@ -116,6 +128,8 @@ export function LabsView({
                       <Bot size={13} />
                       <span><strong>Agent</strong><small>Describe the agent in the shared Create flow.</small></span>
                     </button>
+                ) : null}
+                {activeTab === "workproducts" || activeTab === "models" ? (
                     <button
                       type="button"
                       role="menuitem"
@@ -125,9 +139,8 @@ export function LabsView({
                       }}
                     >
                       <ChartColumnStacked size={13} />
-                      <span><strong>Model</strong><small>Build the data and Evals, then choose training.</small></span>
+                      <span><strong>Model</strong><small>Create a Model and set up its first training run.</small></span>
                     </button>
-                  </>
                 ) : null}
                 <button
                   type="button"
@@ -138,9 +151,9 @@ export function LabsView({
                   }}
                 >
                   <Boxes size={13} />
-                  <span><strong>Dataset</strong><small>Create a reusable Taskset without creating a Model.</small></span>
+                  <span><strong>Taskset</strong><small>Create reusable tasks, data, graders, and evaluations.</small></span>
                 </button>
-                {activeTab !== "datasets" ? (
+                {activeTab === "workproducts" ? (
                   <>
                     <button disabled type="button" role="menuitem">
                       <BookOpenText size={13} />

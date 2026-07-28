@@ -1,9 +1,9 @@
 import type {
-  BaselineReport,
-  CrossSystemFrontierBaselineRun,
   GradeResult,
   GraderAuditReport,
   ModelArtifactLineage,
+  ModelProject,
+  ModelRunDraft,
   RuntimeEvent,
   Session,
   TaskAttemptArtifact,
@@ -14,7 +14,6 @@ import type {
   TaskMinerConfig,
   TaskMinerRun,
   Taskset,
-  TasksetBaselineRun,
   TasksetReadinessReport,
   TrainingApproval,
   TrainingArtifact,
@@ -27,11 +26,11 @@ import type {
   Turn,
 } from "@openpond/contracts";
 import {
-  BaselineReportSchema,
-  CrossSystemFrontierBaselineRunSchema,
   GradeResultSchema,
   GraderAuditReportSchema,
   ModelArtifactLineageSchema,
+  ModelProjectSchema,
+  ModelRunDraftSchema,
   TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   TaskCandidateSchema,
@@ -41,7 +40,6 @@ import {
   TaskMinerConfigSchema,
   TaskMinerRunSchema,
   TasksetReadinessReportSchema,
-  TasksetBaselineRunSchema,
   TasksetSchema,
   TrainingApprovalSchema,
   TrainingArtifactSchema,
@@ -55,6 +53,12 @@ import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteDatasetStore } from "./store-datasets.js";
+import {
+  appendTrainingChatSearchText,
+  trainingChatFtsQuery,
+  trainingChatSearchResult,
+  type TrainingChatSearchResultRow,
+} from "./store-training-search.js";
 
 export type TrainingChatSearchDocument = {
   sessionId: string;
@@ -70,13 +74,6 @@ export type TrainingChatSearchDocument = {
 type TrainingChatSearchDocumentRow = {
   session_id: string;
   signature: string;
-};
-
-type TrainingChatSearchResultRow = {
-  session_id: string;
-  title: string;
-  updated_at: string;
-  snippet: string | null;
 };
 
 type TrainingChatSearchEvidenceRow = {
@@ -392,8 +389,14 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     return this.getParsedPayload("SELECT payload FROM task_design_proposals WHERE creation_id = ?", [creationId], TaskDesignProposalSchema.parse);
   }
 
-  async listTasksets(profileId: string): Promise<Taskset[]> {
-    return this.listParsedPayloads("SELECT payload FROM tasksets WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TasksetSchema.parse);
+  async listTasksets(profileId?: string): Promise<Taskset[]> {
+    return this.listParsedPayloads(
+      profileId
+        ? "SELECT payload FROM tasksets WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM tasksets ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
+      TasksetSchema.parse,
+    );
   }
 
   async getTaskset(id: string): Promise<Taskset | null> {
@@ -441,7 +444,6 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
         await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
-        await this.run("DELETE FROM baseline_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM training_artifacts WHERE job_id IN (SELECT id FROM training_jobs WHERE plan_id IN (SELECT id FROM training_plans WHERE taskset_id = ?))", [id]);
@@ -543,60 +545,6 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     );
   }
 
-  async saveBaselineReport(reportInput: BaselineReport): Promise<BaselineReport> {
-    const report = BaselineReportSchema.parse(reportInput);
-    await this.upsertPayload(
-      `INSERT INTO baseline_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`,
-      [report.id, report.tasksetId, JSON.stringify(report), report.createdAt],
-    );
-    return report;
-  }
-
-  async listBaselineReports(tasksetId: string): Promise<BaselineReport[]> {
-    return this.listParsedPayloads("SELECT payload FROM baseline_reports WHERE taskset_id = ? ORDER BY created_at DESC", [tasksetId], BaselineReportSchema.parse);
-  }
-
-  async saveTasksetBaselineRun(runInput: TasksetBaselineRun): Promise<TasksetBaselineRun> {
-    const run = TasksetBaselineRunSchema.parse(runInput);
-    await this.upsertPayload(
-      `INSERT INTO taskset_baseline_runs (id, profile_id, taskset_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, taskset_id = excluded.taskset_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [run.id, run.profileId, run.tasksetId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
-    );
-    return run;
-  }
-
-  async getTasksetBaselineRun(id: string): Promise<TasksetBaselineRun | null> {
-    return this.getParsedPayload(
-      "SELECT payload FROM taskset_baseline_runs WHERE id = ?",
-      [id],
-      TasksetBaselineRunSchema.parse,
-    );
-  }
-
-  async listTasksetBaselineRuns(input: { profileId?: string; tasksetId?: string } = {}): Promise<TasksetBaselineRun[]> {
-    if (input.tasksetId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM taskset_baseline_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
-        [input.tasksetId],
-        TasksetBaselineRunSchema.parse,
-      );
-    }
-    if (input.profileId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM taskset_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC",
-        [input.profileId],
-        TasksetBaselineRunSchema.parse,
-      );
-    }
-    return this.listParsedPayloads(
-      "SELECT payload FROM taskset_baseline_runs ORDER BY updated_at DESC",
-      [],
-      TasksetBaselineRunSchema.parse,
-    );
-  }
-
   async saveGraderAuditReport(reportInput: GraderAuditReport): Promise<GraderAuditReport> {
     const report = GraderAuditReportSchema.parse(reportInput);
     await this.upsertPayload(`INSERT INTO grader_audit_reports (id, taskset_id, payload, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET taskset_id = excluded.taskset_id, payload = excluded.payload`, [report.id, report.tasksetId, JSON.stringify(report), report.createdAt]);
@@ -655,28 +603,68 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
       : this.listParsedPayloads("SELECT payload FROM task_miner_runs ORDER BY updated_at DESC", [], TaskMinerRunSchema.parse);
   }
 
-  async saveCrossSystemFrontierBaselineRun(runInput: CrossSystemFrontierBaselineRun): Promise<CrossSystemFrontierBaselineRun> {
-    const run = CrossSystemFrontierBaselineRunSchema.parse(runInput);
+  async saveModelProject(projectInput: ModelProject): Promise<ModelProject> {
+    const project = ModelProjectSchema.parse(projectInput);
     await this.upsertPayload(
-      `INSERT INTO cross_system_frontier_baseline_runs (id, profile_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
-      [run.id, run.profileId, run.status, JSON.stringify(run), run.createdAt, run.updatedAt],
+      `INSERT INTO model_projects (id, profile_id, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [project.id, project.profileId, JSON.stringify(project), project.createdAt, project.updatedAt],
     );
-    return run;
+    return project;
   }
 
-  async getCrossSystemFrontierBaselineRun(id: string): Promise<CrossSystemFrontierBaselineRun | null> {
-    return this.getParsedPayload("SELECT payload FROM cross_system_frontier_baseline_runs WHERE id = ?", [id], CrossSystemFrontierBaselineRunSchema.parse);
+  async getModelProject(id: string): Promise<ModelProject | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_projects WHERE id = ?",
+      [id],
+      ModelProjectSchema.parse,
+    );
   }
 
-  async listCrossSystemFrontierBaselineRuns(profileId?: string): Promise<CrossSystemFrontierBaselineRun[]> {
+  async listModelProjects(profileId?: string): Promise<ModelProject[]> {
     return this.listParsedPayloads(
       profileId
-        ? "SELECT payload FROM cross_system_frontier_baseline_runs WHERE profile_id = ? ORDER BY updated_at DESC"
-        : "SELECT payload FROM cross_system_frontier_baseline_runs ORDER BY updated_at DESC",
+        ? "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM model_projects ORDER BY updated_at DESC",
       profileId ? [profileId] : [],
-      CrossSystemFrontierBaselineRunSchema.parse,
+      ModelProjectSchema.parse,
     );
+  }
+
+  async saveModelRunDraft(draftInput: ModelRunDraft): Promise<ModelRunDraft> {
+    const draft = ModelRunDraftSchema.parse(draftInput);
+    await this.upsertPayload(
+      `INSERT INTO model_run_drafts (id, profile_id, model_id, status, payload, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET profile_id = excluded.profile_id, model_id = excluded.model_id, status = excluded.status, payload = excluded.payload, updated_at = excluded.updated_at`,
+      [draft.id, draft.profileId, draft.modelId, draft.status, JSON.stringify(draft), draft.createdAt, draft.updatedAt],
+    );
+    return draft;
+  }
+
+  async getModelRunDraft(id: string): Promise<ModelRunDraft | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_run_drafts WHERE id = ?",
+      [id],
+      ModelRunDraftSchema.parse,
+    );
+  }
+
+  async listModelRunDrafts(profileId?: string): Promise<ModelRunDraft[]> {
+    return this.listParsedPayloads(
+      profileId
+        ? "SELECT payload FROM model_run_drafts WHERE profile_id = ? ORDER BY updated_at DESC"
+        : "SELECT payload FROM model_run_drafts ORDER BY updated_at DESC",
+      profileId ? [profileId] : [],
+      ModelRunDraftSchema.parse,
+    );
+  }
+
+  async deleteModelRunDraft(id: string): Promise<void> {
+    await this.ready;
+    const write = this.writeQueue.then(() =>
+      this.run("DELETE FROM model_run_drafts WHERE id = ?", [id]));
+    this.writeQueue = write.catch(() => undefined);
+    await write;
   }
 
   async saveTrainingPlan(planInput: TrainingPlan): Promise<TrainingPlan> {
@@ -801,44 +789,4 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     return this.getParsedPayload("SELECT payload FROM model_artifact_lineage WHERE id = ?", [id], ModelArtifactLineageSchema.parse);
   }
 
-}
-
-function trainingChatSearchResult(
-  query: string,
-  offset: number,
-  limit: number,
-  total: number,
-  rows: TrainingChatSearchResultRow[],
-  indexedChats: number,
-  totalChats: number,
-): TrainingChatSearchResult {
-  return {
-    schemaVersion: "openpond.trainingChatSearchResult.v1",
-    query,
-    offset,
-    limit,
-    total,
-    hasMore: offset + rows.length < total,
-    indexedChats,
-    totalChats,
-    indexing: indexedChats < totalChats,
-    entries: rows.map((row) => ({
-      sessionId: row.session_id,
-      title: row.title,
-      updatedAt: row.updated_at,
-      snippet: row.snippet?.trim() || null,
-    })),
-  };
-}
-
-function trainingChatFtsQuery(query: string): string | null {
-  const tokens = query.normalize("NFKC").match(/[\p{L}\p{N}_]+/gu)?.slice(0, 24) ?? [];
-  if (!tokens.length) return null;
-  return tokens.map((token) => `"${token.replaceAll('"', '""')}"*`).join(" AND ");
-}
-
-function appendTrainingChatSearchText(target: Map<string, string[]>, sessionId: string, text: string): void {
-  const values = target.get(sessionId) ?? [];
-  values.push(text);
-  target.set(sessionId, values);
 }

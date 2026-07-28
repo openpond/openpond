@@ -4,14 +4,16 @@ import type {
   ModelBinding,
   TrainingArtifact,
 } from "@openpond/contracts";
+import { managedAdapterProjectionReady } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import {
-  MANAGED_QWEN3_8B_BASE_REVISION,
   type ManagedAdapterRegistryClient,
+  type ManagedRegistryBaseProfile,
   type ManagedRegistryArtifact,
   type ManagedRegistryDeployment,
 } from "./managed-adapter-registry-client.js";
+import { resolveManagedRftBaseProfile } from "./managed-rft-base-profile.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
@@ -26,7 +28,7 @@ const ARTIFACT_STATES = new Set([
 ]);
 const DEPLOYMENT_STATES = new Set([
   "requested",
-  "provisioning",
+  "deploying",
   "ready",
   "degraded",
   "deleting",
@@ -52,7 +54,7 @@ export function createManagedAdapterSyncService(dependencies: {
       dependencies.store,
       dependencies.client,
       dependencies.resolveSelectedTeamId,
-      now,
+      now
     )
       .catch(() => undefined)
       .finally(() => {
@@ -66,7 +68,7 @@ export function createManagedAdapterSyncService(dependencies: {
     void reconcile();
     timer = setInterval(
       () => void reconcile(),
-      dependencies.intervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS,
+      dependencies.intervalMs ?? DEFAULT_RECONCILE_INTERVAL_MS
     );
     timer.unref?.();
   }
@@ -80,7 +82,7 @@ export function createManagedAdapterSyncService(dependencies: {
 
   async function deactivateBinding(
     binding: ModelBinding,
-    sourceUpdatedAt: string,
+    sourceUpdatedAt: string
   ): Promise<number | null> {
     const target = await managedBindingTarget(dependencies.store, binding);
     if (!target) return null;
@@ -100,7 +102,7 @@ export function createManagedAdapterSyncService(dependencies: {
 
   async function reactivateBinding(
     binding: ModelBinding,
-    sourceUpdatedAt: string,
+    sourceUpdatedAt: string
   ): Promise<number | null> {
     const target = await managedBindingTarget(dependencies.store, binding);
     if (!target) return null;
@@ -163,7 +165,7 @@ async function reconcileOnce(
   store: SqliteStore,
   client: ManagedAdapterRegistryClient,
   resolveSelectedTeamId: () => Promise<string | null>,
-  now: () => Date,
+  now: () => Date
 ): Promise<void> {
   const selectedTeamId = (await resolveSelectedTeamId())?.trim() || null;
   const registries = new Map<
@@ -173,16 +175,34 @@ async function reconcileOnce(
       deployments: ManagedRegistryDeployment[];
     }>
   >();
+  const capabilitySets = new Map<
+    string,
+    Promise<ManagedRegistryBaseProfile[]>
+  >();
   const registryForTeam = (teamId: string) => {
-    let registry = registries.get(teamId);
+    const registryKey = `user:${teamId}`;
+    let registry = registries.get(registryKey);
     if (!registry) {
       registry = client.listRegistry(teamId).then((value) => ({
         artifacts: [...value.artifacts],
         deployments: [...value.deployments],
       }));
-      registries.set(teamId, registry);
+      registries.set(registryKey, registry);
     }
     return registry;
+  };
+  const baseProfilesForTeam = (
+    teamId: string
+  ) => {
+    const key = `user:${teamId}`;
+    let capabilities = capabilitySets.get(key);
+    if (!capabilities) {
+      capabilities = client.capabilities(teamId).then(
+        (value) => value.baseProfiles
+      );
+      capabilitySets.set(key, capabilities);
+    }
+    return capabilities;
   };
   const lineages = await store.listModelArtifactLineage();
   for (const lineage of lineages) {
@@ -192,6 +212,7 @@ async function reconcileOnce(
       lineage,
       selectedTeamId,
       registryForTeam,
+      baseProfilesForTeam,
       now,
     });
   }
@@ -235,52 +256,78 @@ async function reconcileLineage(input: {
   client: ManagedAdapterRegistryClient;
   lineage: ModelArtifactLineage;
   selectedTeamId: string | null;
-  registryForTeam: (teamId: string) => Promise<{
+  registryForTeam: (
+    teamId: string
+  ) => Promise<{
     artifacts: ManagedRegistryArtifact[];
     deployments: ManagedRegistryDeployment[];
   }>;
+  baseProfilesForTeam: (
+    teamId: string
+  ) => Promise<ManagedRegistryBaseProfile[]>;
   now: () => Date;
 }): Promise<void> {
   const jobArtifacts = await input.store.listTrainingArtifacts(
-    input.lineage.jobId,
+    input.lineage.jobId
   );
-  if (!isFireworksLineage(jobArtifacts)) return;
+  const source = lineageSource(input.lineage, jobArtifacts);
+  if (!source) return;
+  const managedRftJobId =
+    source === "sandbox_managed_rft"
+      ? sandboxManagedJobId(jobArtifacts)
+      : null;
   const timestamp = input.now().toISOString();
-  const teamId =
-    input.lineage.managedServing?.teamId ?? input.selectedTeamId;
+  const teamId = input.lineage.managedServing?.canonicalArtifactId
+    ? input.lineage.managedServing.teamId
+    : sandboxManagedTeamId(jobArtifacts) ?? input.selectedTeamId;
   try {
     if (!teamId) {
       throw new Error(
-        "Select an OpenPond team before publishing managed adapters.",
+        "Select an OpenPond team before reconciling managed adapters."
       );
     }
-    assertQualifiedBase(jobArtifacts);
+    const baseProfileId = assertQualifiedBase(
+      source,
+      jobArtifacts,
+      await input.baseProfilesForTeam(teamId)
+    );
     const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
         (candidate) =>
-          candidate.id ===
-          input.lineage.managedServing?.canonicalArtifactId,
+          candidate.id === input.lineage.managedServing?.canonicalArtifactId
       ) ??
       registry.artifacts.find(
         (candidate) =>
-          candidate.source === "openpond_fireworks" &&
-          candidate.sourceRef === input.lineage.id,
+          candidate.source === source &&
+          (source === "sandbox_managed_rft"
+            ? Boolean(
+                managedRftJobId &&
+                  candidate.sourceRef.endsWith(
+                    `/jobs/${managedRftJobId}/candidate.json`
+                  )
+              )
+            : candidate.sourceRef === input.lineage.id)
       );
     if (!artifact) {
+      if (source === "sandbox_managed_rft") {
+        throw new Error(
+          "Sandbox has not finished canonical publication for this managed training job."
+        );
+      }
       const job = await input.store.getTrainingJob(input.lineage.jobId);
-      if (!job) throw new Error("Fireworks lineage lost its training job.");
+      if (!job) throw new Error(`${source} lineage lost its training job.`);
       const plan = await input.store.getTrainingPlan(job.planId);
-      if (!plan) throw new Error("Fireworks lineage lost its training plan.");
+      if (!plan) throw new Error(`${source} lineage lost its training plan.`);
       const sourceArtifact = await input.store.getTrainingArtifact(
-        input.lineage.artifactId,
+        input.lineage.artifactId
       );
       if (!sourceArtifact) {
-        throw new Error("Fireworks lineage lost its source adapter artifact.");
+        throw new Error(`${source} lineage lost its source adapter artifact.`);
       }
       const evaluation = input.lineage.frozenEvaluationArtifactId
         ? await input.store.getTrainingArtifact(
-            input.lineage.frozenEvaluationArtifactId,
+            input.lineage.frozenEvaluationArtifactId
           )
         : null;
       const files = portableUploadFiles(jobArtifacts);
@@ -288,6 +335,7 @@ async function reconcileLineage(input: {
         teamId,
         lineageId: input.lineage.id,
         label: `OpenPond Fireworks ${input.lineage.id.slice(-12)}`,
+        baseProfileId,
         trainingJobId: job.id,
         trainingPlanId: plan.id,
         sourceArtifactId: sourceArtifact.id,
@@ -308,10 +356,10 @@ async function reconcileLineage(input: {
       registry.deployments.find(
         (candidate) =>
           candidate.artifactId === artifact!.id &&
-          !["deleted", "failed"].includes(candidate.state),
+          !["deleted", "failed"].includes(candidate.state)
       ) ??
       registry.deployments.find(
-        (candidate) => candidate.artifactId === artifact!.id,
+        (candidate) => candidate.artifactId === artifact!.id
       ) ??
       null;
     const ready =
@@ -322,13 +370,22 @@ async function reconcileLineage(input: {
     await saveProjection(input.store, input.lineage, {
       schemaVersion: "openpond.managedAdapterServingProjection.v1",
       teamId,
-      source: "openpond_fireworks",
-      sourceRef: input.lineage.id,
+      source,
+      sourceRef: managedRftJobId ?? input.lineage.id,
       canonicalArtifactId: artifact.id,
       canonicalArtifactState: artifactState(artifact.state),
       canonicalDeploymentId: deployment?.id ?? null,
       canonicalDeploymentState: deploymentState(deployment?.state),
       state: ready ? "ready" : "imported",
+      customerBindingAllowed: artifact.customerBindingAllowed,
+      artifactContentHash:
+        artifact.contentHash ??
+        input.lineage.managedServing?.artifactContentHash ??
+        null,
+      baseProfileId:
+        artifact.baseProfileId ??
+        input.lineage.managedServing?.baseProfileId ??
+        null,
       publishedAt: input.lineage.managedServing?.publishedAt ?? timestamp,
       lastSyncedAt: timestamp,
       lastError: null,
@@ -337,8 +394,8 @@ async function reconcileLineage(input: {
     await saveProjection(input.store, input.lineage, {
       schemaVersion: "openpond.managedAdapterServingProjection.v1",
       teamId,
-      source: "openpond_fireworks",
-      sourceRef: input.lineage.id,
+      source,
+      sourceRef: managedRftJobId ?? input.lineage.id,
       canonicalArtifactId:
         input.lineage.managedServing?.canonicalArtifactId ?? null,
       canonicalArtifactState:
@@ -348,6 +405,11 @@ async function reconcileLineage(input: {
       canonicalDeploymentState:
         input.lineage.managedServing?.canonicalDeploymentState ?? null,
       state: "failed",
+      customerBindingAllowed:
+        input.lineage.managedServing?.customerBindingAllowed ?? false,
+      artifactContentHash:
+        input.lineage.managedServing?.artifactContentHash ?? null,
+      baseProfileId: input.lineage.managedServing?.baseProfileId ?? null,
       publishedAt: input.lineage.managedServing?.publishedAt ?? null,
       lastSyncedAt: timestamp,
       lastError: safeError(error),
@@ -357,19 +419,19 @@ async function reconcileLineage(input: {
 
 async function managedBindingTarget(
   store: SqliteStore,
-  binding: ModelBinding,
+  binding: ModelBinding
 ): Promise<{
   teamId: string;
   artifactId: string;
   deploymentId: string;
 } | null> {
   const lineage = await store.getModelArtifactLineage(
-    binding.modelArtifactLineageId,
+    binding.modelArtifactLineageId
   );
   const projection = lineage?.managedServing;
   if (
     !projection ||
-    projection.state !== "ready" ||
+    !managedAdapterProjectionReady(projection) ||
     !projection.teamId ||
     !projection.canonicalArtifactId ||
     !projection.canonicalDeploymentId
@@ -389,7 +451,7 @@ function portableUploadFiles(artifacts: TrainingArtifact[]) {
       ({ name }) =>
         name === "adapter_config.json" ||
         name === "adapter_model.safetensors.index.json" ||
-        PORTABLE_ADAPTER_PATTERN.test(name),
+        PORTABLE_ADAPTER_PATTERN.test(name)
     )
     .map(({ artifact, name }) => ({
       artifact,
@@ -400,33 +462,125 @@ function portableUploadFiles(artifacts: TrainingArtifact[]) {
     }));
 }
 
-function isFireworksLineage(artifacts: TrainingArtifact[]): boolean {
+type ManagedLineageSource =
+  | "openpond_fireworks"
+  | "sandbox_managed_rft";
+
+function lineageSource(
+  lineage: ModelArtifactLineage,
+  artifacts: TrainingArtifact[]
+): ManagedLineageSource | null {
+  if (
+    lineage.status === "imported" &&
+    artifacts.some((artifact) => artifact.metadata.provider === "sandbox")
+  ) return "sandbox_managed_rft";
   return artifacts.some(
-    (artifact) => artifact.metadata.provider === "fireworks",
-  );
+    (artifact) => artifact.metadata.provider === "fireworks"
+  )
+    ? "openpond_fireworks"
+    : null;
 }
 
-function assertQualifiedBase(artifacts: TrainingArtifact[]): void {
-  const portable = portableUploadFiles(artifacts);
-  if (portable.length < 2) {
-    throw new Error("Fireworks lineage has no complete portable adapter.");
+function assertQualifiedBase(
+  source: ManagedLineageSource,
+  artifacts: TrainingArtifact[],
+  baseProfiles: ManagedRegistryBaseProfile[]
+): string {
+  const qualifiedArtifacts =
+    source === "sandbox_managed_rft"
+      ? artifacts.filter(
+          (artifact) =>
+            artifact.metadata.provider === "sandbox" &&
+            artifact.metadata.managedRftCandidate === true
+        )
+      : portableUploadFiles(artifacts).map(({ artifact }) => artifact);
+  if (
+    qualifiedArtifacts.length <
+      (source === "sandbox_managed_rft" ? 1 : 2)
+  ) {
+    throw new Error(`${source} lineage has no complete portable adapter.`);
   }
-  for (const { artifact } of portable) {
+  const firstArtifact = qualifiedArtifacts[0]!;
+  const openPondProfile =
+    source === "sandbox_managed_rft"
+      ? resolveManagedRftBaseProfile({
+          schemaVersion: "openpond.baseModelPreference.v1",
+          modelId: firstArtifact.baseModelId ?? "",
+          revision: firstArtifact.baseModelRevision,
+          tokenizerRevision: firstArtifact.tokenizerRevision,
+          chatTemplateHash: firstArtifact.chatTemplateHash,
+          modelAssetId: null,
+          source: "managed",
+        })
+      : null;
+  if (source === "sandbox_managed_rft" && !openPondProfile) {
+    throw new Error(
+      "sandbox_managed_rft adapter does not match the qualified Qwen3 managed-training identity."
+    );
+  }
+  const expected = openPondProfile
+    ? {
+        model: openPondProfile.modelId,
+        revision: openPondProfile.revision,
+        tokenizerRevision: openPondProfile.tokenizerRevision,
+        chatTemplateHash: openPondProfile.chatTemplateHash,
+      }
+    : {
+        model: firstArtifact.baseModelId ?? "",
+        revision: firstArtifact.baseModelRevision,
+        tokenizerRevision: firstArtifact.tokenizerRevision,
+        chatTemplateHash: firstArtifact.chatTemplateHash,
+      };
+  const matchedProfile = baseProfiles.find(
+    (profile) =>
+      profile.status === "qualified" &&
+      profile.repository === expected.model &&
+      profile.revision === expected.revision &&
+      profile.tokenizerRevision === expected.tokenizerRevision &&
+      profile.chatTemplateHash === expected.chatTemplateHash
+  );
+  if (!matchedProfile) {
+    throw new Error(
+      `${source} adapter does not match a Sandbox-qualified base profile.`
+    );
+  }
+  for (const artifact of qualifiedArtifacts) {
     if (
-      artifact.baseModelId !== "Qwen/Qwen3-8B" ||
-      artifact.baseModelRevision !== MANAGED_QWEN3_8B_BASE_REVISION
+      artifact.baseModelId !== expected.model ||
+      artifact.baseModelRevision !== expected.revision ||
+      artifact.tokenizerRevision !== expected.tokenizerRevision ||
+      artifact.chatTemplateHash !== expected.chatTemplateHash
     ) {
       throw new Error(
-        "Fireworks adapter does not match the pinned Qwen/Qwen3-8B serving revision.",
+        `${source} adapter does not match the pinned ${expected.model} serving identity.`
       );
     }
   }
+  return matchedProfile.id;
+}
+
+function sandboxManagedJobId(
+  artifacts: TrainingArtifact[]
+): string | null {
+  const value = artifacts.find(
+    (artifact) => artifact.metadata.managedRftCandidate === true
+  )?.metadata.managedRftJobId;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function sandboxManagedTeamId(
+  artifacts: TrainingArtifact[]
+): string | null {
+  const value = artifacts.find(
+    (artifact) => artifact.metadata.managedRftCandidate === true
+  )?.metadata.managedRftTeamId;
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 async function saveProjection(
   store: SqliteStore,
   lineage: ModelArtifactLineage,
-  projection: ManagedAdapterServingProjection,
+  projection: ManagedAdapterServingProjection
 ): Promise<void> {
   await store.saveModelArtifactLineage({
     ...lineage,
@@ -435,7 +589,7 @@ async function saveProjection(
 }
 
 function artifactState(
-  value: string | undefined,
+  value: string | undefined
 ): ManagedAdapterServingProjection["canonicalArtifactState"] {
   return value && ARTIFACT_STATES.has(value)
     ? (value as ManagedAdapterServingProjection["canonicalArtifactState"])
@@ -443,7 +597,7 @@ function artifactState(
 }
 
 function deploymentState(
-  value: string | undefined,
+  value: string | undefined
 ): ManagedAdapterServingProjection["canonicalDeploymentState"] {
   return value && DEPLOYMENT_STATES.has(value)
     ? (value as ManagedAdapterServingProjection["canonicalDeploymentState"])

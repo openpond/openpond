@@ -7,10 +7,6 @@ import {
   callHostedGoalLlm,
   callLocalGoalLlm,
 } from "./llm";
-import {
-  runLocalCreatePipeline,
-  shouldRunLocalCreatePipeline,
-} from "./local-create-pipeline";
 import { assertGoalCanStartIteration } from "./policy";
 import { getGoalProfileDescriptor } from "./profiles";
 import { createGoalRunResult } from "./result";
@@ -80,17 +76,6 @@ export async function runGoalIteration(params: {
   const profile = getGoalProfileDescriptor(params.config.goal);
   const workspace = params.config.workspace ?? process.cwd();
   const storageRoot = params.config.storageRoot ?? workspace;
-
-  if (shouldRunLocalCreatePipeline(params.config.goal, params.config.mode)) {
-    const result = await runLocalCreatePipeline({
-      goal: params.config.goal,
-      iterationId,
-      workspace,
-      localState: params.localState,
-      startedEvents: events,
-    });
-    return finishGoalRunResult(params, result);
-  }
 
   let llmResponse: GoalLlmResponse | null = null;
   let toolResults: GoalToolExecutionResult[] = [];

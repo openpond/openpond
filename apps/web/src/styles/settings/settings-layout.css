@@ -120,6 +120,10 @@
   scrollbar-width: none;
 }
 
+.settings-content-wide {
+  padding-inline: clamp(24px, 5vw, 72px);
+}
+
 .settings-content::-webkit-scrollbar {
   display: none;
 }
@@ -128,6 +132,15 @@
   display: grid;
   gap: 28px;
   max-width: 760px;
+}
+
+.profile-settings {
+  container-name: profile-view;
+  container-type: inline-size;
+  width: min(1120px, 100%);
+  max-width: none;
+  min-width: 0;
+  margin-inline: auto;
 }
 
 .account-settings h1 {

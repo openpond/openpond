@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { CreateImproveRunSchema } from "./create-pipeline.js";
 
 import {
   SandboxTemplateManifestSchema,
@@ -184,26 +183,6 @@ export const LocalProjectSandboxProjectLinkSchema = z.object({
 
 export type LocalProjectSandboxProjectLink = z.infer<typeof LocalProjectSandboxProjectLinkSchema>;
 
-export const ProjectAgentSdkDependencyTypeSchema = z.enum([
-  "dependencies",
-  "devDependencies",
-  "peerDependencies",
-  "optionalDependencies",
-]);
-
-export type ProjectAgentSdkDependencyType = z.infer<typeof ProjectAgentSdkDependencyTypeSchema>;
-
-export const ProjectAgentSdkSchema = z.object({
-  detected: z.boolean(),
-  packageName: z.string().optional().default("openpond-agent-sdk"),
-  rootPath: z.string().nullable().optional().default(null),
-  manifestPath: z.string().nullable().optional().default(null),
-  version: z.string().nullable().optional().default(null),
-  dependencyType: ProjectAgentSdkDependencyTypeSchema.nullable().optional().default(null),
-});
-
-export type ProjectAgentSdk = z.infer<typeof ProjectAgentSdkSchema>;
-
 export const CloudProjectSourceTypeSchema = z.enum(["github_repo", "internal_repo", "template", "manual"]);
 
 export type CloudProjectSourceType = z.infer<typeof CloudProjectSourceTypeSchema>;
@@ -220,7 +199,6 @@ export const CloudProjectSchema = z.object({
   manifestPath: z.string().nullable().optional().default(null),
   manifestHash: z.string().nullable().optional().default(null),
   syncedAt: z.string().nullable().optional().default(null),
-  agentSdk: ProjectAgentSdkSchema.nullable().optional(),
   organizationName: z.string().nullable().optional().default(null),
   organizationSlug: z.string().nullable().optional().default(null),
   createdAt: z.string().nullable().optional().default(null),
@@ -228,96 +206,6 @@ export const CloudProjectSchema = z.object({
 });
 
 export type CloudProject = z.infer<typeof CloudProjectSchema>;
-
-export const CloudWorkItemStatusSchema = z.enum([
-  "backlog",
-  "queued",
-  "running",
-  "needs_review",
-  "done",
-  "failed",
-  "cancelled",
-]);
-
-export type CloudWorkItemStatus = z.infer<typeof CloudWorkItemStatusSchema>;
-
-export const CloudWorkItemSchema = z.object({
-  id: z.string(),
-  teamId: z.string(),
-  projectId: z.string(),
-  conversationId: z.string().nullable().optional().default(null),
-  title: z.string(),
-  status: CloudWorkItemStatusSchema,
-  sourceRef: z.string().nullable().optional().default(null),
-  baseSha: z.string().nullable().optional().default(null),
-  latestRuntimeId: z.string().nullable().optional().default(null),
-  latestSandboxId: z.string().nullable().optional().default(null),
-  latestTaskRunId: z.string().nullable().optional().default(null),
-  assignedAgentId: z.string().nullable().optional().default(null),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-  archivedAt: z.string().nullable().optional().default(null),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
-  createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
-});
-
-export type CloudWorkItem = z.infer<typeof CloudWorkItemSchema>;
-
-export const CloudWorkItemMessageSchema = z.object({
-  id: z.string(),
-  workItemId: z.string(),
-  teamId: z.string().optional(),
-  projectId: z.string().optional(),
-  conversationId: z.string().optional(),
-  role: z.enum(["user", "assistant", "system", "task", "runtime"]),
-  body: z.string(),
-  createdByUserId: z.string().nullable().optional().default(null),
-  createdAt: z.string(),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
-});
-
-export type CloudWorkItemMessage = z.infer<typeof CloudWorkItemMessageSchema>;
-
-export const CloudWorkItemActivitySchema = z.object({
-  id: z.string(),
-  workItemId: z.string(),
-  teamId: z.string().optional(),
-  projectId: z.string().optional(),
-  kind: z.string(),
-  summary: z.string(),
-  createdAt: z.string(),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
-});
-
-export type CloudWorkItemActivity = z.infer<typeof CloudWorkItemActivitySchema>;
-
-export const CloudWorkItemRuntimeSessionSchema = z.object({
-  id: z.string(),
-  workItemId: z.string(),
-  teamId: z.string().optional(),
-  projectId: z.string().optional(),
-  runtimeId: z.string(),
-  runtimeProfileId: z.string(),
-  sandboxId: z.string().nullable().optional().default(null),
-  kind: z.string().optional(),
-  startedAt: z.string(),
-  endedAt: z.string().nullable().optional().default(null),
-  metadata: z.record(z.string(), z.unknown()).optional().default({}),
-});
-
-export type CloudWorkItemRuntimeSession = z.infer<
-  typeof CloudWorkItemRuntimeSessionSchema
->;
-
-export const CloudWorkItemDetailSchema = z.object({
-  workItem: CloudWorkItemSchema,
-  messages: z.array(CloudWorkItemMessageSchema).default([]),
-  activity: z.array(CloudWorkItemActivitySchema).default([]),
-  runtimeSessions: z.array(CloudWorkItemRuntimeSessionSchema).default([]),
-  createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
-});
-
-export type CloudWorkItemDetail = z.infer<typeof CloudWorkItemDetailSchema>;
 
 export const LocalProjectSchema = z.object({
   id: z.string(),
@@ -329,7 +217,6 @@ export const LocalProjectSchema = z.object({
   systemKind: z.enum(["openpond.insights"]).nullable().optional(),
   hiddenFromDefaultSidebar: z.boolean().optional(),
   sandboxTemplate: LocalProjectSandboxTemplateSchema.nullable().optional().default(null),
-  agentSdk: ProjectAgentSdkSchema.nullable().optional(),
   linkedOpenPondApp: LocalProjectOpenPondLinkSchema.nullable().optional().default(null),
   linkedSandboxProject: LocalProjectSandboxProjectLinkSchema.nullable().optional().default(null),
   preferredSandboxAgentId: z.string().nullable().optional().default(null),

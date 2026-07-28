@@ -38,6 +38,8 @@ describe("desktop runtime staging", () => {
         writeFixture(root, "apps/server/dist/index.js", 'console.log("server");\n'),
         writeFixture(root, "apps/web/dist/index.html", "<main>OpenPond</main>\n"),
         writeFixture(root, "apps/cli/skills/openpond-taskset-authoring/SKILL.md", "# Tasksets\n"),
+        writeFixture(root, "apps/cli/skills/openpond-skill-authoring/SKILL.md", "# Skill authoring\n"),
+        writeFixture(root, "apps/cli/skills/openpond-agent-authoring/SKILL.md", "# Agent authoring\n"),
         writeFixture(
           root,
           "apps/server/node_modules/node-pty/package.json",
@@ -53,6 +55,9 @@ describe("desktop runtime staging", () => {
 
       expect(stagedPaths).toContain("server/node_modules/node-pty/package.json");
       expect(stagedPaths).toContain("server/node_modules/node-pty/prebuilds/linux-x64/pty.node");
+      expect(stagedPaths).toContain("server/skills/openpond-skill-authoring/SKILL.md");
+      expect(stagedPaths).toContain("server/skills/openpond-agent-authoring/SKILL.md");
+      expect(stagedPaths.some((entry) => entry.endsWith("/agents/openai.yaml"))).toBe(false);
       expect(stagedPaths.some((entry) => entry.includes("/bindings/"))).toBe(false);
       expect(stagedPaths.some((entry) => entry.includes("file-uri-to-path"))).toBe(false);
       await expect(readFile(path.join(root, "node_modules", "node-pty", "package.json"), "utf8"))

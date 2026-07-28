@@ -2,7 +2,6 @@ import type { SidebarProjectKind } from "../../lib/app-models";
 
 type ProjectKindIconProps = {
   kind: SidebarProjectKind;
-  agentSdk?: boolean;
   linkedCloud?: boolean;
   open?: boolean;
   className?: string;
@@ -11,7 +10,6 @@ type ProjectKindIconProps = {
 
 export function ProjectKindIcon({
   kind,
-  agentSdk = false,
   linkedCloud = false,
   open = false,
   className,
@@ -23,7 +21,6 @@ export function ProjectKindIcon({
       className={[
         "project-kind-icon",
         kind,
-        agentSdk ? "agent-sdk" : "",
         linkedCloud ? "linked-cloud" : "",
         className ?? "",
       ]
@@ -45,7 +42,6 @@ export function ProjectKindIcon({
       >
         {kind === "cloud" ? <CloudShape /> : open ? <FolderOpenShape /> : <FolderShape />}
         {linkedCloud && kind === "local" ? <LinkedCloudBadge /> : null}
-        {agentSdk ? <AgentSdkBotGlyph kind={kind} /> : null}
       </svg>
     </span>
   );
@@ -83,32 +79,6 @@ function LinkedCloudBadge() {
     <g className="project-kind-icon-cloud-badge">
       <circle cx="18" cy="17" r="5" />
       <path d="M20.4 18.6h-4.2a2.2 2.2 0 1 1 2.08-2.9h.88a1.45 1.45 0 1 1 1.24 2.9Z" />
-    </g>
-  );
-}
-
-function AgentSdkBotGlyph({ kind }: { kind: SidebarProjectKind }) {
-  if (kind === "cloud") {
-    return (
-      <g className="project-kind-icon-agent">
-        <path d="M12 10.4V8.8h-1.6" />
-        <rect width="8.8" height="6.4" x="7.6" y="10.4" rx="1.4" />
-        <path d="M6.6 13.6h1" />
-        <path d="M16.4 13.6h1" />
-        <path d="M10.4 13v1.2" />
-        <path d="M13.6 13v1.2" />
-      </g>
-    );
-  }
-
-  return (
-    <g className="project-kind-icon-agent">
-      <path d="M12 10.2V8.4H10" />
-      <rect width="9.6" height="6.8" x="7.2" y="10.2" rx="1.5" />
-      <path d="M6.2 13.8h1" />
-      <path d="M16.8 13.8h1" />
-      <path d="M10.2 13.1v1.2" />
-      <path d="M13.8 13.1v1.2" />
     </g>
   );
 }

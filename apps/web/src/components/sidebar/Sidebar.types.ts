@@ -2,7 +2,6 @@ import type { Dispatch, DragEvent, PointerEvent, SetStateAction } from "react";
 import type {
   AccountState,
   BootstrapPayload,
-  CloudWorkItem,
   OpenPondApp,
   Session,
   SidebarFileBookmark,
@@ -31,7 +30,6 @@ export type SidebarProps = {
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
-  selectedCloudWorkItemId: string | null;
   selectedTeamThreadId: string | null;
   teamChatEnabled: boolean;
   teamChatOrganization: OpenPondOrganization | null;
@@ -67,7 +65,6 @@ export type SidebarProps = {
   insightsSystemProjectHidden: boolean | null;
   cloudProjectRows: SidebarProjectItem[];
   workspaceStates: Record<string, WorkspaceState>;
-  cloudWorkItemsByProjectId: Record<string, CloudWorkItem[]>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
   childSessionRowsByParentId?: Record<string, Session[]>;
   sidebarProjectIdBySessionId: Record<string, string>;
@@ -101,9 +98,7 @@ export type SidebarProps = {
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
   dockSessionRight: (session: Session) => void;
-  openCloudHome: () => void;
   createCloudEnvironment: () => void;
-  selectCloudWorkItem: (workItem: CloudWorkItem) => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;
   discoverCommunities: () => void;

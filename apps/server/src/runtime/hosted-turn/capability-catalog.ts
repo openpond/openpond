@@ -1,4 +1,5 @@
 import type {
+  HarnessActionBinding,
   OpenPondActionCatalogEntry,
   RuntimeEvent,
   SubagentRoleSettings,
@@ -7,6 +8,7 @@ import {
   createOpenPondCapabilityModelToolDefinitions,
 } from "../../openpond/capability-tool-registry.js";
 import { createBrowserModelToolDefinitions } from "../../openpond/browser-tool-registry.js";
+import { createAuthoringModelToolDefinitions } from "../../openpond/authoring-tool-registry.js";
 import { createLocalImageModelToolDefinition } from "../../openpond/local-image-tool-registry.js";
 import { createConnectedAppProviderModelToolDefinitions } from "../../openpond/connected-app-tool-registry.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
@@ -37,6 +39,7 @@ export function createCapabilityCatalogRuntime(deps: {
   executeWebSearch: TurnRunnerDependencies["executeWebSearch"];
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
   executeCrossSystemTool: TurnRunnerDependencies["executeCrossSystemTool"];
+  loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
 }) {
   return function createNativeModelToolDefinitions(
     openPondActionCatalog: OpenPondActionCatalogEntry[],
@@ -47,18 +50,30 @@ export function createCapabilityCatalogRuntime(deps: {
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
+      trainingHarness?: {
+        taskId: string;
+        actionBindings: HarnessActionBinding[];
+      };
     } = {},
   ): ModelToolDefinition[] {
     const definitions: ModelToolDefinition[] = [];
+    if (options.trainingHarness) {
+      return createOpenPondActionModelToolDefinitions({
+        actionCatalog: openPondActionCatalog,
+        executeWorkspaceTool: deps.executeWorkspaceTool,
+        executeProfileAction: deps.executeProfileAction,
+        executeCrossSystemTool: deps.executeCrossSystemTool,
+        trainingHarness: options.trainingHarness,
+      });
+    }
     if (!options.disableWorkflowDelegationTools) {
       const handlers: CapabilityHandlers = {
-        startCreateImprove: deps.handlers.startCreateImprove,
         startGoalControl: deps.handlers.startGoalControl,
         ...(deps.handlers.manageSidebarFile
           ? { manageSidebarFile: deps.handlers.manageSidebarFile }
           : {}),
-        ...(deps.handlers.startProfileSkillGoal
-          ? { startProfileSkillGoal: deps.handlers.startProfileSkillGoal }
+        ...(deps.handlers.runDatasetBuilder
+          ? { runDatasetBuilder: deps.handlers.runDatasetBuilder }
           : {}),
         ...(deps.subagentToolsAvailable() && options.subagentToolsEnabled !== false
           ? {
@@ -74,6 +89,9 @@ export function createCapabilityCatalogRuntime(deps: {
       };
       definitions.push(...createOpenPondCapabilityModelToolDefinitions(handlers));
     }
+    definitions.push(...createAuthoringModelToolDefinitions({
+      loadProfileState: deps.loadOpenPondProfileStateForRef,
+    }));
     definitions.push(...createConnectedAppSkillModelToolDefinitions({
       connectedApps: connectedApps.map((app) => ({ provider: app.provider, label: app.label })),
     }));

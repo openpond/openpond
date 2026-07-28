@@ -45,6 +45,7 @@ describe("Agents lazy view styling", () => {
     expect(profileView).toContain('import "../../styles/settings/settings-forms.css"');
     expect(profileView).toContain('import "../../styles/settings/settings-lists.css"');
     expect(mainPaneStyles).toContain("container-name: profile-view");
-    expect(settingsListStyles).toContain("@container profile-view (max-width: 620px)");
+    expect(mainPaneStyles).toContain("width: min(1120px, calc(100% - 72px))");
+    expect(settingsListStyles).toContain("@container profile-view (max-width: 840px)");
   });
 });

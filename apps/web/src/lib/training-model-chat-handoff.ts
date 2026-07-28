@@ -17,6 +17,7 @@ export type TrainingModelChatHandoff = {
   model: ChatModelRef;
   tasksetId: string;
   tasksetName: string;
+  taskRuntime: "cross_system" | "harness" | null;
   sourceProjectId: string | null;
   tasks: TrainingModelChatTask[];
   selectedTaskIndex: number;
@@ -30,13 +31,19 @@ export function buildTrainingModelChatHandoff({
   modelId: string;
   taskset: Taskset;
 }): TrainingModelChatHandoff {
-  const tasks = taskset.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH
-    ? generatedChatTasks(taskset)
-    : [];
+  const taskRuntime =
+    taskset.metadata.toolContractHash === CROSS_SYSTEM_TOOL_CONTRACT_HASH
+      ? "cross_system"
+      : taskset.environment.kind === "stateful_harness"
+        && Boolean(taskset.environment.actionBindings?.length)
+        ? "harness"
+        : null;
+  const tasks = taskRuntime ? generatedChatTasks(taskset, taskRuntime) : [];
   return {
     model: { providerId: "local-adapter", modelId },
     tasksetId: taskset.id,
     tasksetName: taskset.name,
+    taskRuntime,
     sourceProjectId: uniqueSourceProjectId(taskset),
     tasks,
     selectedTaskIndex: 0,
@@ -74,7 +81,9 @@ export function trainingModelChatTurnMetadata(
   const task = selectedTrainingModelChatTask(handoff);
   if (!task || prompt.trim() !== task.prompt.trim()) return null;
   return {
-    crossSystemTaskId: task.generatedTaskId,
+    ...(handoff.taskRuntime === "cross_system"
+      ? { crossSystemTaskId: task.generatedTaskId }
+      : { trainingHarnessTaskId: task.generatedTaskId }),
     trainingTasksetId: handoff.tasksetId,
     source: "training_model_chat_handoff",
   };
@@ -103,12 +112,18 @@ export async function refreshModelCatalogBeforeChat<Payload>({
   applyBootstrap(await loadBootstrap(connection));
 }
 
-function generatedChatTasks(taskset: Taskset): TrainingModelChatTask[] {
+function generatedChatTasks(
+  taskset: Taskset,
+  runtime: NonNullable<TrainingModelChatHandoff["taskRuntime"]>,
+): TrainingModelChatTask[] {
   const seen = new Set<string>();
   return taskset.tasks.flatMap((task) => {
-    const generatedTaskId = typeof task.metadata.taskId === "string"
-      ? task.metadata.taskId.trim()
-      : "";
+    const rawTaskId =
+      runtime === "cross_system"
+        ? task.metadata.taskId
+        : task.metadata.caseId;
+    const generatedTaskId =
+      typeof rawTaskId === "string" ? rawTaskId.trim() : "";
     const prompt = typeof task.input.prompt === "string" ? task.input.prompt.trim() : "";
     if (!generatedTaskId || !prompt || seen.has(generatedTaskId)) return [];
     seen.add(generatedTaskId);

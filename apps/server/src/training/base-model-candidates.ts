@@ -9,9 +9,13 @@ import {
   type ModelAsset,
   type TrainingDestinationCapabilities,
 } from "@openpond/contracts";
+import { managedRftBaseProfileForModel } from "./managed-rft-base-profile.js";
 
-const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture", "local_cuda", "local_mlx"]);
+const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture"]);
 const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
+const TINY_CPU_CHAT_TEMPLATE_HASH = createHash("sha256")
+  .update("openpond-tiny-cpu-chat-template-v1")
+  .digest("hex");
 
 export function projectBaseModelCandidates(input: {
   destinations: TrainingDestinationCapabilities[];
@@ -27,13 +31,14 @@ export function projectBaseModelCandidates(input: {
   for (const modelId of managedModelIds) {
     const options = executionOptions(input.destinations, modelId, false);
     if (!options.length) continue;
+    const managedProfile = managedRftBaseProfileForModel(modelId);
     candidates.push(candidate({
       preference: {
         schemaVersion: "openpond.baseModelPreference.v1",
         modelId,
-        revision: null,
-        tokenizerRevision: null,
-        chatTemplateHash: null,
+        revision: managedProfile?.revision ?? null,
+        tokenizerRevision: managedProfile?.tokenizerRevision ?? null,
+        chatTemplateHash: managedProfile?.chatTemplateHash ?? null,
         modelAssetId: null,
         source: "managed",
       },
@@ -52,7 +57,7 @@ export function projectBaseModelCandidates(input: {
         modelId: TINY_CPU_MODEL,
         revision: "architecture-v2-seed-17-context-512",
         tokenizerRevision: "wordlevel-v1",
-        chatTemplateHash: "fixture00000000",
+        chatTemplateHash: TINY_CPU_CHAT_TEMPLATE_HASH,
         modelAssetId: null,
         source: "builtin",
       },
@@ -190,11 +195,8 @@ function localSourceLabel(model: ModelAsset): string {
 function destinationLabel(destinationId: BaseModelExecutionOption["destinationId"]): string {
   const labels: Partial<Record<BaseModelExecutionOption["destinationId"], string>> = {
     fireworks: "Fireworks",
-    prime_hosted: "Prime hosted",
-    openpond_managed: "OpenPond managed",
+    openpond_managed: "OpenPond Managed",
     local_cpu_fixture: "Local CPU",
-    local_cuda: "Local NVIDIA GPU",
-    local_mlx: "Apple Silicon",
   };
   return labels[destinationId] ?? destinationId.replaceAll("_", " ");
 }

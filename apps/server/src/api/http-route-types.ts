@@ -112,6 +112,12 @@ export type HttpRouteDeps = {
   updateOpenPondAccountConfigPayload: (payload: unknown) => Promise<unknown>;
   profileCurrentPayload: () => Promise<unknown>;
   profileCatalogPayload: () => Promise<unknown>;
+  profileSelectPayload: (payload: unknown) => Promise<unknown>;
+  profileRemovePayload: (payload: unknown) => Promise<unknown>;
+  profilePublicationPreviewPayload: (payload: unknown) => Promise<unknown>;
+  profilePublicationPublishPayload: (payload: unknown) => Promise<unknown>;
+  profileInstallPayload: (payload: unknown) => Promise<unknown>;
+  profileUpdatePayload: (payload: unknown) => Promise<unknown>;
   profileInitPayload: (payload: unknown) => Promise<unknown>;
   profileLoadPayload: (payload: unknown) => Promise<unknown>;
   profileCheckPayload: (payload: unknown) => Promise<unknown>;
@@ -209,32 +215,6 @@ export type HttpRouteDeps = {
   ) => Promise<unknown>;
   uploadLocalProjectCloudSourcePayload: (
     projectId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  listCloudWorkItemsPayload: (payload: unknown) => Promise<unknown>;
-  getCloudWorkItemPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  createCloudWorkItemPayload: (payload: unknown) => Promise<unknown>;
-  sendCloudWorkItemMessagePayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  handleCloudWorkItemBackgroundPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  cancelCloudWorkItemTaskPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  openCloudWorkItemPayload: (
-    workItemId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  applyCloudWorkItemLocalPatchPayload: (
-    workItemId: string,
     payload: unknown
   ) => Promise<unknown>;
   organizationPayload: (action: OrganizationRequestAction) => Promise<unknown>;

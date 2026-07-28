@@ -3,7 +3,6 @@ import type {
   BaseModelPreference,
   ChatModelRef,
   CodexReasoningEffort,
-  CrossSystemFrontierBaselineRun,
   CreateImproveRun,
   TaskMinerRun,
   TaskCreationRequest,
@@ -11,12 +10,15 @@ import type {
   TaskMinerConfig,
   TrainingBundleManifest,
   TrainingPreparedStart,
+  TrainingPreparationPlan,
   TrainingPlan,
   TrainingSourceRef,
   TrainingSourceEstimate,
   TrainingChatSearchResult,
   TrainingStateResponse,
   LocalModelChatConfiguration,
+  ModelProject,
+  ModelRunDraft,
   FireworksModelServingSession,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
@@ -24,9 +26,7 @@ import type {
   DatasetImportMapping,
   DatasetRowPage,
   Taskset,
-  TasksetBaselineRun,
 } from "@openpond/contracts";
-import { DEFAULT_CROSS_SYSTEM_WORLD_SPECS } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
@@ -81,9 +81,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
 
   const hasActiveJob = payload?.jobs.some((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) ?? false;
   const hasActiveMinerRun = payload?.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)) ?? false;
-  const hasActiveFrontierBaselineRun = payload?.frontierBaselineRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)) ?? false;
-  const hasActiveBaselineRun = payload?.baselineRuns.some((run) =>
-    ["queued", "preparing", "running", "cancelling"].includes(run.status)) ?? false;
   const hasActiveDatasetImport = payload?.datasetImports.some((job) =>
     ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)) ?? false;
   const hasActiveServingSession = payload?.servingSessions.some((session) =>
@@ -92,7 +89,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     if (!connection) return undefined;
     let active = true;
     let timer: number | null = null;
-    const delay = hasActiveJob || hasActiveMinerRun || hasActiveFrontierBaselineRun || hasActiveBaselineRun || hasActiveDatasetImport || hasActiveServingSession ? 500 : 30_000;
+    const delay = hasActiveJob || hasActiveMinerRun || hasActiveDatasetImport || hasActiveServingSession ? 500 : 30_000;
     const poll = async () => {
       await refresh();
       if (active) timer = window.setTimeout(() => void poll(), delay);
@@ -102,9 +99,30 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       active = false;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [connection, hasActiveBaselineRun, hasActiveDatasetImport, hasActiveFrontierBaselineRun, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
+  }, [connection, hasActiveDatasetImport, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
 
   const actions = useMemo(() => ({
+    saveModelProject: (project: ModelProject) =>
+      mutate<ModelProject>(
+        "save-model-project",
+        "/models",
+        project,
+        "PUT",
+      ),
+    saveModelRunDraft: (draft: ModelRunDraft) =>
+      mutate<ModelRunDraft>(
+        "save-model-run-draft",
+        "/model-run-drafts",
+        draft,
+        "PUT",
+      ),
+    deleteModelRunDraft: (draftId: string) =>
+      mutate<{ deleted: boolean; draftId?: string }>(
+        "delete-model-run-draft",
+        `/model-run-drafts/${encodeURIComponent(draftId)}`,
+        {},
+        "DELETE",
+      ),
     inspectHuggingFaceDataset: (url: string) =>
       mutate<DatasetImportJob>(
         "inspect-huggingface-dataset",
@@ -162,18 +180,9 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     searchChats: (query: string, candidates: Array<{ sessionId: string; title: string; updatedAt: string }>, offset = 0, limit = 20) => connection
       ? api.trainingRequest<TrainingChatSearchResult>(connection, "/sources/search", { query, candidates, offset, limit })
       : Promise.resolve({ schemaVersion: "openpond.trainingChatSearchResult.v1" as const, query, offset, limit, total: 0, hasMore: false, indexedChats: 0, totalChats: 0, indexing: false, entries: [] }),
-    runCrossSystemFrontierBaseline: (localProjectId: string, model: ChatModelRef, reasoningEffort: CodexReasoningEffort | null, createImproveRunId: string | null = null) => mutate<CrossSystemFrontierBaselineRun>("cross-system-frontier-baseline", "/cross-system-operations/frontier-baseline", {
-      profileId,
-      createImproveRunId,
-      localProjectId,
-      model,
-      reasoningEffort,
-      worldSpecs: DEFAULT_CROSS_SYSTEM_WORLD_SPECS,
-    }),
-    cancelCrossSystemFrontierBaseline: (runId: string) => mutate<CrossSystemFrontierBaselineRun>("cancel-cross-system-frontier-baseline", `/cross-system-operations/frontier-baseline/runs/${encodeURIComponent(runId)}/cancel`, {}),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
-    startCreation: (sourceIds: string[], options: { objective?: string; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
+    startCreation: (sourceIds: string[], options: { objective?: string; buildIntent?: TaskCreationRequest["buildIntent"]; buildSpecification?: TaskCreationRequest["buildSpecification"]; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", buildIntent: options.buildIntent ?? "demonstrations", buildSpecification: options.buildSpecification ?? null, objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
     createModelFromTaskset: (tasksetId: string, preferredBaseModel: BaseModelPreference) =>
       mutate<CreateImproveRun>("create-model", "/models/from-taskset", {
         profileId,
@@ -208,39 +217,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     configureMiner: (config: TaskMinerConfig) => mutate("configure-miner", "/miner/config", { profileId, config }, "PUT"),
     patchCandidate: (id: string, patch: Record<string, unknown>) => mutate("candidate", `/candidates/${encodeURIComponent(id)}`, patch, "PATCH"),
     createCandidate: (id: string, mode: "defaults" | "customize", analysisModel?: ChatModelRef | null, analysisReasoningEffort?: CodexReasoningEffort | null) => mutate<TaskCreationSnapshot>("create-candidate", `/candidates/${encodeURIComponent(id)}/create`, { mode, analysisModel: analysisModel ?? null, analysisReasoningEffort: analysisReasoningEffort ?? null }),
-    baseline: (
-      tasksetId: string,
-      model: ChatModelRef,
-      options: {
-        targetModelId?: string | null;
-        taskLimit?: number;
-        attemptsPerTask?: number;
-        selectionSeed?: number;
-        split?: "train" | "validation" | "frozen_eval";
-        selectionStrategy?: "stable_hash_top_n" | "rft_easy_curriculum_v1";
-        sampling?: {
-          maxOutputTokens: number;
-          temperature: number;
-          topP: number;
-        };
-      } = {},
-    ) => mutate<TasksetBaselineRun>("baseline", "/baseline", {
-      tasksetId,
-      targetModelId: options.targetModelId ?? null,
-      models: [model],
-      seeds: [17],
-      attemptsPerTask: options.attemptsPerTask ?? 4,
-      taskLimit: options.taskLimit ?? 8,
-      selectionSeed: options.selectionSeed ?? 17,
-      split: options.split ?? "frozen_eval",
-      selectionStrategy: options.selectionStrategy ?? "stable_hash_top_n",
-      sampling: options.sampling,
-    }),
-    cancelBaselineRun: (runId: string) => mutate<TasksetBaselineRun>(
-      "cancel-baseline",
-      `/baseline/runs/${encodeURIComponent(runId)}/cancel`,
-      {},
-    ),
     auditGraders: (tasksetId: string) => mutate<{ passed: boolean; results: Array<{ id: string; label: string; expectedPassed?: boolean; expectedRewardEligible?: boolean; result: { passed: boolean; score: number | null; rewardEligible: boolean } }>; failures: Array<{ label: string; gradeId: string }> }>("audit-graders", "/audit-graders", { tasksetId }),
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     readiness: (tasksetId: string) => mutate("readiness", "/readiness", { tasksetId }),
@@ -262,7 +238,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     approveTraining: (planId: string, bundleId: string) => mutate<{ id: string }>("approve-training", "/approvals", { planId, bundleId }),
     launch: (planId: string, approvalId: string) => mutate("launch", "/launch", { planId, approvalId }),
     prepareTraining: (body: {
-      modelId?: string | null;
+      modelId: string;
       tasksetId: string;
       destinationId: string;
       recipe: unknown;
@@ -270,6 +246,32 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       retentionDays: number | null;
       region: string | null;
     }) => mutate<TrainingPreparedStart>("prepare-training", "/prepare", body),
+    prepareModelRun: (
+      modelRunId: string,
+      input: {
+        maximumSpendUsd: number | null;
+        retentionDays: number | null;
+      },
+    ) => mutate<TrainingPreparationPlan>(
+      "prepare-model-run",
+      `/model-runs/${encodeURIComponent(modelRunId)}/prepare`,
+      input,
+    ),
+    startModelRun: (
+      modelRunId: string,
+      input: {
+        maximumSpendUsd: number | null;
+        retentionDays: number | null;
+        manifest?: unknown;
+      },
+    ) => mutate<{
+      manifest: { id: string; contentHash: string };
+      job: { id: string };
+    }>(
+      "start-model-run",
+      `/model-runs/${encodeURIComponent(modelRunId)}/start`,
+      input,
+    ),
     startPreparedTraining: (body: {
       planId: string;
       bundleId: string;
@@ -281,7 +283,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       job: { id: string };
       createImproveRunId: string;
     }>("start-prepared-training", "/start/prepared", body),
-    startTraining: (body: { modelId?: string | null; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
+    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     evaluateJob: (jobId: string) => mutate(
       "evaluate-job",

@@ -4,14 +4,8 @@ import {
   type CreateImproveEvaluationReceipt,
   type CreateImproveTarget,
 } from "@openpond/contracts";
-import {
-  applyApprovedLocalCreateImproveRun,
-  type LocalCreatePipelineCheckInput,
-  type LocalCreatePipelineCheckResult,
-} from "../local-create-pipeline.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { GradeResult, RuntimeEvent, SendTurnRequest, Session, TaskAttemptResult, Taskset, Turn } from "@openpond/contracts";
-import { authorAgentImprovementCandidate } from "./agent-improvement.js";
 
 type CodexTurnInput = Pick<
   SendTurnRequest,
@@ -29,7 +23,6 @@ export type CreateImproveTargetExecutionContext = {
   setProviderTurnId: (providerTurnId: string) => Promise<void>;
   onRun: (run: CreateImproveRun) => Promise<void>;
   model: string | null;
-  runChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
   resolveTaskset?: (tasksetId: string, revision: number, contentHash: string) => Promise<Taskset | null>;
   gradeTaskAttempt?: (input: { tasksetId: string; taskId: string; attempt: TaskAttemptResult }) => Promise<GradeResult>;
 };
@@ -52,36 +45,8 @@ export type CreateImproveTargetAdapter = {
   normalizeResult(run: CreateImproveRun): CreateImproveRun;
 };
 
-const agentTargetAdapter: CreateImproveTargetAdapter = {
-  kind: "agent",
-  planningContext: commonPlanningContext,
-  scaffold: commonScaffold,
-  allowedPaths: plannedPaths,
-  checks: plannedChecks,
-  evalRefs: (run) => run.context.evalRefs,
-  canExecute: (run) =>
-    run.target.kind === "agent" &&
-    run.adapter.kind === "local" &&
-    run.state === "applying_source" &&
-    run.plan?.status === "approved",
-  execute: (run, context) =>
-    run.operation === "improve"
-      ? authorAgentImprovementCandidate(run, context)
-      : applyApprovedLocalCreateImproveRun(run, {
-          session: context.session,
-          turn: context.turn,
-          ensureCodexRuntime: context.ensureCodexRuntime,
-          appendRuntimeEvent: context.appendRuntimeEvent,
-          setProviderTurnId: context.setProviderTurnId,
-          onSnapshot: context.onRun,
-          model: context.model,
-          runChecks: context.runChecks,
-        }),
-  normalizeResult: (run) => run,
-};
-
 const unsupportedSourceTargetAdapter = (
-  kind: Exclude<CreateImproveTarget["kind"], "agent" | "model">,
+  kind: Exclude<CreateImproveTarget["kind"], "model">,
 ): CreateImproveTargetAdapter => ({
   kind,
   planningContext: commonPlanningContext,
@@ -93,7 +58,9 @@ const unsupportedSourceTargetAdapter = (
   execute: async (run) =>
     nextCreateImproveRunRevision(run, {
       state: "blocked",
-      blockedReason: `${kind} authoring is not registered in this OpenPond build.`,
+      blockedReason: kind === "agent"
+        ? "Agent Create/Improve runs are retired. Use a normal /agent authoring turn."
+        : `${kind} authoring is not registered in this OpenPond build.`,
       updatedAt: new Date().toISOString(),
     }),
   normalizeResult: (run) => run,
@@ -118,7 +85,7 @@ const modelTargetAdapter: CreateImproveTargetAdapter = {
 };
 
 const TARGET_ADAPTERS = new Map<CreateImproveTarget["kind"], CreateImproveTargetAdapter>([
-  ["agent", agentTargetAdapter],
+  ["agent", unsupportedSourceTargetAdapter("agent")],
   ["skill", unsupportedSourceTargetAdapter("skill")],
   ["extension", unsupportedSourceTargetAdapter("extension")],
   ["model", modelTargetAdapter],

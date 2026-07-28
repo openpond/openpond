@@ -1,12 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CloudProject, LocalProject, OpenPondActionCatalogEntry } from "@openpond/contracts";
+import type {
+  CloudProject,
+  LocalProject,
+  OpenPondActionCatalogEntry,
+  OpenPondProfileState,
+} from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { actionCatalogForProject } from "../lib/sandbox-action-catalog";
-import { actionCatalogForLocalAgentSdkProject } from "../lib/local-agent-sdk-action-catalog";
+import { actionCatalogForLocalCrossSystemFixture } from "../lib/local-cross-system-action-catalog";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import {
   buildOpenPondAgentSlashCommand,
-  buildOpenPondProfileActionCommand,
+  buildOpenPondProfileActionCatalog,
 } from "../lib/openpond-action-run";
 import {
   preloadSandboxAgents,
@@ -34,7 +39,7 @@ export function useSandboxActionContext({
   defaultTeamId,
   accountScopeKey,
   localProjects,
-  profileActionCatalogEntries,
+  profile,
   selectedCloudProject,
   selectedProject,
 }: {
@@ -44,7 +49,7 @@ export function useSandboxActionContext({
   defaultTeamId: string | null;
   accountScopeKey?: string | null;
   localProjects: LocalProject[];
-  profileActionCatalogEntries: OpenPondActionCatalogEntry[];
+  profile: OpenPondProfileState | null | undefined;
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
 }) {
@@ -142,7 +147,7 @@ export function useSandboxActionContext({
   }, [accountScopeKey, connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
 
   const selectedLocalProjectActionCatalog = useMemo(
-    () => actionCatalogForLocalAgentSdkProject(selectedProject),
+    () => actionCatalogForLocalCrossSystemFixture(selectedProject),
     [selectedProject],
   );
   const selectedProjectActionCatalog = useMemo(() => {
@@ -152,8 +157,8 @@ export function useSandboxActionContext({
     return [...byId.values()];
   }, [selectedLocalProjectActionCatalog, selectedSandboxProject]);
   const profileActionCatalog = useMemo(
-    () => (profileActionCatalogEntries ?? []).map((action) => buildOpenPondProfileActionCommand(action)),
-    [profileActionCatalogEntries],
+    () => buildOpenPondProfileActionCatalog(profile),
+    [profile],
   );
   const selectedActionCatalog = useMemo(
     () => [

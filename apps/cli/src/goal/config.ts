@@ -33,14 +33,12 @@ export const DEFAULT_GOAL_BUDGET: GoalBudget = {
 };
 
 export function goalKindDefaultProfile(kind: GoalKind): GoalProfile {
-  return kind === "create_agent" || kind === "update_agent"
-    ? "openpond_agent"
-    : "generic_coding";
+  void kind;
+  return "generic_coding";
 }
 
 export function defaultPromptPackForGoal(kind: GoalKind): string {
-  if (kind === "create_agent") return "openpond_agent_create_v1";
-  if (kind === "update_agent") return "openpond_agent_update_v1";
+  void kind;
   return "generic_coding_v1";
 }
 

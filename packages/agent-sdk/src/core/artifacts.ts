@@ -88,14 +88,14 @@ export async function assertArtifactSchemaCompatibility(
 ) {
   for (const entry of index.entries) {
     if (entry.format === "json") {
-      const payload = JSON.parse(await readFile(path.join(cwd, entry.path), "utf8")) as {
+      const payload = JSON.parse(await readFile(path.resolve(cwd, entry.path), "utf8")) as {
         schema?: string;
       };
       assertSchema(entry, payload.schema);
       continue;
     }
     if (entry.format === "jsonl") {
-      const contents = await readFile(path.join(cwd, entry.path), "utf8");
+      const contents = await readFile(path.resolve(cwd, entry.path), "utf8");
       for (const line of contents.split("\n").filter(Boolean)) {
         const payload = JSON.parse(line) as { schema?: string };
         assertSchema(entry, payload.schema);
@@ -103,21 +103,21 @@ export async function assertArtifactSchemaCompatibility(
       continue;
     }
     if (entry.format === "yaml") {
-      const payload = parseYaml(await readFile(path.join(cwd, entry.path), "utf8")) as {
+      const payload = parseYaml(await readFile(path.resolve(cwd, entry.path), "utf8")) as {
         schema?: string;
       };
       assertSchema(entry, payload?.schema);
       continue;
     }
     if (entry.kind === "validator-report") {
-      const contents = await readFile(path.join(cwd, entry.path), "utf8");
+      const contents = await readFile(path.resolve(cwd, entry.path), "utf8");
       if (!contents.includes(`Schema: ${entry.schema}`)) {
         throw new Error(`${entry.path} does not declare schema ${entry.schema}.`);
       }
       continue;
     }
     if (entry.kind === "runtime-bridge") {
-      const contents = await readFile(path.join(cwd, entry.path), "utf8");
+      const contents = await readFile(path.resolve(cwd, entry.path), "utf8");
       if (!contents.includes(entry.schema)) {
         throw new Error(`${entry.path} does not declare schema ${entry.schema}.`);
       }
@@ -231,14 +231,14 @@ function dedupeEntries(entries: ArtifactIndexEntry[]): ArtifactIndexEntry[] {
 }
 
 async function readExistingIndex(cwd: string, artifactDir: string): Promise<ArtifactIndex | null> {
-  const indexPath = path.join(cwd, artifactDir, "artifact-index.json");
+  const indexPath = path.resolve(cwd, artifactDir, "artifact-index.json");
   if (!pathExists(indexPath)) return null;
   const parsed = JSON.parse(await readFile(indexPath, "utf8")) as ArtifactIndex;
   return parsed.schema === ARTIFACT_SCHEMAS.artifactIndex ? parsed : null;
 }
 
 function existingEntriesThatStillExist(cwd: string, index: ArtifactIndex): ArtifactIndexEntry[] {
-  return index.entries.filter((entry) => pathExists(path.join(cwd, entry.path)));
+  return index.entries.filter((entry) => pathExists(path.resolve(cwd, entry.path)));
 }
 
 function assertSchema(entry: ArtifactIndexEntry, actual: string | undefined) {

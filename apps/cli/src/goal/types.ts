@@ -1,5 +1,3 @@
-import type { CreateImproveRun } from "@openpond/contracts";
-
 export type GoalKind =
   | "general_code_goal"
   | "fix_bug"
@@ -7,11 +5,9 @@ export type GoalKind =
   | "refactor"
   | "write_tests"
   | "create_project"
-  | "update_project"
-  | "create_agent"
-  | "update_agent";
+  | "update_project";
 
-export type GoalProfile = "generic_coding" | "openpond_agent";
+export type GoalProfile = "generic_coding";
 
 export type GoalStatus =
   | "queued"
@@ -254,7 +250,6 @@ export type GoalState = {
   questions: GoalQuestion[];
   answers: GoalAnswer[];
   approvals: GoalApproval[];
-  createImproveRun?: CreateImproveRun;
   events: GoalEvent[];
   createdAt: string;
   updatedAt: string;

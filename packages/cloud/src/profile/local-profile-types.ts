@@ -6,6 +6,25 @@ import type {
   LocalOpenPondProfileHostedSourceCheckStatus,
 } from "../config.js";
 
+export type OpenPondProfileRef = {
+  source: "local" | "github" | "openpond_git";
+  repositoryId: string;
+  profileId: string;
+};
+
+export type OpenPondProfileCatalogEntry = {
+  ref: OpenPondProfileRef;
+  name: string;
+  repoPath: string;
+  sourcePath: string | null;
+  state: OpenPondProfileState;
+};
+
+export type OpenPondProfileLibrary = {
+  lastUsed: OpenPondProfileRef | null;
+  profiles: OpenPondProfileCatalogEntry[];
+};
+
 export type OpenPondProfileAgent = {
   id: string;
   name: string;

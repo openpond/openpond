@@ -65,65 +65,34 @@ export function useLabAgentAuthoring(input: {
         targetAgentId: request.agentId ?? null,
       },
     });
-    const authoringRun = request.authoringRunId
-      ? await api.getCreateImproveRun(connection, request.authoringRunId)
-      : null;
-    const {
-      buildLabAgentCreateImproveRun,
-      buildLabAgentImproveRun,
-      continueLabAgentRunFromTaskset,
-    } = await import("../lib/create-pipeline-request");
-    const run = authoringRun
-      ? continueLabAgentRunFromTaskset({
-          authoringRun,
-          agentId: request.agentId,
-          agentName: request.agentName,
-          objective: request.objective,
-          payload: bootstrap,
-          session,
-          operation: request.operation,
-        })
-      : request.operation === "create"
-        ? buildLabAgentCreateImproveRun({
-            objective: request.objective,
-            payload: bootstrap,
-            session,
-          })
-        : buildLabAgentImproveRun({
-            agentId: request.agentId ?? "",
-            agentName: request.agentName,
-            objective: request.objective,
-            payload: bootstrap,
-            session,
-          });
-    if (!run) {
+    const objective = request.objective.trim();
+    if (!objective) {
       throw new Error(
         request.operation === "create"
           ? "Describe what the Agent should do."
           : "Describe what the Agent could do better.",
       );
     }
+    if (modelRef.providerId === "codex") {
+      throw new Error("Agent authoring uses OpenPond's bundled authoring skill. Choose a hosted model.");
+    }
+    const prompt = request.operation === "create"
+      ? `/agent create ${objective}`
+      : `/agent improve ${request.agentId ?? ""} ${objective}`;
     const turn = await api.sendTurn(connection, session.id, {
-      prompt: request.objective,
+      prompt,
       model: modelRef.modelId,
       modelRef,
-      createImproveRun: run,
       approvalPolicy: "never",
       sandbox: "workspace-write",
-      codexPermissionMode: modelRef.providerId === "codex"
-        ? codexPermissionMode
-        : "default",
+      codexPermissionMode: "default",
       codexReasoningEffort,
     });
     if (turn.status === "failed") {
-      throw new Error(turn.error ?? "OpenPond could not start the Agent improvement.");
+      throw new Error(turn.error ?? "OpenPond could not complete the Agent authoring turn.");
     }
-    const planned = turn.createImproveRun
-      ?? await api.getCreateImproveRun(connection, run.id);
-    if (!planned) throw new Error("The Agent plan was not created.");
     onPayload(await api.bootstrap(connection));
     onOpenRightChatForSession(session.id, session);
-    return planned;
   }, [
     activeModel,
     activeProvider,

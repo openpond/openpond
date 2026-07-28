@@ -1,13 +1,11 @@
 import type {
   CreateImproveRun,
-  CrossSystemFrontierBaselineRun,
   Taskset,
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
 
 import { jobsForTaskset, statusLabel } from "../training/training-model-data";
-import { frontierBaselineStatusLabel } from "./LabModelBaseline";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
 const COMPLETED_CREATE_IMPROVE_STATES = new Set<CreateImproveRun["state"]>([
@@ -84,12 +82,6 @@ export function labWorkproductProgression(input: {
   if (activeRun) return progressionForRun(activeRun);
 
   if (input.workproduct.kind === "model") {
-    const frontierBaseline = input.workproduct.frontierBaselineRunId
-      ? input.training?.frontierBaselineRuns.find(
-          (run) => run.id === input.workproduct.frontierBaselineRunId,
-        ) ?? null
-      : null;
-    if (frontierBaseline) return progressionForFrontierBaseline(frontierBaseline);
     if (!input.taskset && latestRun && ["failed", "blocked", "cancelled"].includes(latestRun.state)) {
       return progressionForRun(latestRun);
     }
@@ -127,21 +119,6 @@ export function labWorkproductProgression(input: {
     action: null,
     runId: latestRun?.id ?? null,
     conversationId: latestRun?.scope.conversationId ?? null,
-  };
-}
-
-function progressionForFrontierBaseline(
-  run: CrossSystemFrontierBaselineRun,
-): LabWorkproductProgression {
-  return {
-    statusLabel: frontierBaselineStatusLabel(run),
-    statusValue: run.status,
-    action: {
-      kind: run.status === "succeeded" ? "open_data" : "open_evals",
-      label: run.status === "succeeded" ? "Review data" : "View baseline",
-    },
-    runId: null,
-    conversationId: null,
   };
 }
 
@@ -221,9 +198,11 @@ function progressionForModel(input: {
 
   const jobs = jobsForTaskset(input.training, input.taskset.id);
   const latestJob = jobs[0] ?? null;
-  const importedModel = input.training?.models.find(
-    (model) => model.tasksetId === input.taskset!.id && model.status === "imported",
-  ) ?? null;
+  const importedModel = latestJob
+    ? input.training?.models.find(
+        (model) => model.jobId === latestJob.id && model.status === "imported",
+      ) ?? null
+    : null;
 
   if (latestJob && ACTIVE_TRAINING_STATES.has(latestJob.status)) {
     return {
@@ -244,10 +223,14 @@ function progressionForModel(input: {
     };
   }
   if (latestJob?.status === "succeeded") {
-    if (
-      latestJob.metadata.frozenEvaluationComplete === true &&
-      latestJob.metadata.frozenEvaluationThresholdPassed !== true
-    ) {
+    const evaluationComplete =
+      latestJob.metadata.frozenEvaluationComplete === true
+      || Boolean(importedModel?.frozenEvaluationArtifactId);
+    const evaluationPassed =
+      typeof latestJob.metadata.frozenEvaluationThresholdPassed === "boolean"
+        ? latestJob.metadata.frozenEvaluationThresholdPassed
+        : importedModel?.promotable === true;
+    if (evaluationComplete && !evaluationPassed) {
       return {
         statusLabel: "Evaluation failed",
         statusValue: "failed",
@@ -256,17 +239,18 @@ function progressionForModel(input: {
         conversationId,
       };
     }
+    if (evaluationComplete && evaluationPassed) {
+      return {
+        statusLabel: importedModel?.promotable ? "Model ready" : "Evaluation passed",
+        statusValue: importedModel?.promotable ? "ready" : "passed",
+        action: { kind: "open_training", label: "Review results" },
+        runId: input.latestRun?.id ?? null,
+        conversationId,
+      };
+    }
     return {
-      statusLabel: importedModel
-        ? latestJob.metadata.frozenEvaluationThresholdPassed === true
-          ? "Model ready"
-          : "Evaluation pending"
-        : "Collecting model",
-      statusValue:
-        importedModel &&
-        latestJob.metadata.frozenEvaluationThresholdPassed === true
-          ? "ready"
-          : "running",
+      statusLabel: importedModel ? "Evaluation pending" : "Collecting model",
+      statusValue: "running",
       action: { kind: "open_training", label: "Review results" },
       runId: input.latestRun?.id ?? null,
       conversationId,
@@ -277,26 +261,6 @@ function progressionForModel(input: {
       statusLabel: "Needs review",
       statusValue: "needs_review",
       action: { kind: "open_data", label: "Review data" },
-      runId: input.latestRun?.id ?? null,
-      conversationId,
-    };
-  }
-  const baselineReward = input.taskset.readiness.baselineReward;
-  if (
-    input.taskset.readiness.recommendedMethod === "grpo"
-    && !(
-      input.taskset.readiness.baselineReportId
-      && baselineReward
-      && baselineReward.count >= 2
-      && (baselineReward.variance ?? 0) > 0
-      && (baselineReward.mean ?? 0) > 0.05
-      && (baselineReward.mean ?? 0) < 0.95
-    )
-  ) {
-    return {
-      statusLabel: "Test base model",
-      statusValue: "needs_review",
-      action: { kind: "start_training", label: "Configure training" },
       runId: input.latestRun?.id ?? null,
       conversationId,
     };

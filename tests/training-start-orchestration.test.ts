@@ -53,7 +53,14 @@ describe.sequential("training start orchestration", () => {
       },
     });
     try {
-      const started = await service.start({ tasksetId: taskset.id, destinationId: "local_cpu_fixture", recipe: sftRecipeFixture(), exportApproved: true, maximumCostUsd: 0 });
+      const started = await service.start({
+        modelId: "model_fixture",
+        tasksetId: taskset.id,
+        destinationId: "local_cpu_fixture",
+        recipe: sftRecipeFixture(),
+        exportApproved: true,
+        maximumCostUsd: 0,
+      });
       expect(started).toMatchObject({ plan: { tasksetId: taskset.id }, bundle: { planId: started.plan.id }, approval: { planId: started.plan.id }, job: { planId: started.plan.id } });
       expect(computeChecks).toBe(2);
       await artifactStoreEntered;
@@ -66,7 +73,15 @@ describe.sequential("training start orchestration", () => {
       serviceClosed = true;
       expect(closedBeforeArtifactImportFinished).toBe(false);
       const completed = await waitForTerminal(store, started.job.id);
-      expect(completed).toMatchObject({ status: "succeeded", metadata: { reloadVerified: true, frozenEvaluationExecuted: true } });
+      expect(completed).toMatchObject({
+        status: "succeeded",
+        metadata: {
+          reloadVerified: true,
+          frozenEvaluationExecuted: true,
+          frozenEvaluationComplete: true,
+          frozenEvaluationThresholdPassed: expect.any(Boolean),
+        },
+      });
       const mirrored = String(completed.metadata.mirroredArtifactDirectory);
       await access(path.join(mirrored, "adapter", "adapter_model.safetensors"));
       await access(path.join(mirrored, "artifact-manifest.json"));

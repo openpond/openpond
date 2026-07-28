@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { access, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type PackageJson = {
@@ -37,7 +37,14 @@ async function workspacePackageFiles(root: string): Promise<string[]> {
     const workspaceRoot = workspace.slice(0, -2);
     const entries = await readdir(path.join(root, workspaceRoot), { withFileTypes: true });
     for (const entry of entries) {
-      if (entry.isDirectory()) files.push(path.join(workspaceRoot, entry.name, "package.json"));
+      if (!entry.isDirectory()) continue;
+      const packageFile = path.join(workspaceRoot, entry.name, "package.json");
+      try {
+        await access(path.join(root, packageFile));
+        files.push(packageFile);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      }
     }
   }
 

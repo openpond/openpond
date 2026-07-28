@@ -7,7 +7,7 @@ export async function writeJson(cwd: string, relativePath: string, value: unknow
 }
 
 export async function writeText(cwd: string, relativePath: string, value: string) {
-  const target = path.join(cwd, relativePath);
+  const target = path.resolve(cwd, relativePath);
   await mkdir(path.dirname(target), { recursive: true });
   await writeFile(target, value, "utf8");
 }

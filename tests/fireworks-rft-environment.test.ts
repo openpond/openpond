@@ -649,6 +649,7 @@ async function seedActiveRftJob(
 ) {
   await store.upsertTaskset(taskset);
   const draft = createTrainingPlan({
+    modelId: "model_fireworks_rft_fixture",
     taskset,
     destinationId: "fireworks",
     recipe,
@@ -756,6 +757,14 @@ function crossSystemTasksetFixture(): Taskset {
         id: "reward_cross_system",
         kind: "reward",
         taskId: tasks[0]!.id,
+        task: tasks[0]!.input.prompt,
+        rules: [{
+          id: "reward_cross_system_exact",
+          points: 1,
+          condition: "Return the exact reconciled answer.",
+        }],
+        otherwisePoints: 0,
+        executable: true,
         sourceRefs: [base.sourceRefs[0]!.id],
         artifactRef: "cross-system-verifier",
         approved: true,
@@ -802,7 +811,6 @@ function crossSystemTasksetFixture(): Taskset {
       compatibleDestinationClasses: ["export", "hosted_byok"],
       blockers: [],
       warnings: [],
-      baselineReportId: "baseline_cross_system",
       generatedAt: "2026-07-17T02:00:00.000Z",
     },
     contentHash: hash,
@@ -937,7 +945,6 @@ function exactAnswerTasksetFixture(): Taskset {
       compatibleDestinationClasses: ["export", "hosted_byok"],
       blockers: [],
       warnings: [],
-      baselineReportId: "baseline_math",
       generatedAt: "2026-07-20T02:00:00.000Z",
     },
     contentHash: hash,

@@ -71,6 +71,9 @@ __pycache__/
 .nox/
 *.egg-info/
 
+# Generated from @openpond/contracts before Python development, tests, and packaging
+python/openpond-training/src/openpond_training/schemas/*.json
+
 # Package artifacts
 *.tgz
 
@@ -82,6 +85,7 @@ docs/staging/
 jobs/
 tmp/
 .openpond/
+.local-examples/
 .openpond-negative/
 .openpond-test-fixtures/
 

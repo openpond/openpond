@@ -7,6 +7,7 @@ import type {
   ManagedAdapterServingProjection,
   ModelBinding,
 } from "@openpond/contracts";
+import { managedAdapterProjectionReady } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 import {
@@ -16,6 +17,7 @@ import {
 type ManagedBindingContext = {
   binding: ModelBinding;
   projection: ManagedAdapterServingProjection;
+  baseModelId: string;
 };
 
 export function createManagedAdapterChatRuntime(dependencies: {
@@ -30,9 +32,21 @@ export function createManagedAdapterChatRuntime(dependencies: {
     const lineage = await dependencies.store.getModelArtifactLineage(
       binding.modelArtifactLineageId,
     );
-    return lineage?.managedServing
-      ? { binding, projection: lineage.managedServing }
-      : null;
+    if (!lineage?.managedServing) return null;
+    const versions =
+      typeof dependencies.store.listModelVersions === "function"
+        ? await dependencies.store.listModelVersions({
+            modelId: lineage.modelId,
+          })
+        : [];
+    const version = versions.find(
+      (candidate) => candidate.artifactLineageId === lineage.id,
+    );
+    return {
+      binding,
+      projection: lineage.managedServing,
+      baseModelId: version?.baseModel.modelId ?? lineage.modelId,
+    };
   }
 
   async function appliesTo(modelId: string | null | undefined): Promise<boolean> {
@@ -54,7 +68,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     toolChoice?: HostedChatToolChoice;
   }) {
     const resolved = await context(input.modelId);
-    if (!resolved || !readyProjection(resolved.projection)) {
+    if (!resolved || !managedAdapterProjectionReady(resolved.projection)) {
       throw new Error(
         "The selected trained Model is not ready on managed serving.",
       );
@@ -68,7 +82,7 @@ export function createManagedAdapterChatRuntime(dependencies: {
     yield* dependencies.client.streamChat({
       teamId,
       logicalModelName: managedBindingLogicalModelName(resolved.binding),
-      messages: input.messages,
+      messages: managedAdapterMessages(input.messages, resolved.baseModelId),
       requestId: input.requestId,
       signal: input.signal,
       maxNewTokens: input.maxNewTokens,
@@ -81,16 +95,28 @@ export function createManagedAdapterChatRuntime(dependencies: {
   return { appliesTo, stream };
 }
 
-function readyProjection(
-  projection: ManagedAdapterServingProjection,
-): boolean {
-  return (
-    projection.state === "ready" &&
-    projection.canonicalArtifactState === "promotable" &&
-    projection.canonicalDeploymentState === "ready" &&
-    Boolean(projection.teamId) &&
-    Boolean(projection.canonicalArtifactId) &&
-    Boolean(projection.canonicalDeploymentId)
+function managedAdapterMessages(
+  messages: HostedChatMessage[],
+  baseModelId: string,
+): HostedChatMessage[] {
+  if (!/\bqwen3(?:\b|[-_.])/i.test(baseModelId)) return messages;
+  let lastUserIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user" && typeof message.content === "string") {
+      lastUserIndex = index;
+      break;
+    }
+  }
+  if (lastUserIndex < 0) return messages;
+  const content = messages[lastUserIndex]?.content;
+  if (typeof content !== "string" || /(?:^|\s)\/no_think(?:\s|$)/.test(content)) {
+    return messages;
+  }
+  return messages.map((message, index) =>
+    index === lastUserIndex
+      ? { ...message, content: `${content}\n\n/no_think` }
+      : message,
   );
 }
 
@@ -98,7 +124,28 @@ async function bindingFromRuntimeModelId(
   store: SqliteStore,
   modelId: string | null | undefined,
 ): Promise<ModelBinding | null> {
-  if (!modelId?.startsWith("binding:")) return null;
+  if (!modelId) return null;
+  if (!modelId.startsWith("binding:")) {
+    const bindings = await store.listModelBindings();
+    return (
+      bindings
+        .filter(
+          (binding) =>
+            binding.status === "active" &&
+            binding.role === "chat_manual" &&
+            binding.modelArtifactLineageId === modelId,
+        )
+        .sort((left, right) => {
+          const leftDefault = left.roleTargetId === "default" ? 1 : 0;
+          const rightDefault = right.roleTargetId === "default" ? 1 : 0;
+          return (
+            rightDefault - leftDefault ||
+            right.promotedAt.localeCompare(left.promotedAt) ||
+            left.id.localeCompare(right.id)
+          );
+        })[0] ?? null
+    );
+  }
   const [, profileId, role, ...targetParts] = modelId.split(":");
   const roleTargetId = decodeURIComponent(targetParts.join(":"));
   if (

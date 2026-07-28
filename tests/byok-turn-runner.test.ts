@@ -18,7 +18,7 @@ import {
   type Session,
   type Turn,
 } from "../packages/contracts/src";
-import { runProfileSkillCommand, runProfileSkillGoalCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
+import { runProfileSkillCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
 import { loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
 import {
   baseSession,
@@ -872,7 +872,8 @@ describe("BYOK turn runner dispatch", () => {
         if (streamStarts === 1) firstStreamStarted.resolve();
         if (streamStarts === 2) secondStreamStarted.resolve();
         await releaseStreams.promise;
-        const turn = turns.find((candidate) => candidate.id === input.requestId);
+        const turnId = input.requestId?.split(":model:")[0] ?? null;
+        const turn = turns.find((candidate) => candidate.id === turnId);
         yield { text: `BYOK done ${turn?.sessionId ?? "unknown"}`, raw: { ok: true } };
       },
       turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-concurrent" }),
@@ -1013,7 +1014,8 @@ describe("BYOK turn runner dispatch", () => {
       },
       appendHostedContextUsage: async () => undefined,
       streamLocalByokChatTurn: async function* (input) {
-        const turn = turns.find((candidate) => candidate.id === input.requestId);
+        const turnId = input.requestId?.split(":model:")[0] ?? null;
+        const turn = turns.find((candidate) => candidate.id === turnId);
         if (turn?.prompt === "first") {
           firstStreamStarted.resolve();
           await releaseFirstStream.promise;

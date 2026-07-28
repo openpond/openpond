@@ -199,13 +199,10 @@ function buildOpenPondCapabilityIndexContext(
   return [
     "OpenPond capabilities:",
     "- workspace_context: use resource_search and resource_read for workspace, session, artifact, goal, sandbox, and git context.",
-    "- create_pipeline: create or edit source-backed agents and workflows through Create Pipeline when the matching capability is available.",
+    "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn. For matching natural-language authoring requests, load the relevant bundled profile skill from the catalog.",
     ...(input.hybridWorkspace
-      ? [
-          "- In Hybrid workspace mode, ordinary project file edits are sandbox workspace work. Use create_pipeline only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
-        ]
+      ? ["- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority."]
       : []),
-    "- profile_skill_goal: create or edit profile-backed skill packages through the profile-skill goal workflow when the matching capability is available.",
     "- goal_control: start, restart, pause, resume, or stop OpenPond goals after resolving the current target goal and execution mode.",
     ...(input.browserControlAvailable
       ? [
@@ -301,6 +298,7 @@ function buildActionCatalogContext(
     mode === "native_tool"
       ? [
           "- These are the allowed source-defined actions for the selected OpenPond Project.",
+          "- Profile Agent actions may also be available as direct native function tools. When one directly matches the request, call it instead of searching the catalog.",
           "- Use openpond_action_search to find action ids when needed.",
           "- Use openpond_action_run only with an actionId from this catalog or from openpond_action_search.",
           "- Do not infer hidden action ids from user text.",
@@ -447,7 +445,7 @@ function buildHybridSandboxTurnContext(
     "- The selected Project is backed by a hosted sandbox. Treat normal requests to inspect, edit, test, or diff project files as sandbox workspace work.",
     "- For file edits like README, source, config, or docs updates, inspect and change the active sandbox using sandbox/resource/git tools; do not route those edits through goals or Create Pipeline.",
     "- Keep the user's local checkout unchanged unless the user explicitly asks to preserve, promote, apply, or export sandbox changes.",
-    "- Create Pipeline remains appropriate only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+    "- Agent and Skill authoring remain normal skill-backed turns; do not start Create Pipeline or Goal mode for them.",
   ];
   return [context, hybridRules.join("\n")].filter(Boolean).join("\n");
 }

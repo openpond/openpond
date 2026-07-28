@@ -20,7 +20,6 @@ import { useAppDerivedRows } from "../hooks/useAppDerivedRows";
 import { useBeginNewChat } from "../hooks/useBeginNewChat";
 import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
-import { useCloudWorkItems } from "../hooks/useCloudWorkItems";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
 import { usePinnedSidebarDrag } from "../hooks/usePinnedSidebarDrag";
 import { usePendingChatMessages } from "../hooks/usePendingChatMessages";
@@ -83,9 +82,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
   const [draftSubagentDelegationMode, setDraftSubagentDelegationMode] =
     useState<SubagentDelegationMode | null>(null);
   const rememberWorkspaceStateRef = useRef<((state: WorkspaceState) => void) | null>(null);
-  const rememberCloudWorkspaceState = useCallback((state: WorkspaceState) => {
-    rememberWorkspaceStateRef.current?.(state);
-  }, []);
   const { confirmProjectAction, projectConfirmDialog, resolveProjectConfirmDialog } =
     useProjectConfirmDialog();
   const {
@@ -317,7 +313,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     sessions,
   });
   const runtimeIndexes = useRuntimeIndexes(events, approvals);
-  const { chatMentionApps, cloudProjectIdsByTeam, connectedAppMentions, pendingApproval } =
+  const { chatMentionApps, connectedAppMentions, pendingApproval } =
     useAppConversationContext({
       bootstrap,
       connectedAppRows,
@@ -451,7 +447,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     defaultTeamId: appDefaults.defaultTeamId,
     accountScopeKey,
     localProjects: bootstrap?.localProjects ?? [],
-    profileActionCatalogEntries: bootstrap?.profile.actionCatalog ?? [],
+    profile: bootstrap?.profile,
     selectedCloudProject,
     selectedProject,
   });
@@ -481,38 +477,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     setSessions,
     setTerminalOpen,
     toast,
-  });
-
-  const {
-    cloudBusy,
-    cloudError,
-    cloudLoading,
-    cloudWorkItemDetail,
-    cloudWorkItems,
-    selectedCloudWorkItem,
-    selectedCloudWorkItemId,
-    selectedCloudWorkItemLocalProject,
-    applyCloudWorkItemPatchLocally,
-    cancelCloudWorkItemCreatePipeline,
-    cancelCloudWorkItemTask,
-    createCloudWork,
-    handleCloudWorkItemBackground,
-    openCloudHome,
-    selectCloudWorkItem,
-    sendCloudWorkItemMessage,
-    setCloudError,
-  } = useCloudWorkItems({
-    bootstrap,
-    connection,
-    cloudProjectById,
-    cloudProjectIdsByTeam,
-    setSelectedAppId,
-    setSelectedProjectId,
-    setSelectedSessionId,
-    setView,
-    setError,
-    rememberWorkspaceState: rememberCloudWorkspaceState,
-    showToast,
   });
 
   const { changeCodexPermissionMode, changeCodexReasoningEffort } = useCodexPreferenceActions({
@@ -617,7 +581,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     localProjectRows,
     visibleProjectRows,
     cloudProjectRows,
-    cloudWorkItemsByProjectId,
     projectSessionRowsByProjectId,
     childSessionRowsByParentId,
     sidebarProjectIdBySessionId,
@@ -631,7 +594,6 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
     cloudProjects: bootstrap?.cloudProjects ?? [],
-    cloudWorkItems,
     sessions: sidebarSessions,
     runtimeIndexes: selectedRuntimeIndexes,
     appPreferences,
@@ -797,9 +759,7 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     activeWorkspaceKind === "local_project" &&
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
-  const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<
-    "queue_cloud" | "hybrid" | null
-  >(null);
+  const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<"hybrid" | null>(null);
   const [pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget] = useState<{
     projectId: string;
     target: WorkspaceTargetValue;
@@ -852,13 +812,11 @@ const { composerDraftStore, dispatch: appDispatch, setters: appSetters, state: a
     publishTeamProfileAgent, communities, communitySidebar, communityView, teamAiThreadId, toggleTeamAiSidebar,
     selectedProjectConfirmedCloudProject, activeOpenPondCommandAccessMode, profileWorkspaceId, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind,
     viewWorkspaceName, openPondActionCatalog, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded,
-    setExpandedProjectIds, cloudBusy, cloudError, cloudLoading, cloudWorkItemDetail, cloudWorkItems,
-    selectedCloudWorkItem, selectedCloudWorkItemId, selectedCloudWorkItemLocalProject, applyCloudWorkItemPatchLocally, cancelCloudWorkItemCreatePipeline, cancelCloudWorkItemTask,
-    createCloudWork, handleCloudWorkItemBackground, openCloudHome, selectCloudWorkItem, sendCloudWorkItemMessage, setCloudError,
+    setExpandedProjectIds,
     changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode, resolveApproval, beginNewChat, advanceTrainingModelChatAfterTurn,
     beginNewChatWithTrainingModel, bindTrainingModelChatSession, dismissTrainingChatHandoff, trainingChatHandoff, prepareTrainingModelChatTurn, selectTrainingChatTaskForComposer,
     chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, pinnedFiles, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
-    localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
+    localProjectRows, visibleProjectRows, cloudProjectRows, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, chatMessages, goalRuntime,
     subagentRuntime, pendingChatUserMessages, recordPendingChatUserMessage, visibleChatMessages, activeTerminalScope,
     terminalSummaries, runningSessionIds, selectedSessionRunning, selectedSteerAutoDispatchBlocked, selectedSteerAutoDispatchReady, sidebarGoalRuntimeBySessionId,

@@ -15,6 +15,9 @@ describe("app preferences", () => {
     expect(normalizeAppPreferences(null)).toMatchObject({
       defaultChatProvider: "openpond",
       defaultChatModel: "openpond-chat",
+      subagents: {
+        delegationMode: "manual",
+      },
     });
     expect(normalizeAppPreferences({
       defaultChatProvider: "openpond",
@@ -30,6 +33,19 @@ describe("app preferences", () => {
       defaultChatProvider: "openai",
       defaultChatModel: "gpt-5.6-sol",
     });
+  });
+
+  test("keeps explicit existing subagent delegation settings", () => {
+    expect(normalizeAppPreferences({
+      subagents: {
+        delegationMode: "balanced",
+      },
+    }).subagents.delegationMode).toBe("balanced");
+    expect(normalizeAppPreferences({
+      subagents: {
+        delegationMode: "proactive",
+      },
+    }).subagents.delegationMode).toBe("proactive");
   });
 
   test("parses preference patches without defaulting omitted fields", () => {
@@ -45,7 +61,7 @@ describe("app preferences", () => {
     expect(preferences.insightsEnabled).toBe(false);
     expect(preferences.subagents).toMatchObject({
       enabled: true,
-      delegationMode: "balanced",
+      delegationMode: "manual",
       maxConcurrentRuns: 4,
       maxConcurrentRunsPerProvider: 2,
       maxConcurrentRunsPerWorkspaceTarget: 1,

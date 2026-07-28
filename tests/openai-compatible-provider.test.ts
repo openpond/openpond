@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, describe, expect, test } from "vitest";
 import { ProviderConfigSchema } from "../packages/contracts/src/providers";
 import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
@@ -466,11 +467,12 @@ describe("OpenAI-compatible provider adapter", () => {
     ).toThrow(/The raw OpenAI provider uses Platform API credentials/);
   });
 
-  test("streams OpenAI ChatGPT subscription requests through the Codex Responses endpoint", async () => {
+  test("streams OpenAI ChatGPT subscription requests through the Codex Responses endpoint without unsupported sampling fields", async () => {
     const requests: Array<{
       url: string;
       authorization: string | null;
       accountId: string | null;
+      sessionId: string | null;
       body: Record<string, unknown>;
     }> = [];
     globalThis.fetch = async (input, init) => {
@@ -479,6 +481,7 @@ describe("OpenAI-compatible provider adapter", () => {
         url: String(input),
         authorization: headers.get("authorization"),
         accountId: headers.get("chatgpt-account-id"),
+        sessionId: headers.get("session-id"),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
       return streamResponse([
@@ -505,6 +508,7 @@ describe("OpenAI-compatible provider adapter", () => {
     };
 
     const deltas = [];
+    const requestId = `benchmark_${"x".repeat(80)}`;
     for await (const delta of streamOpenAiCompatibleChatCompletion({
       ...subscriptionProviderState(),
       providerId: "openai",
@@ -523,7 +527,7 @@ describe("OpenAI-compatible provider adapter", () => {
         },
       ],
       toolChoice: "auto",
-      requestId: "turn_subscription",
+      requestId,
       maxOutputTokens: 512,
       temperature: 0.4,
       topP: 0.8,
@@ -536,6 +540,7 @@ describe("OpenAI-compatible provider adapter", () => {
         url: "https://chatgpt.com/backend-api/codex/responses",
         authorization: "Bearer access-token",
         accountId: "acct_123456",
+        sessionId: createHash("sha256").update(requestId).digest("hex"),
         body: {
           model: "gpt-5.5",
           input: [
@@ -547,9 +552,6 @@ describe("OpenAI-compatible provider adapter", () => {
           ],
           stream: true,
           store: false,
-          max_output_tokens: 512,
-          temperature: 0.4,
-          top_p: 0.8,
           instructions: "Be concise.",
           tools: [
             {
@@ -579,22 +581,26 @@ describe("OpenAI-compatible provider adapter", () => {
     expect(deltas[4]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
   });
 
-  test("rejects unsupported deterministic seed sampling for ChatGPT subscriptions", async () => {
-    globalThis.fetch = async () => {
-      throw new Error("Fetch must not run for an unsupported request.");
+  test("omits unsupported deterministic seeds for ChatGPT subscriptions", async () => {
+    let body: Record<string, unknown> | null = null;
+    globalThis.fetch = async (_input, init) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return streamResponse([
+        sse({ type: "response.output_text.delta", delta: "sampled" }),
+        sse({ type: "response.completed", response: { output: [] } }),
+      ]);
     };
-    const drain = async () => {
-      for await (const _delta of streamOpenAiCompatibleChatCompletion({
-        ...subscriptionProviderState(),
-        providerId: "openai",
-        modelId: "gpt-5.5",
-        messages: [{ role: "user", content: "sample deterministically" }],
-        seed: 17,
-      })) {
-        // Drain the stream.
-      }
-    };
-    await expect(drain()).rejects.toThrow("do not support deterministic seed");
+    for await (const _delta of streamOpenAiCompatibleChatCompletion({
+      ...subscriptionProviderState(),
+      providerId: "openai",
+      modelId: "gpt-5.5",
+      messages: [{ role: "user", content: "sample deterministically" }],
+      seed: 17,
+    })) {
+      // Drain the stream.
+    }
+    expect(body).toMatchObject({ model: "gpt-5.5" });
+    expect(body).not.toHaveProperty("seed");
   });
 
   test("captures and replays opaque Responses reasoning items across tool requests", async () => {

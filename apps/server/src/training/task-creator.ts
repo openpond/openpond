@@ -12,6 +12,8 @@ import {
   TrainingSourceEstimateSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
+  type DatasetBuildIntent,
+  type DatasetBuildSpecification,
   type RuntimeEvent,
   type TaskCreationMode,
   type NewModelMode,
@@ -41,6 +43,18 @@ import {
   enrichCrossSystemProposal,
 } from "./task-creator-cross-system.js";
 import { defaultFixtureTemplates } from "./task-creator-fixtures.js";
+import {
+  capabilitiesForBuildSpecification,
+  learningSignalsForBuildSpecification,
+  manualBuildEvidence,
+} from "./task-creator-signals.js";
+import {
+  assertProposalMaterializable,
+  conciseTasksetName,
+  materializedTasksetId,
+  proposalMaterializationBlockers,
+  trainingPathForProposal,
+} from "./task-creator-materialization.js";
 
 export { crossSystemStructuredExample, enrichCrossSystemProposal };
 
@@ -49,6 +63,8 @@ export type TaskProposalAuthor = (input: {
   model: ChatModelRef;
   reasoningEffort: CodexReasoningEffort | null;
   evidence: TaskAuthoringEvidence[];
+  buildIntent: DatasetBuildIntent;
+  buildSpecification: DatasetBuildSpecification | null;
   methodHint?: TaskCreationRequest["methodHint"];
   instruction?: string | null;
   currentProposal?: TaskDesignProposal | null;
@@ -163,6 +179,8 @@ export function createTaskCreatorService(deps: {
     mode: TaskCreationMode;
     entryMode?: NewModelMode;
     resourceIntent?: TaskCreationRequest["resourceIntent"];
+    buildIntent?: DatasetBuildIntent;
+    buildSpecification?: DatasetBuildSpecification | null;
     objective?: string | null;
     methodHint?: TaskCreationRequest["methodHint"];
     preferredBaseModelId?: string | null;
@@ -199,6 +217,8 @@ export function createTaskCreatorService(deps: {
       mode: input.mode,
       entryMode: input.entryMode ?? (input.surface === "task_candidate" ? "automated" : "manual"),
       resourceIntent: input.resourceIntent ?? "workproduct",
+      buildIntent: input.buildIntent ?? "demonstrations",
+      buildSpecification: input.buildSpecification ?? null,
       objective: input.objective?.trim() || null,
       methodHint: input.methodHint ?? null,
       preferredBaseModelId: input.preferredBaseModelId ?? null,
@@ -227,7 +247,7 @@ export function createTaskCreatorService(deps: {
     const needsDisclosure = request.disclosure.status === "pending";
     const blockingQuestions = [
       ...(!request.objective && request.mode === "customize" ? [{ id: `task_question_${randomUUID()}`, kind: "objective" as const, prompt: "What repeatable capability should this Taskset teach or evaluate?", answer: null }] : []),
-      ...(!sources.length ? [{ id: `task_question_${randomUUID()}`, kind: "success_signal" as const, prompt: "Add at least one successful example, correction, reviewer choice, or outcome-bearing run so the authoring model can ground this capability without fabricating demonstrations.", answer: null }] : []),
+      ...(!sources.length && !input.buildSpecification ? [{ id: `task_question_${randomUUID()}`, kind: "success_signal" as const, prompt: "Add at least one successful example, correction, reviewer choice, or outcome-bearing run so the authoring model can ground this capability without fabricating demonstrations.", answer: null }] : []),
     ];
     const initialState = blockingQuestions.length ? "awaiting_questions" : needsDisclosure ? "awaiting_disclosure_approval" : "planning";
     let snapshot = TaskCreationSnapshotSchema.parse({
@@ -332,7 +352,12 @@ export function createTaskCreatorService(deps: {
     try {
       const sources = await requireSources(snapshot.request.profileId, snapshot.request.sourceIds);
       const proposal = enrichCrossSystemProposal(snapshot.proposal, sources);
-      assertProposalMaterializable(proposal, sources);
+      const manual = manualBuildEvidence(snapshot);
+      assertProposalMaterializable(
+        proposal,
+        manual ? [...sources, manual.source] : sources,
+        snapshot.request,
+      );
       applying = await persist({ ...applying, proposal, updatedAt: now() });
       const taskset = await materializeTaskset(applying, proposal, sources);
       return persist({ ...applying, state: "ready", materializedTasksetId: taskset.id, blockedReason: null, updatedAt: now(), transcript: [...applying.transcript, { id: `task_message_${randomUUID()}`, role: "assistant", text: `Materialized ${taskset.name} with ${taskset.tasks.length} tasks and ${taskset.graders.length} graders.`, createdAt: now() }] });
@@ -382,22 +407,27 @@ export function createTaskCreatorService(deps: {
 
   async function plan(snapshot: TaskCreationSnapshot, sources: TrainingSourceRef[], signal: AbortSignal, instruction: string | null = null, currentProposal: TaskDesignProposal | null = null): Promise<TaskCreationSnapshot> {
     if (snapshot.blockingQuestions.some((question) => !question.answer)) return TaskCreationSnapshotSchema.parse({ ...snapshot, state: "awaiting_questions", updatedAt: now() });
-    const evidence = await Promise.all(sources.map((source) => sourceEvidence(deps.store, source, deps.loadCodexHistoryThread)));
+    const manual = manualBuildEvidence(snapshot);
+    const effectiveSources = manual ? [...sources, manual.source] : sources;
+    const evidence = [
+      ...await Promise.all(sources.map((source) => sourceEvidence(deps.store, source, deps.loadCodexHistoryThread))),
+      ...(manual ? [manual.evidence] : []),
+    ];
     if (snapshot.request.analysisModel) assertHostedAuthoringEvidenceBudget(evidence);
     const proposalId = `task_proposal_${randomUUID()}`;
     const authored = snapshot.request.analysisModel && deps.authorProposal
-      ? await deps.authorProposal({ id: proposalId, model: snapshot.request.analysisModel, reasoningEffort: snapshot.request.analysisReasoningEffort, evidence, methodHint: snapshot.request.methodHint, signal, instruction: instruction ?? snapshot.request.objective, currentProposal })
-      : heuristicProposal(proposalId, snapshot, sources, evidence);
+      ? await deps.authorProposal({ id: proposalId, model: snapshot.request.analysisModel, reasoningEffort: snapshot.request.analysisReasoningEffort, evidence, buildIntent: snapshot.request.buildIntent, buildSpecification: snapshot.request.buildSpecification, methodHint: snapshot.request.methodHint, signal, instruction: instruction ?? snapshot.request.objective, currentProposal })
+      : heuristicProposal(proposalId, snapshot, effectiveSources, evidence);
     const proposal = "proposal" in authored ? authored.proposal : authored;
     const repairHistory = "proposal" in authored ? authored.repairHistory : [];
-    const specialized = enrichCrossSystemProposal(proposal, sources);
+    const specialized = enrichCrossSystemProposal(proposal, effectiveSources);
     const parsed = TaskDesignProposalSchema.parse({
       ...specialized,
       name: conciseWorkproductName(specialized.name),
       trainingPath: trainingPathForProposal(specialized),
     });
     validateProposedExamples(parsed, evidence);
-    const reviewBlockers = proposalMaterializationBlockers(parsed, sources);
+    const reviewBlockers = proposalMaterializationBlockers(parsed, effectiveSources, snapshot.request);
     const reviewed = TaskDesignProposalSchema.parse({
       ...parsed,
       warnings: [...new Set([...parsed.warnings, ...reviewBlockers])],
@@ -421,9 +451,8 @@ export function createTaskCreatorService(deps: {
     if (!deps.tasksetRootDir) {
       throw new Error("A managed Taskset storage root is required for private evaluation material.");
     }
-    const tasks = taskRecords(proposal, sources);
-    const agentTarget = snapshot.request.targetIntent.kind === "agent";
-    const timestamp = now();
+    const manual = manualBuildEvidence(snapshot);
+    const effectiveSources = manual ? [...sources, manual.source] : sources;
     const tasksetId = materializedTasksetId(snapshot, proposal);
     const existingTaskset = snapshot.request.resourceIntent === "dataset"
       && snapshot.request.targetIntent.operation === "improve"
@@ -436,16 +465,25 @@ export function createTaskCreatorService(deps: {
     ) {
       throw new Error(`Dataset ${tasksetId} was not found.`);
     }
+    const tasksetRevision = existingTaskset ? existingTaskset.revision + 1 : 1;
+    const tasks = taskRecords(
+      proposal,
+      effectiveSources,
+      snapshot.request.buildSpecification,
+    );
+    const agentTarget = snapshot.request.targetIntent.kind === "agent";
+    const timestamp = now();
     const draft = {
       schemaVersion: "openpond.taskset.v1" as const,
       id: tasksetId,
-      revision: existingTaskset ? existingTaskset.revision + 1 : 1,
+      revision: tasksetRevision,
       profileId: snapshot.request.profileId,
+      profileRelease: null,
       createImproveRunId: snapshot.request.createImproveRunId,
       name: proposal.name,
       objective: proposal.objective,
       status: "needs_review" as const,
-      sourceRefs: sources,
+      sourceRefs: effectiveSources,
       policy: proposal.policy,
       environment: {
         protocolVersion: "openpond.taskEnvironment.v1" as const,
@@ -458,16 +496,14 @@ export function createTaskCreatorService(deps: {
         defaultTimeoutMs: 120_000,
         networkPolicy: "none" as const,
         metadata: {
-          ...crossSystemTasksetMetadata(sources),
+          ...crossSystemTasksetMetadata(effectiveSources),
           ...(agentTarget ? { executor: "openpond-agent-sdk", action: "chat" } : {}),
         },
       },
       capabilities: {
         schemaVersion: "openpond.tasksetCapabilities.v1" as const,
         taskKind: agentTarget ? "single_agent" as const : proposal.taskKind,
-        supportedSignals: proposal.trainingPath?.primaryMethod === "grpo" ? ["demonstration", "reward"] as const : ["demonstration"] as const,
-        compatibleMethods: proposal.trainingPath ? [...new Set([proposal.trainingPath.primaryMethod, ...(proposal.trainingPath.bootstrap ? [proposal.trainingPath.bootstrap.method] : [])])] : ["sft"],
-        rewardKinds: proposal.trainingPath?.primaryMethod === "grpo" ? ["exact", "deterministic"] as const : ["deterministic"] as const,
+        ...capabilitiesForBuildSpecification(snapshot.request.buildSpecification, proposal),
         requiresTools: proposal.diagnosis.requiredTools.length > 0,
         requiresState: agentTarget || proposal.taskKind !== "chat",
         requiresPrivilegedGrading: true,
@@ -484,8 +520,13 @@ export function createTaskCreatorService(deps: {
           : fixture.output;
         return { ...fixture, taskId: task.id, output };
       }),
-      learningSignals: {
-        demonstrations: tasks
+      learningSignals: learningSignalsForBuildSpecification(
+        snapshot.request.buildSpecification,
+        tasks,
+        effectiveSources,
+        proposal,
+        {
+          demonstrations: tasks
           .filter(
             (task) =>
               task.split === "train"
@@ -502,6 +543,8 @@ export function createTaskCreatorService(deps: {
             sourceRefs: task.sourceRefs,
             artifactRef: `task_output_${task.id}`,
             approved: true,
+            prompt: typeof task.input.prompt === "string" ? task.input.prompt : null,
+            response: typeof task.expectedOutput?.text === "string" ? task.expectedOutput.text : null,
             confidence: task.metadata.exampleOrigin === "extracted"
               ? 0.8
               : task.metadata.exampleOrigin === "expert_authored"
@@ -513,13 +556,9 @@ export function createTaskCreatorService(deps: {
               approval: "taskset_materialization",
             },
           })),
-        preferences: [],
-        corrections: [],
-        feedback: [],
-        rewards: [],
-        labels: [],
-      },
-      authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1" as const, model: snapshot.request.analysisModel, modelConfig: snapshot.request.analysisReasoningEffort ? { reasoningEffort: snapshot.request.analysisReasoningEffort } : {}, skillHash: deps.authoringSkillHash, promptTemplateVersion: "task-authoring.v2", evidenceHashes: sources.map((source) => source.sourceHash), tasksetSdkVersion: "0.0.1", sourceCommit: profile.git?.head ?? null, repairHistory: snapshot.repairHistory, createdAt: timestamp },
+        },
+      ),
+      authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1" as const, model: snapshot.request.analysisModel, modelConfig: snapshot.request.analysisReasoningEffort ? { reasoningEffort: snapshot.request.analysisReasoningEffort } : {}, skillHash: deps.authoringSkillHash, promptTemplateVersion: "task-authoring.v2", buildIntent: snapshot.request.buildIntent, buildSpecification: snapshot.request.buildSpecification, evidenceHashes: effectiveSources.map((source) => source.sourceHash), tasksetSdkVersion: "0.0.1", sourceCommit: profile.git?.head ?? null, repairHistory: snapshot.repairHistory, createdAt: timestamp },
       readiness: null,
       contentHash: "",
       createdAt: existingTaskset?.createdAt ?? timestamp,
@@ -538,12 +577,16 @@ export function createTaskCreatorService(deps: {
         diagnosis: proposal.diagnosis,
         assumptions: proposal.assumptions,
         warnings: proposal.warnings,
-        ...crossSystemTasksetMetadata(sources),
+        ...crossSystemTasksetMetadata(effectiveSources),
       },
     };
     const unhashed = TasksetSchema.parse({ ...draft, contentHash: "00000000" });
     const taskset = TasksetSchema.parse({ ...unhashed, contentHash: computeTasksetHash(unhashed) });
-    await buildTaskset(taskset, path.join(deps.tasksetRootDir, taskset.id), { generatedFiles: proposal.generatedFiles });
+    await buildTaskset(taskset, path.join(deps.tasksetRootDir, taskset.id), {
+      generatedFiles: [
+        ...proposal.generatedFiles,
+      ],
+    });
     await deps.store.upsertTaskset(taskset);
     return taskset;
   }
@@ -702,12 +745,33 @@ async function evidenceForTurns(store: SqliteStore, sessionId: string, turns: Tu
 
 function heuristicProposal(id: string, snapshot: TaskCreationSnapshot, sources: TrainingSourceRef[], evidence: TaskAuthoringEvidence[]): TaskDesignProposal {
   const objective = snapshot.request.objective ?? `Reproduce the successful response behavior demonstrated across ${sources.length} selected conversations.`;
-  const proposedMethod = snapshot.request.methodHint ?? "sft";
-  const proposedExamples = sources.flatMap((source, sourceIndex) => pairEvidence(evidence[sourceIndex]?.excerpts ?? []).flatMap((pair, pairIndex) => pair.assistant ? [{ id: `example_${contentHash([source.id, pair.user.turnId, pairIndex]).slice(0, 20)}`, sourceId: source.id, sourceTurnId: pair.user.turnId, split: splitForSource(sourceIndex, sources.length), origin: "extracted" as const, inputPrompt: pair.user.text, expectedOutputText: pair.assistant.text, rationale: "Selected as a candidate example from the explicitly chosen conversation." }] : []));
+  const proposedMethod = snapshot.request.methodHint
+    ?? (snapshot.request.buildIntent === "preferences"
+      ? "dpo"
+      : snapshot.request.buildIntent === "verifiable_reward"
+        ? "grpo"
+        : snapshot.request.buildIntent === "rubric"
+          ? "none"
+          : "sft");
+  const proposedExamples = sources.flatMap((source, sourceIndex) => {
+    const pairs = pairEvidence(evidence[sourceIndex]?.excerpts ?? []);
+    return pairs.flatMap((pair, pairIndex) => pair.assistant ? [{
+      id: `example_${contentHash([source.id, pair.user.turnId, pairIndex]).slice(0, 20)}`,
+      sourceId: source.id,
+      sourceTurnId: pair.user.turnId,
+      split: source.metadata.manualBuildSpecification === true
+        ? splitForSource(pairIndex, pairs.length)
+        : splitForSource(sourceIndex, sources.length),
+      origin: "extracted" as const,
+      inputPrompt: pair.user.text,
+      expectedOutputText: pair.assistant.text,
+      rationale: "Selected as a candidate example from the explicitly chosen conversation.",
+    }] : []);
+  });
   return TaskDesignProposalSchema.parse({
     schemaVersion: "openpond.taskDesignProposal.v1",
     id,
-    name: conciseName(objective),
+    name: conciseTasksetName(objective),
     objective,
     diagnosis: {
       schemaVersion: "openpond.capabilityDiagnosis.v1",
@@ -716,9 +780,11 @@ function heuristicProposal(id: string, snapshot: TaskCreationSnapshot, sources: 
       changingKnowledge: [],
       requiredContext: [],
       requiredTools: [],
-      intervention: proposedMethod === "grpo" ? "grpo_rft" : proposedMethod === "dpo" ? "preference" : "sft",
-      trainingEligible: true,
-      rationale: ["The selected conversations contain candidate input-output examples; the user must review them before they become approved demonstrations."],
+      intervention: proposedMethod === "grpo" ? "grpo_rft" : proposedMethod === "dpo" ? "preference" : proposedMethod === "none" ? "no_training" : "sft",
+      trainingEligible: proposedMethod !== "none",
+      rationale: [proposedMethod === "none"
+        ? "The rubric is evaluation evidence until a valid preference or executable reward projection is approved."
+        : "The selected evidence contains candidate learning signals; the user must review them before they become approved Dataset artifacts."],
       confidence: 0.4,
     },
     taskKind: "chat",
@@ -740,9 +806,15 @@ function normalizeAuthoredGraders(graders: TaskDesignProposal["proposedGraders"]
   return graders.map((grader) => grader.kind === "model_judge" ? { ...grader, rewardEligible: false, calibrationStatus: "pending", metadata: { ...grader.metadata, requestedRewardEligible: grader.rewardEligible, calibrationSource: "openpond_fixture_audit_required" } } : grader);
 }
 
-function taskRecords(proposal: TaskDesignProposal, sources: TrainingSourceRef[]): TaskDataRecord[] {
+function taskRecords(
+  proposal: TaskDesignProposal,
+  sources: TrainingSourceRef[],
+  specification: TaskCreationRequest["buildSpecification"],
+): TaskDataRecord[] {
   const sourceById = new Map(sources.map((source) => [source.id, source]));
-  return proposal.proposedExamples.map((example) => {
+  const proposalTasks = proposal.proposedExamples
+    .filter((example) => sourceById.get(example.sourceId)?.metadata.manualBuildSpecification !== true)
+    .map((example) => {
     const source = sourceById.get(example.sourceId);
     if (!source) throw new Error(`Proposed example ${example.id} references a source outside this creation.`);
     const structured = crossSystemStructuredExample(source);
@@ -775,7 +847,54 @@ function taskRecords(proposal: TaskDesignProposal, sources: TrainingSourceRef[])
         ...crossSystemExampleMetadata(source),
       },
     };
+    });
+  if (!specification) return proposalTasks;
+  const source = sources.find((candidate) => candidate.metadata.manualBuildSpecification === true);
+  if (!source) return proposalTasks;
+  const task = (
+    id: string,
+    input: Record<string, unknown>,
+    expectedOutput: Record<string, unknown> | null,
+    split: TaskDataRecord["split"] = "train",
+  ): TaskDataRecord => ({
+    schemaVersion: "openpond.taskData.v1",
+    id: `task_${contentHash([source.id, id]).slice(0, 20)}`,
+    clusterKey: `${source.clusterKey}_${id}`,
+    split,
+    input,
+    expectedOutput,
+    policyVisibleContext: {},
+    privilegedContextRef: expectedOutput ? `expected_output_${id}` : null,
+    sourceRefs: [source.id],
+    tags: ["manual", specification.kind],
+    metadata: {
+      exampleOrigin: "expert_authored",
+      buildSpecificationKind: specification.kind,
+    },
   });
+  if (specification.kind === "demonstrations") {
+    return [...proposalTasks, ...specification.examples.map((example, index) =>
+      task(
+        example.id,
+        { prompt: example.prompt },
+        { text: example.response },
+        splitForSource(index, specification.examples.length),
+      ))];
+  }
+  if (specification.kind === "preferences") {
+    return [...proposalTasks, ...specification.pairs.map((pair, index) =>
+      task(
+        pair.id,
+        { prompt: pair.prompt },
+        { text: pair.chosen },
+        splitForSource(index, specification.pairs.length),
+      ))];
+  }
+  return [...proposalTasks, task(
+    specification.kind,
+    { prompt: specification.task },
+    null,
+  )];
 }
 
 function pairEvidence(excerpts: TaskAuthoringEvidence["excerpts"]): Array<{ user: TaskAuthoringEvidence["excerpts"][number]; assistant: TaskAuthoringEvidence["excerpts"][number] | null }> {
@@ -802,91 +921,3 @@ function validateProposedExamples(proposal: TaskDesignProposal, evidence: TaskAu
     if (!user || !assistant || user.text !== example.inputPrompt || assistant.text !== example.expectedOutputText) throw new Error(`Extracted example ${example.id} does not exactly match its cited conversation turn.`);
   }
 }
-
-function proposalMaterializationBlockers(proposal: TaskDesignProposal, sources: TrainingSourceRef[]): string[] {
-  if (!proposal.diagnosis.trainingEligible) return [`OpenPond recommends ${proposal.diagnosis.intervention.replaceAll("_", " ")} instead of model training.`];
-  const blockers: string[] = [];
-  if (!["sft", "dpo", "grpo", "sdft", "opsd", "sdpo"].includes(proposal.proposedMethod)) blockers.push(`The ${proposal.proposedMethod.replaceAll("_", " ")} recommendation does not create a trainable Taskset.`);
-  const sourceById = new Map(sources.map((source) => [source.id, source]));
-  const hasGroundTruth = (example: TaskDesignProposal["proposedExamples"][number]) =>
-    Boolean(example.expectedOutputText || crossSystemGroundTruth(sourceById.get(example.sourceId)));
-  const train = proposal.proposedExamples.filter(
-    (example) =>
-      example.split === "train"
-      && (proposal.proposedMethod === "grpo" ? hasGroundTruth(example) : Boolean(example.expectedOutputText)),
-  );
-  const frozen = proposal.proposedExamples.filter(
-    (example) => example.split === "frozen_eval" && hasGroundTruth(example),
-  );
-  if (!train.length) {
-    blockers.push(
-      proposal.proposedMethod === "grpo"
-        ? "No reviewed reward-bearing training task was proposed."
-        : "No reviewed training example was proposed.",
-    );
-  }
-  if (!frozen.length) blockers.push("No independent evaluation example was proposed.");
-  const clusterSplits = new Map<string, Set<string>>();
-  for (const example of proposal.proposedExamples) {
-    const cluster = sourceById.get(example.sourceId)?.clusterKey;
-    if (!cluster) continue;
-    const splits = clusterSplits.get(cluster) ?? new Set<string>();
-    splits.add(example.split);
-    clusterSplits.set(cluster, splits);
-  }
-  if ([...clusterSplits.values()].some((splits) => splits.size > 1)) blockers.push("A source conversation appears in both training and evaluation. Each conversation must remain in one split.");
-  const trainClusters = new Set(train.map((example) => sourceById.get(example.sourceId)?.clusterKey).filter(Boolean));
-  const frozenClusters = new Set(frozen.map((example) => sourceById.get(example.sourceId)?.clusterKey).filter(Boolean));
-  if (!trainClusters.size || !frozenClusters.size || [...trainClusters].some((cluster) => frozenClusters.has(cluster))) blockers.push("Training and evaluation require independent source conversations.");
-  if (!proposal.proposedGraders.length) blockers.push("No evaluation grader was proposed.");
-  const fixtureLabels = new Set(proposal.graderFixtures.map((fixture) => fixture.label));
-  for (const label of ["positive", "negative", "boundary", "adversarial", "prompt_injection", "infrastructure_failure"] as const) if (!fixtureLabels.has(label)) blockers.push(`The grader is missing its ${label.replaceAll("_", " ")} fixture.`);
-  return [...new Set(blockers)];
-}
-
-function trainingPathForProposal(proposal: Pick<TaskDesignProposal, "proposedMethod" | "proposedExamples"> | Record<string, unknown>) {
-  const method = proposal.proposedMethod;
-  if (method !== "sft" && method !== "dpo" && method !== "grpo" && method !== "sdft" && method !== "opsd" && method !== "sdpo") return null;
-  const examples = Array.isArray(proposal.proposedExamples) ? proposal.proposedExamples as TaskDesignProposal["proposedExamples"] : [];
-  const demonstrationRefs = examples.filter((example) => example.split === "train" && Boolean(example.expectedOutputText)).map((example) => example.id);
-  return {
-    primaryMethod: method,
-    bootstrap: method === "grpo" && demonstrationRefs.length ? {
-      method: "sft" as const,
-      purpose: "trajectory_bootstrap" as const,
-      demonstrationRefs,
-      limitations: [
-        "The SFT bootstrap imitates approved trajectories; it does not optimize verifier reward.",
-        "Completing the bootstrap does not satisfy the primary GRPO recommendation.",
-      ],
-    } : null,
-  };
-}
-
-function assertProposalMaterializable(proposal: TaskDesignProposal, sources: TrainingSourceRef[]): void {
-  const blockers = proposalMaterializationBlockers(proposal, sources);
-  if (blockers.length) throw new Error(blockers[0]);
-}
-function conciseName(objective: string): string {
-  return conciseWorkproductName(
-    objective.replace(/[^a-zA-Z0-9 ]/g, " "),
-    "Training Taskset",
-  );
-}
-function materializedTasksetId(
-  snapshot: TaskCreationSnapshot,
-  proposal: TaskDesignProposal,
-): string {
-  if (
-    snapshot.request.resourceIntent === "dataset"
-    && snapshot.request.targetIntent.operation === "improve"
-  ) {
-    if (!snapshot.request.targetIntent.id) {
-      throw new Error("Editing a Dataset requires its existing Dataset ID.");
-    }
-    return snapshot.request.targetIntent.id;
-  }
-  return safeTasksetId(proposal.name, snapshot.id);
-}
-
-function safeTasksetId(name: string, snapshotId: string): string { const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "taskset"; return `${slug}-${contentHash(snapshotId).slice(0, 8)}`; }

@@ -1,6 +1,10 @@
 import { memo, useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
-import type { ChatAttachmentSummary } from "@openpond/contracts";
+import type {
+  ChatAttachmentSummary,
+  SessionUserQuestion,
+  SessionUserQuestionResolution,
+} from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
 import type { ChatMessage, ChatSource } from "../../lib/app-models";
@@ -29,6 +33,10 @@ type MessageRowProps = {
   onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenProfileSettings?: () => void;
+  onResolveUserQuestion?: (
+    question: SessionUserQuestion,
+    resolution: SessionUserQuestionResolution,
+  ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
   workspaceRootPath?: string | null;
@@ -44,6 +52,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenBrowserLink,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onResolveUserQuestion,
   onOpenSession,
   showFooter = false,
   workspaceRootPath = null,
@@ -160,6 +169,12 @@ export const MessageRow = memo(function MessageRow({
         />
       )}
       {message.createImproveRun ? <CreateImproveStatusReceipt run={message.createImproveRun} /> : null}
+      {message.userQuestion ? (
+        <UserQuestionCard
+          question={message.userQuestion}
+          onResolve={onResolveUserQuestion}
+        />
+      ) : null}
       {showFooter && (
         <div className="assistant-message-footer">
           {timestampLabel && (
@@ -223,6 +238,7 @@ function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProp
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
     previous.onOpenProfileSettings === next.onOpenProfileSettings &&
+    previous.onResolveUserQuestion === next.onResolveUserQuestion &&
     previous.onOpenSession === next.onOpenSession &&
     previous.showFooter === next.showFooter &&
     previous.workspaceRootPath === next.workspaceRootPath &&
@@ -249,6 +265,105 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.insightsRunPrompt === next.insightsRunPrompt &&
     previous.changeSummary === next.changeSummary &&
     previous.createImproveRun === next.createImproveRun
+    && previous.userQuestion === next.userQuestion
+  );
+}
+
+function UserQuestionCard({
+  question,
+  onResolve,
+}: {
+  question: SessionUserQuestion;
+  onResolve?: (
+    question: SessionUserQuestion,
+    resolution: SessionUserQuestionResolution,
+  ) => Promise<void>;
+}) {
+  const [freeform, setFreeform] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const resolve = async (resolution: SessionUserQuestionResolution) => {
+    if (!onResolve || submitting || question.status !== "pending") return;
+    setSubmitting(true);
+    try {
+      await onResolve(question, resolution);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <section className={`user-question-card ${question.status}`} aria-label="Question from OpenPond">
+      <strong>{question.question}</strong>
+      {question.reason ? <p>{question.reason}</p> : null}
+      {question.status === "pending" ? (
+        <>
+          {question.options.length > 0 ? (
+            <div className="user-question-options">
+              {question.options.map((option) => (
+                <button
+                  disabled={submitting || !onResolve}
+                  key={option.id}
+                  type="button"
+                  onClick={() => void resolve({
+                    questionId: question.id,
+                    action: "answer",
+                    optionId: option.id,
+                    text: option.label,
+                  })}
+                >
+                  <span>{option.label}</span>
+                  {option.description ? <small>{option.description}</small> : null}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {question.allowFreeform ? (
+            <form
+              className="user-question-freeform"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const text = freeform.trim();
+                if (text) void resolve({
+                  questionId: question.id,
+                  action: "answer",
+                  optionId: null,
+                  text,
+                });
+              }}
+            >
+              <input
+                aria-label="Answer"
+                disabled={submitting || !onResolve}
+                onChange={(event) => setFreeform(event.target.value)}
+                placeholder="Type an answer"
+                value={freeform}
+              />
+              <button disabled={submitting || !onResolve || !freeform.trim()} type="submit">
+                Answer
+              </button>
+            </form>
+          ) : null}
+          <button
+            className="user-question-dismiss"
+            disabled={submitting || !onResolve}
+            type="button"
+            onClick={() => void resolve({
+              questionId: question.id,
+              action: "dismiss",
+              optionId: null,
+              text: "",
+            })}
+          >
+            Dismiss question
+          </button>
+        </>
+      ) : (
+        <small>
+          {question.status === "answered"
+            ? `Answered${question.answer?.text ? `: ${question.answer.text}` : ""}`
+            : "Dismissed"}
+        </small>
+      )}
+    </section>
   );
 }
 

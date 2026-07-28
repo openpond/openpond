@@ -75,8 +75,6 @@ const PlannerCheckSchema = z.object({
 const PlannerPlanDecisionSchema = z.object({
   targetId: z.string().trim().min(1).optional().nullable(),
   targetName: z.string().trim().min(1).optional().nullable(),
-  agentId: z.string().trim().min(1).optional().nullable(),
-  agentName: z.string().trim().min(1).optional().nullable(),
   summary: z.string().trim().min(1),
   capturedContextSummary: z.string().trim().min(1),
   actionShape: CreateImproveActionShapeSchema,
@@ -113,14 +111,6 @@ type PlannerPlanDecision = z.infer<typeof PlannerPlanDecisionSchema>;
 export async function runModelBackedCreateImprovePlanner(
   input: ModelBackedCreateImprovePlannerInput,
 ): Promise<CreateImproveRun> {
-  const labDecision = labImprovePlanDecision(input.run);
-  if (labDecision) {
-    return createImproveRunFromPlannerDecision({
-      run: input.run,
-      decision: labDecision,
-      modelRef: null,
-    });
-  }
   const messages = createImprovePlannerMessages(input.run);
   const content = await collectPlannerText(input.stream, messages);
   let decision: PlannerDecision;
@@ -242,7 +232,7 @@ function createPlanRun(
   const timestamp = new Date().toISOString();
   const planId = `create_improve_plan_${randomUUID()}`;
   const approvalId = `approval_${randomUUID()}`;
-  const target = plannedTarget(run.target, decision, run.objective);
+  const target = plannedTarget(run.target, decision);
   const sourceRoot = sourceRootForTarget(target);
   const actionShape = decision.actionShape;
   const checks = decision.checks.length ? decision.checks : defaultChecks(target.kind);
@@ -251,11 +241,8 @@ function createPlanRun(
     : defaultSourcePlan({ run: { ...run, target }, sourceRoot });
   const defaultActionKey = decision.defaultChatAction?.key
     ?? actionShape.defaultActionKey
-    ?? (target.kind === "agent" ? target.defaultActionKey : null)
     ?? "chat";
-  const provenance = run.surface === "lab_improve"
-    ? deterministicLabPlannerProvenance()
-    : plannerProvenance(modelRef);
+  const provenance = plannerProvenance(modelRef);
   const plan = CreateImprovePlanSchema.parse({
     schemaVersion: "openpond.createImprove.plan.v1",
     id: planId,
@@ -311,29 +298,11 @@ function createPlanRun(
 function plannedTarget(
   target: CreateImproveTarget,
   decision: PlannerPlanDecision,
-  objective: string,
 ): CreateImproveTarget {
-  const requestedId = decision.targetId ?? decision.agentId;
-  const requestedName = decision.targetName ?? decision.agentName;
-  if (target.kind !== "agent") {
-    return {
-      ...target,
-      id: target.id ?? requestedId ?? null,
-      displayName: target.displayName ?? requestedName ?? null,
-    };
-  }
-  const id = normalizeTargetId(requestedId ?? "")
-    || target.id
-    || normalizeTargetId(requestedName ?? "")
-    || targetIdFromObjective(objective);
-  const defaultActionKey = target.id === id && target.defaultActionKey
-    ? target.defaultActionKey
-    : `${id}.chat`;
   return {
     ...target,
-    id,
-    displayName: requestedName ?? target.displayName,
-    defaultActionKey,
+    id: target.id ?? decision.targetId ?? null,
+    displayName: target.displayName ?? decision.targetName ?? null,
   };
 }
 
@@ -408,15 +377,7 @@ function defaultSourcePlan(input: { run: CreateImproveRun; sourceRoot: string })
   ];
 }
 
-function defaultChecks(kind: CreateImproveTarget["kind"]) {
-  if (kind === "agent") {
-    return [
-      { name: "inspect", command: "pnpm agent:inspect", required: true },
-      { name: "build", command: "pnpm build", required: true },
-      { name: "validate", command: "pnpm agent:validate", required: true },
-      { name: "eval", command: "pnpm agent:eval", required: true },
-    ];
-  }
+function defaultChecks(_kind: CreateImproveTarget["kind"]) {
   return [
     { name: "build", command: "pnpm build", required: true },
     { name: "validate", command: "pnpm run typecheck", required: true },
@@ -440,17 +401,6 @@ function plannerProvenance(modelRef: ChatModelRef | null) {
       source: "create_improve_model_planner",
       providerId: modelRef?.providerId ?? null,
       modelId: modelRef?.modelId ?? null,
-    },
-  };
-}
-
-function deterministicLabPlannerProvenance() {
-  return {
-    planner: {
-      kind: "deterministic",
-      source: "lab_improve_default_planner",
-      providerId: null,
-      modelId: null,
     },
   };
 }
@@ -528,54 +478,6 @@ function normalizePlannerDecision(value: unknown): unknown {
     normalized.questions = value.questions.map(normalizePlannerQuestion);
   }
   return normalized;
-}
-
-function labImprovePlanDecision(run: CreateImproveRun): PlannerDecision | null {
-  if (
-    run.operation !== "improve"
-    || run.surface !== "lab_improve"
-  ) {
-    return null;
-  }
-  const targetName = run.target.displayName ?? run.target.id ?? "Agent";
-  const accountHealth = run.target.id === "account-health-agent"
-    || /account health|renewal risk|weekly account review/i.test(run.objective);
-  const defaultActionKey = run.target.kind === "agent"
-    ? run.target.defaultActionKey ?? `${run.target.id ?? "default"}.chat`
-    : "chat";
-  return PlannerDecisionSchema.parse({
-    schemaVersion: "openpond.createImprove.plannerDecision.v1",
-    decision: "plan",
-    plan: {
-      targetId: run.target.id,
-      targetName,
-      summary: `Improve ${targetName}: ${run.objective}`,
-      capturedContextSummary:
-        "The user supplied the desired outcome in Lab. Inspect the existing Profile source and choose the narrowest implementation that achieves it.",
-      actionShape: {
-        mode: accountHealth ? "chat_and_direct_actions" : "chat",
-        label: accountHealth ? "Account health chat and reviews" : "Chat",
-        detail: accountHealth
-          ? "Preserve chat plus the account summary, renewal triage, and weekly review actions while applying the correction."
-          : "Preserve the Agent's existing chat surface while improving the requested behavior.",
-        defaultActionKey,
-        directActionHint: accountHealth
-          ? "Preserve summarize-account, triage-renewal-risk, and build-weekly-account-review with their existing inputs and artifacts."
-          : null,
-        artifactPolicy: accountHealth
-          ? "Keep the source diff, checks, evaluations, and weekly-review Markdown and JSON artifacts with the candidate for review."
-          : "Keep the source diff, checks, and evaluation evidence with the candidate for review.",
-      },
-      defaultChatAction: {
-        key: defaultActionKey,
-        label: targetName,
-        required: true,
-      },
-      sourcePlan: [],
-      requirements: [],
-      checks: [],
-    },
-  });
 }
 
 function normalizePlannerQuestion(value: unknown, index: number): unknown {
@@ -712,17 +614,6 @@ function extractJsonObject(content: string): string | null {
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   return start >= 0 && end > start ? candidate.slice(start, end + 1) : null;
-}
-
-function targetIdFromObjective(objective: string): string {
-  return normalizeTargetId(
-    objective
-      .toLowerCase()
-      .replace(/['"]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48) || "created-agent",
-  );
 }
 
 function normalizeTargetId(value: string): string {

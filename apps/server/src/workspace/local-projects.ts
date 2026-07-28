@@ -15,7 +15,6 @@ import {
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { now } from "../utils.js";
-import { detectProjectAgentSdk } from "./project-agent-sdk.js";
 import { normalizeProjectDirectory } from "./project-directories.js";
 import { runWorkspaceCommand, type WorkspacePaths } from "./workspaces.js";
 
@@ -131,23 +130,6 @@ async function detectLocalProjectSandboxTemplate(input: {
     if (detected) return detected;
   }
   return null;
-}
-
-async function detectLocalProjectCapabilities(input: {
-  selectedPath: string;
-  workspacePath: string;
-}): Promise<{
-  sandboxTemplate: LocalProjectSandboxTemplate | null;
-  agentSdk: LocalProject["agentSdk"] | null;
-}> {
-  const [sandboxTemplate, agentSdk] = await Promise.all([
-    detectLocalProjectSandboxTemplate(input),
-    detectProjectAgentSdk(input),
-  ]);
-  return {
-    sandboxTemplate,
-    agentSdk,
-  };
 }
 
 async function resolveProjectPath(
@@ -350,14 +332,13 @@ export async function listLocalProjects(store: SqliteStore): Promise<LocalProjec
   return sortLocalProjects(
     await Promise.all(
       parsed.data.map(async (project) => {
-        const capabilities = await detectLocalProjectCapabilities({
+        const sandboxTemplate = await detectLocalProjectSandboxTemplate({
           selectedPath: project.path,
           workspacePath: project.workspacePath,
         });
         return {
           ...project,
-          sandboxTemplate: capabilities.sandboxTemplate,
-          agentSdk: capabilities.agentSdk,
+          sandboxTemplate,
         };
       })
     )
@@ -388,7 +369,6 @@ export async function ensureSystemLocalProject(
     systemKind: input.systemKind,
     hiddenFromDefaultSidebar: existing?.hiddenFromDefaultSidebar ?? input.hiddenFromDefaultSidebar ?? true,
     sandboxTemplate: null,
-    agentSdk: null,
     linkedOpenPondApp: null,
     linkedSandboxProject: null,
     preferredSandboxAgentId: null,
@@ -419,7 +399,7 @@ export async function upsertLocalProject(
   const selectedPath = createdProjectPath ?? input.path;
   if (!selectedPath) throw new Error("Project path is required.");
   const resolved = await resolveProjectPath(selectedPath, { detectGitRoot: true });
-  const { sandboxTemplate, agentSdk } = await detectLocalProjectCapabilities(resolved);
+  const sandboxTemplate = await detectLocalProjectSandboxTemplate(resolved);
   const projects = await listLocalProjects(store);
   const existing = projects.find((project) => project.workspacePath === resolved.workspacePath);
   const timestamp = now();
@@ -431,7 +411,6 @@ export async function upsertLocalProject(
     repoPath: resolved.repoPath,
     source: resolved.source,
     sandboxTemplate,
-    agentSdk,
     linkedOpenPondApp: existing?.linkedOpenPondApp ?? null,
     linkedSandboxProject: existing?.linkedSandboxProject ?? null,
     preferredSandboxAgentId: existing?.preferredSandboxAgentId ?? null,
@@ -451,15 +430,14 @@ export async function refreshLocalProjectGitMetadata(store: SqliteStore, project
   const existing = projects.find((project) => project.id === projectId);
   if (!existing) throw new Error("Project workspace not found");
   const resolved = await resolveProjectPath(existing.path, { detectGitRoot: true });
-  const capabilities = await detectLocalProjectCapabilities(resolved);
+  const sandboxTemplate = await detectLocalProjectSandboxTemplate(resolved);
   const updated: LocalProject = {
     ...existing,
     path: resolved.selectedPath,
     workspacePath: resolved.workspacePath,
     repoPath: resolved.repoPath,
     source: resolved.source,
-    sandboxTemplate: capabilities.sandboxTemplate,
-    agentSdk: capabilities.agentSdk,
+    sandboxTemplate,
     updatedAt: now(),
   };
   await saveLocalProjects(store, [updated, ...projects.filter((project) => project.id !== projectId)]);

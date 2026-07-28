@@ -53,6 +53,7 @@ describe("compute model storage settings", () => {
     expect(html).not.toContain("Choose a writable drive");
     expect(html).not.toContain("model-storage-selection");
     expect(html).not.toContain('placeholder="Choose a local or mounted folder"');
+    expect(html).not.toContain("Remote accelerators");
   });
 
   test("shows the full mounted path inside the manual location dialog", () => {

@@ -7,6 +7,7 @@ import {
   createResourceModelToolDefinitions,
   createWebFetchModelToolDefinition,
   createWebSearchModelToolDefinition,
+  directOpenPondActionToolName,
 } from "../apps/server/src/openpond/model-tool-registry";
 import {
   createBrowserModelToolDefinitions,
@@ -1055,6 +1056,189 @@ describe("model tool registry", () => {
           sessionId: "session_1",
         },
       },
+    ]);
+  });
+
+  test("exposes scoped Profile Agent actions as schema-shaped native tools", async () => {
+    const profilePayloads: unknown[] = [];
+    const action = {
+      id: "profile.cmo.review-campaign",
+      agentId: "cmo",
+      label: "Review campaign",
+      description: "Review campaign metrics and recommend the next action.",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          campaignId: { type: "string" },
+          prompt: { type: "string" },
+        },
+        required: ["campaignId"],
+      },
+      implementation: {
+        type: "openpond-profile-action",
+        actionId: "review-campaign",
+      },
+    } as const;
+    const definitions = createOpenPondActionModelToolDefinitions({
+      actionCatalog: [action],
+      executeWorkspaceTool: async () => {
+        throw new Error("profile actions should not use sandbox_run_action");
+      },
+      executeProfileAction: async (payload) => {
+        profilePayloads.push(payload);
+        return { recommendation: "Pause the weakest creative." };
+      },
+    });
+    const toolName = directOpenPondActionToolName(action);
+    const direct = definitions.find((definition) => definition.name === toolName);
+    if (!direct) throw new Error("direct Profile Agent tool missing");
+
+    expect(toolName).toMatch(/^agent_review_campaign_[a-f0-9]{8}$/);
+    expect(toolName.length).toBeLessThanOrEqual(64);
+    expect(direct.parameters).toEqual(action.inputSchema);
+    const result = await direct.execute({
+      ...actionContext({
+        campaignId: "campaign_1",
+        prompt: "What should I do next?",
+      }),
+      session: baseSession({
+        workspaceKind: "local_project",
+        workspaceId: "local_project_1",
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.name).toBe(toolName);
+    expect(profilePayloads).toEqual([
+      {
+        action: "review-campaign",
+        input: {
+          campaignId: "campaign_1",
+          prompt: "What should I do next?",
+          message: "What should I do next?",
+          source: "openpond_app",
+        },
+        metadata: {
+          source: "openpond_app",
+          selectedActionId: "review-campaign",
+          selectedActionLabel: "Review campaign",
+          selectedBy: "native_model_tool",
+          displayPrompt: "run action",
+          sessionId: "session_1",
+        },
+      },
+    ]);
+  });
+
+  test("scopes a generated Harness turn to exact tools and injects its private case", async () => {
+    const profilePayloads: unknown[] = [];
+    const action = {
+      id: "get-portfolio-snapshot",
+      agentId: "support-triage-agent",
+      label: "Get portfolio snapshot",
+      inputSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: { scenarioId: { type: "string" } },
+        required: ["scenarioId"],
+      },
+      implementation: {
+        type: "openpond-profile-action",
+        actionId: "get-portfolio-snapshot",
+      },
+    } as const;
+    const studentSchema = {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+      required: [],
+    };
+    const definitions = createOpenPondActionModelToolDefinitions({
+      actionCatalog: [action],
+      executeWorkspaceTool: async () => {
+        throw new Error("Harness profile actions should stay local");
+      },
+      executeProfileAction: async (payload) => {
+        profilePayloads.push(payload);
+        return {
+          action: "get-portfolio-snapshot",
+          stdout: JSON.stringify({
+            result: {
+              text: JSON.stringify({
+                schemaVersion: "openpond.cmoPortfolioSnapshot.v1",
+                incrementalBudgetUsd: 100_000,
+              }),
+              metadata: {
+                snapshot: {
+                  schemaVersion: "openpond.cmoPortfolioSnapshot.v1",
+                  incrementalBudgetUsd: 100_000,
+                },
+              },
+            },
+            traceArtifactRef: ".openpond/traces/snapshot.jsonl",
+          }),
+          stderr: "",
+          code: 0,
+        };
+      },
+      trainingHarness: {
+        taskId: "cmo_train_1",
+        actionBindings: [
+          {
+            schemaVersion: "openpond.harnessActionBinding.v1",
+            actionId: action.id,
+            modelToolName: "get_portfolio_snapshot",
+            description: "Read the current portfolio.",
+            inputSchema: studentSchema,
+            actionSchemaHash: "a".repeat(64),
+            agentRelease: {
+              id: "agent_marketing_fixture",
+              contentHash: "b".repeat(64),
+            },
+            implementationHash: "c".repeat(64),
+            runtimeBindingId: "profile_action_fixture",
+            capabilityReceiptHash: "d".repeat(64),
+            sideEffect: "read",
+            studentVisible: true,
+            timeoutMs: 30_000,
+            episodeArgumentBindings: [
+              { argument: "scenarioId", source: "case_id" },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(definitions.map((definition) => definition.name)).toEqual([
+      "get_portfolio_snapshot",
+    ]);
+    expect(definitions[0]?.parameters).toEqual(studentSchema);
+    const result = await definitions[0]!.execute({
+      ...actionContext({}),
+      session: baseSession({
+        workspaceKind: "local_project",
+        workspaceId: "local_project_1",
+      }),
+    });
+    expect(JSON.parse(result.contentText)).toEqual({
+      ok: true,
+      action: "get_portfolio_snapshot",
+      output: "Ran profile action get-portfolio-snapshot.",
+      data: {
+        result: {
+          schemaVersion: "openpond.cmoPortfolioSnapshot.v1",
+          incrementalBudgetUsd: 100_000,
+        },
+      },
+    });
+    expect(result.contentText).not.toContain("traceArtifactRef");
+    expect(result.contentText).not.toContain("stdout");
+    expect(profilePayloads).toEqual([
+      expect.objectContaining({
+        action: "get-portfolio-snapshot",
+        input: expect.objectContaining({ scenarioId: "cmo_train_1" }),
+      }),
     ]);
   });
 

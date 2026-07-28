@@ -159,24 +159,6 @@ Options:
   --json
   --path <string>
 ```
-## extend
-
-```text
-Usage:
-  openpond extend <instructions>
-
-Options:
-  --cwd <string>
-```
-## edit
-
-```text
-Usage:
-  openpond edit <instructions>
-
-Options:
-  --cwd <string>
-```
 ## extension
 
 ```text
@@ -666,6 +648,28 @@ Options:
   --volume-name <string>
   --volume-storage-gb <number>
   --workflow-mode <string>
+```
+## training
+
+```text
+Usage:
+  openpond training <start|status|watch|logs|cancel|artifacts> <model-run-id|run-id>
+  openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
+  openpond training status <run-id> [--json]
+  openpond training watch <run-id> [--interval-ms <ms>] [--json]
+  openpond training logs <run-id> [--json]
+  openpond training cancel <run-id> [--json]
+  openpond training artifacts <run-id> [--json]
+
+Options:
+  --api-base-url <string>
+  --detach
+  --interval-ms <integer>
+  --json
+  --manifest <string>
+  --max-spend <number>
+  --retention-days <integer>
+  --yes
 ```
 ## opchat
 

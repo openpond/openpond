@@ -23,21 +23,32 @@ export function useLabDetailNavigation(active: boolean) {
         { label: "Lab", onSelect: () => requestClose(null) },
         { label: "Datasets", onSelect: () => requestClose("dataset") },
         ...(detailLocation.workproductLabel
-          ? [{ label: detailLocation.workproductLabel }]
+          ? [{
+              label: detailLocation.workproductLabel,
+              onSelect: detailLocation.workproductOnSelect,
+            }]
           : []),
-        ...detailLocation.sectionLabels.map((label) => ({ label })),
+        ...detailLocation.segments,
       ];
     }
     return [
-      { label: "Lab", onSelect: () => requestClose(null) },
-      { label: "Home", onSelect: () => requestClose(null) },
+      {
+        label: "Lab",
+        onSelect: detailLocation.kindOnSelect ?? (() => requestClose(null)),
+      },
       {
         label: detailLocation.kindLabel,
-        onSelect: () =>
-          requestClose(detailLocation.kind === "model" ? null : detailLocation.kind),
+        onSelect:
+          detailLocation.kindOnSelect ??
+          (() => requestClose(detailLocation.kind === "model" ? null : detailLocation.kind)),
       },
-      ...(detailLocation.workproductLabel ? [{ label: detailLocation.workproductLabel }] : []),
-      ...detailLocation.sectionLabels.map((label) => ({ label })),
+      ...(detailLocation.workproductLabel
+        ? [{
+            label: detailLocation.workproductLabel,
+            onSelect: detailLocation.workproductOnSelect,
+          }]
+        : []),
+      ...detailLocation.segments,
     ];
   }, [active, detailLocation, requestClose]);
 

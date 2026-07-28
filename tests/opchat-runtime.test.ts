@@ -129,7 +129,7 @@ describe("OpenPond runtime OpChat routing", () => {
       ]);
     };
 
-    const deltas = await collectStream();
+    const deltas = await collectStream({ reasoningEffort: "high" });
 
     expect(requests).toEqual([
       {
@@ -137,6 +137,7 @@ describe("OpenPond runtime OpChat routing", () => {
         body: {
           model: "openpond-chat",
           messages: [{ role: "user", content: "hello" }],
+          reasoning_effort: "high",
           stream: true,
         },
       },
@@ -319,13 +320,16 @@ describe("OpenPond runtime OpChat routing", () => {
   });
 });
 
-async function collectStream() {
+async function collectStream(
+  options: { reasoningEffort?: "low" | "medium" | "high" | "xhigh" } = {},
+) {
   const deltas = [];
   for await (const delta of streamOpChatChatCompletion({
     apiBaseUrl: "https://api.example.test/opchat/v1",
     token: "opk_test",
     model: "openpond-chat",
     messages: [{ role: "user", content: "hello" }],
+    reasoningEffort: options.reasoningEffort,
   })) {
     deltas.push(delta);
   }

@@ -13,6 +13,7 @@
     { "path": "../../packages/runtime" }
     ,{ "path": "../../packages/taskset-sdk" }
     ,{ "path": "../../packages/training-sdk" }
+    ,{ "path": "../../packages/trainer-local" }
   ],
   "include": ["src/**/*.ts"]
 }

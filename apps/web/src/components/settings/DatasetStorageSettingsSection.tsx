@@ -6,6 +6,7 @@ import type {
 } from "@openpond/contracts";
 import { RefreshCw } from "../icons";
 import { ModelStoragePicker } from "./ModelStoragePicker";
+import type { ComputeSettingsBusy } from "./useComputeSettings";
 
 export function DatasetStorageSettingsSection({
   state,
@@ -17,7 +18,7 @@ export function DatasetStorageSettingsSection({
 }: {
   state: ComputeStateResponse | null;
   catalog: DatasetCatalogResponse | null;
-  busy: "load" | "scan" | "save" | null;
+  busy: ComputeSettingsBusy;
   catalogLoading: boolean;
   onRefresh: () => Promise<void>;
   onSave: (datasetStorePath: string | null) => Promise<boolean>;

@@ -238,7 +238,7 @@ export function useWorkspaceTargetState({
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
   selectedSession: Session | null;
-  pendingWorkspaceTarget: "queue_cloud" | "hybrid" | null;
+  pendingWorkspaceTarget: "hybrid" | null;
   workspaceStates: Record<string, WorkspaceState>;
   workspaceBusy: boolean;
 }) {
@@ -325,16 +325,6 @@ export function useWorkspaceTargetState({
         disabled: !selectedProject && activeWorkspaceLocation !== "local",
         disabledReason: "No linked local workspace.",
       };
-      const queueOption = {
-        value: "queue_cloud" as const,
-        label: "Queue cloud work item",
-        detail: "Run the next task in a hosted sandbox. Keeps this chat local.",
-        stateNote: cloudLinked ? `will use ${cloudStateNote}` : "upload required",
-        disabled: accountPending || accountSignedOut || !cloudLinked,
-        disabledReason: accountSignedOut
-          ? "Add an OpenPond account before queueing Cloud work."
-          : "Upload/sync this Project to Cloud before queueing work.",
-      };
       const hybridOption = {
         value: "hybrid" as const,
         label: "Hybrid",
@@ -369,7 +359,6 @@ export function useWorkspaceTargetState({
       const actionOption = actionTarget === "local" ? localOption : cloudOption;
       let selectedOption: WorkspaceTargetOptionState =
         activeWorkspaceLocation === "cloud" ? cloudOption : localOption;
-      if (pendingWorkspaceTarget === "queue_cloud") selectedOption = queueOption;
       if (isHybridWorkspaceSession(selectedSession) || pendingWorkspaceTarget === "hybrid") {
         selectedOption = hybridOption;
       }
@@ -388,7 +377,7 @@ export function useWorkspaceTargetState({
                 : "Check out locally",
         },
         uploadAction: uploadOption,
-        options: [localOption, hybridOption, queueOption, cloudOption],
+        options: [localOption, hybridOption, cloudOption],
       };
     },
     [

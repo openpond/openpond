@@ -80,7 +80,20 @@ export function summarizeActivityGroup(activities: ActivityItem[]): ActivityGrou
   const clauses = [...primaryClauses(counters), ...outcomeClauses, ...receiptClauses];
   const runClause = counters.runCount > 0 ? ranClause(counters.runCount) : "";
   const genericSummary = formatGenericLabels(genericLabels);
-  const text = formatActivityClauses(clauses, runClause) || genericSummary || fallbackLabel || "Ran command";
+  const singleCommandSummary =
+    activities.length === 1 &&
+    activities[0]?.kind === "command" &&
+    activities[0].content &&
+    outcomeClauses.length === 0 &&
+    receiptClauses.length === 0
+      ? summarizeShellCommand(activities[0].content, "completed")
+      : null;
+  const text =
+    singleCommandSummary ||
+    formatActivityClauses(clauses, runClause) ||
+    genericSummary ||
+    fallbackLabel ||
+    "Ran command";
 
   return {
     kind: summaryKind(counters, runClause),
@@ -92,22 +105,115 @@ export function activityGroupSummary(activities: ActivityItem[]): string {
   return summarizeActivityGroup(activities).text;
 }
 
-export function summarizeShellCommand(command: string): string | null {
+export function summarizeShellCommand(
+  command: string,
+  state: ActivityItem["state"] = "completed",
+): string | null {
   const tokens = shellWords(command);
   if (tokens.length === 0) return null;
-  if (tokens.some(isShellOperator)) return null;
-  const executable = tokens[0]!;
-  if (executable === "cat") {
-    const files = nonFlagArgs(tokens.slice(1));
-    return files.length > 0 ? `Read ${formatCommandTargets(files)}` : "Read standard input";
+  const running = state === "running" || state === "pending";
+  if (tokens.some(isShellOperator)) return running ? "Running shell command" : "Ran shell command";
+  const executable = stripCommandWrapper(tokens);
+  if (!executable) return null;
+  const [name, args] = executable;
+
+  if (name === "cat") {
+    const files = nonFlagArgs(args);
+    if (files.length === 0) return running ? "Reading standard input" : "Read standard input";
+    return `${running ? "Reading" : "Read"} ${formatCommandTargets(files)}`;
   }
-  if (executable === "sed") {
-    return summarizeSedCommand(tokens);
+  if (name === "sed") {
+    return commandSummaryForState(summarizeSedCommand([name, ...args]), running);
   }
-  if (executable === "rg") {
-    return summarizeRipgrepCommand(tokens);
+  if (name === "rg") {
+    return summarizeRipgrepCommand([name, ...args], running);
   }
-  return null;
+  if (["grep", "ag"].includes(name) || (name === "git" && args[0] === "grep")) {
+    return running ? "Searching code" : "Searched code";
+  }
+  if (["ls", "find", "tree", "fd"].includes(name)) {
+    const targets = name === "ls" ? nonFlagArgs(args) : [];
+    if (targets.length === 0) return running ? "Listing files" : "Listed files";
+    return `${running ? "Listing" : "Listed"} files in ${formatCommandTargets(targets)}`;
+  }
+  if (["head", "tail", "nl", "wc", "awk", "jq"].includes(name)) {
+    const files = commandReadFiles(name, args);
+    if (files.length === 0) return running ? `Running ${name}` : `Ran ${name}`;
+    return `${running ? "Reading" : "Read"} ${formatCommandTargets(files)}`;
+  }
+  if (name === "apply_patch") return running ? "Editing files" : "Edited files";
+  if (name === "write_stdin") return running ? "Continuing command" : "Continued command";
+  if (name === "wait") return running ? "Waiting for command" : "Waited for command";
+  if (name === "js") return running ? "Running JavaScript" : "Ran JavaScript";
+  if (name === "exec_command") return running ? "Running shell command" : "Ran shell command";
+  if (name === "read_file") return running ? "Reading file" : "Read file";
+  if (name === "view_image") return running ? "Viewing image" : "Viewed image";
+  if (name === "update_plan") return running ? "Updating plan" : "Updated plan";
+  if (name === "tool_search") return running ? "Searching tools" : "Searched tools";
+  if (name === "rm") return running ? "Removing files" : "Removed files";
+  if (name === "mv") return running ? "Moving files" : "Moved files";
+  if (name === "cp") return running ? "Copying files" : "Copied files";
+  if (name === "mkdir") return running ? "Creating directories" : "Created directories";
+  if (name === "touch") return running ? "Creating files" : "Created files";
+  if (name === "git") return summarizeGitCommand(args, running);
+  if (isPackageCommand(name)) return summarizePackageCommand(name, args, running);
+  if (isDirectCheckCommand(name)) return summarizeDirectCheckCommand(name, running);
+  if (["curl", "wget"].includes(name)) return running ? "Fetching URL" : "Fetched URL";
+  if (["node", "tsx", "python", "python3", "bash", "sh", "zsh"].includes(name)) {
+    return running ? `Running ${displayExecutable(name)} script` : `Ran ${displayExecutable(name)} script`;
+  }
+  const executableLabel = displayExecutable(name);
+  return running ? `Running ${executableLabel} command` : `Ran ${executableLabel} command`;
+}
+
+function summarizeGitCommand(args: string[], running: boolean): string {
+  const subcommand = args.find((arg) => !arg.startsWith("-")) ?? "";
+  if (subcommand === "status") return running ? "Checking Git status" : "Checked Git status";
+  if (subcommand === "diff") return running ? "Reviewing changes" : "Reviewed changes";
+  if (subcommand === "show" || subcommand === "log") return running ? "Reading Git history" : "Read Git history";
+  if (subcommand === "add") return running ? "Staging changes" : "Staged changes";
+  if (subcommand === "commit") return running ? "Committing changes" : "Committed changes";
+  if (subcommand === "push") return running ? "Pushing changes" : "Pushed changes";
+  if (subcommand === "pull" || subcommand === "fetch") return running ? "Fetching changes" : "Fetched changes";
+  if (subcommand === "checkout" || subcommand === "switch") return running ? "Switching branches" : "Switched branches";
+  if (subcommand === "branch") return running ? "Listing branches" : "Listed branches";
+  return running ? "Running Git command" : "Ran Git command";
+}
+
+function summarizePackageCommand(name: string, args: string[], running: boolean): string {
+  const joined = args.join(" ").toLowerCase();
+  if (/\b(typecheck|tsc)\b/.test(joined)) return running ? "Checking types" : "Checked types";
+  if (/\b(lint|eslint|prettier)\b/.test(joined)) return running ? "Running lint" : "Ran lint";
+  if (/\b(test|vitest|jest|playwright)\b/.test(joined)) return running ? "Running tests" : "Ran tests";
+  if (/\bbuild\b/.test(joined)) return running ? "Building project" : "Built project";
+  if (/\b(install|add)\b/.test(joined)) return running ? "Installing dependencies" : "Installed dependencies";
+  return running ? `Running ${displayExecutable(name)} command` : `Ran ${displayExecutable(name)} command`;
+}
+
+function summarizeDirectCheckCommand(name: string, running: boolean): string {
+  if (name === "tsc") return running ? "Checking types" : "Checked types";
+  if (name === "eslint" || name === "prettier") return running ? "Running lint" : "Ran lint";
+  return running ? "Running tests" : "Ran tests";
+}
+
+function isPackageCommand(name: string): boolean {
+  return ["bun", "npm", "pnpm", "yarn"].includes(name);
+}
+
+function displayExecutable(name: string): string {
+  const executable = name.split("/").filter(Boolean).at(-1) ?? name;
+  if (executable === "python" || executable === "python3") return "Python";
+  if (executable === "node" || executable === "tsx") return "Node";
+  if (["bash", "sh", "zsh"].includes(executable)) return "shell";
+  if (executable === "git") return "Git";
+  return executable;
+}
+
+function commandSummaryForState(summary: string | null, running: boolean): string | null {
+  if (!summary || !running) return summary;
+  if (summary.startsWith("Read ")) return `Reading ${summary.slice(5)}`;
+  if (summary.startsWith("Run ")) return `Running ${summary.slice(4)}`;
+  return summary;
 }
 
 function emptyCounters(): ActivityCounters {
@@ -419,8 +525,7 @@ function countClause(verb: string, count: number, noun: string): string {
 
 function formatActivityClauses(primary: string[], runClause: string): string {
   if (primary.length === 0) return runClause ? capitalize(runClause) : "";
-  if (runClause) return `${capitalize(formatList(primary))}, ${runClause}`;
-  return capitalize(formatList(primary));
+  return capitalize(formatList(runClause ? [...primary, runClause] : primary));
 }
 
 function addGenericLabel(labels: string[], label: string): void {
@@ -512,19 +617,23 @@ function summarizeSedCommand(tokens: string[]): string | null {
   return files.length > 0 ? `Read ${formatCommandTargets(files)} with sed` : "Run sed";
 }
 
-function summarizeRipgrepCommand(tokens: string[]): string | null {
+function summarizeRipgrepCommand(tokens: string[], running = false): string | null {
   const args = tokens.slice(1);
   if (args.includes("--files")) {
     const filters = nonFlagArgs(args.filter((token) => token !== "--files"));
-    return filters.length > 0 ? `List files matching ${formatCommandTargets(filters)}` : "List files";
+    return filters.length > 0
+      ? `${running ? "Listing" : "Listed"} files matching ${formatCommandTargets(filters)}`
+      : running
+        ? "Listing files"
+        : "Listed files";
   }
   const positional = nonFlagArgs(args);
   const query = positional[0];
   const targets = positional.slice(1);
-  if (!query) return "Search files";
+  if (!query) return running ? "Searching files" : "Searched files";
   return targets.length > 0
-    ? `Search for ${quoteCommandText(query)} in ${formatCommandTargets(targets)}`
-    : `Search for ${quoteCommandText(query)}`;
+    ? `${running ? "Searching" : "Searched"} for ${quoteCommandText(query)} in ${formatCommandTargets(targets)}`
+    : `${running ? "Searching" : "Searched"} for ${quoteCommandText(query)}`;
 }
 
 function shellWords(command: string): string[] {

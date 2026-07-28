@@ -23,7 +23,6 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 15, run: (store) => store.createTrainingChatSearchTables() },
   { version: 16, run: (store) => store.resetTrainingChatSearchForProgressiveIndexing() },
   { version: 17, run: (store) => store.createTaskMinerRunTables() },
-  { version: 18, run: (store) => store.createCrossSystemFrontierBaselineRunTables() },
   { version: 19, run: (store) => store.createCreateImproveRunTables() },
   { version: 20, run: (store) => store.createTrainingReceiptAndModelBindingTables() },
   { version: 21, run: (store) => store.createTasksetRevisionTables() },
@@ -32,6 +31,12 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   { version: 24, run: (store) => store.resetLegacySubagentTransportState() },
   { version: 25, run: (store) => store.resetLegacySubagentRuntimeEvents() },
   { version: 26, run: (store) => store.createDatasetImportTables() },
-  { version: 27, run: (store) => store.createTasksetBaselineRunTables() },
   { version: 28, run: (store) => store.createSidebarFileBookmarkTables() },
+  { version: 29, run: (store) => store.createModelBuildDraftTables() },
+  { version: 30, run: (store) => store.createModelProjectAndRunDraftTables() },
+  { version: 31, run: (store) => store.createModelLifecycleTables() },
+  {
+    version: 32,
+    run: (store) => store.createTrainingTables(),
+  },
 ];

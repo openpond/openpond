@@ -205,7 +205,7 @@ export function crossSystemTasksetMetadata(
     generatorVersion: CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
     toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
     sourceTrajectoryCount: lineage.traces.length,
-    baselineRewardVariance: lineage.variance,
+    sourceRewardVariance: lineage.variance,
     worldSpecs: [...new Map(lineage.traces.map((trace) => [
       `${trace.worldSplit}:${trace.worldSeed}:${trace.worldDifficulty}`,
       { seed: trace.worldSeed, split: trace.worldSplit, difficulty: trace.worldDifficulty },

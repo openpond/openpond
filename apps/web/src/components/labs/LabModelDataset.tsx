@@ -2,16 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import {
   isTrainingSourceRef,
   TaskDataRecordSchema,
+  type ChatModelRef,
   type DatasetArtifactSummary,
   type TaskDataRecord,
   type Taskset,
   type TasksetSourceRef,
 } from "@openpond/contracts";
 
+import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
 import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { LabDatasetRuns } from "./LabDatasetRuns";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
 type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
@@ -22,19 +23,21 @@ const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
   { id: "validation", label: "Validation" },
   { id: "frozen_eval", label: "Frozen Eval" },
 ];
-const INITIAL_EXAMPLE_COUNT = 10;
-
+const EXAMPLE_PAGE_SIZE = 10;
 export function LabModelDataset({
   artifact,
   tab = "overview",
   taskset,
   onOpenFiles,
+  onToast,
   training,
 }: {
   artifact: DatasetArtifactSummary | null;
+  defaultModel: ChatModelRef;
   tab?: DatasetDetailTab;
   taskset: Taskset;
   onOpenFiles: () => void;
+  onToast: ShowAppToast;
   training: ReturnType<typeof useTraining>;
 }) {
   const counts = useMemo(
@@ -53,13 +56,14 @@ export function LabModelDataset({
   const [split, setSplit] = useState<DatasetSplit>(
     initialSplit === "test" ? "frozen_eval" : initialSplit,
   );
-  const [showAllExamples, setShowAllExamples] = useState(false);
+  const [inlinePage, setInlinePage] = useState(1);
   const [artifactRows, setArtifactRows] = useState<TaskDataRecord[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
   const sourceById = useMemo(
     () => new Map(taskset.sourceRefs.map((source) => [source.id, source])),
     [taskset.sourceRefs],
@@ -72,7 +76,7 @@ export function LabModelDataset({
     void training.actions.datasetRows(taskset.id, {
       split,
       cursor,
-      limit: 25,
+      limit: EXAMPLE_PAGE_SIZE,
     }).then((page) => {
       if (cancelled || !page) return;
       setArtifactRows(page.rows.map((row) => TaskDataRecordSchema.parse(row)));
@@ -94,9 +98,19 @@ export function LabModelDataset({
   const visibleTasks = artifact
     ? artifactRows
     : taskset.tasks.filter((task) => task.split === split);
-  const displayedTasks = showAllExamples
+  const inlinePages = Math.max(
+    1,
+    Math.ceil(visibleTasks.length / EXAMPLE_PAGE_SIZE),
+  );
+  const displayedTasks = artifact
     ? visibleTasks
-    : visibleTasks.slice(0, INITIAL_EXAMPLE_COUNT);
+    : visibleTasks.slice(
+        (inlinePage - 1) * EXAMPLE_PAGE_SIZE,
+        inlinePage * EXAMPLE_PAGE_SIZE,
+      );
+  const exampleIndexOffset = artifact
+    ? cursorHistory.length * EXAMPLE_PAGE_SIZE
+    : (inlinePage - 1) * EXAMPLE_PAGE_SIZE;
   const syntheticSources = taskset.sourceRefs.filter(isSyntheticSource).length;
   const chatSources = taskset.sourceRefs.filter(
     (source) => isTrainingSourceRef(source) && source.turnIds.length > 0,
@@ -107,13 +121,35 @@ export function LabModelDataset({
   const approvedDemonstrations = taskset.learningSignals.demonstrations.filter(
     (signal) => signal.approved,
   ).length;
-  const baselineRuns = training.payload?.baselineRuns.filter((run) =>
-    run.tasksetId === taskset.id) ?? [];
+  const approvedPreferences = taskset.learningSignals.preferences.filter(
+    (signal) => signal.approved,
+  ).length;
+  const approvedRewards = taskset.learningSignals.rewards.filter(
+    (signal) => signal.approved,
+  ).length;
+  const rubricLabels = taskset.learningSignals.labels.filter(
+    (signal) => signal.approved && signal.labelKind === "rubric",
+  ).length;
+  const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
+
+  async function runCheck(
+    label: string,
+    action: () => Promise<unknown>,
+  ): Promise<void> {
+    setCheckMessage(null);
+    const result = await action();
+    if (!result) {
+      setCheckMessage(`${label} did not complete. Check the latest error and try again.`);
+      return;
+    }
+    setCheckMessage(`${label} started or completed successfully.`);
+    onToast(`${label} started or completed successfully.`, "success");
+  }
 
   if (tab === "overview") {
     return (
       <DetailSection
-        title="Dataset"
+        title="Taskset"
       >
         <p className="labs-detail-copy labs-dataset-summary">
           {datasetDescription({
@@ -127,8 +163,33 @@ export function LabModelDataset({
           <Fact label="Training" value={String(counts.get("train") ?? 0)} />
           <Fact label="Validation" value={String(counts.get("validation") ?? 0)} />
           <Fact label="Frozen Eval" value={String(counts.get("frozen_eval") ?? 0)} />
-          <Fact label="Approved demonstrations" value={String(approvedDemonstrations)} />
+          <Fact label="Demonstrations" value={String(approvedDemonstrations)} />
+          <Fact label="Preference pairs" value={String(approvedPreferences)} />
+          <Fact label="Reward specs" value={String(approvedRewards)} />
+          <Fact label="Rubrics" value={String(rubricLabels)} />
         </dl>
+        <div className="labs-dataset-method-readiness">
+          <strong>Training compatibility</strong>
+          <div className="training-pills">
+            {taskset.readiness?.methodReadiness.length
+              ? taskset.readiness.methodReadiness.map((entry) => (
+                  <span key={entry.method} title={entry.reasons.join(" ")}>
+                    {entry.method.toUpperCase()} · {titleCase(entry.status)}
+                  </span>
+                ))
+              : taskset.capabilities.compatibleMethods
+                  .filter((method) => !["none", "retrieval"].includes(method))
+                  .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
+          </div>
+          {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
+            <ul>
+              {taskset.readiness.methodReadiness.flatMap((entry) =>
+                entry.reasons.map((reason) => (
+                  <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
+                )))}
+            </ul>
+          ) : null}
+        </div>
       </DetailSection>
     );
   }
@@ -136,11 +197,59 @@ export function LabModelDataset({
   if (tab === "evals") {
     return (
       <>
-      <LabDatasetRuns
-        runs={baselineRuns}
-        taskset={taskset}
-        onCancel={training.actions.cancelBaselineRun}
-      />
+        <DetailSection title="Taskset checks">
+          <p className="labs-detail-copy">
+            Audit the reward and graders before creating a Model run.
+          </p>
+          <div className="labs-dataset-detail-actions">
+            <button
+              className="training-button secondary"
+              disabled={training.busyAction !== null}
+              type="button"
+              onClick={() => void runCheck(
+                "Grader audit",
+                () => training.actions.auditGraders(taskset.id),
+              )}
+            >
+              Audit graders
+            </button>
+            {hasModelJudge ? (
+              <button
+                className="training-button secondary"
+                disabled={training.busyAction !== null}
+                type="button"
+                onClick={() => void runCheck(
+                  "Judge calibration",
+                  () => training.actions.calibrateJudges(taskset.id),
+                )}
+              >
+                Calibrate judges
+              </button>
+            ) : null}
+            <button
+              className="training-button secondary"
+              disabled={training.busyAction !== null}
+              type="button"
+              onClick={() => void runCheck(
+                "Readiness check",
+                () => training.actions.readiness(taskset.id),
+              )}
+            >
+              Refresh readiness
+            </button>
+          </div>
+          {checkMessage ? <p className="labs-detail-copy" role="status">{checkMessage}</p> : null}
+          {taskset.readiness?.blockers.length ? (
+            <div className="training-banner warning">
+              <strong>Readiness blockers</strong>
+              <ul>
+                {taskset.readiness.blockers.map((blocker) => (
+                  <li key={`${blocker.code}:${blocker.path ?? ""}`}>{blocker.message}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </DetailSection>
         <DetailSection title="Graders">
           <div className="labs-dataset-grader-list">
             {taskset.graders.map((grader) => (
@@ -166,7 +275,7 @@ export function LabModelDataset({
         )}
       >
         <dl className="training-configuration-list">
-          <Fact label="Dataset ID" value={taskset.id} />
+          <Fact label="Taskset ID" value={taskset.id} />
           <Fact label="Revision" value={String(taskset.revision)} />
           <Fact label="Format" value={artifact?.format.toUpperCase() ?? "Inline Taskset"} />
           <Fact label="Rows" value={String(artifact?.rowCount ?? taskset.tasks.length)} />
@@ -180,7 +289,7 @@ export function LabModelDataset({
 
   return (
       <DetailSection title="Examples">
-        <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Dataset splits">
+        <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Taskset splits">
           {SPLITS.map((item) => (
             <button
               aria-selected={split === item.id}
@@ -190,7 +299,7 @@ export function LabModelDataset({
               type="button"
               onClick={() => {
                 setSplit(item.id);
-                setShowAllExamples(false);
+                setInlinePage(1);
                 setCursor(null);
                 setCursorHistory([]);
               }}
@@ -203,23 +312,14 @@ export function LabModelDataset({
         <div className="labs-dataset-examples">
           {displayedTasks.map((task, index) => (
             <DatasetExample
-              index={index}
+              index={exampleIndexOffset + index}
               key={task.id}
               source={task.sourceRefs.map((sourceId) => sourceById.get(sourceId)).find(Boolean) ?? null}
               task={task}
             />
           ))}
-          {visibleTasks.length > INITIAL_EXAMPLE_COUNT ? (
-            <button
-              className="training-button secondary labs-dataset-show-all"
-              type="button"
-              onClick={() => setShowAllExamples((current) => !current)}
-            >
-              {showAllExamples ? `Show first ${INITIAL_EXAMPLE_COUNT}` : `Show all ${visibleTasks.length}`}
-            </button>
-          ) : null}
           {artifact ? (
-            <div className="labs-pagination" aria-label="Dataset example pages">
+            <nav className="labs-pagination" aria-label="Task data pages">
               <button
                 type="button"
                 disabled={!cursorHistory.length || rowsLoading}
@@ -234,7 +334,7 @@ export function LabModelDataset({
               <span>
                 {rowsLoading
                   ? "Loading…"
-                  : `${artifactRows.length.toLocaleString()} rows on this page`}
+                  : `Page ${cursorHistory.length + 1} · ${artifactRows.length.toLocaleString()} rows`}
               </span>
               <button
                 type="button"
@@ -246,7 +346,27 @@ export function LabModelDataset({
               >
                 Next
               </button>
-            </div>
+            </nav>
+          ) : inlinePages > 1 ? (
+            <nav className="labs-pagination" aria-label="Task data pages">
+              <button
+                type="button"
+                disabled={inlinePage <= 1}
+                onClick={() => setInlinePage((page) => Math.max(1, page - 1))}
+              >
+                Previous
+              </button>
+              <span>{inlinePage} of {inlinePages}</span>
+              <button
+                type="button"
+                disabled={inlinePage >= inlinePages}
+                onClick={() =>
+                  setInlinePage((page) => Math.min(inlinePages, page + 1))
+                }
+              >
+                Next
+              </button>
+            </nav>
           ) : null}
           {rowsError ? (
             <div className="training-banner error" role="alert">{rowsError}</div>
@@ -255,6 +375,7 @@ export function LabModelDataset({
       </DetailSection>
   );
 }
+
 
 function DatasetExample({
   index,

@@ -1,34 +1,8 @@
-import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
-import path from "node:path";
-
 import type {
   OpenPondProfileSkill,
   OpenPondProfileState,
 } from "./local-profile-types.js";
 import { loadOpenPondProfileState } from "./local-profile.js";
-import {
-  PROFILE_SKILL_FILE,
-  PROFILE_SKILLS_DIR,
-} from "./profile-skills.js";
-
-export type ProfileSkillGoalRequest = {
-  id: string;
-  kind: "profile_skill_create" | "profile_skill_edit";
-  provider: "openpond";
-  status: "queued";
-  operation: "create" | "edit";
-  objective: string;
-  userObjective: string;
-  source: "slash_command" | "natural_language" | "model_tool";
-  activeProfile: string;
-  profileRepoPath: string;
-  profileSourcePath: string;
-  profileSourceRelativePath: string;
-  requestedName: string | null;
-  targetSkillName: string | null;
-  targetSkillPath: string | null;
-};
 
 export type ProfileSkillCommandResult = {
   handled: true;
@@ -36,34 +10,11 @@ export type ProfileSkillCommandResult = {
   message: string;
   skills?: OpenPondProfileSkill[];
   profile: OpenPondProfileState;
-} | {
-  handled: false;
-  action: "goal";
-  message: string;
-  prompt: string;
-  workspaceCwd: string;
-  goal: ProfileSkillGoalRequest;
-  skill?: OpenPondProfileSkill;
-  profile: OpenPondProfileState;
 };
 
 type ProfileSkillCommandDeps = {
   loadProfileState: () => Promise<OpenPondProfileState>;
 };
-
-export type ProfileSkillGoalCommandInput = {
-  operation: "create" | "edit";
-  objective: string;
-  skillName?: string | null;
-  changeRequest?: string | null;
-  source?: "natural_language" | "model_tool" | "slash_command" | null;
-};
-
-type ParsedProfileSkillCommand =
-  | { action: "list" }
-  | { action: "help" }
-  | { action: "create"; objective: string; requestedName: string | null }
-  | { action: "edit"; name: string; changeRequest: string };
 
 export async function runProfileSkillCommandFromPrompt(
   prompt: string,
@@ -77,90 +28,18 @@ export async function runProfileSkillCommand(
   prompt: string,
   deps: ProfileSkillCommandDeps,
 ): Promise<ProfileSkillCommandResult | null> {
-  const trimmed = prompt.trim();
-  if (!trimmed) return null;
-  const parsed = parseProfileSkillCommand(trimmed);
-  if (!parsed) return null;
+  const action = readOnlyProfileSkillAction(prompt);
+  if (!action) return null;
   const profile = await deps.loadProfileState();
-  if (parsed.action === "help") return profileSkillHelp(profile);
-  if (parsed.action === "list") return listProfileSkills(profile);
-  const writableProfile = assertWritableProfile(profile);
-  if (parsed.action === "create") {
-    return createProfileSkillGoal({
-      profile: writableProfile,
-      objective: parsed.objective,
-      requestedName: parsed.requestedName,
-      source: "slash_command",
-    });
-  }
-  return updateProfileSkillGoal({
-    profile: writableProfile,
-    name: parsed.name,
-    changeRequest: parsed.changeRequest,
-    source: "slash_command",
-  });
+  return action === "help" ? profileSkillHelp(profile) : listProfileSkills(profile);
 }
 
-export async function runProfileSkillGoalCommand(
-  input: ProfileSkillGoalCommandInput,
-  deps: ProfileSkillCommandDeps = { loadProfileState: loadOpenPondProfileState },
-): Promise<ProfileSkillCommandResult> {
-  const profile = await deps.loadProfileState();
-  const writableProfile = assertWritableProfile(profile);
-  const source = input.source ?? "model_tool";
-  if (input.operation === "create") {
-    return createProfileSkillGoal({
-      profile: writableProfile,
-      objective: input.objective,
-      requestedName: input.skillName ?? null,
-      source,
-    });
-  }
-  const name = input.skillName?.trim() ?? "";
-  if (!name) throw new Error("Profile skill edit requires skillName.");
-  return updateProfileSkillGoal({
-    profile: writableProfile,
-    name,
-    changeRequest: input.changeRequest?.trim() || input.objective,
-    source,
-  });
-}
-
-function parseProfileSkillCommand(
-  prompt: string,
-): ParsedProfileSkillCommand | null {
-  const slash = /^\/skill(?:\s+([\s\S]*))?$/i.exec(prompt);
-  if (slash) {
-    const rest = slash[1]?.trim() ?? "";
-    if (!rest) return { action: "list" };
-    const [subcommandRaw = "", ...restParts] = rest.split(/\s+/);
-    const subcommand = subcommandRaw.toLowerCase();
-    const args = restParts.join(" ").trim();
-    if (subcommand === "list") return { action: "list" };
-    if (subcommand === "help") return { action: "help" };
-    if (subcommand === "create") {
-      if (!args) return { action: "help" };
-      const named = splitOptionalSkillName(args);
-      return {
-        action: "create",
-        objective: named.objective,
-        requestedName: named.name,
-      };
-    }
-    if (subcommand === "edit") {
-      const [nameRaw = "", ...changeParts] = args.split(/\s+/);
-      const name = normalizeSkillName(nameRaw.replace(/^\$/, ""));
-      const changeRequest = changeParts.join(" ").trim();
-      if (!name || !changeRequest) return { action: "help" };
-      return { action: "edit", name, changeRequest };
-    }
-    const named = splitOptionalSkillName(rest);
-    return {
-      action: "create",
-      objective: named.objective,
-      requestedName: named.name,
-    };
-  }
+function readOnlyProfileSkillAction(prompt: string): "list" | "help" | null {
+  const slash = /^\/skill(?:\s+([\s\S]*))?$/i.exec(prompt.trim());
+  if (!slash) return null;
+  const rest = slash[1]?.trim().toLowerCase() ?? "";
+  if (!rest || rest === "list") return "list";
+  if (rest === "help") return "help";
   return null;
 }
 
@@ -177,7 +56,7 @@ function profileSkillHelp(profile: OpenPondProfileState): ProfileSkillCommandRes
       "- /skill create --name <skill-name> <what the skill should help with>",
       "- /skill edit <skill-name> <change request>",
       "",
-      "Create/edit starts a profile-skill goal in the active profile repo. Skills may include SKILL.md plus focused scripts, references, and assets. Use an agent when the workflow needs durable autonomy, schedules, identity, or its own model loop.",
+      "Create and edit run as normal model turns with the bundled OpenPond Skill Authoring skill. Skills may include SKILL.md plus focused scripts, references, and assets. Use an Agent when the workflow needs code, actions, durable runtime behavior, setup, or Evals.",
     ].join("\n"),
   };
 }
@@ -189,7 +68,9 @@ function listProfileSkills(profile: OpenPondProfileState): ProfileSkillCommandRe
     : [
         `Profile skills (${skills.length}):`,
         ...skills.map((skill) => {
-          const status = skill.validationStatus === "valid" ? "valid" : `invalid: ${skill.validationMessages.join("; ")}`;
+          const status = skill.validationStatus === "valid"
+            ? "valid"
+            : `invalid: ${skill.validationMessages.join("; ")}`;
           return `- ${skill.name} (${status}) ${skill.path}`;
         }),
       ].join("\n");
@@ -200,190 +81,4 @@ function listProfileSkills(profile: OpenPondProfileState): ProfileSkillCommandRe
     skills,
     profile,
   };
-}
-
-function createProfileSkillGoal(input: {
-  profile: WritableProfileState;
-  objective: string;
-  requestedName: string | null;
-  source: ProfileSkillGoalRequest["source"];
-}): ProfileSkillCommandResult {
-  const objective = cleanObjective(input.objective);
-  if (!objective) throw new Error("Describe what the skill should help with.");
-  const existingNames = new Set(input.profile.skills.map((skill) => skill.name));
-  const requestedName = input.requestedName
-    ? requireAvailableSkillName(input.requestedName, existingNames, input.profile.sourcePath)
-    : null;
-  const goal = createProfileSkillGoalRequest({
-    profile: input.profile,
-    operation: "create",
-    objective: `Create a profile-backed skill${requestedName ? ` named ${requestedName}` : ""}: ${objective}`,
-    userObjective: objective,
-    requestedName,
-    targetSkillName: requestedName,
-    source: input.source,
-  });
-  return {
-    handled: false,
-    action: "goal",
-    profile: input.profile,
-    workspaceCwd: input.profile.repoPath,
-    goal,
-    prompt: profileSkillGoalPrompt(goal),
-    message: `Started profile skill goal: ${goal.objective}`,
-  };
-}
-
-function updateProfileSkillGoal(input: {
-  profile: WritableProfileState;
-  name: string;
-  changeRequest: string;
-  source: ProfileSkillGoalRequest["source"];
-}): ProfileSkillCommandResult {
-  const name = normalizeSkillName(input.name);
-  if (!name) throw new Error("Skill name must be lowercase kebab-case.");
-  const existing = input.profile.skills.find((skill) => skill.name === name);
-  if (!existing) throw new Error(`Profile skill not found: ${name}`);
-  const changeRequest = cleanObjective(input.changeRequest);
-  if (!changeRequest) throw new Error("Describe how to update the skill.");
-  const goal = createProfileSkillGoalRequest({
-    profile: input.profile,
-    operation: "edit",
-    objective: `Update profile-backed skill ${name}: ${changeRequest}`,
-    userObjective: changeRequest,
-    requestedName: name,
-    targetSkillName: name,
-    source: input.source,
-  });
-  return {
-    handled: false,
-    action: "goal",
-    profile: input.profile,
-    workspaceCwd: input.profile.repoPath,
-    goal,
-    skill: existing,
-    prompt: profileSkillGoalPrompt(goal),
-    message: `Started profile skill goal: ${goal.objective}`,
-  };
-}
-
-type WritableProfileState = OpenPondProfileState & {
-  mode: "local";
-  sourcePath: string;
-  repoPath: string;
-};
-
-function assertWritableProfile(profile: OpenPondProfileState): WritableProfileState {
-  if (profile.error) throw new Error(profile.error);
-  if (profile.mode !== "local" || !profile.sourcePath || !profile.repoPath) {
-    throw new Error("Profile skill creation requires an active local OpenPond profile.");
-  }
-  return profile as WritableProfileState;
-}
-
-function createProfileSkillGoalRequest(input: {
-  profile: WritableProfileState;
-  operation: "create" | "edit";
-  objective: string;
-  userObjective: string;
-  requestedName: string | null;
-  targetSkillName: string | null;
-  source: ProfileSkillGoalRequest["source"];
-}): ProfileSkillGoalRequest {
-  const profileSourceRelativePath = path.relative(input.profile.repoPath, input.profile.sourcePath) || ".";
-  const targetSkillPath = input.targetSkillName
-    ? path.join(profileSourceRelativePath, PROFILE_SKILLS_DIR, input.targetSkillName, PROFILE_SKILL_FILE).replace(/\\/g, "/")
-    : null;
-  return {
-    id: `goal_${randomUUID()}`,
-    kind: input.operation === "create" ? "profile_skill_create" : "profile_skill_edit",
-    provider: "openpond",
-    status: "queued",
-    operation: input.operation,
-    objective: input.objective,
-    userObjective: input.userObjective,
-    source: input.source,
-    activeProfile: input.profile.activeProfile ?? "default",
-    profileRepoPath: input.profile.repoPath,
-    profileSourcePath: input.profile.sourcePath,
-    profileSourceRelativePath: profileSourceRelativePath.replace(/\\/g, "/"),
-    requestedName: input.requestedName,
-    targetSkillName: input.targetSkillName,
-    targetSkillPath,
-  };
-}
-
-function profileSkillGoalPrompt(goal: ProfileSkillGoalRequest): string {
-  const targetPath = goal.targetSkillPath
-    ?? `${goal.profileSourceRelativePath}/${PROFILE_SKILLS_DIR}/<skill-name>/${PROFILE_SKILL_FILE}`;
-  const nameLine = goal.targetSkillName
-    ? `- Skill name: ${goal.targetSkillName}`
-    : "- Choose a concise lowercase kebab-case skill name from the user's objective.";
-  const modeLine = goal.operation === "edit"
-    ? "- Read the existing SKILL.md before changing it."
-    : "- Create a new skill directory and SKILL.md.";
-  return [
-    `Goal: ${goal.objective}`,
-    "",
-    "<profile_skill_goal>",
-    `Operation: ${goal.operation}`,
-    `Active profile: ${goal.activeProfile}`,
-    `Workspace cwd: profile repo root (${goal.profileRepoPath})`,
-    `Profile source: ${goal.profileSourceRelativePath}`,
-    nameLine,
-    `- Target path: ${targetPath}`,
-    "",
-    "Rules:",
-    modeLine,
-    "- Keep SKILL.md as the required entry point. Add only scripts, references, assets, or agents/openai.yaml that directly support the workflow.",
-    "- SKILL.md must include YAML frontmatter with required name and description fields, followed by a markdown body.",
-    "- The body should describe the reusable workflow clearly enough for future chats to apply it.",
-    "- Use scripts for deterministic repeated operations, references for detailed knowledge, and assets for files consumed by outputs.",
-    "- Do not add README, changelog, installation guide, or other auxiliary documentation.",
-    "- Validate the resulting file by reading it back and checking name, description, body, and path consistency.",
-    "- Report the final skill name, path, validation status, and explicit invocation such as $skill-name only after the file is written or updated.",
-    "- Ask only for missing details that materially change the skill.",
-    "</profile_skill_goal>",
-  ].join("\n");
-}
-
-function splitOptionalSkillName(input: string): { name: string | null; objective: string } {
-  const trimmed = input.trim();
-  const namedFlag = /^--name\s+([a-z][a-z0-9-]*)\s+([\s\S]+)$/i.exec(trimmed);
-  if (namedFlag) {
-    return {
-      name: normalizeSkillName(namedFlag[1] ?? ""),
-      objective: namedFlag[2]?.trim() ?? "",
-    };
-  }
-  const colon = /^([a-z][a-z0-9-]*):\s*([\s\S]+)$/.exec(trimmed);
-  if (colon) {
-    return {
-      name: normalizeSkillName(colon[1] ?? ""),
-      objective: colon[2]?.trim() ?? "",
-    };
-  }
-  return { name: null, objective: trimmed };
-}
-
-function requireAvailableSkillName(name: string, existingNames: Set<string>, profileSourcePath: string): string {
-  const normalized = normalizeSkillName(name);
-  if (!normalized) throw new Error("Skill name must be lowercase kebab-case.");
-  if (existingNames.has(normalized) || skillDirectoryExists(profileSourcePath, normalized)) {
-    throw new Error(`Profile skill ${normalized} already exists. Use /skill edit ${normalized} to update it.`);
-  }
-  return normalized;
-}
-
-function skillDirectoryExists(profileSourcePath: string, name: string): boolean {
-  return existsSync(path.join(profileSourcePath, PROFILE_SKILLS_DIR, name));
-}
-
-function cleanObjective(value: string): string {
-  return value.replace(/\r\n/g, "\n").trim();
-}
-
-function normalizeSkillName(value: string): string | null {
-  const normalized = value.trim().toLowerCase();
-  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(normalized) ? normalized : null;
 }

@@ -92,6 +92,7 @@ async function loadProfileActionCatalogSource(
     const manifest = await readJsonIfExists(manifestPath);
     const registry = await readJsonIfExists(registryPath);
     const sourceUploadMetadata = await readJsonIfExists(sourceUploadMetadataPath);
+    const namedInputSchemas = asRecord(asRecord(manifest)?.inputSchemas);
     const sourceSetupRequirements =
       recordArray(asRecord(sourceUploadMetadata)?.setupRequirements) ?? [];
     const sourceRequirementsByAction = sourceSetupRequirementsByAction(sourceSetupRequirements);
@@ -123,7 +124,10 @@ async function loadProfileActionCatalogSource(
         label: text(record.label) ?? existing?.label ?? titleFromActionId(id),
         description: text(record.description) ?? existing?.description ?? null,
         visibility: text(record.visibility) ?? existing?.visibility ?? "default",
-        inputSchema: schemaValue(record.inputSchema) ?? existing?.inputSchema ?? null,
+        inputSchema:
+          resolvedSchemaValue(record.inputSchema, namedInputSchemas) ??
+          existing?.inputSchema ??
+          null,
         outputSchema: schemaValue(record.outputSchema) ?? existing?.outputSchema ?? null,
         approvalPolicy: asRecord(record.approvalPolicy) ?? existing?.approvalPolicy ?? null,
         artifactPolicy: asRecord(record.artifactPolicy) ?? existing?.artifactPolicy ?? null,
@@ -303,6 +307,15 @@ function text(value: unknown): string | null {
 
 function schemaValue(value: unknown): string | Record<string, unknown> | null {
   return text(value) ?? asRecord(value);
+}
+
+function resolvedSchemaValue(
+  value: unknown,
+  namedSchemas: Record<string, unknown> | null,
+): string | Record<string, unknown> | null {
+  const schema = schemaValue(value);
+  if (typeof schema !== "string") return schema;
+  return asRecord(namedSchemas?.[schema]) ?? schema;
 }
 
 function titleFromActionId(id: string): string {

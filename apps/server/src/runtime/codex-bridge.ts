@@ -33,6 +33,7 @@ export function createCodexBridge(deps: {
 }) {
   const { store, upsertApproval, appendRuntimeEvent, providerRuntimeIngestionQueue } = deps;
   const pendingApprovals = new Map<string, PendingApproval>();
+  const agentMessagePhases = new Map<string, CodexAgentMessagePhase>();
 
   async function resolveApproval(approvalId: string, payload: unknown): Promise<Approval> {
     const input = ResolveApprovalRequestSchema.parse(payload);
@@ -133,14 +134,49 @@ export function createCodexBridge(deps: {
 
     if (notification.method === "item/agentMessage/delta") {
       const context = await store.runtimeEventContext(sessionId, providerTurnId);
+      const itemId = stringValue(params, ["itemId", "item_id"]);
+      const phase = itemId ? agentMessagePhases.get(codexAgentMessageKey(sessionId, itemId)) : undefined;
+      const commentary = phase === "commentary";
       await appendRuntimeEvent(
         event({
           sessionId,
           turnId: context.turnId ?? undefined,
-          name: "assistant.delta",
+          name: commentary ? "assistant.reasoning.delta" : "assistant.delta",
           source: "provider",
           appId: context.appId,
+          action: commentary ? "codex_commentary" : undefined,
           output: extractDelta(notification.params),
+          data: {
+            provider: "codex",
+            kind: commentary ? "commentary" : "agent_message",
+            phase: phase ?? null,
+            itemId: itemId ?? null,
+          },
+        })
+      );
+      return;
+    }
+
+    if (notification.method === "item/reasoning/summaryTextDelta") {
+      const context = await store.runtimeEventContext(sessionId, providerTurnId);
+      const itemId = stringValue(params, ["itemId", "item_id"]);
+      const summaryIndex = numberValue(params, ["summaryIndex", "summary_index"]);
+      await appendRuntimeEvent(
+        event({
+          sessionId,
+          turnId: context.turnId ?? undefined,
+          name: "assistant.reasoning.delta",
+          source: "provider",
+          appId: context.appId,
+          action: "codex_reasoning_summary",
+          output: extractDelta(notification.params),
+          data: {
+            provider: "codex",
+            kind: "reasoning_summary",
+            itemId: itemId ?? null,
+            callId: itemId ? `${itemId}:${summaryIndex ?? 0}` : null,
+            summaryIndex,
+          },
         })
       );
       return;
@@ -282,6 +318,14 @@ export function createCodexBridge(deps: {
     if (notification.method === "item/started") {
       const item = params?.item as Record<string, unknown> | undefined;
       const type = typeof item?.type === "string" ? item.type : "";
+      if (type === "agentMessage") {
+        const itemId = stringValue(item, ["id"]);
+        const phase = codexAgentMessagePhase(item);
+        if (itemId && phase) {
+          agentMessagePhases.set(codexAgentMessageKey(sessionId, itemId), phase);
+        }
+        return;
+      }
       if (type === "contextCompaction") {
         const codexThreadId = stringValue(params, ["threadId", "thread_id"]);
         if (hasRecentCodexCompactionStarted(sessionEvents, sessionId, codexThreadId)) return;
@@ -360,6 +404,11 @@ export function createCodexBridge(deps: {
     if (notification.method === "item/completed") {
       const item = params?.item as Record<string, unknown> | undefined;
       const type = typeof item?.type === "string" ? item.type : "";
+      if (type === "agentMessage") {
+        const itemId = stringValue(item, ["id"]);
+        if (itemId) agentMessagePhases.delete(codexAgentMessageKey(sessionId, itemId));
+        return;
+      }
       if (type === "contextCompaction") {
         const codexThreadId = stringValue(params, ["threadId", "thread_id"]);
         if (hasRecentCodexCompactionCompleted(sessionEvents, sessionId, codexThreadId)) return;
@@ -918,6 +967,17 @@ function isOutputDeltaNotification(method: string): boolean {
     method === "process/outputDelta" ||
     method === "item/commandExecution/outputDelta"
   );
+}
+
+type CodexAgentMessagePhase = "commentary" | "final_answer";
+
+function codexAgentMessagePhase(item: Record<string, unknown> | undefined): CodexAgentMessagePhase | null {
+  const phase = stringValue(item, ["phase"]);
+  return phase === "commentary" || phase === "final_answer" ? phase : null;
+}
+
+function codexAgentMessageKey(sessionId: string, itemId: string): string {
+  return `${sessionId}:${itemId}`;
 }
 
 function numberValue(record: Record<string, unknown> | null | undefined, keys: string[]): number | null {

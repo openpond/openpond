@@ -9,8 +9,6 @@ import {
   normalizeSidebarFilePath,
   type Approval,
   type ChatProvider,
-  type ChatModelRef,
-  type CodexReasoningEffort,
   type InsightStatus,
   type InsightsListResponse,
   type InsightsScanResponse,
@@ -20,10 +18,10 @@ import {
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import {
+  loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
+  loadOpenPondProfileStateForRef,
   readProfileSkill,
-  runProfileSkillCommandFromPrompt,
-  runProfileSkillGoalCommand,
 } from "@openpond/cloud";
 import {
   getBundledRuntimeVersion,
@@ -124,30 +122,46 @@ import { communityRequestPayload } from "./openpond/community-client.js";
 import { contentHash } from "@openpond/taskset-sdk";
 import { createTaskCreatorService } from "./training/task-creator.js";
 import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
-import { loadTasksetAuthoringSkillBundle } from "./training/task-authoring-skill.js";
+import {
+  loadTasksetAuthoringProfileSkill,
+  loadTasksetAuthoringSkillBundle,
+  readTasksetAuthoringProfileSkill,
+} from "./training/task-authoring-skill.js";
+import {
+  isBundledAuthoringSkillName,
+  loadBundledAuthoringSkills,
+  readBundledAuthoringProfileSkill,
+} from "./runtime/bundled-authoring-skills.js";
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
+import {
+  createImproveLimit,
+  createImproveTargetKind,
+  findRecentCodexCompactionCompleted,
+  isInsightEvidenceSourceFilter,
+  parseModelJudgeResult,
+  resolveMaxHostedWorkspaceToolRounds,
+} from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
-import { createTrainingBaselineAttemptRunner } from "./training/task-baseline-attempt-runner.js";
-import { createFireworksBaselineDeploymentService } from "./training/fireworks-baseline-deployment.js";
 import { createComputeService } from "./compute/compute-service.js";
+import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
+import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
+import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
+import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
 import {
   createCrossSystemChatToolRuntime,
-  createCrossSystemFrontierBaselineService,
-  createFrontierBaselineChatSource,
-  type CrossSystemFrontierModelStream,
 } from "./training/cross-system-operations/index.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
@@ -157,7 +171,6 @@ import {
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
-const DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 64;
 const MAX_REPEATED_INVALID_TOOL_REQUESTS = 3;
 
 export async function createOpenPondServer(
@@ -288,14 +301,6 @@ export async function createOpenPondServer(
     updateLocalProjectAgentSetupPayload,
     previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
-    listCloudWorkItemsPayload,
-    getCloudWorkItemPayload,
-    createCloudWorkItemPayload,
-    sendCloudWorkItemMessagePayload,
-    handleCloudWorkItemBackgroundPayload,
-    cancelCloudWorkItemTaskPayload,
-    openCloudWorkItemPayload,
-    applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
     listSidebarFileBookmarksPayload,
     patchSidebarFileBookmarkPayload,
@@ -307,6 +312,8 @@ export async function createOpenPondServer(
     updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
+    profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
+    profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
@@ -354,6 +361,7 @@ export async function createOpenPondServer(
     defaultSessionCwd,
     loadAppPreferences,
     appendRuntimeEvent,
+    loadLastUsedProfile: async () => (await loadOpenPondProfileLibrary()).lastUsed,
   });
 
   const {
@@ -425,81 +433,15 @@ export async function createOpenPondServer(
       ),
     };
   }
-  async function resolveFireworksCredential() {
-    const credential = (await readProviderSecrets(providerSecretPaths))
-      .providers.fireworks;
-    if (!credential) return null;
-    const value = credential.source === "local_secret"
-      ? credential.value
-      : credential.source === "env" && credential.envVar
-        ? process.env[credential.envVar] ?? null
-        : null;
-    if (
-      !value?.trim()
-      || (credential.source !== "local_secret" && credential.source !== "env")
-    ) {
-      return null;
-    }
-    return {
-      value,
-      source: credential.source,
-      createdAt: credential.createdAt,
-      updatedAt: credential.updatedAt,
-    };
-  }
-  async function trainingModelText(input: {
-    model: ChatModelRef;
-    reasoningEffort?: CodexReasoningEffort | "none" | null;
-    messages: Array<{ role: "system" | "user"; content: string }>;
-    signal: AbortSignal;
-    requestId: string;
-    maxOutputTokens?: number;
-    temperature?: number;
-    topP?: number;
-    seed?: number;
-  }): Promise<string> {
-    let text = "";
-    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of trainedAdapterChatRuntime.stream({
-        modelId: input.model.modelId,
-        messages: input.messages,
-        requestId: input.requestId,
-        signal: input.signal,
-      })) {
-        if (delta.text) text += delta.text;
-      }
-      return text;
-    }
-    if (input.model.providerId === "openpond") {
-      for await (const delta of streamOpenPondHostedChatTurn({
-        model: input.model.modelId,
-        messages: input.messages,
-        requestId: input.requestId,
-        signal: input.signal,
-      })) {
-        if (delta.type === "text_delta" && delta.text) text += delta.text;
-      }
-      return text;
-    }
-    const state = await localByokRuntimeState();
-    for await (const delta of streamOpenAiCompatibleChatCompletion({
-      providerId: input.model.providerId,
-      settings: state.settings,
-      secrets: state.secrets,
-      modelId: input.model.modelId,
-      messages: input.messages,
-      requestId: input.requestId,
-      signal: input.signal,
-      reasoningEffort: input.reasoningEffort,
-      maxOutputTokens: input.maxOutputTokens,
-      temperature: input.temperature,
-      topP: input.topP,
-      seed: input.seed,
-    })) {
-      if (delta.type === "text_delta" && delta.text) text += delta.text;
-    }
-    return text;
-  }
+  const {
+    resolveFireworksCredential,
+    trainingModelText,
+  } = createTrainingModelRuntime({
+    providerSecretPaths,
+    loadLocalByokRuntimeState: localByokRuntimeState,
+    getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
+    streamOpenPondHostedChatTurn,
+  });
 
   const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
   const taskCreatorService = createTaskCreatorService({
@@ -533,9 +475,6 @@ export async function createOpenPondServer(
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
-  let trainingBaselineAttemptRunner: ReturnType<
-    typeof createTrainingBaselineAttemptRunner
-  > | null = null;
   const datasetArtifactService = createDatasetArtifactService({
     store,
     workerProjectDir: path.resolve(
@@ -544,25 +483,11 @@ export async function createOpenPondServer(
       "openpond-training",
     ),
   });
-  const fireworksBaselineDeployments =
-    createFireworksBaselineDeploymentService({
-      resolveCredential: resolveFireworksCredential,
-    });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
-    projectDatasetArtifact: datasetArtifactService.project,
-    prepareBaselineModels: fireworksBaselineDeployments.prepare,
-    cleanupBaselineDeployments:
-      fireworksBaselineDeployments.cleanupOrphanedDeployments,
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
-    runAttempt: async (input) => {
-      if (!trainingBaselineAttemptRunner) {
-        throw new Error("The Taskset baseline runner is not initialized.");
-      }
-      return trainingBaselineAttemptRunner(input);
-    },
     modelJudge: async ({ grader, task, attempt }) => {
       const raw = await trainingModelText({
         model: grader.judge,
@@ -630,6 +555,12 @@ export async function createOpenPondServer(
     }
     throw new Error(`Unknown compute action ${action}.`);
   };
+  const portableTrainingDependencies =
+    createPortableTrainingServerDependencies({
+      storeDir,
+      environment: process.env,
+      computeInventory: computeService.inventory,
+    });
   const trainingService = createTrainingService({
     store,
     storeDir,
@@ -638,13 +569,20 @@ export async function createOpenPondServer(
       "python",
       "openpond-training"
     ),
-    revalidateCompute: async () => {
-      await computeService.scan();
-    },
+    revalidateCompute: async () => void (await computeService.scan()),
     resolveModelPath: computeService.modelPath,
-    modelArtifactStore: async () =>
-      (await computeService.settings()).modelStorePath,
+    prepareModel: (model) => computeService.ensureModel(model),
+    modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
+    ...portableTrainingDependencies,
+    resolveManagedTrainingAccess: async () => {
+      const entry = await store.getCacheEntry<unknown>(
+        APP_PREFERENCES_CACHE_TYPE,
+        APP_PREFERENCES_CACHE_KEY,
+      );
+      const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
+      return resolveManagedAdapterUserAccess({ teamId });
+    },
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -701,97 +639,6 @@ export async function createOpenPondServer(
       (await computeService.settings()).datasetStorePath,
   });
   await datasetImportService.reconcile();
-  const crossSystemFrontierModelStream: CrossSystemFrontierModelStream =
-    async function* (input) {
-      if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        for await (const delta of trainedAdapterChatRuntime.stream({
-          modelId: input.model.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          signal: input.signal,
-        })) {
-          yield { text: delta.text, toolCalls: delta.toolCalls };
-        }
-        return;
-      }
-      if (input.model.providerId === "openpond") {
-        for await (const delta of streamOpenPondHostedChatTurn({
-          model: input.model.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          signal: input.signal,
-        })) {
-          if (delta.type === "text_delta") yield { text: delta.text };
-          if (delta.type === "continuation")
-            yield { continuation: delta.continuation };
-          if (delta.type === "tool_call_delta")
-            yield { toolCalls: delta.toolCalls };
-        }
-        return;
-      }
-      const state = await localByokRuntimeState();
-      for await (const delta of streamOpenAiCompatibleChatCompletion({
-        providerId: input.model.providerId,
-        settings: state.settings,
-        secrets: state.secrets,
-        modelId: input.model.modelId,
-        messages: input.messages,
-        tools: input.tools,
-        toolChoice: input.toolChoice,
-        requestId: input.requestId,
-        signal: input.signal,
-        reasoningEffort: input.reasoningEffort,
-        saveChatGptSubscriptionCredential: async (providerId, credential) => {
-          await writeProviderChatGptSubscriptionCredential({
-            paths: providerSecretPaths,
-            providerId,
-            credential,
-            timestamp: now(),
-          });
-        },
-      })) {
-        if (delta.type === "text_delta") yield { text: delta.text };
-        if (delta.type === "continuation")
-          yield { continuation: delta.continuation };
-        if (delta.type === "tool_call_delta")
-          yield { toolCalls: delta.toolCalls };
-      }
-    };
-  trainingBaselineAttemptRunner = createTrainingBaselineAttemptRunner({
-    store,
-    storeDir,
-    modelText: trainingModelText,
-    crossSystemStream: crossSystemFrontierModelStream,
-    timestamp: now,
-  });
-  const crossSystemFrontierBaselineService =
-    createCrossSystemFrontierBaselineService({
-      store,
-      stream: crossSystemFrontierModelStream,
-      findLocalProject: findLocalWorkspace,
-      createEvidenceSource: ({
-        profileId,
-        model,
-        localProject,
-        task,
-        trajectory,
-      }) =>
-        createFrontierBaselineChatSource({
-          store,
-          profileId,
-          model,
-          localProject,
-          task,
-          trajectory,
-          createSession,
-          appendRuntimeEvent,
-          addSessionSource: taskCreatorService.addSessionSource,
-        }),
-    });
   const trainingApi = createTrainingApi({
     store,
     taskCreator: taskCreatorService,
@@ -801,9 +648,8 @@ export async function createOpenPondServer(
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
-    frontierBaseline: crossSystemFrontierBaselineService,
   });
-
+  const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({
     loadProviderRuntime: localByokRuntimeState,
     version,
@@ -865,15 +711,104 @@ export async function createOpenPondServer(
       sandboxRequestPayload({ type: "delete", sandboxId }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
+    executeDatasetBuilderAction: async ({ session, provider, model, action, payload }) => {
+      const profile = session.currentProfile
+        ? await loadOpenPondProfileStateForRef(session.currentProfile)
+        : await loadOpenPondProfileState();
+      const profileId = session.currentProfile?.profileId ?? profile.activeProfile ?? "default";
+      const creationId = typeof payload.creationId === "string" ? payload.creationId : null;
+      const tasksetId = typeof payload.tasksetId === "string" ? payload.tasksetId : null;
+      if (action === "start") {
+        return trainingApi.request("start_creation", {
+          profileId,
+          sourceIds: Array.isArray(payload.sourceIds) ? payload.sourceIds : [],
+          surface: "training_page",
+          mode: payload.mode === "customize" ? "customize" : "defaults",
+          entryMode: "manual",
+          resourceIntent: "dataset",
+          buildIntent: payload.buildIntent,
+          buildSpecification: payload.buildSpecification,
+          objective: payload.objective,
+          methodHint: payload.methodHint,
+          analysisModel: { providerId: provider, modelId: model },
+          targetIntent: {
+            kind: null,
+            id: null,
+            displayName: null,
+            operation: "create",
+          },
+        });
+      }
+      if (action === "status") return trainingApi.request("state", { profileId });
+      if (!creationId && ["revise", "answer_questions", "approve_disclosure", "materialize", "cancel"].includes(action)) {
+        throw new Error("creationId is required for this Dataset Builder action.");
+      }
+      if (action === "revise") {
+        return trainingApi.request("chat_creation", {
+          creationId,
+          message: payload.message,
+        });
+      }
+      if (action === "answer_questions") {
+        return trainingApi.request("answer_questions", {
+          creationId,
+          answers: payload.answers,
+        });
+      }
+      if (action === "approve_disclosure") {
+        return trainingApi.request("approve_disclosure", {
+          creationId,
+          approved: payload.approved === true,
+        });
+      }
+      if (action === "materialize") {
+        return trainingApi.request("approve_materialization", {
+          creationId,
+          approved: payload.approved === true,
+        });
+      }
+      if (action === "cancel") {
+        return trainingApi.request("cancel_creation", { creationId });
+      }
+      if (!tasksetId) throw new Error("tasksetId is required for Dataset testing.");
+      if (action === "audit_graders") {
+        return trainingApi.request("audit_graders", { tasksetId });
+      }
+      if (action === "calibrate_judges") {
+        return trainingApi.request("calibrate_judges", { tasksetId });
+      }
+      if (action === "readiness") {
+        return trainingApi.request("readiness", { tasksetId });
+      }
+      return trainingApi.request("baseline", {
+        tasksetId,
+        models: [{ providerId: provider, modelId: model }],
+        seeds: [17],
+        attemptsPerTask: typeof payload.attemptsPerTask === "number"
+          ? payload.attemptsPerTask
+          : 4,
+        taskLimit: typeof payload.taskLimit === "number" ? payload.taskLimit : 8,
+        split: payload.split ?? "train",
+        selectionStrategy: "rft_easy_curriculum_v1",
+      });
+    },
     executeCrossSystemTool: crossSystemChatToolRuntime.execute,
     finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
+    ...createProfileTurnDependencies(),
+    loadOpenPondProfileLibrary,
     readOpenPondProfileSkill: readProfileSkill,
+    loadBuiltInOpenPondSkills: async () => [
+      await loadTasksetAuthoringProfileSkill(),
+      ...await loadBundledAuthoringSkills(),
+    ],
+    readBuiltInOpenPondSkill: async (name) => {
+      if (name === "openpond-taskset-authoring") return readTasksetAuthoringProfileSkill();
+      if (isBundledAuthoringSkillName(name)) return readBundledAuthoringProfileSkill(name);
+      throw new Error(`Built-in OpenPond skill not found: ${name}`);
+    },
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
-    executeProfileSkillCommand: ({ prompt }) =>
-      runProfileSkillCommandFromPrompt(prompt),
-    executeProfileSkillGoal: (input) => runProfileSkillGoalCommand(input),
     executeWebSearch: executeWebSearch ?? undefined,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
@@ -1025,6 +960,7 @@ export async function createOpenPondServer(
     queue: workQueues.localAgentSchedule,
     isClosing: () => closing,
     loadProfileState: loadOpenPondProfileState,
+    loadProfileLibrary: loadOpenPondProfileLibrary,
     appendRuntimeEvent,
     logger,
   });
@@ -1647,7 +1583,7 @@ export async function createOpenPondServer(
       runInsightsScanPayload,
       askInsightsPayload,
       patchInsightPayload,
-      trainingPayload: trainingApi.request,
+      trainingPayload,
       fireworksRftPayload: trainingService.handleFireworksRft,
       computePayload,
       listLocalAgentSchedulesPayload,
@@ -1666,6 +1602,8 @@ export async function createOpenPondServer(
       updateOpenPondAccountConfigPayload,
       profileCurrentPayload,
       profileCatalogPayload,
+      profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
+      profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
       profileInitPayload,
       profileLoadPayload,
       profileCheckPayload,
@@ -1707,14 +1645,6 @@ export async function createOpenPondServer(
       updateLocalProjectAgentSetupPayload,
       previewLocalProjectCloudSourcePayload,
       uploadLocalProjectCloudSourcePayload,
-      listCloudWorkItemsPayload,
-      getCloudWorkItemPayload,
-      createCloudWorkItemPayload,
-      sendCloudWorkItemMessagePayload,
-      handleCloudWorkItemBackgroundPayload,
-      cancelCloudWorkItemTaskPayload,
-      openCloudWorkItemPayload,
-      applyCloudWorkItemLocalPatchPayload,
       organizationPayload: organizationRequestPayload,
       sandboxPayload: sandboxRequestPayload,
       teamChatPayload: teamChatRequestPayload,
@@ -1838,7 +1768,6 @@ export async function createOpenPondServer(
       trainedAdapterChatRuntime.close,
       managedAdapterSyncService.close,
       crossSystemChatToolRuntime.close,
-      crossSystemFrontierBaselineService.close,
       taskMinerService.close,
       taskEvaluationService.close,
       trainingService.close,
@@ -1861,122 +1790,6 @@ export async function createOpenPondServer(
       workQueueReceipts: workQueues.receipts,
     },
   };
-}
-
-function parseModelJudgeResult(
-  raw: string
-): {
-  score: number;
-  passed: boolean;
-  feedback: string;
-  evidenceRefs: string[];
-} | null {
-  const normalized = raw
-    .trim()
-    .replace(/^```(?:json)?\s*/i, "")
-    .replace(/```\s*$/, "");
-  try {
-    const value = JSON.parse(normalized) as Record<string, unknown>;
-    if (typeof value.score !== "number" || typeof value.passed !== "boolean")
-      return null;
-    return {
-      score: Math.max(0, Math.min(1, value.score)),
-      passed: value.passed,
-      feedback:
-        typeof value.feedback === "string"
-          ? value.feedback.slice(0, 20_000)
-          : "Model judge completed.",
-      evidenceRefs: [],
-    };
-  } catch {
-    return null;
-  }
-}
-
-function resolveMaxHostedWorkspaceToolRounds(
-  optionValue: number | undefined
-): number {
-  if (
-    typeof optionValue === "number" &&
-    Number.isFinite(optionValue) &&
-    optionValue > 0
-  ) {
-    return Math.floor(optionValue);
-  }
-  const envValue = process.env.OPENPOND_HOSTED_WORKSPACE_TOOL_ROUNDS?.trim();
-  if (!envValue) return DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
-  if (/^(unlimited|infinite|infinity)$/i.test(envValue))
-    return Number.POSITIVE_INFINITY;
-  const parsed = Number.parseInt(envValue, 10);
-  return Number.isFinite(parsed) && parsed > 0
-    ? parsed
-    : DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS;
-}
-
-function isInsightEvidenceSourceFilter(
-  value: string | null
-): value is
-  | "all"
-  | "create_edit"
-  | "stuck_turn"
-  | "tool_failure"
-  | "abandoned_goal"
-  | "user_correction"
-  | "unresolved_conversation"
-  | "usage_anomaly" {
-  return (
-    value === "all" ||
-    value === "create_edit" ||
-    value === "stuck_turn" ||
-    value === "tool_failure" ||
-    value === "abandoned_goal" ||
-    value === "user_correction" ||
-    value === "unresolved_conversation" ||
-    value === "usage_anomaly"
-  );
-}
-
-function findRecentCodexCompactionCompleted(
-  events: RuntimeEvent[],
-  sessionId: string,
-  codexThreadId: string
-): RuntimeEvent | null {
-  const cutoff = Date.now() - 60_000;
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const item = events[index]!;
-    const timestamp = Date.parse(item.timestamp);
-    if (Number.isFinite(timestamp) && timestamp < cutoff) return null;
-    if (
-      item.sessionId !== sessionId ||
-      item.name !== "session.compaction.completed"
-    )
-      continue;
-    const data =
-      item.data && typeof item.data === "object"
-        ? (item.data as Record<string, unknown>)
-        : null;
-    if (data?.provider === "codex" && data.codexThreadId === codexThreadId)
-      return item;
-  }
-  return null;
-}
-
-function createImproveTargetKind(
-  value: string | null
-): "agent" | "skill" | "extension" | "model" | "configuration" | null {
-  return value === "agent" ||
-    value === "skill" ||
-    value === "extension" ||
-    value === "model" ||
-    value === "configuration"
-    ? value
-    : null;
-}
-
-function createImproveLimit(value: string | null): number | undefined {
-  if (!value) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined;
 }
 
 if (isCliEntrypoint(import.meta.url)) {

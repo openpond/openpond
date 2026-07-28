@@ -33,6 +33,130 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.compute-section-heading {
+  padding: 4px 2px 0;
+  border: 0;
+}
+
+.prime-compute-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #181818;
+}
+
+.prime-compute-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.prime-compute-identity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.prime-compute-identity > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.prime-compute-identity strong {
+  color: #f5f5f5;
+  font-size: 13px;
+  font-weight: 580;
+}
+
+.prime-compute-identity small {
+  color: #9b9b9b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.prime-compute-explainer {
+  padding: 12px 16px;
+}
+
+.prime-compute-explainer p {
+  max-width: 760px;
+  margin: 0;
+  color: #9b9b9b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.prime-compute-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.prime-compute-stats > div {
+  display: grid;
+  gap: 5px;
+  padding: 13px 16px;
+}
+
+.prime-compute-stats > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.065);
+}
+
+.prime-compute-stats dt {
+  color: #8f8f8f;
+  font-size: 11px;
+}
+
+.prime-compute-stats dd {
+  margin: 0;
+  color: #f1f1f1;
+  font-size: 14px;
+  font-weight: 580;
+}
+
+.prime-compute-error {
+  margin: 12px 18px 0;
+  border: 1px solid rgba(255, 98, 98, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 98, 98, 0.07);
+  color: #f0a1a1;
+  padding: 9px 11px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.prime-compute-form {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px 18px 16px;
+}
+
+.prime-compute-actions {
+  align-items: center;
+  flex-wrap: nowrap;
+}
+
+.prime-compute-actions .settings-primary {
+  margin: 0;
+}
+
+.prime-compute-last-checked {
+  display: block;
+  margin: -7px 18px 14px;
+  color: #777;
+  font-size: 11px;
+}
+
 .compute-device-default {
   padding-top: 0;
 }
@@ -188,6 +312,27 @@
 }
 
 @media (max-width: 720px) {
+  .prime-compute-header {
+    align-items: flex-start;
+  }
+
+  .prime-compute-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prime-compute-stats > div + div {
+    border-top: 1px solid rgba(255, 255, 255, 0.065);
+    border-left: 0;
+  }
+
+  .prime-compute-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prime-compute-actions {
+    flex-wrap: wrap;
+  }
+
   .compute-row {
     align-items: flex-start;
     flex-direction: column;

@@ -399,6 +399,20 @@ export default defineAgentProject({
       ".openpond-custom/agent-inspect.json",
     );
 
+    const absoluteOutDir = path.join(fixtureRoot, ".openpond-absolute");
+    await runSdkJson([
+      "inspect",
+      "--json",
+      "--cwd",
+      fixtureRoot,
+      "--out-dir",
+      absoluteOutDir,
+    ]);
+    const absoluteInspect = JSON.parse(
+      await readFile(path.join(absoluteOutDir, "agent-inspect.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect(absoluteInspect.schema).toBe("openpond.agent.inspect.v1");
+
     const validation = await runSdkJson(["validate", "--json", "--cwd", fixtureRoot]);
     expect(validation.schema).toBe("openpond.agent.validation.v1");
     expect(validation.status).toBe("passed");

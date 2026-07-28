@@ -1,6 +1,8 @@
 import {
   ChatAttachmentSummarySchema,
   CreateImproveRunSchema,
+  SessionUserQuestionResolutionSchema,
+  SessionUserQuestionSchema,
   WorkspaceDiffSummarySchema,
   type CreateImproveRun,
   type RuntimeEvent,
@@ -16,6 +18,7 @@ import {
   completeActivityGroup,
   isCodexGoalContextEvent,
   isCompactionEvent,
+  settleLatestActivityGroup,
 } from "./chat-activities";
 import { classifyChatError } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
@@ -106,6 +109,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     if (item.name === "assistant.delta") {
       const content = item.output ?? "";
       if (!content) continue;
+      settleLatestActivityGroup(messages, item);
       const previous = messages[messages.length - 1];
       if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createImproveRun) {
         previous.content = `${previous.content ?? ""}${content}`;
@@ -130,6 +134,41 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
     if (item.name === "assistant.reasoning.delta") {
       appendActivityMessage(messages, item);
+      continue;
+    }
+
+    if (item.name === "user_question.asked") {
+      const data = asRecord(item.data);
+      const parsed = SessionUserQuestionSchema.safeParse(data?.question);
+      if (!parsed.success) continue;
+      messages.push({
+        id: item.id,
+        role: "assistant",
+        timestamp: item.timestamp,
+        turnId: item.turnId,
+        userQuestion: parsed.data,
+      });
+      continue;
+    }
+
+    if (item.name === "user_question.answered" || item.name === "user_question.dismissed") {
+      const data = asRecord(item.data);
+      const parsed = SessionUserQuestionResolutionSchema.safeParse(data?.resolution);
+      if (!parsed.success) continue;
+      const message = findLast(
+        messages,
+        (candidate) => candidate.userQuestion?.id === parsed.data.questionId,
+      );
+      if (!message?.userQuestion || message.userQuestion.status !== "pending") continue;
+      message.userQuestion = {
+        ...message.userQuestion,
+        status: parsed.data.action === "answer" ? "answered" : "dismissed",
+        answer: parsed.data.action === "answer"
+          ? { optionId: parsed.data.optionId, text: parsed.data.text }
+          : null,
+        answeredAt: item.timestamp,
+      };
+      message.timestamp = item.timestamp;
       continue;
     }
 

@@ -333,25 +333,6 @@ export function useCloudWorkspaceSetup({
       if (target === activeWorkspaceLocation || workspaceBusy || busy) return;
       setError(null);
 
-      if (target === "queue_cloud") {
-        const linkedCloudProject =
-          selectedCloudProject ??
-          confirmedLinkedCloudProject(selectedProject, cloudProjects);
-        if (!linkedCloudProject) {
-          if (selectedProject) {
-            openCloudSetupForLocalProject(selectedProject, visibleWorkspaceState?.currentBranch ?? null);
-            return;
-          }
-          showToast("Select a Project before queueing Cloud work.", "error");
-          return;
-        }
-        showToast(
-          `Next Cloud task will use ${linkedCloudProject.name}. Start the message with /goal-remote to queue it while this chat stays local.`,
-          "info",
-        );
-        return;
-      }
-
       if (target === "upload_cloud") {
         if (!selectedProject) {
           showToast("Select a local Project before uploading source.", "error");

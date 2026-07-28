@@ -1,11 +1,7 @@
 import type {
   BootstrapPayload,
   CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
-  CloudWorkItemMessage,
   LocalProject,
-  WorkspaceState,
 } from "@openpond/contracts";
 
 export type VoiceTranscriptionStatus = {
@@ -66,39 +62,4 @@ export type LocalProjectCloudSourcePreviewResponse = {
     skippedCount: number;
     initializedEmptyProject: boolean;
   };
-};
-
-export type CloudWorkItemsResponse = {
-  workItems: CloudWorkItem[];
-};
-
-export type CloudWorkItemMessageResponse = {
-  message: CloudWorkItemMessage;
-  userMessage: CloudWorkItemMessage;
-};
-
-export type CloudWorkItemOpenCloudResponse = {
-  workItem: CloudWorkItem;
-  runtime?: unknown;
-  session?: CloudWorkItemDetail["runtimeSessions"][number];
-  activity?: CloudWorkItemDetail["activity"][number];
-  resumed?: boolean;
-};
-
-export type CloudWorkItemApplyLocalPatchResponse = {
-  workItem: CloudWorkItem;
-  localProject: LocalProject;
-  workspaceState: WorkspaceState;
-  patch: {
-    sandboxId: string;
-    filename: string | null;
-    bytes: number;
-    applied: true;
-    fileCount: number;
-  };
-};
-
-export type CloudWorkItemCancelTaskResponse = {
-  workItem: CloudWorkItem;
-  taskRun: unknown;
 };

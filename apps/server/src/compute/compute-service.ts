@@ -57,10 +57,13 @@ export function createComputeService(deps: ComputeServiceDeps) {
   }
 
   async function state() {
-    const snapshot = await inventory();
+    const [snapshot, currentSettings] = await Promise.all([
+      inventory(),
+      settings(),
+    ]);
     return ComputeStateResponseSchema.parse({
       schemaVersion: "openpond.computeState.v1",
-      settings: await settings(),
+      settings: currentSettings,
       inventory: snapshot ? { ...snapshot, downloads: await modelDownloads.list() } : null,
       scanning: scanPromise !== null,
     });
@@ -320,8 +323,9 @@ export function createComputeService(deps: ComputeServiceDeps) {
     return current.models.find((model) => model.modelId === modelId && model.revision === revision && model.trainingCompatible)?.path ?? null;
   }
 
-  return { state, settings, inventory, updateSettings, scan, modelPath, startModelDownload: modelDownloads.start, cancelModelDownload: modelDownloads.cancel, close: modelDownloads.close };
+  return { state, settings, inventory, updateSettings, scan, modelPath, ensureModel: modelDownloads.ensure, startModelDownload: modelDownloads.start, cancelModelDownload: modelDownloads.cancel, close: modelDownloads.close };
 }
+
 
 async function pythonRuntimeProbe(probe: CommandProbe, projectDir: string): Promise<ComputeRuntime[]> {
   const script = "import json, importlib.metadata as m; print(json.dumps({'python': __import__('platform').python_version(), 'torch': m.version('torch'), 'transformers': m.version('transformers'), 'trl': m.version('trl'), 'peft': m.version('peft')}))";

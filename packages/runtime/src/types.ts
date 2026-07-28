@@ -10,6 +10,7 @@ import type {
 } from "@openpond/cloud";
 import type {
   AccountState,
+  CodexReasoningEffort,
   OpenPondApp,
   ProviderCatalog,
 } from "@openpond/contracts";
@@ -102,6 +103,7 @@ export type HostedChatTurnInput = {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  reasoningEffort?: CodexReasoningEffort | null;
   signal?: AbortSignal;
 };
 

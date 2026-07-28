@@ -243,7 +243,7 @@ export function parseProviderCredentialDeleteRequest(
 
 export async function writeProviderCredential(input: {
   paths: ProviderSecretStorePaths;
-  providerId: ProviderId;
+  providerId: string;
   request: ProviderCredentialWriteRequest;
   timestamp: string;
 }): Promise<ProviderSecrets> {
@@ -300,7 +300,7 @@ export async function writeProviderChatGptSubscriptionCredential(input: {
 
 export async function deleteProviderCredential(input: {
   paths: ProviderSecretStorePaths;
-  providerId: ProviderId;
+  providerId: string;
   request: ProviderCredentialDeleteRequest;
 }): Promise<ProviderSecrets> {
   return withProviderSecretQueue(input.paths, async () => {
@@ -317,7 +317,7 @@ export async function deleteProviderCredential(input: {
 
 export async function updateProviderCredentialValidation(input: {
   paths: ProviderSecretStorePaths;
-  providerId: ProviderId;
+  providerId: string;
   timestamp: string;
   lastError: string | null;
 }): Promise<ProviderSecrets> {

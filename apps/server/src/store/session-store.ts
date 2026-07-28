@@ -18,8 +18,9 @@ export function createSessionStore(deps: {
   defaultSessionCwd: (appId?: string | null) => string;
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
 }) {
-  const { store, defaultSessionCwd, loadAppPreferences, appendRuntimeEvent } = deps;
+  const { store, defaultSessionCwd, loadAppPreferences, appendRuntimeEvent, loadLastUsedProfile } = deps;
 
   async function createSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
@@ -29,6 +30,11 @@ export function createSessionStore(deps: {
     const openPondCommandAccessMode =
       input.openPondCommandAccessMode ??
       (loadAppPreferences ? (await loadAppPreferences()).openPondCommandAccessMode : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE);
+    const currentProfile = input.currentProfile !== undefined
+      ? input.currentProfile
+      : loadLastUsedProfile
+        ? await loadLastUsedProfile()
+        : null;
     const session: Session = {
       id: randomUUID(),
       provider: input.provider,
@@ -51,6 +57,7 @@ export function createSessionStore(deps: {
       localProjectId: input.localProjectId ?? null,
       cloudProjectId: input.cloudProjectId ?? null,
       cloudTeamId: input.cloudTeamId ?? null,
+      currentProfile,
       ...(input.metadata ? { metadata: input.metadata } : {}),
       cwd: input.cwd === undefined ? defaultSessionCwd(input.appId) : input.cwd,
       codexThreadId: null,
@@ -217,6 +224,7 @@ function normalizeSession(
   return {
     ...session,
     openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    currentProfile: session.currentProfile ?? null,
     pinned,
     savedForLater,
     archived,

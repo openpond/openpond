@@ -197,11 +197,12 @@ describe("ProfileSettingsSection", () => {
       }),
     );
 
+    expect(html).toContain('<section class="account-settings profile-settings">');
     expect(html).toContain('class="profile-hosted-status"');
     expect(html).toContain('class="profile-local-status ready"');
     expect(html).toContain("Profile ready.");
     expect(html).toContain("uploaded f33a352dfb");
-    expect(html).toContain('<table class="profile-agent-table" aria-label="Profile agents table">');
+    expect(html).toContain('<table class="profile-data-table profile-agent-table" aria-label="Profile agents table">');
     expect(html).toContain('<th scope="col">Agent</th>');
     expect(html).toContain("Action");
     expect(html).toContain("Check");
@@ -250,7 +251,7 @@ describe("ProfileSettingsSection", () => {
     expect(hostedIndex).toBeLessThan(agentsIndex);
   });
 
-  test("keeps an empty Agents section above Skills", () => {
+  test("keeps the built-in Dataset Builder Agent above Skills", () => {
     const payload = profilePayload();
     payload.profile.agents = [];
 
@@ -266,11 +267,11 @@ describe("ProfileSettingsSection", () => {
     const agentsIndex = html.indexOf(
       'class="account-list-heading profile-agent-list-heading"><span>Agents</span>',
     );
-    const emptyAgentsIndex = html.indexOf("No profile agents found");
+    const datasetBuilderIndex = html.indexOf("Dataset Builder");
     const skillsIndex = html.indexOf("<span>Skills</span>");
     expect(agentsIndex).toBeGreaterThan(-1);
-    expect(emptyAgentsIndex).toBeGreaterThan(agentsIndex);
-    expect(skillsIndex).toBeGreaterThan(emptyAgentsIndex);
+    expect(datasetBuilderIndex).toBeGreaterThan(agentsIndex);
+    expect(skillsIndex).toBeGreaterThan(datasetBuilderIndex);
   });
 
   test("renders profile skills beside profile agents", () => {
@@ -307,6 +308,9 @@ describe("ProfileSettingsSection", () => {
     );
 
     expect(html).toContain("<span>Skills</span>");
+    expect(html).toContain('<table class="profile-data-table profile-skill-table" aria-label="Profile skills table">');
+    expect(html).toContain('<th scope="col">Skill</th>');
+    expect(html).toContain('<th scope="col">Actions</th>');
     expect(html).toContain("release-notes");
     expect(html).toContain("Draft release notes from user-facing changes.");
     expect(html).toContain("skills/release-notes/SKILL.md");

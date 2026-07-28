@@ -345,6 +345,48 @@
   line-height: 1.6;
 }
 
+.user-question-card {
+  display: grid;
+  gap: 10px;
+  max-width: min(620px, 100%);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-soft);
+}
+
+.user-question-card p,
+.user-question-card small {
+  margin: 0;
+  color: var(--muted);
+}
+
+.user-question-options {
+  display: grid;
+  gap: 8px;
+}
+
+.user-question-options button {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.user-question-freeform {
+  display: flex;
+  gap: 8px;
+}
+
+.user-question-freeform input {
+  flex: 1;
+  min-width: 0;
+}
+
+.user-question-dismiss {
+  justify-self: start;
+}
+
 .assistant-sources {
   display: flex;
   flex-wrap: wrap;

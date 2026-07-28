@@ -137,18 +137,6 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   ...profileSdkAliasDefinitions(),
   {
-    name: "extend",
-    usage: "openpond extend <instructions>",
-    optionSchema: { cwd: "string" },
-    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondExtendCommand(options, rest),
-  },
-  {
-    name: "edit",
-    usage: "openpond edit <instructions>",
-    optionSchema: { cwd: "string" },
-    handler: async ({ options, rest }) => (await import("./extend")).runOpenPondEditCommand(options, rest),
-  },
-  {
     name: "extension",
     usage: "openpond extension <add|preview|list|inspect|update|remove> [owner/repo]",
     usages: [
@@ -337,6 +325,30 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     usage: "openpond sandbox <command> [args]",
     optionSchema: SANDBOX_OPTION_SCHEMA,
     handler: async ({ options, rest }) => (await import("./sandbox-command")).runSandboxCommand(options, rest),
+  },
+  {
+    name: "training",
+    usage: "openpond training <start|status|watch|logs|cancel|artifacts> <model-run-id|run-id>",
+    usages: [
+      "openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
+      "openpond training status <run-id> [--json]",
+      "openpond training watch <run-id> [--interval-ms <ms>] [--json]",
+      "openpond training logs <run-id> [--json]",
+      "openpond training cancel <run-id> [--json]",
+      "openpond training artifacts <run-id> [--json]",
+    ],
+    optionSchema: {
+      apiBaseUrl: "string",
+      detach: "boolean",
+      intervalMs: "integer",
+      json: "boolean",
+      manifest: "string",
+      maxSpend: "number",
+      retentionDays: "integer",
+      yes: "boolean",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./training")).runTrainingCommand(options, rest),
   },
   {
     name: "opchat",

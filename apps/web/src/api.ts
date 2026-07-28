@@ -1,13 +1,9 @@
 import type {
   Approval,
   AppPreferences,
-  ApplyCloudWorkItemLocalPatchRequest,
   BootstrapPayload,
-  CloudWorkItemBackgroundRequest,
-  CloudWorkItemDetail,
   ChatAttachment,
   ChatAttachmentSummary,
-  CreateCloudWorkItemRequest,
   CreateLocalProjectRequest,
   CreateSessionRequest,
   InsightStatus,
@@ -19,6 +15,7 @@ import type {
   InsightsAskRequest,
   InsightsAskResponse,
   TrainingStateResponse,
+  TrainingCatalog,
   TrainingRunDetail,
   DatasetCatalogResponse,
   ComputeStateResponse,
@@ -27,6 +24,12 @@ import type {
   OpenPondExtension,
   OpenPondExtensionCatalog,
   OpenPondExtensionPreview,
+  OpenPondProfileLibrary,
+  OpenPondProfileRef,
+  OpenPondProfilePublicationPreview,
+  OpenPondProfilePublicationPreviewRequest,
+  OpenPondProfilePublicationPublishRequest,
+  OpenPondProfilePublicationResult,
   LocalAgentSchedulesResponse,
   LocalAgentScheduleRunsResponse,
   LocalAgentScheduleRunResponse,
@@ -61,9 +64,6 @@ import type {
   SubagentLifecycleActionRequest,
   SubagentLifecycleActionResponse,
   UpdateOpenPondAccountConfigRequest,
-  ListCloudWorkItemsRequest,
-  OpenCloudWorkItemRequest,
-  SendCloudWorkItemMessageRequest,
   UploadLocalProjectCloudSourceRequest,
   UpdateAppPreferencesRequest,
   UpdatePersonalizationRequest,
@@ -103,11 +103,6 @@ import { sessionApi } from "./api/session-api";
 import { sandboxApi } from "./api/sandbox";
 import { communityApi } from "./api/community-api";
 import type {
-  CloudWorkItemCancelTaskResponse,
-  CloudWorkItemApplyLocalPatchResponse,
-  CloudWorkItemMessageResponse,
-  CloudWorkItemOpenCloudResponse,
-  CloudWorkItemsResponse,
   GitAvailability,
   LocalProjectCloudSourcePreviewResponse,
   LocalProjectCloudSourceUploadResponse,
@@ -182,10 +177,6 @@ export {
 export { resolveConnection } from "./api/connection";
 export type { ClientConnection } from "./api/api-client";
 export type {
-  CloudWorkItemCancelTaskResponse,
-  CloudWorkItemMessageResponse,
-  CloudWorkItemOpenCloudResponse,
-  CloudWorkItemsResponse,
   GitAvailability,
   LocalProjectCloudSourcePreviewResponse,
   LocalProjectCloudSourceUploadResponse,
@@ -629,6 +620,19 @@ export const api = {
       connection,
       `/v1/training?profileId=${encodeURIComponent(profileId)}`
     ),
+  portableTrainingCatalog: (
+    connection: ClientConnection,
+    query = "",
+    method?: "sft" | "dpo" | "grpo" | "ppo",
+  ) => {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("query", query.trim());
+    if (method) params.set("method", method);
+    return apiFetch<TrainingCatalog>(
+      connection,
+      `/v1/training/catalog${params.size ? `?${params.toString()}` : ""}`,
+    );
+  },
   datasetCatalog: (connection: ClientConnection, profileId: string) =>
     apiFetch<DatasetCatalogResponse>(
       connection,
@@ -923,6 +927,50 @@ export const api = {
     ),
   profileCurrent: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload["profile"]>(connection, "/v1/profile"),
+  profileCatalog: (connection: ClientConnection) =>
+    apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/catalog"),
+  profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(
+      connection,
+      "/v1/profile/select",
+      { method: "POST", body: JSON.stringify({ ref }) },
+    ),
+  profileRemove: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/remove", {
+      method: "POST",
+      body: JSON.stringify({ ref }),
+    }),
+  profilePublicationPreview: (
+    connection: ClientConnection,
+    input: OpenPondProfilePublicationPreviewRequest,
+  ) => apiFetch<OpenPondProfilePublicationPreview>(connection, "/v1/profile/publication/preview", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profilePublicationPublish: (
+    connection: ClientConnection,
+    input: OpenPondProfilePublicationPublishRequest,
+  ) => apiFetch<OpenPondProfilePublicationResult>(connection, "/v1/profile/publication/publish", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profileInstall: (
+    connection: ClientConnection,
+    input: {
+      source: "github" | "openpond_git";
+      repositoryId: string;
+      url?: string | null;
+      profile?: string | null;
+    },
+  ) => apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/install", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  profileUpdate: (connection: ClientConnection, ref: OpenPondProfileRef) =>
+    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/update", {
+      method: "POST",
+      body: JSON.stringify({ ref }),
+    }),
   profileInit: (
     connection: ClientConnection,
     input: {
@@ -1336,110 +1384,6 @@ export const api = {
       )}/cloud-source/preview${suffix}`
     );
   },
-  cloudWorkItems: (
-    connection: ClientConnection,
-    input: ListCloudWorkItemsRequest
-  ) => {
-    const query = new URLSearchParams({
-      teamId: input.teamId,
-      limit: String(input.limit ?? 100),
-    });
-    for (const projectId of input.projectIds)
-      query.append("projectId", projectId);
-    if (input.includeArchived) query.set("includeArchived", "true");
-    return apiFetch<CloudWorkItemsResponse>(
-      connection,
-      `/v1/cloud/work-items?${query.toString()}`
-    );
-  },
-  cloudWorkItem: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: { teamId: string }
-  ) => {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    return apiFetch<CloudWorkItemDetail>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(
-        workItemId
-      )}?${query.toString()}`
-    );
-  },
-  createCloudWorkItem: (
-    connection: ClientConnection,
-    input: CreateCloudWorkItemRequest
-  ) =>
-    apiFetch<CloudWorkItemDetail>(connection, "/v1/cloud/work-items", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
-  sendCloudWorkItemMessage: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: SendCloudWorkItemMessageRequest
-  ) =>
-    apiFetch<CloudWorkItemMessageResponse>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
-  handleCloudWorkItemInBackground: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: CloudWorkItemBackgroundRequest
-  ) =>
-    apiFetch<unknown>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(
-        workItemId
-      )}/handle-background`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
-  cancelCloudWorkItemTask: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: { teamId: string }
-  ) =>
-    apiFetch<CloudWorkItemCancelTaskResponse>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/cancel-task`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
-  openCloudWorkItem: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: OpenCloudWorkItemRequest
-  ) =>
-    apiFetch<CloudWorkItemOpenCloudResponse>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/open-cloud`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
-  applyCloudWorkItemLocalPatch: (
-    connection: ClientConnection,
-    workItemId: string,
-    input: ApplyCloudWorkItemLocalPatchRequest
-  ) =>
-    apiFetch<CloudWorkItemApplyLocalPatchResponse>(
-      connection,
-      `/v1/cloud/work-items/${encodeURIComponent(workItemId)}/apply-local`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ),
   deleteLocalProject: (connection: ClientConnection, projectId: string) =>
     apiFetch<BootstrapPayload>(
       connection,

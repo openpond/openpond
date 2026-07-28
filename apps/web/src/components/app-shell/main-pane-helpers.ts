@@ -1,15 +1,10 @@
 import type {
-  BootstrapPayload,
   CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
   UsageRequestAttribution,
-  WorkspaceKind,
 } from "@openpond/contracts";
-import type { AppView, ChatMessage } from "../../lib/app-models";
+import type { ChatMessage } from "../../lib/app-models";
 import type { ParsedComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runtime";
-import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import type { ComposerCreateImproveRuntime } from "../chat/ComposerCreateImproveStrip";
 
 const CHAT_AUTOSCROLL_THRESHOLD_PX = 72;
@@ -47,22 +42,16 @@ function userMessageRows(element: HTMLElement): HTMLElement[] {
 export function billingTargetForContext({
   activeWorkspaceId,
   cloudProjects,
-  selectedCloudWorkItem,
 }: {
   activeWorkspaceId: string | null;
   cloudProjects: CloudProject[];
-  selectedCloudWorkItem: CloudWorkItem | null;
 }): { organizationSlug: string | null; teamId: string | null } {
-  const selectedProject = cloudProjects.find((project) =>
-    project.id === activeWorkspaceId ||
-    project.id === selectedCloudWorkItem?.projectId ||
-    project.teamId === selectedCloudWorkItem?.teamId
-  );
+  const selectedProject = cloudProjects.find((project) => project.id === activeWorkspaceId);
   const fallbackProject = cloudProjects.find((project) => project.organizationSlug || project.teamId);
   const project = selectedProject ?? fallbackProject ?? null;
   return {
     organizationSlug: project?.organizationSlug ?? null,
-    teamId: project?.teamId ?? selectedCloudWorkItem?.teamId ?? null,
+    teamId: project?.teamId ?? null,
   };
 }
 
@@ -132,20 +121,14 @@ export function latestCreatePipelineRuntime(
   messages: ChatMessage[],
 ): ComposerCreateImproveRuntime | null {
   const run = latestCreateImproveRunProjection({ messages });
-  return run ? { run } : null;
-}
-
-export function cloudProjectIdFromComposerTarget(value: string): string | null {
-  return value.startsWith("cloud:") ? value.slice("cloud:".length) || null : null;
+  return run && run.target.kind !== "agent" ? { run } : null;
 }
 
 export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
-  if (command.command === "create") return `/create ${command.args}`;
-  if (command.command === "edit") return `/edit ${command.args}`;
+  if (command.command === "agent") return command.args ? `/agent ${command.args}` : "/agent";
   if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
   if (command.command === "sync-cloud") return command.args ? `/sync-cloud ${command.args}` : "/sync-cloud";
-  if (command.command === "goal-local") return `Goal: ${command.args}`;
-  return `Goal: ${command.args}`;
+  return command.args ? `/${command.command} ${command.args}` : `/${command.command}`;
 }
 
 export function usageAttributionForComposerSlashCommand(
@@ -164,39 +147,9 @@ export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSl
   return (
     command.command === "goal" ||
     command.command === "goal-local" ||
+    command.command === "agent" ||
     command.command === "skill" ||
     command.command === "sync-cloud"
-  );
-}
-
-export function shouldRunCreateImproveCommandLocally(input: {
-  command: ParsedComposerSlashCommand;
-  profile: BootstrapPayload["profile"] | null | undefined;
-  activeWorkspaceKind: WorkspaceKind | null;
-  view: AppView;
-}): boolean {
-  if (input.command.command !== "create" && input.command.command !== "edit") {
-    return false;
-  }
-  if (input.profile?.mode !== "local") return false;
-  if (input.view === "cloud") return false;
-  return !isCloudWorkspaceKind(input.activeWorkspaceKind);
-}
-
-export function cloudWorkItemSandboxId(
-  workItem: CloudWorkItem | null,
-  detail: CloudWorkItemDetail | null,
-): string | null {
-  if (!workItem) return null;
-  const detailApplies = detail?.workItem.id === workItem.id;
-  return (
-    (detailApplies ? detail.workItem.latestSandboxId : null) ??
-    workItem.latestSandboxId ??
-    (detailApplies
-      ? detail.runtimeSessions.find((session) => session.sandboxId && !session.endedAt)?.sandboxId ??
-        detail.runtimeSessions.find((session) => session.sandboxId)?.sandboxId ??
-        null
-      : null)
   );
 }
 

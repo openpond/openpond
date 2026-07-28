@@ -1,17 +1,175 @@
 import type {
   FireworksModelServingSession,
   ModelBinding,
+  ModelRun,
+  ModelVersion,
   RolloutTrajectoryReceipt,
 } from "@openpond/contracts";
 import {
   FireworksModelServingSessionSchema,
   ModelBindingSchema,
+  ModelRunSchema,
+  ModelVersionSchema,
   RolloutTrajectoryReceiptSchema,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { SqliteStoreCore } from "./store-core.js";
 
 export class SqliteTrainingModelStore extends SqliteStoreCore {
+  async saveModelVersion(
+    versionInput: ModelVersion,
+  ): Promise<ModelVersion> {
+    const version = ModelVersionSchema.parse(versionInput);
+    const existing = await this.getModelVersion(version.id);
+    if (existing && existing.contentHash !== version.contentHash) {
+      throw new Error(
+        `Model Version ${version.id} is immutable and already has different content.`,
+      );
+    }
+    const conflicting = (
+      await this.listModelVersions({ modelId: version.modelId })
+    ).find((candidate) => candidate.version === version.version);
+    if (conflicting && conflicting.id !== version.id) {
+      throw new Error(
+        `Model ${version.modelId} already has version ${version.version}.`,
+      );
+    }
+    await this.upsertPayload(
+      `INSERT INTO model_versions
+        (id, model_id, profile_id, version_number, kind, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      [
+        version.id,
+        version.modelId,
+        version.profileId,
+        version.version,
+        version.kind,
+        JSON.stringify(version),
+        version.createdAt,
+      ],
+    );
+    return version;
+  }
+
+  async getModelVersion(id: string): Promise<ModelVersion | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_versions WHERE id = ?",
+      [id],
+      ModelVersionSchema.parse,
+    );
+  }
+
+  async listModelVersions(input: {
+    profileId?: string;
+    modelId?: string;
+  } = {}): Promise<ModelVersion[]> {
+    if (input.modelId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_versions WHERE model_id = ? ORDER BY version_number DESC",
+        [input.modelId],
+        ModelVersionSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_versions WHERE profile_id = ? ORDER BY created_at DESC",
+        [input.profileId],
+        ModelVersionSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_versions ORDER BY created_at DESC",
+      [],
+      ModelVersionSchema.parse,
+    );
+  }
+
+  async saveModelRun(runInput: ModelRun): Promise<ModelRun> {
+    const modelRun = ModelRunSchema.parse(runInput);
+    const existing = await this.getModelRun(modelRun.id);
+    if (
+      existing
+      && (
+        existing.modelId !== modelRun.modelId
+        || existing.modelVersionId !== modelRun.modelVersionId
+        || existing.profileId !== modelRun.profileId
+        || existing.taskset.id !== modelRun.taskset.id
+      )
+    ) {
+      throw new Error("A Model Run cannot change its immutable lineage.");
+    }
+    if (
+      existing
+      && ["succeeded", "failed", "cancelled"].includes(existing.status)
+      && JSON.stringify(existing) !== JSON.stringify(modelRun)
+    ) {
+      throw new Error(`Terminal Model Run ${modelRun.id} is immutable.`);
+    }
+    await this.upsertPayload(
+      `INSERT INTO model_runs
+        (id, model_id, model_version_id, profile_id, taskset_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         status = excluded.status,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        modelRun.id,
+        modelRun.modelId,
+        modelRun.modelVersionId,
+        modelRun.profileId,
+        modelRun.taskset.id,
+        modelRun.status,
+        JSON.stringify(modelRun),
+        modelRun.startedAt,
+        modelRun.updatedAt,
+      ],
+    );
+    return modelRun;
+  }
+
+  async getModelRun(id: string): Promise<ModelRun | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM model_runs WHERE id = ?",
+      [id],
+      ModelRunSchema.parse,
+    );
+  }
+
+  async listModelRuns(input: {
+    profileId?: string;
+    modelId?: string;
+    tasksetId?: string;
+  } = {}): Promise<ModelRun[]> {
+    if (input.modelId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_runs WHERE model_id = ? ORDER BY updated_at DESC",
+        [input.modelId],
+        ModelRunSchema.parse,
+      );
+    }
+    if (input.tasksetId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
+        [input.tasksetId],
+        ModelRunSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM model_runs WHERE profile_id = ? ORDER BY updated_at DESC",
+        [input.profileId],
+        ModelRunSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM model_runs ORDER BY updated_at DESC",
+      [],
+      ModelRunSchema.parse,
+    );
+  }
+
   async saveFireworksModelServingSession(
     sessionInput: FireworksModelServingSession,
   ): Promise<FireworksModelServingSession> {

@@ -4,6 +4,68 @@ export const SHIPPED_OPENPOND_SKILL_NAMES = [
   "openpond-cli",
   "openpond-desktop-harness",
   "openpond-taskset-authoring",
+  "openpond-skill-authoring",
+  "openpond-agent-authoring",
+] as const;
+
+export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
+  {
+    name: "openpond-taskset-authoring",
+    description:
+      "Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented evidence, or imported data.",
+    path: "skills/openpond-taskset-authoring/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: [
+      "references/task-design.md",
+      "references/graders-and-rewards.md",
+      "references/method-selection.md",
+      "references/privacy-and-provenance.md",
+    ],
+  },
+  {
+    name: "openpond-skill-authoring",
+    description:
+      "Create, copy, adapt, review, or update OpenPond Profile skill packages from slash commands or ordinary authoring requests.",
+    path: "skills/openpond-skill-authoring/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: [
+      "references/skill-package-layout.md",
+      "references/copying-and-adaptation.md",
+      "references/validation-and-repair.md",
+      "scripts/validate-skill.mjs",
+    ],
+  },
+  {
+    name: "openpond-agent-authoring",
+    description:
+      "Create, improve, review, or repair source-backed OpenPond Profile Agents and Agent SDK projects.",
+    path: "skills/openpond-agent-authoring/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: [
+      "references/profile-layout.md",
+      "references/action-and-chat-design.md",
+      "references/integrations-and-setup.md",
+      "references/validation-and-repair.md",
+    ],
+  },
 ] as const;
 
 export const OpenPondExtensionSkillSchema = z.object({

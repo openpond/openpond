@@ -9,7 +9,16 @@ import { LocalCpuTrainingDestination } from "../apps/server/src/training/local-c
 import { createEvidenceSnapshot, createTasksetRef } from "../apps/server/src/training/create-improve-taskset-lineage";
 import { createModelTrainingCreateImproveRun } from "../apps/server/src/training/model-create-improve";
 import { syncModelTrainingCreateImproveRuns } from "../apps/server/src/training/model-create-improve-reconciliation";
-import { planFixture, tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
+import {
+  dpoRecipeFixture,
+  executablePlanFixture,
+  planFixture,
+  ppoRecipeFixture,
+  preferenceTasksetFixture,
+  rewardTasksetFixture,
+  tasksetFixture,
+  withTrainingStore,
+} from "./helpers/training-fixtures";
 
 describe.sequential("local CPU training fixture", () => {
   test("runs LoRA SFT, imports verified artifacts, reloads, evaluates, and records immutable lineage", async () => withTrainingStore(async ({ store, directory }) => {
@@ -23,6 +32,7 @@ describe.sequential("local CPU training fixture", () => {
     });
     const createImproveRun = createModelTrainingCreateImproveRun({
       profileId: setup.taskset.profileId,
+      modelId: setup.plan.recipe.baseModel.id,
       tasksetId: setup.taskset.id,
       displayName: setup.taskset.name,
       trainingPlanId: setup.plan.id,
@@ -113,12 +123,84 @@ describe.sequential("local CPU training fixture", () => {
       expect(grades.some((grade: any) => grade.feedback.some((feedback: string) => feedback.includes("unavailable")))).toBe(false);
     } finally { await setup.destination.close(); }
   }), 30_000);
+
+  test("runs native DPO with reference-logprob evidence and frozen evaluation", async () => withTrainingStore(async ({ store, directory }) => {
+    const setup = await setupFixture(store, directory, { method: "dpo" });
+    try {
+      const job = await setup.destination.launch(setup.plan, setup.approval);
+      const completed = await waitForTerminal(setup.destination, job.id);
+      expect(completed.status).toBe("succeeded");
+      const [artifacts, models] = await Promise.all([
+        store.listTrainingArtifacts(job.id),
+        store.listModelArtifactLineage(setup.taskset.id),
+      ]);
+      expect(artifacts.some((artifact: any) =>
+        artifact.path.endsWith("reference-logprobs.jsonl"))).toBe(true);
+      expect(artifacts.some((artifact: any) => artifact.kind === "evaluation")).toBe(true);
+      expect(models[0]).toMatchObject({
+        modelId: "model_dpo_fixture",
+        frozenEvaluationArtifactId: expect.any(String),
+        promotable: false,
+      });
+    } finally {
+      await setup.destination.close();
+    }
+  }), 30_000);
+
+  test("runs verifier-backed PPO with policy, reference, critic, trajectories, and checkpoints", async () => withTrainingStore(async ({ store, directory }) => {
+    const setup = await setupFixture(store, directory, { method: "ppo" });
+    try {
+      const job = await setup.destination.launch(setup.plan, setup.approval);
+      const completed = await waitForTerminal(setup.destination, job.id);
+      expect(completed.status).toBe("succeeded");
+      const [artifacts, receipts, models] = await Promise.all([
+        store.listTrainingArtifacts(job.id),
+        store.listRolloutTrajectoryReceipts({ jobId: job.id }),
+        store.listModelArtifactLineage(setup.taskset.id),
+      ]);
+      expect(artifacts.some((artifact: any) =>
+        artifact.path.endsWith("value_head.safetensors"))).toBe(true);
+      expect(artifacts.some((artifact: any) =>
+        artifact.path.endsWith("checkpoint.json"))).toBe(true);
+      expect(receipts).toHaveLength(2);
+      expect(receipts[0]).toMatchObject({
+        optimizerMethod: "ppo",
+        provider: "local_cpu_fixture",
+        evidenceLevels: {
+          requested: "trajectory",
+          observed: "trajectory",
+          providerReported: "trajectory",
+        },
+        trajectory: {
+          schemaVersion: "openpond.ppoTrajectory.v1",
+          valueModelId: expect.stringContaining("value-head"),
+        },
+      });
+      expect(models[0]).toMatchObject({
+        modelId: "model_ppo_fixture",
+        trainerVersion: "openpond-ppo-reference-v1",
+        frozenEvaluationArtifactId: expect.any(String),
+        promotable: false,
+      });
+    } finally {
+      await setup.destination.close();
+    }
+  }), 30_000);
 });
 
-async function setupFixture(store: any, directory: string, options: { customVerifier?: boolean } = {}) {
+async function setupFixture(store: any, directory: string, options: { customVerifier?: boolean; method?: "sft" | "dpo" | "ppo" } = {}) {
   const customGrader = { id: "sandbox_exact", version: "1", label: "Sandbox exact match", kind: "custom_verifier" as const, weight: 1, hardGate: true, rewardEligible: false, privileged: true, module: "graders/exact.js", exportName: "verify", timeoutMs: 1_000, networkPolicy: "none" as const, metadata: {} };
-  const taskset = tasksetFixture({ ready: true, graders: options.customVerifier ? [customGrader] : undefined });
-  const plan = planFixture(taskset);
+  const method = options.method ?? "sft";
+  const taskset = method === "dpo"
+    ? preferenceTasksetFixture()
+    : method === "ppo"
+      ? rewardTasksetFixture()
+      : tasksetFixture({ ready: true, graders: options.customVerifier ? [customGrader] : undefined });
+  const plan = method === "dpo"
+    ? executablePlanFixture(taskset, dpoRecipeFixture())
+    : method === "ppo"
+      ? executablePlanFixture(taskset, ppoRecipeFixture(taskset))
+      : planFixture(taskset);
   const tasksetDirectory = path.join(directory, "training", "tasksets", taskset.id);
   await mkdir(tasksetDirectory, { recursive: true });
   await buildTaskset(taskset, tasksetDirectory, options.customVerifier ? { generatedFiles: [{ path: "graders/exact.js", role: "verifier", content: "export function verify({ task, attempt }) { const passed = attempt.output.text === task.expectedOutput.text; return { score: passed ? 1 : 0, passed, feedback: 'Sandbox verifier executed.' }; }\n" }] } : undefined);
@@ -127,7 +209,12 @@ async function setupFixture(store: any, directory: string, options: { customVeri
   const bundleDirectory = path.join(directory, "training", "bundles", plan.id);
   const bundle = await buildTrainingBundle({ taskset, plan, directory: bundleDirectory });
   await store.saveTrainingBundle(bundle);
-  const approval = TrainingApprovalSchema.parse({ schemaVersion: "openpond.trainingApproval.v1", id: "approval_fixture", planId: plan.id, bundleHash: bundle.contentHash, destinationId: "local_cpu_fixture", modelId: plan.recipe.method === "sft" ? plan.recipe.baseModel.id : "unsupported", method: "sft", parameterization: "lora", maximumCostUsd: 0, approvedBy: "local_user", approvedAt: "2026-07-12T00:00:00Z" });
+  const approvalModelId = plan.recipe.method === "sft"
+    ? plan.recipe.baseModel.id
+    : plan.recipe.method === "dpo"
+      ? plan.recipe.policyModel.id
+      : plan.recipe.policyOptimization.policyModel.id;
+  const approval = TrainingApprovalSchema.parse({ schemaVersion: "openpond.trainingApproval.v1", id: `approval_${method}_fixture`, planId: plan.id, bundleHash: bundle.contentHash, destinationId: "local_cpu_fixture", modelId: approvalModelId, method, parameterization: "lora", maximumCostUsd: 0, approvedBy: "local_user", approvedAt: "2026-07-12T00:00:00Z" });
   await store.saveTrainingApproval(approval);
   const destination = new LocalCpuTrainingDestination({ store, storeDir: directory, projectDir: path.resolve("python/openpond-training") });
   return { taskset, plan, bundle, approval, destination };

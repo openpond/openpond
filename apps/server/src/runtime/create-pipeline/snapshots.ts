@@ -470,17 +470,6 @@ export function withCreateImproveRun(turn: Turn, run: CreateImproveRun | null): 
 }
 
 function resumeStateFromMetadata(run: CreateImproveRun): CreateImproveRun["state"] {
-  if (
-    run.state === "blocked"
-    && run.operation === "improve"
-    && run.target.kind === "agent"
-    && run.candidates.some((candidate) =>
-      Boolean(candidate.git?.worktreePath)
-      && ["draft", "checking"].includes(candidate.status),
-    )
-  ) {
-    return "applying_source";
-  }
   if (run.state !== "paused") throw new Error("Create/Improve run cannot be resumed.");
   const parsed = CreateImproveRunSchema.shape.state.safeParse(run.metadata.pausedFromState);
   if (!parsed.success || parsed.data === "paused") return "planning";

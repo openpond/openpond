@@ -7,7 +7,12 @@ import { SessionSchema } from "./sessions.js";
 import { RuntimeEventSchema } from "./runtime.js";
 import { ApprovalSchema } from "./approvals.js";
 import { PlaceholderPaneSchema } from "./placeholders.js";
-import { OpenPondProfileStateSchema, emptyOpenPondProfileState } from "./profile.js";
+import {
+  OpenPondProfileLibrarySchema,
+  OpenPondProfileStateSchema,
+  emptyOpenPondProfileLibrary,
+  emptyOpenPondProfileState,
+} from "./profile.js";
 import { SidebarFileBookmarkSchema } from "./sidebar-files.js";
 import { CodexPersonalSkillSchema } from "./skills.js";
 import { OpenPondExtensionCatalogSchema } from "./extensions.js";
@@ -37,6 +42,7 @@ export const BootstrapPayloadSchema = z.object({
   localProjects: z.array(LocalProjectSchema).optional().default([]),
   cloudProjects: z.array(CloudProjectSchema).optional().default([]),
   profile: OpenPondProfileStateSchema.optional().default(emptyOpenPondProfileState),
+  profileLibrary: OpenPondProfileLibrarySchema.optional().default(emptyOpenPondProfileLibrary),
   codexPersonalSkills: z.array(CodexPersonalSkillSchema).optional().default([]),
   extensionCatalog: OpenPondExtensionCatalogSchema.optional().default({
     rootPath: "",

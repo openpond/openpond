@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { ComputeDevice, ComputeStateResponse } from "@openpond/contracts";
 import { RefreshCw } from "../icons";
 import { ModelStoragePicker } from "./ModelStoragePicker";
+import type { ComputeSettingsBusy } from "./useComputeSettings";
 
 export function ComputeSettingsSection({
   state,
@@ -13,7 +14,7 @@ export function ComputeSettingsSection({
   onCancelDownload,
 }: {
   state: ComputeStateResponse | null;
-  busy: "load" | "scan" | "save" | null;
+  busy: ComputeSettingsBusy;
   title?: string;
   onScan: () => Promise<void>;
   onSave: (

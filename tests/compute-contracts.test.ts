@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { ComputeInventorySchema, ComputeSettingsSchema, ModelAssetSchema } from "@openpond/contracts";
+import {
+  ComputeInventorySchema,
+  ComputeSettingsSchema,
+  ModelAssetSchema,
+} from "@openpond/contracts";
 
 describe("compute contracts", () => {
   test("accepts a normalized inventory without raw command or hardware identifiers", () => {

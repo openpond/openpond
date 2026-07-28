@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import type {
-  BootstrapPayload,
   OpenPondExtension,
-  OpenPondProfileSkill,
   SidebarFileBookmark,
   TerminalScope,
 } from "@openpond/contracts";
@@ -20,48 +18,11 @@ import type { SkillSourceDocument } from "../components/app-shell/skill-source-d
 import type { SkillPackageSourceSelection } from "../components/app-shell/skill-package-source";
 import { extensionSourceSelection } from "../components/settings/extension-source-selection";
 import { AppToastProvider } from "./AppToastContext";
-import {
-  POST_TRAINING_LESSONS,
-  type PostTrainingCourseState,
-} from "../components/get-started/post-training-lessons";
-import {
-  getPostTrainingProgress,
-  startingPostTrainingLessonIndex,
-} from "../components/get-started/post-training-progress";
-import type {
-  MakeAgentTutorialState,
-  MakeAgentTutorialVideoId,
-} from "../components/get-started/make-agent-tutorial";
+import { composerSkillsForProfile } from "../lib/profile-selection";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
   secondary: AppSecondaryRuntime;
-}
-
-function harnessSkillsForComposer(bootstrap: BootstrapPayload | null): OpenPondProfileSkill[] {
-  const skills = new Map(
-    (bootstrap?.profile?.skills ?? []).map((skill) => [skill.name, skill]),
-  );
-  for (const extension of bootstrap?.extensionCatalog.extensions ?? []) {
-    if (extension.validationStatus !== "valid") continue;
-    for (const skill of extension.skills) {
-      if (skill.validationStatus !== "valid" || skills.has(skill.name)) continue;
-      skills.set(skill.name, {
-        name: skill.name,
-        description: skill.description,
-        path: skill.relativePath,
-        scope: "profile",
-        enabled: true,
-        sourcePath: extension.sourcePath,
-        charCount: skill.charCount,
-        sourceHash: skill.sourceHash,
-        validationStatus: "valid",
-        validationMessages: [],
-        resourceFiles: skill.resourceFiles,
-      });
-    }
-  }
-  return [...skills.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
@@ -89,13 +50,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     appDefaults, startMessage, teamChatOrganization,
     teamChatTeamId, teamChat, publishTeamProfileAgent, communitySidebar, communityView, teamAiThreadId,
     toggleTeamAiSidebar, activeOpenPondCommandAccessMode, profileWorkspaceId, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind,
-    viewWorkspaceName, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded, cloudBusy,
-    cloudError, cloudLoading, cloudWorkItemDetail, cloudWorkItems, selectedCloudWorkItem, selectedCloudWorkItemId,
-    selectedCloudWorkItemLocalProject, applyCloudWorkItemPatchLocally, cancelCloudWorkItemCreatePipeline, cancelCloudWorkItemTask, createCloudWork, handleCloudWorkItemBackground,
-    openCloudHome, selectCloudWorkItem, sendCloudWorkItemMessage, changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
+    viewWorkspaceName, selectedActionCatalog, expandedProjectIds, expandProject, toggleProjectExpanded,
+    changeCodexPermissionMode, changeCodexReasoningEffort, changeOpenPondCommandAccessMode,
     resolveApproval, beginNewChat, beginNewChatWithTrainingModel, dismissTrainingChatHandoff, trainingChatHandoff, selectTrainingChatTaskForComposer,
     chatHistoryLoadStates, loadMoreSelectedChatHistory, selectedPagedSessionEvents, activeSessions, pinnedSessions, savedForLaterSessions, savedForLaterFiles, sidebarFileBookmarks, setSidebarFileStatus, projectRows,
-    localProjectRows, visibleProjectRows, cloudProjectRows, cloudWorkItemsByProjectId, projectSessionRowsByProjectId, childSessionRowsByParentId,
+    localProjectRows, visibleProjectRows, cloudProjectRows, projectSessionRowsByProjectId, childSessionRowsByParentId,
     sidebarProjectIdBySessionId, chatRows, visibleChatRows, sessionEvents, goalRuntime,
     subagentRuntime, visibleChatMessages, activeTerminalScope, terminalSummaries, runningSessionIds, selectedSessionRunning,
     selectedSteerAutoDispatchBlocked, selectedSteerAutoDispatchReady, sidebarGoalRuntimeBySessionId, sidebarSubagentRuntimeBySessionId, dragItem, startPinnedDrag,
@@ -115,7 +74,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
     toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
-    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab, setupCloudProjectFromCloudView,
+    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
     openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
     closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
     showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
@@ -124,106 +83,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   } = secondary;
   const [nativeSkillSidebar, setNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
   const [extensionSkillSidebar, setExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const harnessSkills = harnessSkillsForComposer(bootstrap);
+  const harnessSkills = composerSkillsForProfile(bootstrap?.profile, bootstrap?.extensionCatalog);
   const [pendingNativeSkillSidebar, setPendingNativeSkillSidebar] = useState<SkillSourceDocument | null>(null);
   const [pendingExtensionSkillSidebar, setPendingExtensionSkillSidebar] = useState<SkillPackageSourceSelection | null>(null);
-  const [postTrainingCourse, setPostTrainingCourse] = useState<PostTrainingCourseState | null>(null);
-  const [makeAgentTutorial, setMakeAgentTutorial] = useState<MakeAgentTutorialState | null>(null);
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] = useState<SidebarFileOpenRequest | null>(null);
-  const preCourseSidebarOpenRef = useRef<boolean | null>(null);
-  const openPostTrainingCourse = useCallback(() => {
-    if (preCourseSidebarOpenRef.current === null) {
-      preCourseSidebarOpenRef.current = diffPanelOpen;
-    }
-    setPostTrainingCourse({
-      autoplay: true,
-      fullCourseSelected: false,
-      lessonIndex: startingPostTrainingLessonIndex(
-        getPostTrainingProgress(),
-        POST_TRAINING_LESSONS.map((lesson) => lesson.id),
-      ),
-      panelView: "lessons",
-      playRequestId: 0,
-      scriptLessonIndex: null,
-    });
-    setMakeAgentTutorial(null);
-    setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen]);
-  const closePostTrainingCourse = useCallback(() => {
-    const previousSidebarOpen = preCourseSidebarOpenRef.current;
-    preCourseSidebarOpenRef.current = null;
-    setPostTrainingCourse(null);
-    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
-  }, [setDiffPanelOpen]);
-  const selectPostTrainingLesson = useCallback((lessonIndex: number) => {
-    setPostTrainingCourse((current) => current
-      ? {
-          ...current,
-          fullCourseSelected: false,
-          lessonIndex,
-          playRequestId: current.playRequestId + 1,
-        }
-      : current);
-  }, []);
-  const selectPostTrainingFullCourse = useCallback(() => {
-    setPostTrainingCourse((current) => current
-      ? {
-          ...current,
-          fullCourseSelected: true,
-          panelView: "lessons",
-          playRequestId: current.playRequestId + 1,
-        }
-      : current);
-  }, []);
-  const setPostTrainingAutoplay = useCallback((autoplay: boolean) => {
-    setPostTrainingCourse((current) => current ? { ...current, autoplay } : current);
-  }, []);
-  const openPostTrainingScript = useCallback((lessonIndex: number) => {
-    setPostTrainingCourse((current) => current
-      ? { ...current, panelView: "script", scriptLessonIndex: lessonIndex }
-      : current);
-  }, []);
-  const showPostTrainingLessons = useCallback(() => {
-    setPostTrainingCourse((current) => current ? { ...current, panelView: "lessons" } : current);
-  }, []);
-  const openMakeAgentTutorial = useCallback(() => {
-    if (preCourseSidebarOpenRef.current === null) {
-      preCourseSidebarOpenRef.current = diffPanelOpen;
-    }
-    setPostTrainingCourse(null);
-    setMakeAgentTutorial({
-      autoplay: true,
-      panelView: "lessons",
-      playRequestId: 0,
-      videoId: "create",
-    });
-    setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen]);
-  const closeMakeAgentTutorial = useCallback(() => {
-    const previousSidebarOpen = preCourseSidebarOpenRef.current;
-    preCourseSidebarOpenRef.current = null;
-    setMakeAgentTutorial(null);
-    if (previousSidebarOpen !== null) setDiffPanelOpen(previousSidebarOpen);
-  }, [setDiffPanelOpen]);
-  const selectMakeAgentTutorialVideo = useCallback((videoId: MakeAgentTutorialVideoId) => {
-    setMakeAgentTutorial((current) => current
-      ? { ...current, playRequestId: current.playRequestId + 1, videoId }
-      : current);
-  }, []);
-  const setMakeAgentTutorialAutoplay = useCallback((autoplay: boolean) => {
-    setMakeAgentTutorial((current) => current ? { ...current, autoplay } : current);
-  }, []);
-  const showMakeAgentTutorialLessons = useCallback(() => {
-    setMakeAgentTutorial((current) => current ? { ...current, panelView: "lessons" } : current);
-  }, []);
-  const showMakeAgentTutorialScript = useCallback(() => {
-    setMakeAgentTutorial((current) => current ? { ...current, panelView: "script" } : current);
-  }, []);
-  useEffect(() => {
-    if (view === "get-started") return;
-    if (postTrainingCourse) closePostTrainingCourse();
-    else if (makeAgentTutorial) closeMakeAgentTutorial();
-  }, [closeMakeAgentTutorial, closePostTrainingCourse, makeAgentTutorial, postTrainingCourse, view]);
   const openSkillFromSettings = useCallback((skill: SkillSourceDocument) => {
     setPendingNativeSkillSidebar(skill);
     setPendingExtensionSkillSidebar(null);
@@ -376,9 +239,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   } as CSSProperties;
   const rightSidebarAvailableForView =
     view === "chat" ||
-    view === "cloud" ||
     view === "labs" ||
-    (view === "get-started" && Boolean(postTrainingCourse || makeAgentTutorial)) ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -421,7 +282,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         selectedAppId,
         selectedProjectId,
         selectedSessionId,
-        selectedCloudWorkItemId,
         selectedTeamThreadId: teamChat.selectedThreadId,
         teamChatEnabled: teamChatTeamId !== null,
         teamChatOrganization,
@@ -452,7 +312,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         insightsSystemProjectHidden,
         cloudProjectRows,
         workspaceStates,
-        cloudWorkItemsByProjectId,
         projectSessionRowsByProjectId,
         childSessionRowsByParentId,
         sidebarProjectIdBySessionId,
@@ -486,9 +345,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         setChatRowsVisibleCount,
         beginNewChat,
         dockSessionRight: openRightChatPanel,
-        openCloudHome,
         createCloudEnvironment: createCloudEnvironmentFromSidebar,
-        selectCloudWorkItem,
         selectTeamThread: (threadId) => {
           setView("team");
           void teamChat.selectThread(threadId);
@@ -544,19 +401,15 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         managedWorkspace,
         workspaceBusy,
         defaultTeamId: appDefaults.defaultTeamId,
-        showDiffControls: view === "chat" || view === "cloud",
+        showDiffControls: view === "chat",
         diffPanelOpen,
         terminalOpen,
         rightSidebarAvailable: rightSidebarAvailableForView,
-        rightSidebarOpen: view === "get-started"
-          ? Boolean(postTrainingCourse || makeAgentTutorial) && diffPanelOpen
-          : diffPanelOpen,
+        rightSidebarOpen: diffPanelOpen,
         onToggleDiffPanel: toggleRightSidebar,
-        onToggleRightSidebar: view === "get-started"
-          ? () => setDiffPanelOpen((open) => !open)
-          : view === "team" && Boolean(teamAiThreadId)
-            ? toggleTeamAiSidebar
-            : toggleRightSidebar,
+        onToggleRightSidebar: view === "team" && Boolean(teamAiThreadId)
+          ? toggleTeamAiSidebar
+          : toggleRightSidebar,
         onOpenSearch: () => {
           setSectionMenuOpen(null);
           setSearchOpen(true);
@@ -694,8 +547,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         rightChatPanels: rightChatPanelViews,
         nativeSkillSidebar,
         extensionSkillSidebar,
-        makeAgentTutorial,
-        postTrainingCourse,
         workspaceDiffPanelViewState,
         sidebarFileOpenRequest,
         sidebarFileBookmarks,
@@ -727,30 +578,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onPatchInsightStatus: insights.patchStatus,
         onOpenInsightsSession: openSessionInChat,
         cloudProjects: bootstrap?.cloudProjects ?? [],
-        cloudWorkItems,
-        selectedCloudWorkItem,
-        cloudWorkItemDetail,
-        cloudWorkItemLocalProjectName: selectedCloudWorkItemLocalProject?.name ?? null,
-        cloudLoading,
-        cloudBusy,
-        cloudError,
         chatHistoryHasMore: selectedChatHistoryHasMore,
         chatHistoryLoading: selectedChatHistoryLoading,
         onDiffPanelResizeStart: startDiffPanelResize,
         onToggleDiffPanelExpanded: () => setDiffPanelExpanded((expanded) => !expanded),
-        onOpenPostTrainingCourse: openPostTrainingCourse,
-        onClosePostTrainingCourse: closePostTrainingCourse,
-        onOpenPostTrainingScript: openPostTrainingScript,
-        onSelectPostTrainingFullCourse: selectPostTrainingFullCourse,
-        onSelectPostTrainingLesson: selectPostTrainingLesson,
-        onSetPostTrainingAutoplay: setPostTrainingAutoplay,
-        onShowPostTrainingLessons: showPostTrainingLessons,
-        onOpenMakeAgentTutorial: openMakeAgentTutorial,
-        onCloseMakeAgentTutorial: closeMakeAgentTutorial,
-        onSelectMakeAgentTutorialVideo: selectMakeAgentTutorialVideo,
-        onSetMakeAgentTutorialAutoplay: setMakeAgentTutorialAutoplay,
-        onShowMakeAgentTutorialLessons: showMakeAgentTutorialLessons,
-        onShowMakeAgentTutorialScript: showMakeAgentTutorialScript,
         onShowDiffPanel: showChangesPanel,
         onShowBrowserPanel: showBrowserPanel,
         onShowFilesPanel: () => showRightPanelDiffTab("files"),
@@ -780,15 +611,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onSubmitRightChat: submitRightChatPrompt,
         onStopRightChat: (sessionId) => stopTurn(sessionId),
         onCloseTerminal: () => setTerminalOpen(false),
-        onOpenCloudHome: openCloudHome,
-        onSetupCloudProject: setupCloudProjectFromCloudView,
-        onCreateCloudWork: createCloudWork,
-        onSelectCloudWorkItem: selectCloudWorkItem,
-        onSendCloudWorkItemMessage: sendCloudWorkItemMessage,
-        onHandleCloudWorkItemBackground: handleCloudWorkItemBackground,
-        onCancelCloudWorkItemCreatePipeline: cancelCloudWorkItemCreatePipeline,
-        onCancelCloudWorkItemTask: cancelCloudWorkItemTask,
-        onApplyCloudWorkItemPatchLocally: applyCloudWorkItemPatchLocally,
         onLoadMoreChatHistory: loadMoreSelectedChatHistory,
         canSyncWorkspace: canSyncActiveWorkspace,
         startMessage,

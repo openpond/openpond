@@ -37,7 +37,11 @@ import {
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
-import { buildOpenPondProfileActionCommand } from "../../lib/openpond-action-run";
+import {
+  buildOpenPondProfileActionCatalog,
+  buildOpenPondProfileActionCommand,
+  isOpenPondProfileAction,
+} from "../../lib/openpond-action-run";
 import {
   resolveRightSidebarFileSource,
   type RightSidebarFileSource,
@@ -50,10 +54,17 @@ import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import {
   skillPromptForComposer,
 } from "../../lib/profile-skill-composer";
+import {
+  composerProfileTargetForLibrary,
+  composerSkillsForProfile,
+  openPondProfileRefFromKey,
+  profileStateForRef,
+} from "../../lib/profile-selection";
+import { selectComposerProfileTransaction } from "../../lib/profile-selection-transaction";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { trainingCreationForSession } from "../training/training-flow";
-import type { TrainingLaunchRequest } from "../training/TrainingView";
+import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
 import type {
   WorkspaceFileSourceSwitcher,
@@ -65,8 +76,6 @@ import {
   CHAT_USER_MESSAGE_SCROLL_OFFSET_PX,
   EMPTY_USER_MESSAGE_NAVIGATION,
   billingTargetForContext,
-  cloudProjectIdFromComposerTarget,
-  cloudWorkItemSandboxId,
   easeInOutCubic,
   easedChatScrollDuration,
   insightsSystemSessionId,
@@ -76,7 +85,6 @@ import {
   nextUserMessageTarget,
   promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
-  shouldRunCreateImproveCommandLocally,
   shouldSubmitComposerSlashCommandToChat,
   usageAttributionForComposerSlashCommand,
   userMessageNavigationState,
@@ -96,13 +104,10 @@ import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import {
   AppsView,
   BrowserSidebar,
-  CloudWorkView,
   GetStartedView,
   LabsRoute,
   LabSkillSidebar,
-  MakeAgentTutorialLearningPanel,
   NativeSkillSidebar,
-  PostTrainingLearningPanel,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
@@ -173,8 +178,6 @@ export function MainPane({
   rightChatPanels,
   nativeSkillSidebar,
   extensionSkillSidebar,
-  makeAgentTutorial,
-  postTrainingCourse,
   workspaceDiffPanelViewState,
   sidebarFileOpenRequest,
   sidebarFileBookmarks,
@@ -206,13 +209,6 @@ export function MainPane({
   onPatchInsightStatus,
   onOpenInsightsSession,
   cloudProjects,
-  cloudWorkItems,
-  selectedCloudWorkItem,
-  cloudWorkItemDetail,
-  cloudWorkItemLocalProjectName,
-  cloudLoading,
-  cloudBusy,
-  cloudError,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
   onDiffPanelResizeStart,
@@ -253,19 +249,6 @@ export function MainPane({
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
   onToggleDiffPanelExpanded,
-  onOpenPostTrainingCourse,
-  onClosePostTrainingCourse,
-  onOpenPostTrainingScript,
-  onSelectPostTrainingFullCourse,
-  onSelectPostTrainingLesson,
-  onSetPostTrainingAutoplay,
-  onShowPostTrainingLessons,
-  onOpenMakeAgentTutorial,
-  onCloseMakeAgentTutorial,
-  onSelectMakeAgentTutorialVideo,
-  onSetMakeAgentTutorialAutoplay,
-  onShowMakeAgentTutorialLessons,
-  onShowMakeAgentTutorialScript,
   onShowDiffPanel,
   onShowBrowserPanel,
   onShowTrainingDraftPanel,
@@ -286,15 +269,6 @@ export function MainPane({
   onSubmitRightChat,
   onStopRightChat,
   onCloseTerminal,
-  onOpenCloudHome,
-  onSetupCloudProject,
-  onCreateCloudWork,
-  onSelectCloudWorkItem,
-  onSendCloudWorkItemMessage,
-  onHandleCloudWorkItemBackground,
-  onCancelCloudWorkItemCreatePipeline,
-  onCancelCloudWorkItemTask,
-  onApplyCloudWorkItemPatchLocally,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
   const [composerAttachmentRequest, setComposerAttachmentRequest] = useState<ComposerAttachmentRequest | null>(null);
@@ -328,6 +302,65 @@ export function MainPane({
   const [profileActionCatalogOverride, setProfileActionCatalogOverride] = useState<
     SandboxActionCatalogEntry[]
   >([]);
+  const selectedProfileSession = useMemo(
+    () => bootstrap?.sessions.find((session) => session.id === selectedSessionId) ?? null,
+    [bootstrap?.sessions, selectedSessionId],
+  );
+  const selectedProfileRef = selectedProfileSession?.currentProfile ?? bootstrap?.profileLibrary?.lastUsed ?? null;
+  const selectedProfileState = profileStateForRef(
+    bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
+    selectedProfileRef,
+  ) ?? bootstrap?.profile ?? null;
+  const selectedProfileSkills = useMemo(
+    () => composerSkillsForProfile(selectedProfileState, bootstrap?.extensionCatalog),
+    [bootstrap?.extensionCatalog, selectedProfileState],
+  );
+  const selectedProfileActionCatalog = useMemo(
+    () => buildOpenPondProfileActionCatalog(selectedProfileState),
+    [selectedProfileState],
+  );
+  const composerProfileTarget = useMemo(() => {
+    return composerProfileTargetForLibrary(bootstrap?.profileLibrary, selectedProfileRef);
+  }, [bootstrap?.profileLibrary, selectedProfileRef]);
+  const changeComposerProfile = useCallback(async (
+    value: string,
+    targetSessionId: string | null = selectedSessionId,
+  ) => {
+    if (!connection || !bootstrap) return;
+    const ref = openPondProfileRefFromKey(
+      bootstrap.profileLibrary ?? { lastUsed: null, profiles: [] },
+      value,
+    );
+    if (!ref) return;
+    try {
+      const targetSession = targetSessionId && !isCodexHistorySessionId(targetSessionId)
+        ? bootstrap.sessions.find((session) => session.id === targetSessionId) ?? null
+        : null;
+      const result = await selectComposerProfileTransaction({
+        ref,
+        session: targetSession,
+        selectProfile: (nextRef) => api.profileSelect(connection, nextRef),
+        patchSession: (sessionId, currentProfile) =>
+          api.patchSession(connection, sessionId, { currentProfile }),
+      });
+      let sessions = bootstrap.sessions;
+      if (result.session) {
+        sessions = sessions.map((session) =>
+          session.id === result.session!.id ? result.session! : session,
+        );
+      }
+      onPayload({
+        ...bootstrap,
+        profile: result.selected.profile,
+        profileLibrary: result.selected.library,
+        sessions,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      onError(message);
+      showToast(message, "error");
+    }
+  }, [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]);
   const [insightsPreferenceSaving, setInsightsPreferenceSaving] = useState(false);
   useEffect(() => {
     if (!sidebarFileOpenRequest) return;
@@ -358,10 +391,15 @@ export function MainPane({
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
-    const byId = new Map(actionCatalog.map((action) => [action.id, action]));
+    const byId = new Map(
+      actionCatalog
+        .filter((action) => !isOpenPondProfileAction(action))
+        .map((action) => [action.id, action]),
+    );
+    for (const action of selectedProfileActionCatalog) byId.set(action.id, action);
     for (const action of profileActionCatalogOverride) byId.set(action.id, action);
     return [...byId.values()];
-  }, [actionCatalog, profileActionCatalogOverride]);
+  }, [actionCatalog, profileActionCatalogOverride, selectedProfileActionCatalog]);
   const labCandidateReview = useLabCandidateReview(connection);
   const handleLabCandidateReviewChange = useCallback((input: {
     run: CreateImproveReviewActionInput["run"];
@@ -432,7 +470,9 @@ export function MainPane({
 
     void api.profileCurrent(connection)
       .then((profile) => {
-        const freshActions = profile.actionCatalog.map(buildOpenPondProfileActionCommand);
+        const freshActions = profile.actionCatalog.map((action) =>
+          buildOpenPondProfileActionCommand(action)
+        );
         if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
           selectActionAfterCatalogCommit([existingAction]);
         } else if (!freshActions.some((action) => action.id === actionId)) {
@@ -500,10 +540,6 @@ export function MainPane({
     () => trainingCreationForSession(training.payload, selectedSessionId),
     [selectedSessionId, training.payload],
   );
-  const selectedCloudSandboxId = useMemo(
-    () => cloudWorkItemSandboxId(selectedCloudWorkItem, cloudWorkItemDetail),
-    [cloudWorkItemDetail, selectedCloudWorkItem],
-  );
   const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
   const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
   const showLabCandidateDiffPanel = view === "labs" && Boolean(labCandidateReview.selection);
@@ -512,11 +548,6 @@ export function MainPane({
     && diffPanelOpen
     && rightPanelMode === "changes"
     && Boolean(labSkillSource);
-  const showCloudDiffPanel =
-    view === "cloud" &&
-    diffPanelOpen &&
-    (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails)) &&
-    Boolean(selectedCloudWorkItem);
   const showLocalDiffPanel = (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
     view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
@@ -524,17 +555,16 @@ export function MainPane({
     ? activeWorkspaceId ?? sandboxIdFromWorkspaceName(workspaceName)
     : null;
   const showChatSandboxDiffPanel = view === "chat" && Boolean(chatSandboxId);
-  const rightSidebarSandboxId = showCloudDiffPanel ? selectedCloudSandboxId : chatSandboxId;
+  const rightSidebarSandboxId = chatSandboxId;
   const rightSidebarSandboxSourceAvailable =
     Boolean(rightSidebarSandboxId) ||
-    showCloudDiffPanel ||
     workspaceTarget.value === "cloud" ||
     workspaceTarget.value === "hybrid";
   const rightSidebarSourceState = useMemo(
     () =>
       resolveRightSidebarFileSource({
-        workspaceTarget: showCloudDiffPanel ? "cloud" : workspaceTarget.value,
-        localWorkspaceId: showCloudDiffPanel ? null : activeWorkspaceAppId,
+        workspaceTarget: workspaceTarget.value,
+        localWorkspaceId: activeWorkspaceAppId,
         sandboxSourceAvailable: rightSidebarSandboxSourceAvailable,
         sandboxWorkspaceId: rightSidebarSandboxId,
         override: rightSidebarSourceOverride,
@@ -544,7 +574,6 @@ export function MainPane({
       rightSidebarSandboxSourceAvailable,
       rightSidebarSandboxId,
       rightSidebarSourceOverride,
-      showCloudDiffPanel,
       workspaceTarget.value,
     ],
   );
@@ -563,13 +592,13 @@ export function MainPane({
   );
   useEffect(() => {
     setRightSidebarSourceOverride(null);
-  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, showCloudDiffPanel, workspaceTarget.value]);
+  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, workspaceTarget.value]);
   const showDiffPanel =
     !showLabSkillPanel &&
-    (showLabCandidateDiffPanel || showLocalDiffPanel || showCloudDiffPanel || showChatSandboxDiffPanel) &&
+    (showLabCandidateDiffPanel || showLocalDiffPanel || showChatSandboxDiffPanel) &&
     diffPanelOpen &&
     (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
-  const showBrowserPanel = (view === "chat" || view === "cloud") && diffPanelOpen && rightPanelMode === "browser";
+  const showBrowserPanel = view === "chat" && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     (view === "chat" || view === "labs") &&
     diffPanelOpen &&
@@ -578,10 +607,6 @@ export function MainPane({
   const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
   const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
   const showExtensionSkillPanel = view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
-  const showPostTrainingPanel =
-    view === "get-started" && diffPanelOpen && Boolean(postTrainingCourse);
-  const showMakeAgentTutorialPanel =
-    view === "get-started" && diffPanelOpen && Boolean(makeAgentTutorial);
   const showTeamAiThreadPanel =
     view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
   const showTeamAgentConversationPanel =
@@ -590,7 +615,7 @@ export function MainPane({
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
-    supportedView: view === "chat" || view === "cloud" || view === "labs",
+    supportedView: view === "chat" || view === "labs",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
@@ -609,21 +634,16 @@ export function MainPane({
     showRightChatPanel ||
     showTrainingDraftPanel ||
     showNativeSkillPanel ||
-    showPostTrainingPanel ||
-    showMakeAgentTutorialPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
     showRightHomePanel;
   const rightPanelExpanded = showRightPanel
-    && !showPostTrainingPanel
-    && !showMakeAgentTutorialPanel
     && rightPanelMode !== "chat"
     && diffPanelExpanded;
   const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
   const billingTarget = billingTargetForContext({
     activeWorkspaceId,
     cloudProjects,
-    selectedCloudWorkItem,
   });
   const showThinkingIndicator =
     view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
@@ -675,10 +695,6 @@ export function MainPane({
       : null;
   }, [createImproveActions, latestCreateRuntime]);
   const viewClass = mainPaneViewClass(view, showChatThread);
-  const slashCommandCloudProjectId =
-    selectedCloudWorkItem?.projectId ??
-    cloudProjectIdFromComposerTarget(projectTarget.value) ??
-    (cloudProjects.length === 1 ? cloudProjects[0]?.id ?? null : null);
   const submitComposerPrompt = useCallback(
     async (
       attachments: ChatAttachment[] = [],
@@ -760,15 +776,7 @@ export function MainPane({
               ),
             });
           }
-          if (
-            shouldSubmitComposerSlashCommandToChat(command) ||
-            shouldRunCreateImproveCommandLocally({
-              command,
-              profile: bootstrap?.profile,
-              activeWorkspaceKind,
-              view,
-            })
-          ) {
+          if (shouldSubmitComposerSlashCommandToChat(command)) {
             const skillPrompt = command.command === "skill"
               ? skillPromptForComposer(
                   command.args,
@@ -784,23 +792,19 @@ export function MainPane({
               ),
             });
           }
-          if (!slashCommandCloudProjectId) {
-            showToast(`Select a Cloud Project before using /${command.command}.`, "error");
-            return false;
-          }
-          const created = await onCreateCloudWork({
-            projectId: slashCommandCloudProjectId,
-            prompt: promptForAppSlashCommand(command),
+          return sendPrompt([], null, promptForAppSlashCommand(command), {
+            clearPrompt: options.preservePrompt ? () => undefined : undefined,
+            usageAttribution: usageAttributionForComposerSlashCommand(
+              command,
+              selectedCommand ? "composer_selection" : "prompt_parse",
+            ),
           });
-          if (created) {
-            clearMainPrompt();
-          }
-          return created;
         }
       }
       return sendPrompt(attachments, action, options.promptOverride, {
         clearPrompt: options.preservePrompt ? () => undefined : undefined,
         displayPrompt: options.displayPrompt,
+        turnMetadata: options.turnMetadata,
       });
     },
     [
@@ -812,7 +816,6 @@ export function MainPane({
       onAskInsightsQuestion,
       onOpenLabSuggestions,
       onOpenInsightsSession,
-      onCreateCloudWork,
       onRunInsightsScan,
       composerDraftStore,
       sendPrompt,
@@ -820,7 +823,6 @@ export function MainPane({
       setMentionedAppId,
       setView,
       showToast,
-      slashCommandCloudProjectId,
       training,
       view,
     ],
@@ -1277,17 +1279,17 @@ export function MainPane({
           : trainingTasksetRootPath}
       filesWithPreview={showLabCandidateDiffPanel}
       editorPreferences={bootstrap?.preferences.editor ?? null}
-      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? cloudLoading : diffBusy || workspaceStatusLoading}
+      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? workspaceBusy : diffBusy || workspaceStatusLoading}
       openFileRequest={showLabCandidateDiffPanel ? labCandidateReview.openFileRequest : openDiffFileRequest}
       sidebarFileBookmarks={sidebarFileBookmarks}
       sidebarFileSourceSessionId={selectedSessionId}
       onSetSidebarFileStatus={onSetSidebarFileStatus}
       readOnly={showLabCandidateDiffPanel}
-      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title }))}
+      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title, running: panel.running }))}
       sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
       tabRequest={rightPanelTabRequest}
       viewState={workspaceDiffPanelViewState}
-      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? selectedCloudWorkItem?.title ?? "Sandbox" : workspaceName}
+      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? workspaceName ?? "Sandbox" : workspaceName}
       workspaceInitialized={showLabCandidateDiffPanel ? true : rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
       workspaceError={showLabCandidateDiffPanel ? labCandidateReview.error : rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
       expanded={diffPanelExpanded}
@@ -1344,6 +1346,7 @@ export function MainPane({
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
+      actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
@@ -1354,6 +1357,8 @@ export function MainPane({
       mentionApps={mentionApps}
       codexPersonalSkills={bootstrap?.codexPersonalSkills ?? []}
       profileSkills={profileSkills}
+      profileLibrary={bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+      extensionCatalog={bootstrap?.extensionCatalog ?? null}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
       accountBaseUrl={accountBaseUrl}
@@ -1374,6 +1379,7 @@ export function MainPane({
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
+      onProfileTargetChange={(sessionId, value) => void changeComposerProfile(value, sessionId)}
       onScrollStateChange={onRightChatScrollStateChange}
       onProjectTargetChange={changeProjectTarget}
       onResolveApproval={resolveApproval}
@@ -1442,36 +1448,7 @@ export function MainPane({
       onToggleExpanded={onToggleDiffPanelExpanded}
     />
   ) : null;
-  const postTrainingPanel = showPostTrainingPanel && postTrainingCourse ? (
-    <PostTrainingLearningPanel
-      activeLessonIndex={postTrainingCourse.lessonIndex}
-      autoplay={postTrainingCourse.autoplay}
-      fullCourseSelected={postTrainingCourse.fullCourseSelected}
-      onResizeStart={onDiffPanelResizeStart}
-      onOpenScript={onOpenPostTrainingScript}
-      onSelectFullCourse={onSelectPostTrainingFullCourse}
-      onSelectLesson={onSelectPostTrainingLesson}
-      onSetAutoplay={onSetPostTrainingAutoplay}
-      onShowLessons={onShowPostTrainingLessons}
-      panelView={postTrainingCourse.panelView}
-      scriptLessonIndex={postTrainingCourse.scriptLessonIndex}
-    />
-  ) : null;
-  const makeAgentTutorialPanel = showMakeAgentTutorialPanel && makeAgentTutorial ? (
-    <MakeAgentTutorialLearningPanel
-      activeVideoId={makeAgentTutorial.videoId}
-      autoplay={makeAgentTutorial.autoplay}
-      onResizeStart={onDiffPanelResizeStart}
-      onSelectVideo={onSelectMakeAgentTutorialVideo}
-      onSetAutoplay={onSetMakeAgentTutorialAutoplay}
-      onShowScript={onShowMakeAgentTutorialScript}
-      onShowLessons={onShowMakeAgentTutorialLessons}
-      panelView={makeAgentTutorial.panelView}
-    />
-  ) : null;
   const rightPanel =
-    makeAgentTutorialPanel ??
-    postTrainingPanel ??
     teamAgentConversationPanel ??
     teamAiThreadPanel ??
     rightChatPanel ??
@@ -1494,32 +1471,6 @@ export function MainPane({
       workspaceName={workspaceName}
       queuedCommand={pendingTerminalCommand}
       onClose={onCloseTerminal}
-    />
-  );
-  const cloudView = (
-    <CloudWorkView
-      projects={cloudProjects}
-      workItems={cloudWorkItems}
-      selectedWorkItem={selectedCloudWorkItem}
-      detail={cloudWorkItemDetail}
-      loading={cloudLoading}
-      actionBusy={cloudBusy}
-      error={cloudError}
-      model={activeModel}
-      onBack={onOpenCloudHome}
-      connection={connection}
-      showToast={showToast}
-      onModelChange={changeMainComposerModel}
-      onSetupCloudProject={onSetupCloudProject}
-      onCreateWork={onCreateCloudWork}
-      onSelectWorkItem={onSelectCloudWorkItem}
-      onSendMessage={onSendCloudWorkItemMessage}
-      onHandleBackground={onHandleCloudWorkItemBackground}
-      onCancelCreatePlan={onCancelCloudWorkItemCreatePipeline}
-      onCancelTask={onCancelCloudWorkItemTask}
-      localProjectName={cloudWorkItemLocalProjectName}
-      onApplyLocalPatch={onApplyCloudWorkItemPatchLocally}
-      onShowFiles={selectedCloudSandboxId ? onShowFilesPanel : undefined}
     />
   );
   return (
@@ -1547,30 +1498,9 @@ export function MainPane({
           <CommunityView {...community} />
         </Suspense>
       ) : view === "get-started" ? (
-        <>
-          <Suspense fallback={null}>
-            <GetStartedView
-              onCreateAgent={() => {
-                composerDraftStore.set("/create ");
-                setMentionedAppId(null);
-                setView("chat");
-              }}
-              onClosePostTrainingCourse={onClosePostTrainingCourse}
-              makeAgentTutorial={makeAgentTutorial}
-              onCloseMakeAgentTutorial={onCloseMakeAgentTutorial}
-              onOpenApps={() => setView("apps")}
-              onOpenChat={() => setView("chat")}
-              onOpenCloud={() => setView("cloud")}
-              onOpenPostTrainingCourse={onOpenPostTrainingCourse}
-              onOpenMakeAgentTutorial={onOpenMakeAgentTutorial}
-              onOpenProfile={() => setView("labs")}
-              onSelectMakeAgentTutorialVideo={onSelectMakeAgentTutorialVideo}
-              onSelectPostTrainingLesson={onSelectPostTrainingLesson}
-              postTrainingCourse={postTrainingCourse}
-            />
-          </Suspense>
-          {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
-        </>
+        <Suspense fallback={null}>
+          <GetStartedView />
+        </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
           <Suspense fallback={null}>{rightPanel}</Suspense>
@@ -1581,8 +1511,13 @@ export function MainPane({
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
                 openSuggestionsRequestId={labSuggestionsRequestId}
-                onNewModel={() => {
-                  setTrainingLaunchRequest({ id: Date.now(), objective: null, initialSessionIds: [] });
+                onNewModel={(initialTasksetId) => {
+                  setTrainingLaunchRequest({
+                    id: Date.now(),
+                    objective: null,
+                    initialSessionIds: [],
+                    initialTasksetId,
+                  });
                 }}
                 onUseAgent={handleUseAgent}
                 onCreateAgent={createAgentFromLab}
@@ -1618,9 +1553,8 @@ export function MainPane({
                     setMentionedAppId(null);
                     if (provider) {
                       changeDraftProvider(provider);
-                    } else {
-                      setView("chat");
                     }
+                    setView("chat");
                   },
                 }}
                 insights={{
@@ -1678,12 +1612,6 @@ export function MainPane({
             {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
           </>
         )
-      ) : view === "cloud" ? (
-        <>
-          <Suspense fallback={null}>{cloudView}</Suspense>
-          {terminalPanel}
-          {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
-        </>
       ) : rightPanelExpanded ? (
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (
@@ -1699,6 +1627,16 @@ export function MainPane({
               onOpenBrowserLink={handleOpenBrowserLink}
               onOpenFileInSidebar={handleOpenFileInSidebar}
               onOpenProfileSettings={onOpenProfileSettings}
+              onResolveUserQuestion={async (_question, resolution) => {
+                const displayPrompt = resolution.action === "answer"
+                  ? resolution.text
+                  : "Dismiss this question";
+                const sent = await sendPrompt([], null, displayPrompt, {
+                  displayPrompt,
+                  turnMetadata: { userQuestionResolution: resolution },
+                });
+                if (!sent) throw new Error("The question response could not be sent.");
+              }}
               onOpenSession={onOpenInsightsSession}
               onScroll={(event) => handleChatScroll(event.currentTarget)}
               preparingInitialScroll={chatThreadPreparingInitialScroll}
@@ -1739,7 +1677,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1756,6 +1694,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
+                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1765,6 +1704,7 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
+                onProfileTargetChange={(value) => void changeComposerProfile(value)}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
@@ -1804,7 +1744,7 @@ export function MainPane({
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={mentionApps}
                 connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : profileSkills}
+                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
                 goalRuntime={goalRuntime}
@@ -1820,6 +1760,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
+                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1829,6 +1770,7 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
+                onProfileTargetChange={(value) => void changeComposerProfile(value)}
                 onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}

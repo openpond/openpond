@@ -2,6 +2,7 @@ import type {
   Approval,
   AppPreferences,
   ChatProvider,
+  CodexReasoningEffort,
   ConnectedAppConnectionLike,
   CreateImproveRun,
   CreateImproveRunAction,
@@ -11,6 +12,8 @@ import type {
   OpenPondExtensionCatalog,
   OpenPondProfileSkill,
   OpenPondProfileState,
+  OpenPondProfileLibrary,
+  OpenPondProfileRef,
   ProviderSettings,
   RuntimeEvent,
   SendTurnRequest,
@@ -28,10 +31,10 @@ import type {
   HostedChatToolChoice,
   HostedChatContinuation,
   ProfileSkillCommandResult,
-  ProfileSkillGoalCommandInput,
 } from "@openpond/cloud";
 import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { BrowserHarnessToolExecutor } from "../../openpond/browser-tool-registry.js";
+import type { OpenPondDatasetBuilderAction } from "../../openpond/capability-tool-registry.js";
 import type { OpenPondCommandExecutionInput, OpenPondCommandRunResult } from "../../openpond/command-access.js";
 import type { ConnectedAppToolExecutor } from "../../openpond/connected-app-tool-registry.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
@@ -44,7 +47,6 @@ import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
 import type { CreateImprovePlanner } from "../create-pipeline-planner.js";
-import type { LocalCreatePipelineCheckInput, LocalCreatePipelineCheckResult } from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
 
 export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
@@ -78,6 +80,7 @@ export type SubagentSandboxCleanupRequest = {
 };
 
 export type TurnRepository = {
+  getTaskset?(id: string): Promise<import("@openpond/contracts").Taskset | null>;
   runtimeEventsForSession(
     sessionId: string,
     query?: {
@@ -207,6 +210,7 @@ export type ProviderRuntime = {
     tools?: HostedChatTool[];
     toolChoice?: HostedChatToolChoice;
     requestId: string;
+    reasoningEffort?: CodexReasoningEffort;
     signal: AbortSignal;
   }) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
@@ -276,6 +280,13 @@ export type TurnRunnerDependencies = {
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
   executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeDatasetBuilderAction?: (input: {
+    session: Session;
+    provider: ChatProvider;
+    model: string;
+    action: OpenPondDatasetBuilderAction;
+    payload: Record<string, unknown>;
+  }) => Promise<unknown>;
   executeCrossSystemTool?: (input: {
     modelId: string;
     localProjectId: string | null;
@@ -302,11 +313,17 @@ export type TurnRunnerDependencies = {
     } | null;
   }) => Promise<{ attemptId: string; gradeId: string; generatedTaskId: string } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
+  loadOpenPondProfileStateForRef?: (ref: OpenPondProfileRef | null | undefined) => Promise<OpenPondProfileState>;
+  loadOpenPondProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
   readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
+  loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
+  readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (name: string) => Promise<ProfileSkillReadResult>;
-  executeProfileSkillCommand?: (input: { prompt: string }) => Promise<ProfileSkillCommandResult | null>;
-  executeProfileSkillGoal?: (input: ProfileSkillGoalCommandInput) => Promise<ProfileSkillCommandResult>;
+  executeProfileSkillCommand?: (input: {
+    prompt: string;
+    profileRef: OpenPondProfileRef | null;
+  }) => Promise<ProfileSkillCommandResult | null>;
   executeWebSearch?: WebSearchExecutor;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
@@ -348,7 +365,6 @@ export type TurnRunnerDependencies = {
   appendHostedContextUsage: TurnEventSink["appendHostedContextUsage"];
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
-  runLocalCreatePipelineChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
   planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;

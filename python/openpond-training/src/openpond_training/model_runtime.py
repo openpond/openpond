@@ -14,7 +14,7 @@ from .fixture_model import BASE_MODEL_ID, construct_fixture, reload_adapter as r
 
 
 def load_base_model(recipe: dict[str, Any], records: list[dict[str, Any]], seed: int, model_path: str | None):  # type: ignore[no-untyped-def]
-    expected = recipe["baseModel"]
+    expected = recipe_base_model(recipe)
     if expected["id"] == BASE_MODEL_ID:
         model, tokenizer, template_hash = construct_fixture(records, seed)
         return model, tokenizer, template_hash
@@ -42,10 +42,23 @@ def load_base_model(recipe: dict[str, Any], records: list[dict[str, Any]], seed:
 
 
 def reload_adapter(adapter_directory: Path, recipe: dict[str, Any], records: list[dict[str, Any]], seed: int, model_path: str | None):  # type: ignore[no-untyped-def]
-    if recipe["baseModel"]["id"] == BASE_MODEL_ID:
+    if recipe_base_model(recipe)["id"] == BASE_MODEL_ID:
         return reload_fixture(adapter_directory, records, seed)
     base, tokenizer, template_hash = load_base_model(recipe, records, seed, model_path)
     return PeftModel.from_pretrained(base, adapter_directory), tokenizer, template_hash
+
+
+def recipe_base_model(recipe: dict[str, Any]) -> dict[str, Any]:
+    if recipe.get("method") == "sft":
+        value = recipe.get("baseModel")
+    elif recipe.get("method") == "ppo":
+        contract = recipe.get("policyOptimization")
+        value = contract.get("policyModel") if isinstance(contract, dict) else None
+    else:
+        value = recipe.get("policyModel")
+    if not isinstance(value, dict):
+        raise ContractError("Training recipe has no pinned base policy model.")
+    return value
 
 
 def render_training_record(record: dict[str, Any], tokenizer) -> str:  # type: ignore[no-untyped-def]

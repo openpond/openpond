@@ -217,7 +217,7 @@ export function SettingsView({
         <WindowControls platform={connection?.platform} />
       </div>
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
-      <main className="settings-content">
+      <main className={`settings-content ${section === "profile" ? "settings-content-wide" : ""}`}>
         {section === "account" ? (
           <AccountSettingsSection
             payload={payload}

@@ -81,7 +81,6 @@ function localProject(root: string): LocalProject {
     systemKind: null,
     hiddenFromDefaultSidebar: false,
     sandboxTemplate: null,
-    agentSdk: null,
     linkedOpenPondApp: null,
     linkedSandboxProject: null,
     preferredSandboxAgentId: null,

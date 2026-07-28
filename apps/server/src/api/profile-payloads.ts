@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import type { RuntimeEvent } from "@openpond/contracts";
+import { OpenPondProfileRefSchema, type RuntimeEvent } from "@openpond/contracts";
 import {
   collectProfileSourceUploadEntries,
   commitActiveProfileChanges,
@@ -11,11 +11,14 @@ import {
   hostedSourceCheckStatusFromPayload,
   initLocalProfileRepo,
   loadLocalProfileRepo,
+  loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
+  removeOpenPondProfile,
   renameActiveProfileAgent,
   runProfileCheck,
   runProfileSdkCommand,
   saveProfilePushStatus,
+  selectOpenPondProfile,
   type LocalOpenPondProfilePushStatus,
   type ProfileRepoManifest,
 } from "@openpond/cloud";
@@ -33,6 +36,14 @@ import {
   profileActionRunSummary,
   stringValue,
 } from "./server-payload-helpers.js";
+import {
+  previewOpenPondProfilePublication,
+  publishOpenPondProfile,
+} from "../profile-publication.js";
+import {
+  installOpenPondProfile,
+  updateInstalledOpenPondProfile,
+} from "../profile-installation.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -44,12 +55,58 @@ export function createProfilePayloads(deps: {
   }
 
   async function profileCatalogPayload() {
-    const profile = await loadOpenPondProfileState();
-    return {
-      profile,
-      catalog: profile.catalog,
-      actions: profile.actionCatalog,
-    };
+    return loadOpenPondProfileLibrary();
+  }
+
+  async function profileSelectPayload(payload: unknown) {
+    const input = asRecord(payload);
+    const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
+    const profile = await selectOpenPondProfile(ref);
+    return { profile, library: await loadOpenPondProfileLibrary() };
+  }
+
+  async function profileRemovePayload(payload: unknown) {
+    const input = asRecord(payload);
+    const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
+    return removeOpenPondProfile(ref);
+  }
+
+  async function profilePublicationPreviewPayload(payload: unknown) {
+    return previewOpenPondProfilePublication(payload);
+  }
+
+  async function profilePublicationPublishPayload(payload: unknown) {
+    const result = await publishOpenPondProfile(payload);
+    await appendRuntimeEvent(event({
+      name: "diagnostic",
+      source: "server",
+      action: "openpond.profile.publish",
+      status: "completed",
+      output: `Published Profile to ${result.owner}/${result.repository}.`,
+      data: result,
+    }));
+    return result;
+  }
+
+  async function profileInstallPayload(payload: unknown) {
+    const input = asRecord(payload);
+    const source = input.source === "openpond_git" ? "openpond_git" : input.source === "github" ? "github" : null;
+    const repositoryId = stringValue(input.repositoryId);
+    if (!source || !repositoryId) throw new Error("Profile source and owner/repository are required.");
+    const state = await installOpenPondProfile({
+      source,
+      repositoryId,
+      url: stringValue(input.url),
+      profile: stringValue(input.profile),
+    });
+    return { profile: state, library: await loadOpenPondProfileLibrary() };
+  }
+
+  async function profileUpdatePayload(payload: unknown) {
+    const input = asRecord(payload);
+    const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
+    const state = await updateInstalledOpenPondProfile(ref);
+    return { profile: state, library: await loadOpenPondProfileLibrary() };
   }
 
   async function profileInitPayload(payload: unknown) {
@@ -702,6 +759,12 @@ export function createProfilePayloads(deps: {
   return {
     profileCurrentPayload,
     profileCatalogPayload,
+    profileSelectPayload,
+    profileRemovePayload,
+    profilePublicationPreviewPayload,
+    profilePublicationPublishPayload,
+    profileInstallPayload,
+    profileUpdatePayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,

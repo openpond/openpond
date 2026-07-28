@@ -1,14 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
   LocalModelChatConfigurationSchema,
   SendTurnRequestSchema,
+  SessionUserQuestionResolutionSchema,
   type ChatModelRef,
   type ChatProvider,
   type LocalModelChatConfiguration,
   type OpenPondActionCatalogEntry,
   type RuntimeEvent,
+  type SessionUserQuestionResolution,
   type Session,
   type SubagentRoleSettings,
   type Turn,
@@ -36,7 +38,6 @@ import {
   createConnectedAppTurnResolver,
 } from "./hosted-turn/connected-apps.js";
 import { resolveMentionedAppsForTurn } from "./hosted-turn/mentioned-apps.js";
-import { createProfileSkillGoalRuntime } from "./hosted-turn/profile-skill-goal.js";
 import { createHostedCompactionRuntime } from "./hosted-turn/compaction-runtime.js";
 import {
   createNativeToolRuntime,
@@ -46,7 +47,6 @@ import { createHostedToolLoopRuntime } from "./hosted-turn/tool-loop-runtime.js"
 import { createProfileSkillCatalogRuntime } from "./hosted-turn/profile-skill-catalog-runtime.js";
 import { createCapabilityCatalogRuntime } from "./hosted-turn/capability-catalog.js";
 import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
-import { createCreateImproveModelTool } from "./create-pipeline/model-tool.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
 import { KeyedRegistry } from "./turns/keyed-registry.js";
@@ -80,8 +80,87 @@ import {
 import {
   threadGoalFromTurnMetadata,
 } from "./create-pipeline/snapshots.js";
+import {
+  authoringCommandRoute,
+  authoringCommandRouteFromLegacyAgentRun,
+} from "./authoring-command-routing.js";
 
 export * from "./turns/public-api.js";
+
+function parseUserQuestionResolution(
+  value: unknown,
+  priorEvents: RuntimeEvent[],
+): SessionUserQuestionResolution | null {
+  if (value === undefined) return null;
+  const parsed = SessionUserQuestionResolutionSchema.parse(value);
+  const asked = priorEvents.find((runtimeEvent) => {
+    if (runtimeEvent.name !== "user_question.asked") return false;
+    const data = runtimeEvent.data && typeof runtimeEvent.data === "object" && !Array.isArray(runtimeEvent.data)
+      ? runtimeEvent.data as Record<string, unknown>
+      : null;
+    const question = data?.question && typeof data.question === "object" && !Array.isArray(data.question)
+      ? data.question as Record<string, unknown>
+      : null;
+    return question?.id === parsed.questionId;
+  });
+  if (!asked) throw new Error(`Pending user question not found: ${parsed.questionId}`);
+  const alreadyResolved = priorEvents.some((runtimeEvent) => {
+    if (runtimeEvent.name !== "user_question.answered" && runtimeEvent.name !== "user_question.dismissed") {
+      return false;
+    }
+    const data = runtimeEvent.data && typeof runtimeEvent.data === "object" && !Array.isArray(runtimeEvent.data)
+      ? runtimeEvent.data as Record<string, unknown>
+      : null;
+    const resolution = data?.resolution && typeof data.resolution === "object" && !Array.isArray(data.resolution)
+      ? data.resolution as Record<string, unknown>
+      : null;
+    return resolution?.questionId === parsed.questionId;
+  });
+  if (alreadyResolved) throw new Error(`User question is already resolved: ${parsed.questionId}`);
+
+  const askedData = asked.data && typeof asked.data === "object" && !Array.isArray(asked.data)
+    ? asked.data as Record<string, unknown>
+    : {};
+  const askedQuestion = askedData.question && typeof askedData.question === "object" && !Array.isArray(askedData.question)
+    ? askedData.question as Record<string, unknown>
+    : {};
+  const options = Array.isArray(askedQuestion.options) ? askedQuestion.options : [];
+  if (
+    parsed.action === "answer" &&
+    parsed.optionId &&
+    !options.some((option) => (
+      option &&
+      typeof option === "object" &&
+      !Array.isArray(option) &&
+      (option as Record<string, unknown>).id === parsed.optionId
+    ))
+  ) {
+    throw new Error(`Question option not found: ${parsed.optionId}`);
+  }
+  if (parsed.action === "answer" && !parsed.text && !parsed.optionId) {
+    throw new Error("A user-question answer requires text or an option.");
+  }
+  return parsed;
+}
+
+function promptWithUserQuestionResolution(
+  prompt: string,
+  resolution: SessionUserQuestionResolution | null,
+): string {
+  if (!resolution) return prompt;
+  const structured = resolution.action === "answer"
+    ? [
+        `The user explicitly answered pending question ${resolution.questionId}.`,
+        resolution.optionId ? `Selected option ID: ${resolution.optionId}.` : null,
+        resolution.text ? `Answer: ${resolution.text}` : null,
+        "Continue the same task using this answer.",
+      ]
+    : [
+        `The user explicitly dismissed pending question ${resolution.questionId}.`,
+        "Continue only if the task can proceed safely without that answer; otherwise explain the blocker.",
+      ];
+  return `${prompt}\n\n[OpenPond question resolution]\n${structured.filter(Boolean).join("\n")}`;
+}
 
 export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const {
@@ -108,14 +187,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     cleanupSandboxForSubagent,
     executeOpenPondCommand,
     executeProfileAction,
+    executeDatasetBuilderAction,
     executeCrossSystemTool,
     finalizeCrossSystemTurn,
     loadOpenPondProfileState,
+    loadOpenPondProfileStateForRef,
+    loadOpenPondProfileLibrary,
     readOpenPondProfileSkill,
     loadOpenPondExtensionCatalog,
     readOpenPondExtensionSkill,
     executeProfileSkillCommand,
-    executeProfileSkillGoal,
     executeWebSearch,
     executeConnectedAppTool,
     browserToolExecutor,
@@ -130,7 +211,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendHostedContextUsage,
     streamLocalByokChatTurn,
     streamOpenPondHostedChatTurn = defaultStreamOpenPondHostedChatTurn,
-    runLocalCreatePipelineChecks,
     planCreateImprove,
     turnFollowUpQueue,
     subagentQueue,
@@ -240,7 +320,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     upsertApproval,
     appendRuntimeEvent,
     ensureCodexRuntime,
-    runLocalCreatePipelineChecks,
     planCreateImprove,
     turnFollowUpQueue,
     streamLocalByokChatTurn,
@@ -258,34 +337,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     planCreateImproveForTurn,
     resolveCreateImproveApproval,
   } = createImproveRuntime;
-  const startCreateImproveFromModelTool = createCreateImproveModelTool({
-    getTurn: getStoredTurn,
-    loadProfileState: loadOpenPondProfileState,
-    appendRuntimeEvent,
-    planCreateImproveForTurn,
-    persistCreateImproveRun,
-  });
   const handleCreateImproveTurn = createCreateImproveTurnHandler({
     appendRuntimeEvent,
     planCreateImproveForTurn,
     persistCreateImproveRun,
     completeTurn,
   });
-  const {
-    executeProfileSkillGoalForTurn,
-    profileSkillGoalToolResultFromExecution,
-    startProfileSkillGoalFromModelTool,
-  } = createProfileSkillGoalRuntime({
-    executeProfileSkillGoal,
-    updateSession,
-    appendRuntimeEvent,
-  });
   const handleProfileSkillCommand = createProfileSkillCommandRuntime({
     appendRuntimeEvent,
-    executeProfileSkillGoalForTurn,
-    profileSkillGoalToolResultFromExecution,
     completeTurn,
-    failTurn,
   });
   const {
     maybeAutoCompactHostedContext,
@@ -300,7 +360,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   });
   const {
     appendProfileSkillEvent,
-    applyNativeToolUsageAttribution,
     executeNativeToolCalls,
     explicitProfileSkillNames,
     profileSkillBodyFromReadResult,
@@ -308,7 +367,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = createNativeToolRuntime({
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
-    updateTurn: updateStoredTurn,
     throwIfInterrupted,
   });
   const {
@@ -316,8 +374,14 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     preloadExplicitProfileSkills,
     profileSkillInstructionModeForProvider,
   } = createProfileSkillCatalogRuntime({
-    loadProfileState: loadOpenPondProfileState,
+    loadProfileState: loadOpenPondProfileStateForRef
+      ? (session) => loadOpenPondProfileStateForRef(session.currentProfile)
+      : loadOpenPondProfileState
+        ? () => loadOpenPondProfileState()
+        : undefined,
     readProfileSkill: readOpenPondProfileSkill,
+    loadBuiltInSkills: deps.loadBuiltInOpenPondSkills,
+    readBuiltInSkill: deps.readBuiltInOpenPondSkill,
     loadExtensionCatalog: loadOpenPondExtensionCatalog,
     readExtensionSkill: readOpenPondExtensionSkill,
     appendRuntimeEvent,
@@ -336,13 +400,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     subagentToolsAvailable,
     runtimeEventsForSession: (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
     getSession,
+    getTaskset: store.getTaskset
+      ? (tasksetId) => store.getTaskset!(tasksetId)
+      : undefined,
     appendHostedContextUsage,
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
     executeNativeToolCalls,
-    applyNativeToolUsageAttribution,
     readProfileSkillForModel,
     executeWorkspaceTool,
     appendAssistantText,
@@ -566,11 +632,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   }) satisfies SubagentToolHandlers;
   const capabilityCatalogDefinitions = createCapabilityCatalogRuntime({
     handlers: {
-      startCreateImprove: startCreateImproveFromModelTool,
       startGoalControl: startGoalControlFromModelTool,
-      ...(executeProfileSkillGoal
-        ? { startProfileSkillGoal: startProfileSkillGoalFromModelTool }
-        : {}),
       startSubagent: startSubagentFromModelTool,
       statusSubagents: statusSubagentsFromModelTool,
       joinSubagent: joinSubagentFromModelTool,
@@ -586,6 +648,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }),
           }
         : {}),
+      ...(executeDatasetBuilderAction
+        ? {
+            runDatasetBuilder: (context, action, input) =>
+              executeDatasetBuilderAction({
+                session: context.session,
+                provider: context.provider,
+                model: context.model,
+                action,
+                payload: input,
+              }),
+          }
+        : {}),
     },
     subagentToolsAvailable,
     hostedToolFlags,
@@ -596,6 +670,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWebSearch,
     executeProfileAction,
     executeCrossSystemTool,
+    loadOpenPondProfileStateForRef,
   });
 
   function createNativeModelToolDefinitions(
@@ -607,6 +682,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
+      trainingHarness?: {
+        taskId: string;
+        actionBindings: import("@openpond/contracts").HarnessActionBinding[];
+      };
     } = {},
   ) {
     return capabilityCatalogDefinitions(
@@ -634,6 +713,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const selectedProfileRef = session.currentProfile ??
+      (loadOpenPondProfileLibrary ? (await loadOpenPondProfileLibrary()).lastUsed : null);
+    if (!session.currentProfile && selectedProfileRef) {
+      session = await updateSession(sessionId, { currentProfile: selectedProfileRef });
+    }
+    const selectedProfile = loadOpenPondProfileStateForRef
+      ? await loadOpenPondProfileStateForRef(selectedProfileRef)
+      : loadOpenPondProfileState
+        ? await loadOpenPondProfileState()
+        : null;
     let subagentContinuation = await prepareSubagentContinuationTurn({
       session,
       request: input,
@@ -649,10 +738,22 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     const turnModelRef: ChatModelRef | null = activeModelId
       ? { providerId: activeProvider, modelId: activeModelId }
       : input.modelRef ?? session.modelRef ?? null;
-    const profileSkillCommand = executeProfileSkillCommand
-      ? await executeProfileSkillCommand({ prompt: input.prompt })
+    const legacyAgentAuthoringRoute = input.createImproveRun
+      ? authoringCommandRouteFromLegacyAgentRun(input.createImproveRun)
+      : null;
+    const authoringRoute = authoringCommandRoute(input.prompt) ?? legacyAgentAuthoringRoute;
+    const activeCreateImproveRun = legacyAgentAuthoringRoute ? null : input.createImproveRun;
+    const profileSkillCommand = !authoringRoute && executeProfileSkillCommand
+      ? await executeProfileSkillCommand({
+          prompt: input.prompt,
+          profileRef: selectedProfileRef,
+        })
       : null;
     const priorEvents = await store.runtimeEventsForSession(sessionId);
+    const userQuestionResolution = parseUserQuestionResolution(
+      input.metadata?.userQuestionResolution,
+      priorEvents,
+    );
 
     const startedAt = now();
     const effectiveUsageAttribution = input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
@@ -660,7 +761,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ...(input.metadata ? input.metadata : {}),
       ...(subagentDelegation ? { subagentDelegation } : {}),
       ...(effectiveUsageAttribution ? { usageAttribution: effectiveUsageAttribution } : {}),
-      ...(input.createImproveRun ? { createImproveRun: input.createImproveRun } : {}),
+      ...(activeCreateImproveRun ? { createImproveRun: activeCreateImproveRun } : {}),
+      ...(authoringRoute
+        ? {
+            authoringIntent: authoringRoute.intent,
+            selectedProfileRef,
+          }
+        : {}),
     };
     const turn: Turn = {
       id: randomUUID(),
@@ -673,11 +780,29 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       status: "in_progress",
       error: null,
       metadata: createImproveMetadata,
-      createImproveRun: input.createImproveRun ?? null,
+      createImproveRun: activeCreateImproveRun ?? null,
+      profileSnapshot:
+        selectedProfileRef && selectedProfile && selectedProfile.mode !== "none" && !selectedProfile.error
+          ? {
+              ref: selectedProfileRef,
+              revision: selectedProfile.git?.head ?? null,
+              sourceHash: createHash("sha256")
+                .update(JSON.stringify({
+                  profile: selectedProfile.activeProfile,
+                  revision: selectedProfile.git?.head ?? null,
+                  agents: selectedProfile.agents,
+                  skills: selectedProfile.skills.map((skill) => [skill.name, skill.sourceHash]),
+                  actions: selectedProfile.actionCatalog.map((action) => action.id),
+                }))
+                .digest("hex"),
+            }
+          : null,
     };
     await insertStoredTurn(turn);
     const initialCwd =
-      (!profileSkillCommand?.handled ? profileSkillCommand?.workspaceCwd ?? null : null) ??
+      (authoringRoute && selectedProfile?.mode === "local"
+        ? selectedProfile.repoPath
+        : null) ??
       input.cwd ??
       (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: false })) ??
       session.cwd ??
@@ -757,7 +882,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         attachments: input.attachments,
       });
       const attachmentContext = chatAttachmentContext(attachmentContexts);
-      const providerPrompt = formatPromptWithAttachmentContext(input.prompt, attachmentContext);
+      const providerPrompt = formatPromptWithAttachmentContext(
+        promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
+        attachmentContext,
+      );
       await appendRuntimeEvent(
         event({
           sessionId,
@@ -785,6 +913,25 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           status: "started",
         })
       );
+      if (userQuestionResolution) {
+        await appendRuntimeEvent(
+          event({
+            sessionId,
+            turnId: turn.id,
+            name: userQuestionResolution.action === "answer"
+              ? "user_question.answered"
+              : "user_question.dismissed",
+            source: "ui_button",
+            action: "ask_user",
+            appId: session.appId,
+            status: "completed",
+            output: userQuestionResolution.action === "answer"
+              ? userQuestionResolution.text
+              : "Question dismissed.",
+            data: { resolution: userQuestionResolution },
+          }),
+        );
+      }
       const threadGoal = threadGoalFromTurnMetadata(input.metadata);
       if (threadGoal) {
         await appendRuntimeEvent(
@@ -803,11 +950,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (profileSkillCommand) {
         return handleProfileSkillCommand({ session, turn, command: profileSkillCommand });
       }
-      if (input.createImproveRun) {
+      if (activeCreateImproveRun) {
         return await handleCreateImproveTurn({
           session,
           turn,
-          run: input.createImproveRun,
+          run: activeCreateImproveRun,
           signal: controller.signal,
         });
       }
@@ -825,14 +972,20 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const personalizationSoul = await loadPersonalizationSoul();
       const shouldLoadProfileSkills =
         session.provider === "openpond" || isOpenAiCompatibleProviderId(session.provider);
+      if (authoringRoute && !shouldLoadProfileSkills) {
+        throw new Error(
+          `${authoringRoute.intent.artifact === "agent" ? "Agent" : "Skill"} authoring requires an OpenPond hosted-tool provider so the bundled authoring skill and validation tools are available.`,
+        );
+      }
       const profileSkillRuntime: ProfileSkillRuntime = shouldLoadProfileSkills
-        ? await loadProfileSkillRuntime({ session, turnId: turn.id })
+        ? await loadProfileSkillRuntime({ session, turnId: turn.id, profile: selectedProfile })
         : { profileSourcePath: null, skills: [], readSkill: null };
       const loadedProfileSkills = shouldLoadProfileSkills
         ? await preloadExplicitProfileSkills({
             session,
             turnId: turn.id,
             prompt: providerPrompt,
+            selectedSkillNames: authoringRoute ? [authoringRoute.skillName] : [],
             runtime: profileSkillRuntime,
             signal: controller.signal,
           })
@@ -892,7 +1045,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               messages: loopMessages,
               tools: options?.tools,
               toolChoice: options?.toolChoice,
-              requestId: turn.id,
+              requestId: options?.requestId ?? turn.id,
+              reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: controller.signal,
             })) {
               if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
@@ -929,6 +1083,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const localModelConfiguration = session.provider === "local-adapter"
           ? LocalModelChatConfigurationSchema.safeParse(providerModel?.raw?.chatConfiguration).data ?? null
           : null;
+        if (authoringRoute && localModelConfiguration?.systemPromptMode !== undefined && localModelConfiguration.systemPromptMode !== "full_harness") {
+          throw new Error("Authoring requires the full OpenPond harness system prompt.");
+        }
         const contextLimitTokens = localModelConfiguration?.contextWindowTokens ?? trustedProviderContextLimit({ provider: session.provider, model: runtimeModel, settings: providerSettings });
         await updateStoredTurn(turn.id, (current) => ({ ...current, providerTurnId }));
         const systemPrompt = localModelConfiguration && localModelConfiguration.systemPromptMode !== "full_harness"
@@ -968,6 +1125,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               modelId: runtimeModel,
               messages: streamInput.messages,
               requestId: streamInput.requestId,
+              reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: streamInput.signal ?? controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
@@ -1010,7 +1168,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               messages: loopMessages,
               tools: options?.tools,
               toolChoice: options?.toolChoice,
-              requestId: turn.id,
+              requestId: options?.requestId ?? turn.id,
               signal: controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
@@ -1084,11 +1242,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return interruptTurn(session, turn.id, activeTurn.interruptionReason ?? "Stopped by user");
       }
       const message = error instanceof Error ? error.message : String(error);
-      if (input.createImproveRun) {
+      if (activeCreateImproveRun) {
         await persistCreateImprovePlanningFailure({
           session,
           turn,
-          run: input.createImproveRun,
+          run: activeCreateImproveRun,
           message,
         }).catch(() => undefined);
       }

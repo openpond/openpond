@@ -18,7 +18,7 @@ import {
   contentHash,
 } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../../store/store.js";
-import { buildExpertCrossSystemTrajectories } from "./baseline.js";
+import { buildExpertCrossSystemTrajectories } from "./expert-trajectories.js";
 import { buildCrossSystemBootstrapDataset } from "./bootstrap-dataset.js";
 import {
   generateCrossSystemTasks,

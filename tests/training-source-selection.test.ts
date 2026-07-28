@@ -3,26 +3,28 @@ import { readFile } from "node:fs/promises";
 
 describe("Training source selection UI", () => {
   test("supports intent-first flow followed by compact shared evidence selection", async () => {
-    const [rows, view, labs, pane, dialog, flow, startStep, sourceStep, chatPicker, hook] = await Promise.all([
+    const [rows, labs, pane, dialog, flow, startStep, goalCards, sourceStep, chatPicker, hook] = await Promise.all([
       readFile("apps/web/src/components/sidebar/SidebarRows.tsx", "utf8"),
-      readFile("apps/web/src/components/training/TrainingView.tsx", "utf8"),
       readFile("apps/web/src/components/labs/LabsView.tsx", "utf8"),
       readFile("apps/web/src/components/app-shell/MainPane.tsx", "utf8"),
       readFile("apps/web/src/components/create-improve/CreateImproveAuthoringDialog.tsx", "utf8"),
       readFile("apps/web/src/components/training/training-flow.ts", "utf8"),
       readFile("apps/web/src/components/training/TrainingStartModeStep.tsx", "utf8"),
+      readFile("apps/web/src/components/training/TrainingGoalCards.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingSourceStep.tsx", "utf8"),
       readFile("apps/web/src/components/training/TrainingChatPicker.tsx", "utf8"),
       readFile("apps/web/src/hooks/useTraining.ts", "utf8"),
     ]);
     expect(rows).not.toContain('label="Add to training"');
-    expect(view).not.toContain("New model");
     expect(labs).toContain("onCreateModel");
     expect(pane).toContain("setTrainingLaunchRequest");
     expect(pane).toContain("onNewModel");
     expect(startStep).toContain('type NewModelMode = "automated" | "manual"');
+    expect(startStep).toContain("type DatasetEvidenceIntent");
     expect(startStep).toContain('type AgentSourceMode = "from_prompt" | "from_chats"');
-    expect(startStep).toContain('NewModelMode | AgentSourceMode | "existing_dataset"');
+    for (const intent of ["demonstrations", "preferences", "verifiable_reward", "rubric", "discovery"]) {
+      expect(startStep).toContain(`"${intent}"`);
+    }
     expect(flow).toContain('type NewModelStep =');
     for (const step of ["start", "base_model", "existing_dataset", "automatic_scope", "automatic_candidates", "evidence", "recommendation"]) expect(flow).toContain(`| "${step}"`);
     expect(flow).not.toContain("manual_goal");
@@ -31,9 +33,13 @@ describe("Training source selection UI", () => {
     expect(dialog).toContain("const sessionIds = [...selectedSessionIds]");
     expect(dialog).toContain("runMiner(");
     expect(dialog).not.toContain("eligibleSessions.map((session) => session.id),");
-    expect(startStep).toContain("Choose a setup");
-    expect(startStep).toContain("Automatic");
-    expect(startStep).toContain("Manual");
+    expect(startStep).toContain("What do you want to build?");
+    expect(goalCards).toContain("Teach with examples");
+    expect(goalCards).toContain("Compare responses");
+    expect(goalCards).toContain("Reward correct outcomes");
+    expect(goalCards).toContain("Score with a rubric");
+    expect(goalCards).toContain("Find opportunities");
+    expect(goalCards).toContain("training-evidence-intent-example");
     expect(dialog).toContain('? "existing_dataset"');
     expect(dialog).toContain("onCreateDataset");
     expect(sourceStep).toContain("Build the Dataset");
@@ -43,6 +49,7 @@ describe("Training source selection UI", () => {
     expect(sourceStep).toContain("Add supporting chats");
     expect(sourceStep).toContain("Optional");
     expect(dialog).not.toContain("methodHintForApproach");
+    expect(dialog).toContain("buildIntent:");
     expect(sourceStep).toContain("CodexModelReasoningMenu");
     expect(chatPicker).toContain('placeholder="Search chats"');
     expect(dialog).toContain("CHAT_SEARCH_PAGE_SIZE = 20");
@@ -63,5 +70,6 @@ describe("Training source selection UI", () => {
     expect(hook).toContain('"/sources/search"');
     expect(hook).toContain('"/models/from-taskset"');
     expect(hook).toContain('TaskCreationRequest["methodHint"]');
+    expect(hook).toContain('TaskCreationRequest["buildIntent"]');
   });
 });

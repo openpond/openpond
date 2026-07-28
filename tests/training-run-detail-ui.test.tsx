@@ -120,4 +120,62 @@ describe("Training run detail UI", () => {
     );
     expect(html).toContain("<span>Optimizer updates</span><strong>0</strong>");
   });
+
+  test("renders DPO preference telemetry as first-class metrics", () => {
+    const dpoDetail = TrainingRunDetailSchema.parse({
+      ...detail,
+      stepMetrics: [{
+        ...detail.stepMetrics[0]!,
+        loss: 0.6908,
+        preferenceAccuracy: 1,
+        preferenceMargin: 0.0047,
+        chosenReward: 0.002,
+        rejectedReward: -0.0027,
+        chosenLogProbability: -2.1,
+        rejectedLogProbability: -2.5,
+      }],
+    });
+    const html = renderToStaticMarkup(
+      <TrainingRunMetrics detail={dpoDetail} loading={false} />,
+    );
+    expect(html).toContain("Preference accuracy");
+    expect(html).toContain("Preference margin");
+    expect(html).toContain("Chosen reward");
+    expect(html).toContain("Rejected reward");
+  });
+
+  test("renders PPO policy, value, reward, and environment telemetry", () => {
+    const ppoDetail = TrainingRunDetailSchema.parse({
+      ...detail,
+      stepMetrics: [],
+      policyMetrics: [{
+        schemaVersion: "openpond.policyOptimizationMetric.v1",
+        method: "ppo",
+        step: 1,
+        timestamp: "2026-07-13T00:00:30.000Z",
+        policyLoss: -1.3397,
+        valueLoss: 0.5474,
+        meanReward: 0,
+        meanReturn: 0,
+        kl: 0.1392,
+        entropy: 3.8727,
+        policyClipFraction: 0,
+        valueClipFraction: 0,
+        explainedVariance: 0,
+        rolloutLearnerLag: 0,
+        inputTokens: 36,
+        outputTokens: 1,
+        environmentExecutions: 1,
+        costUsd: 0,
+      }],
+    });
+    const html = renderToStaticMarkup(
+      <TrainingRunMetrics detail={ppoDetail} loading={false} />,
+    );
+    expect(html).toContain("<span>Optimizer steps</span><strong>1</strong>");
+    expect(html).toContain("Policy loss");
+    expect(html).toContain("Value loss");
+    expect(html).toContain("Environment executions");
+    expect(html).toContain("Reward by optimizer step");
+  });
 });

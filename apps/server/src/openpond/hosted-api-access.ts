@@ -1,13 +1,8 @@
 import { loadOpenPondAccountContext, type RuntimeAccountContext } from "@openpond/runtime";
 
 const DEFAULT_OPENPOND_API_BASE_URL = "https://api.openpond.ai";
-export const MANAGED_ADAPTER_SERVICE_API_KEY_ENV =
-  "OPENPOND_MODEL_ADAPTER_SERVICE_API_KEY";
-export const MANAGED_ADAPTER_CONTROL_RUNTIME_ENV =
-  "OPENPOND_MODEL_ADAPTER_CONTROL_RUNTIME";
 export const MANAGED_ADAPTER_TEAM_ID_ENV =
   "OPENPOND_MODEL_ADAPTER_TEAM_ID";
-const TRUSTED_HOSTED_CONTROL_RUNTIME = "trusted-hosted";
 
 export type HostedApiAccessDependencies = {
   loadAccountContext?: () => Promise<RuntimeAccountContext>;
@@ -28,33 +23,6 @@ export async function resolveManagedAdapterUserAccess(
 ): Promise<{ apiBaseUrl: string; token: string; teamId: string }> {
   const access = await resolveHostedApiAccess(dependencies);
   return { ...access, teamId: managedAdapterTeamId(dependencies.teamId) };
-}
-
-export async function resolveManagedAdapterControlAccess(
-  dependencies: HostedApiAccessDependencies = {},
-): Promise<{ apiBaseUrl: string; token: string; teamId: string }> {
-  if (
-    process.env[MANAGED_ADAPTER_CONTROL_RUNTIME_ENV]?.trim() !==
-    TRUSTED_HOSTED_CONTROL_RUNTIME
-  ) {
-    throw new Error(
-      "Managed-adapter publication is available only in the trusted hosted bridge runtime.",
-    );
-  }
-  const context = await (
-    dependencies.loadAccountContext ?? loadOpenPondAccountContext
-  )();
-  const token = process.env[MANAGED_ADAPTER_SERVICE_API_KEY_ENV]?.trim();
-  if (!token) {
-    throw new Error(
-      `${MANAGED_ADAPTER_SERVICE_API_KEY_ENV} is required for trusted managed-adapter publication.`,
-    );
-  }
-  return {
-    apiBaseUrl: resolveApiBaseUrl(context),
-    token,
-    teamId: managedAdapterTeamId(dependencies.teamId),
-  };
 }
 
 export function hostedApiAuthHeaders(token: string): Headers {

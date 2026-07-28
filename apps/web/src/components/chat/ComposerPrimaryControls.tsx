@@ -27,6 +27,7 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
 import { CodexModelReasoningMenu } from "./ComposerControls";
+import { ComposerProfileTargetControl, type ComposerProfileTargetState } from "./ComposerControls";
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
@@ -65,9 +66,11 @@ export function ComposerPrimaryControls({
   modelValue,
   modelOptions = [],
   openPondCommandAccessMode,
+  profileTarget,
   onCodexPermissionModeChange,
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
+  onProfileTargetChange,
   onModelChange,
   onOpenFilePicker,
   onProviderChange,
@@ -110,9 +113,11 @@ export function ComposerPrimaryControls({
   modelValue: string;
   modelOptions?: DropdownOption[];
   openPondCommandAccessMode: OpenPondCommandAccessMode;
+  profileTarget?: ComposerProfileTargetState | null;
   onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
   onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
+  onProfileTargetChange?: (value: string) => void;
   onModelChange: (value: string) => void;
   onOpenFilePicker: () => void;
   onProviderChange: (value: ChatProvider) => void;
@@ -301,6 +306,14 @@ export function ComposerPrimaryControls({
           onChange={(value) => onOpenPondCommandAccessModeChange(value as OpenPondCommandAccessMode)}
         />
       )}
+      {profileTarget && onProfileTargetChange ? (
+        <ComposerProfileTargetControl
+          busy={busy}
+          placement={dropdownPlacement}
+          state={profileTarget}
+          onChange={onProfileTargetChange}
+        />
+      ) : null}
       <div className="composer-spacer" />
       <span className={`context-status-shell ${contextWindowStatus.tone}`} style={contextStatusStyle}>
         <span

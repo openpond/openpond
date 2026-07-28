@@ -175,6 +175,7 @@ describe("frontier-model Task Creator chat", () => {
     expect(reviewed.proposal?.trainingPath).toMatchObject({ primaryMethod: "grpo", bootstrap: { method: "sft", purpose: "trajectory_bootstrap", demonstrationRefs: ["trajectory_train"] } });
 
     const ready = await service.approveMaterialization(reviewed.id, true);
+    expect(ready.state, ready.blockedReason ?? "Taskset materialization failed.").toBe("ready");
     const taskset = await store.getTaskset(ready.materializedTasksetId!);
     expect(taskset?.metadata).toMatchObject({ trainingMethod: "grpo", trainingPath: { primaryMethod: "grpo", bootstrap: { method: "sft" } } });
     expect(taskset?.capabilities.compatibleMethods).toEqual(["grpo", "sft"]);

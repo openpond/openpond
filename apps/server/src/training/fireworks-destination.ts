@@ -182,54 +182,6 @@ export class FireworksTrainingDestination
             "Fireworks RFT supports Cross-System Operations or the Dataset exact-answer environment.",
         });
       }
-      if (exactAnswer) {
-        const gate = plan.rftSignalGate;
-        const report = gate
-          ? (await this.deps.store.listBaselineReports(taskset.id)).find(
-              (candidate) => candidate.id === gate.baselineReportId,
-            ) ?? null
-          : null;
-        const gateAligned = Boolean(
-          gate
-          && report
-          && contentHash(report) === gate.baselineReportHash
-          && report.tasksetHash === taskset.contentHash
-          && gate.scope.split === "train"
-          && gate.scope.taskCount === trainExampleCount
-          && gate.scope.attemptsPerTask === plan.recipe.rollout.groupSize
-          && gate.scope.selectionSeed === plan.recipe.rollout.seed
-          && gate.scope.selectionStrategy === plan.recipe.dataset.selectionStrategy
-          && gate.scope.taskIdsHash === selection?.taskIdsHash
-          && gate.scope.model.providerId === "fireworks"
-          && gate.scope.model.modelId === plan.recipe.baseModel.id
-          && gate.scope.sampling.maxOutputTokens === plan.recipe.rollout.maxOutputTokens
-          && gate.scope.sampling.temperature === plan.recipe.rollout.temperature
-          && gate.scope.sampling.topP === plan.recipe.rollout.topP,
-        );
-        if (!gateAligned) {
-          issues.push({
-            code: "fireworks_rft_signal_gate_missing",
-            severity: "error" as const,
-            path: "plan.rftSignalGate",
-            message:
-              "Run the train-signal check for this exact base model, prompt selection, and rollout configuration before preparing paid RFT.",
-          });
-        } else if (
-          !gate!.signal.passed
-          || gate!.signal.infrastructureFailures > 0
-          || gate!.signal.mixedRewardGroups
-            < gate!.signal.requiredMixedRewardGroups
-        ) {
-          issues.push({
-            code: "fireworks_rft_signal_gate_failed",
-            severity: "error" as const,
-            path: "plan.rftSignalGate.signal",
-            message:
-              `The aligned train-signal check found ${gate!.signal.mixedRewardGroups} mixed-reward groups; `
-              + `${gate!.signal.requiredMixedRewardGroups} are required with zero infrastructure failures.`,
-          });
-        }
-      }
       const expectedEnvironmentVersion = crossSystem
         ? CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION
         : DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION;

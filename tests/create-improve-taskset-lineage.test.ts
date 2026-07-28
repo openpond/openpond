@@ -7,7 +7,7 @@ import {
   createTasksetRef,
 } from "../apps/server/src/training/create-improve-taskset-lineage";
 import { attachModelTargetRefs } from "../apps/server/src/runtime/create-pipeline/target-adapters";
-import { continueLabAgentRunFromTaskset } from "../apps/web/src/lib/create-pipeline-request";
+import { continueLabAgentRunFromTaskset } from "./helpers/create-pipeline-request";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import {
   FIXED_TIME,

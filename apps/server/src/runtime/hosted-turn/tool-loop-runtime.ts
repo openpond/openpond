@@ -4,6 +4,7 @@ import {
   SubagentRunSchema,
   type AppPreferences,
   type ChatProvider,
+  type HarnessActionBinding,
   type ModelUsageRecord,
   type OpenPondActionCatalogEntry,
   type OpenPondApp,
@@ -11,6 +12,7 @@ import {
   type Session,
   type SubagentRoleSettings,
   type SubagentRun,
+  type Taskset,
   type Turn,
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
@@ -63,6 +65,7 @@ type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 type HostedToolLoopStreamOptions = {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
+  requestId?: string;
 };
 
 const RESOURCE_TEXT_FALLBACK_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
@@ -98,6 +101,43 @@ const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
   "subagent.message",
 ]);
 
+export function hostedTrainingHarnessRound(input: {
+  trainingHarness: {
+    actionBindings: HarnessActionBinding[];
+  } | null | undefined;
+  completedActionCount: number;
+  nativeTools: HostedChatTool[];
+}): {
+  tools: HostedChatTool[];
+  toolChoice: HostedChatToolChoice;
+  requiredToolName: string | null;
+} | null {
+  if (!input.trainingHarness) return null;
+  const requiredToolName =
+    input.trainingHarness.actionBindings[input.completedActionCount]
+      ?.modelToolName ?? null;
+  if (!requiredToolName) {
+    return {
+      tools: [],
+      toolChoice: "none",
+      requiredToolName: null,
+    };
+  }
+  const requiredToolIndex = input.nativeTools.findIndex(
+    (tool) => tool.function?.name === requiredToolName,
+  );
+  if (requiredToolIndex < 0) {
+    throw new Error(
+      `Training harness tool ${requiredToolName} is unavailable to the hosted model.`,
+    );
+  }
+  return {
+    tools: input.nativeTools.slice(0, requiredToolIndex + 1),
+    toolChoice: "required",
+    requiredToolName,
+  };
+}
+
 export function createHostedToolLoopRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;
   nativeToolsEnabledForProvider(provider: ChatProvider): boolean;
@@ -110,6 +150,10 @@ export function createHostedToolLoopRuntime(deps: {
       disableWorkflowDelegationTools?: boolean;
       subagentRoles?: readonly SubagentRoleSettings[];
       subagentToolsEnabled?: boolean;
+      trainingHarness?: {
+        taskId: string;
+        actionBindings: HarnessActionBinding[];
+      };
     },
   ): ModelToolDefinition[];
   profileSkillInstructionModeForProvider(
@@ -123,6 +167,7 @@ export function createHostedToolLoopRuntime(deps: {
     limit?: number | null;
   }): Promise<RuntimeEvent[]>;
   getSession(sessionId: string): Promise<Session>;
+  getTaskset?: (tasksetId: string) => Promise<Taskset | null>;
   appendHostedContextUsage: TurnRunnerDependencies["appendHostedContextUsage"];
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
@@ -143,7 +188,6 @@ export function createHostedToolLoopRuntime(deps: {
     invalidRequestCounts: Map<string, number>;
     toolCalls: import("../../openpond/native-tool-calls.js").NativeModelToolCall[];
   }): Promise<NativeModelToolResult[]>;
-  applyNativeToolUsageAttribution(turn: Turn, results: NativeModelToolResult[]): Promise<void>;
   readProfileSkillForModel(input: {
     session: Session;
     turnId: string;
@@ -166,7 +210,6 @@ export function createHostedToolLoopRuntime(deps: {
   const appendRuntimeEvent = deps.appendRuntimeEvent;
   const safeUpsertModelUsageRecord = deps.upsertModelUsageRecord;
   const executeNativeToolCalls = deps.executeNativeToolCalls;
-  const applyNativeToolUsageAttribution = deps.applyNativeToolUsageAttribution;
   const readProfileSkillForModel = deps.readProfileSkillForModel;
   const executeWorkspaceTool = deps.executeWorkspaceTool;
   const appendAssistantText = deps.appendAssistantText;
@@ -203,6 +246,10 @@ export function createHostedToolLoopRuntime(deps: {
     let workspaceToolResultCount = 0;
     let toolRequiredCorrectionSent = false;
     const appPreferences = params.appPreferences;
+    const trainingHarness = await trainingHarnessForTurn(
+      params.turn,
+      deps.getTaskset,
+    );
     const nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
       ? enabledModelToolDefinitions(createNativeModelToolDefinitions(
           params.openPondActionCatalog,
@@ -213,6 +260,7 @@ export function createHostedToolLoopRuntime(deps: {
           disableWorkflowDelegationTools: isTerminalOneShotTurn(params.turn),
           subagentRoles: appPreferences?.subagents.roles.filter((role) => role.enabled),
           subagentToolsEnabled: appPreferences?.subagents.enabled ?? false,
+          trainingHarness,
         },
       ), {
           session,
@@ -223,6 +271,7 @@ export function createHostedToolLoopRuntime(deps: {
       : [];
     const nativeTools = nativeToolDefinitions.map(modelToolDefinitionToHostedTool);
     const nativeToolDefinitionByName = new Map(nativeToolDefinitions.map((definition) => [definition.name, definition]));
+    let completedTrainingHarnessActions = 0;
     const textFallbackMode = hostedToolInstructionModeForProvider(hostedToolFlags, params.provider);
     const profileSkillMode = profileSkillInstructionModeForProvider(params.provider, params.profileSkillRuntime);
     const initialEventIds = new Set(params.resourceEvents.map((item) => item.id));
@@ -291,11 +340,20 @@ export function createHostedToolLoopRuntime(deps: {
         requestOrdinal: index,
         upsert: safeUpsertModelUsageRecord,
       });
+      const trainingHarnessRound = hostedTrainingHarnessRound({
+        trainingHarness,
+        completedActionCount: completedTrainingHarnessActions,
+        nativeTools,
+      });
       try {
-        const toolChoice: HostedChatToolChoice = "auto";
+        const requestTools = trainingHarnessRound?.tools ?? nativeTools;
+        const toolChoice: HostedChatToolChoice =
+          trainingHarnessRound?.toolChoice ?? "auto";
         for await (const delta of params.stream(
           messages,
-          nativeTools.length > 0 ? { tools: nativeTools, toolChoice } : undefined,
+          requestTools.length > 0
+            ? { tools: requestTools, toolChoice, requestId: usageRequestId }
+            : { requestId: usageRequestId },
         )) {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
@@ -330,6 +388,41 @@ export function createHostedToolLoopRuntime(deps: {
       }
 
       const nativeToolCalls = nativeToolAccumulator.completed();
+      if (
+        trainingHarnessRound?.requiredToolName &&
+        (
+          nativeToolCalls.length !== 1 ||
+          nativeToolCalls[0]?.name !== trainingHarnessRound.requiredToolName
+        )
+      ) {
+        await appendRuntimeEvent(
+          event({
+            sessionId: session.id,
+            turnId: params.turn.id,
+            name: "diagnostic",
+            source: "server",
+            appId: session.appId,
+            status: "failed",
+            output: `The training harness required ${trainingHarnessRound.requiredToolName}, but the provider did not return exactly that one tool call.`,
+            data: {
+              provider: params.provider,
+              model: params.model,
+              requiredToolName: trainingHarnessRound.requiredToolName,
+              receivedToolNames: nativeToolCalls.map((call) => call.name),
+            },
+          }),
+        );
+        await appendContextUsage({
+          messages,
+          usage: latestUsage,
+          includeCompletion: true,
+        });
+        messages.push({
+          role: "user",
+          content: `Call the required ${trainingHarnessRound.requiredToolName} function exactly once with valid JSON arguments. Do not answer in prose.`,
+        });
+        continue;
+      }
       if (nativeToolCalls.length > 0) {
         messages.push(assistantMessageForNativeToolCalls(assistantText, nativeToolCalls, {
           continuation: latestContinuation,
@@ -350,9 +443,25 @@ export function createHostedToolLoopRuntime(deps: {
           toolCalls: nativeToolCalls,
         });
         workspaceToolResultCount += nativeResults.length;
-        await applyNativeToolUsageAttribution(params.turn, nativeResults);
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
+        }
+        const blockingQuestion = nativeResults.find(
+          (result) => result.turnControl === "await_user_input",
+        );
+        if (blockingQuestion) {
+          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          return session;
+        }
+        if (
+          trainingHarnessRound?.requiredToolName &&
+          nativeResults.some(
+            (result) =>
+              result.name === trainingHarnessRound.requiredToolName &&
+              result.ok,
+          )
+        ) {
+          completedTrainingHarnessActions += 1;
         }
         session = await getSession(session.id);
         await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
@@ -572,7 +681,7 @@ export function createHostedToolLoopRuntime(deps: {
     return session;
   }
 
-  function subagentModelAsideMessages(input: {
+function subagentModelAsideMessages(input: {
     session: Session;
     events: RuntimeEvent[];
     initialEventIds: Set<string>;
@@ -722,6 +831,42 @@ export function createHostedToolLoopRuntime(deps: {
       "Do not claim the workspace changed until a tool result confirms it.",
       "If the request cannot be completed with the available workspace tools, explain the blocker instead of saying it is done.",
     ].join(" ");
+  }
+
+  async function trainingHarnessForTurn(
+    turn: Turn,
+    getTaskset:
+      | ((tasksetId: string) => Promise<Taskset | null>)
+      | undefined,
+  ): Promise<{
+    taskId: string;
+    actionBindings: HarnessActionBinding[];
+  } | undefined> {
+    const tasksetId =
+      typeof turn.metadata.trainingTasksetId === "string"
+        ? turn.metadata.trainingTasksetId.trim()
+        : "";
+    const taskId =
+      typeof turn.metadata.trainingHarnessTaskId === "string"
+        ? turn.metadata.trainingHarnessTaskId.trim()
+        : "";
+    if (!tasksetId || !taskId || !getTaskset) return undefined;
+    const taskset = await getTaskset(tasksetId);
+    if (!taskset || taskset.environment.kind !== "stateful_harness") {
+      return undefined;
+    }
+    const task = taskset.tasks.find((candidate) => {
+      const caseId =
+        typeof candidate.metadata.caseId === "string"
+          ? candidate.metadata.caseId.trim()
+          : "";
+      return candidate.id === taskId || caseId === taskId;
+    });
+    if (!task) return undefined;
+    const actionBindings = taskset.environment.actionBindings ?? [];
+    return actionBindings.length
+      ? { taskId, actionBindings }
+      : undefined;
   }
 
 

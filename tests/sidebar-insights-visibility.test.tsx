@@ -206,7 +206,6 @@ function SidebarDataProbe({
   const data = useSidebarData({
     localProjects: projects,
     cloudProjects: [],
-    cloudWorkItems: [],
     sessions,
     runtimeIndexes: buildRuntimeIndexes([], []),
     appPreferences: {},

@@ -16,12 +16,14 @@ import { ComposerCreateImproveStrip } from "../apps/web/src/components/chat/Comp
 import { GoalDetailsView } from "../apps/web/src/components/goal/GoalDetailsView";
 import { WorkspaceDiffTabs } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanelChrome";
 import {
+  promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
   shouldSubmitComposerSlashCommandToChat,
   shouldRunCreateImproveCommandLocally,
 } from "../apps/web/src/components/app-shell/main-pane-helpers";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import {
+  composerActionCatalogLabel,
   composerActionCatalogMatches,
   composerActionSlashQuery,
 } from "../apps/web/src/lib/composer-action-catalog";
@@ -31,34 +33,24 @@ import {
 } from "../apps/web/src/lib/composer-slash-commands";
 import { buildSubmitIssueSlashPrompt } from "../apps/web/src/lib/submit-issue-command";
 import {
-  approveCreateImproveRun,
   buildComposerCreateImproveRun,
-  buildHostedCloudWorkCreateImproveRun,
   buildInitialCreateImproveRun,
   buildLabAgentCreateImproveRun,
   buildLabAgentImproveRun,
-  cancelCreateImproveRun,
-  reviseCreateImproveRun,
-} from "../apps/web/src/lib/create-pipeline-request";
+} from "./helpers/create-pipeline-request";
 import {
   buildOpenPondAppActionRunInput,
   buildOpenPondAgentRunInput,
+  buildOpenPondProfileActionCatalog,
   buildOpenPondProfileActionCommand,
   buildOpenPondProfileActionRunInput,
   shouldRetainOpenPondProfileActionAfterSubmit,
 } from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
-import {
-  buildSidebarProjectPathIndex,
-  isSidebarCloudWorkSession,
-  sidebarProjectKeyForSession,
-} from "../apps/web/src/lib/sidebar-session-projects";
-import { projectSelectionKey } from "../apps/web/src/lib/app-models";
 import type {
   SandboxActionCatalogEntry,
 } from "../apps/web/src/lib/sandbox-types";
-import type { CloudProject, LocalProject } from "@openpond/contracts";
 import type { BootstrapPayload } from "@openpond/contracts";
 
 const timestamp = "2026-06-20T00:00:00.000Z";
@@ -105,46 +97,6 @@ function session(input: Partial<Session> = {}): Session {
   };
 }
 
-function localProject(input: Partial<LocalProject> = {}): LocalProject {
-  return {
-    id: "local_project_1",
-    name: "Local Project",
-    path: "/workspace/local-project",
-    workspacePath: "/workspace/local-project",
-    repoPath: "/workspace/local-project",
-    source: "git",
-    sandboxTemplate: null,
-    linkedOpenPondApp: null,
-    linkedSandboxProject: null,
-    preferredSandboxAgentId: null,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    ...input,
-  };
-}
-
-function cloudProject(input: Partial<CloudProject> = {}): CloudProject {
-  return {
-    id: "cloud_project_1",
-    teamId: "team_1",
-    name: "Cloud Project",
-    slug: "cloud-project",
-    sourceType: "github_repo",
-    sourceLabel: "openpond/cloud-project",
-    defaultBranch: "main",
-    internalRepoPath: null,
-    manifestPath: null,
-    manifestHash: null,
-    syncedAt: timestamp,
-    agentSdk: null,
-    organizationName: "OpenPond",
-    organizationSlug: "openpond",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    ...input,
-  };
-}
-
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
   return {
     timestamp,
@@ -153,6 +105,31 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
 }
 
 describe("OpenPond App action channel", () => {
+  test("labels a profile's default chat action with its configured agent name", () => {
+    const [profileAction] = buildOpenPondProfileActionCatalog({
+      agents: [{
+        id: "release-reviewer",
+        name: "Release Reviewer",
+        path: "agents/release-reviewer",
+        enabled: true,
+      }],
+      actionCatalog: [{
+        id: "chat",
+        agentId: "release-reviewer",
+        sourceActionId: "chat",
+        label: "Chat",
+        description: "Reviews releases before they ship.",
+      }],
+    });
+
+    expect(profileAction?.implementation).toMatchObject({
+      type: "openpond-profile-action",
+      actionId: "chat",
+      agentName: "Release Reviewer",
+    });
+    expect(composerActionCatalogLabel(profileAction!)).toBe("Release Reviewer");
+  });
+
   test("retains profile chat actions for conversational follow-ups only", () => {
     const chat = buildOpenPondProfileActionCommand({
       id: "account-health-agent.chat",
@@ -172,41 +149,39 @@ describe("OpenPond App action channel", () => {
 
   test("discovers built-in app commands from composer slash input", () => {
     expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
-      "create",
+      "agent",
       "skill",
       "goal",
       "insights",
       "submit-issue",
-      "edit",
-      "goal-remote",
       "goal-local",
       "train",
       "sync-cloud",
     ]);
-    expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual(["create"]);
+    expect(composerSlashCommandMatches({ prompt: "/agent" }).map((item) => item.id)).toEqual(["agent"]);
+    expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual([
+      "agent",
+      "skill",
+      "train",
+    ]);
+    expect(parseComposerSlashCommandPrompt("/create summarize files")).toBeNull();
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
       "goal",
-      "goal-remote",
       "goal-local",
     ]);
-    expect(composerSlashCommandMatches({ prompt: "/goal-r" }).map((item) => item.id)).toEqual([
-      "goal-remote",
-    ]);
+    expect(composerSlashCommandMatches({ prompt: "/goal-r" })).toEqual([]);
     expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
     expect(composerSlashCommandMatches({ prompt: "/submit issue" }).map((item) => item.id)).toEqual(["submit-issue"]);
-    expect(parseComposerSlashCommandPrompt("/create summarize files")).toEqual({
-      command: "create",
-      args: "summarize files",
+    expect(parseComposerSlashCommandPrompt("/agent create summarize files")).toEqual({
+      command: "agent",
+      args: "create summarize files",
     });
     expect(parseComposerSlashCommandPrompt("/skill create release-notes")).toEqual({
       command: "skill",
       args: "create release-notes",
     });
-    expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toEqual({
-      command: "goal-remote",
-      args: "summarize files",
-    });
+    expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toBeNull();
     expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toEqual({
       command: "goal-local",
       args: "summarize files",
@@ -222,17 +197,16 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
   });
 
-  test("routes plain goal slash commands through chat unless remote is explicit", () => {
+  test("routes goal slash commands through chat", () => {
     const goalCommand = parseComposerSlashCommandPrompt("/goal smoke goal");
     const localGoalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
-    const remoteGoalCommand = parseComposerSlashCommandPrompt("/goal-remote smoke goal");
     expect(goalCommand).not.toBeNull();
     expect(localGoalCommand).not.toBeNull();
-    expect(remoteGoalCommand).not.toBeNull();
 
     expect(shouldSubmitComposerSlashCommandToChat(goalCommand!)).toBe(true);
     expect(shouldSubmitComposerSlashCommandToChat(localGoalCommand!)).toBe(true);
-    expect(shouldSubmitComposerSlashCommandToChat(remoteGoalCommand!)).toBe(false);
+    expect(promptForAppSlashCommand(goalCommand!)).toBe("/goal smoke goal");
+    expect(promptForAppSlashCommand(localGoalCommand!)).toBe("/goal-local smoke goal");
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {
@@ -244,7 +218,7 @@ describe("OpenPond App action channel", () => {
     expect(prompt).toContain("Add export progress to long-running workspace sync.");
   });
 
-  test("builds create pipeline envelopes from composer slash commands", () => {
+  test.skip("legacy composer Agent Create/Improve envelopes are retired", () => {
     const parsed = parseComposerSlashCommandPrompt("/create summarize files");
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
@@ -476,7 +450,7 @@ describe("OpenPond App action channel", () => {
     expect(evalBackedEdit?.context.evalRefs).toEqual(["agent/evals/reply.eval.ts"]);
   });
 
-  test("builds a Lab Agent run on a hidden Lab execution session", () => {
+  test.skip("legacy hidden Lab Agent Create/Improve runs are retired", () => {
     const labSession = session({
       id: "session_lab_agent",
       workspaceKind: "local_project",
@@ -524,7 +498,7 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test("builds a Lab Agent improvement run from a plain outcome statement", () => {
+  test.skip("legacy Lab Agent improvement runs are retired", () => {
     const labSession = session({
       id: "session_lab_agent_improve",
       systemKind: "openpond.lab",
@@ -568,7 +542,7 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test("does not synthesize support-specific create questions from the objective", () => {
+  test.skip("legacy Create/Improve question synthesis is retired", () => {
     const parsed = parseComposerSlashCommandPrompt("/create Help me keep track of open customer support items.");
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
@@ -793,7 +767,7 @@ describe("OpenPond App action channel", () => {
     expect(html).not.toContain(">Review</span>");
   });
 
-  test("keeps create pipeline commands local when a local profile is active", () => {
+  test.skip("legacy local Agent Create/Improve routing is retired", () => {
     const createCommand = parseComposerSlashCommandPrompt("/create smoke agent");
     const goalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
     expect(createCommand).not.toBeNull();
@@ -897,104 +871,6 @@ describe("OpenPond App action channel", () => {
     expect(html.indexOf(">Summary</span>")).toBeLessThan(html.indexOf(">Files</span>"));
   });
 
-  test("builds hosted create pipeline envelopes for Cloud work items", () => {
-    const payload = {
-      account: {
-        activeProfile: { handle: "sam" },
-        label: "Sam",
-      },
-      preferences: { defaultTeamId: "team_1" },
-      profile: {
-        mode: "local",
-        activeProfile: "default",
-        hosted: {
-          sourceRef: "profile-main",
-          sourceCommitSha: "profile_sha",
-        },
-      },
-    } as BootstrapPayload;
-    const request = buildHostedCloudWorkCreateImproveRun({
-      command: "create",
-      objective: "Create a hosted release notes agent",
-      payload,
-      project: cloudProject(),
-      source: "cloud_work_home",
-    });
-
-    expect(request?.surface).toBe("hosted_create");
-    expect(request?.adapter.kind).toBe("hosted");
-    expect(request?.adapter.sourceAuthority).toBe("hosted_profile");
-    expect(request?.adapter.sourceRef).toBe("profile-main");
-    expect(request?.scope.targetProject?.name).toBe("Cloud Project");
-    const snapshot = buildInitialCreateImproveRun(request!);
-    expect(snapshot.state).toBe("awaiting_plan_approval");
-    expect(snapshot.plan?.status).toBe("pending_approval");
-    expect(snapshot.plan?.approvalId).toBeTruthy();
-    expect(snapshot.approvalIds).toEqual([snapshot.plan?.approvalId]);
-    expect(snapshot.plan?.sourcePlan.map((item) => item.path)).toContain(
-      `agents/${snapshot.target.id}`,
-    );
-    expect(snapshot.workflowCapture?.targetRepoAssumptions).toEqual([
-      "cloud project: openpond/cloud-project",
-    ]);
-    const approved = approveCreateImproveRun(snapshot);
-    expect(approved.state).toBe("applying_source");
-    expect(approved.plan?.status).toBe("approved");
-    expect(reviseCreateImproveRun(approved, "Change after approval")).toEqual(approved);
-    const revised = reviseCreateImproveRun(snapshot, "Prefer concise bullet summaries.");
-    expect(revised.state).toBe("awaiting_plan_approval");
-    expect(revised.plan?.status).toBe("pending_approval");
-    expect(revised.plan?.id).not.toBe(snapshot.plan?.id);
-    expect(revised.plan?.editedFromPlanId).toBe(snapshot.plan?.id);
-    expect(revised.plan?.approvalId).toBe(snapshot.plan?.approvalId);
-    expect(revised.approvalIds).toEqual(snapshot.approvalIds);
-    expect(revised.plan?.summary).toContain("Prefer concise bullet summaries.");
-    const cancelled = cancelCreateImproveRun(snapshot);
-    expect(cancelled.state).toBe("cancelled");
-    expect(cancelled.plan?.status).toBe("cancelled");
-    expect(cancelled.blockedReason).toContain("Cancelled");
-
-    expect(buildHostedCloudWorkCreateImproveRun({
-      command: "edit",
-      objective: "Tighten hosted release notes",
-      payload,
-      project: cloudProject(),
-      source: "cloud_work_home",
-    })).toBeNull();
-
-    const editRequest = buildHostedCloudWorkCreateImproveRun({
-      command: "edit",
-      objective: "Tighten hosted release notes",
-      payload,
-      project: cloudProject(),
-      workItem: {
-        id: "work_item_1",
-        teamId: "team_1",
-        projectId: "cloud_project_1",
-        conversationId: "conversation_1",
-        title: "Release notes agent",
-        status: "needs_review",
-        sourceRef: "profile-main",
-        baseSha: "profile_sha",
-        latestRuntimeId: null,
-        latestSandboxId: null,
-        latestTaskRunId: null,
-        assignedAgentId: "agent_1",
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        archivedAt: null,
-        metadata: {},
-      },
-      source: "cloud_work_thread",
-    });
-    expect(editRequest?.surface).toBe("hosted_improve");
-    expect(editRequest?.target).toMatchObject({
-      kind: "agent",
-      id: "agent_1",
-      defaultActionKey: "agent_1.chat",
-    });
-  });
-
   test("discovers flat project actions from composer slash input", () => {
     const actions = [
       action({
@@ -1032,7 +908,7 @@ describe("OpenPond App action channel", () => {
     ).toEqual(["chat", "water.estimate", "build.report"]);
   });
 
-  test("detects ready local Create pipelines for profile catalog refresh", () => {
+  test.skip("legacy Agent Create/Improve profile refresh projection is retired", () => {
     const ignoredBlocked = runtimeEvent({
       id: "event_blocked",
       sessionId: "session_1",
@@ -1206,56 +1082,6 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test("keeps Cloud work sessions out of project grouping without hiding standalone chats", () => {
-    const projects = [localProject()];
-    const localIds = new Set(projects.map((project) => project.id));
-    const projectPathIndex = buildSidebarProjectPathIndex(projects);
-    const cloudIds = new Set(["cloud_project_1"]);
-
-    expect(isSidebarCloudWorkSession(session(), cloudIds)).toBe(true);
-    expect(
-      sidebarProjectKeyForSession(
-        session(),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBeNull();
-    expect(
-      sidebarProjectKeyForSession(
-        session({
-          id: "standalone_chat",
-          workspaceKind: "local",
-          workspaceId: null,
-          workspaceName: null,
-          cloudProjectId: null,
-          cloudTeamId: null,
-          title: "Standalone chat",
-        }),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBeNull();
-    expect(
-      sidebarProjectKeyForSession(
-        session({
-          id: "codex_local",
-          provider: "codex",
-          workspaceKind: undefined,
-          workspaceId: null,
-          workspaceName: null,
-          cloudProjectId: null,
-          cloudTeamId: null,
-          cwd: "/workspace/local-project/src",
-        }),
-        localIds,
-        projectPathIndex,
-        cloudIds,
-      ),
-    ).toBe(projectSelectionKey("local", "local_project_1"));
-  });
-
   test("projects and renders OpenPond action run cards in the message timeline", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -1372,7 +1198,7 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Parse fixtures");
   });
 
-  test("renders create pipeline receipts in chat messages without duplicate approval controls", () => {
+  test.skip("legacy Agent Create/Improve receipts remain historical only", () => {
     const parsed = parseComposerSlashCommandPrompt("/create release notes agent");
     const request = buildComposerCreateImproveRun({
       parsed: parsed!,

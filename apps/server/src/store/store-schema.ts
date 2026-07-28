@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 28;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 32;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -473,27 +473,6 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
 
-  CREATE TABLE IF NOT EXISTS baseline_reports (
-    id TEXT PRIMARY KEY,
-    taskset_id TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS baseline_reports_taskset_idx ON baseline_reports(taskset_id, created_at DESC);
-
-  CREATE TABLE IF NOT EXISTS taskset_baseline_runs (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL,
-    taskset_id TEXT NOT NULL,
-    status TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_profile_updated_idx ON taskset_baseline_runs(profile_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_taskset_updated_idx ON taskset_baseline_runs(taskset_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS taskset_baseline_runs_status_updated_idx ON taskset_baseline_runs(status, updated_at DESC);
-
   CREATE TABLE IF NOT EXISTS grader_audit_reports (
     id TEXT PRIMARY KEY,
     taskset_id TEXT NOT NULL,
@@ -525,16 +504,51 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS task_miner_runs_profile_updated_idx ON task_miner_runs(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS task_miner_runs_status_updated_idx ON task_miner_runs(status, updated_at DESC);
 
-  CREATE TABLE IF NOT EXISTS cross_system_frontier_baseline_runs (
+  CREATE TABLE IF NOT EXISTS model_projects (
     id TEXT PRIMARY KEY,
     profile_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS model_projects_profile_updated_idx ON model_projects(profile_id, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS model_run_drafts (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
     status TEXT NOT NULL,
     payload TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_profile_updated_idx ON cross_system_frontier_baseline_runs(profile_id, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS cross_system_frontier_runs_status_updated_idx ON cross_system_frontier_baseline_runs(status, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_run_drafts_profile_updated_idx ON model_run_drafts(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_run_drafts_model_idx ON model_run_drafts(model_id, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS model_versions (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    version_number INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(model_id, version_number)
+  );
+  CREATE INDEX IF NOT EXISTS model_versions_profile_created_idx ON model_versions(profile_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS model_versions_model_idx ON model_versions(model_id, version_number DESC);
+  CREATE TABLE IF NOT EXISTS model_runs (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    model_version_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    taskset_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS model_runs_profile_updated_idx ON model_runs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_runs_model_updated_idx ON model_runs(model_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS model_runs_taskset_updated_idx ON model_runs(taskset_id, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS training_plans (
     id TEXT PRIMARY KEY,

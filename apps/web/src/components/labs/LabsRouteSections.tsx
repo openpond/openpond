@@ -1,13 +1,16 @@
 import type {
   CreateImproveRun,
-  CrossSystemFrontierBaselineRun,
   TaskCreationSnapshot,
   TrainingStateResponse,
+} from "@openpond/contracts";
+import {
+  managedAdapterCustomerBindingAllowed,
+  resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
 import type { InsightsViewProps } from "../insights/InsightsView";
 import { InsightsView } from "../insights/InsightsView";
-import type { TrainingViewProps } from "../training/TrainingView";
+import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
 import {
   ChartColumnStacked,
@@ -17,19 +20,11 @@ import {
   Loader2,
   XCircle,
 } from "../icons";
-import {
-  trainingMethodLabel,
-} from "../training/training-model-data";
-import {
-  workproductKey,
-  type LabWorkproductSummary,
-} from "./lab-workproducts";
+import { trainingMethodLabel } from "../training/training-model-data";
+import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { LabModelBaselineProgress } from "./LabModelBaseline";
-import { labModelVersions } from "./lab-models";
-import {
-  type LabWorkproductProgression,
-} from "./lab-workproduct-progression";
+import { labBaseModelVersion, labModelVersions } from "./lab-models";
+import { type LabWorkproductProgression } from "./lab-workproduct-progression";
 import type { LabsRouteProps } from "./LabsRoute";
 
 const PAGE_SIZE = 10;
@@ -97,7 +92,6 @@ export function SuggestionsTab({
 }
 
 export function WorkproductsTable({
-  frontierBaselineRuns,
   items,
   loading,
   progressionByKey,
@@ -107,7 +101,6 @@ export function WorkproductsTable({
   onUseModel,
   onUseSkill,
 }: {
-  frontierBaselineRuns: CrossSystemFrontierBaselineRun[];
   items: LabWorkproductSummary[];
   loading: boolean;
   progressionByKey: Map<string, LabWorkproductProgression>;
@@ -127,9 +120,6 @@ export function WorkproductsTable({
     return (
       <div className="labs-table-empty">No workproducts match this view.</div>
     );
-  const frontierBaselineById = new Map(
-    frontierBaselineRuns.map((run) => [run.id, run] as const)
-  );
   return (
     <div className="training-table-wrap">
       <table
@@ -153,9 +143,6 @@ export function WorkproductsTable({
         <tbody>
           {items.map((item) => {
             const progression = progressionByKey.get(item.key);
-            const frontierBaseline = item.frontierBaselineRunId
-              ? frontierBaselineById.get(item.frontierBaselineRunId) ?? null
-              : null;
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
                 {showType ? (
@@ -165,20 +152,12 @@ export function WorkproductsTable({
                 ) : null}
                 <td>
                   <button
-                    className={frontierBaseline
-                      ? "labs-workproduct-link labs-training-run-name"
-                      : "labs-workproduct-link"}
+                    className="labs-workproduct-link"
                     type="button"
                     onClick={() => onSelect(item.key)}
                   >
                     <strong>{item.name}</strong>
                     <span>{item.description}</span>
-                    {frontierBaseline ? (
-                      <LabModelBaselineProgress
-                        run={frontierBaseline}
-                        showOutcomes={false}
-                      />
-                    ) : null}
                   </button>
                 </td>
                 <td>
@@ -227,9 +206,11 @@ export function WorkproductsTable({
                         className="settings-secondary compact labs-workproduct-use"
                         type="button"
                         disabled={!item.enabled}
-                        title={item.enabled
-                          ? "Start a bounded chat session with this model"
-                          : "Chat is available after a version passes frozen evaluation"}
+                        title={
+                          item.enabled
+                            ? "Start a bounded chat session with this model"
+                            : "Chat is available after a version passes frozen evaluation"
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
                           onUseModel(item.id);
@@ -255,6 +236,7 @@ export function ModelsTable({
   loading,
   runs,
   state,
+  emptyMessage = "No Models yet.",
   onSelect,
   onUseModel,
 }: {
@@ -262,6 +244,7 @@ export function ModelsTable({
   loading: boolean;
   runs: CreateImproveRun[];
   state: TrainingStateResponse | null;
+  emptyMessage?: string;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
 }) {
@@ -273,7 +256,7 @@ export function ModelsTable({
     );
   }
   if (!items.length) {
-    return <div className="labs-table-empty">No Models yet.</div>;
+    return <div className="labs-table-empty">{emptyMessage}</div>;
   }
   return (
     <div className="training-table-wrap">
@@ -281,18 +264,21 @@ export function ModelsTable({
         <thead>
           <tr>
             <th>Model</th>
+            <th>Profile</th>
             <th>Active</th>
             <th>Eval</th>
-            <th>Versions</th>
+            <th>Runs</th>
             <th>Updated</th>
-            <th><span className="sr-only">Actions</span></th>
+            <th>
+              <span className="sr-only">Actions</span>
+            </th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => {
             const versions = labModelVersions(item, runs, state);
-            const current =
-              versions.find((version) => version.current) ?? null;
+            const baseVersion = labBaseModelVersion(item, state);
+            const current = versions.find((version) => version.current) ?? null;
             const latest = versions[0] ?? null;
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
@@ -306,34 +292,43 @@ export function ModelsTable({
                     <span>{item.description}</span>
                   </button>
                 </td>
+                <td>{item.ownerProfileId ?? "Unknown"}</td>
                 <td>
                   {current
                     ? `Version ${current.number} · ${trainingMethodLabel(
-                        current.plan?.recipe.method,
+                        current.plan?.recipe.method
                       )}`
+                    : baseVersion
+                    ? "Base version 0"
                     : "Not selected"}
                 </td>
                 <td>
                   <LabStatusBadge
                     label={
                       latest
-                        ? latest.lineage.promotable
+                        ? resolveModelBindingPromotionGate(latest.lineage) ||
+                          managedAdapterCustomerBindingAllowed(latest.lineage)
                           ? "Passed"
-                          : latest.lineage.frozenEvaluationArtifactId
-                            ? "Failed"
-                            : "Not run"
+                          : latest.lineage.frozenEvaluationArtifactId ||
+                            latest.lineage.managedServing
+                              ?.customerBindingAllowed
+                          ? "Failed"
+                          : "Not run"
                         : "Not run"
                     }
                     value={
-                      latest?.lineage.promotable
+                      latest &&
+                      (resolveModelBindingPromotionGate(latest.lineage) ||
+                        managedAdapterCustomerBindingAllowed(latest.lineage))
                         ? "passed"
-                        : latest?.lineage.frozenEvaluationArtifactId
-                          ? "failed"
-                          : "not_run"
+                        : latest?.lineage.frozenEvaluationArtifactId ||
+                          latest?.lineage.managedServing?.customerBindingAllowed
+                        ? "failed"
+                        : "not_run"
                     }
                   />
                 </td>
-                <td>{versions.length}</td>
+                <td>{item.trainingRunCount}</td>
                 <td>{compactUpdatedAt(item.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
@@ -482,15 +477,15 @@ export async function finishModelCreation(
   training.onDetailTasksetIdChange(creation.materializedTasksetId);
   const refreshed = await refreshRuns();
   const run = refreshed?.find(
-    (candidate) => candidate.id === creation.request.createImproveRunId,
+    (candidate) => candidate.id === creation.request.createImproveRunId
   );
   setSelectedKey(
     workproductKey(
       "model",
       run?.target.kind === "model"
         ? run.target.id ?? run.id
-        : creation.materializedTasksetId,
-    ),
+        : creation.materializedTasksetId
+    )
   );
 }
 
@@ -513,7 +508,7 @@ function titleCase(value: string): string {
 }
 
 export function trainingModelRunSyncKey(
-  training: TrainingViewProps["training"]["payload"]
+  training: TrainingWorkspaceProps["training"]["payload"]
 ): string {
   if (!training) return "";
   return [

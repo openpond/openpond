@@ -5,6 +5,7 @@ import {
   type TrainingDestinationId,
 } from "../packages/contracts/src";
 import { projectBaseModelCandidates } from "../apps/server/src/training/base-model-candidates";
+import { createPortableTrainingCatalog } from "../apps/server/src/training/portable-training-catalog";
 
 const checkedAt = "2026-07-19T12:00:00.000Z";
 
@@ -22,11 +23,6 @@ describe("provider-neutral base-model candidates", () => {
             "openpond/tiny-cpu-gpt2-fixture",
             "HuggingFaceTB/SmolLM2-135M-Instruct",
           ],
-        }),
-        destination("local_cuda", {
-          available: false,
-          modelAllowlist: ["HuggingFaceTB/SmolLM2-135M-Instruct"],
-          unavailableReason: "CUDA worker conformance is missing.",
         }),
       ],
       inventory: inventory(),
@@ -48,11 +44,6 @@ describe("provider-neutral base-model candidates", () => {
       },
       executionOptions: [
         { destinationId: "local_cpu_fixture", available: true },
-        {
-          destinationId: "local_cuda",
-          available: false,
-          unavailableReason: "CUDA worker conformance is missing.",
-        },
       ],
     });
     expect(JSON.stringify(candidates)).not.toContain("ollama/qwen-local");
@@ -78,6 +69,94 @@ describe("provider-neutral base-model candidates", () => {
       sourceLabel: "Fireworks",
     });
   });
+
+  test("pins the qualified OpenPond Managed GRPO base profile exactly", () => {
+    const candidates = projectBaseModelCandidates({
+      destinations: [
+        destination("openpond_managed", {
+          modelAllowlist: ["Qwen/Qwen3-0.6B"],
+          methods: ["grpo"],
+        }),
+      ],
+      inventory: null,
+    });
+
+    expect(
+      candidates.map((candidate) => candidate.preference),
+    ).toEqual([
+      expect.objectContaining({
+        modelId: "Qwen/Qwen3-0.6B",
+        revision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        tokenizerRevision:
+          "c1899de289a04d12100db370d81485cdf75e47ca",
+        chatTemplateHash:
+          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      }),
+    ]);
+  });
+
+  test("returns one backend-selected target for the requested method", () => {
+    const destinations = [
+      destination("openpond_managed", {
+        modelAllowlist: ["Qwen/Qwen3-0.6B"],
+        methods: ["grpo"],
+      }),
+      destination("fireworks", {
+        modelAllowlist: ["accounts/fireworks/models/qwen3-8b"],
+        methods: ["sft", "grpo"],
+        nonProduction: false,
+      }),
+      destination("local_cpu_fixture", {
+        modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture"],
+      }),
+    ];
+    const candidates = projectBaseModelCandidates({
+      destinations,
+      inventory: null,
+    });
+    const shared = {
+      candidates,
+      destinations,
+      inventory: null,
+      registeredEngineIds: [
+        "sandbox-managed-rft",
+        "fireworks-native",
+        "local-trl",
+      ],
+      now: checkedAt,
+    };
+
+    expect(
+      createPortableTrainingCatalog({
+        ...shared,
+        preferredMethod: "grpo",
+      }).targets,
+    ).toEqual([
+      expect.objectContaining({
+        id: "automatic",
+        destinationId: "openpond_managed",
+        computeAdapterId: "openpond-managed",
+        defaults: expect.objectContaining({
+          loraRank: 16,
+          maxSteps: 2,
+          rolloutGroupSize: 4,
+          rolloutConcurrency: 4,
+        }),
+        available: true,
+      }),
+    ]);
+    expect(
+      createPortableTrainingCatalog({
+        ...shared,
+        preferredMethod: "sft",
+      }).targets[0],
+    ).toMatchObject({
+      id: "automatic",
+      destinationId: "fireworks",
+      computeAdapterId: "fireworks-managed",
+      available: true,
+    });
+  });
 });
 
 function destination(
@@ -98,9 +177,12 @@ function destination(
     parameterizations: ["lora"],
     modelAllowlist: input.modelAllowlist,
     maxDatasetBytes: 10_000_000,
-    environmentPlacements: destinationId === "fireworks"
-      ? ["provider_native"]
-      : ["local"],
+    environmentPlacements:
+      destinationId === "fireworks"
+        ? ["provider_native"]
+        : destinationId === "openpond_managed"
+          ? ["remote"]
+          : ["local"],
     nonProduction: input.nonProduction ?? true,
     unavailableReason: input.unavailableReason ?? null,
     checkedAt,

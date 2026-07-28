@@ -4,12 +4,6 @@ import path from "node:path";
 import {
   AccountStateSchema,
   BootstrapPayloadSchema,
-  CloudWorkItemDetailSchema,
-  CloudWorkItemBackgroundRequestSchema,
-  CreateCloudWorkItemRequestSchema,
-  ApplyCloudWorkItemLocalPatchRequestSchema,
-  ListCloudWorkItemsRequestSchema,
-  OpenCloudWorkItemRequestSchema,
   PatchSidebarAppPreferenceRequestSchema,
   PatchSidebarFileBookmarkRequestSchema,
   RecordClientDiagnosticRequestSchema,
@@ -17,7 +11,6 @@ import {
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
-  SendCloudWorkItemMessageRequestSchema,
   SessionSchema,
   SwitchOpenPondAccountRequestSchema,
   UpdateOpenPondAccountConfigRequestSchema,
@@ -34,11 +27,6 @@ import {
   type AppPreferences,
   type BootstrapPayload,
   type CloudProject,
-  type CloudWorkItem,
-  type CloudWorkItemActivity,
-  type CloudWorkItemDetail,
-  type CloudWorkItemMessage,
-  type CloudWorkItemRuntimeSession,
   type CodexStatus,
   type LocalProject,
   type OpenPondApp,
@@ -51,7 +39,6 @@ import {
   type SidebarFileBookmark,
   type SidebarFileBookmarksResponse,
   type PatchSidebarFileBookmarkRequest,
-  type WorkspaceState,
   normalizeSidebarFilePath,
 } from "@openpond/contracts";
 import {
@@ -62,16 +49,11 @@ import {
   updateOpenPondAccountConfig,
 } from "@openpond/runtime";
 import {
-  createGithubExtensionManager,
-  emptyProfileState,
-  initLocalProfileRepo,
-  loadOpenPondProfileState,
+  createGithubExtensionManager, emptyProfileState, initLocalProfileRepo,
+  loadOpenPondProfileLibrary, loadOpenPondProfileState,
 } from "@openpond/cloud";
 import { loadGlobalConfig, saveGlobalConfig } from "@openpond/cloud/config";
 import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
-import {
-  assertCreateImproveRunLinked,
-} from "../create-pipeline-guards.js";
 import { normalizeAppPreferences } from "../preferences.js";
 import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
 import {
@@ -130,46 +112,24 @@ import {
   findLocalProject,
   inferLocalProjectOpenPondLinks,
   listLocalProjects,
-  localProjectStateWorkspace,
-  localProjectWorkspacePaths,
   updateLocalProjectAgentSetup,
 } from "../workspace/local-projects.js";
 import {
   previewLocalProjectSourceUpload,
 } from "../workspace/local-project-source-upload.js";
 import { createServerWorkspacePayloads } from "../workspace/server-workspace-payloads.js";
-import { loadWorkspaceStateAtPath, runWorkspaceCommand } from "../workspace/workspaces.js";
 import {
   hasObjectKey,
-  assertCreateImproveBackgroundApproved,
   fetchCloudProjects,
   asRecord,
-  nonEmptyRecord,
-  asRecordArray,
   stringValue,
   internalRepoPathForLocalProject,
   uploadLocalProjectCloudSource,
   sandboxProjectRecordOrFallback,
   upsertInternalSandboxProject,
   cloudProjectFromSandboxRecord,
-  cloudWorkItemTeamInput,
-  createImproveMetadata,
-  usageAttributionMetadata,
-  linkCreateImproveRunToWorkItem,
-  attachCreateImproveRunToWorkItem,
-  latestCreateImproveRunFromTimeline,
-  normalizeCloudWorkItem,
-  normalizeRequiredCloudWorkItem,
-  normalizeCloudWorkItemMessage,
-  normalizeRequiredCloudWorkItemMessage,
-  normalizeCloudWorkItemActivity,
-  normalizeCloudWorkItemRuntimeSession,
-  assertApplyableLocalWorkspace,
-  countPatchFiles,
-  latestRuntimeSessionSandboxId,
 } from "./server-payload-helpers.js";
 import { createCodexHistoryPayloads } from "./codex-history-payloads.js";
-export { assertCreateImproveBackgroundApproved } from "./server-payload-helpers.js";
 import { createProfilePayloads } from "./profile-payloads.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
@@ -796,6 +756,7 @@ export function createServerPayloads(deps: {
       personalization,
       localProjects,
       profile,
+      profileLibrary,
       codexPersonalSkills,
       extensionCatalog,
     ] = await Promise.all([
@@ -808,6 +769,7 @@ export function createServerPayloads(deps: {
       loadPersonalizationSettings(store, storeDir),
       listLocalProjects(store),
       loadBootstrapProfile(Boolean(bootstrapOptions.ensureProfile)),
+      loadOpenPondProfileLibrary(),
       loadCodexPersonalSkills(),
       extensionManager.list(),
     ]);
@@ -857,6 +819,7 @@ export function createServerPayloads(deps: {
       localProjects: linkedLocalProjects,
       cloudProjects,
       profile,
+      profileLibrary,
       codexPersonalSkills,
       extensionCatalog,
       codexHistorySessions: validBootstrapSessions(
@@ -1390,394 +1353,6 @@ export function createServerPayloads(deps: {
     return `${(value / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  async function listCloudWorkItemsPayload(payload: unknown): Promise<{ workItems: CloudWorkItem[] }> {
-    const input = ListCloudWorkItemsRequestSchema.parse(payload);
-    const workItemLists = await Promise.all(
-      input.projectIds.map(async (projectId) => {
-        const response = asRecord(
-          await sandboxRequestPayload({
-            type: "work_item_list",
-            projectId,
-            payload: {
-              teamId: input.teamId,
-              includeArchived: input.includeArchived,
-              limit: input.limit ?? 100,
-            },
-          }),
-        );
-        return asRecordArray(response.workItems)
-          .map(normalizeCloudWorkItem)
-          .filter((item): item is CloudWorkItem => Boolean(item));
-      }),
-    );
-    const byId = new Map<string, CloudWorkItem>();
-    for (const workItem of workItemLists.flat()) {
-      byId.set(workItem.id, workItem);
-    }
-    const workItems = [...byId.values()].sort(
-      (left, right) => (Date.parse(right.updatedAt) || 0) - (Date.parse(left.updatedAt) || 0),
-    );
-    return { workItems };
-  }
-
-  async function getCloudWorkItemPayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<CloudWorkItemDetail> {
-    const input = cloudWorkItemTeamInput(payload);
-    const [workItemResponse, messagesResponse, activityResponse] = await Promise.all([
-      sandboxRequestPayload({
-        type: "work_item_get",
-        workItemId,
-        payload: { teamId: input.teamId, includeArchived: true },
-      }),
-      sandboxRequestPayload({
-        type: "work_item_messages",
-        workItemId,
-        payload: { teamId: input.teamId, limit: 250 },
-      }),
-      sandboxRequestPayload({
-        type: "work_item_activity",
-        workItemId,
-        payload: { teamId: input.teamId, limit: 250 },
-      }),
-    ]);
-    const workItem = normalizeRequiredCloudWorkItem(asRecord(workItemResponse).workItem);
-    const messages = asRecordArray(asRecord(messagesResponse).messages)
-      .map(normalizeCloudWorkItemMessage)
-      .filter((message): message is CloudWorkItemMessage => Boolean(message));
-    const activity = asRecordArray(asRecord(activityResponse).activity)
-      .map(normalizeCloudWorkItemActivity)
-      .filter((item): item is CloudWorkItemActivity => Boolean(item));
-    const latestCreateImproveRun =
-      latestCreateImproveRunFromTimeline(workItem, messages, activity) ??
-      workItem.createImproveRun ??
-      null;
-    const workItemWithCreateImproveRun = attachCreateImproveRunToWorkItem(
-      workItem,
-      latestCreateImproveRun,
-    );
-    return CloudWorkItemDetailSchema.parse({
-      workItem: workItemWithCreateImproveRun,
-      messages,
-      activity,
-      runtimeSessions: [],
-      createImproveRun: latestCreateImproveRun,
-    });
-  }
-
-  async function createCloudWorkItemPayload(payload: unknown): Promise<CloudWorkItemDetail> {
-    const input = CreateCloudWorkItemRequestSchema.parse(payload);
-    const {
-      createImproveRun,
-      localProjectId,
-      localProjectName,
-      localWorkspacePath,
-      requestedExecutionTarget,
-      usageAttribution,
-      ...workItemInput
-    } = input;
-    const response = asRecord(
-      await sandboxRequestPayload({
-        type: "work_item_create",
-        projectId: input.projectId,
-        payload: {
-          ...workItemInput,
-          metadata: {
-            source: "openpond_app_cloud",
-            ...(requestedExecutionTarget ? { requestedExecutionTarget } : {}),
-            ...(localProjectId ? { localProjectId } : {}),
-            ...(localProjectName ? { localProjectName } : {}),
-            ...(localWorkspacePath ? { localWorkspacePath } : {}),
-            ...usageAttributionMetadata(usageAttribution ?? null),
-            ...createImproveMetadata(createImproveRun ?? null),
-          },
-        },
-      }),
-    );
-    const createdWorkItem = normalizeRequiredCloudWorkItem(response.workItem);
-    const linkedCreateImproveRun = linkCreateImproveRunToWorkItem({
-      workItem: createdWorkItem,
-      run: createImproveRun ?? null,
-    });
-    if (linkedCreateImproveRun) {
-      await sandboxRequestPayload({
-        type: "work_item_message_create",
-        workItemId: createdWorkItem.id,
-        payload: {
-          teamId: input.teamId,
-          role: "system",
-          body: "Create/Improve run linked to this work item.",
-          metadata: {
-            source: "openpond_app_cloud_create_improve_link",
-            hidden: true,
-            ...usageAttributionMetadata(usageAttribution ?? null),
-            ...createImproveMetadata(linkedCreateImproveRun),
-          },
-        },
-      });
-    }
-    const workItem = attachCreateImproveRunToWorkItem(
-      createdWorkItem,
-      linkedCreateImproveRun,
-    );
-    return CloudWorkItemDetailSchema.parse({
-      workItem,
-      messages: [],
-      activity: [],
-      runtimeSessions: [],
-      createImproveRun: linkedCreateImproveRun,
-    });
-  }
-
-  async function sendCloudWorkItemMessagePayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<{
-    message: CloudWorkItemMessage;
-    userMessage: CloudWorkItemMessage;
-  }> {
-    const input = SendCloudWorkItemMessageRequestSchema.parse(payload);
-    assertCreateImproveRunLinked({
-      actionLabel: "Cloud work item Create/Improve metadata",
-      run: input.createImproveRun ?? null,
-    });
-    const response = asRecord(
-      await sandboxRequestPayload({
-        type: "work_item_chat",
-        workItemId,
-        payload: {
-          teamId: input.teamId,
-          message: input.message,
-          metadata: {
-            source: "openpond_app_cloud_thread",
-            ...usageAttributionMetadata(input.usageAttribution ?? null),
-            ...createImproveMetadata(input.createImproveRun ?? null),
-          },
-        },
-      }),
-    );
-    return {
-      message: normalizeRequiredCloudWorkItemMessage(response.assistantMessage),
-      userMessage: normalizeRequiredCloudWorkItemMessage(response.userMessage),
-    };
-  }
-
-  async function handleCloudWorkItemBackgroundPayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<unknown> {
-    const input = CloudWorkItemBackgroundRequestSchema.parse(payload);
-    const {
-      createImproveRun,
-      usageAttribution,
-      payload: requestPayload,
-      ...backgroundInput
-    } = input;
-    assertCreateImproveRunLinked({
-      actionLabel: "Create/Improve background work",
-      run: createImproveRun ?? null,
-    });
-    assertCreateImproveBackgroundApproved({
-      run: createImproveRun ?? null,
-    });
-    return sandboxRequestPayload({
-      type: "work_item_handle_background",
-      workItemId,
-      payload: {
-        ...backgroundInput,
-        ...(usageAttribution ? { usageAttribution } : {}),
-        branchPolicy: input.branchPolicy ?? { mode: "patch_only" },
-        payload: {
-          source: "openpond_app_cloud_thread",
-          ...(requestPayload ?? {}),
-          ...usageAttributionMetadata(usageAttribution ?? null),
-          ...createImproveMetadata(createImproveRun ?? null),
-        },
-      },
-    });
-  }
-
-  async function cancelCloudWorkItemTaskPayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<unknown> {
-    const input = cloudWorkItemTeamInput(payload);
-    return sandboxRequestPayload({
-      type: "work_item_cancel_task",
-      workItemId,
-      payload: {
-        teamId: input.teamId,
-      },
-    });
-  }
-
-  async function openCloudWorkItemPayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<{
-    workItem: CloudWorkItem;
-    runtime?: unknown;
-    session?: CloudWorkItemRuntimeSession;
-    activity?: CloudWorkItemActivity;
-    resumed?: boolean;
-  }> {
-    const input = OpenCloudWorkItemRequestSchema.parse(payload);
-    const response = asRecord(
-      await sandboxRequestPayload({
-        type: "work_item_open_cloud",
-        workItemId,
-        payload: {
-          ...input,
-          payload: {
-            source: "openpond_app_cloud_thread",
-            ...(input.payload ?? {}),
-          },
-        },
-      }),
-    );
-    return {
-      ...response,
-      workItem: normalizeRequiredCloudWorkItem(response.workItem),
-      session: response.session ? normalizeCloudWorkItemRuntimeSession(response.session) ?? undefined : undefined,
-      activity: response.activity ? normalizeCloudWorkItemActivity(response.activity) ?? undefined : undefined,
-      resumed: response.resumed === true,
-    };
-  }
-
-  async function applyCloudWorkItemLocalPatchPayload(
-    workItemId: string,
-    payload: unknown,
-  ): Promise<{
-    workItem: CloudWorkItem;
-    localProject: LocalProject;
-    workspaceState: WorkspaceState;
-    patch: {
-      sandboxId: string;
-      filename: string | null;
-      bytes: number;
-      applied: true;
-      fileCount: number;
-    };
-  }> {
-    const input = ApplyCloudWorkItemLocalPatchRequestSchema.parse(payload);
-    const detail = await getCloudWorkItemPayload(workItemId, { teamId: input.teamId });
-    const workItem = detail.workItem;
-    if (workItem.teamId !== input.teamId) {
-      throw new Error("Cloud work item does not belong to the requested team.");
-    }
-    const localProject = await linkedLocalProjectForCloudWorkItem(
-      workItem,
-      input.localProjectId ?? null,
-    );
-    const sandboxId =
-      input.sandboxId?.trim() ||
-      workItem.latestSandboxId ||
-      latestRuntimeSessionSandboxId(detail) ||
-      null;
-    if (!sandboxId) {
-      throw new Error("No reviewed Cloud sandbox is available for this work item.");
-    }
-
-    const workspaceOptions = {
-      clone: false,
-      allowPlainFolder: true,
-      linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
-    };
-    const workspaceState = await loadWorkspaceStateAtPath(
-      localProjectWorkspacePaths(localProject),
-      localProjectStateWorkspace(localProject),
-      workspaceOptions,
-    );
-    await assertApplyableLocalWorkspace(workspaceState);
-
-    const patchResponse = asRecord(
-      await sandboxRequestPayload({
-        type: "git_export_patch",
-        sandboxId,
-        payload: {
-          ...(input.baseRef ? { baseRef: input.baseRef } : {}),
-        },
-      }),
-    );
-    const patchRecord = nonEmptyRecord(patchResponse.patch) ?? patchResponse;
-    if (patchRecord.isRepo === false) {
-      throw new Error("Cloud sandbox is not a Git repository.");
-    }
-    const patchText = typeof patchRecord.patch === "string" ? patchRecord.patch : "";
-    if (!patchText.trim() || patchRecord.empty === true) {
-      throw new Error("Cloud patch is empty. There are no changes to apply locally.");
-    }
-
-    const check = await runWorkspaceCommand(
-      "git",
-      ["apply", "--check", "--whitespace=nowarn", "-"],
-      workspaceState.repoPath,
-      {},
-      patchText,
-    );
-    if (check.code !== 0) {
-      throw new Error(
-        check.stderr.trim() ||
-          check.stdout.trim() ||
-          "Cloud patch does not apply cleanly to the local checkout.",
-      );
-    }
-    const apply = await runWorkspaceCommand(
-      "git",
-      ["apply", "--whitespace=nowarn", "-"],
-      workspaceState.repoPath,
-      {},
-      patchText,
-    );
-    if (apply.code !== 0) {
-      throw new Error(
-        apply.stderr.trim() ||
-          apply.stdout.trim() ||
-          "Unable to apply Cloud patch to the local checkout.",
-      );
-    }
-
-    const nextWorkspaceState = await loadWorkspaceStateAtPath(
-      localProjectWorkspacePaths(localProject),
-      localProjectStateWorkspace(localProject),
-      workspaceOptions,
-    );
-    return {
-      workItem,
-      localProject,
-      workspaceState: nextWorkspaceState,
-      patch: {
-        sandboxId,
-        filename: stringValue(patchRecord.filename),
-        bytes:
-          typeof patchRecord.bytes === "number"
-            ? patchRecord.bytes
-            : Buffer.byteLength(patchText, "utf8"),
-        applied: true,
-        fileCount: countPatchFiles(patchText),
-      },
-    };
-  }
-
-  async function linkedLocalProjectForCloudWorkItem(
-    workItem: CloudWorkItem,
-    localProjectId: string | null,
-  ): Promise<LocalProject> {
-    const projects = localProjectId
-      ? [await findLocalProject(store, localProjectId)]
-      : await listLocalProjects(store);
-    const localProject = projects.find((project): project is LocalProject => {
-      if (!project) return false;
-      const linked = project.linkedSandboxProject;
-      return linked?.teamId === workItem.teamId && linked.projectId === workItem.projectId;
-    });
-    if (!localProject) {
-      throw new Error("No linked local checkout exists for this Cloud Project.");
-    }
-    return localProject;
-  }
-
   async function currentSidebarScope(): Promise<string> {
     const context = await loadOpenPondAccountContext();
     return openPondCacheScope(context.accountState);
@@ -1976,14 +1551,6 @@ export function createServerPayloads(deps: {
     ...workspacePayloads,
     previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
-    listCloudWorkItemsPayload,
-    getCloudWorkItemPayload,
-    createCloudWorkItemPayload,
-    sendCloudWorkItemMessagePayload,
-    handleCloudWorkItemBackgroundPayload,
-    cancelCloudWorkItemTaskPayload,
-    openCloudWorkItemPayload,
-    applyCloudWorkItemLocalPatchPayload,
     patchSidebarAppPreference,
     listSidebarFileBookmarksPayload,
     patchSidebarFileBookmarkPayload,

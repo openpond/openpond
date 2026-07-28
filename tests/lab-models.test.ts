@@ -6,11 +6,13 @@ import type {
   TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
-import { TasksetBaselineRunSchema } from "@openpond/contracts";
+import {
+  ModelProjectSchema,
+  ModelRunDraftSchema,
+} from "@openpond/contracts";
 
 import {
   currentModelBinding,
-  labModelBaselineRuns,
   labModelDatasets,
   labModelJobs,
   labModelPlans,
@@ -27,29 +29,6 @@ import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
 
 describe("Lab Model workspace projection", () => {
-  test("uses exact model lineage for new checks and Dataset lineage for existing checks", () => {
-    const taskset = tasksetFixture({ ready: true });
-    const firstModel = modelWorkproduct("model_fixture_first", taskset);
-    const secondModel = modelWorkproduct("model_fixture_second", taskset);
-    const targeted = baselineRun("baseline_run_targeted", taskset, firstModel.id);
-    const legacy = baselineRun("baseline_run_legacy", taskset, null);
-    const state = {
-      tasksets: [taskset],
-      plans: [],
-      jobs: [],
-      models: [],
-      modelBindings: [],
-      baselineRuns: [targeted, legacy],
-    } as unknown as TrainingStateResponse;
-
-    expect(
-      labModelBaselineRuns(firstModel, [], state).map((run) => run.id),
-    ).toEqual([targeted.id, legacy.id]);
-    expect(
-      labModelBaselineRuns(secondModel, [], state).map((run) => run.id),
-    ).toEqual([legacy.id]);
-  });
-
   test("keeps multiple Dataset runs and methods under one stable Model with a current Version", () => {
     const modelId = "model_fixture_stable";
     const firstDataset = tasksetFixture({ ready: true });
@@ -148,7 +127,6 @@ describe("Lab Model workspace projection", () => {
       tasksetId: secondDataset.id,
       trainingRunCount: 2,
       evaluationStatus: "passed",
-      frontierBaselineRunId: null,
       useActionId: null,
     };
 
@@ -175,7 +153,47 @@ describe("Lab Model workspace projection", () => {
     );
   });
 
-  test("coalesces executed pre-identity runs without merging new reusable-Dataset drafts", () => {
+  test("recognizes the active default Chat binding for a Model lineage", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const modelId = "model_fixture_default_binding";
+    const workproduct = modelWorkproduct(modelId, taskset);
+    const version = lineage(
+      "lineage_default_binding",
+      modelId,
+      taskset.id,
+      "training_job_default_binding",
+      "2026-07-13T02:00:00.000Z",
+    );
+    const binding = {
+      schemaVersion: "openpond.modelBinding.v1",
+      id: "model_binding_default",
+      profileId: "default",
+      role: "chat_manual",
+      roleTargetId: "default",
+      modelArtifactLineageId: version.id,
+      tasksetId: taskset.id,
+      evaluationArtifactId: version.frozenEvaluationArtifactId,
+      status: "active",
+      priorBindingId: null,
+      rollbackTargetBindingId: null,
+      promotedBy: "acceptance",
+      promotedAt: "2026-07-13T03:00:00.000Z",
+      rolledBackAt: null,
+      metadata: {},
+    } satisfies ModelBinding;
+    const state = {
+      tasksets: [taskset],
+      plans: [],
+      jobs: [],
+      models: [version],
+      modelBindings: [binding],
+    } as unknown as TrainingStateResponse;
+
+    expect(currentModelBinding(workproduct, [], state)?.id).toBe(binding.id);
+    expect(labModelVersions(workproduct, [], state)[0]?.current).toBe(true);
+  });
+
+  test("keeps executed Model identities separate from each other and reusable-Dataset drafts", () => {
     const taskset = tasksetFixture({ ready: true });
     const firstPlan = {
       ...planFixture(taskset),
@@ -247,7 +265,6 @@ describe("Lab Model workspace projection", () => {
       ],
       models: [],
       modelBindings: [],
-      frontierBaselineRuns: [],
     } as unknown as TrainingStateResponse;
 
     const models = labWorkproductProjection({
@@ -256,12 +273,156 @@ describe("Lab Model workspace projection", () => {
       runs: [...executed, draft],
     }).filter((workproduct) => workproduct.kind === "model");
 
-    expect(models).toHaveLength(2);
+    expect(models).toHaveLength(3);
+    expect(models.find((model) => model.id === "model_legacy_first")?.runIds)
+      .toEqual([first.id]);
+    expect(
+      models.find((model) => model.id === "model_legacy_first")
+        ?.trainingRunCount,
+    ).toBe(1);
     expect(models.find((model) => model.id === "model_legacy_second")?.runIds)
-      .toEqual(expect.arrayContaining([first.id, second.id]));
+      .toEqual([second.id]);
+    expect(
+      models.find((model) => model.id === "model_legacy_second")
+        ?.trainingRunCount,
+    ).toBe(1);
     expect(models.some((model) => model.id === "model_intentional_new")).toBe(
       true,
     );
+  });
+
+  test("projects stable Models and saved run drafts into the Model workspace", () => {
+    const timestamp = "2026-07-23T12:00:00.000Z";
+    const project = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v1",
+      id: "model_fixture_draft",
+      profileId: "default",
+      name: "Renewal Risk Model",
+      objective: "Classify renewal risk.",
+      defaultBaseModel: null,
+      defaultDestinationId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const draft = ModelRunDraftSchema.parse({
+      schemaVersion: "openpond.modelRunDraft.v1",
+      id: "run_draft_fixture",
+      profileId: "default",
+      modelId: "model_fixture_draft",
+      status: "draft",
+      title: "Run draft",
+      datasetMode: null,
+      tasksetRef: null,
+      datasetCreationId: null,
+      buildIntent: null,
+      buildSpecification: null,
+      baseModel: null,
+      method: null,
+      destinationId: null,
+      runPreset: null,
+      recipe: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const readyDraft = ModelRunDraftSchema.parse({
+      ...draft,
+      id: "run_draft_ready_fixture",
+      status: "ready_to_run",
+      title: "Second run draft",
+      updatedAt: "2026-07-23T12:05:00.000Z",
+    });
+
+    const [projected] = labWorkproductProjection({
+      profile: null,
+      training: {
+        modelProjects: [project],
+        modelRunDrafts: [readyDraft, draft],
+        tasksets: [],
+        plans: [],
+        jobs: [],
+        models: [],
+      } as TrainingStateResponse,
+      runs: [],
+    });
+
+    expect(projected).toMatchObject({
+      kind: "model",
+      id: draft.modelId,
+      name: project.name,
+      status: "Ready to run",
+      trainingRunCount: 2,
+    });
+  });
+
+  test("preserves a stable Model name and counts only its own launched runs", () => {
+    const timestamp = "2026-07-23T12:00:00.000Z";
+    const taskset = tasksetFixture({ ready: true });
+    const project = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v1",
+      id: "model_local_sft_smoke",
+      profileId: "default",
+      name: "Local SFT Smoke",
+      objective: "Verify local SFT training.",
+      defaultBaseModel: null,
+      defaultDestinationId: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    });
+    const olderPlan = {
+      ...planFixture(taskset),
+      id: "training_plan_other_model",
+      modelId: "model_other",
+      createdAt: "2026-07-23T12:01:00.000Z",
+    };
+    const projectPlan = {
+      ...planFixture(taskset),
+      id: "training_plan_local_sft_smoke",
+      modelId: project.id,
+      createdAt: "2026-07-23T12:03:00.000Z",
+    };
+    const state = {
+      modelProjects: [project],
+      modelRunDrafts: [],
+      tasksets: [taskset],
+      plans: [olderPlan, projectPlan],
+      jobs: [
+        job(
+          "training_job_other_model",
+          olderPlan.id,
+          "2026-07-23T12:02:00.000Z",
+        ),
+        job(
+          "training_job_local_sft_smoke",
+          projectPlan.id,
+          "2026-07-23T12:04:00.000Z",
+        ),
+      ],
+      models: [],
+      modelBindings: [],
+    } as unknown as TrainingStateResponse;
+    const staleRun = createImproveRunFixture({
+      id: "create_improve_local_sft_smoke",
+      target: {
+        kind: "model",
+        id: project.id,
+        displayName: taskset.name,
+        trainingPlanId: projectPlan.id,
+        trainingJobId: "training_job_local_sft_smoke",
+        artifactId: null,
+      },
+    });
+
+    const projected = labWorkproductProjection({
+      profile: null,
+      training: state,
+      runs: [staleRun],
+    }).find((workproduct) => workproduct.id === project.id);
+
+    expect(projected).toMatchObject({
+      name: project.name,
+      description: project.objective,
+      trainingRunCount: 1,
+    });
   });
 });
 
@@ -365,53 +526,6 @@ function modelWorkproduct(
     tasksetId: taskset.id,
     trainingRunCount: 0,
     evaluationStatus: "not_run",
-    frontierBaselineRunId: null,
     useActionId: null,
   };
-}
-
-function baselineRun(id: string, taskset: Taskset, targetModelId: string | null) {
-  const timestamp = id.endsWith("targeted")
-    ? "2026-07-21T12:01:00.000Z"
-    : "2026-07-21T12:00:00.000Z";
-  return TasksetBaselineRunSchema.parse({
-    schemaVersion: "openpond.tasksetBaselineRun.v1",
-    id,
-    profileId: "default",
-    targetModelId,
-    tasksetId: taskset.id,
-    tasksetHash: taskset.contentHash,
-    status: "failed",
-    configuration: {
-      split: "train",
-      taskLimit: 16,
-      attemptsPerTask: 8,
-      selectionSeed: 17,
-      selectionStrategy: "rft_easy_curriculum_v1",
-      model: {
-        providerId: "fireworks",
-        modelId: "accounts/fireworks/models/qwen3-0p6b",
-      },
-      sampling: { maxOutputTokens: 2_048, temperature: 0.8, topP: 0.95 },
-    },
-    scope: null,
-    progress: {
-      stage: "provisioning",
-      completedAttempts: 0,
-      totalAttempts: 128,
-      correctAttempts: 0,
-      incorrectAttempts: 0,
-      parseableAttempts: 0,
-      infrastructureFailures: 0,
-    },
-    provider: null,
-    reportId: null,
-    estimatedCostUsd: null,
-    cancelRequested: false,
-    error: "No available capacity",
-    createdAt: timestamp,
-    startedAt: timestamp,
-    completedAt: timestamp,
-    updatedAt: timestamp,
-  });
 }

@@ -13,6 +13,12 @@ export async function handleCoreRoutes({
     skillSourceFilePayload,
     profileCurrentPayload,
     profileCatalogPayload,
+    profileSelectPayload,
+    profileRemovePayload,
+    profilePublicationPreviewPayload,
+    profilePublicationPublishPayload,
+    profileInstallPayload,
+    profileUpdatePayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
@@ -88,6 +94,30 @@ export async function handleCoreRoutes({
   }
   if (request.method === "POST" && requestUrl.pathname === "/v1/profile/load") {
     sendJson(response, 200, await profileLoadPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/select") {
+    sendJson(response, 200, await profileSelectPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/remove") {
+    sendJson(response, 200, await profileRemovePayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/publication/preview") {
+    sendJson(response, 200, await profilePublicationPreviewPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/publication/publish") {
+    sendJson(response, 200, await profilePublicationPublishPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/install") {
+    sendJson(response, 200, await profileInstallPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/profile/update") {
+    sendJson(response, 200, await profileUpdatePayload(await readJson(request)));
     return true;
   }
   if (

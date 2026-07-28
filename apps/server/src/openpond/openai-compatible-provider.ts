@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ProviderModelSchema,
   type ProviderId,
@@ -359,11 +360,6 @@ async function* streamOpenAiSubscriptionResponses(input: {
     saveChatGptSubscriptionCredential: input.saveChatGptSubscriptionCredential,
   });
   if (!credential.accessToken) throw new Error("OpenAI ChatGPT subscription credential has no access token.");
-  if (input.seed != null) {
-    throw new Error(
-      "OpenAI ChatGPT subscription Responses do not support deterministic seed sampling.",
-    );
-  }
   const requestSignal = createProviderRequestSignal(input.signal, input.requestTimeoutMs);
   try {
     const response = await fetch(OPENAI_CODEX_RESPONSES_ENDPOINT, {
@@ -375,9 +371,6 @@ async function* streamOpenAiSubscriptionResponses(input: {
         tools: input.tools,
         toolChoice: input.toolChoice,
         reasoningEffort: input.reasoningEffort,
-        maxOutputTokens: input.maxOutputTokens,
-        temperature: input.temperature,
-        topP: input.topP,
       })),
       signal: requestSignal.signal,
     });
@@ -698,7 +691,14 @@ function subscriptionHeaders(
   headers.set("Accept", "text/event-stream");
   headers.set("originator", "openpond");
   headers.set("User-Agent", "openpond-app");
-  if (requestId) headers.set("session-id", requestId);
+  if (requestId) {
+    headers.set(
+      "session-id",
+      requestId.length <= 64
+        ? requestId
+        : createHash("sha256").update(requestId).digest("hex"),
+    );
+  }
   if (credential.accountId) headers.set("ChatGPT-Account-Id", credential.accountId);
   return headers;
 }

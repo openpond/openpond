@@ -89,6 +89,12 @@ describe("OpenPond action catalog context", () => {
     );
 
     expect(prompt).toContain("Available fallback actions: resource_search, resource_read.");
+    expect(prompt).toContain(
+      "Profile Agent actions may also be available as direct native function tools.",
+    );
+    expect(prompt).toContain(
+      "When one directly matches the request, call it instead of searching the catalog.",
+    );
     expect(prompt).toContain("- Use openpond_action_run only with an actionId from this catalog");
     expect(prompt).toContain("- Use available native resource tools for inspection");
     expect(prompt).not.toContain("Available actions: create_sandbox_template_scaffold");
@@ -165,8 +171,9 @@ describe("OpenPond action catalog context", () => {
 
     expect(prompt).toContain("OpenPond capabilities:");
     expect(prompt).toContain("- workspace_context: use resource_search and resource_read");
-    expect(prompt).toContain("- create_pipeline: create or edit source-backed agents and workflows");
-    expect(prompt).toContain("- profile_skill_goal: create or edit profile-backed skill packages");
+    expect(prompt).toContain(
+      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn.",
+    );
     expect(prompt).toContain("- goal_control: start, restart, pause, resume, or stop OpenPond goals");
     expect(prompt).toContain("- Capability names are not slash commands.");
     expect(prompt.indexOf("OpenPond capabilities:")).toBeLessThan(prompt.indexOf("OpenPond profile skills:"));
@@ -175,7 +182,7 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).not.toContain("Identify user-facing changes first");
   });
 
-  test("scopes Hybrid project edits to the hosted sandbox without removing Create Pipeline", async () => {
+  test("scopes Hybrid project edits to the hosted sandbox without adding an authoring mode", async () => {
     const helpers = createHostedTurnHelpers({
       appendRuntimeEvent: async (_event: RuntimeEvent) => {},
     });
@@ -211,11 +218,10 @@ describe("OpenPond action catalog context", () => {
       "Keep the user's local checkout unchanged unless the user explicitly asks to preserve, promote, apply, or export sandbox changes.",
     );
     expect(prompt).toContain(
-      "Create Pipeline remains appropriate only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+      "Agent and Skill authoring remain normal skill-backed turns; do not start Create Pipeline or Goal mode for them.",
     );
-    expect(prompt).toContain("- create_pipeline: create or edit source-backed agents and workflows");
     expect(prompt).toContain(
-      "Use create_pipeline only when the user explicitly asks to create or edit an OpenPond agent, workflow, app behavior, or Create Pipeline plan.",
+      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn.",
     );
     expect(prompt).toContain("sandbox_read_file");
     expect(prompt).toContain("sandbox_edit_file");

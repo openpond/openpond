@@ -19,8 +19,10 @@ import {
 import { event, textFromUnknown } from "../../utils.js";
 
 export function createProfileSkillCatalogRuntime(deps: {
-  loadProfileState?: (() => Promise<OpenPondProfileState>) | null;
+  loadProfileState?: ((session: Session) => Promise<OpenPondProfileState>) | null;
   readProfileSkill?: ((input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>) | null;
+  loadBuiltInSkills?: (() => Promise<OpenPondProfileSkill[]>) | null;
+  readBuiltInSkill?: ((name: string) => Promise<ProfileSkillReadResult>) | null;
   loadExtensionCatalog?: (() => Promise<OpenPondExtensionCatalog>) | null;
   readExtensionSkill?: ((name: string) => Promise<ProfileSkillReadResult>) | null;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
@@ -42,6 +44,8 @@ export function createProfileSkillCatalogRuntime(deps: {
 }) {
   const loadOpenPondProfileState = deps.loadProfileState;
   const readOpenPondProfileSkill = deps.readProfileSkill;
+  const loadBuiltInSkills = deps.loadBuiltInSkills;
+  const readBuiltInSkill = deps.readBuiltInSkill;
   const loadOpenPondExtensionCatalog = deps.loadExtensionCatalog;
   const readOpenPondExtensionSkill = deps.readExtensionSkill;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
@@ -64,17 +68,27 @@ export function createProfileSkillCatalogRuntime(deps: {
   async function loadProfileSkillRuntime(input: {
     session: Session;
     turnId: string;
+    profile?: OpenPondProfileState | null;
   }): Promise<ProfileSkillRuntime> {
-    const [profileResult, extensionResult] = await Promise.allSettled([
-      loadOpenPondProfileState && readOpenPondProfileSkill
-        ? loadOpenPondProfileState()
+    const [builtInResult, profileResult, extensionResult] = await Promise.allSettled([
+      loadBuiltInSkills && readBuiltInSkill
+        ? loadBuiltInSkills()
+        : Promise.resolve([]),
+      input.profile
+        ? Promise.resolve(input.profile)
+        : loadOpenPondProfileState && readOpenPondProfileSkill
+          ? loadOpenPondProfileState(input.session)
         : Promise.resolve(null),
       loadOpenPondExtensionCatalog && readOpenPondExtensionSkill
         ? loadOpenPondExtensionCatalog()
         : Promise.resolve(null),
     ]);
+    const builtInSkills = builtInResult.status === "fulfilled" ? builtInResult.value : [];
     const profile = profileResult.status === "fulfilled" ? profileResult.value : null;
     const extensionCatalog = extensionResult.status === "fulfilled" ? extensionResult.value : null;
+    if (builtInResult.status === "rejected") {
+      await appendSkillCatalogDiagnostic(input, "built-in", builtInResult.reason);
+    }
     if (profileResult.status === "rejected") {
       await appendSkillCatalogDiagnostic(input, "profile", profileResult.reason);
     } else if (profile?.error) {
@@ -88,9 +102,16 @@ export function createProfileSkillCatalogRuntime(deps: {
 
     const skills: OpenPondProfileSkill[] = [];
     const readers = new Map<string, () => Promise<ProfileSkillReadResult>>();
+    if (readBuiltInSkill) {
+      for (const skill of builtInSkills) {
+        if (!skill.enabled || skill.validationStatus !== "valid") continue;
+        skills.push(skill);
+        readers.set(skill.name, () => readBuiltInSkill(skill.name));
+      }
+    }
     if (profile?.sourcePath && !profile.error && readOpenPondProfileSkill) {
       for (const skill of profile.skills) {
-        if (!skill.enabled || skill.validationStatus !== "valid") continue;
+        if (!skill.enabled || skill.validationStatus !== "valid" || readers.has(skill.name)) continue;
         skills.push(skill);
         readers.set(skill.name, () => readOpenPondProfileSkill({
           profileSourcePath: profile.sourcePath!,
@@ -136,7 +157,7 @@ export function createProfileSkillCatalogRuntime(deps: {
 
   async function appendSkillCatalogDiagnostic(
     input: { session: Session; turnId: string },
-    kind: "profile" | "extension",
+    kind: "built-in" | "profile" | "extension",
     error: unknown,
   ): Promise<void> {
     await appendRuntimeEvent(
@@ -156,12 +177,26 @@ export function createProfileSkillCatalogRuntime(deps: {
     session: Session;
     turnId: string;
     prompt: string;
+    selectedSkillNames?: readonly string[];
     runtime: ProfileSkillRuntime;
     signal: AbortSignal;
   }): Promise<HostedProfileSkillBody[]> {
-    if (!input.runtime.readSkill || input.runtime.skills.length === 0) return [];
+    const requiredNames = input.selectedSkillNames ?? [];
+    if (!input.runtime.readSkill || input.runtime.skills.length === 0) {
+      if (requiredNames.length > 0) {
+        throw new Error(`Required bundled authoring skill is unavailable: ${requiredNames.join(", ")}`);
+      }
+      return [];
+    }
     const skillByName = new Map(input.runtime.skills.map((skill) => [skill.name, skill]));
-    const names = explicitProfileSkillNames(input.prompt).filter((name) => skillByName.has(name));
+    const missingRequired = requiredNames.filter((name) => !skillByName.has(name));
+    if (missingRequired.length > 0) {
+      throw new Error(`Required bundled authoring skill is unavailable: ${missingRequired.join(", ")}`);
+    }
+    const names = [
+      ...(input.selectedSkillNames ?? []),
+      ...explicitProfileSkillNames(input.prompt),
+    ].filter((name, index, all) => skillByName.has(name) && all.indexOf(name) === index);
     const loaded: HostedProfileSkillBody[] = [];
     for (const name of names.slice(0, 5)) {
       throwIfInterrupted(input.signal);
@@ -197,6 +232,7 @@ export function createProfileSkillCatalogRuntime(deps: {
           skillName: name,
           source: "server",
         });
+        if (requiredNames.includes(name)) throw error;
       }
     }
     return loaded;

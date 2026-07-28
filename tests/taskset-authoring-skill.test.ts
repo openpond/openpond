@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   loadTasksetAuthoringSkillBundle,
+  loadTasksetAuthoringProfileSkill,
+  readTasksetAuthoringProfileSkill,
   resolveTasksetAuthoringSkillRoot,
 } from "../apps/server/src/training/task-authoring-skill";
 
@@ -12,11 +14,12 @@ describe("bundled Taskset Authoring skill", () => {
     const root = "apps/cli/skills/openpond-taskset-authoring";
     const skill = await readFile(`${root}/SKILL.md`, "utf8");
     const refs = await readdir(`${root}/references`);
-    expect(skill).toContain("Create with defaults");
-    expect(skill).toContain("positive/negative/boundary/adversarial");
-    expect(skill).toContain("Keep the user-facing name and objective natural");
-    expect(skill).toContain("Treat synthetic smoke fixtures as diagnostics");
-    expect(skill).toContain("Never put source IDs, hashes, cluster keys");
+    expect(skill).toContain("The user should only");
+    expect(skill).toContain("one plain-language question at a time");
+    expect(skill).toContain("Do not ask the user to provide internal names");
+    expect(skill).toContain("The dataset is the task collection or source data inside that package");
+    expect(skill).toContain("submitting the first rollout or");
+    expect(skill).toContain("Treat fixed synthetic smoke fixtures as diagnostics");
     expect(refs.toSorted()).toEqual(["graders-and-rewards.md", "method-selection.md", "privacy-and-provenance.md", "task-design.md"]);
     expect((await readdir("apps/cli/skills")).filter((name) => name.includes("taskset") || name.includes("task-miner"))).toEqual(["openpond-taskset-authoring"]);
   });
@@ -27,6 +30,21 @@ describe("bundled Taskset Authoring skill", () => {
       expect(bundle).toContain(`Bundled reference: ${name}`);
     }
     expect(bundle).toContain("Prefer deterministic graders");
+  });
+
+  test("publishes Taskset Authoring as a valid built-in Chat skill", async () => {
+    const metadata = await loadTasksetAuthoringProfileSkill();
+    const loaded = await readTasksetAuthoringProfileSkill();
+    expect(metadata).toMatchObject({
+      name: "openpond-taskset-authoring",
+      enabled: true,
+      validationStatus: "valid",
+    });
+    expect(metadata.description).toContain("OpenPond Taskset");
+    expect(metadata.sourceHash).toHaveLength(64);
+    expect(loaded.body).toContain("installed Dataset Builder actions");
+    expect(loaded.body).toContain("Do not recite those schemas");
+    expect(loaded.resourceFiles).toContain("references/method-selection.md");
   });
 
   test("loads the skill from an installed CLI distribution", async () => {

@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
+  ChatModelRef,
   CreateImproveRun,
   Taskset,
   TrainingStateResponse,
@@ -15,9 +16,8 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 
 const PAGE_SIZE = 10;
-type DatasetDetailTab = "build" | "overview" | "data" | "evals" | "configuration";
+type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
 const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
-  { id: "build", label: "Build" },
   { id: "overview", label: "Overview" },
   { id: "data", label: "Data" },
   { id: "evals", label: "Evals" },
@@ -29,9 +29,9 @@ export function LabDatasetsPage({
   runs,
   selectedId,
   onSelectedIdChange,
-  building = false,
-  buildContent = null,
-  onBuild,
+  defaultModel,
+  onImproveInChat,
+  onTrainModel,
   onOpenFiles,
   training,
   onToast,
@@ -40,20 +40,22 @@ export function LabDatasetsPage({
   runs: CreateImproveRun[];
   selectedId: string | null;
   onSelectedIdChange: (tasksetId: string | null) => void;
-  building?: boolean;
-  buildContent?: ReactNode;
-  onBuild: (tasksetId: string) => void;
+  defaultModel: ChatModelRef;
+  onImproveInChat: (taskset: Taskset) => void;
+  onTrainModel: (tasksetId: string) => void;
   onOpenFiles: (tasksetId: string) => void;
   training: ReturnType<typeof useTraining>;
   onToast: ShowAppToast;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [detailTab, setDetailTab] = useState<DatasetDetailTab>(
-    () => building ? "build" : "overview",
-  );
+  const [detailTab, setDetailTab] = useState<DatasetDetailTab>("overview");
   const tasksets = state?.tasksets ?? [];
-  const selected = tasksets.find((taskset) => taskset.id === selectedId) ?? null;
+  const selected =
+    [...tasksets, ...(state?.modelTasksets ?? [])].find(
+      (taskset) => taskset.id === selectedId,
+    ) ?? null;
+  const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
   const selectedArtifact = selected?.datasetArtifact
     ? state?.datasetArtifacts.find(
         (artifact) =>
@@ -86,72 +88,92 @@ export function LabDatasetsPage({
   }, [runs, state]);
 
   useEffect(() => {
-    setDetailTab(building ? "build" : "overview");
-  }, [building, selectedId]);
+    setDetailTab("overview");
+  }, [selectedId]);
 
-  if (selected || building) {
-    const creating = !selected;
+  if (selected) {
     return (
       <div className="labs-flat-body labs-datasets-page">
         <div className="labs-dataset-detail-heading">
-          {!building ? (
-            <button
-              aria-label="Back to Datasets"
-              className="labs-back-button"
-              type="button"
-              onClick={() => onSelectedIdChange(null)}
-            >
-              <ArrowLeft size={15} />
-            </button>
-          ) : <span aria-hidden="true" className="labs-dataset-heading-spacer" />}
+          <button
+            aria-label="Back to Tasksets"
+            className="labs-back-button"
+            type="button"
+            onClick={() => onSelectedIdChange(null)}
+          >
+            <ArrowLeft size={15} />
+          </button>
           <div>
-            <h1>{selected?.name ?? "New Dataset"}</h1>
-            <p>{selected?.objective ?? "Define the Dataset, review its tasks and Evals, then save an immutable first version."}</p>
+            <h1>{selected.name}</h1>
+            <p>{selected.objective}</p>
           </div>
-          <LabStatusBadge
-            label={selected ? datasetStatus(selected) : "Draft"}
-            value={selected?.status ?? "planning"}
-          />
+          <div className="labs-dataset-detail-actions">
+            {readOnly ? (
+              <LabStatusBadge
+                label={`Profile: ${selected.profileId}`}
+                value="available"
+              />
+            ) : null}
+            <button
+              className="training-button secondary"
+              disabled={readOnly}
+              title={
+                readOnly
+                  ? "Switch to this Taskset's Profile to modify it."
+                  : "Improve this Taskset in Chat."
+              }
+              type="button"
+              onClick={() => onImproveInChat(selected)}
+            >
+              Improve in Chat
+            </button>
+            <button
+              className="training-button"
+              disabled={readOnly || !selected.readiness?.ready}
+              title={readOnly
+                ? "Switch to this Taskset's Profile before launching a Model run."
+                : selected.readiness?.ready
+                  ? "Create a Model run from this ready Taskset."
+                  : selected.readiness?.blockers[0]?.message ?? "Run Taskset checks before training."}
+              type="button"
+              onClick={() => onTrainModel(selected.id)}
+            >
+              Train Model
+            </button>
+            <LabStatusBadge
+              label={datasetStatus(selected)}
+              value={selected.status}
+            />
+          </div>
         </div>
         <div
           className="training-detail-tabs"
           role="tablist"
-          aria-label="Dataset detail"
+          aria-label="Taskset detail"
         >
           {DATASET_DETAIL_TABS.map((tab) => (
             <button
               aria-selected={detailTab === tab.id}
               className={detailTab === tab.id ? "active" : undefined}
-              disabled={creating && tab.id !== "build"}
               key={tab.id}
               role="tab"
               type="button"
-              onClick={() => {
-                setDetailTab(tab.id);
-                if (tab.id === "build" && selected && !building) {
-                  onBuild(selected.id);
-                }
-              }}
+              onClick={() => setDetailTab(tab.id)}
             >
               {tab.label}
             </button>
           ))}
         </div>
-        {buildContent ? (
-          <div hidden={detailTab !== "build"}>{buildContent}</div>
-        ) : detailTab === "build" ? (
-          <div className="training-empty">Preparing the Dataset builder…</div>
-        ) : null}
-        {selected && detailTab !== "build" ? (
-          <LabModelDataset
-            artifact={selectedArtifact}
-            tab={detailTab}
-            taskset={selected}
-            onOpenFiles={() => onOpenFiles(selected.id)}
-            training={training}
-          />
-        ) : null}
-        {selected && detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
+        <LabModelDataset
+          artifact={selectedArtifact}
+          defaultModel={defaultModel}
+          tab={detailTab}
+          taskset={selected}
+          onOpenFiles={() => onOpenFiles(selected.id)}
+          onToast={onToast}
+          training={training}
+        />
+        {detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
           <LabExpertBootstrap
             busyAction={training.busyAction}
             taskset={selected}
@@ -172,8 +194,8 @@ export function LabDatasetsPage({
         <label className="labs-search">
           <Search size={14} />
           <input
-            aria-label="Search Datasets"
-            placeholder="Search Datasets"
+            aria-label="Search Tasksets"
+            placeholder="Search Tasksets"
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -186,7 +208,7 @@ export function LabDatasetsPage({
         <table className="training-data-table labs-datasets-table">
           <thead>
             <tr>
-              <th>Dataset</th>
+              <th>Taskset</th>
               <th>Training</th>
               <th>Validation</th>
               <th>Frozen Eval</th>
@@ -222,7 +244,7 @@ export function LabDatasetsPage({
           </tbody>
         </table>
       </div>
-      {!visible.length ? <div className="labs-table-empty">No Datasets match this view.</div> : null}
+      {!visible.length ? <div className="labs-table-empty">No Tasksets match this view.</div> : null}
       <DatasetPagination
         page={page}
         total={filtered.length}
@@ -272,7 +294,7 @@ function DatasetPagination({
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (pages === 1) return null;
   return (
-    <nav className="labs-pagination" aria-label="Dataset pages">
+    <nav className="labs-pagination" aria-label="Taskset pages">
       <button type="button" disabled={page <= 1} onClick={() => onChange(page - 1)}>Previous</button>
       <span>{page} of {pages}</span>
       <button type="button" disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</button>

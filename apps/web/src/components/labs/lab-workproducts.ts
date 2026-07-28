@@ -1,13 +1,19 @@
 import type {
   CreateImproveRun,
-  CrossSystemFrontierBaselineRun,
   OpenPondProfileState,
-  Taskset,
+  TrainingJob,
   TrainingStateResponse,
 } from "@openpond/contracts";
-import { conciseWorkproductName } from "@openpond/contracts";
+import {
+  conciseWorkproductName,
+  managedAdapterCustomerBindingAllowed,
+  resolveModelBindingPromotionGate,
+} from "@openpond/contracts";
 
-import { trainingModelRows } from "../training/training-model-data";
+import {
+  statusLabel,
+  trainingModelRows,
+} from "../training/training-model-data";
 
 export type LabWorkproductKind = "agent" | "skill" | "extension" | "model";
 
@@ -15,6 +21,7 @@ export type LabWorkproductSummary = {
   key: string;
   kind: LabWorkproductKind;
   id: string;
+  ownerProfileId: string | null;
   name: string;
   description: string;
   status: string;
@@ -24,7 +31,6 @@ export type LabWorkproductSummary = {
   runIds: string[];
   conversationId: string | null;
   tasksetId: string | null;
-  frontierBaselineRunId?: string | null;
   trainingRunCount: number;
   evaluationStatus: "not_run" | "passed" | "failed";
   useActionId: string | null;
@@ -51,24 +57,52 @@ export function labWorkproductProjection(input: {
   runs: CreateImproveRun[];
 }): LabWorkproductSummary[] {
   const byKey = new Map<string, LabWorkproductSummary>();
-  const modelIdentityByRunId = legacyModelIdentityMap(
-    input.runs,
-    input.training,
+  const stableModelProjectIds = new Set(
+    (input.training?.modelProjects ?? []).map((project) => project.id)
   );
+  const jobIdsByModelId = new Map<string, Set<string>>();
+  const planModelById = new Map(
+    (input.training?.plans ?? []).map(
+      (plan) => [plan.id, plan.modelId] as const
+    )
+  );
+  for (const job of input.training?.jobs ?? []) {
+    const modelId = planModelById.get(job.planId);
+    if (!modelId) continue;
+    const jobIds = jobIdsByModelId.get(modelId) ?? new Set<string>();
+    jobIds.add(job.id);
+    jobIdsByModelId.set(modelId, jobIds);
+  }
+  for (const run of input.runs) {
+    if (
+      run.target.kind !== "model" ||
+      !run.target.id ||
+      !run.target.trainingPlanId
+    )
+      continue;
+    const jobIds = jobIdsByModelId.get(run.target.id) ?? new Set<string>();
+    for (const job of input.training?.jobs ?? []) {
+      if (job.planId === run.target.trainingPlanId) jobIds.add(job.id);
+    }
+    jobIdsByModelId.set(run.target.id, jobIds);
+  }
   const timestamp = new Date(0).toISOString();
 
   for (const agent of input.profile?.agents ?? []) {
     const key = workproductKey("agent", agent.id);
-    const defaultChatAction = input.profile?.actionCatalog.find((action) =>
-      action.agentId === agent.id
-      && action.sourceActionId === "chat"
-      && action.visibility !== "internal"
-      && action.visibility !== "debug",
-    ) ?? null;
+    const defaultChatAction =
+      input.profile?.actionCatalog.find(
+        (action) =>
+          action.agentId === agent.id &&
+          action.sourceActionId === "chat" &&
+          action.visibility !== "internal" &&
+          action.visibility !== "debug"
+      ) ?? null;
     byKey.set(key, {
       key,
       kind: "agent",
       id: agent.id,
+      ownerProfileId: input.profile?.activeProfile ?? null,
       name: agent.name || agent.id,
       description: agent.enabled
         ? "Enabled Profile Agent"
@@ -80,7 +114,6 @@ export function labWorkproductProjection(input: {
       runIds: [],
       conversationId: null,
       tasksetId: null,
-      frontierBaselineRunId: null,
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: defaultChatAction?.id ?? null,
@@ -93,6 +126,7 @@ export function labWorkproductProjection(input: {
       key,
       kind: "skill",
       id: skill.name,
+      ownerProfileId: input.profile?.activeProfile ?? null,
       name: skill.name,
       description: skill.description,
       status:
@@ -103,7 +137,6 @@ export function labWorkproductProjection(input: {
       runIds: [],
       conversationId: null,
       tasksetId: null,
-      frontierBaselineRunId: null,
       trainingRunCount: 0,
       evaluationStatus: "not_run",
       useActionId: null,
@@ -116,11 +149,73 @@ export function labWorkproductProjection(input: {
     });
   }
 
+  for (const project of input.training?.modelProjects ?? []) {
+    const drafts = (input.training?.modelRunDrafts ?? []).filter(
+      (draft) =>
+        draft.modelId === project.id &&
+        (draft.status === "draft" || draft.status === "ready_to_run")
+    );
+    const latestDraft = drafts[0] ?? null;
+    const lifecycleRuns = (input.training?.modelRuns ?? [])
+      .filter((run) => run.modelId === project.id)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const latestLifecycleRun = lifecycleRuns[0] ?? null;
+    const baseVersion =
+      (input.training?.modelVersions ?? []).find(
+        (version) =>
+          version.modelId === project.id &&
+          version.kind === "base_reference" &&
+          version.version === 0
+      ) ?? null;
+    const key = workproductKey("model", project.id);
+    byKey.set(key, {
+      key,
+      kind: "model",
+      id: project.id,
+      ownerProfileId: project.profileId,
+      name: conciseWorkproductName(project.name, "Untitled Model"),
+      description:
+        project.objective ??
+        "Configure this Model and run its first training job.",
+      status: latestLifecycleRun
+        ? lifecycleModelRunStatus(latestLifecycleRun.status)
+        : latestDraft?.status === "ready_to_run"
+        ? "Ready to run"
+        : latestDraft
+        ? "Draft"
+        : baseVersion
+        ? "Base ready"
+        : "Ready",
+      updatedAt:
+        latestLifecycleRun?.updatedAt ??
+        latestDraft?.updatedAt ??
+        project.updatedAt,
+      path: latestLifecycleRun
+        ? `tasksets/${latestLifecycleRun.taskset.id}`
+        : latestDraft?.tasksetRef
+        ? `tasksets/${latestDraft.tasksetRef.id}`
+        : baseVersion
+        ? `tasksets/${baseVersion.taskset.id}`
+        : null,
+      enabled: baseVersion ? false : null,
+      runIds: [],
+      conversationId: null,
+      tasksetId:
+        latestLifecycleRun?.taskset.id ??
+        latestDraft?.tasksetRef?.id ??
+        baseVersion?.taskset.id ??
+        null,
+      trainingRunCount: drafts.length + lifecycleRuns.length,
+      evaluationStatus: "not_run",
+      useActionId: null,
+    });
+  }
+
   for (const row of trainingModelRows(input.training)) {
     if (
-      row.taskset.metadata.resourceIntent === "dataset"
-      && !row.latestPlan
-      && !row.localModel
+      row.taskset.metadata.resourceIntent === "dataset" &&
+      !row.latestPlan &&
+      !row.localModel
     ) {
       continue;
     }
@@ -129,70 +224,97 @@ export function labWorkproductProjection(input: {
         .filter(
           (run) =>
             run.target.kind === "model" &&
-            run.tasksetRef?.id === row.taskset.id,
+            ((row.latestPlan &&
+              run.target.trainingPlanId === row.latestPlan.id) ||
+              (!row.latestPlan &&
+                row.localModel &&
+                run.target.trainingJobId === row.localModel.jobId))
         )
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
-        ?? null;
+        .sort((left, right) =>
+          right.updatedAt.localeCompare(left.updatedAt)
+        )[0] ?? null;
     const modelId =
-      modelRun?.target.kind === "model"
-        ? modelIdentityByRunId.get(modelRun.id) ??
-          modelRun.target.id ??
-          modelRun.id
-        : row.latestPlan?.modelId ?? row.taskset.id;
+      modelRun?.target.kind === "model" && modelRun.target.id
+        ? modelRun.target.id
+        : row.latestPlan?.modelId ?? row.localModel?.modelId ?? null;
+    if (!modelId) continue;
     const key = workproductKey("model", modelId);
     const existing = byKey.get(key);
+    const linkedPlanId =
+      modelRun?.target.kind === "model" ? modelRun.target.trainingPlanId : null;
+    const modelPlanIds = new Set(
+      (input.training?.plans ?? [])
+        .filter(
+          (plan) =>
+            plan.modelId === modelId ||
+            (linkedPlanId != null && plan.id === linkedPlanId)
+        )
+        .map((plan) => plan.id)
+    );
+    const modelJobs = (input.training?.jobs ?? [])
+      .filter((job) => modelPlanIds.has(job.planId))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    const latestModelJob = modelJobs[0] ?? null;
+    const latestModelLineage = latestModelJob
+      ? input.training?.models.find(
+          (model) => model.jobId === latestModelJob.id
+        ) ?? null
+      : null;
     byKey.set(key, {
       key,
       kind: "model",
       id: modelId,
+      ownerProfileId: existing?.ownerProfileId ?? row.taskset.profileId,
       name: conciseWorkproductName(
-        modelRun?.target.displayName ?? row.name,
-        "New model",
+        existing?.name ?? modelRun?.target.displayName ?? row.name,
+        "New model"
       ),
-      description: row.taskset.objective,
-      status: row.status,
-      updatedAt: row.updatedAt,
+      description: existing?.description ?? row.taskset.objective,
+      status: latestModelJob ? statusLabel(latestModelJob.status) : row.status,
+      updatedAt: latestModelJob?.updatedAt ?? row.updatedAt,
       path: `tasksets/${row.taskset.id}`,
       enabled: row.localModel
-        ? row.localModel.status === "imported" && row.localModel.promotable
+        ? row.localModel.status === "imported" &&
+          Boolean(resolveModelBindingPromotionGate(row.localModel))
         : null,
       runIds: modelRun
         ? [...new Set([...(existing?.runIds ?? []), modelRun.id])]
         : existing?.runIds ?? [],
       conversationId: null,
       tasksetId: row.taskset.id,
-      frontierBaselineRunId: null,
-      trainingRunCount: Math.max(existing?.trainingRunCount ?? 0, row.runCount),
-      evaluationStatus:
-        row.latestJob?.metadata.frozenEvaluationComplete === true
-          ? row.latestJob.metadata.frozenEvaluationThresholdPassed === true
-            ? "passed"
-            : "failed"
-          : "not_run",
+      trainingRunCount: Math.max(
+        existing?.trainingRunCount ?? 0,
+        modelJobs.length
+      ),
+      evaluationStatus: modelJobEvaluationStatus(
+        latestModelJob,
+        latestModelLineage
+      ),
       useActionId: null,
     });
   }
 
   for (const run of input.runs) {
+    if (run.target.kind === "agent") continue;
     if (run.target.kind === "configuration" || run.target.kind === "unselected")
       continue;
     if (
-      run.target.kind === "model"
-      && !run.tasksetRef
-      && ["cancelled", "failed", "rejected"].includes(run.state)
+      run.target.kind === "model" &&
+      !run.tasksetRef &&
+      ["cancelled", "failed", "rejected"].includes(run.state)
     ) {
       continue;
     }
+    if (run.target.kind === "model" && !run.target.id) continue;
     const kind = run.target.kind;
     const id =
-      run.target.kind === "model"
-        ? modelIdentityByRunId.get(run.id) ?? run.target.id ?? run.id
-        : run.target.id ?? run.id;
+      run.target.kind === "model" ? run.target.id! : run.target.id ?? run.id;
     const key = workproductKey(kind, id);
     const existing = byKey.get(key);
-    const candidateName = kind === "agent"
-      ? agentWorkproductName(run, existing?.name ?? null)
-      : run.target.displayName ?? existing?.name ?? draftName(run);
+    const candidateName =
+      kind === "model" && stableModelProjectIds.has(id)
+        ? existing?.name ?? run.target.displayName ?? draftName(run)
+        : run.target.displayName ?? existing?.name ?? draftName(run);
     const name =
       kind === "model"
         ? conciseWorkproductName(candidateName, "New model")
@@ -201,6 +323,7 @@ export function labWorkproductProjection(input: {
       key,
       kind,
       id,
+      ownerProfileId: existing?.ownerProfileId ?? run.scope.profileId,
       name,
       description: existing?.description ?? run.objective,
       status: runStatusLabel(run),
@@ -214,42 +337,16 @@ export function labWorkproductProjection(input: {
         run.target.kind === "model"
           ? run.tasksetRef?.id ?? existing?.tasksetId ?? null
           : null,
-      frontierBaselineRunId: existing?.frontierBaselineRunId ?? null,
-      trainingRunCount: existing?.trainingRunCount ?? 0,
+      trainingRunCount:
+        kind === "model"
+          ? Math.max(
+              existing?.trainingRunCount ?? 0,
+              jobIdsByModelId.get(id)?.size ?? 0
+            )
+          : existing?.trainingRunCount ?? 0,
       evaluationStatus:
         runEvaluationStatus(run) ?? existing?.evaluationStatus ?? "not_run",
       useActionId: existing?.useActionId ?? null,
-    });
-  }
-
-  for (const baselineRun of input.training?.frontierBaselineRuns ?? []) {
-    const linkedRunId = linkedModelRunId(baselineRun, input.runs);
-    if (!linkedRunId) continue;
-    const entry = [...byKey.values()].find((workproduct) =>
-      workproduct.runIds.includes(linkedRunId)
-    );
-    if (!entry) continue;
-    const currentTaskset = entry.tasksetId
-      ? input.training?.tasksets.find((taskset) => taskset.id === entry.tasksetId)
-        ?? null
-      : null;
-    if (
-      currentTaskset
-      && !frontierBaselineMatchesCurrentTaskset(baselineRun, currentTaskset)
-    ) {
-      continue;
-    }
-    const priorBaseline = entry.frontierBaselineRunId
-      ? input.training?.frontierBaselineRuns.find(
-          (run) => run.id === entry.frontierBaselineRunId
-        ) ?? null
-      : null;
-    if (priorBaseline && priorBaseline.updatedAt >= baselineRun.updatedAt)
-      continue;
-    byKey.set(entry.key, {
-      ...entry,
-      updatedAt: newer(entry.updatedAt, baselineRun.updatedAt),
-      frontierBaselineRunId: baselineRun.id,
     });
   }
 
@@ -265,116 +362,15 @@ export function labWorkproductProjection(input: {
   });
 }
 
-function legacyModelIdentityMap(
-  runs: CreateImproveRun[],
-  training: TrainingStateResponse | null,
-): Map<string, string> {
-  const result = new Map<string, string>();
-  const plans = training?.plans ?? [];
-  const jobs = training?.jobs ?? [];
-  const lineages = training?.models ?? [];
-  const planById = new Map(plans.map((plan) => [plan.id, plan] as const));
-  const jobById = new Map(jobs.map((job) => [job.id, job] as const));
-  const runsByTaskset = new Map<string, CreateImproveRun[]>();
-  for (const run of runs) {
-    if (run.target.kind !== "model" || !run.tasksetRef) continue;
-    const grouped = runsByTaskset.get(run.tasksetRef.id) ?? [];
-    grouped.push(run);
-    runsByTaskset.set(run.tasksetRef.id, grouped);
-  }
-  for (const [tasksetId, grouped] of runsByTaskset) {
-    const explicitIds = new Set<string>();
-    for (const plan of plans) {
-      if (plan.tasksetId === tasksetId && plan.modelId) {
-        explicitIds.add(plan.modelId);
-      }
-    }
-    for (const lineage of lineages) {
-      if (lineage.tasksetId === tasksetId && lineage.modelId) {
-        explicitIds.add(lineage.modelId);
-      }
-    }
-    if (explicitIds.size > 1) continue;
-    const executed = grouped.filter((run) => {
-      if (run.target.kind !== "model") return false;
-      if (
-        run.target.trainingPlanId ||
-        run.target.trainingJobId ||
-        run.target.artifactId
-      ) {
-        return true;
-      }
-      return plans.some(
-        (plan) =>
-          plan.tasksetId === tasksetId &&
-          plan.modelId === (run.target.id ?? run.id),
-      );
-    });
-    if (!executed.length) continue;
-    const explicitId = [...explicitIds][0] ?? null;
-    const canonical =
-      explicitId ??
-      [...executed]
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]!
-        .target.id ??
-      executed[0]!.id;
-    for (const run of executed) {
-      if (run.target.kind !== "model") continue;
-      const linkedPlan =
-        (run.target.trainingPlanId
-          ? planById.get(run.target.trainingPlanId)
-          : null) ??
-        (run.target.trainingJobId
-          ? planById.get(jobById.get(run.target.trainingJobId)?.planId ?? "")
-          : null);
-      if (
-        linkedPlan?.modelId &&
-        linkedPlan.modelId !== canonical
-      ) {
-        continue;
-      }
-      result.set(run.id, canonical);
-    }
-  }
-  return result;
-}
 
-export function frontierBaselineMatchesCurrentTaskset(
-  run: CrossSystemFrontierBaselineRun,
-  taskset: Taskset,
-): boolean {
-  if (["queued", "running", "cancelling"].includes(run.status)) return true;
-  const tasksetSourceIds = new Set(
-    taskset.sourceRefs.map((source) => source.id),
-  );
-  return (
-    run.sourceIds.length === tasksetSourceIds.size
-    && run.sourceIds.every((sourceId) => tasksetSourceIds.has(sourceId))
-  );
-}
-
-function linkedModelRunId(
-  baselineRun: CrossSystemFrontierBaselineRun,
-  runs: CreateImproveRun[]
-): string | null {
-  if (
-    baselineRun.createImproveRunId &&
-    runs.some(
-      (run) =>
-        run.id === baselineRun.createImproveRunId && run.target.kind === "model"
-    )
-  ) {
-    return baselineRun.createImproveRunId;
-  }
-  if (baselineRun.sourceIds.length === 0) return null;
-  const sourceIds = new Set(baselineRun.sourceIds);
-  return (
-    runs.find(
-      (run) =>
-        run.target.kind === "model" &&
-        [...sourceIds].every((sourceId) => run.sourceRefs.includes(sourceId))
-    )?.id ?? null
-  );
+function lifecycleModelRunStatus(
+  status: "prepared" | "running" | "succeeded" | "failed" | "cancelled"
+): string {
+  if (status === "prepared") return "Prepared";
+  if (status === "running") return "Running";
+  if (status === "succeeded") return "Rollout complete";
+  if (status === "failed") return "Failed";
+  return "Cancelled";
 }
 
 export function workproductKey(kind: LabWorkproductKind, id: string): string {
@@ -413,38 +409,6 @@ function draftName(run: CreateImproveRun): string {
   return `${prefix} ${run.target.kind}`;
 }
 
-function agentWorkproductName(
-  run: CreateImproveRun,
-  profileName: string | null,
-): string {
-  const targetName = meaningfulAgentName(run.target.displayName);
-  if (targetName) return targetName;
-  const persistedName = meaningfulAgentName(profileName);
-  if (persistedName) return persistedName;
-  const purposeClause = run.objective
-    .split(/[.!?\n]|[,;](?=\s)/, 1)[0]
-    ?.replace(/^(?:please\s+)?(?:create|make|build|improve)\s+(?:an?\s+)?agent\s+(?:that\s+|to\s+)?/i, "")
-    .trim();
-  const purposeTitle = conciseWorkproductName(purposeClause, "New agent");
-  return `${purposeTitle} · ${draftRunLabel(run.id)}`;
-}
-
-function draftRunLabel(runId: string): string {
-  const segments = runId.split(/[^a-z0-9]+/i).filter(Boolean);
-  const candidate = segments.at(-1) ?? runId;
-  return candidate.slice(-6).toUpperCase().padStart(4, "0");
-}
-
-function meaningfulAgentName(value: string | null | undefined): string | null {
-  const name = value?.trim() ?? "";
-  if (!name) return null;
-  const normalized = name.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  if (/^(?:create|creating|improve|improving|new) (?:an )?agent$/.test(normalized)) {
-    return null;
-  }
-  return name;
-}
-
 function runStatusLabel(run: CreateImproveRun): string {
   return run.state.replaceAll("_", " ");
 }
@@ -472,6 +436,25 @@ function runEvaluationStatus(
   )
     ? "passed"
     : null;
+}
+
+function modelJobEvaluationStatus(
+  job: TrainingJob | null,
+  lineage: TrainingStateResponse["models"][number] | null
+): LabWorkproductSummary["evaluationStatus"] {
+  if (!job) return "not_run";
+  const complete =
+    Boolean(lineage && resolveModelBindingPromotionGate(lineage)) ||
+    job.metadata.frozenEvaluationComplete === true ||
+    Boolean(lineage?.frozenEvaluationArtifactId) ||
+    Boolean(lineage?.managedServing?.customerBindingAllowed);
+  if (!complete) return "not_run";
+  const passed = Boolean(
+    lineage &&
+      (resolveModelBindingPromotionGate(lineage) ||
+        managedAdapterCustomerBindingAllowed(lineage))
+  );
+  return passed ? "passed" : "failed";
 }
 
 function newer(left: string | undefined, right: string): string {

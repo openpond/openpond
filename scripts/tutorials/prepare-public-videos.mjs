@@ -12,11 +12,13 @@ import {
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repositoryRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const repositoryRoot = resolve(
+  fileURLToPath(new URL("../..", import.meta.url))
+);
 const publicRoot = join(repositoryRoot, "apps/web/public");
 const manifestPath = join(
   repositoryRoot,
-  "apps/web/src/lib/public-video-manifest.json",
+  "apps/web/src/lib/public-video-manifest.json"
 );
 const courseRoot = join(publicRoot, "courses/post-training");
 
@@ -29,7 +31,9 @@ const courseVideos = readdirSync(courseRoot, { withFileTypes: true })
   .toSorted((left, right) => left.localPath.localeCompare(right.localPath));
 
 if (courseVideos.length !== 10) {
-  throw new Error(`Expected 10 post-training lesson videos, found ${courseVideos.length}`);
+  throw new Error(
+    `Expected 10 post-training lesson videos, found ${courseVideos.length}`
+  );
 }
 
 const makeAgentVideos = [
@@ -72,7 +76,7 @@ function durationSeconds(filePath) {
       "default=noprint_wrappers=1:nokey=1",
       filePath,
     ],
-    { encoding: "utf8" },
+    { encoding: "utf8" }
   );
   const duration = Number.parseFloat(output.trim());
   if (!Number.isFinite(duration) || duration <= 0) {
@@ -127,7 +131,9 @@ const manifest = {
   videos,
 };
 const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
-const previous = existsSync(manifestPath) ? readFileSync(manifestPath, "utf8") : "";
+const previous = existsSync(manifestPath)
+  ? readFileSync(manifestPath, "utf8")
+  : "";
 if (previous !== serialized) {
   writeFileSync(manifestPath, serialized, "utf8");
   console.info(`Updated ${manifestPath}`);

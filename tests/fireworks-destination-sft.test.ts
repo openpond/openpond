@@ -68,6 +68,7 @@ describe.sequential("Fireworks SFT destination", () => {
 
       try {
         await expect(service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),
@@ -80,6 +81,7 @@ describe.sequential("Fireworks SFT destination", () => {
         )).toBe(false);
 
         const started = await service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),
@@ -198,6 +200,7 @@ describe.sequential("Fireworks SFT destination", () => {
         });
         const createImprove = createModelTrainingCreateImproveRun({
           profileId: taskset.profileId,
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           displayName: taskset.name,
           trainingPlanId: started.plan.id,
@@ -383,6 +386,7 @@ describe.sequential("Fireworks SFT destination", () => {
 
       try {
         const started = await service.start({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),
@@ -426,6 +430,7 @@ describe.sequential("Fireworks SFT destination", () => {
         });
         const createImprove = createModelTrainingCreateImproveRun({
           profileId: taskset.profileId,
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           displayName: taskset.name,
           trainingPlanId: started.plan.id,
@@ -556,6 +561,7 @@ describe.sequential("Fireworks SFT destination", () => {
 
       try {
         const prepared = await service.prepareStart({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),
@@ -641,6 +647,7 @@ describe.sequential("Fireworks SFT destination", () => {
           },
         });
         const prepared = await service.prepareStart({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe,
@@ -694,6 +701,7 @@ describe.sequential("Fireworks SFT destination", () => {
 
       try {
         const prepared = await service.prepareStart({
+          modelId: "model_fireworks_fixture",
           tasksetId: taskset.id,
           destinationId: "fireworks",
           recipe: fireworksRecipe(),

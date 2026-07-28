@@ -383,6 +383,7 @@ export function useRightChatPanels(input: {
         openPondCommandAccessMode: panelOpenPondCommandAccessMode,
         chatMessages: buildCachedChatMessages(sessionEvents),
         displayPrompt: options.displayPrompt,
+        turnMetadata: options.turnMetadata,
         usageAttribution:
           command?.id === "submit-issue"
             ? {

@@ -14,6 +14,7 @@ import type {
   ProviderModel,
   ProviderSettings,
   Session,
+  SessionUserQuestion,
   SidebarFileBookmark,
   SubagentRoleId,
   SubagentRoleSettings,
@@ -39,7 +40,6 @@ export type AppView =
   | "team"
   | "community"
   | "apps"
-  | "cloud"
   | "get-started"
   | "labs"
   | "settings";
@@ -206,7 +206,7 @@ export type ChatMessage = {
   turnId?: string;
   activities?: ActivityItem[];
   deliverables?: NonNullable<ActivityItem["artifacts"]>;
-  traceState?: "running" | "completed" | "failed" | "interrupted";
+  traceState?: "running" | "settled" | "completed" | "failed" | "interrupted";
   traceStartedAt?: string;
   traceCompletedAt?: string;
   sources?: ChatSource[];
@@ -217,6 +217,7 @@ export type ChatMessage = {
   actionRun?: ActionRunSummary;
   insightsRunPrompt?: InsightsRunPromptSummary;
   createImproveRun?: CreateImproveRun | null;
+  userQuestion?: SessionUserQuestion;
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

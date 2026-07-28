@@ -1,6 +1,17 @@
 import { TaskAttemptResultSchema, type TaskAttemptResult, type TaskDataRecord, type Taskset } from "@openpond/contracts";
 import { contentHash } from "./hashing.js";
 
+export {
+  assertPortableReplay,
+  portableTraceReplayHash,
+  runPortableHarnessLocally,
+} from "./portable-local-runtime.js";
+export type {
+  PortableHarnessLease,
+  PortableHarnessTask,
+  PortableLocalHarnessRuntime,
+} from "./portable-local-runtime.js";
+
 export type LocalTaskHandler = (input: { task: TaskDataRecord; seed: number }) => Promise<Record<string, unknown>>;
 
 export async function runTasksetLocally(input: { taskset: Taskset; split?: "validation" | "test" | "frozen_eval"; seed?: number; handler: LocalTaskHandler; now?: () => string }): Promise<TaskAttemptResult[]> {

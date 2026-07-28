@@ -1,0 +1,8 @@
+*
+!Dockerfile.worker
+!LICENSE
+!pyproject.toml
+!worker-sbom.cdx.json
+!worker-directory.keep
+!src/
+!src/**

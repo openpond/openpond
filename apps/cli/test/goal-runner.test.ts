@@ -135,13 +135,15 @@ describe("goal runner hosted tool loop", () => {
     expect(stdout).toContain("Usage:");
     expect(stdout).toContain("openpond goal <command> [args]");
     expect(stdout).toContain("--goal-storage <string>");
+    expect(stdout).not.toContain("goal create-agent");
+    expect(stdout).not.toContain("goal update-agent");
   });
 
-  test("builds LLM messages from the selected prompt pack and answered questions", () => {
+  test("builds generic Goal messages with answered questions", () => {
     const goal = normalizeGoalState(
       createGoalState({
         objective: "Make the SharePoint report longer.",
-        kind: "update_agent",
+        kind: "general_code_goal",
       })
     );
     goal.questions.push({
@@ -166,13 +168,13 @@ describe("goal runner hosted tool loop", () => {
 
     const messages = buildGoalLlmMessages(goal);
 
-    expect(messages[0]?.content).toContain("# Update OpenPond Agent Goal");
+    expect(messages[0]?.content).toContain("# Generic Coding Goal");
     expect(messages[1]?.content).toContain("Make the SharePoint report longer.");
     expect(messages[1]?.content).toContain("Use the quarterly workbook.");
-    expect(messages[1]?.content).toContain("openpond_agent_update_v1");
+    expect(messages[1]?.content).toContain('"promptPack": "generic_coding_v1"');
   });
 
-  test("create-agent prompt instructs the model to choose action shape without keyword heuristics", () => {
+  test.skip("legacy create-agent Goal prompt is retired", () => {
     const goal = normalizeGoalState(
       createGoalState({
         objective: "Create an agent that can prepare a weekly report.",
@@ -190,7 +192,7 @@ describe("goal runner hosted tool loop", () => {
     expect(messages[0]?.content).toContain("default_chat_fallback");
   });
 
-  test("includes create plan action-shape metadata in LLM context", () => {
+  test.skip("legacy Agent Create/Improve plan context is retired", () => {
     const goal = normalizeGoalState(
       createGoalState({
         objective: "Create an agent that can answer questions and produce a weekly report.",
@@ -255,7 +257,7 @@ describe("goal runner hosted tool loop", () => {
     expect(messages[1]?.content).toContain('"actionShapeDecisionSource": "request_metadata"');
   });
 
-  test("skips hosted shell openpond-agent probes for agent goals", async () => {
+  test.skip("legacy Goal Agent SDK shell policy is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-agent-shell-"));
     try {
       const goal = normalizeGoalState(
@@ -305,7 +307,7 @@ describe("goal runner hosted tool loop", () => {
     }
   });
 
-  test("skips hosted OpenPond agent manifest writes", async () => {
+  test.skip("legacy Goal Agent manifest policy is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-agent-manifest-"));
     try {
       await writeFile(join(workspace, "openpond.yaml"), "name: original\n");
@@ -361,7 +363,7 @@ describe("goal runner hosted tool loop", () => {
     }
   });
 
-  test("allows hosted OpenPond agent source writes", async () => {
+  test.skip("legacy Goal Agent source authoring is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-agent-source-"));
     try {
       const goal = normalizeGoalState(
@@ -825,7 +827,7 @@ describe("goal runner hosted tool loop", () => {
     }
   });
 
-  test("lets create-agent inspect continue when no project has been initialized", async () => {
+  test.skip("legacy Goal Agent inspect wrapper is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-sdk-missing-"));
     try {
       const goal = normalizeGoalState(
@@ -882,7 +884,7 @@ describe("goal runner hosted tool loop", () => {
     }
   });
 
-  test("installs agent dependencies and runs project-local SDK checks", async () => {
+  test.skip("legacy Goal Agent SDK dependency setup is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-sdk-install-"));
     const originalPath = process.env.PATH;
     try {
@@ -1033,7 +1035,7 @@ describe("goal runner hosted tool loop", () => {
     }
   });
 
-  test("feeds failed agent checks back into the planner for repair", async () => {
+  test.skip("legacy Goal Agent repair loop is retired", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "openpond-goal-sdk-repair-"));
     try {
       await mkdir(join(workspace, "agent"), { recursive: true });

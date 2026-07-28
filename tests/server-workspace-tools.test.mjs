@@ -45,15 +45,13 @@ describe("server workspace tool harness", () => {
           `${JSON.stringify({ dependencies: { "openpond-agent-sdk": "^1.0.0" } })}\n`,
           "utf8"
         );
-
         const created = await api(instance.url, instance.token, "/v1/projects", {
           method: "POST",
           body: JSON.stringify({ path: projectDir }),
         });
         assert.equal(created.project.source, "folder");
         assert.equal(created.project.repoPath, null);
-        assert.equal(created.project.agentSdk.detected, true);
-        assert.equal(created.project.agentSdk.version, "^1.0.0");
+        assert.equal(Object.hasOwn(created.project, "agentSdk"), false);
         assert.ok(created.bootstrap.localProjects.some((project) => project.id === created.project.id));
 
         const state = await api(instance.url, instance.token, `/v1/workspaces/${created.project.id}?ensure=1`);

@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { createOpenPondCapabilityModelToolDefinitions } from "../apps/server/src/openpond/capability-tool-registry";
+import { createCapabilityCatalogRuntime } from "../apps/server/src/runtime/hosted-turn/capability-catalog";
+import { resolveHostedToolRolloutFlags } from "../apps/server/src/runtime/hosted-turn/rollout";
 import type {
   ModelToolExecutionContext,
   ModelToolDefinition,
@@ -7,6 +9,15 @@ import type {
 import { defaultSubagentPreferences, type Session } from "../packages/contracts/src";
 
 describe("OpenPond capability tool registry", () => {
+  test("describes Goal mode as explicitly opt-in", () => {
+    const definitions = createOpenPondCapabilityModelToolDefinitions(requiredHandlers());
+    const goalControl = requireTool(definitions, "openpond_goal_control");
+
+    expect(goalControl.description).toContain("Use start only when the current user message is an explicit");
+    expect(goalControl.description).toContain("/goal or /goal-local");
+    expect(goalControl.description).not.toContain("Goal:");
+  });
+
   test("adds subagent tools only when subagent handlers are supplied", () => {
     const withoutSubagents = createOpenPondCapabilityModelToolDefinitions(requiredHandlers());
     expect(withoutSubagents.map((definition) => definition.name)).not.toContain("openpond_subagent_start");
@@ -22,7 +33,6 @@ describe("OpenPond capability tool registry", () => {
     });
 
     expect(withSubagents.map((definition) => definition.name)).toEqual([
-      "openpond_create_improve",
       "openpond_goal_control",
       "openpond_subagent_start",
       "openpond_subagent_status",
@@ -241,6 +251,89 @@ describe("OpenPond capability tool registry", () => {
     await expect(
       tool.execute(context({ action: "pin" })),
     ).rejects.toThrow("path is required for this action");
+  });
+
+  test("exposes Dataset Builder Agent actions without a training launch action", async () => {
+    const calls: unknown[] = [];
+    const definitions = createOpenPondCapabilityModelToolDefinitions({
+      ...requiredHandlers(),
+      runDatasetBuilder: async (_context, action, input) => {
+        calls.push({ action, input });
+        return { id: input.creationId ?? input.tasksetId ?? "creation_1" };
+      },
+    });
+    const names = definitions.map((definition) => definition.name);
+    expect(names).toEqual(expect.arrayContaining([
+      "openpond_dataset_design",
+      "openpond_dataset_materialize",
+      "openpond_dataset_test",
+    ]));
+    expect(names.some((name) => name.includes("train") || name.includes("launch"))).toBe(false);
+
+    await requireTool(definitions, "openpond_dataset_design").execute(context({
+      action: "start",
+      objective: "Teach campaign triage with verifiable metrics.",
+      buildIntent: "verifiable_reward",
+      methodHint: "grpo",
+    }));
+    await expect(
+      requireTool(definitions, "openpond_dataset_materialize").execute(context({
+        creationId: "creation_1",
+        approved: false,
+      })),
+    ).rejects.toThrow("explicit user approval");
+    await requireTool(definitions, "openpond_dataset_materialize").execute(context({
+      creationId: "creation_1",
+      approved: true,
+    }));
+    await requireTool(definitions, "openpond_dataset_test").execute(context({
+      action: "baseline",
+      tasksetId: "taskset_1",
+      taskLimit: 8,
+      attemptsPerTask: 4,
+    }));
+
+    expect(calls.map((call: any) => call.action)).toEqual([
+      "start",
+      "materialize",
+      "baseline",
+    ]);
+  });
+
+  test("keeps Dataset Builder actions in the full Chat capability catalog", () => {
+    const catalog = createCapabilityCatalogRuntime({
+      handlers: {
+        ...requiredHandlers(),
+        runDatasetBuilder: async () => ({ id: "creation_1" }),
+      },
+      subagentToolsAvailable: () => false,
+      hostedToolFlags: resolveHostedToolRolloutFlags(),
+      executeConnectedAppTool: undefined,
+      browserToolExecutor: undefined,
+      executeOpenPondCommand: undefined,
+      executeWorkspaceTool: async () => ({
+        ok: true,
+        action: "resource_search",
+        output: "",
+        data: null,
+      }),
+      executeWebSearch: undefined,
+      executeProfileAction: undefined,
+      executeCrossSystemTool: undefined,
+    } as any);
+
+    const names = catalog(
+      [],
+      [],
+      { profileSourcePath: null, skills: [], readSkill: null },
+      [],
+    ).map((definition) => definition.name);
+
+    expect(names).toEqual(expect.arrayContaining([
+      "openpond_dataset_design",
+      "openpond_dataset_materialize",
+      "openpond_dataset_test",
+    ]));
   });
 });
 

@@ -202,7 +202,7 @@ export function createExistingTasksetModelCreateImproveRun(input: {
 
 export function createModelTrainingCreateImproveRun(input: {
   profileId: string;
-  modelId?: string | null;
+  modelId: string;
   tasksetId: string;
   displayName: string;
   trainingPlanId: string;
@@ -216,7 +216,7 @@ export function createModelTrainingCreateImproveRun(input: {
   const runId = `create_improve_${randomUUID()}`;
   const target = {
     kind: "model" as const,
-    id: input.modelId ?? input.tasksetId,
+    id: input.modelId,
     displayName: input.displayName,
     trainingPlanId: input.trainingPlanId,
     trainingJobId: input.trainingJobId,

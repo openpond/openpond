@@ -82,7 +82,10 @@ export function useRightChatPanelViews(input: {
           ? localPathWorkspaceId(session.cwd)
           : null);
       const panelMessages = buildCachedChatMessages(panelEvents);
-      const createImproveRun = latestCreateImproveRunProjection({ events: panelEvents });
+      const projectedCreateImproveRun = latestCreateImproveRunProjection({ events: panelEvents });
+      const createImproveRun = projectedCreateImproveRun?.target.kind === "agent"
+        ? null
+        : projectedCreateImproveRun;
 
       return {
         ...panel,

@@ -646,26 +646,8 @@ describe("project and agent sandbox CLI scenarios", () => {
         initialMessage: "Update the agent",
         sourceRef: "draft/ref",
         baseSha: "base_sha_test",
-        createImproveRun: {
-          operation: "improve",
-          surface: "hosted_improve",
-          command: "/edit",
-          objective: "Update the agent",
-          adapter: {
-            kind: "hosted",
-            sourceAuthority: "hosted_profile",
-            teamId: "team_test",
-            projectId: "project_test",
-            sourceRef: "draft/ref",
-            baseSha: "base_sha_test",
-          },
-          target: {
-            kind: "agent",
-            id: "agent_test",
-            defaultActionKey: "agent_test.chat",
-          },
-        },
       });
+      expect(requests[11]?.body).not.toHaveProperty("createImproveRun");
       expect(requests[12]?.body).toMatchObject({
         teamId: "team_test",
         message: "Please update copy",

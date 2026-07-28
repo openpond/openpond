@@ -30,10 +30,6 @@ import {
   runModelBackedCreateImprovePlanner,
   type CreateImprovePlanner,
 } from "../create-pipeline-planner.js";
-import type {
-  LocalCreatePipelineCheckInput,
-  LocalCreatePipelineCheckResult,
-} from "../local-create-pipeline.js";
 import { startProviderRequestUsageRecorder } from "../model-usage-recorder.js";
 import { KeyedRegistry } from "../turns/keyed-registry.js";
 import type { HostedToolLoopDelta, TurnRunnerDependencies } from "../turns/ports.js";
@@ -48,10 +44,6 @@ import {
   withCreateImproveRun,
 } from "./snapshots.js";
 import { createImproveTargetAdapter } from "./target-adapters.js";
-import {
-  executeAgentImprovementReleaseAction,
-  isAgentImprovementReleaseAction,
-} from "./agent-improvement-release.js";
 
 export type CreateImproveRuntime = ReturnType<typeof createCreateImproveRuntime>;
 
@@ -77,7 +69,6 @@ export function createCreateImproveRuntime(deps: {
   upsertApproval(approval: Approval): Promise<void>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
   ensureCodexRuntime: TurnRunnerDependencies["ensureCodexRuntime"];
-  runLocalCreatePipelineChecks?: (input: LocalCreatePipelineCheckInput) => Promise<LocalCreatePipelineCheckResult>;
   planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   streamLocalByokChatTurn?: (input: {
@@ -111,6 +102,9 @@ export function createCreateImproveRuntime(deps: {
     let run = mutation.replayed
       ? await deps.getCreateImproveRun(action.runId) ?? mutation.run
       : mutation.run;
+    if (run.target.kind === "agent") {
+      throw new Error("Agent Create/Improve runs are retired. Use a normal /agent authoring turn.");
+    }
     const turn = await turnForRun(run);
     const session = await deps.getSession(run.scope.conversationId ?? turn.sessionId);
 
@@ -127,9 +121,7 @@ export function createCreateImproveRuntime(deps: {
       run = createPlanExecutionRunForApprovedAdapter(run, session);
     }
     await persistCreateImproveRun({ session, turnId: turn.id, run, source: "ui_button" });
-    if (!mutation.replayed && isAgentImprovementReleaseAction(action)) {
-      queueAgentImprovementReleaseAction({ session, turn, run, action });
-    } else if (!mutation.replayed && shouldExecuteTarget(run)) {
+    if (!mutation.replayed && shouldExecuteTarget(run)) {
       queueCreateImproveExecution({ session, turn, run });
     }
     return await deps.getCreateImproveRun(run.id) ?? run;
@@ -249,52 +241,6 @@ export function createCreateImproveRuntime(deps: {
     applyJobs.set(key, receipt);
   }
 
-  function queueAgentImprovementReleaseAction(input: {
-    session: Session;
-    turn: Turn;
-    run: CreateImproveRun;
-    action: Extract<
-      CreateImproveRunAction,
-      { type: "apply_candidate" | "open_pull_request" | "reject_candidate" | "reconcile_pull_request" }
-    >;
-  }): void {
-    const key = `release:${input.run.id}:${input.run.revision}:${input.action.type}`;
-    if (applyJobs.has(key)) return;
-    const receipt = deps.turnFollowUpQueue.enqueue(
-      {
-        label: `${input.action.type.replaceAll("_", " ")} for Agent improvement`,
-        metadata: {
-          key,
-          sessionId: input.session.id,
-          turnId: input.turn.id,
-          runId: input.run.id,
-          revision: input.run.revision,
-          action: input.action.type,
-        },
-      },
-      async () => {
-        try {
-          const latestRun = await deps.getCreateImproveRun(input.run.id) ?? input.run;
-          const result = await executeAgentImprovementReleaseAction({
-            run: latestRun,
-            action: input.action,
-            resolveTaskset: deps.resolveTaskset,
-            gradeTaskAttempt: deps.gradeTaskAttempt,
-          });
-          await persistCreateImproveRun({
-            session: input.session,
-            turnId: input.turn.id,
-            run: result,
-            source: "server",
-          });
-        } finally {
-          applyJobs.delete(key);
-        }
-      },
-    );
-    applyJobs.set(key, receipt);
-  }
-
   async function runQueuedCreateImproveExecution(input: {
     session: Session;
     turn: Turn;
@@ -322,7 +268,6 @@ export function createCreateImproveRuntime(deps: {
       model: input.session.provider === "codex"
         ? input.session.modelRef?.modelId ?? null
         : null,
-      runChecks: deps.runLocalCreatePipelineChecks,
       resolveTaskset: deps.resolveTaskset,
       gradeTaskAttempt: deps.gradeTaskAttempt,
     }));

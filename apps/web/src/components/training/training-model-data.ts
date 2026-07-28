@@ -80,12 +80,16 @@ export function trainingRunMethodLabel(taskset: Taskset, plan: TrainingPlan | nu
 
 export function trainingMethodLabel(method: string | null | undefined): string {
   if (method === "grpo") return "RFT";
+  if (method === "dpo") return "DPO";
+  if (method === "ppo") return "PPO";
   if (method === "sft") return "SFT";
   return method?.toUpperCase() ?? "Review";
 }
 
 export function trainingMethodName(method: string | null | undefined): string {
   if (method === "grpo") return "Reinforcement";
+  if (method === "ppo") return "Reinforcement";
+  if (method === "dpo") return "Preference";
   if (method === "sft") return "Supervised";
   return "Training";
 }
@@ -103,13 +107,8 @@ export function destinationLabel(destination: string): string {
   const labels: Record<string, string> = {
     export: "Export only",
     local_cpu_fixture: "Local CPU",
-    local_cuda: "Local GPU",
-    local_mlx: "Apple Silicon",
-    ssh_gpu: "SSH GPU",
-    runpod_byoc: "RunPod",
-    prime_hosted: "Prime hosted",
+    openpond_managed: "OpenPond Managed",
     fireworks: "Fireworks",
-    openpond_managed: "OpenPond managed",
   };
   return labels[destination] ?? destination.replaceAll("_", " ");
 }

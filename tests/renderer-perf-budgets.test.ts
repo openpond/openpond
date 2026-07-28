@@ -43,7 +43,7 @@ describe("renderer performance budgets", () => {
       200,
     );
 
-    expect(first.html).toContain("Make Agent");
+    expect(first.html).toContain("Author Agent");
     expect(typed.html).toContain("Run a local goal");
     expect(typed.bytes).toBeGreaterThan(2_000);
   });
@@ -383,7 +383,6 @@ function sidebarProps(chatCount: number): SidebarProps {
     selectedAppId: null,
     selectedProjectId: null,
     selectedSessionId: "session-0",
-    selectedCloudWorkItemId: null,
     account: null,
     profile: emptyOpenPondProfileState(),
     pinnedCollapsed: false,
@@ -403,7 +402,6 @@ function sidebarProps(chatCount: number): SidebarProps {
     localProjectRows,
     insightsSystemProjectHidden: true,
     cloudProjectRows: [],
-    cloudWorkItemsByProjectId: {},
     projectSessionRowsByProjectId: {},
     sidebarProjectIdBySessionId: {},
     runningSessionIds: new Set(["session-3"]),
@@ -430,9 +428,7 @@ function sidebarProps(chatCount: number): SidebarProps {
     setChatRowsVisibleCount: noopDispatch,
     beginNewChat: noop,
     dockSessionRight: noop,
-    openCloudHome: noop,
     createCloudEnvironment: noop,
-    selectCloudWorkItem: noop,
     addProjectFolder: noop,
     startExistingProjectFromPath: noop,
     startProjectFromScratch: noop,
@@ -545,7 +541,6 @@ function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number
   const data = useSidebarData({
     localProjects,
     cloudProjects: [],
-    cloudWorkItems: [],
     sessions,
     runtimeIndexes: buildRuntimeIndexes([], []),
     appPreferences: {},

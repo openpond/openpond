@@ -13,9 +13,9 @@ describe("training privacy and credentials", () => {
     expect(scan.redacted).not.toContain("expert@example.com");
     const directory = await mkdtemp(path.join(os.tmpdir(), "training-secrets-"));
     try {
-      await writeTrainingDestinationSecret({ directory, destinationId: "custom", value: "credential-value", timestamp: "2026-07-12T00:00:00Z" });
-      expect(await readTrainingDestinationSecret({ directory, destinationId: "custom" })).toBe("credential-value");
-      expect(await listTrainingDestinationSecretRefs(directory)).toEqual([expect.objectContaining({ destinationId: "custom", configured: true })]);
+      await writeTrainingDestinationSecret({ directory, destinationId: "fireworks", value: "credential-value", timestamp: "2026-07-12T00:00:00Z" });
+      expect(await readTrainingDestinationSecret({ directory, destinationId: "fireworks" })).toBe("credential-value");
+      expect(await listTrainingDestinationSecretRefs(directory)).toEqual([expect.objectContaining({ destinationId: "fireworks", configured: true })]);
       expect(await readFile(path.join(directory, "training-destinations.json"), "utf8")).not.toContain("credential-value");
     } finally { await rm(directory, { recursive: true, force: true }); }
   });

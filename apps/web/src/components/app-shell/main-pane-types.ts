@@ -4,8 +4,6 @@ import type {
   ChatAttachment,
   ChatProvider,
   CloudProject,
-  CloudWorkItem,
-  CloudWorkItemDetail,
   CodexPermissionMode,
   CodexReasoningEffort,
   InsightItem,
@@ -52,12 +50,10 @@ import type {
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import type { CommunityViewProps } from "../community/CommunityView";
-import type { MakeAgentTutorialState, MakeAgentTutorialVideoId } from "../get-started/make-agent-tutorial";
-import type { PostTrainingCourseState } from "../get-started/post-training-lessons";
 import type { LabDetailLocation } from "../labs/lab-detail-navigation";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
 import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
-import type { TrainingLaunchRequest } from "../training/TrainingView";
+import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type {
   WorkspaceDiffPanelViewState,
   WorkspaceDiffTabRequest,
@@ -119,8 +115,6 @@ export type MainPaneProps = {
   rightChatPanels: RightChatPanelView[];
   nativeSkillSidebar: SkillSourceDocument | null;
   extensionSkillSidebar: SkillPackageSourceSelection | null;
-  makeAgentTutorial: MakeAgentTutorialState | null;
-  postTrainingCourse: PostTrainingCourseState | null;
   workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;
   sidebarFileOpenRequest: SidebarFileOpenRequest | null;
   sidebarFileBookmarks: SidebarFileBookmark[];
@@ -155,13 +149,6 @@ export type MainPaneProps = {
   onPatchInsightStatus: (insightId: string, status: InsightStatus) => Promise<unknown>;
   onOpenInsightsSession: (sessionId: string) => void;
   cloudProjects: CloudProject[];
-  cloudWorkItems: CloudWorkItem[];
-  selectedCloudWorkItem: CloudWorkItem | null;
-  cloudWorkItemDetail: CloudWorkItemDetail | null;
-  cloudWorkItemLocalProjectName: string | null;
-  cloudLoading: boolean;
-  cloudBusy: boolean;
-  cloudError: string | null;
   chatHistoryHasMore?: boolean;
   chatHistoryLoading?: boolean;
   onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -222,26 +209,18 @@ export type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     promptOverride?: string,
-    options?: { clearPrompt?: () => void; displayPrompt?: string; usageAttribution?: UsageRequestAttribution },
+    options?: {
+      clearPrompt?: () => void;
+      displayPrompt?: string;
+      usageAttribution?: UsageRequestAttribution;
+      turnMetadata?: Record<string, unknown>;
+    },
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
   pauseGoal: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;
   onToggleDiffPanelExpanded: () => void;
-  onOpenPostTrainingCourse: () => void;
-  onClosePostTrainingCourse: () => void;
-  onOpenPostTrainingScript: (lessonIndex: number) => void;
-  onSelectPostTrainingFullCourse: () => void;
-  onSelectPostTrainingLesson: (lessonIndex: number) => void;
-  onSetPostTrainingAutoplay: (autoplay: boolean) => void;
-  onShowPostTrainingLessons: () => void;
-  onOpenMakeAgentTutorial: () => void;
-  onCloseMakeAgentTutorial: () => void;
-  onSelectMakeAgentTutorialVideo: (videoId: MakeAgentTutorialVideoId) => void;
-  onSetMakeAgentTutorialAutoplay: (autoplay: boolean) => void;
-  onShowMakeAgentTutorialLessons: () => void;
-  onShowMakeAgentTutorialScript: () => void;
   onShowDiffPanel: () => void;
   onShowBrowserPanel: () => void;
   onShowGoalSidebarTab: () => void;
@@ -272,14 +251,5 @@ export type MainPaneProps = {
   ) => Promise<boolean>;
   onStopRightChat: (sessionId: string | null) => Promise<boolean>;
   onCloseTerminal: () => void;
-  onOpenCloudHome: () => void;
-  onSetupCloudProject: (projectId: string) => void;
-  onCreateCloudWork: (input: { projectId: string; prompt: string; select?: boolean }) => Promise<boolean>;
-  onSelectCloudWorkItem: (workItem: CloudWorkItem) => void;
-  onSendCloudWorkItemMessage: (message: string) => Promise<void>;
-  onHandleCloudWorkItemBackground: (message: string | null) => Promise<void>;
-  onCancelCloudWorkItemCreatePipeline: () => Promise<void>;
-  onCancelCloudWorkItemTask: () => Promise<void>;
-  onApplyCloudWorkItemPatchLocally: () => Promise<void>;
   onLoadMoreChatHistory?: () => Promise<boolean>;
 };

@@ -4,12 +4,10 @@ import type {
   SandboxAgentListResponse,
   SandboxAgentResponse,
   SandboxAgentUpsertInput,
-  CreateSandboxRequest,
   SandboxProjectListResponse,
   SandboxProjectResponse,
   SandboxProjectSourceUploadInput,
   SandboxProjectUpsertInput,
-  SandboxRecordResponse,
 } from "../../lib/sandbox-types";
 import {
   apiFetch,
@@ -17,11 +15,6 @@ import {
 } from "../api-client";
 
 export const sandboxProjectApi = {
-  createSandbox: (connection: ClientConnection, input: CreateSandboxRequest) =>
-    apiFetch<SandboxRecordResponse>(connection, "/v1/sandboxes", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
   listSandboxProjects: (connection: ClientConnection, input: { teamId: string }) => {
     const query = new URLSearchParams({ teamId: input.teamId });
     return apiFetch<SandboxProjectListResponse>(
@@ -34,13 +27,6 @@ export const sandboxProjectApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  sandboxProject: (connection: ClientConnection, projectId: string, input: { teamId: string }) => {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    return apiFetch<SandboxProjectResponse>(
-      connection,
-      `/v1/sandbox-projects/${encodeURIComponent(projectId)}?${query.toString()}`,
-    );
-  },
   syncSandboxProject: (
     connection: ClientConnection,
     projectId: string,
@@ -93,13 +79,6 @@ export const sandboxProjectApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  sandboxAgent: (connection: ClientConnection, agentId: string, input: { teamId: string }) => {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    return apiFetch<SandboxAgentResponse>(
-      connection,
-      `/v1/sandbox-agents/${encodeURIComponent(agentId)}?${query.toString()}`,
-    );
-  },
 	  runSandboxAgent: (
 	    connection: ClientConnection,
 	    agentId: string,
@@ -125,16 +104,4 @@ export const sandboxProjectApi = {
 	        body: JSON.stringify(input),
 	      },
 	    ),
-	  archiveSandboxAgent: (
-    connection: ClientConnection,
-    agentId: string,
-    input: { teamId: string },
-  ) => {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    return apiFetch<SandboxAgentResponse>(
-      connection,
-      `/v1/sandbox-agents/${encodeURIComponent(agentId)}?${query.toString()}`,
-      { method: "DELETE" },
-    );
-  },
 };
