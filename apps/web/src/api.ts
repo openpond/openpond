@@ -20,7 +20,6 @@ import type {
   DatasetCatalogResponse,
   ComputeStateResponse,
   ComputeSettings,
-  PrimeComputeProviderStatus,
   ModelDownloadJob,
   OpenPondExtension,
   OpenPondExtensionCatalog,
@@ -680,30 +679,6 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
-  savePrimeComputeCredential: (
-    connection: ClientConnection,
-    apiKey: string,
-  ) =>
-    apiFetch<PrimeComputeProviderStatus>(
-      connection,
-      "/v1/compute/providers/prime/credential",
-      {
-        method: "PUT",
-        body: JSON.stringify({ apiKey }),
-      },
-    ),
-  validatePrimeComputeCredential: (connection: ClientConnection) =>
-    apiFetch<PrimeComputeProviderStatus>(
-      connection,
-      "/v1/compute/providers/prime/validate",
-      { method: "POST", body: JSON.stringify({}) },
-    ),
-  deletePrimeComputeCredential: (connection: ClientConnection) =>
-    apiFetch<PrimeComputeProviderStatus>(
-      connection,
-      "/v1/compute/providers/prime/credential",
-      { method: "DELETE" },
-    ),
   downloadSmolLm2: (connection: ClientConnection) =>
     apiFetch<ModelDownloadJob>(
       connection,

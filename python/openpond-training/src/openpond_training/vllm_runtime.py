@@ -198,7 +198,7 @@ def vllm_bootstrap_command() -> list[str]:
     uv = shutil.which("uv")
     if not uv:
         raise RuntimeError(
-            "The Prime-RL image contract requires the uv executable "
+            "The managed evaluation image contract requires the uv executable "
             "for isolated, PEP 668-compatible package installation."
         )
     return [

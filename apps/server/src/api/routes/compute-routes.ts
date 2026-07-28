@@ -15,20 +15,6 @@ export async function handleComputeRoutes({ deps, request, requestUrl, response 
     sendJson(response, 200, await deps.computePayload("update_settings", await readJson(request)));
     return true;
   }
-  if (requestUrl.pathname === "/v1/compute/providers/prime/credential") {
-    if (request.method === "PUT") {
-      sendJson(response, 200, await deps.computePayload("save_prime_credential", await readJson(request)));
-      return true;
-    }
-    if (request.method === "DELETE") {
-      sendJson(response, 200, await deps.computePayload("delete_prime_credential", {}));
-      return true;
-    }
-  }
-  if (request.method === "POST" && requestUrl.pathname === "/v1/compute/providers/prime/validate") {
-    sendJson(response, 200, await deps.computePayload("validate_prime_credential", {}));
-    return true;
-  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/compute/models/smollm2/download") {
     sendJson(response, 202, await deps.computePayload("download_smollm2", {}));
     return true;

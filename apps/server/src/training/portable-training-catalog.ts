@@ -29,19 +29,41 @@ const LOCAL_TARGET_POLICY = {
   },
   defaults: {
     loraRank: 2,
+    maxSteps: 8,
+    rolloutGroupSize: 4,
+    rolloutConcurrency: 1,
     rolloutOutputTokens: 64,
   },
 };
-const CONNECTED_TARGET_POLICY = {
-  executionMode: "connected_worker" as const,
-  approvalPolicy: null,
+const MANAGED_TARGET_POLICY = {
+  executionMode: "provider_native" as const,
+  approvalPolicy: {
+    providerId: "openpond" as const,
+    providerLabel: "OpenPond Managed",
+    settingsActionLabel: "Manage OpenPond account",
+    exportApprovalRequired: true,
+    exportDescription:
+      "Submit the approved trainer projection and private validation tasks to OpenPond Managed.",
+    preparationRequired: true,
+    minimumSpendUsd: 1,
+    maximumSpendUsd: 25,
+    defaultMaximumSpendUsd: 9,
+    minimumRetentionDays: 1,
+    maximumRetentionDays: 30,
+    defaultRetentionDays: 7,
+    methodRequirement:
+      "Managed training selects qualified compute capacity after approval.",
+  },
   limits: {
-    maximumSequenceLength: 32_768,
+    maximumSequenceLength: 4_096,
     maximumOutputTokens: 8_192,
     maximumTrainingExamples: null,
   },
   defaults: {
-    loraRank: 8,
+    loraRank: 16,
+    maxSteps: 2,
+    rolloutGroupSize: 4,
+    rolloutConcurrency: 4,
     rolloutOutputTokens: 2_048,
   },
 };
@@ -71,6 +93,9 @@ const FIREWORKS_TARGET_POLICY = {
   },
   defaults: {
     loraRank: 8,
+    maxSteps: 8,
+    rolloutGroupSize: 8,
+    rolloutConcurrency: 4,
     rolloutOutputTokens: 2_048,
   },
 };
@@ -81,10 +106,6 @@ export function createPortableTrainingCatalog(input: {
   inventory: ComputeInventory | null;
   searchResults?: RegistryModelSearchResult[];
   registeredEngineIds?: string[];
-  connectedWorkerConfigured?: boolean;
-  connectedEngineConfigured?: boolean;
-  primeRawConfigured?: boolean;
-  connectedWorkerImageDigest?: string | null;
   adapterCompute?: ComputeTargetCapabilities[];
   preferredMethod?: "sft" | "dpo" | "grpo" | "ppo";
   now?: string;
@@ -93,19 +114,12 @@ export function createPortableTrainingCatalog(input: {
   const compute = computeCapabilities(
     input.inventory,
     generatedAt,
-    input.connectedWorkerConfigured ?? false,
-    input.primeRawConfigured ?? false,
     input.adapterCompute ?? [],
   );
   const engines = engineCapabilities({
     destinations: input.destinations,
     generatedAt,
     registeredEngineIds: input.registeredEngineIds ?? [],
-    connectedEngineConfigured:
-      input.connectedEngineConfigured ?? false,
-    primeRawConfigured:
-      input.primeRawConfigured ?? false,
-    connectedWorkerImageDigest: input.connectedWorkerImageDigest ?? null,
   });
   const runtimes = runtimeCapabilities(generatedAt);
   const targets = trainingTargets({
@@ -196,7 +210,7 @@ export function createPortableTrainingCatalog(input: {
           : !option
           ? ("unsupported" as const)
           : !target.available
-            ? target.computeAdapterId === "prime-raw"
+            ? target.computeAdapterId === "openpond-managed"
               ? ("compute_setup_required" as const)
               : engine && !engine.available
                 ? ("unsupported" as const)
@@ -280,27 +294,16 @@ function trainingTargets(input: {
 }): TrainingCatalog["targets"] {
   const definitions = [
     {
-      id: "prime-gpu",
-      label: "Prime Raw GPU",
+      id: "openpond-managed",
+      label: "OpenPond Managed",
       description:
-        "Provision raw Prime compute for OpenPond-controlled rollout and PRIME-RL execution. This is not Prime Hosted Training.",
-      destinationId: "prime_hosted",
-      computeAdapterId: "prime-raw",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["Prime Raw GPU"],
-      ...CONNECTED_TARGET_POLICY,
-    },
-    {
-      id: "connected-gpu",
-      label: "Connected GPU",
-      description: "Use the authenticated LAN/SSH/BYOC worker protocol.",
-      destinationId: "ssh_gpu",
-      computeAdapterId: "ssh-worker",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "connected-prime-rl",
-      capabilityPills: ["LAN/SSH GPU"],
-      ...CONNECTED_TARGET_POLICY,
+        "Run the approved portable training bundle on OpenPond-managed infrastructure.",
+      destinationId: "openpond_managed",
+      computeAdapterId: "openpond-managed",
+      runtimeAdapterId: "openpond-managed-harness",
+      engineAdapterId: "sandbox-managed-rft",
+      capabilityPills: ["Managed"],
+      ...MANAGED_TARGET_POLICY,
     },
     {
       id: "fireworks-managed",
@@ -421,7 +424,8 @@ export function preparePortableModelRun(input: {
     quoteUsd: input.quoteUsd ?? null,
     retentionDays: input.retentionDays ?? null,
     providerManaged:
-      input.modelRun.destinationId === "fireworks",
+      input.modelRun.destinationId === "fireworks" ||
+      input.modelRun.destinationId === "openpond_managed",
   });
 }
 
@@ -440,7 +444,9 @@ export function resolvePortableBindings(input: {
   const runtimeId =
     destinationId === "fireworks"
       ? "provider-native"
-      : "local-harness";
+      : destinationId === "openpond_managed"
+        ? "openpond-managed-harness"
+        : "local-harness";
   const compute = input.catalog.compute.find(
     (candidate) => candidate.adapterId === computeId,
   );
@@ -459,7 +465,9 @@ export function resolvePortableBindings(input: {
       placement:
         runtimeId === "provider-native"
           ? "provider_native"
-          : "local",
+          : runtimeId === "openpond-managed-harness"
+            ? "remote"
+            : "local",
       capabilityReceipt: runtime.capabilityReceipt,
       runtimeVersion: "1",
       dataPlane: null,
@@ -484,8 +492,6 @@ export function resolvePortableBindings(input: {
 function computeCapabilities(
   inventory: ComputeInventory | null,
   checkedAt: string,
-  connectedWorkerConfigured: boolean,
-  primeRawConfigured: boolean,
   adapters: ComputeTargetCapabilities[],
 ): ComputeTargetCapabilities[] {
   const localDevices: ComputeTargetCapabilities["devices"] =
@@ -537,33 +543,15 @@ function computeCapabilities(
     checkedAt,
     unavailableReason: reason,
   });
-  const sshAvailable =
-    connectedWorkerConfigured ||
-    (inventory?.connections.some(
-      (connection) =>
-        connection.kind === "ssh" && connection.available,
-    ) ?? false);
   const defaults = [
     capability("local-cpu", "local", null, localDevices.filter((device) => device.kind === "cpu"), true, null),
-    capability("ssh-worker", "ssh", null, [], sshAvailable, sshAvailable ? null : "Configure and verify an SSH worker connection."),
     capability(
-      "prime-raw",
+      "openpond-managed",
       "managed",
-      "prime",
-      primeRawConfigured
-        ? [{
-            id: "prime-raw-dynamic",
-            kind: "gpu",
-            vendor: "nvidia",
-            name: "Prime secure H100 (fresh quote)",
-            memoryBytes: 80_000_000_000,
-            runtime: "cuda",
-          }]
-        : [],
-      primeRawConfigured,
-      primeRawConfigured
-        ? null
-        : "Connect and verify Prime before requesting a fresh raw-GPU quote.",
+      "openpond",
+      [],
+      true,
+      null,
     ),
     capability("fireworks-managed", "managed", "fireworks", [], true, null),
   ];
@@ -574,9 +562,6 @@ function engineCapabilities(input: {
   destinations: TrainingDestinationCapabilities[];
   generatedAt: string;
   registeredEngineIds: string[];
-  connectedEngineConfigured: boolean;
-  primeRawConfigured: boolean;
-  connectedWorkerImageDigest: string | null;
 }): TrainingEngineCapabilities[] {
   const engine = (
     adapterId: string,
@@ -594,7 +579,12 @@ function engineCapabilities(input: {
     modelFamilies: ["transformers"],
     precisions: ["fp32", "fp16", "bf16"],
     topologies: ["single_worker", "single_gpu_phased"],
-    workerProtocolVersion: "openpond.connectedWorker.v1",
+    workerProtocolVersion:
+      adapterId === "sandbox-managed-rft"
+        ? "openpond.managedRftWorker.v2"
+        : adapterId === "fireworks-native"
+          ? "openpond.fireworksNative.v1"
+          : "openpond.localTrainingWorker.v1",
     upstreamRevision,
     capabilityReceipt: contentHash({
       adapterId,
@@ -604,10 +594,7 @@ function engineCapabilities(input: {
     }),
     checkedAt: input.generatedAt,
     unavailableReason: reason,
-    workerImageDigest:
-      adapterId === "connected-prime-rl"
-        ? input.connectedWorkerImageDigest
-        : null,
+    workerImageDigest: null,
   });
   const fireworksAvailable =
     input.destinations.find(
@@ -617,7 +604,7 @@ function engineCapabilities(input: {
   return [
     engine("local-trl", ["sft", "dpo", "ppo"], ["demonstration", "preference", "trajectory", "reward"], registered.has("local-trl"), "trl-0.26.2", registered.has("local-trl") ? null : "The local TRL adapter is not registered."),
     engine(
-      "connected-prime-rl",
+      "sandbox-managed-rft",
       ["grpo"],
       [
         "trajectory",
@@ -625,22 +612,11 @@ function engineCapabilities(input: {
         "grader_evidence",
         "infrastructure_failure",
       ],
-      input.primeRawConfigured ||
-        (
-          input.connectedEngineConfigured &&
-          registered.has("connected-prime-rl") &&
-          input.connectedWorkerImageDigest !== null
-        ),
+      registered.has("sandbox-managed-rft"),
       PRIME_RL_REVISION,
-      input.primeRawConfigured
+      registered.has("sandbox-managed-rft")
         ? null
-        : !input.connectedEngineConfigured
-          ? "Configure an authenticated connected or managed worker route."
-          : input.connectedWorkerImageDigest === null
-            ? "Configure an immutable connected-worker image digest."
-            : !registered.has("connected-prime-rl")
-              ? "Register the connected training engine."
-              : null,
+        : "Register the OpenPond Managed training adapter.",
     ),
     engine("fireworks-native", ["sft", "grpo"], ["demonstration", "trajectory", "reward"], fireworksAvailable && registered.has("fireworks-native"), "provider-managed", !fireworksAvailable ? "Fireworks is not configured." : !registered.has("fireworks-native") ? "The Fireworks adapter is not registered." : null),
   ];
@@ -672,6 +648,7 @@ function runtimeCapabilities(
   return [
     runtime("local-harness", ["local"], true),
     runtime("provider-native", ["provider_native"], false),
+    runtime("openpond-managed-harness", ["remote"], true),
   ];
 }
 
@@ -691,9 +668,8 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
 function computeIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-cpu",
-    ssh_gpu: "ssh-worker",
-    prime_hosted: "prime-raw",
     fireworks: "fireworks-managed",
+    openpond_managed: "openpond-managed",
   };
   return values[destinationId] ?? "unsupported";
 }
@@ -701,9 +677,8 @@ function computeIdForDestination(destinationId: string): string {
 function engineIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-trl",
-    ssh_gpu: "connected-prime-rl",
-    prime_hosted: "connected-prime-rl",
     fireworks: "fireworks-native",
+    openpond_managed: "sandbox-managed-rft",
   };
   return values[destinationId] ?? "unsupported";
 }

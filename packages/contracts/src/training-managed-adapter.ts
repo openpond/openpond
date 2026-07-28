@@ -29,7 +29,7 @@ export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION =
 export const ManagedAdapterServingProjectionSchema = z.object({
   schemaVersion: z.literal("openpond.managedAdapterServingProjection.v1"),
   teamId: IdSchema.nullable().default(null),
-  source: z.enum(["openpond_fireworks", "openpond_training"]),
+  source: z.enum(["openpond_fireworks", "sandbox_managed_rft"]),
   sourceRef: IdSchema,
   canonicalArtifactId: IdSchema.nullable(),
   canonicalArtifactState: z
@@ -94,7 +94,7 @@ export function managedAdapterCustomerBindingAllowed(
 ): boolean {
   const projection = lineage.managedServing;
   return Boolean(
-    projection?.source === "openpond_training" &&
+    projection?.source === "sandbox_managed_rft" &&
       projection.canonicalArtifactState === "promotable" &&
       projection.customerBindingAllowed
   );
@@ -127,7 +127,7 @@ export function resolveModelBindingPromotionGate(
   }
   const projection = lineage.managedServing;
   if (
-    projection?.source === "openpond_training" &&
+    projection?.source === "sandbox_managed_rft" &&
     managedAdapterProjectionReady(projection) &&
     projection.canonicalArtifactId &&
     projection.canonicalDeploymentId

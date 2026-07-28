@@ -11,9 +11,7 @@ import {
 } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
 import {
-  ExportTrainingDestination,
   PortablePreparationTrainingDestination,
-  UnavailableTrainingDestination,
 } from "./destinations.js";
 import { listTrainingDestinationSecretRefs, writeTrainingDestinationSecret } from "./destination-secrets.js";
 import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
@@ -72,10 +70,11 @@ export function createTrainingService(deps: {
     revision: string | null;
   }) => Promise<unknown>;
   registerPortableAdapters?: (registry: TrainingAdapterRegistry) => void;
-  connectedWorkerConfigured?: boolean;
-  connectedEngineConfigured?: boolean;
-  primeRawConfigured?: boolean;
-  connectedWorkerImageDigest?: string | null;
+  resolveManagedTrainingAccess?: () => Promise<{
+    apiBaseUrl: string;
+    token: string;
+    teamId: string;
+  }>;
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
@@ -91,30 +90,20 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     projectDatasetArtifact: deps.projectDatasetArtifact,
   });
-  registry.register(new ExportTrainingDestination(resolveTaskset));
   const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
   registry.register(localCpu);
   registry.register(
-    deps.primeRawConfigured
-      ? new PortablePreparationTrainingDestination("prime_hosted", {
-          resolveTaskset,
-          estimatedCostUsd: null,
-          methods: ["grpo"],
-          environmentPlacements: ["local"],
-          assumptions: [
-            "Prime provisions raw compute before the generic connected-worker bootstrap.",
-            "A fresh provider quote is bounded by the available Prime wallet balance.",
-          ],
-          modelAllowlist: [
-            "Qwen/Qwen3-0.6B",
-            "Qwen/Qwen3-8B",
-          ],
-        })
-      : new UnavailableTrainingDestination(
-          "prime_hosted",
-          "Prime raw compute requires a configured provider adapter and connected-worker bootstrap.",
-          resolveTaskset,
-        ),
+    new PortablePreparationTrainingDestination("openpond_managed", {
+      resolveTaskset,
+      estimatedCostUsd: null,
+      methods: ["grpo"],
+      environmentPlacements: ["remote"],
+      assumptions: [
+        "OpenPond Managed selects qualified compute capacity after approval.",
+        "The approved maximum spend is enforced before provider resources start.",
+      ],
+      modelAllowlist: ["Qwen/Qwen3-0.6B"],
+    }),
   );
   const fireworks = new FireworksTrainingDestination({
     store: deps.store,
@@ -163,28 +152,12 @@ export function createTrainingService(deps: {
     localCpu,
   });
   registry.register(fireworks);
-  registry.register(
-    deps.connectedWorkerConfigured
-      ? new PortablePreparationTrainingDestination("ssh_gpu", {
-          resolveTaskset,
-          estimatedCostUsd: 0,
-          methods: ["grpo"],
-          environmentPlacements: ["local"],
-          assumptions: [
-            "The user owns the connected GPU; OpenPond adds no provider charge.",
-            "The exact signed worker image is already running at the configured endpoint.",
-          ],
-        })
-      : new UnavailableTrainingDestination(
-          "ssh_gpu",
-          "Configure an authenticated connected worker endpoint.",
-          resolveTaskset,
-        ),
-  );
   deps.registerDestinations?.(registry);
   const portableAdapters = createDestinationTrainingEngineRegistry({
     destinations: registry,
     store: deps.store,
+    storeDir: deps.storeDir,
+    resolveManagedAccess: deps.resolveManagedTrainingAccess,
     catalog: () => portableCatalog(),
   });
   deps.registerPortableAdapters?.(portableAdapters);
@@ -200,10 +173,6 @@ export function createTrainingService(deps: {
     adapters: portableAdapters,
     computeInventory: deps.computeInventory,
     revalidateCompute: deps.revalidateCompute,
-    connectedWorkerConfigured: deps.connectedWorkerConfigured,
-    connectedEngineConfigured: deps.connectedEngineConfigured,
-    primeRawConfigured: deps.primeRawConfigured,
-    connectedWorkerImageDigest: deps.connectedWorkerImageDigest,
     searchTrainingModels: deps.searchTrainingModels,
   });
   const portableCatalog = portableSupport.catalog;

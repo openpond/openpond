@@ -54,6 +54,9 @@ export function useTrainingCatalogState(input: {
         },
         defaults: {
           loraRank: 2,
+          maxSteps: 8,
+          rolloutGroupSize: 4,
+          rolloutConcurrency: 1,
           rolloutOutputTokens: DEFAULT_ROLLOUT_OUTPUT_TOKENS,
         },
         available: destination.available,

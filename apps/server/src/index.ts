@@ -149,13 +149,13 @@ import { createTrainingChatSearchService } from "./training/training-chat-search
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
 import { createComputeService } from "./compute/compute-service.js";
-import { createPrimeComputeProviderSetup } from "./compute/prime-provider-setup.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
+import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
@@ -514,10 +514,6 @@ export async function createOpenPondServer(
       return parsed;
     },
   });
-  const primeComputeProvider = createPrimeComputeProviderSetup({
-    storeDir,
-    secretPaths: providerSecretPaths,
-  });
   const computeService = createComputeService({
     storeDir,
     localWorkerProjectDir: path.resolve(
@@ -525,7 +521,6 @@ export async function createOpenPondServer(
       "python",
       "openpond-training"
     ),
-    primeProvider: primeComputeProvider,
   });
   const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
   const managedAdapterSyncService = createManagedAdapterSyncService({
@@ -547,12 +542,6 @@ export async function createOpenPondServer(
       await computeService.scan();
       return settings;
     }
-    if (action === "save_prime_credential")
-      return primeComputeProvider.saveCredential(payload);
-    if (action === "validate_prime_credential")
-      return primeComputeProvider.validateCredential();
-    if (action === "delete_prime_credential")
-      return primeComputeProvider.deleteCredential();
     if (action === "download_smollm2")
       return computeService.startModelDownload();
     if (action === "cancel_download") {
@@ -566,23 +555,6 @@ export async function createOpenPondServer(
     }
     throw new Error(`Unknown compute action ${action}.`);
   };
-  const primeProviderStatus = await primeComputeProvider.status();
-  const savedPrimeRawConfigured = Boolean(
-    primeProviderStatus.credential.configured
-    && !primeProviderStatus.lastError
-    && (
-      primeProviderStatus.state === "credential_valid"
-      || primeProviderStatus.state === "ready"
-    )
-    && (
-      primeProviderStatus.availability?.availableOfferingCount
-        ?? 0
-    ) > 0
-    && (
-      primeProviderStatus.availability?.registeredSshKeyCount
-        ?? 0
-    ) > 0,
-  );
   const portableTrainingDependencies =
     createPortableTrainingServerDependencies({
       storeDir,
@@ -603,12 +575,14 @@ export async function createOpenPondServer(
     modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
     ...portableTrainingDependencies,
-    primeRawConfigured:
-      portableTrainingDependencies.primeRawConfigured
-      || savedPrimeRawConfigured,
-    connectedEngineConfigured:
-      portableTrainingDependencies.connectedEngineConfigured
-      || savedPrimeRawConfigured,
+    resolveManagedTrainingAccess: async () => {
+      const entry = await store.getCacheEntry<unknown>(
+        APP_PREFERENCES_CACHE_TYPE,
+        APP_PREFERENCES_CACHE_KEY,
+      );
+      const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
+      return resolveManagedAdapterUserAccess({ teamId });
+    },
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;

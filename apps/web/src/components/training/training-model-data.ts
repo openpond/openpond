@@ -107,8 +107,7 @@ export function destinationLabel(destination: string): string {
   const labels: Record<string, string> = {
     export: "Export only",
     local_cpu_fixture: "Local CPU",
-    ssh_gpu: "SSH GPU",
-    prime_hosted: "Prime Raw GPU",
+    openpond_managed: "OpenPond Managed",
     fireworks: "Fireworks",
   };
   return labels[destination] ?? destination.replaceAll("_", " ");

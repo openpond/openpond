@@ -175,6 +175,7 @@ export const TrainingExecutionRefSchema = z
     adapterId: ReleaseIdSchema,
     routeId: ReleaseIdSchema.optional(),
     providerJobId: z.string().trim().min(1).max(1_000).nullable(),
+    tenantId: ReleaseIdSchema.optional(),
     leaseId: ReleaseIdSchema.nullable(),
     manifestHash: ReleaseHashSchema.optional(),
     inputBundleHash: ReleaseHashSchema.optional(),
@@ -247,7 +248,6 @@ export const TrainingCatalogTargetSchema = z
     capabilityPills: z.array(z.string().trim().min(1).max(100)),
     executionMode: z.enum([
       "local_worker",
-      "connected_worker",
       "provider_native",
     ]),
     approvalPolicy: z
@@ -278,6 +278,9 @@ export const TrainingCatalogTargetSchema = z
     defaults: z
       .object({
         loraRank: z.number().int().positive(),
+        maxSteps: z.number().int().positive(),
+        rolloutGroupSize: z.number().int().min(2).max(32),
+        rolloutConcurrency: z.number().int().positive().max(32),
         rolloutOutputTokens: z.number().int().positive(),
       })
       .strict(),

@@ -14,10 +14,8 @@ import {
 } from "./managed-adapter-registry-parsers.js";
 import {
   hostedApiAuthHeaders,
-  resolveManagedAdapterControlAccess,
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
-import { type OpenPondTrainingProvenancePayload } from "./managed-adapter-training-provenance.js";
 
 export type ManagedRegistryArtifact = {
   id: string;
@@ -89,20 +87,10 @@ export type FireworksSourceImport = {
   files: PortableUploadFile[];
 };
 
-export type OpenPondTrainingSourceImport = {
-  teamId: string;
-  lineageId: string;
-  label: string;
-  baseProfileId: string;
-  files: PortableUploadFile[];
-  provenance: OpenPondTrainingProvenancePayload;
-};
-
 export type ManagedAdapterRegistryClientDependencies = {
   fetchImpl?: typeof fetch;
   readFileImpl?: typeof readFile;
   resolveRegistryAccess?: ManagedAdapterAccessResolver;
-  resolveTrustedSourceAccess?: ManagedAdapterAccessResolver;
   resolveInferenceAccess?: ManagedAdapterAccessResolver;
 };
 
@@ -118,9 +106,6 @@ export function createManagedAdapterRegistryClient(
   const resolveRegistryAccess =
     dependencies.resolveRegistryAccess ??
     ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
-  const resolveTrustedSourceAccess =
-    dependencies.resolveTrustedSourceAccess ??
-    ((teamId) => resolveManagedAdapterControlAccess({ teamId }));
   const resolveInferenceAccess =
     dependencies.resolveInferenceAccess ??
     ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
@@ -181,12 +166,8 @@ export function createManagedAdapterRegistryClient(
   }
   const listRegistry = (teamId: string) =>
     listRegistryWithAccess(resolveRegistryAccess, teamId);
-  const listTrustedRegistry = (teamId: string) =>
-    listRegistryWithAccess(resolveTrustedSourceAccess, teamId);
   const capabilities = (teamId: string) =>
     capabilitiesWithAccess(resolveRegistryAccess, teamId);
-  const trustedCapabilities = (teamId: string) =>
-    capabilitiesWithAccess(resolveTrustedSourceAccess, teamId);
 
   async function capabilitiesWithAccess(
     resolveAccess: ManagedAdapterAccessResolver,
@@ -204,75 +185,11 @@ export function createManagedAdapterRegistryClient(
   async function publishFireworksSource(
     input: FireworksSourceImport
   ): Promise<ManagedRegistryArtifact> {
-    return uploadFireworksSource({
+    return uploadSource({
       input,
       resolveAccess: resolveRegistryAccess,
-      trustedProvenance: false,
-    });
-  }
-
-  async function publishTrustedFireworksSource(
-    input: FireworksSourceImport
-  ): Promise<ManagedRegistryArtifact> {
-    return uploadFireworksSource({
-      input,
-      resolveAccess: resolveTrustedSourceAccess,
-      trustedProvenance: true,
-    });
-  }
-
-  async function publishTrustedOpenPondTrainingSource(
-    input: OpenPondTrainingSourceImport
-  ): Promise<ManagedRegistryArtifact> {
-    return uploadSource({
-      input,
-      resolveAccess: resolveTrustedSourceAccess,
       baseProfileId: input.baseProfileId,
-      source: "openpond_training",
-      sourceRef: input.lineageId,
-      idempotencyKey: `openpond-training:v5:${input.lineageId}:${input.provenance.sourceArtifactSha256}`,
-      sourceProvenance: input.provenance,
-      sourceImportPath: "/v1/model-adapters/openpond-training-publications",
-    });
-  }
-
-  async function uploadFireworksSource({
-    input,
-    resolveAccess,
-    trustedProvenance,
-  }: {
-    input: FireworksSourceImport;
-    resolveAccess: ManagedAdapterAccessResolver;
-    trustedProvenance: boolean;
-  }): Promise<ManagedRegistryArtifact> {
-    return uploadSource({
-      input,
-      resolveAccess,
-      baseProfileId: input.baseProfileId,
-      source: trustedProvenance ? "openpond_fireworks" : null,
-      sourceRef: trustedProvenance ? input.lineageId : null,
       idempotencyKey: `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
-      sourceProvenance: trustedProvenance
-        ? {
-            schemaVersion: "openpond.modelAdapterSourceProvenance.v1",
-            sourceSystem: "openpond_fireworks",
-            trainingJobId: input.trainingJobId,
-            trainingPlanId: input.trainingPlanId,
-            sourceArtifactId: input.sourceArtifactId,
-            sourceArtifactSha256: input.sourceArtifactSha256,
-            tasksetId: input.tasksetId,
-            tasksetHash: input.tasksetHash,
-            ...(input.evaluationArtifactId && input.evaluationArtifactSha256
-              ? {
-                  evaluationArtifactId: input.evaluationArtifactId,
-                  evaluationArtifactSha256: input.evaluationArtifactSha256,
-                }
-              : {}),
-            ...(input.providerRunId
-              ? { providerRunId: input.providerRunId }
-              : {}),
-          }
-        : null,
     });
   }
 
@@ -280,11 +197,7 @@ export function createManagedAdapterRegistryClient(
     input,
     resolveAccess,
     baseProfileId,
-    source,
-    sourceRef,
     idempotencyKey,
-    sourceProvenance,
-    sourceImportPath,
   }: {
     input: {
       teamId: string;
@@ -293,11 +206,7 @@ export function createManagedAdapterRegistryClient(
     };
     resolveAccess: ManagedAdapterAccessResolver;
     baseProfileId: string;
-    source: "openpond_fireworks" | "openpond_training" | null;
-    sourceRef: string | null;
     idempotencyKey: string;
-    sourceProvenance: unknown | null;
-    sourceImportPath?: string;
   }): Promise<ManagedRegistryArtifact> {
     assertPortableUploadFiles(input.files);
     const created = await requestJson<{
@@ -306,22 +215,13 @@ export function createManagedAdapterRegistryClient(
     }>(
       resolveAccess,
       input.teamId,
-      source
-        ? sourceImportPath ?? "/v1/model-adapters/source-imports"
-        : "/v1/model-adapters/uploads",
+      "/v1/model-adapters/uploads",
       {
         method: "POST",
         body: JSON.stringify({
           label: input.label,
           idempotencyKey,
           baseProfileId,
-          ...(source && sourceRef && sourceProvenance
-            ? {
-                source,
-                sourceRef,
-                sourceProvenance,
-              }
-            : {}),
           files: input.files.map(({ artifact, path, mediaType }) => ({
             path,
             sizeBytes: artifact.sizeBytes,
@@ -439,17 +339,6 @@ export function createManagedAdapterRegistryClient(
     sourceUpdatedAt: string;
     state: "active" | "inactive" | "deleted";
   }) => syncBindingWithAccess(resolveRegistryAccess, input);
-  const syncTrustedBinding = (input: {
-    teamId: string;
-    binding: ModelBinding;
-    logicalModelName: string;
-    artifactId: string;
-    deploymentId: string;
-    bindingVersion: number;
-    sourceUpdatedAt: string;
-    state: "active" | "inactive" | "deleted";
-  }) => syncBindingWithAccess(resolveTrustedSourceAccess, input);
-
   async function* streamChat(input: {
     teamId: string;
     logicalModelName: string;
@@ -533,14 +422,9 @@ export function createManagedAdapterRegistryClient(
 
   return {
     listRegistry,
-    listTrustedRegistry,
     capabilities,
-    trustedCapabilities,
     publishFireworksSource,
-    publishTrustedFireworksSource,
-    publishTrustedOpenPondTrainingSource,
     syncBinding,
-    syncTrustedBinding,
     streamChat,
   };
 }

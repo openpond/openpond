@@ -11,11 +11,6 @@ from .learning_signals import (
 )
 
 
-PRIME_RL_UPSTREAM_REVISION = "e0d60e4d85ea636873acb2e7083e794740d20226"
-PRIME_RL_BASE_IMAGE_DIGEST = (
-    "sha256:eae2df21d34ddfdc0065390b4f3261ff"
-    "691ea4ebd281630f64aacc60855c0c37"
-)
 TRL_UPSTREAM_REVISION = "0.26.2"
 
 
@@ -88,56 +83,6 @@ class TrlEngineAdapter:
                 "manifestHash": _manifest_hash(manifest),
                 "model": manifest.get("model"),
                 "recipe": manifest.get("recipe"),
-            },
-        )
-
-
-class PrimeRlEngineAdapter:
-    adapter_id = "connected-prime-rl"
-    upstream_revision = PRIME_RL_UPSTREAM_REVISION
-
-    def project(
-        self,
-        *,
-        method: str,
-        signals: list[CanonicalSignal],
-        manifest: dict[str, Any],
-    ) -> EngineProjection:
-        validate_signal_lineage(signals, manifest)
-        normalized = method.lower()
-        if normalized != "grpo":
-            raise ValueError("prime-rl adapter supports live GRPO signals")
-        records = project_online_rollouts(signals)
-        if not records:
-            raise ValueError("prime-rl requires approved trajectory/reward pairs")
-        incomplete = [
-            record["episodeId"]
-            for record in records
-            if not isinstance(record.get("optimizerSample"), dict)
-        ]
-        if incomplete:
-            raise ValueError(
-                "prime-rl requires token-level optimizer samples for "
-                + ", ".join(incomplete)
-            )
-        runtime_target = manifest.get("runtimeTarget")
-        if not isinstance(runtime_target, dict):
-            raise ValueError("prime-rl requires a resolved runtime target")
-        return EngineProjection(
-            adapter_id=self.adapter_id,
-            upstream_revision=self.upstream_revision,
-            method=normalized,
-            records=records,
-            configuration={
-                "schemaVersion": "openpond.primeRlVerifiersAdapter.v1",
-                "upstreamImageDigest": PRIME_RL_BASE_IMAGE_DIGEST,
-                "manifestHash": _manifest_hash(manifest),
-                "environment": {
-                    "adapter": "verifiers-v1",
-                    "transport": "canonical-learning-signal-batch",
-                    "runtimeTarget": runtime_target,
-                },
-                "optimizer": {"engine": "prime-rl", "method": normalized},
             },
         )
 

@@ -9,7 +9,6 @@ import {
   UpdateComputeSettingsRequestSchema,
   type ComputeDevice,
   type ComputeInventory,
-  type PrimeComputeProviderStatus,
   type ComputeRuntime,
   type ComputeSettings,
   type ComputeStorageRoot,
@@ -30,9 +29,6 @@ type ComputeServiceDeps = {
   commandProbe?: CommandProbe;
   now?: () => Date;
   storageCandidates?: () => Promise<StorageCandidate[]>;
-  primeProvider?: {
-    status(): Promise<PrimeComputeProviderStatus>;
-  };
 };
 
 export function createComputeService(deps: ComputeServiceDeps) {
@@ -61,16 +57,14 @@ export function createComputeService(deps: ComputeServiceDeps) {
   }
 
   async function state() {
-    const [snapshot, currentSettings, prime] = await Promise.all([
+    const [snapshot, currentSettings] = await Promise.all([
       inventory(),
       settings(),
-      deps.primeProvider?.status() ?? Promise.resolve(disconnectedPrimeStatus()),
     ]);
     return ComputeStateResponseSchema.parse({
       schemaVersion: "openpond.computeState.v1",
       settings: currentSettings,
       inventory: snapshot ? { ...snapshot, downloads: await modelDownloads.list() } : null,
-      providers: { prime },
       scanning: scanPromise !== null,
     });
   }
@@ -332,28 +326,6 @@ export function createComputeService(deps: ComputeServiceDeps) {
   return { state, settings, inventory, updateSettings, scan, modelPath, ensureModel: modelDownloads.ensure, startModelDownload: modelDownloads.start, cancelModelDownload: modelDownloads.cancel, close: modelDownloads.close };
 }
 
-function disconnectedPrimeStatus(): PrimeComputeProviderStatus {
-  return {
-    schemaVersion: "openpond.primeComputeProviderStatus.v1",
-    providerId: "prime",
-    displayName: "Prime Intellect",
-    state: "disconnected",
-    credential: {
-      configured: false,
-      redacted: null,
-      storedLocally: true,
-    },
-    availability: null,
-    worker: {
-      ready: false,
-      status: "not_configured",
-      message: "Prime Intellect is not connected.",
-      issues: [],
-    },
-    lastValidatedAt: null,
-    lastError: null,
-  };
-}
 
 async function pythonRuntimeProbe(probe: CommandProbe, projectDir: string): Promise<ComputeRuntime[]> {
   const script = "import json, importlib.metadata as m; print(json.dumps({'python': __import__('platform').python_version(), 'torch': m.version('torch'), 'transformers': m.version('transformers'), 'trl': m.version('trl'), 'peft': m.version('peft')}))";

@@ -1,7 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
-
 import {
   ModelRunDraftSchema,
   TrainingJobSchema,
@@ -29,7 +25,7 @@ import {
 } from "./helpers/training-fixtures.js";
 
 describe("portable Model Run lifecycle", () => {
-  test("imports verified adapter files into canonical lineage and Model Version state", async () =>
+  test("imports a Sandbox-owned managed candidate into canonical lineage and Model Version state", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const taskset = rftTasksetFixture();
       const recipeFixture = fireworksRftRecipe();
@@ -66,7 +62,7 @@ describe("portable Model Run lifecycle", () => {
           source: "managed",
         },
         method: "grpo",
-        destinationId: "prime_hosted",
+        destinationId: "openpond_managed",
         runPreset: "small",
         recipe,
         createdAt: FIXED_TIME,
@@ -79,24 +75,24 @@ describe("portable Model Run lifecycle", () => {
         taskset,
         modelRun: draft,
         runtime: {
-          adapterId: "local-harness",
-          placement: "local",
+          adapterId: "openpond-managed-harness",
+          placement: "remote",
           capabilityReceipt,
           runtimeVersion: "1",
           dataPlane: null,
         },
         compute: {
-          adapterId: "prime-raw",
+          adapterId: "openpond-managed",
           kind: "managed",
           deviceOrPool: "gpu-0",
           capabilityReceipt,
-          provider: "prime",
+          provider: "openpond",
         },
         engine: {
-          adapterId: "connected-prime-rl",
-          workerVersion: "0.0.38",
-          workerImageDigest: `sha256:${sha256("worker-image")}`,
-          upstreamRevision: sha256("prime-rl-revision"),
+          adapterId: "sandbox-managed-rft",
+          workerVersion: "managed-rft-v2",
+          workerImageDigest: null,
+          upstreamRevision: sha256("managed-rft-revision"),
           capabilityReceipt,
         },
         approval: {
@@ -105,7 +101,7 @@ describe("portable Model Run lifecycle", () => {
           maximumSpendUsd: 2,
         },
         openpondRelease: "0.0.38",
-        workerProtocol: "openpond.connectedWorker.v1",
+        workerProtocol: "openpond.managedRftWorker.v2",
       });
       const profileRelease = graph.profileRelease;
       const releaseGraph = portableReleaseGraphMetadata({
@@ -141,7 +137,7 @@ describe("portable Model Run lifecycle", () => {
       const plan = createTrainingPlan({
         modelId: draft.modelId,
         taskset,
-        destinationId: "prime_hosted",
+        destinationId: "openpond_managed",
         recipe,
         exportApproved: true,
       });
@@ -154,7 +150,7 @@ describe("portable Model Run lifecycle", () => {
           planId: plan.id,
           bundleHash: sha256("training-bundle"),
           approvalId: "approval-1",
-          destinationId: "prime_hosted",
+          destinationId: "openpond_managed",
           status: "running",
           nonProduction: false,
           workerPid: null,
@@ -176,50 +172,26 @@ describe("portable Model Run lifecycle", () => {
           },
         }),
       );
-      const artifactDirectory = path.join(directory, "artifacts");
-      await mkdir(artifactDirectory, { recursive: true });
-      const files = [
+      const artifactEntries = [
         {
-          name: "adapter_model.safetensors",
-          content: Buffer.from("portable weights"),
           kind: "adapter" as const,
-        },
-        {
-          name: "adapter_config.json",
-          content: Buffer.from('{"r":8}\n'),
-          kind: "adapter" as const,
-        },
-        {
-          name: "prime-rl-step-receipts.jsonl",
-          content: Buffer.from('{"step":1}\n'),
-          kind: "receipt" as const,
+          objectRef:
+            "sandbox-managed-rft://managed-provider-job-1/model-artifact-1",
+          sha256: sha256("managed candidate"),
+          sizeBytes: 8_000_000,
         },
       ];
-      const artifactEntries = [];
-      for (const [index, file] of files.entries()) {
-        const digest = sha256(file.content);
-        const target = path.join(
-          artifactDirectory,
-          `${index}-${digest.slice(0, 12)}-${file.name}`,
-        );
-        await writeFile(target, file.content);
-        artifactEntries.push({
-          kind: file.kind,
-          objectRef: pathToFileURL(target).toString(),
-          sha256: digest,
-          sizeBytes: file.content.byteLength,
-        });
-      }
       const artifactBase = {
-        runId: jobId,
+        runId: "managed-provider-job-1",
         manifestHash: graph.manifest.contentHash,
         artifacts: artifactEntries,
       };
       const executionRef = {
-        runId: jobId,
-        adapterId: "connected-prime-rl",
-        providerJobId: "prime-provider-job-1",
-        leaseId: "prime-lease-1",
+        runId: "managed-provider-job-1",
+        adapterId: "sandbox-managed-rft",
+        providerJobId: "managed-provider-job-1",
+        tenantId: "team_managed",
+        leaseId: null,
         createdAt: FIXED_TIME,
       };
       const completedAt = "2026-07-12T00:10:00.000Z";
@@ -230,7 +202,7 @@ describe("portable Model Run lifecycle", () => {
         job,
         executionRef,
         status: {
-          runId: jobId,
+          runId: "managed-provider-job-1",
           state: "succeeded",
           phase: "complete",
           progress: 1,
@@ -247,8 +219,8 @@ describe("portable Model Run lifecycle", () => {
         status: "succeeded",
         modelVersionId: prepared.targetVersion.id,
         receipt: {
-          provider: "prime",
-          providerRunId: "prime-provider-job-1",
+          provider: "sandbox",
+          providerRunId: "managed-provider-job-1",
           cleanup: {
             computeReleased: true,
             tunnelClosed: true,
@@ -263,21 +235,18 @@ describe("portable Model Run lifecycle", () => {
         artifactLineageId: terminal.adapterArtifactLineageId,
       });
       const artifacts = await store.listTrainingArtifacts(jobId);
-      expect(artifacts).toHaveLength(3);
+      expect(artifacts).toHaveLength(1);
       expect(artifacts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
             kind: "adapter",
             metadata: expect.objectContaining({
-              provider: "prime",
-              providerFilename: "adapter_model.safetensors",
-              groupedGrpoReceiptHash: artifactEntries[2]!.sha256,
-            }),
-          }),
-          expect.objectContaining({
-            kind: "manifest",
-            metadata: expect.objectContaining({
-              providerFilename: "adapter_config.json",
+              provider: "sandbox",
+              providerFilename: "managed-rft-candidate",
+              managedRftCandidate: true,
+              managedRftJobId: "managed-provider-job-1",
+              managedRftModelArtifactId: "model-artifact-1",
+              managedRftTeamId: "team_managed",
             }),
           }),
         ]),

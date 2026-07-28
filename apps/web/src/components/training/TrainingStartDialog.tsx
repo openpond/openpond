@@ -313,6 +313,10 @@ export function TrainingStartDialog({
       method,
     ));
     setRank(target?.defaults.loraRank ?? 2);
+    setRolloutGroupSize(target?.defaults.rolloutGroupSize ?? 4);
+    setRolloutConcurrency(
+      target?.defaults.rolloutConcurrency ?? 1,
+    );
     setRolloutMaxOutputTokens(
       target?.defaults.rolloutOutputTokens ?? DEFAULT_ROLLOUT_OUTPUT_TOKENS,
     );
@@ -322,7 +326,7 @@ export function TrainingStartDialog({
     setRetentionDays(target?.approvalPolicy?.defaultRetentionDays ?? 7);
     setExportApproved(false);
     if (method === "grpo") {
-      setMaxSteps(8);
+      setMaxSteps(target?.defaults.maxSteps ?? 8);
       if (taskset.datasetArtifact && target?.executionMode === "provider_native") {
         setTrainingExamples(
           Math.max(
@@ -420,16 +424,13 @@ export function TrainingStartDialog({
     approvalPresentation === "dialog" && approvalPolicy ? "Run" : actionLabel;
 
   useEffect(() => {
-    if (
-      selectedComputeTarget &&
-      selectedComputeTarget.destinationId !== destinationId
-    ) {
+    if (selectedComputeTarget) {
       selectDestination(
         selectedComputeTarget.destinationId as TrainingDestinationId,
         selectedComputeTarget,
       );
     }
-  }, [destinationId, selectedComputeTarget?.destinationId]);
+  }, [selectedComputeTarget?.id]);
 
   useEffect(() => {
     onReadinessChange?.({

@@ -67,8 +67,7 @@ export function useTrainingStartForm(input: {
     )?.destinationId
     ?? input.destinations.find(
       (destination) =>
-        destination.available
-        && destination.destinationId !== "export",
+        destination.available,
     )?.destinationId
     ?? "local_cpu_fixture";
   const initialCandidate = preferredOption

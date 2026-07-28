@@ -66,11 +66,9 @@ export const TrainingMethodSchema = z.enum([
 ]);
 export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
-  "export",
   "local_cpu_fixture",
-  "prime_hosted",
   "fireworks",
-  "ssh_gpu",
+  "openpond_managed",
 ]);
 
 export const SftRecipeSchema = z.object({

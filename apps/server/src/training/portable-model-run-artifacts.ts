@@ -27,7 +27,7 @@ export async function importPortableModelRunArtifacts(input: {
 }): Promise<{
   artifacts: TrainingArtifact[];
   weights: TrainingArtifact;
-  configuration: TrainingArtifact;
+  configuration: TrainingArtifact | null;
   provider: string;
 }> {
   assertArtifacts(input.portable, input.executionRef, input.job);
@@ -36,6 +36,22 @@ export async function importPortableModelRunArtifacts(input: {
     ...input,
     provider,
   });
+  if (provider === "sandbox") {
+    const weights = artifacts.find(
+      (artifact) => artifact.metadata.managedRftCandidate === true,
+    );
+    if (!weights || artifacts.length !== 1) {
+      throw new Error(
+        "Sandbox managed training completed without one canonical candidate receipt.",
+      );
+    }
+    return {
+      artifacts,
+      weights,
+      configuration: null,
+      provider,
+    };
+  }
   const portableFiles = artifacts
     .map((artifact) => ({
       artifact,
@@ -130,33 +146,46 @@ async function persistPortableArtifacts(input: {
   draft: ModelRunDraft & {
     baseModel: NonNullable<ModelRunDraft["baseModel"]>;
   };
+  executionRef: TrainingExecutionRef;
   provider: string;
   completedAt: string;
   portable: TrainingArtifacts;
 }): Promise<TrainingArtifact[]> {
   const existing = await input.store.listTrainingArtifacts(input.job.id);
   const optimizerReceiptHash =
-    input.portable.artifacts.find((artifact) => {
-      const name = portableFilenameFromRef(artifact.objectRef);
-      return (
-        name === "grouped-grpo-receipt.json"
-        || name === "prime-rl-step-receipts.jsonl"
-      );
-    })?.sha256 ?? input.portable.contentHash;
+    input.portable.artifacts.find(
+      (artifact) => artifact.kind === "receipt",
+    )?.sha256 ?? input.portable.contentHash;
   const persisted: TrainingArtifact[] = [];
   for (const portable of input.portable.artifacts) {
-    const artifactPath = localArtifactPath(portable.objectRef);
-    const info = await stat(artifactPath);
-    if (!info.isFile() || info.size !== portable.sizeBytes) {
+    const managedCandidate = managedRftCandidateRef(
+      portable.objectRef,
+      input.executionRef.runId,
+    );
+    if (
+      input.provider === "sandbox" &&
+      (!managedCandidate || portable.kind !== "adapter")
+    ) {
       throw new Error(
-        `Portable artifact ${portable.objectRef} changed before import.`,
+        "Sandbox managed training returned an invalid remote candidate receipt.",
       );
     }
-    const bytes = await readFile(artifactPath);
-    if (sha256(bytes) !== portable.sha256) {
-      throw new Error(
-        `Portable artifact ${portable.objectRef} failed hash verification.`,
-      );
+    const artifactPath = managedCandidate
+      ? portable.objectRef
+      : localArtifactPath(portable.objectRef);
+    if (!managedCandidate) {
+      const info = await stat(artifactPath);
+      if (!info.isFile() || info.size !== portable.sizeBytes) {
+        throw new Error(
+          `Portable artifact ${portable.objectRef} changed before import.`,
+        );
+      }
+      const bytes = await readFile(artifactPath);
+      if (sha256(bytes) !== portable.sha256) {
+        throw new Error(
+          `Portable artifact ${portable.objectRef} failed hash verification.`,
+        );
+      }
     }
     const duplicate = existing.find(
       (artifact) =>
@@ -167,7 +196,9 @@ async function persistPortableArtifacts(input: {
       persisted.push(duplicate);
       continue;
     }
-    const providerFilename = portableFilenameFromRef(portable.objectRef);
+    const providerFilename = managedCandidate
+      ? "managed-rft-candidate"
+      : portableFilenameFromRef(portable.objectRef);
     const isWeights = isAdapterWeights(providerFilename);
     const metadata: Record<string, unknown> = {
       provider: input.provider,
@@ -175,10 +206,17 @@ async function persistPortableArtifacts(input: {
       portableKind: portable.kind,
       manifestHash: input.portable.manifestHash,
       verified: true,
+      ...(managedCandidate
+        ? {
+            managedRftCandidate: true,
+            managedRftJobId: managedCandidate.jobId,
+            managedRftModelArtifactId: managedCandidate.modelArtifactId,
+            managedRftTeamId: input.executionRef.tenantId ?? null,
+          }
+        : {}),
     };
     if (
-      input.provider === "prime"
-      && input.draft.method === "grpo"
+      input.draft.method === "grpo"
       && isWeights
     ) {
       metadata.groupedGrpoReceiptHash = optimizerReceiptHash;
@@ -218,6 +256,25 @@ function localArtifactPath(objectRef: string): string {
     );
   }
   return path.resolve(objectRef);
+}
+
+function managedRftCandidateRef(
+  objectRef: string,
+  expectedJobId: string,
+): { jobId: string; modelArtifactId: string } | null {
+  const match = objectRef.match(
+    /^sandbox-managed-rft:\/\/([^/]+)\/([^/?#]+)$/,
+  );
+  if (!match) return null;
+  try {
+    const jobId = decodeURIComponent(match[1]!);
+    const modelArtifactId = decodeURIComponent(match[2]!);
+    return jobId === expectedJobId && modelArtifactId
+      ? { jobId, modelArtifactId }
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function portableFilenameFromRef(objectRef: string): string {
@@ -271,6 +328,7 @@ function trainingArtifactKind(
 }
 
 function portableProvider(job: TrainingJob): string {
+  if (job.destinationId === "openpond_managed") return "sandbox";
   const bindings = objectValue(job.metadata.portableAdapterBindings);
   const compute = objectValue(bindings.compute);
   return typeof compute.provider === "string" && compute.provider.trim()

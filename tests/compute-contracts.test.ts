@@ -3,8 +3,6 @@ import {
   ComputeInventorySchema,
   ComputeSettingsSchema,
   ModelAssetSchema,
-  PrimeComputeProviderStatusSchema,
-  SavePrimeComputeCredentialRequestSchema,
 } from "@openpond/contracts";
 
 describe("compute contracts", () => {
@@ -29,40 +27,5 @@ describe("compute contracts", () => {
   test("rejects impossible byte counts and incomplete model lineage", () => {
     expect(ComputeSettingsSchema.safeParse({ schemaVersion: "openpond.computeSettings.v1", modelStorePath: null, defaultDeviceIds: [], additionalModelPaths: [], updatedAt: "not-a-date" }).success).toBe(false);
     expect(ModelAssetSchema.safeParse({ name: "model", source: "huggingface", sizeBytes: -1 }).success).toBe(false);
-  });
-
-  test("keeps Prime credential input separate from redacted provider status", () => {
-    const request = SavePrimeComputeCredentialRequestSchema.parse({
-      apiKey: "  prime-secret  ",
-    });
-    const status = PrimeComputeProviderStatusSchema.parse({
-      schemaVersion: "openpond.primeComputeProviderStatus.v1",
-      providerId: "prime",
-      displayName: "Prime Intellect",
-      state: "credential_valid",
-      credential: {
-        configured: true,
-        redacted: "••••••••••••",
-        storedLocally: true,
-      },
-      availability: {
-        availableOfferingCount: 2,
-        lowestHourlyUsd: 1.25,
-        registeredSshKeyCount: 1,
-      },
-      worker: {
-        ready: false,
-        status: "setup_required",
-        message: "Worker setup remains.",
-        issues: ["Publish a pinned worker image."],
-      },
-      lastValidatedAt: "2026-07-24T12:00:00.000Z",
-      lastError: null,
-      apiKey: "must-be-stripped",
-    });
-
-    expect(request.apiKey).toBe("prime-secret");
-    expect(status).not.toHaveProperty("apiKey");
-    expect(JSON.stringify(status)).not.toContain("prime-secret");
   });
 });

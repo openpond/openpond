@@ -139,7 +139,12 @@ export function createPortableModelRunService(deps: {
         maximumSpendUsd: approval.maximumCostUsd,
       },
       openpondRelease: "0.0.38",
-      workerProtocol: "openpond.connectedWorker.v1",
+      workerProtocol:
+        bindings.engine.adapterId === "sandbox-managed-rft"
+          ? "openpond.managedRftWorker.v2"
+          : bindings.engine.adapterId === "fireworks-native"
+            ? "openpond.fireworksNative.v1"
+            : "openpond.localTrainingWorker.v1",
     });
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,

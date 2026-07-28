@@ -106,9 +106,6 @@ describe("managed adapter registry client", () => {
         token: "opk_user",
         teamId,
       }),
-      resolveTrustedSourceAccess: vi.fn(async () => {
-        throw new Error("trusted source identity must not run in the desktop");
-      }),
       resolveInferenceAccess: vi.fn(async () => {
         throw new Error("inference identity must not publish artifacts");
       }),
@@ -134,183 +131,6 @@ describe("managed adapter registry client", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
-  test("reserves trusted Fireworks provenance for the hosted service identity", async () => {
-    const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(
-      async (input: string | URL | Request, init = {}) => {
-        const url = String(input);
-        requests.push({ url, init });
-        if (url.endsWith("/v1/model-adapters/source-imports")) {
-          return Response.json({
-            upload: {
-              id: "upload-trusted",
-              version: 1,
-              state: "uploading",
-            },
-            uploadCapabilities: uploadCapabilities(),
-          });
-        }
-        if (
-          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/")
-        ) {
-          return new Response(null, { status: 200 });
-        }
-        if (
-          url.endsWith("/v1/model-adapters/uploads/upload-trusted/complete")
-        ) {
-          return Response.json({
-            artifact: {
-              id: "artifact-trusted",
-              source: "openpond_fireworks",
-              sourceRef: "lineage-1",
-              state: "imported_unvalidated",
-              promotable: false,
-              customerBindingAllowed: false,
-            },
-          });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      }
-    );
-    const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
-      readFileImpl: artifactReader,
-      resolveRegistryAccess: vi.fn(async () => {
-        throw new Error("user identity must not assert trusted provenance");
-      }),
-      resolveTrustedSourceAccess: async () => ({
-        apiBaseUrl: "https://api.test",
-        token: "opk_service",
-        teamId: "team_qa",
-      }),
-    });
-
-    const artifact = await client.publishTrustedFireworksSource(sourceImport());
-
-    expect(artifact).toMatchObject({
-      id: "artifact-trusted",
-      source: "openpond_fireworks",
-    });
-    const create = requests.find((request) =>
-      request.url.endsWith("/source-imports")
-    );
-    const body = JSON.parse(String(create?.init.body)) as Record<
-      string,
-      unknown
-    >;
-    expect(body).toMatchObject({
-      source: "openpond_fireworks",
-      sourceRef: "lineage-1",
-      sourceProvenance: expect.objectContaining({
-        sourceSystem: "openpond_fireworks",
-        trainingJobId: "job-1",
-      }),
-    });
-    expect(new Headers(create?.init.headers).get("openpond-api-key")).toBe(
-      "opk_service"
-    );
-    expect(new Headers(create?.init.headers).get("x-openpond-team-id")).toBe(
-      "team_qa"
-    );
-  });
-
-  test("publishes signed Prime GRPO provenance without owning serving lifecycle", async () => {
-    const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(
-      async (input: string | URL | Request, init: RequestInit = {}) => {
-        const url = String(input);
-        requests.push({ url, init });
-        if (url.endsWith("/v1/model-adapters/openpond-training-publications")) {
-          return Response.json({
-            upload: {
-              id: "upload-prime",
-              version: 1,
-              state: "uploading",
-            },
-            uploadCapabilities: uploadCapabilities(),
-          });
-        }
-        if (
-          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/")
-        ) {
-          return new Response(null, { status: 200 });
-        }
-        if (url.endsWith("/v1/model-adapters/uploads/upload-prime/complete")) {
-          return Response.json({
-            artifact: {
-              id: "artifact-prime",
-              source: "openpond_training",
-              sourceRef: "lineage-1",
-              state: "imported_unvalidated",
-              promotable: false,
-              customerBindingAllowed: false,
-            },
-          });
-        }
-        if (url.endsWith("/artifact-prime/evaluations")) {
-          return Response.json({
-            evaluation: {
-              id: "evaluation-prime",
-              state: "queued",
-            },
-          });
-        }
-        if (url.endsWith("/artifact-prime/deploy")) {
-          return Response.json({
-            deployment: {
-              id: "deployment-prime",
-              artifactId: "artifact-prime",
-              state: "requested",
-            },
-          });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      }
-    );
-    const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
-      readFileImpl: artifactReader,
-      resolveTrustedSourceAccess: async (teamId) => ({
-        apiBaseUrl: "https://api.test",
-        token: "opk_service",
-        teamId,
-      }),
-      resolveRegistryAccess: async (teamId) => ({
-        apiBaseUrl: "https://api.test",
-        token: "opk_user",
-        teamId,
-      }),
-    });
-
-    await client.publishTrustedOpenPondTrainingSource(
-      openPondTrainingSourceImport()
-    );
-
-    const create = requests.find((request) =>
-      request.url.endsWith("/openpond-training-publications")
-    );
-    const body = JSON.parse(String(create?.init.body));
-    expect(body).toMatchObject({
-      source: "openpond_training",
-      sourceRef: "lineage-1",
-      baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-      idempotencyKey: `openpond-training:v5:lineage-1:${"1".repeat(64)}`,
-      sourceProvenance: {
-        sourceSystem: "openpond_training",
-        modelRunId: "model-run-1",
-      },
-    });
-    const publicationHeaders = new Headers(create?.init.headers);
-    expect(publicationHeaders.get("openpond-api-key")).toBe("opk_service");
-    expect(
-      requests.some(
-        (request) =>
-          request.url.endsWith("/evaluations") ||
-          request.url.endsWith("/deploy")
-      )
-    ).toBe(false);
-  });
-
   test("uses the explicit user workspace for registry reads and binding sync", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const fetchImpl = vi.fn(
@@ -322,8 +142,9 @@ describe("managed adapter registry client", () => {
             artifacts: [
               {
                 id: "artifact-1",
-                source: "openpond_training",
-                sourceRef: "lineage-1",
+                source: "sandbox_managed_rft",
+                sourceRef:
+                  "r2://managed-rft/jobs/managed-job-1/candidate.json",
                 state: "promotable",
                 promotable: true,
                 customerBindingAllowed: true,
@@ -356,9 +177,6 @@ describe("managed adapter registry client", () => {
         apiBaseUrl: "https://api.test",
         token: "opk_user",
         teamId,
-      }),
-      resolveTrustedSourceAccess: vi.fn(async () => {
-        throw new Error("trusted identity must not list or bind");
       }),
     });
 
@@ -542,23 +360,6 @@ function trainingArtifact(id: string, sha256: string, sizeBytes: number) {
   };
 }
 
-function uploadCapabilities() {
-  return [
-    {
-      path: "adapter_config.json",
-      url: "https://openpond-test.s3.us-east-2.amazonaws.com/config",
-      headers: { "content-type": "application/json" },
-    },
-    {
-      path: "adapter_model.safetensors",
-      url: "https://openpond-test.s3.us-east-2.amazonaws.com/weights",
-      headers: {
-        "content-type": "application/vnd.safetensors",
-      },
-    },
-  ];
-}
-
 const artifactReader = (async (path: string) =>
   path.endsWith("config")
     ? Buffer.from("{}")
@@ -591,49 +392,5 @@ function sourceImport() {
         mediaType: "application/vnd.safetensors" as const,
       },
     ],
-  };
-}
-
-function openPondTrainingSourceImport() {
-  const hash = (character: string) => character.repeat(64);
-  return {
-    teamId: "team_qa",
-    lineageId: "lineage-1",
-    label: "Prime GRPO adapter",
-    baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-    files: sourceImport().files,
-    provenance: {
-      schemaVersion: "openpond.modelAdapterSourceProvenance.v1" as const,
-      sourceSystem: "openpond_training" as const,
-      trainingJobId: "job-1",
-      trainingPlanId: "plan-1",
-      sourceArtifactId: "artifact-1",
-      sourceArtifactSha256: hash("1"),
-      sourceManifestSha256: hash("2"),
-      sourceInventorySha256: hash("3"),
-      sourceBaseModelSha256: hash("4"),
-      candidateBundleSha256: hash("5"),
-      tasksetId: "taskset-1",
-      tasksetHash: hash("6"),
-      evaluationArtifactId: "evaluation-1",
-      evaluationArtifactSha256: hash("7"),
-      frozenEvaluatorHash: hash("8"),
-      spendAttestationSha256: hash("9"),
-      cleanupAttestationSha256: hash("a"),
-      providerRunId: "prime-run-1",
-      trainingMethod: "grpo" as const,
-      sourcePolicyOrCheckpoint: "model-version-1:policy-1",
-      optimizerProofSha256: hash("b"),
-      modelProjectId: "model-1",
-      modelRunId: "model-run-1",
-      modelVersionId: "model-version-1",
-      primeRlRevision: "c".repeat(40),
-      rawPrimeComputeReceiptSha256: hash("d"),
-      harnessReleaseSha256: hash("e"),
-      profileReleaseSha256: hash("f"),
-      agentReleaseSha256: hash("0"),
-      graderSha256: hash("1"),
-      trainingTelemetrySha256: hash("2"),
-    },
   };
 }

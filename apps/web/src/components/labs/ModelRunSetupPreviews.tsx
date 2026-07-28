@@ -221,9 +221,7 @@ function PreviewSelect({ label, value }: { label: string; value: string }) {
 function destinationLabel(destination: ModelRunDraft["destinationId"]): string {
   if (destination === "fireworks") return "Fireworks";
   if (destination === "local_cpu_fixture") return "Local CPU";
-  if (destination === "ssh_gpu") return "SSH GPU";
-  if (destination === "prime_hosted") return "Prime Raw GPU";
-  return destination ? destination.replaceAll("_", " ") : "Not selected";
+  return "OpenPond Managed";
 }
 
 function budgetLabel(preset: ModelRunDraft["runPreset"]): string {

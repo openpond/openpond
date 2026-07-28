@@ -88,12 +88,6 @@ describe("server HTTP route table", () => {
         args: [{ type: "list" }],
       });
       await expect(
-        expectJsonRequest(origin, "GET", "/v1/sandboxes?teamId=team-1", 200)
-      ).resolves.toMatchObject({
-        name: "sandboxPayload",
-        args: [{ type: "list", payload: { teamId: "team-1" } }],
-      });
-      await expect(
         expectJsonRequest(
           origin,
           "GET",
@@ -276,7 +270,6 @@ describe("server HTTP route table", () => {
         "extensionRemovePayload",
         "profileRenameAgentPayload",
         "organizationPayload",
-        "sandboxPayload",
         "teamChatPayload",
         "communityPayload",
         "communityPayload",

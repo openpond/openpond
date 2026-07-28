@@ -20,6 +20,7 @@ import {
 } from "@openpond/training-sdk";
 
 import type { SqliteStore } from "../store/store.js";
+import { OpenPondManagedTrainingAdapter } from "./openpond-managed-training-adapter.js";
 
 /**
  * Registers the provider implementations that still expose the destination
@@ -30,6 +31,12 @@ import type { SqliteStore } from "../store/store.js";
 export function createDestinationTrainingEngineRegistry(input: {
   destinations: TrainingDestinationRegistry;
   store: SqliteStore;
+  storeDir: string;
+  resolveManagedAccess?: () => Promise<{
+    apiBaseUrl: string;
+    token: string;
+    teamId: string;
+  }>;
   catalog(): Promise<TrainingCatalog>;
 }) {
   const adapters = new TrainingAdapterRegistry();
@@ -52,6 +59,13 @@ export function createDestinationTrainingEngineRegistry(input: {
       }),
     );
   }
+  adapters.registerEngine(
+    new OpenPondManagedTrainingAdapter({
+      store: input.store,
+      storeDir: input.storeDir,
+      resolveAccess: input.resolveManagedAccess,
+    }),
+  );
   return adapters;
 }
 

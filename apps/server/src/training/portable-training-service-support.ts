@@ -20,10 +20,6 @@ export function createPortableTrainingServiceSupport(input: {
   adapters: TrainingAdapterRegistry;
   computeInventory?: () => Promise<ComputeInventory | null>;
   revalidateCompute?: () => Promise<unknown>;
-  connectedWorkerConfigured?: boolean;
-  connectedEngineConfigured?: boolean;
-  primeRawConfigured?: boolean;
-  connectedWorkerImageDigest?: string | null;
   searchTrainingModels?: (
     query: string,
   ) => Promise<RegistryModelSearchResult[]>;
@@ -54,14 +50,6 @@ export function createPortableTrainingServiceSupport(input: {
       inventory: compute,
       searchResults,
       registeredEngineIds: input.adapters.engineIds(),
-      connectedWorkerConfigured:
-        input.connectedWorkerConfigured ?? false,
-      connectedEngineConfigured:
-        input.connectedEngineConfigured ?? false,
-      primeRawConfigured:
-        input.primeRawConfigured ?? false,
-      connectedWorkerImageDigest:
-        input.connectedWorkerImageDigest ?? null,
       adapterCompute,
       preferredMethod,
     });

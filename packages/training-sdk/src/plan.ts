@@ -22,8 +22,7 @@ export function createTrainingPlan(input: {
   const environmentPlacement =
     input.destinationId === "fireworks"
       ? ("provider_native" as const)
-      : input.destinationId === "ssh_gpu" ||
-          input.destinationId === "prime_hosted"
+      : input.destinationId === "openpond_managed"
         ? ("remote" as const)
         : ("local" as const);
   const draft = { schemaVersion: "openpond.trainingPlan.v1" as const, id, modelId: input.modelId, tasksetId: input.taskset.id, tasksetHash: input.taskset.contentHash, destinationId: input.destinationId, recipe: input.recipe, environmentPlacement, compatibility, dataPolicy: { exportApproved: input.exportApproved ?? false, approvedSourceIds: input.taskset.sourceRefs.map((source) => source.id), retentionDays: input.retentionDays ?? null, region: input.region ?? null }, estimatedCostUsd: input.destinationId === "local_cpu_fixture" ? 0 : null, createdAt, contentHash: "00000000" };

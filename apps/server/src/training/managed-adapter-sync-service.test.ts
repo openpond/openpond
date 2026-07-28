@@ -355,133 +355,32 @@ describe("managed adapter sync service", () => {
     });
   });
 
-  test("publishes Prime GRPO lineage and leaves evaluation to Sandbox", async () => {
-    const prime = primeHarness({
+  test("waits for Sandbox canonical publication without uploading managed bytes", async () => {
+    const managed = managedHarness({
       registryArtifact: null,
       deployment: null,
     });
 
-    await prime.service.reconcile();
+    await managed.service.reconcile();
 
-    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        teamId: "team_qa",
-        lineageId: "lineage-qa",
-        files: expect.arrayContaining([
-          expect.objectContaining({
-            path: "adapter_config.json",
-          }),
-          expect.objectContaining({
-            path: "adapter_model.safetensors",
-          }),
-        ]),
-        provenance: expect.objectContaining({
-          sourceSystem: "openpond_training",
-          trainingMethod: "grpo",
-          modelProjectId: "model-qa",
-          modelRunId: "job-qa",
-          modelVersionId: "model-version-1",
-          providerRunId: "job-qa",
-          primeRlRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
-        }),
-      })
-    );
-    expect(prime.requestEvaluation).not.toHaveBeenCalled();
-    expect(prime.deployArtifact).not.toHaveBeenCalled();
-    expect(prime.saved()?.managedServing).toMatchObject({
-      source: "openpond_training",
-      canonicalArtifactState: "imported_unvalidated",
-      state: "imported",
-      lastError: null,
+    expect(managed.listRegistry).toHaveBeenCalledWith("team_managed");
+    expect(managed.publishFireworksSource).not.toHaveBeenCalled();
+    expect(managed.saved()?.managedServing).toMatchObject({
+      teamId: "team_managed",
+      source: "sandbox_managed_rft",
+      sourceRef: "managed-job-qa",
+      state: "failed",
+      lastError: expect.stringContaining("canonical publication"),
     });
   });
 
-  test("delegates promotion to Sandbox when the source benchmark has not run", async () => {
-    const prime = primeHarness({
-      registryArtifact: null,
-      deployment: null,
-      withEvaluation: false,
-      localPromotable: false,
-    });
-
-    await prime.service.reconcile();
-
-    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provenance: expect.not.objectContaining({
-          evaluationArtifactId: expect.anything(),
-          evaluationArtifactSha256: expect.anything(),
-          frozenEvaluatorHash: expect.anything(),
-        }),
-      })
-    );
-    expect(prime.requestEvaluation).not.toHaveBeenCalled();
-  });
-
-  test("observes promotion while Sandbox owns first deployment", async () => {
-    const prime = primeHarness({
+  test("observes the Sandbox-owned candidate and first deployment", async () => {
+    const managed = managedHarness({
       registryArtifact: {
         id: "canonical-artifact",
-        source: "openpond_training",
-        sourceRef: "lineage-qa",
-        state: "promotable",
-        promotable: true,
-        customerBindingAllowed: true,
-      },
-      deployment: null,
-    });
-
-    await prime.service.reconcile();
-
-    expect(prime.publishTrustedOpenPondTrainingSource).not.toHaveBeenCalled();
-    expect(prime.listTrustedRegistry).toHaveBeenCalledWith("team_qa");
-    expect(prime.listRegistry).not.toHaveBeenCalled();
-    expect(prime.requestEvaluation).not.toHaveBeenCalled();
-    expect(prime.deployArtifact).not.toHaveBeenCalled();
-    expect(prime.saved()?.managedServing).toMatchObject({
-      source: "openpond_training",
-      canonicalDeploymentId: null,
-      canonicalDeploymentState: null,
-      state: "imported",
-    });
-  });
-
-  test.each(["failed", "deleted"])(
-    "does not silently reprovision after a canonical deployment is %s",
-    async (state) => {
-      const prime = primeHarness({
-        registryArtifact: {
-          id: "canonical-artifact",
-          source: "openpond_training",
-          sourceRef: "lineage-qa",
-          state: "promotable",
-          promotable: true,
-          customerBindingAllowed: true,
-        },
-        deployment: {
-          id: `deployment-${state}`,
-          artifactId: "canonical-artifact",
-          state,
-        },
-      });
-
-      await prime.service.reconcile();
-
-      expect(prime.deployArtifact).not.toHaveBeenCalled();
-      expect(prime.saved()?.managedServing).toMatchObject({
-        canonicalDeploymentId: `deployment-${state}`,
-        canonicalDeploymentState: state,
-        state: "imported",
-      });
-    }
-  );
-
-  test("retains Sandbox admission after the deployment is offline", async () => {
-    const prime = primeHarness({
-      registryArtifact: {
-        id: "canonical-artifact",
-        source: "openpond_training",
-        sourceRef: "lineage-qa",
+        source: "sandbox_managed_rft",
+        sourceRef:
+          "r2://managed-rft/tenants/team_managed/jobs/managed-job-qa/candidate.json",
         state: "promotable",
         promotable: true,
         customerBindingAllowed: true,
@@ -489,72 +388,34 @@ describe("managed adapter sync service", () => {
         baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
       },
       deployment: {
-        id: "deployment-failed",
+        id: "deployment-managed",
         artifactId: "canonical-artifact",
-        state: "failed",
+        state: "ready",
       },
     });
 
-    await prime.service.reconcile();
+    await managed.service.reconcile();
 
-    expect(prime.deployArtifact).not.toHaveBeenCalled();
-    expect(prime.saved()?.managedServing).toMatchObject({
+    expect(managed.publishFireworksSource).not.toHaveBeenCalled();
+    expect(managed.saved()?.managedServing).toMatchObject({
+      teamId: "team_managed",
+      source: "sandbox_managed_rft",
+      sourceRef: "managed-job-qa",
+      canonicalArtifactId: "canonical-artifact",
       canonicalArtifactState: "promotable",
-      canonicalDeploymentState: "failed",
-      state: "imported",
+      canonicalDeploymentId: "deployment-managed",
+      canonicalDeploymentState: "ready",
+      state: "ready",
       customerBindingAllowed: true,
       artifactContentHash: "1".repeat(64),
       baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+      lastError: null,
     });
-    expect(prime.saved()?.managedServing).not.toHaveProperty("evaluation");
-    expect(prime.saved()?.managedServing).not.toHaveProperty("deployment");
-    expect(prime.saved()?.managedServing).not.toHaveProperty("servingPool");
-    expect(prime.saved()?.managedServing).not.toHaveProperty("servingReceipts");
   });
 
-  test("leaves the last trusted Prime projection untouched in an ordinary local runtime", async () => {
-    const prime = primeHarness({
-      registryArtifact: {
-        id: "canonical-artifact",
-        source: "openpond_training",
-        sourceRef: "lineage-qa",
-        state: "promotable",
-        promotable: true,
-        customerBindingAllowed: true,
-      },
-      deployment: {
-        id: "deployment-failed",
-        artifactId: "canonical-artifact",
-        state: "failed",
-      },
-      trustedControlAvailable: false,
-    });
-
-    await prime.service.reconcile();
-
-    expect(prime.listTrustedRegistry).not.toHaveBeenCalled();
-    expect(prime.deployArtifact).not.toHaveBeenCalled();
-    expect(prime.saved()).toBeNull();
-  });
-
-  test("publishes OpenPond-trained 8B lineage into the distinct 8B pool", async () => {
-    const prime = primeHarness({
-      registryArtifact: null,
-      deployment: null,
-      base: "8b",
-    });
-
-    await prime.service.reconcile();
-
-    expect(prime.publishTrustedOpenPondTrainingSource).toHaveBeenCalledWith(
-      expect.objectContaining({
-        baseProfileId: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-      })
-    );
-  });
 });
 
-function primeHarness(input: {
+function managedHarness(input: {
   registryArtifact: {
     id: string;
     source: string;
@@ -570,189 +431,63 @@ function primeHarness(input: {
     artifactId: string;
     state: string;
   } | null;
-  base?: "0.6b" | "8b";
-  withEvaluation?: boolean;
-  localPromotable?: boolean;
-  trustedControlAvailable?: boolean;
 }) {
   const currentLineage = lineage();
-  currentLineage.promotable = input.localPromotable ?? true;
-  currentLineage.frozenEvaluationArtifactId =
-    input.withEvaluation === false ? null : "evaluation-artifact";
   let saved: ModelArtifactLineage | null = null;
-  const hash = (character: string) => character.repeat(64);
-  const baseProfile =
-    input.base === "8b"
-      ? {
-          id: MANAGED_QWEN3_8B_BASE_PROFILE_ID,
-          modelId: "Qwen/Qwen3-8B",
-          revision: MANAGED_QWEN3_8B_BASE_REVISION,
-        }
-      : {
-          id: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-          modelId: "Qwen/Qwen3-0.6B",
-          revision: MANAGED_QWEN3_0_6B_BASE_REVISION,
-        };
-  const primeArtifact = (
-    id: string,
-    providerFilename: string,
-    kind: TrainingArtifact["kind"]
-  ): TrainingArtifact => ({
+  const candidate: TrainingArtifact = {
     schemaVersion: "openpond.trainingArtifact.v1",
-    id,
+    id: "source-adapter",
     jobId: "job-qa",
-    kind,
-    path: `/tmp/${providerFilename}`,
-    sha256: id === "config" ? hash("3") : hash("4"),
-    sizeBytes: id === "config" ? 800 : 8_000_000,
-    baseModelId: baseProfile.modelId,
-    baseModelRevision: baseProfile.revision,
-    tokenizerRevision: baseProfile.revision,
+    kind: "adapter",
+    path: "sandbox-managed-rft://managed-job-qa/model-artifact-qa",
+    sha256: "4".repeat(64),
+    sizeBytes: 8_000_000,
+    baseModelId: "Qwen/Qwen3-0.6B",
+    baseModelRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
+    tokenizerRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
     chatTemplateHash:
       "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
     nonProduction: false,
     createdAt: timestamp,
     metadata: {
-      provider: "prime",
-      providerFilename,
-      manifestHash: hash("5"),
-      groupedGrpoReceiptHash: hash("6"),
-    },
-  });
-  const config = primeArtifact("config", "adapter_config.json", "manifest");
-  const weights = primeArtifact(
-    "source-adapter",
-    "adapter_model.safetensors",
-    "adapter"
-  );
-  const evaluation: TrainingArtifact = {
-    ...primeArtifact(
-      "evaluation-artifact",
-      "evaluation-receipt.json",
-      "evaluation"
-    ),
-    sha256: hash("7"),
-    metadata: {
-      benchmarkSpecificationHash: hash("8"),
+      provider: "sandbox",
+      providerFilename: "managed-rft-candidate",
+      managedRftCandidate: true,
+      managedRftJobId: "managed-job-qa",
+      managedRftModelArtifactId: "model-artifact-qa",
+      managedRftTeamId: "team_managed",
     },
   };
   const store = {
     listModelArtifactLineage: vi.fn(async () => [currentLineage]),
-    listTrainingArtifacts: vi.fn(async () => [config, weights]),
-    getTrainingJob: vi.fn(async () => ({
-      id: "job-qa",
-      planId: "plan-qa",
-      metadata: {
-        finalPolicyVersion: 1,
-        portableAdapterBindings: {
-          engine: {
-            upstreamRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
-          },
-        },
-      },
-    })),
-    getTrainingPlan: vi.fn(async () => ({
-      id: "plan-qa",
-      contentHash: hash("9"),
-    })),
-    getTrainingArtifact: vi.fn(async (id: string) =>
-      id === weights.id ? weights : id === evaluation.id ? evaluation : null
-    ),
-    listModelRuns: vi.fn(async () => [
-      {
-        id: "job-qa",
-        modelId: "model-qa",
-        modelVersionId: "model-version-1",
-        status: "succeeded",
-        quote: {
-          maximumSpendUsd: 1,
-          hourlyCostUsd: 0.5,
-        },
-        receipt: {
-          provider: "prime",
-          providerRunId: "job-qa",
-          resultHash: hash("a"),
-          traceHash: hash("b"),
-          cleanup: {
-            computeReleased: true,
-            tunnelClosed: true,
-          },
-          telemetry: null,
-        },
-        adapterArtifactLineageId: "lineage-qa",
-      },
-    ]),
-    getModelVersion: vi.fn(async () => ({
-      id: "model-version-1",
-      modelId: "model-qa",
-      kind: "lora_adapter",
-      artifactLineageId: "lineage-qa",
-      baseModel: {
-        schemaVersion: "openpond.baseModelPreference.v1",
-        modelId: baseProfile.modelId,
-        revision: baseProfile.revision,
-        tokenizerRevision: baseProfile.revision,
-        chatTemplateHash:
-          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
-        modelAssetId: null,
-        source: "managed",
-      },
-      releaseGraph: {
-        profileRelease: { contentHash: hash("c") },
-        harnessRelease: { contentHash: hash("d") },
-        agentRelease: { contentHash: hash("e") },
-        grader: { contentHash: hash("f") },
-      },
-    })),
+    listTrainingArtifacts: vi.fn(async () => [candidate]),
     saveModelArtifactLineage: vi.fn(async (value: ModelArtifactLineage) => {
       saved = value;
       return value;
     }),
     listModelBindings: vi.fn(async () => []),
   } as unknown as SqliteStore;
-  const publishTrustedOpenPondTrainingSource = vi.fn(async () => ({
-    id: "canonical-artifact",
-    source: "openpond_training",
-    sourceRef: "lineage-qa",
-    state: "imported_unvalidated",
-    promotable: false,
-    customerBindingAllowed: false,
-  }));
-  const requestEvaluation = vi.fn(async () => undefined);
-  const deployArtifact = vi.fn(async () => ({
-    id: "deployment-prime",
-    artifactId: "canonical-artifact",
-    state: "requested",
-  }));
+  const publishFireworksSource = vi.fn();
   const registry = () => ({
     artifacts: input.registryArtifact ? [input.registryArtifact] : [],
     deployments: input.deployment ? [input.deployment] : [],
   });
   const listRegistry = vi.fn(async () => registry());
-  const listTrustedRegistry = vi.fn(async () => registry());
   const client = {
     listRegistry,
-    listTrustedRegistry,
     capabilities: vi.fn(async () => sandboxCapabilities()),
-    trustedCapabilities: vi.fn(async () => sandboxCapabilities()),
-    publishTrustedOpenPondTrainingSource,
-    requestEvaluation,
-    deployArtifact,
+    publishFireworksSource,
     syncBinding: vi.fn(async () => undefined),
   } as unknown as ManagedAdapterRegistryClient;
   return {
     service: createManagedAdapterSyncService({
       store,
       client,
-      resolveSelectedTeamId: async () => "team_qa",
-      trustedControlAvailable: () => input.trustedControlAvailable ?? true,
+      resolveSelectedTeamId: async () => "team_selected_later",
       now: () => new Date(timestamp),
     }),
-    publishTrustedOpenPondTrainingSource,
-    requestEvaluation,
-    deployArtifact,
+    publishFireworksSource,
     listRegistry,
-    listTrustedRegistry,
     saved: () => saved,
   };
 }

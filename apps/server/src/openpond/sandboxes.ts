@@ -26,17 +26,12 @@ import {
   normalizeIntegrationLeaseId,
   normalizeExecInput,
   normalizeProcessStartInput,
-  normalizePtyStartInput,
-  normalizePtyInput,
   normalizeProcessCursorInput,
   normalizeOpenPortInput,
   normalizeSnapshotUpdateInput,
   normalizeSnapshotValidateInput,
   normalizeForkInput,
-  normalizeSnapshotForkInput,
   normalizeTemplateLaunchInput,
-  normalizeTemplateBuildListInput,
-  normalizeTemplateBuildCreateInput,
   normalizeListFilesInput,
   normalizeSearchFilesInput,
   normalizeDeleteFileInput,
@@ -61,26 +56,10 @@ export {
 
 export type SandboxRequestAction =
   | { type: "list"; payload?: unknown }
-  | { type: "volume_list"; payload?: unknown }
-  | { type: "volume_create"; payload: unknown }
-  | { type: "volume_get"; volumeId: string; payload?: unknown }
-  | { type: "volume_delete"; volumeId: string; payload?: unknown }
-  | { type: "secret_list"; payload?: unknown }
-  | { type: "secret_get"; secretId: string; payload?: unknown }
-  | { type: "secret_create"; payload: unknown }
-  | { type: "secret_rotate"; secretId: string; payload: unknown }
-  | { type: "secret_attach"; secretId: string; payload: unknown }
-  | { type: "secret_revoke"; secretId: string; payload?: unknown }
-  | { type: "secret_delete"; secretId: string; payload?: unknown }
   | { type: "snapshot_catalog"; payload: unknown }
   | { type: "snapshot_create"; sandboxId: string; payload: unknown }
   | { type: "template_catalog"; payload: unknown }
   | { type: "template_launch"; payload: unknown }
-  | { type: "template_builds"; payload: unknown }
-  | { type: "template_build_create"; payload: unknown }
-  | { type: "template_build_get"; buildId: string }
-  | { type: "template_build_logs"; buildId: string }
-  | { type: "template_build_cancel"; buildId: string }
   | { type: "integration_connections"; payload: unknown }
   | { type: "connected_app_status"; payload: unknown }
   | { type: "integration_leases"; sandboxId: string }
@@ -103,20 +82,8 @@ export type SandboxRequestAction =
   | { type: "project_sync"; projectId: string; payload: unknown }
   | { type: "project_source_upload"; projectId: string; payload: unknown }
   | { type: "project_archive"; projectId: string; payload: unknown }
-  | { type: "work_item_list"; projectId: string; payload: unknown }
-  | { type: "work_item_create"; projectId: string; payload: unknown }
-  | { type: "work_item_get"; workItemId: string; payload: unknown }
-  | { type: "work_item_messages"; workItemId: string; payload: unknown }
-  | { type: "work_item_message_create"; workItemId: string; payload: unknown }
-  | { type: "work_item_chat"; workItemId: string; payload: unknown }
-  | { type: "work_item_activity"; workItemId: string; payload: unknown }
-  | { type: "work_item_handle_background"; workItemId: string; payload: unknown }
-  | { type: "work_item_cancel_task"; workItemId: string; payload: unknown }
-  | { type: "work_item_open_cloud"; workItemId: string; payload: unknown }
   | { type: "agent_list"; payload: unknown }
   | { type: "agent_upsert"; payload: unknown }
-  | { type: "agent_get"; agentId: string; payload: unknown }
-  | { type: "agent_archive"; agentId: string; payload: unknown }
   | { type: "agent_run"; agentId: string; payload: unknown }
   | { type: "agent_source_deploy_plan"; agentId: string; payload: unknown }
   | { type: "agent_source_checks"; agentId: string; payload: unknown }
@@ -130,7 +97,6 @@ export type SandboxRequestAction =
   | { type: "snapshot_update"; sandboxId: string; snapshotId: string; payload: unknown }
   | { type: "snapshot_validate"; sandboxId: string; snapshotId: string; payload: unknown }
   | { type: "snapshot_publish"; sandboxId: string; snapshotId: string }
-  | { type: "snapshot_fork"; snapshotId: string; payload: unknown }
   | { type: "replays"; payload: unknown }
   | { type: "replay_start"; payload: unknown }
   | { type: "replay_get"; replayId: string; payload?: unknown }
@@ -142,16 +108,8 @@ export type SandboxRequestAction =
   | { type: "stop"; sandboxId: string; failOnUnpreservedChanges?: boolean }
   | { type: "receipts"; sandboxId: string }
   | { type: "logs"; sandboxId: string }
-  | { type: "billing"; sandboxId: string }
   | { type: "process_start"; sandboxId: string; payload: unknown }
-  | { type: "process_list"; sandboxId: string }
   | { type: "process_get"; sandboxId: string; processId: string; payload: unknown }
-  | { type: "process_stop"; sandboxId: string; processId: string }
-  | { type: "pty_start"; sandboxId: string; payload: unknown }
-  | { type: "pty_list"; sandboxId: string }
-  | { type: "pty_get"; sandboxId: string; ptyId: string; payload: unknown }
-  | { type: "pty_input"; sandboxId: string; ptyId: string; payload: unknown }
-  | { type: "pty_stop"; sandboxId: string; ptyId: string }
   | { type: "upload_file"; sandboxId: string; payload: unknown }
   | { type: "download_file"; sandboxId: string; payload: unknown }
   | { type: "list_files"; sandboxId: string; payload: unknown }
@@ -187,110 +145,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
 
   if (action.type === "list") {
     return { sandboxes: await client.list(normalizeSandboxListInput(action.payload)), account };
-  }
-  if (action.type === "volume_list") {
-    return {
-      ...(await requestSandboxApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/sandboxes/volumes", normalizeSandboxListInput(action.payload)),
-      })),
-      account,
-    };
-  }
-  if (action.type === "volume_create") {
-    return {
-      ...(await requestSandboxApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: "/sandboxes/volumes",
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "volume_get") {
-    return {
-      ...(await requestSandboxApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxScopedCollectionPath(
-          `/sandboxes/volumes/${encodeURIComponent(action.volumeId)}`,
-          normalizeSandboxListInput(action.payload),
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "volume_delete") {
-    return {
-      ...(await requestSandboxApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxScopedCollectionPath(
-          `/sandboxes/volumes/${encodeURIComponent(action.volumeId)}`,
-          normalizeSandboxListInput(action.payload),
-        ),
-        method: "DELETE",
-      })),
-      account,
-    };
-  }
-  if (action.type === "secret_list") {
-    return { secrets: await client.listSecrets(normalizeSandboxListInput(action.payload)), account };
-  }
-  if (action.type === "secret_get") {
-    return {
-      ...(await requestSandboxApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxSecretPath(
-          `/sandbox-secrets/${encodeURIComponent(action.secretId)}`,
-          normalizeSandboxListInput(action.payload),
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "secret_create") {
-    return { secret: await client.createSecret(asRecord(action.payload) as Parameters<typeof client.createSecret>[0]), account };
-  }
-  if (action.type === "secret_rotate") {
-    return {
-      secret: await client.rotateSecret(
-        action.secretId,
-        asRecord(action.payload) as Parameters<typeof client.rotateSecret>[1],
-      ),
-      account,
-    };
-  }
-  if (action.type === "secret_attach") {
-    return {
-      secret: await client.attachSecret(
-        action.secretId,
-        asRecord(action.payload) as Parameters<typeof client.attachSecret>[1],
-      ),
-      account,
-    };
-  }
-  if (action.type === "secret_revoke") {
-    return {
-      secret: await client.revokeSecret(
-        action.secretId,
-        normalizeSandboxListInput(action.payload),
-      ),
-      account,
-    };
-  }
-  if (action.type === "secret_delete") {
-    return {
-      secret: await client.deleteSecret(
-        action.secretId,
-        normalizeSandboxListInput(action.payload),
-      ),
-      account,
-    };
   }
   if (action.type === "snapshot_catalog") {
     const input = asRecord(action.payload);
@@ -608,132 +462,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       account,
     };
   }
-  if (action.type === "work_item_list") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: workItemScopedPath(
-          `/projects/${encodeURIComponent(action.projectId)}/work-items`,
-          action.payload,
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_create") {
-    const payload = asRecord(action.payload);
-    const { projectId: _projectId, ...body } = payload;
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/projects/${encodeURIComponent(action.projectId)}/work-items`,
-        method: "POST",
-        body,
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_get") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: workItemScopedPath(
-          `/work-items/${encodeURIComponent(action.workItemId)}`,
-          action.payload,
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_messages") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: workItemScopedPath(
-          `/work-items/${encodeURIComponent(action.workItemId)}/messages`,
-          action.payload,
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_message_create") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/work-items/${encodeURIComponent(action.workItemId)}/messages`,
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_chat") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/work-items/${encodeURIComponent(action.workItemId)}/chat`,
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_activity") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: workItemScopedPath(
-          `/work-items/${encodeURIComponent(action.workItemId)}/activity`,
-          action.payload,
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_handle_background") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/work-items/${encodeURIComponent(action.workItemId)}/handle-background`,
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_cancel_task") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/work-items/${encodeURIComponent(action.workItemId)}/cancel-task`,
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "work_item_open_cloud") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: `/work-items/${encodeURIComponent(action.workItemId)}/open-cloud`,
-        method: "POST",
-        body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
   if (action.type === "agent_list") {
     return {
       ...(await requestSandboxPublicApiRoot({
@@ -752,33 +480,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         path: "/agents",
         method: "POST",
         body: asRecord(action.payload),
-      })),
-      account,
-    };
-  }
-  if (action.type === "agent_get") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxScopedCollectionPath(
-          `/agents/${encodeURIComponent(action.agentId)}`,
-          normalizeSandboxListInput(action.payload),
-        ),
-      })),
-      account,
-    };
-  }
-  if (action.type === "agent_archive") {
-    return {
-      ...(await requestSandboxPublicApiRoot({
-        apiKey,
-        sandboxApiUrl,
-        path: sandboxScopedCollectionPath(
-          `/agents/${encodeURIComponent(action.agentId)}`,
-          normalizeSandboxListInput(action.payload),
-        ),
-        method: "DELETE",
       })),
       account,
     };
@@ -913,15 +614,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       account,
     };
   }
-  if (action.type === "snapshot_fork") {
-    return {
-      ...(await client.forkSnapshot(
-        action.snapshotId,
-        normalizeSnapshotForkInput(action.payload),
-      )),
-      account,
-    };
-  }
   if (action.type === "replays") {
     return {
       ...(await client.listReplays(normalizeSandboxListInput(action.payload))),
@@ -984,36 +676,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       account,
     };
   }
-  if (action.type === "template_builds") {
-    return {
-      builds: await client.listTemplateBuilds(normalizeTemplateBuildListInput(action.payload)),
-      account,
-    };
-  }
-  if (action.type === "template_build_create") {
-    return {
-      build: await client.createTemplateBuild(normalizeTemplateBuildCreateInput(action.payload)),
-      account,
-    };
-  }
-  if (action.type === "template_build_get") {
-    return {
-      build: await client.getTemplateBuild(action.buildId),
-      account,
-    };
-  }
-  if (action.type === "template_build_logs") {
-    return {
-      ...(await client.getTemplateBuildLogs(action.buildId)),
-      account,
-    };
-  }
-  if (action.type === "template_build_cancel") {
-    return {
-      build: await client.cancelTemplateBuild(action.buildId),
-      account,
-    };
-  }
   if (action.type === "fork") {
     return {
       ...(await client.fork(action.sandboxId, normalizeForkInput(action.payload))),
@@ -1038,9 +700,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "logs") {
     return { logs: await client.logs(action.sandboxId), account };
-  }
-  if (action.type === "billing") {
-    return { ...(await client.billing(action.sandboxId)), account };
   }
   if (action.type === "integration_leases") {
     return { ...(await client.integrationLeases(action.sandboxId)), account };
@@ -1069,9 +728,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       account,
     };
   }
-  if (action.type === "process_list") {
-    return { ...(await client.listProcesses(action.sandboxId)), account };
-  }
   if (action.type === "process_get") {
     return {
       ...(await client.getProcess(
@@ -1081,37 +737,6 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       )),
       account,
     };
-  }
-  if (action.type === "process_stop") {
-    return { ...(await client.stopProcess(action.sandboxId, action.processId)), account };
-  }
-  if (action.type === "pty_start") {
-    return {
-      ...(await client.startPty(action.sandboxId, normalizePtyStartInput(action.payload))),
-      account,
-    };
-  }
-  if (action.type === "pty_list") {
-    return { ...(await client.listPtys(action.sandboxId)), account };
-  }
-  if (action.type === "pty_get") {
-    return {
-      ...(await client.getPty(
-        action.sandboxId,
-        action.ptyId,
-        normalizeProcessCursorInput(action.payload),
-      )),
-      account,
-    };
-  }
-  if (action.type === "pty_input") {
-    return {
-      ...(await client.writePtyInput(action.sandboxId, action.ptyId, normalizePtyInput(action.payload))),
-      account,
-    };
-  }
-  if (action.type === "pty_stop") {
-    return { ...(await client.stopPty(action.sandboxId, action.ptyId)), account };
   }
   if (action.type === "upload_file") {
     const input = normalizeUploadFileInput(action.payload);
@@ -1494,13 +1119,6 @@ function sandboxPublicApiRootUrl(sandboxApiUrl: string): string {
   return normalized.replace(/\/sandboxes\/?$/, "");
 }
 
-function sandboxSecretPath(
-  path: string,
-  queryInput: { teamId?: string; projectId?: string; agentId?: string },
-): string {
-  return sandboxScopedCollectionPath(path, queryInput);
-}
-
 function sandboxScopedCollectionPath(
   path: string,
   queryInput: { teamId?: string; projectId?: string; agentId?: string },
@@ -1509,19 +1127,6 @@ function sandboxScopedCollectionPath(
   if (queryInput.teamId) query.set("teamId", queryInput.teamId);
   if (queryInput.projectId) query.set("projectId", queryInput.projectId);
   if (queryInput.agentId) query.set("agentId", queryInput.agentId);
-  return `${path}${query.size > 0 ? `?${query.toString()}` : ""}`;
-}
-
-function workItemScopedPath(path: string, payload: unknown): string {
-  const input = asRecord(payload);
-  const query = new URLSearchParams();
-  const teamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
-  if (teamId) query.set("teamId", teamId);
-  if (input.includeArchived === true) query.set("includeArchived", "true");
-  const limit = typeof input.limit === "number" && Number.isFinite(input.limit)
-    ? Math.trunc(input.limit)
-    : Number.parseInt(typeof input.limit === "string" ? input.limit : "", 10);
-  if (limit > 0) query.set("limit", String(Math.min(limit, 250)));
   return `${path}${query.size > 0 ? `?${query.toString()}` : ""}`;
 }
 

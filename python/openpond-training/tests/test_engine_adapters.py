@@ -2,9 +2,6 @@ from __future__ import annotations
 
 from openpond_training.canonical_json import content_hash
 from openpond_training.engine_adapters import (
-    PRIME_RL_BASE_IMAGE_DIGEST,
-    PRIME_RL_UPSTREAM_REVISION,
-    PrimeRlEngineAdapter,
     TrlEngineAdapter,
 )
 from openpond_training.learning_signals import parse_signals
@@ -103,67 +100,6 @@ def test_trl_projects_sft_and_dpo_from_canonical_offline_signals() -> None:
     assert sft.records[0]["completion"] == "4"
     assert dpo.configuration["trainer"] == "trl.DPOTrainer"
     assert dpo.records[0]["rejected"] == "5"
-
-
-def test_prime_rl_is_thin_pinned_verifiers_projection() -> None:
-    adapter = PrimeRlEngineAdapter()
-    projection = adapter.project(
-        method="grpo",
-        signals=parse_signals(
-            [
-                signal(
-                    "trajectory",
-                    {
-                        "traceRef": "r2://traces/episode-1.json",
-                        "traceHash": "d" * 64,
-                        "terminal": True,
-                        "failureClass": None,
-                        "optimizerSample": {
-                            "schemaVersion": (
-                                "openpond.optimizerTrainingSample.v1"
-                            ),
-                            "tokenIds": [1, 2],
-                            "mask": [False, True],
-                            "logprobs": [0.0, -0.2],
-                            "temperatures": [0.8, 0.8],
-                            "envName": "fixture",
-                            "modelRequestId": "request-1",
-                            "promptTokenCount": 1,
-                            "completionTokenCount": 1,
-                            "servedPolicyVersion": 0,
-                        },
-                    },
-                    signal_id="trajectory-1",
-                ),
-                signal(
-                    "reward",
-                    {
-                        "reward": 1,
-                        "components": {"grader": 1},
-                        "eligible": True,
-                        "graderEvidenceRefs": ["grader-1"],
-                    },
-                    signal_id="reward-1",
-                ),
-            ]
-        ),
-        manifest=manifest(),
-    )
-    assert (
-        projection.upstream_revision
-        == PRIME_RL_UPSTREAM_REVISION
-        == "e0d60e4d85ea636873acb2e7083e794740d20226"
-    )
-    assert (
-        projection.configuration["upstreamImageDigest"]
-        == PRIME_RL_BASE_IMAGE_DIGEST
-    )
-    assert projection.configuration["environment"] == {
-        "adapter": "verifiers-v1",
-        "transport": "canonical-learning-signal-batch",
-        "runtimeTarget": manifest()["runtimeTarget"],
-    }
-    assert projection.records[0]["reward"] == 1
 
 
 def test_trl_projects_sdft_and_orpo_after_canonical_adapter_conformance() -> None:

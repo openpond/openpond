@@ -51,28 +51,6 @@ function computeState(): ComputeStateResponse {
       warnings: [],
       scannedAt: now,
     },
-    providers: {
-      prime: {
-        schemaVersion: "openpond.primeComputeProviderStatus.v1",
-        providerId: "prime",
-        displayName: "Prime Intellect",
-        state: "disconnected",
-        credential: {
-          configured: false,
-          redacted: null,
-          storedLocally: true,
-        },
-        availability: null,
-        worker: {
-          ready: false,
-          status: "not_configured",
-          message: "Prime Intellect is not connected.",
-          issues: [],
-        },
-        lastValidatedAt: null,
-        lastError: null,
-      },
-    },
     scanning: false,
   };
 }

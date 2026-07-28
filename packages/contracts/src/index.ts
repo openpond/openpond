@@ -48,4 +48,3 @@ export * from "./learning-signals.js";
 export * from "./harness-releases.js";
 export * from "./harness-actions.js";
 export * from "./training-platform.js";
-export * from "./connected-worker.js";

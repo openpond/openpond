@@ -1,12 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
 import {
   TrainingAdapterRegistry,
   type TrainingEngineAdapter,
 } from "@openpond/training-sdk";
-import { sha256 } from "@openpond/taskset-sdk";
 import { describe, expect, test, vi } from "vitest";
 
 import { createPortableTrainingServerDependencies } from "../apps/server/src/training/portable-training-server-dependencies.js";
@@ -54,7 +49,7 @@ describe("portable training server composition", () => {
       adapters: {
         engineRoutes: [
           {
-            canonicalEngineId: "connected-prime-rl",
+            canonicalEngineId: "remote-training",
             route: {
               id: "remote",
               matches: () => true,
@@ -67,99 +62,19 @@ describe("portable training server composition", () => {
 
     dependencies.registerPortableAdapters(registry);
 
-    expect(registry.engineIds()).toEqual(["connected-prime-rl"]);
+    expect(registry.engineIds()).toEqual(["remote-training"]);
   });
 
-  test("composes raw Prime compute with the generic provisioned worker route", async () => {
-    const directory = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-prime-raw-config-"),
-    );
-    const privateFiles = await Promise.all(
-      [
-        "api-key",
-        "ssh-key",
-        "authentication-lease",
-        "registry-auth",
-        "identity-key",
-        "worker-tls-key",
-        "client-tls-key",
-      ].map(async (name) => {
-        const file = path.join(directory, name);
-        await writeFile(file, `${name}-fixture\n`, { mode: 0o600 });
-        return file;
-      }),
-    );
-    const publicFiles = await Promise.all(
-      ["worker-tls-cert", "worker-client-ca", "client-cert", "server-ca"].map(
-        async (name) => {
-          const file = path.join(directory, name);
-          await writeFile(file, `${name}-fixture\n`);
-          return file;
-        },
-      ),
-    );
-    try {
-      const registry = new TrainingAdapterRegistry();
-      const dependencies = createPortableTrainingServerDependencies({
-        storeDir: directory,
-        environment: {
-          OPENPOND_PRIME_API_KEY_FILE: privateFiles[0],
-          OPENPOND_PRIME_SSH_KEY_ID: "prime-ssh-key",
-          OPENPOND_PRIME_SSH_PRIVATE_KEY_FILE: privateFiles[1],
-          OPENPOND_PRIME_WORKER_TEMPLATE_ID: "immutable-template",
-          OPENPOND_PRIME_WORKER_IMAGE_REPOSITORY:
-            "registry.example/openpond-worker",
-          OPENPOND_PRIME_WORKER_IMAGE_DIGEST:
-            `sha256:${sha256("worker-image")}`,
-          OPENPOND_PRIME_WORKER_CAPABILITY_RECEIPT:
-            sha256("worker-capability"),
-          OPENPOND_PRIME_WORKER_AUTHENTICATION_LEASE_FILE:
-            privateFiles[2],
-          OPENPOND_PRIME_WORKER_REGISTRY_AUTH_FILE:
-            privateFiles[3],
-          OPENPOND_PRIME_WORKER_IDENTITY_KEY_FILE:
-            privateFiles[4],
-          OPENPOND_PRIME_WORKER_TLS_CERTIFICATE_FILE:
-            publicFiles[0],
-          OPENPOND_PRIME_WORKER_TLS_PRIVATE_KEY_FILE:
-            privateFiles[5],
-          OPENPOND_PRIME_WORKER_CLIENT_CA_FILE: publicFiles[1],
-          OPENPOND_PRIME_CLIENT_CERTIFICATE_FILE: publicFiles[2],
-          OPENPOND_PRIME_CLIENT_PRIVATE_KEY_FILE: privateFiles[6],
-          OPENPOND_PRIME_SERVER_CA_FILE: publicFiles[3],
-          OPENPOND_PRIME_TLS_SERVER_NAME: "openpond-worker",
-        },
-      });
-      dependencies.registerPortableAdapters(registry);
-
-      expect(dependencies.primeRawConfigured).toBe(true);
-      expect(dependencies.connectedWorkerImageDigest).toBe(
-        `sha256:${sha256("worker-image")}`,
-      );
-      expect(registry.computeTargetIds()).toContain("prime-raw");
-      expect(registry.engineIds()).toEqual([
-        "connected-prime-rl",
-      ]);
-      await expect(
-        registry.engine("connected-prime-rl").capabilities(),
-      ).resolves.toMatchObject({
-        available: true,
-        upstreamRevision:
-          "e0d60e4d85ea636873acb2e7083e794740d20226",
-      });
-    } finally {
-      await rm(directory, { recursive: true, force: true });
-    }
-  });
-
-  test("rejects partial raw Prime configuration", () => {
-    expect(() =>
-      createPortableTrainingServerDependencies({
-        storeDir: "/tmp/openpond-portable-training-test",
-        environment: {
-          OPENPOND_PRIME_SSH_KEY_ID: "partial",
-        },
-      }),
-    ).toThrow(/requires provider, SSH, worker image/);
+  test("does not interpret raw cloud credentials in the desktop process", () => {
+    const registry = new TrainingAdapterRegistry();
+    const dependencies = createPortableTrainingServerDependencies({
+      storeDir: "/tmp/openpond-portable-training-test",
+      environment: {
+        OPENPOND_PRIME_SSH_KEY_ID: "ignored-by-desktop",
+      },
+    });
+    dependencies.registerPortableAdapters(registry);
+    expect(registry.computeTargetIds()).toEqual(["local-cpu"]);
+    expect(registry.engineIds()).toEqual([]);
   });
 });

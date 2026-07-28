@@ -13,9 +13,7 @@ import {
   type ManagedRegistryArtifact,
   type ManagedRegistryDeployment,
 } from "./managed-adapter-registry-client.js";
-import { resolvePrimeGrpoBaseProfile } from "./prime-grpo-base-profiles.js";
-import { openPondTrainingProvenance } from "./managed-adapter-publication-provenance.js";
-import { isManagedAdapterControlRuntimeEnabled } from "../openpond/hosted-api-access.js";
+import { resolveManagedRftBaseProfile } from "./managed-rft-base-profile.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
@@ -42,14 +40,10 @@ export function createManagedAdapterSyncService(dependencies: {
   store: SqliteStore;
   client: ManagedAdapterRegistryClient;
   resolveSelectedTeamId: () => Promise<string | null>;
-  trustedControlAvailable?: () => boolean;
   intervalMs?: number;
   now?: () => Date;
 }) {
   const now = dependencies.now ?? (() => new Date());
-  const trustedControlAvailable =
-    dependencies.trustedControlAvailable ??
-    isManagedAdapterControlRuntimeEnabled;
   let timer: ReturnType<typeof setInterval> | null = null;
   let active: Promise<void> | null = null;
   let closed = false;
@@ -60,7 +54,6 @@ export function createManagedAdapterSyncService(dependencies: {
       dependencies.store,
       dependencies.client,
       dependencies.resolveSelectedTeamId,
-      trustedControlAvailable,
       now
     )
       .catch(() => undefined)
@@ -172,7 +165,6 @@ async function reconcileOnce(
   store: SqliteStore,
   client: ManagedAdapterRegistryClient,
   resolveSelectedTeamId: () => Promise<string | null>,
-  trustedControlAvailable: () => boolean,
   now: () => Date
 ): Promise<void> {
   const selectedTeamId = (await resolveSelectedTeamId())?.trim() || null;
@@ -187,16 +179,11 @@ async function reconcileOnce(
     string,
     Promise<ManagedRegistryBaseProfile[]>
   >();
-  const registryForTeam = (teamId: string, source: ManagedLineageSource) => {
-    const trustedRead = source === "openpond_training";
-    const registryKey = `${trustedRead ? "trusted" : "user"}:${teamId}`;
+  const registryForTeam = (teamId: string) => {
+    const registryKey = `user:${teamId}`;
     let registry = registries.get(registryKey);
     if (!registry) {
-      registry = (
-        trustedRead
-          ? client.listTrustedRegistry(teamId)
-          : client.listRegistry(teamId)
-      ).then((value) => ({
+      registry = client.listRegistry(teamId).then((value) => ({
         artifacts: [...value.artifacts],
         deployments: [...value.deployments],
       }));
@@ -205,18 +192,14 @@ async function reconcileOnce(
     return registry;
   };
   const baseProfilesForTeam = (
-    teamId: string,
-    source: ManagedLineageSource
+    teamId: string
   ) => {
-    const trustedRead = source === "openpond_training";
-    const key = `${trustedRead ? "trusted" : "user"}:${teamId}`;
+    const key = `user:${teamId}`;
     let capabilities = capabilitySets.get(key);
     if (!capabilities) {
-      capabilities = (
-        trustedRead
-          ? client.trustedCapabilities(teamId)
-          : client.capabilities(teamId)
-      ).then((value) => value.baseProfiles);
+      capabilities = client.capabilities(teamId).then(
+        (value) => value.baseProfiles
+      );
       capabilitySets.set(key, capabilities);
     }
     return capabilities;
@@ -230,7 +213,6 @@ async function reconcileOnce(
       selectedTeamId,
       registryForTeam,
       baseProfilesForTeam,
-      trustedControlAvailable,
       now,
     });
   }
@@ -275,17 +257,14 @@ async function reconcileLineage(input: {
   lineage: ModelArtifactLineage;
   selectedTeamId: string | null;
   registryForTeam: (
-    teamId: string,
-    source: ManagedLineageSource
+    teamId: string
   ) => Promise<{
     artifacts: ManagedRegistryArtifact[];
     deployments: ManagedRegistryDeployment[];
   }>;
   baseProfilesForTeam: (
-    teamId: string,
-    source: ManagedLineageSource
+    teamId: string
   ) => Promise<ManagedRegistryBaseProfile[]>;
-  trustedControlAvailable: () => boolean;
   now: () => Date;
 }): Promise<void> {
   const jobArtifacts = await input.store.listTrainingArtifacts(
@@ -293,25 +272,26 @@ async function reconcileLineage(input: {
   );
   const source = lineageSource(input.lineage, jobArtifacts);
   if (!source) return;
-  if (source === "openpond_training" && !input.trustedControlAvailable()) {
-    return;
-  }
+  const managedRftJobId =
+    source === "sandbox_managed_rft"
+      ? sandboxManagedJobId(jobArtifacts)
+      : null;
   const timestamp = input.now().toISOString();
   const teamId = input.lineage.managedServing?.canonicalArtifactId
     ? input.lineage.managedServing.teamId
-    : input.selectedTeamId;
+    : sandboxManagedTeamId(jobArtifacts) ?? input.selectedTeamId;
   try {
     if (!teamId) {
       throw new Error(
-        "Select an OpenPond team before publishing managed adapters."
+        "Select an OpenPond team before reconciling managed adapters."
       );
     }
     const baseProfileId = assertQualifiedBase(
       source,
       jobArtifacts,
-      await input.baseProfilesForTeam(teamId, source)
+      await input.baseProfilesForTeam(teamId)
     );
-    const registry = await input.registryForTeam(teamId, source);
+    const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
         (candidate) =>
@@ -320,9 +300,21 @@ async function reconcileLineage(input: {
       registry.artifacts.find(
         (candidate) =>
           candidate.source === source &&
-          candidate.sourceRef === input.lineage.id
+          (source === "sandbox_managed_rft"
+            ? Boolean(
+                managedRftJobId &&
+                  candidate.sourceRef.endsWith(
+                    `/jobs/${managedRftJobId}/candidate.json`
+                  )
+              )
+            : candidate.sourceRef === input.lineage.id)
       );
     if (!artifact) {
+      if (source === "sandbox_managed_rft") {
+        throw new Error(
+          "Sandbox has not finished canonical publication for this managed training job."
+        );
+      }
       const job = await input.store.getTrainingJob(input.lineage.jobId);
       if (!job) throw new Error(`${source} lineage lost its training job.`);
       const plan = await input.store.getTrainingPlan(job.planId);
@@ -339,43 +331,25 @@ async function reconcileLineage(input: {
           )
         : null;
       const files = portableUploadFiles(jobArtifacts);
-      artifact =
-        source === "openpond_training"
-          ? await input.client.publishTrustedOpenPondTrainingSource({
-              teamId,
-              lineageId: input.lineage.id,
-              label: `OpenPond Prime GRPO ${input.lineage.id.slice(-12)}`,
-              baseProfileId,
-              files,
-              provenance: await openPondTrainingProvenance({
-                store: input.store,
-                lineage: input.lineage,
-                job,
-                plan,
-                sourceArtifact,
-                evaluation,
-                files,
-              }),
-            })
-          : await input.client.publishFireworksSource({
-              teamId,
-              lineageId: input.lineage.id,
-              label: `OpenPond Fireworks ${input.lineage.id.slice(-12)}`,
-              baseProfileId,
-              trainingJobId: job.id,
-              trainingPlanId: plan.id,
-              sourceArtifactId: sourceArtifact.id,
-              sourceArtifactSha256: sourceArtifact.sha256,
-              tasksetId: input.lineage.tasksetId,
-              tasksetHash: input.lineage.tasksetHash,
-              evaluationArtifactId: evaluation?.id ?? null,
-              evaluationArtifactSha256: evaluation?.sha256 ?? null,
-              providerRunId:
-                typeof job.metadata.providerJobId === "string"
-                  ? job.metadata.providerJobId
-                  : null,
-              files,
-            });
+      artifact = await input.client.publishFireworksSource({
+        teamId,
+        lineageId: input.lineage.id,
+        label: `OpenPond Fireworks ${input.lineage.id.slice(-12)}`,
+        baseProfileId,
+        trainingJobId: job.id,
+        trainingPlanId: plan.id,
+        sourceArtifactId: sourceArtifact.id,
+        sourceArtifactSha256: sourceArtifact.sha256,
+        tasksetId: input.lineage.tasksetId,
+        tasksetHash: input.lineage.tasksetHash,
+        evaluationArtifactId: evaluation?.id ?? null,
+        evaluationArtifactSha256: evaluation?.sha256 ?? null,
+        providerRunId:
+          typeof job.metadata.providerJobId === "string"
+            ? job.metadata.providerJobId
+            : null,
+        files,
+      });
       registry.artifacts.push(artifact);
     }
     const deployment =
@@ -397,7 +371,7 @@ async function reconcileLineage(input: {
       schemaVersion: "openpond.managedAdapterServingProjection.v1",
       teamId,
       source,
-      sourceRef: input.lineage.id,
+      sourceRef: managedRftJobId ?? input.lineage.id,
       canonicalArtifactId: artifact.id,
       canonicalArtifactState: artifactState(artifact.state),
       canonicalDeploymentId: deployment?.id ?? null,
@@ -421,7 +395,7 @@ async function reconcileLineage(input: {
       schemaVersion: "openpond.managedAdapterServingProjection.v1",
       teamId,
       source,
-      sourceRef: input.lineage.id,
+      sourceRef: managedRftJobId ?? input.lineage.id,
       canonicalArtifactId:
         input.lineage.managedServing?.canonicalArtifactId ?? null,
       canonicalArtifactState:
@@ -488,7 +462,9 @@ function portableUploadFiles(artifacts: TrainingArtifact[]) {
     }));
 }
 
-type ManagedLineageSource = "openpond_fireworks" | "openpond_training";
+type ManagedLineageSource =
+  | "openpond_fireworks"
+  | "sandbox_managed_rft";
 
 function lineageSource(
   lineage: ModelArtifactLineage,
@@ -496,10 +472,8 @@ function lineageSource(
 ): ManagedLineageSource | null {
   if (
     lineage.status === "imported" &&
-    artifacts.some((artifact) => artifact.metadata.provider === "prime")
-  ) {
-    return "openpond_training";
-  }
+    artifacts.some((artifact) => artifact.metadata.provider === "sandbox")
+  ) return "sandbox_managed_rft";
   return artifacts.some(
     (artifact) => artifact.metadata.provider === "fireworks"
   )
@@ -512,14 +486,24 @@ function assertQualifiedBase(
   artifacts: TrainingArtifact[],
   baseProfiles: ManagedRegistryBaseProfile[]
 ): string {
-  const portable = portableUploadFiles(artifacts);
-  if (portable.length < 2) {
+  const qualifiedArtifacts =
+    source === "sandbox_managed_rft"
+      ? artifacts.filter(
+          (artifact) =>
+            artifact.metadata.provider === "sandbox" &&
+            artifact.metadata.managedRftCandidate === true
+        )
+      : portableUploadFiles(artifacts).map(({ artifact }) => artifact);
+  if (
+    qualifiedArtifacts.length <
+      (source === "sandbox_managed_rft" ? 1 : 2)
+  ) {
     throw new Error(`${source} lineage has no complete portable adapter.`);
   }
-  const firstArtifact = portable[0]!.artifact;
+  const firstArtifact = qualifiedArtifacts[0]!;
   const openPondProfile =
-    source === "openpond_training"
-      ? resolvePrimeGrpoBaseProfile({
+    source === "sandbox_managed_rft"
+      ? resolveManagedRftBaseProfile({
           schemaVersion: "openpond.baseModelPreference.v1",
           modelId: firstArtifact.baseModelId ?? "",
           revision: firstArtifact.baseModelRevision,
@@ -529,9 +513,9 @@ function assertQualifiedBase(
           source: "managed",
         })
       : null;
-  if (source === "openpond_training" && !openPondProfile) {
+  if (source === "sandbox_managed_rft" && !openPondProfile) {
     throw new Error(
-      "openpond_training adapter does not match a qualified Qwen3 serving identity."
+      "sandbox_managed_rft adapter does not match the qualified Qwen3 managed-training identity."
     );
   }
   const expected = openPondProfile
@@ -560,7 +544,7 @@ function assertQualifiedBase(
       `${source} adapter does not match a Sandbox-qualified base profile.`
     );
   }
-  for (const { artifact } of portable) {
+  for (const artifact of qualifiedArtifacts) {
     if (
       artifact.baseModelId !== expected.model ||
       artifact.baseModelRevision !== expected.revision ||
@@ -573,6 +557,24 @@ function assertQualifiedBase(
     }
   }
   return matchedProfile.id;
+}
+
+function sandboxManagedJobId(
+  artifacts: TrainingArtifact[]
+): string | null {
+  const value = artifacts.find(
+    (artifact) => artifact.metadata.managedRftCandidate === true
+  )?.metadata.managedRftJobId;
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function sandboxManagedTeamId(
+  artifacts: TrainingArtifact[]
+): string | null {
+  const value = artifacts.find(
+    (artifact) => artifact.metadata.managedRftCandidate === true
+  )?.metadata.managedRftTeamId;
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 async function saveProjection(

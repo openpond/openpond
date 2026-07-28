@@ -70,14 +70,11 @@ describe("provider-neutral base-model candidates", () => {
     });
   });
 
-  test("pins both qualified Prime GRPO base profiles exactly", () => {
+  test("pins the qualified OpenPond Managed GRPO base profile exactly", () => {
     const candidates = projectBaseModelCandidates({
       destinations: [
-        destination("prime_hosted", {
-          modelAllowlist: [
-            "Qwen/Qwen3-0.6B",
-            "Qwen/Qwen3-8B",
-          ],
+        destination("openpond_managed", {
+          modelAllowlist: ["Qwen/Qwen3-0.6B"],
           methods: ["grpo"],
         }),
       ],
@@ -95,20 +92,12 @@ describe("provider-neutral base-model candidates", () => {
         chatTemplateHash:
           "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
       }),
-      expect.objectContaining({
-        modelId: "Qwen/Qwen3-8B",
-        revision: "b968826d9c46dd6066d109eabc6255188de91218",
-        tokenizerRevision:
-          "b968826d9c46dd6066d109eabc6255188de91218",
-        chatTemplateHash:
-          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
-      }),
     ]);
   });
 
   test("returns one backend-selected target for the requested method", () => {
     const destinations = [
-      destination("prime_hosted", {
+      destination("openpond_managed", {
         modelAllowlist: ["Qwen/Qwen3-0.6B"],
         methods: ["grpo"],
       }),
@@ -130,13 +119,10 @@ describe("provider-neutral base-model candidates", () => {
       destinations,
       inventory: null,
       registeredEngineIds: [
-        "connected-prime-rl",
+        "sandbox-managed-rft",
         "fireworks-native",
         "local-trl",
       ],
-      connectedEngineConfigured: true,
-      primeRawConfigured: true,
-      connectedWorkerImageDigest: `sha256:${"a".repeat(64)}`,
       now: checkedAt,
     };
 
@@ -148,8 +134,14 @@ describe("provider-neutral base-model candidates", () => {
     ).toEqual([
       expect.objectContaining({
         id: "automatic",
-        destinationId: "prime_hosted",
-        computeAdapterId: "prime-raw",
+        destinationId: "openpond_managed",
+        computeAdapterId: "openpond-managed",
+        defaults: expect.objectContaining({
+          loraRank: 16,
+          maxSteps: 2,
+          rolloutGroupSize: 4,
+          rolloutConcurrency: 4,
+        }),
         available: true,
       }),
     ]);
@@ -185,9 +177,12 @@ function destination(
     parameterizations: ["lora"],
     modelAllowlist: input.modelAllowlist,
     maxDatasetBytes: 10_000_000,
-    environmentPlacements: destinationId === "fireworks"
-      ? ["provider_native"]
-      : ["local"],
+    environmentPlacements:
+      destinationId === "fireworks"
+        ? ["provider_native"]
+        : destinationId === "openpond_managed"
+          ? ["remote"]
+          : ["local"],
     nonProduction: input.nonProduction ?? true,
     unavailableReason: input.unavailableReason ?? null,
     checkedAt,

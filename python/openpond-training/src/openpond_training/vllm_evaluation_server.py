@@ -1,4 +1,4 @@
-"""Bounded vLLM process used by OpenPond's raw-Prime evaluation sessions."""
+"""Bounded vLLM process used by OpenPond post-training evaluation sessions."""
 
 from __future__ import annotations
 
@@ -169,7 +169,7 @@ def verify_adapter_alias(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="OpenPond raw-Prime vLLM evaluation server"
+        description="OpenPond post-training vLLM evaluation server"
     )
     parser.add_argument("--run-dir", required=True)
     parser.add_argument("--model-repository", required=True)

@@ -54,7 +54,7 @@ describe("Model binding promotion gate", () => {
       managedServing: {
         schemaVersion: "openpond.managedAdapterServingProjection.v1",
         teamId: "team-fixture",
-        source: "openpond_training",
+        source: "sandbox_managed_rft",
         sourceRef: "lineage-fixture",
         canonicalArtifactId: "sandbox-artifact-fixture",
         canonicalArtifactState: "promotable",
@@ -101,7 +101,7 @@ describe("Model binding promotion gate", () => {
         managedServing: {
           schemaVersion: "openpond.managedAdapterServingProjection.v1",
           teamId: "team-fixture",
-          source: "openpond_training",
+          source: "sandbox_managed_rft",
           sourceRef: "lineage-fixture",
           canonicalArtifactId: "sandbox-artifact-fixture",
           canonicalArtifactState: "promotable",
@@ -124,7 +124,7 @@ describe("Model binding promotion gate", () => {
         managedServing: {
           schemaVersion: "openpond.managedAdapterServingProjection.v1",
           teamId: "team-fixture",
-          source: "openpond_training",
+          source: "sandbox_managed_rft",
           sourceRef: "lineage-fixture",
           canonicalArtifactId: "sandbox-artifact-fixture",
           canonicalArtifactState: "promotable",
