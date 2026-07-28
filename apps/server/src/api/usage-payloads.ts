@@ -7,7 +7,6 @@ import {
   type Session,
   type UsageCommandBreakdown,
   type UsageDailyBucket,
-  type UsageInsightRunBreakdown,
   type UsageModelBreakdown,
   type UsageRange,
   type UsageRecordsResponse,
@@ -102,7 +101,6 @@ export async function usageSummaryPayload(input: {
     models: modelBreakdowns(records),
     threads: threadBreakdowns(records, sessionById),
     commands: commandBreakdowns(records),
-    insightRuns: insightRunBreakdowns(records),
     routes: routeBreakdowns(records),
     statuses: statusBreakdowns(records),
     sources: sourceBreakdowns(records),
@@ -363,28 +361,6 @@ function commandBreakdowns(records: ModelUsageRecord[]): UsageCommandBreakdown[]
       commandName: group.commandName,
       commandSource: group.commandSource,
       ...breakdownTotals(group.totals),
-    }))
-    .sort(breakdownSort);
-}
-
-function insightRunBreakdowns(records: ModelUsageRecord[]): UsageInsightRunBreakdown[] {
-  const groups = new Map<string, BreakdownAccumulator>();
-  for (const record of records) {
-    const insightRunId = record.attribution.insightRunId;
-    if (!insightRunId) continue;
-    const totals = groups.get(insightRunId) ?? accumulator();
-    addRecord(totals, record);
-    groups.set(insightRunId, totals);
-  }
-  return [...groups.entries()]
-    .map(([insightRunId, totals]) => ({
-      insightRunId,
-      status: null,
-      trigger: null,
-      findingCount: null,
-      sessionId: null,
-      turnId: null,
-      ...breakdownTotals(totals),
     }))
     .sort(breakdownSort);
 }

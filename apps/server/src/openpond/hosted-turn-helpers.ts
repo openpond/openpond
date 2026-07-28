@@ -203,7 +203,6 @@ function buildOpenPondCapabilityIndexContext(
     ...(input.hybridWorkspace
       ? ["- In Hybrid workspace mode, use the ordinary scoped workspace capabilities exposed for that turn; authoring skills do not grant new filesystem authority."]
       : []),
-    "- goal_control: start, restart, pause, resume, or stop OpenPond goals after resolving the current target goal and execution mode.",
     ...(input.browserControlAvailable
       ? [
           "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",

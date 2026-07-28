@@ -109,5 +109,5 @@ openpond harness desktop run tests/desktop-scenarios/chat-two-turns.ts --package
 - Running state: delayed child execution, parent activity running row, sidebar running indicator, final completion.
 - Handoff: child `openpond_subagent_send_message`, parent wake metadata, one child start, no duplicate child run.
 - Blocker/approval: blocked runtime event and visible blocked UI, no accidental completion, no unexpected pending approval.
-- Goal-scoped subagents: active Goal strip, right-sidebar Goal details, subagent counts, child `parentGoalId`.
+- Parent-scoped subagents: right-sidebar subagent details, child sessions, and parent-task handoffs.
 - Context compaction: manual compaction status divider, summary event metadata, usage record, and post-compaction follow-up turn.

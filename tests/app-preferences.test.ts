@@ -58,7 +58,6 @@ describe("app preferences", () => {
     const preferences = AppPreferencesSchema.parse({});
     const coding = preferences.subagents.roles.find((role) => role.id === "coding");
 
-    expect(preferences.insightsEnabled).toBe(false);
     expect(preferences.subagents).toMatchObject({
       enabled: true,
       delegationMode: "manual",
@@ -70,7 +69,7 @@ describe("app preferences", () => {
       isolationMode: "none",
       toolPolicy: "full_tools",
       background: true,
-      peerMessages: "goal_scoped",
+      peerMessages: "parent_scoped",
     });
     expect(preferences.subagents).not.toHaveProperty("maxTokens");
     expect(preferences.subagents).not.toHaveProperty("heartbeatIntervalSeconds");

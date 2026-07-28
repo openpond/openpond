@@ -245,7 +245,7 @@ export async function handleTerminalSlashCommand(
     return;
   }
   if (command.type === "settings") {
-    await handleSettingsCommand(command.args, context, connection);
+    await handleSettingsCommand(command.args, context);
     return;
   }
   if (command.type === "logs") {
@@ -381,7 +381,6 @@ async function patchTerminalSessionCommandAccess(
 async function handleSettingsCommand(
   args: string[],
   context: TerminalCommandContext,
-  connection: TerminalSessionConnection
 ): Promise<void> {
   const latest = context.getPayload() ?? (await context.refreshBootstrap());
   const subcommand = args[0] ?? "show";
@@ -389,34 +388,14 @@ async function handleSettingsCommand(
     context.addItem(systemItem(formatTerminalSettings(latest)));
     return;
   }
-  if (subcommand !== "goal-storage") {
-    context.addItem(systemItem("Usage: /settings [goal-storage global|workspace]", "warning"));
-    return;
-  }
-  const location = args[1];
-  if (location !== "global" && location !== "workspace") {
-    context.addItem(systemItem("Usage: /settings goal-storage global|workspace", "warning"));
-    return;
-  }
-  const updated = await apiFetch<BootstrapPayload>(connection.server, connection.token, "/v1/preferences", {
-    method: "PATCH",
-    body: JSON.stringify({ goalStorageLocation: location }),
-  });
-  context.setPayload(updated);
-  context.addItem(systemItem(`Goal storage set to ${goalStorageLabel(updated.preferences.goalStorageLocation)}.`));
+  context.addItem(systemItem("Usage: /settings", "warning"));
 }
 
 function formatTerminalSettings(payload: BootstrapPayload): string {
   return [
     "Settings:",
-    `Goal storage: ${goalStorageLabel(payload.preferences.goalStorageLocation)}`,
-    "",
-    "Change it with /settings goal-storage global or /settings goal-storage workspace.",
+    `Default chat: ${payload.preferences.defaultChatProvider} / ${payload.preferences.defaultChatModel}`,
   ].join("\n");
-}
-
-function goalStorageLabel(location: BootstrapPayload["preferences"]["goalStorageLocation"]): string {
-  return location === "workspace" ? ".openpond/goals in the working directory" : "~/.openpond/goals";
 }
 
 async function handleProfileCommand(

@@ -516,14 +516,6 @@ function capabilityToolActivityLabel(item: RuntimeEvent): string | null {
     if (item.name === "tool.started") return "Starting Create Pipeline";
     return failed ? "Create Pipeline failed" : "Started Create Pipeline";
   }
-  if (item.action === "openpond_profile_skill_goal") {
-    if (item.name === "tool.started") return "Creating profile skill";
-    return failed ? "Profile skill validation failed" : "Created profile skill";
-  }
-  if (item.action === "openpond_goal_control") {
-    if (item.name === "tool.started") return "Updating goal";
-    return failed ? "Goal update failed" : "Updated goal";
-  }
   return null;
 }
 
@@ -568,9 +560,7 @@ function browserToolActivityContent(item: RuntimeEvent): string | null {
 
 function capabilityToolActivityContent(item: RuntimeEvent): string | null {
   if (
-    item.action !== "openpond_create_improve" &&
-    item.action !== "openpond_profile_skill_goal" &&
-    item.action !== "openpond_goal_control"
+    item.action !== "openpond_create_improve"
   ) {
     return null;
   }
@@ -737,7 +727,6 @@ function activitySubagentMessage(item: RuntimeEvent): ActivityItem["subagentMess
     fromRunId,
     toRunId: stringValue(message, ["toRunId"]),
     toRole: stringValue(message, ["toRole"]),
-    parentGoalId: stringValue(message, ["parentGoalId"]),
     childSessionId: stringValue(data, ["childSessionId"]),
     roleId: stringValue(data, ["roleId"]),
     modelRef: modelProviderId && modelId ? { providerId: modelProviderId, modelId } : null,

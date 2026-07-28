@@ -1,46 +1,17 @@
 # Goals
 
-Goals are durable task state for agentic work. They let a user define an objective once, then let OpenPond track status, continuation, budget, context, and completion evidence across turns.
+Goal mode is a Codex-native feature. OpenPond preserves Codex Goal commands, events, history recovery, and compact status presentation, but it does not implement a separate Goal runtime.
 
-Goals are control-plane state, not prompt decoration. The runtime owns lifecycle transitions such as pause, resume, clear, budget limits, and continuation. The model can contribute progress and completion evidence, but it should not secretly rewrite the user's goal.
+## Availability
 
-## Commands
+`/goal` is available only when the selected provider is Codex. The composer hides it for other providers, and a directly typed `/goal` on a non-Codex provider is rejected before the model is invoked.
 
-```text
-/goal <objective>
-/goal
-/goal status
-/goal pause
-/goal resume
-/goal clear
-```
+OpenPond does not provide `/goal-local`, `/goal-remote`, a top-level `openpond goal` CLI command, hosted Goal continuation, or local Goal persistence.
 
-`/goal <objective>` sets or replaces the active objective for the session. `/goal status` shows current state. `/goal pause` stops automatic continuation without deleting the goal. `/goal resume` continues. `/goal clear` removes the goal.
+## Behavior
 
-## Goal States
+OpenPond passes the complete `/goal ...` command to Codex unchanged. Codex remains responsible for the objective, lifecycle, continuation, budgets, completion, and supported command forms.
 
-- `active`: continuation may run.
-- `paused`: the goal is retained, but automatic continuation is stopped.
-- `budget_limited`: the runtime stopped because the configured token, turn, or time budget was reached.
-- `complete`: the objective has been achieved and verified.
-- `blocked`: progress cannot continue productively without user input or an external change.
+OpenPond bridges Codex-native Goal updates into the app so the current status, elapsed time, budget information when supplied, completion state, and Goal details remain visible. Codex history can also restore that presentation when a task is reopened.
 
-## How Goals Work
-
-1. The user creates a goal.
-2. OpenPond stores the goal with the session.
-3. The runtime supplies the current goal as structured context.
-4. The agent works toward the next concrete step.
-5. The runtime records progress, usage, and relevant context.
-6. Before completion, the agent audits evidence such as files, tests, diffs, command output, artifacts, or deployment state.
-7. The goal is marked complete only when the objective is actually satisfied.
-
-## Local And Cloud
-
-Goals work as part of the local-first app experience. A goal can operate on local projects, Codex-backed sessions, OpenPond-hosted chat, and OpenPond Cloud workspaces depending on the selected provider and workspace.
-
-OpenPond Cloud is useful for goals that need cloud dependencies, long-running execution, replayable state, or source preservation. Local goals remain useful when the task only needs the user's machine and repo.
-
-## Budgeting And Safety
-
-Budgets keep goals bounded. User messages take priority over automatic continuation, and OpenPond should avoid empty continuation loops. If the agent cannot make real progress, it should report the blocker instead of repeatedly spending turns.
+Normal OpenPond-hosted turns and subagents remain available without Goal mode. Subagents belong to their parent task and keep their ordinary progress, review, messaging, and cleanup lifecycle.

@@ -39,12 +39,12 @@ describe("renderer performance budgets", () => {
     );
     const typed = measureStaticRender(
       "composer typing updated prompt",
-      createElement(Composer, composerProps("/goal-l")),
+      createElement(Composer, composerProps("/skill")),
       200,
     );
 
     expect(first.html).toContain("Author Agent");
-    expect(typed.html).toContain("Run a local goal");
+    expect(typed.html).toContain("Manage skills");
     expect(typed.bytes).toBeGreaterThan(2_000);
   });
 
@@ -400,7 +400,6 @@ function sidebarProps(chatCount: number): SidebarProps {
     savedForLaterSessions: [],
     visibleProjectRows: localProjectRows,
     localProjectRows,
-    insightsSystemProjectHidden: true,
     cloudProjectRows: [],
     projectSessionRowsByProjectId: {},
     sidebarProjectIdBySessionId: {},
@@ -435,7 +434,6 @@ function sidebarProps(chatCount: number): SidebarProps {
     startCloudProjectFromScratch: noop,
     moveProjectToCloud: noop,
     removeProject: noop,
-    toggleInsightsSystemProjectVisibility: noop,
     toggleProjectPinned: noop,
     toggleSessionPinned: noop,
     toggleSessionSavedForLater: noop,

@@ -15,7 +15,6 @@ Start here:
 - [Goals](goals.md): durable goal state, continuation, budgets, and task orchestration.
 - [Model access](model-access.md): OpenPond Chat hosted models, BYOK in desktop, Codex support, and open source model orchestration.
 - [OpenPond Connect](openpond-connect.md): OAuth and third-party provider connections through the OpenPond website.
-- [Continuous Insights](continuous-insights.md): background analysis of chat logs, runs, errors, and follow-ups.
 
 ## Principles
 

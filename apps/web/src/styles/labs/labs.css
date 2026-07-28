@@ -648,7 +648,6 @@
   overflow: auto;
 }
 
-.labs-suggestions-body .insights-view,
 .labs-suggestions-body .training-page-body {
   width: min(1180px, calc(100% - 56px));
   margin-inline: auto;

@@ -13,7 +13,6 @@ const PROFILE_REPO_GITIGNORE = [
   "**/.bun/",
   "**/.env",
   "**/.env.*",
-  "**/.openpond/goals/",
   "**/.openpond/traces/",
   "**/.openpond/vendor/",
   "**/.openpond/eval-results.json",

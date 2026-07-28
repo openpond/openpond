@@ -3,18 +3,9 @@ import { setTimeout as delay } from "node:timers/promises";
 import { TaskMinerRunSchema } from "@openpond/contracts";
 import { createTaskMinerService } from "../apps/server/src/training/task-miner";
 import { createTaskMinerBackgroundLoop } from "../apps/server/src/training/task-miner-background-loop";
-import { detectRepeatedToolFailures, detectRepeatedUserCorrections } from "../apps/server/src/insights/insight-evidence-detectors";
 import { sourceFixture, withTrainingStore } from "./helpers/training-fixtures";
 
-describe("task mining evidence detectors", () => {
-  test("detects recurring operational failures and corrections", () => {
-    const timestamp = "2026-07-12T00:00:00.000Z";
-    const failures = [0, 1, 2].map((sequence) => ({ sequence, event: { id: `event_${sequence}`, name: "tool.completed", status: "failed" as const, action: "search", sessionId: "session_1", timestamp, source: "server" as const } }));
-    expect(detectRepeatedToolFailures(failures, timestamp)[0]?.item).toMatchObject({ severity: "blocker", type: "tool.repeated_failure" });
-    const corrections = [0, 1].map((sequence) => ({ sequence, event: { id: `correction_${sequence}`, name: "turn.started", args: { prompt: sequence ? "Again, that is wrong" : "Fix this result" }, sessionId: "session_1", timestamp, source: "server" as const } }));
-    expect(detectRepeatedUserCorrections(corrections, timestamp)[0]?.evidenceSource).toBe("user_correction");
-  });
-
+describe("task mining", () => {
   test("clusters three consented recurring sources and deduplicates reruns", async () => withTrainingStore(async ({ store }) => {
     for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`source_${index}`, `cluster_${index}`), title: `Weekly research workflow ${index}`, metadata: { workflowSignature: "weekly-research", verifiableOutcome: true, frontierCost: true } });
     const service = createTaskMinerService({ store });

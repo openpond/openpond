@@ -26,13 +26,9 @@ import {
   SqliteIntegrityError,
 } from "./sqlite/sqlite-health.js";
 import {
-  isTerminalOpenPondGoalStatus,
-  openPondThreadGoalMutationFromEvent,
   threadDetailProjectionFromRow,
   threadDetailProjectionPayload,
   timestampForPath,
-  type EventPagePayloadRow,
-  type OpenPondThreadGoalMutation,
   type ThreadDetailProjection,
   type ThreadDetailProjectionRow,
 } from "./store-codecs.js";
@@ -47,6 +43,7 @@ import {
 import {
   createModelLifecycleTables as migrateModelLifecycleTables,
 } from "./store-model-lifecycle-migration.js";
+import { retireGoalAndInsightsStorageState } from "./store-goal-insights-retirement.js";
 import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 
 type UserVersionRow = { user_version: number };
@@ -92,7 +89,6 @@ export class SqliteStoreCore {
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
     });
-    await this.run("DELETE FROM openpond_thread_goals WHERE provisional = 1", []);
   }
 
   protected async configureDatabase(): Promise<void> {
@@ -335,45 +331,6 @@ export class SqliteStoreCore {
     await this.rebuildReadModels();
   }
 
-  async createInsightTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS insight_items (
-        id TEXT PRIMARY KEY,
-        scope_type TEXT NOT NULL,
-        scope_id TEXT NOT NULL,
-        severity TEXT NOT NULL,
-        type TEXT NOT NULL,
-        status TEXT NOT NULL,
-        fingerprint TEXT NOT NULL,
-        title TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        payload TEXT NOT NULL,
-        last_run_id TEXT,
-        last_run_session_id TEXT,
-        last_run_turn_id TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        resolved_at TEXT,
-        dismissed_at TEXT
-      );
-
-      CREATE INDEX IF NOT EXISTS insight_items_scope_status_idx
-        ON insight_items(scope_type, scope_id, status, updated_at);
-
-      CREATE INDEX IF NOT EXISTS insight_items_fingerprint_idx
-        ON insight_items(fingerprint);
-    `);
-    await this.addColumnIfMissing("insight_items", "last_run_id", "TEXT");
-    await this.addColumnIfMissing("insight_items", "last_run_session_id", "TEXT");
-    await this.addColumnIfMissing("insight_items", "last_run_turn_id", "TEXT");
-  }
-
-  async createInsightRunLinkColumns(): Promise<void> {
-    await this.addColumnIfMissing("insight_items", "last_run_id", "TEXT");
-    await this.addColumnIfMissing("insight_items", "last_run_session_id", "TEXT");
-    await this.addColumnIfMissing("insight_items", "last_run_turn_id", "TEXT");
-  }
-
   async createModelUsageTables(): Promise<void> {
     await this.exec(`
       CREATE TABLE IF NOT EXISTS model_usage_records (
@@ -467,7 +424,6 @@ export class SqliteStoreCore {
         id TEXT PRIMARY KEY,
         parent_session_id TEXT NOT NULL,
         parent_turn_id TEXT,
-        parent_goal_id TEXT,
         child_session_id TEXT,
         role_id TEXT NOT NULL,
         status TEXT NOT NULL,
@@ -479,15 +435,11 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS subagent_runs_parent_session_status_idx
         ON subagent_runs(parent_session_id, status, updated_at DESC);
 
-      CREATE INDEX IF NOT EXISTS subagent_runs_parent_goal_status_idx
-        ON subagent_runs(parent_goal_id, status, updated_at DESC);
-
       CREATE INDEX IF NOT EXISTS subagent_runs_child_session_idx
         ON subagent_runs(child_session_id);
 
       CREATE TABLE IF NOT EXISTS subagent_messages (
         id TEXT PRIMARY KEY,
-        parent_goal_id TEXT,
         from_run_id TEXT NOT NULL,
         to_run_id TEXT,
         to_role TEXT,
@@ -496,12 +448,19 @@ export class SqliteStoreCore {
         created_at TEXT NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS subagent_messages_parent_goal_created_idx
-        ON subagent_messages(parent_goal_id, created_at);
-
       CREATE INDEX IF NOT EXISTS subagent_messages_receiver_created_idx
         ON subagent_messages(to_run_id, to_role, created_at);
     `);
+  }
+
+  async retireGoalAndInsightsStorage(): Promise<void> {
+    await retireGoalAndInsightsStorageState({
+      all: (sql, params) => this.all(sql, params),
+      get: (sql, params = []) => this.get(sql, params),
+      run: (sql, params = []) => this.run(sql, params),
+      exec: (sql) => this.exec(sql),
+      createSubagentTables: () => this.createSubagentTables(),
+    });
   }
 
   async resetLegacySubagentTransportState(): Promise<void> {
@@ -513,44 +472,6 @@ export class SqliteStoreCore {
       (sql, params) => this.run(sql, params),
       () => this.rebuildReadModels(),
     );
-  }
-
-  async createOpenPondThreadGoalTable(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS openpond_thread_goals (
-        session_id TEXT PRIMARY KEY,
-        goal_id TEXT NOT NULL,
-        status TEXT NOT NULL,
-        provisional INTEGER NOT NULL DEFAULT 0,
-        updated_at TEXT NOT NULL
-      );
-    `);
-    const rows = await this.all<EventPagePayloadRow>(
-      "SELECT sequence, payload FROM events ORDER BY sequence ASC",
-      [],
-    );
-    const currentBySession = new Map<string, Extract<OpenPondThreadGoalMutation, { kind: "upsert" }>>();
-    for (const row of rows) {
-      const mutation = openPondThreadGoalMutationFromEvent(JSON.parse(row.payload) as RuntimeEvent);
-      if (!mutation) continue;
-      if (mutation.kind === "clear") {
-        currentBySession.delete(mutation.sessionId);
-      } else if (isTerminalOpenPondGoalStatus(mutation.status)) {
-        if (currentBySession.get(mutation.sessionId)?.goalId === mutation.goalId) {
-          currentBySession.delete(mutation.sessionId);
-        }
-      } else {
-        currentBySession.set(mutation.sessionId, mutation);
-      }
-    }
-    await this.run("DELETE FROM openpond_thread_goals", []);
-    for (const goal of currentBySession.values()) {
-      await this.run(
-        `INSERT INTO openpond_thread_goals (session_id, goal_id, status, provisional, updated_at)
-         VALUES (?, ?, ?, 0, ?)`,
-        [goal.sessionId, goal.goalId, goal.status, goal.updatedAt],
-      );
-    }
   }
 
   async createCreateImproveRunTables(): Promise<void> {

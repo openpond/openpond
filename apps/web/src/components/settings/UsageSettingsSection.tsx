@@ -15,7 +15,6 @@ import type {
   ModelUsageRecord,
   UsageCommandBreakdown,
   UsageDailyBucket,
-  UsageInsightRunBreakdown,
   UsageModelBreakdown,
   UsageRecordsResponse,
   UsageRouteBreakdown,
@@ -224,10 +223,6 @@ export function UsageSettingsContent({
     () => withSourceActionColumn(threadColumns, onOpenSourceSession, (row) => row.sessionId, "Open thread"),
     [onOpenSourceSession],
   );
-  const insightTableColumns = useMemo(
-    () => withSourceActionColumn(insightColumns, onOpenSourceSession, (row) => row.sessionId, "Open Insight session"),
-    [onOpenSourceSession],
-  );
   const requestTableColumns = useMemo(
     () => withSourceActionColumn(requestColumns, onOpenSourceSession, (row) => row.sessionId, "Open request source"),
     [onOpenSourceSession],
@@ -320,14 +315,6 @@ export function UsageSettingsContent({
         rowKey={(row) => `${row.commandName}:${row.commandSource ?? "unknown"}`}
         emptyLabel="No command usage"
         columns={commandColumns}
-      />
-
-      <UsageDataTable
-        title="Insight runs"
-        rows={summary?.insightRuns ?? []}
-        rowKey={(row) => row.insightRunId}
-        emptyLabel="No Insight usage"
-        columns={insightTableColumns}
       />
 
       <div className="usage-breakdown-grid">
@@ -578,18 +565,6 @@ const commandColumns: Array<UsageTableColumn<UsageCommandBreakdown>> = [
   { key: "failure-rate", label: "Failure rate", align: "end", render: (row) => formatPercent(row.failureRate) },
 ];
 
-const insightColumns: Array<UsageTableColumn<UsageInsightRunBreakdown>> = [
-  {
-    key: "run",
-    label: "Run",
-    render: (row) => <UsagePrimaryCell title={shortId(row.insightRunId)} detail={[row.status, row.trigger].filter(Boolean).join(" / ") || "Insight run"} />,
-  },
-  { key: "tokens", label: "Tokens", align: "end", render: (row) => formatTokens(row.totalTokens) },
-  { key: "requests", label: "Requests", align: "end", render: (row) => formatInteger(row.requests) },
-  { key: "findings", label: "Findings", align: "end", render: (row) => nullableInteger(row.findingCount) },
-  { key: "latency", label: "p95 latency", align: "end", render: (row) => formatDuration(row.p95LatencyMs) },
-];
-
 const routeColumns: Array<UsageTableColumn<UsageRouteBreakdown>> = [
   { key: "route", label: "Route", render: (row) => routeLabel(row.route) },
   { key: "requests", label: "Requests", align: "end", render: (row) => formatInteger(row.requests) },
@@ -734,10 +709,6 @@ function formatInteger(value: number): string {
   return integerFormatter.format(value);
 }
 
-function nullableInteger(value: number | null): string {
-  return value === null ? "missing" : formatInteger(value);
-}
-
 function formatCompactNumber(value: number): string {
   return compactNumberFormatter.format(value);
 }
@@ -822,9 +793,6 @@ function requestKindLabel(kind: string): string {
   if (kind === "slash_command") return "Slash command";
   if (kind === "create_improve_planner") return "Create/Improve planner";
   if (kind === "context_compaction") return "Compaction";
-  if (kind === "insights_scan") return "Insight scan";
-  if (kind === "insights_question") return "Insight question";
-  if (kind === "goal_control") return "Goal control";
   if (kind === "subagent") return "Subagent";
   if (kind === "codex_context") return "Codex context";
   return "Other";
@@ -833,7 +801,6 @@ function requestKindLabel(kind: string): string {
 function requestContext(row: ModelUsageRecord): ReactNode {
   if (row.attribution.commandName) return row.attribution.commandName;
   if (row.sessionId) return shortId(row.sessionId);
-  if (row.attribution.insightRunId) return shortId(row.attribution.insightRunId);
   return "None";
 }
 

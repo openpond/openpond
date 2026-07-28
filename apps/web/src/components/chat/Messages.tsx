@@ -21,7 +21,6 @@ import {
 import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
 import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
-import { InsightsRunPromptCard } from "./MessageInsightsRunPrompt";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
@@ -100,9 +99,8 @@ export const MessageRow = memo(function MessageRow({
     const hasImageAttachments = Boolean(message.attachments?.some((attachment) => attachment.kind === "image"));
     return (
       <article className="message-row user">
-        <div className={`user-message ${message.insightsRunPrompt ? "insights-run-message" : ""} ${hasAttachments ? "has-attachments" : ""} ${hasImageAttachments ? "has-image-attachments" : ""}`}>
+        <div className={`user-message ${hasAttachments ? "has-attachments" : ""} ${hasImageAttachments ? "has-image-attachments" : ""}`}>
           {message.attachments?.length ? <MessageAttachments attachments={message.attachments} connection={connection} /> : null}
-          {message.insightsRunPrompt ? <InsightsRunPromptCard prompt={message.insightsRunPrompt} /> : null}
           {message.content ? <UserMessageContent content={message.content} /> : null}
         </div>
       </article>
@@ -262,7 +260,6 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.activities === next.activities &&
     previous.sources === next.sources &&
     previous.actionRun === next.actionRun &&
-    previous.insightsRunPrompt === next.insightsRunPrompt &&
     previous.changeSummary === next.changeSummary &&
     previous.createImproveRun === next.createImproveRun
     && previous.userQuestion === next.userQuestion

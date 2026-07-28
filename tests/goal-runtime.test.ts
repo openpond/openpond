@@ -41,13 +41,13 @@ describe("goal runtime projection", () => {
     expect(status?.objective).toBe("Ship sidebar polish");
   });
 
-  test("projects active OpenPond elapsed time from later runtime activity", () => {
+  test("projects active Codex elapsed time from later runtime activity", () => {
     const goalEvent = runtimeEvent({
       id: "goal_elapsed",
       name: "diagnostic",
       data: {
         kind: "thread_goal",
-        provider: "openpond",
+        provider: "codex",
         goal: {
           objective: "Keep the runtime clock honest",
           status: "running",
@@ -79,7 +79,7 @@ describe("goal runtime projection", () => {
           name: "diagnostic",
           data: {
             kind: "thread_goal",
-            provider: "openpond",
+            provider: "codex",
             goal: {
               objective: "Keep ticking without provider events",
               status: "running",
@@ -110,7 +110,7 @@ describe("goal runtime projection", () => {
       name: "diagnostic",
       data: {
         kind: "thread_goal",
-        provider: "openpond",
+        provider: "codex",
         goal: {
           objective: "Resume without counting paused time",
           status: "running",
@@ -140,6 +140,7 @@ describe("goal runtime projection", () => {
         name: "diagnostic",
         data: {
           kind: "thread_goal",
+          provider: "codex",
           goal: {
             objective: "Ship sidebar polish",
             status: "completed",
@@ -162,6 +163,7 @@ describe("goal runtime projection", () => {
         name: "diagnostic",
         data: {
           kind: "thread_goal",
+          provider: "codex",
           goal: {
             objective: "Ship sidebar polish",
             status: "running",
@@ -274,6 +276,7 @@ describe("goal runtime projection", () => {
         name: "diagnostic",
         data: {
           kind: "thread_goal",
+          provider: "codex",
           goal: {
             objective: "Ship sidebar polish",
             status: "running",
@@ -304,6 +307,7 @@ describe("goal runtime projection", () => {
         name: "diagnostic",
         data: {
           kind: "thread_goal",
+          provider: "codex",
           goal: {
             objective: "Ship sidebar polish",
             status: "running",
@@ -328,6 +332,7 @@ describe("goal runtime projection", () => {
         name: "diagnostic",
         data: {
           kind: "thread_goal",
+          provider: "codex",
           goal: {
             objective: "Ship sidebar polish",
             status: "completed",
@@ -344,41 +349,6 @@ describe("goal runtime projection", () => {
 
     expect(status?.tone).toBe("done");
     expect(status?.actionLabel).toBe("Goal achieved");
-  });
-
-  test("maps exact OpenPond goal statuses to stable UI tone and action label", () => {
-    const cases = [
-      ["queued", "active", "Goal queued"],
-      ["running", "active", "Pursuing goal"],
-      ["awaiting_user_input", "active", "Goal awaiting input"],
-      ["awaiting_approval", "active", "Goal awaiting approval"],
-      ["paused", "paused", "Goal paused"],
-      ["blocked", "limited", "Goal blocked"],
-      ["completed", "done", "Goal achieved"],
-      ["failed", "limited", "Goal failed"],
-      ["cancelled", "limited", "Goal cancelled"],
-      ["budget_limited", "limited", "Goal budget limited"],
-    ] as const;
-
-    for (const [goalStatus, tone, actionLabel] of cases) {
-      const status = latestGoalRuntimeFromEvents([
-        runtimeEvent({
-          id: `goal_${goalStatus}`,
-          name: "diagnostic",
-          data: {
-            kind: "thread_goal",
-            goal: {
-              objective: `Status ${goalStatus}`,
-              status: goalStatus,
-              timeUsedSeconds: 1,
-            },
-          },
-        }),
-      ]);
-
-      expect(status?.tone).toBe(tone);
-      expect(status?.actionLabel).toBe(actionLabel);
-    }
   });
 
   test("maps exact Codex goal statuses to stable UI tone and action label", () => {

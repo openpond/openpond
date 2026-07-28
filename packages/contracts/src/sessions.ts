@@ -10,10 +10,7 @@ import { ChatModelRefSchema } from "./providers.js";
 import { SubagentDelegationModeSchema, SubagentRoleIdSchema } from "./subagents.js";
 import { OpenPondProfileRefSchema, OpenPondTurnProfileSnapshotSchema } from "./profile-ref.js";
 
-export const SystemSessionKindSchema = z.enum([
-  "openpond.insights",
-  "openpond.lab",
-]);
+export const SystemSessionKindSchema = z.enum(["openpond.lab"]);
 
 export const SessionSchema = z.object({
   id: z.string(),
@@ -24,7 +21,6 @@ export const SessionSchema = z.object({
   hiddenFromDefaultSidebar: z.boolean().optional(),
   parentSessionId: z.string().nullable().optional(),
   parentTurnId: z.string().nullable().optional(),
-  parentGoalId: z.string().nullable().optional(),
   subagentRunId: z.string().nullable().optional(),
   subagentRoleId: SubagentRoleIdSchema.nullable().optional(),
   subagentDelegationMode: SubagentDelegationModeSchema.nullable().optional(),

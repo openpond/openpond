@@ -22,7 +22,7 @@ import { runProfileSkillCommand } from "../packages/cloud/src/profile/profile-sk
 import { loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
 import {
   baseSession,
-  createNativeGoalControlHarness,
+  createByokTurnRunnerHarness,
   deferred,
   hostedCompactionPriorEvents,
   openRouterProviderSettingsWithContextWindow,
@@ -31,7 +31,7 @@ import {
 describe("BYOK turn runner dispatch", () => {
   test("finalizes generated local-adapter turns through the persisted chat-attempt boundary", async () => {
     const finalized: Array<Record<string, unknown>> = [];
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       providerId: "local-adapter",
       modelId: "lineage_cso",
       toolArgs: null,
@@ -72,7 +72,7 @@ describe("BYOK turn runner dispatch", () => {
     const finalized: Array<Record<string, unknown>> = [];
     const failure = new Error("Local model emitted malformed tool-call JSON.");
     failure.name = "LocalAdapterToolProtocolError";
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       providerId: "local-adapter",
       modelId: "lineage_cso",
       toolArgs: null,
@@ -111,7 +111,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("omits workflow delegation tools for terminal one-shot turns", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       sessionOverrides: {
         workspaceKind: undefined,
@@ -136,8 +136,21 @@ describe("BYOK turn runner dispatch", () => {
     expect(toolNames).toEqual(expect.arrayContaining(["resource_search", "resource_read"]));
   });
 
+  test("rejects /goal before invoking a non-Codex provider", async () => {
+    const harness = createByokTurnRunnerHarness({
+      toolArgs: null,
+      providerId: "openrouter",
+    });
+
+    await expect(harness.runner.sendTurn("session_1", {
+      prompt: "/goal review this repository",
+      modelRef: { providerId: "openrouter", modelId: "test/model" },
+    })).rejects.toThrow("/goal is only available with the Codex provider.");
+    expect(harness.streamInputs).toHaveLength(0);
+  });
+
   test("records local BYOK provider usage frames in the model usage ledger", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       sessionOverrides: {
         appId: "app_usage",
@@ -191,7 +204,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("records OpenPond hosted provider usage frames in the model usage ledger", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       providerId: "openpond",
       modelId: "openpond-chat",
       toolArgs: null,
@@ -230,7 +243,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("records hosted auto context compaction usage in the model usage ledger", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       providerId: "openpond",
       modelId: "openpond-1k",
       toolArgs: null,
@@ -287,7 +300,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("blocks hosted sends over the context limit when auto compaction is disabled", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       providerId: "openpond",
       modelId: "openpond-1k",
       toolArgs: null,
@@ -328,7 +341,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("auto compacts local BYOK context with the selected provider and model", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       initialEvents: hostedCompactionPriorEvents(4800),
       finalText: "BYOK answer after compaction.",
@@ -388,7 +401,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("preserves BYOK context and continues when summary compaction fails below the hard ceiling", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       initialEvents: hostedCompactionPriorEvents(4800),
       finalText: "BYOK answer after failed compaction.",
@@ -425,7 +438,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("blocks local BYOK sends over a trusted context limit when auto compaction is disabled", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       initialEvents: [
         ...hostedCompactionPriorEvents(),
@@ -460,7 +473,7 @@ describe("BYOK turn runner dispatch", () => {
   });
 
   test("records local BYOK context usage when provider metadata includes a context window", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       finalText: "BYOK context measured.",
       usage: { prompt_tokens: 1200, completion_tokens: 50, total_tokens: 1250 },
@@ -487,184 +500,12 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
   });
 
-  test("records Insights scan usage with system session attribution", async () => {
-    const harness = createNativeGoalControlHarness({
-      toolArgs: null,
-      sessionOverrides: {
-        title: "Insights system session",
-        systemKind: "openpond.insights",
-        hiddenFromDefaultSidebar: true,
-        workspaceKind: "local_project",
-        workspaceId: "project_usage",
-        localProjectId: "project_usage",
-      },
-      finalText: "Usage insight found.",
-      usage: { prompt_tokens: 55, completion_tokens: 9, total_tokens: 64 },
-    });
-
-    const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "scan usage evidence",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-      metadata: {
-        insightsRun: {
-          id: "insights_run_usage",
-          trigger: "manual",
-          sourceEventSequence: 123,
-        },
-        threadGoal: {
-          id: "goal_insights_usage",
-          provider: "openpond.insights",
-          objective: "Find notable usage behavior.",
-        },
-      },
-    });
-
-    expect(turn.status).toBe("completed");
-    expect(harness.usageRecords).toHaveLength(1);
-    expect(harness.usageRecords[0]).toMatchObject({
-      sessionId: "session_1",
-      turnId: turn.id,
-      provider: "openrouter",
-      model: "test/model",
-      route: "local_byok",
-      source: "provider_usage",
-      requestKind: "insights_scan",
-      visibility: "system",
-      status: "completed",
-      promptTokens: 55,
-      completionTokens: 9,
-      totalTokens: 64,
-      attribution: {
-        surface: "insights",
-        workflowKind: "scan",
-        sessionId: "session_1",
-        turnId: turn.id,
-        insightRunId: "insights_run_usage",
-        goalId: "goal_insights_usage",
-        localProjectId: "project_usage",
-        workspaceKind: "local_project",
-        workspaceId: "project_usage",
-        sourceEventSequence: 123,
-      },
-    });
-  });
-
-  test("records Insights question usage with distinct system attribution", async () => {
-    const harness = createNativeGoalControlHarness({
-      toolArgs: null,
-      sessionOverrides: {
-        title: "Insights question session",
-        systemKind: "openpond.insights",
-        hiddenFromDefaultSidebar: true,
-      },
-      finalText: "The spike came from one model.",
-      usage: { input_tokens: 24, output_tokens: 6 },
-    });
-
-    const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "answer the usage question",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-      metadata: {
-        insightsQuestion: {
-          question: "Why did usage spike?",
-          runCount: 2,
-          insightCount: 1,
-          startedAt: "2026-07-04T12:00:00.000Z",
-        },
-        threadGoal: {
-          id: "goal_insights_question",
-          provider: "openpond.insights",
-          objective: "Answer an Insights question.",
-        },
-      },
-    });
-
-    expect(turn.status).toBe("completed");
-    expect(harness.usageRecords).toHaveLength(1);
-    expect(harness.usageRecords[0]).toMatchObject({
-      sessionId: "session_1",
-      turnId: turn.id,
-      requestKind: "insights_question",
-      visibility: "system",
-      source: "provider_usage",
-      promptTokens: 24,
-      completionTokens: 6,
-      totalTokens: 30,
-      attribution: {
-        surface: "insights",
-        workflowKind: "scan",
-        sessionId: "session_1",
-        turnId: turn.id,
-        insightRunId: null,
-        goalId: "goal_insights_question",
-      },
-    });
-  });
-
-  test("records goal-control usage with thread-goal attribution", async () => {
-    const harness = createNativeGoalControlHarness({
-      toolArgs: null,
-      sessionOverrides: {
-        workspaceKind: "local_project",
-        workspaceId: "project_usage",
-        localProjectId: "project_usage",
-      },
-      finalText: "Goal status updated.",
-      usage: { prompt_tokens: 44, completion_tokens: 11, total_tokens: 55 },
-    });
-
-    const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "continue the usage tracking goal",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-      metadata: {
-        threadGoal: {
-          id: "goal_usage_tracking",
-          provider: "openpond",
-          objective: "Implement usage tracking.",
-          status: "active",
-        },
-      },
-    });
-
-    expect(turn.status).toBe("completed");
-    expect(harness.usageRecords).toHaveLength(1);
-    expect(harness.usageRecords[0]).toMatchObject({
-      sessionId: "session_1",
-      turnId: turn.id,
-      provider: "openrouter",
-      model: "test/model",
-      route: "local_byok",
-      source: "provider_usage",
-      requestKind: "goal_control",
-      visibility: "background",
-      status: "completed",
-      promptTokens: 44,
-      completionTokens: 11,
-      totalTokens: 55,
-      attribution: {
-        surface: "goal",
-        workflowKind: "goal_control",
-        sessionId: "session_1",
-        turnId: turn.id,
-        goalId: "goal_usage_tracking",
-        localProjectId: "project_usage",
-        workspaceKind: "local_project",
-        workspaceId: "project_usage",
-      },
-    });
-    expect(harness.events.some(
-      (event) => event.name === "diagnostic" && (event.data as any)?.kind === "thread_goal",
-    )).toBe(true);
-  });
-
   test("records tool-loop follow-up requests with stable request ordinals", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: {
-        action: "start",
-        objective: "Track model usage carefully.",
-        reason: "User asked to start a goal.",
+        unexpected: true,
       },
-      finalText: "Goal started.",
+      finalText: "Tool loop completed.",
       usageByPass: {
         1: { prompt_tokens: 30, completion_tokens: 2, total_tokens: 32 },
         2: { prompt_tokens: 40, completion_tokens: 5, total_tokens: 45 },
@@ -672,7 +513,7 @@ describe("BYOK turn runner dispatch", () => {
     });
 
     const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "start a goal to track usage",
+      prompt: "exercise a model tool loop",
       modelRef: { providerId: "openrouter", modelId: "test/model" },
     });
 
@@ -686,26 +527,24 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.usageRecords.map((record) => record.totalTokens)).toEqual([32, 45]);
     expect(harness.usageRecords[0]?.attribution.workflowKind).toBe("direct_chat");
     expect(harness.usageRecords[1]?.attribution.workflowKind).toBe("tool_loop");
-    expect(harness.events.some((event) => event.name === "tool.completed" && event.action === "openpond_goal_control")).toBe(true);
+    expect(harness.events.some((event) => event.name === "tool.completed" && event.action === "missing_test_tool")).toBe(true);
   });
 
   test("replays ZAI preserved thinking with assistant tool calls", async () => {
-    const reasoningContent = "I need to create the requested goal before I can report completion.";
-    const harness = createNativeGoalControlHarness({
+    const reasoningContent = "I need to complete the tool call before I can report completion.";
+    const harness = createByokTurnRunnerHarness({
       providerId: "zai",
       modelId: "glm-5.2",
       toolArgs: {
-        action: "start",
-        objective: "Verify preserved thinking continuation.",
-        reason: "Regression test for a multi-round tool turn.",
+        unexpected: true,
       },
       reasoningTextOnToolCall: reasoningContent,
       continuationOnToolCall: { kind: "chat_completions_reasoning", reasoningContent },
-      finalText: "Goal started.",
+      finalText: "Tool loop completed.",
     });
 
     const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "start a goal to verify preserved thinking",
+      prompt: "verify preserved thinking across a tool loop",
       modelRef: { providerId: "zai", modelId: "glm-5.2" },
     });
 
@@ -717,18 +556,18 @@ describe("BYOK turn runner dispatch", () => {
         content: "",
         continuation: { kind: "chat_completions_reasoning", reasoningContent },
         tool_calls: expect.arrayContaining([
-          expect.objectContaining({ id: "call_goal_control" }),
+          expect.objectContaining({ id: "call_test_tool" }),
         ]),
       }),
       expect.objectContaining({
         role: "tool",
-        tool_call_id: "call_goal_control",
+        tool_call_id: "call_test_tool",
       }),
     ]));
   });
 
   test("records failed provider requests in the usage ledger", async () => {
-    const harness = createNativeGoalControlHarness({
+    const harness = createByokTurnRunnerHarness({
       toolArgs: null,
       failOnPass: 1,
     });

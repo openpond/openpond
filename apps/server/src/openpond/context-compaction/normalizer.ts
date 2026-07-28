@@ -258,7 +258,6 @@ function subagentEventPreview(event: RuntimeEvent): string {
     `run: subagent-run:${run.id}`,
     `role: ${run.roleId}`,
     `status: ${run.status}`,
-    run.parentGoalId ? `parent goal: ${run.parentGoalId}` : null,
     run.childSessionId ? `child session: session:${run.childSessionId}` : null,
     `objective: ${run.objective}`,
     report?.summary ? `summary: ${report.summary}` : null,
@@ -367,4 +366,3 @@ function numberValue(value: unknown): number {
 function truncate(value: string, maxChars: number): string {
   return value.length > maxChars ? `${value.slice(0, maxChars)}\n[truncated]` : value;
 }
-

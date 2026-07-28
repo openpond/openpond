@@ -6,7 +6,6 @@ import {
   ChartColumnStacked,
   Code2,
   FileText,
-  Lightbulb,
   MessageSquare,
   Monitor,
   HardDrive,
@@ -48,9 +47,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
     items: [
       { section: "profile", label: "Profiles", Icon: Bot },
       { section: "skills", label: "Skills", Icon: FileText },
-      { section: "goals", label: "Goals", Icon: ScrollText },
       { section: "context", label: "Context", Icon: BookOpenText },
-      { section: "insights", label: "Insights", Icon: Lightbulb },
       { section: "training", label: "Training", Icon: Workflow },
       { section: "subagents", label: "Subagents", Icon: Workflow },
     ],

@@ -68,7 +68,6 @@ export function createCapabilityCatalogRuntime(deps: {
     }
     if (!options.disableWorkflowDelegationTools) {
       const handlers: CapabilityHandlers = {
-        startGoalControl: deps.handlers.startGoalControl,
         ...(deps.handlers.manageSidebarFile
           ? { manageSidebarFile: deps.handlers.manageSidebarFile }
           : {}),

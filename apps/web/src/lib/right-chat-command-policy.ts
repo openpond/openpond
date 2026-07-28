@@ -2,7 +2,6 @@ import type { ComposerSlashCommand } from "./composer-slash-commands";
 import { buildSubmitIssueSlashPrompt } from "./submit-issue-command";
 
 export type RightChatCommandPolicy =
-  | { kind: "open_insights" }
   | { kind: "open_training"; objective: string | null }
   | { kind: "send_prompt"; prompt: string; requiresInstructions: boolean };
 
@@ -23,10 +22,6 @@ export function rightChatCommandPolicy(
       return { kind: "send_prompt", prompt: `/skill ${args}`, requiresInstructions: false };
     case "goal":
       return { kind: "send_prompt", prompt: `/goal ${args}`, requiresInstructions: true };
-    case "goal-local":
-      return { kind: "send_prompt", prompt: `/goal-local ${args}`, requiresInstructions: true };
-    case "insights":
-      return { kind: "open_insights" };
     case "train":
       return { kind: "open_training", objective: args || null };
     case "submit-issue":

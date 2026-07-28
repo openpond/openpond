@@ -20,9 +20,6 @@ export const ModelUsageRequestKindSchema = z.enum([
   "slash_command",
   "create_improve_planner",
   "context_compaction",
-  "insights_scan",
-  "insights_question",
-  "goal_control",
   "subagent",
   "codex_context",
   "other",
@@ -52,7 +49,6 @@ export const UsageCommandSourceSchema = z.enum([
 export const UsageSurfaceSchema = z.enum([
   "chat",
   "settings",
-  "insights",
   "goal",
   "create_improve",
   "compaction",
@@ -66,7 +62,6 @@ export const UsageWorkflowKindSchema = z.enum([
   "planner",
   "summary",
   "scan",
-  "goal_control",
   "subagent",
   "other",
 ]);
@@ -76,7 +71,6 @@ export const ModelUsageAttributionSchema = z.object({
   workflowKind: UsageWorkflowKindSchema,
   sessionId: z.string().trim().min(1).nullable(),
   turnId: z.string().trim().min(1).nullable(),
-  insightRunId: z.string().trim().min(1).nullable(),
   goalId: z.string().trim().min(1).nullable(),
   subagentRunId: z.string().trim().min(1).nullable().default(null),
   subagentRoleId: z.string().trim().min(1).nullable().default(null),
@@ -94,7 +88,6 @@ export const ModelUsageAttributionSchema = z.object({
 export const UsageRequestAttributionSchema = z.object({
   surface: UsageSurfaceSchema.optional(),
   workflowKind: UsageWorkflowKindSchema.optional(),
-  insightRunId: z.string().trim().min(1).nullable().optional(),
   goalId: z.string().trim().min(1).nullable().optional(),
   subagentRunId: z.string().trim().min(1).nullable().optional(),
   subagentRoleId: z.string().trim().min(1).nullable().optional(),
@@ -197,15 +190,6 @@ export const UsageCommandBreakdownSchema = UsageBreakdownBaseSchema.extend({
   commandSource: UsageCommandSourceSchema.nullable(),
 });
 
-export const UsageInsightRunBreakdownSchema = UsageBreakdownBaseSchema.extend({
-  insightRunId: z.string().trim().min(1),
-  status: z.string().trim().min(1).nullable(),
-  trigger: z.string().trim().min(1).nullable(),
-  findingCount: z.number().int().nonnegative().nullable(),
-  sessionId: z.string().trim().min(1).nullable(),
-  turnId: z.string().trim().min(1).nullable(),
-});
-
 export const UsageRouteBreakdownSchema = UsageBreakdownBaseSchema.extend({
   route: ModelUsageRouteSchema,
 });
@@ -265,7 +249,6 @@ export const UsageSummaryResponseSchema = z.object({
   models: z.array(UsageModelBreakdownSchema),
   threads: z.array(UsageThreadBreakdownSchema),
   commands: z.array(UsageCommandBreakdownSchema),
-  insightRuns: z.array(UsageInsightRunBreakdownSchema),
   routes: z.array(UsageRouteBreakdownSchema),
   statuses: z.array(UsageStatusBreakdownSchema),
   sources: z.array(UsageSourceBreakdownSchema),
@@ -323,7 +306,6 @@ export type UsageRecordsQuery = z.infer<typeof UsageRecordsQuerySchema>;
 export type UsageModelBreakdown = z.infer<typeof UsageModelBreakdownSchema>;
 export type UsageThreadBreakdown = z.infer<typeof UsageThreadBreakdownSchema>;
 export type UsageCommandBreakdown = z.infer<typeof UsageCommandBreakdownSchema>;
-export type UsageInsightRunBreakdown = z.infer<typeof UsageInsightRunBreakdownSchema>;
 export type UsageRouteBreakdown = z.infer<typeof UsageRouteBreakdownSchema>;
 export type UsageStatusBreakdown = z.infer<typeof UsageStatusBreakdownSchema>;
 export type UsageSourceBreakdown = z.infer<typeof UsageSourceBreakdownSchema>;

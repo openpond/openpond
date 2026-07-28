@@ -22,8 +22,6 @@ import { DiagnosticsSettingsSection } from "./DiagnosticsSettingsSection";
 import { EditorSettingsSection } from "./EditorSettingsSection";
 import {
   ContextSettingsSection,
-  GoalsSettingsSection,
-  InsightsSettingsSection,
   SubagentsSettingsSection,
 } from "./HarnessSettingsSections";
 import { NotificationsSettingsSection } from "./NotificationsSettingsSection";
@@ -288,16 +286,8 @@ export function SettingsView({
           />
         ) : section === "defaults" ? (
           <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
-        ) : section === "goals" ? (
-          <GoalsSettingsSection preferences={preferences} {...defaultsSettings} />
         ) : section === "context" ? (
           <ContextSettingsSection preferences={preferences} {...defaultsSettings} />
-        ) : section === "insights" ? (
-          <InsightsSettingsSection
-            preferences={preferences}
-            providers={payload?.providers ?? null}
-            {...defaultsSettings}
-          />
         ) : section === "training" ? (
           <TrainingSettingsSection
             connection={connection}

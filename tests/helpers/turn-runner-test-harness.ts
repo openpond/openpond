@@ -76,12 +76,6 @@ export function withTurnRunnerTestStore<
         Boolean(runtimeEvent.output?.trim())
       )?.output?.trim() ?? null;
     },
-    async currentOpenPondThreadGoal(sessionId) {
-      return currentGoalFromEvents((await store.snapshot()).events, sessionId);
-    },
-    async openPondThreadGoalById(sessionId, goalId) {
-      return goalFromEvents((await store.snapshot()).events, sessionId, goalId);
-    },
     async latestTurnForSession(sessionId, status) {
       return (await store.snapshot()).turns.findLast((turn) =>
         turn.sessionId === sessionId && (!status || turn.status === status)
@@ -216,12 +210,6 @@ export function createTurnRunnerTestHarness(options: {
         runtimeEvent.name === "assistant.delta" &&
         Boolean(runtimeEvent.output?.trim())
       )?.output?.trim() ?? null;
-    },
-    async currentOpenPondThreadGoal(sessionId) {
-      return currentGoalFromEvents(state.events, sessionId);
-    },
-    async openPondThreadGoalById(sessionId, goalId) {
-      return goalFromEvents(state.events, sessionId, goalId);
     },
     async latestTurnForSession(sessionId, status) {
       return state.turns.findLast((turn) =>
@@ -398,7 +386,6 @@ export function createTurnRunnerTestHarness(options: {
     },
     turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-runner-characterization" }),
     subagentQueue: createBackgroundWorkerQueue({ queueId: "subagent-characterization" }),
-    enableGoalContinuations: false,
     maxHostedWorkspaceToolRounds: 3,
     maxRepeatedInvalidToolRequests: 2,
   };
@@ -487,36 +474,6 @@ function updateSessionStatus(
 ): void {
   const session = sessions.get(sessionId);
   if (session) sessions.set(sessionId, { ...session, status });
-}
-
-function currentGoalFromEvents(events: RuntimeEvent[], sessionId: string): Record<string, unknown> | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const runtimeEvent = events[index]!;
-    if (runtimeEvent.sessionId !== sessionId || runtimeEvent.name !== "diagnostic") continue;
-    const data = objectRecord(runtimeEvent.data);
-    if (data?.kind === "thread_goal_cleared") return null;
-    if (data?.kind !== "thread_goal") continue;
-    const goal = objectRecord(data.goal);
-    const status = typeof goal?.status === "string" ? goal.status : "active";
-    if (["completed", "complete", "failed", "cancelled", "stopped"].includes(status)) return null;
-    return goal;
-  }
-  return null;
-}
-
-function goalFromEvents(
-  events: RuntimeEvent[],
-  sessionId: string,
-  goalId: string,
-): Record<string, unknown> | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const runtimeEvent = events[index]!;
-    if (runtimeEvent.sessionId !== sessionId || runtimeEvent.name !== "diagnostic") continue;
-    const data = objectRecord(runtimeEvent.data);
-    const goal = objectRecord(data?.goal);
-    if (goal?.id === goalId) return goal;
-  }
-  return null;
 }
 
 function nestedString(

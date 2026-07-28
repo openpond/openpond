@@ -62,7 +62,6 @@ export type SidebarProps = {
   projectRows?: SidebarProjectItem[];
   visibleProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
-  insightsSystemProjectHidden: boolean | null;
   cloudProjectRows: SidebarProjectItem[];
   workspaceStates: Record<string, WorkspaceState>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
@@ -111,9 +110,7 @@ export type SidebarProps = {
   moveProjectToCloud: (item: SidebarProjectItem) => void;
   switchProjectWorkspaceTarget: (projectId: string, target: WorkspaceTargetValue) => void;
   removeProject: (item: SidebarProjectItem) => void;
-  toggleInsightsSystemProjectVisibility: () => void;
   toggleProjectPinned: (item: SidebarProjectItem) => void;
-  toggleSystemProjectVisibility: (item: SidebarProjectItem) => void;
   toggleSessionPinned: (session: Session) => void;
   toggleSessionSavedForLater: (session: Session) => void;
   openSidebarFile: (file: SidebarFileBookmark) => void;

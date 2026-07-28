@@ -288,18 +288,6 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./project-agent")).runAgentCommand(options, rest),
   },
   {
-    name: "goal",
-    usage: "openpond goal <command> [args]",
-    optionSchema: {
-      agentId: "string",
-      cwd: "string",
-      goalStorage: "string",
-      json: "boolean",
-      goalId: "string",
-    },
-    handler: async ({ options, rest }) => (await import("../goal/cli")).runGoalCommand(options, rest),
-  },
-  {
     name: "harness",
     usage: "openpond harness desktop <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]",
     optionSchema: {

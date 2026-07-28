@@ -29,7 +29,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const {
     composerDraftStore, appDispatch, pendingTerminalCommand, setPendingTerminalCommand, terminalTabs, setTerminalTabs,
     trainingDetailTasksetId, setTrainingDetailTasksetId, mentionedAppId, setMentionedAppId, cloudSetupDialog, setCloudSetupDialog,
-    rightPanelTabRequest, workspaceDiffPanelViewState, mainComposerFocusRequestId, labSuggestionsRequestId, projectConfirmDialog, resolveProjectConfirmDialog,
+    rightPanelTabRequest, workspaceDiffPanelViewState, mainComposerFocusRequestId, projectConfirmDialog, resolveProjectConfirmDialog,
     query, searchOpen, archivedChatsOpen, sectionMenuOpen, projectsExpanded, cloudProjectsExpanded,
     sidebarOpen, view, selectedAppId, selectedProjectId, selectedSessionId, codexPermissionMode,
     codexReasoningEffort, busy, diffPanelOpen, diffPanelExpanded, rightPanelMode,
@@ -42,7 +42,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setTerminalOpen, setSettingsSection, setNewProjectDialogOpen, setNewProjectMode, setNewProjectName, setNewProjectPath,
     setCommitDialogOpen, setCommitMessage, setCommitIncludeUnstaged, setCommitNextStep, setCommitDraft, setBranchDialogOpen,
     setBranchDialogName, setError, showToast, applyBootstrapPayload, bootstrap, connection,
-    startup, insights, training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed,
+    startup, training, pinnedCollapsed, projectsCollapsed, cloudProjectsCollapsed,
     chatsCollapsed, savedForLaterCollapsed, sidebarWidth, sidebarResizing, diffPanelWidth, diffPanelResizing, togglePinnedCollapsed,
     toggleProjectsCollapsed, toggleCloudProjectsCollapsed, toggleChatsCollapsed, toggleSavedForLaterCollapsed, startSidebarResize, startDiffPanelResize, selectedApp,
     selectedProject, selectedProjectLinkedApp, selectedSession, sidebarSessions, runtimeIndexes, chatMentionApps,
@@ -64,18 +64,18 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     workspaceTarget,
   } = primary;
   const {
-    title, browserConversationId, handleWorkspaceDiffPanelViewStateChange, openSessionInChat, insightsSystemProjectHidden,
-    toggleInsightsSystemProjectVisibility, toggleSystemProjectVisibility, openExistingProjectPathDialog, addProjectFolder, removeProject,
+    title, browserConversationId, handleWorkspaceDiffPanelViewStateChange, openSessionInChat,
+    openExistingProjectPathDialog, addProjectFolder, removeProject,
     changeProjectTarget, submitNewProjectDialog, changeWorkspaceBranch, openCommitDialog, openCreateWorkspaceBranchDialog,
     openDefaultsSettingsFromBranchDialog, runWorkspaceTool, submitCommitDialog, submitCreateWorkspaceBranch, syncWorkspaceLocally,
     answerCreateImproveQuestion,
     applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
     reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
-    pauseGoal, stopTurn, archiveSession, restoreSession, renameSession,
+    stopTurn, archiveSession, restoreSession, renameSession,
     toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
     switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
     openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
-    openLabSuggestions, rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
+    rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
     closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
     showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
     updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
@@ -309,7 +309,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         projectRows,
         visibleProjectRows,
         localProjectRows,
-        insightsSystemProjectHidden,
         cloudProjectRows,
         workspaceStates,
         projectSessionRowsByProjectId,
@@ -366,9 +365,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         moveProjectToCloud,
         switchProjectWorkspaceTarget,
         removeProject: (project) => void removeProject(project),
-        toggleInsightsSystemProjectVisibility: () => void toggleInsightsSystemProjectVisibility(),
         toggleProjectPinned,
-        toggleSystemProjectVisibility,
         toggleSessionPinned,
         toggleSessionSavedForLater,
         openSidebarFile,
@@ -415,10 +412,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setSearchOpen(true);
         },
         onToggleTerminal: () => setTerminalOpen((open) => !open),
-        onOpenInsights: () => {
-          setSectionMenuOpen(null);
-          openLabSuggestions();
-        },
         onRunTerminalCommand: (command) => {
           setPendingTerminalCommand({ id: Date.now(), scope: viewTerminalScope, command });
           setTerminalOpen(true);
@@ -433,9 +426,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onShowSidebar: () => setSidebarOpen(true),
         platform,
         showWorkspaceControls: view !== "team" && view !== "community" && view !== "labs",
-        insightsItems: insights.items,
-        insightsSummary: insights.summary,
-        insightsScanning: insights.scanRunning,
       }}
       mainPane={{
         view,
@@ -509,7 +499,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         mainComposerFocusRequestId,
         labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
         labCloseDetailKind: labDetailNavigation.closeDetailKind,
-        labSuggestionsRequestId,
         sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
         onSideChatTrainingLaunchHandled: (id) => setRightChatTrainingLaunchRequest((current) =>
           current?.id === id ? null : current),
@@ -559,13 +548,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         terminalOpen,
         onToggleTerminal: () => setTerminalOpen((open) => !open),
         onWorkspaceDiffPanelViewStateChange: handleWorkspaceDiffPanelViewStateChange,
-        insightsItems: insights.items,
-        insightsRuns: insights.runs,
-        insightsNextScanAt: insights.nextScanAt,
-        insightsScanRunning: insights.scanRunning,
-        insightsScanStartedAt: insights.scanStartedAt,
-        insightsScanning: insights.scanning,
-        insightsError: insights.error,
         training,
         trainingSessions: sidebarSessions,
         trainingChatHandoff,
@@ -573,10 +555,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         onTrainingDetailTasksetIdChange: setTrainingDetailTasksetId,
         onTrainingChatTaskSelect: selectTrainingChatTaskForComposer,
         onTrainingChatHandoffDismiss: dismissTrainingChatHandoff,
-        onRunInsightsScan: insights.runScan,
-        onAskInsightsQuestion: insights.askQuestion,
-        onPatchInsightStatus: insights.patchStatus,
-        onOpenInsightsSession: openSessionInChat,
+        onOpenSession: openSessionInChat,
         cloudProjects: bootstrap?.cloudProjects ?? [],
         chatHistoryHasMore: selectedChatHistoryHasMore,
         chatHistoryLoading: selectedChatHistoryLoading,
@@ -598,7 +577,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             ?? null;
           if (session) openRightChatPanel(session, { preserveView: true });
         },
-        onOpenLabSuggestions: openLabSuggestions,
         onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
         onTerminalTabsChange: setTerminalTabs,
         onCloseRightChatPanel: closeRightChatPanel,
@@ -651,7 +629,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         setMentionedAppId,
         showToast,
         sendPrompt: sendPromptFromMainComposer,
-        pauseGoal,
         stopTurn,
         syncWorkspaceLocally,
         refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,

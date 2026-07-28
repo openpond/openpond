@@ -28,6 +28,7 @@ import {
   composerActionSlashQuery,
 } from "../apps/web/src/lib/composer-action-catalog";
 import {
+  composerSlashCommandsForProvider,
   composerSlashCommandMatches,
   parseComposerSlashCommandPrompt,
 } from "../apps/web/src/lib/composer-slash-commands";
@@ -152,9 +153,7 @@ describe("OpenPond App action channel", () => {
       "agent",
       "skill",
       "goal",
-      "insights",
       "submit-issue",
-      "goal-local",
       "train",
       "sync-cloud",
     ]);
@@ -167,7 +166,6 @@ describe("OpenPond App action channel", () => {
     expect(parseComposerSlashCommandPrompt("/create summarize files")).toBeNull();
     expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
       "goal",
-      "goal-local",
     ]);
     expect(composerSlashCommandMatches({ prompt: "/goal-r" })).toEqual([]);
     expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
@@ -182,10 +180,9 @@ describe("OpenPond App action channel", () => {
       args: "create release-notes",
     });
     expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toBeNull();
-    expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toEqual({
-      command: "goal-local",
-      args: "summarize files",
-    });
+    expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toBeNull();
+    expect(composerSlashCommandsForProvider("openpond").map((item) => item.id)).not.toContain("goal");
+    expect(composerSlashCommandsForProvider("codex").map((item) => item.id)).toContain("goal");
     expect(parseComposerSlashCommandPrompt("/sync-cloud")).toEqual({
       command: "sync-cloud",
       args: "",
@@ -199,14 +196,10 @@ describe("OpenPond App action channel", () => {
 
   test("routes goal slash commands through chat", () => {
     const goalCommand = parseComposerSlashCommandPrompt("/goal smoke goal");
-    const localGoalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
     expect(goalCommand).not.toBeNull();
-    expect(localGoalCommand).not.toBeNull();
 
     expect(shouldSubmitComposerSlashCommandToChat(goalCommand!)).toBe(true);
-    expect(shouldSubmitComposerSlashCommandToChat(localGoalCommand!)).toBe(true);
     expect(promptForAppSlashCommand(goalCommand!)).toBe("/goal smoke goal");
-    expect(promptForAppSlashCommand(localGoalCommand!)).toBe("/goal-local smoke goal");
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {
@@ -765,73 +758,6 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("aria-label=\"Close New chat\"");
     expect(html.indexOf(">Files</span>")).toBeLessThan(html.indexOf(">New chat</span>"));
     expect(html).not.toContain(">Review</span>");
-  });
-
-  test.skip("legacy local Agent Create/Improve routing is retired", () => {
-    const createCommand = parseComposerSlashCommandPrompt("/create smoke agent");
-    const goalCommand = parseComposerSlashCommandPrompt("/goal-local smoke goal");
-    expect(createCommand).not.toBeNull();
-    expect(goalCommand).not.toBeNull();
-    const localProfile = {
-      mode: "local",
-      activeProfile: "default",
-      repoPath: "/profiles/default-repo",
-      sourcePath: "/profiles/default-repo/profiles/default",
-      git: { head: "abc123" },
-    } as BootstrapPayload["profile"];
-
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: createCommand!,
-        profile: localProfile,
-        activeWorkspaceKind: "local_project",
-        view: "chat",
-      }),
-    ).toBe(true);
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: createCommand!,
-        profile: localProfile,
-        activeWorkspaceKind: null,
-        view: "chat",
-      }),
-    ).toBe(true);
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: createCommand!,
-        profile: localProfile,
-        activeWorkspaceKind: "sandbox",
-        view: "chat",
-      }),
-    ).toBe(false);
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: createCommand!,
-        profile: localProfile,
-        activeWorkspaceKind: "local_project",
-        view: "cloud",
-      }),
-    ).toBe(false);
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: createCommand!,
-        profile: {
-          mode: "hosted",
-          activeProfile: "default",
-          hosted: { sourceRef: "main", sourceCommitSha: "hosted_sha" },
-        } as BootstrapPayload["profile"],
-        activeWorkspaceKind: "local_project",
-        view: "chat",
-      }),
-    ).toBe(false);
-    expect(
-      shouldRunCreateImproveCommandLocally({
-        command: goalCommand!,
-        profile: localProfile,
-        activeWorkspaceKind: "local_project",
-        view: "chat",
-      }),
-    ).toBe(false);
   });
 
   test("keeps direct sandbox chats on the standard right sidebar with a summary tab", () => {

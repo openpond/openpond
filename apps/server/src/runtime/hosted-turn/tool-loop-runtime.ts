@@ -750,7 +750,6 @@ function subagentModelAsideMessages(input: {
       `message: ${message.id}`,
       `kind: ${message.kind}`,
       `from: ${message.fromRunId}`,
-      message.parentGoalId ? `goal: ${message.parentGoalId}` : null,
       `body: ${truncateForModelAside(message.body, 4000)}`,
       message.refs.length
         ? `refs: ${message.refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(", ")}`

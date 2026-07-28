@@ -68,13 +68,13 @@ describe("private cloud persistence", () => {
     await Promise.all([
       saveGlobalConfig({ lspEnabled: true }),
       saveGlobalConfig({ mode: "builder" }),
-      saveGlobalConfig({ goalStorageLocation: "workspace" }),
+      saveGlobalConfig({ executionMode: "local" }),
     ]);
 
     await expect(loadGlobalConfig()).resolves.toMatchObject({
       lspEnabled: true,
       mode: "builder",
-      goalStorageLocation: "workspace",
+      executionMode: "local",
     });
     expect(await readdir(path.join(home, ".openpond"))).toEqual(["config.json"]);
   });

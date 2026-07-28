@@ -208,7 +208,6 @@ export function createSubagentHarness(input: {
       async listSubagentRuns(query = {}) {
         return runs.filter((run) => {
           if (query.parentSessionId && run.parentSessionId !== query.parentSessionId) return false;
-          if (query.parentGoalId && run.parentGoalId !== query.parentGoalId) return false;
           if (query.childSessionId && run.childSessionId !== query.childSessionId) return false;
           if (query.status) {
             const statuses = Array.isArray(query.status) ? query.status : [query.status];
@@ -223,7 +222,6 @@ export function createSubagentHarness(input: {
       },
       async listSubagentMessages(query = {}) {
         return messages.filter((message) => {
-          if (query.parentGoalId && message.parentGoalId !== query.parentGoalId) return false;
           if (query.fromRunId && message.fromRunId !== query.fromRunId) return false;
           if (query.toRunId && message.toRunId !== query.toRunId) return false;
           if (query.toRole && message.toRole !== query.toRole) return false;
@@ -246,7 +244,6 @@ export function createSubagentHarness(input: {
         hiddenFromDefaultSidebar: record.hiddenFromDefaultSidebar,
         parentSessionId: record.parentSessionId,
         parentTurnId: record.parentTurnId,
-        parentGoalId: record.parentGoalId,
         subagentRunId: record.subagentRunId,
         subagentRoleId: record.subagentRoleId,
         title: record.title ?? "Child session",
@@ -500,7 +497,6 @@ export function createSubagentHarness(input: {
     turnFollowUpQueue,
     subagentQueue,
     notifySubagentRunStateChanged: input.notifySubagentRunStateChanged,
-    enableGoalContinuations: false,
     maxHostedWorkspaceToolRounds: input.maxHostedWorkspaceToolRounds ?? 3,
     maxRepeatedInvalidToolRequests: 2,
   });

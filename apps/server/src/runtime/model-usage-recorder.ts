@@ -177,26 +177,12 @@ function modelUsageRequestKind(input: {
   turn: Turn | null;
   requestOrdinal: number;
 }): ModelUsageRequestKind {
-  if (input.turn && insightsQuestionFromTurn(input.turn)) {
-    return "insights_question";
-  }
-  if ((input.turn && insightRunIdFromTurn(input.turn)) || input.session.systemKind === "openpond.insights") {
-    return "insights_scan";
-  }
   const requestAttribution = usageRequestAttributionFromTurn(input.turn);
   if (
     requestAttribution?.subagentRunId ||
     requestAttribution?.workflowKind === "subagent"
   ) {
     return "subagent";
-  }
-  if (
-    requestAttribution?.workflowKind === "goal_control" ||
-    requestAttribution?.surface === "goal" ||
-    requestAttribution?.goalId ||
-    (input.turn && goalIdFromTurn(input.turn))
-  ) {
-    return "goal_control";
   }
   if (input.turn && commandNameFromTurn(input.turn)) return "slash_command";
   return input.requestOrdinal === 0 ? "chat_turn" : "tool_loop";
@@ -210,10 +196,7 @@ function modelUsageVisibility(
   if (
     requestKind === "context_compaction" ||
     requestKind === "create_improve_planner" ||
-    requestKind === "goal_control" ||
     requestKind === "subagent" ||
-    requestKind === "insights_scan" ||
-    requestKind === "insights_question" ||
     requestKind === "codex_context"
   ) {
     return "background";
@@ -234,8 +217,7 @@ function modelUsageAttribution(input: {
     workflowKind: requestAttribution?.workflowKind ?? usageWorkflowKind(input.requestKind, input.requestOrdinal, commandName),
     sessionId: input.session.id,
     turnId: input.turn?.id ?? null,
-    insightRunId: requestAttribution?.insightRunId ?? insightRunIdFromTurn(input.turn),
-    goalId: requestAttribution?.goalId ?? goalIdFromTurn(input.turn),
+    goalId: requestAttribution?.goalId ?? null,
     subagentRunId: requestAttribution?.subagentRunId ?? null,
     subagentRoleId: requestAttribution?.subagentRoleId ?? null,
     createImproveRunId: requestAttribution?.createImproveRunId ?? input.turn?.createImproveRun?.id ?? null,
@@ -246,21 +228,17 @@ function modelUsageAttribution(input: {
     workspaceId: input.session.workspaceId ?? null,
     localProjectId: input.session.localProjectId ?? null,
     cloudProjectId: input.session.cloudProjectId ?? null,
-    sourceEventSequence: insightSourceEventSequenceFromTurn(input.turn),
+    sourceEventSequence: null,
   };
 }
 
 function usageSurface(
-  session: Session,
+  _session: Session,
   requestKind: ModelUsageRequestKind,
 ): ModelUsageAttribution["surface"] {
-  if (session.systemKind === "openpond.insights" || requestKind === "insights_scan" || requestKind === "insights_question") {
-    return "insights";
-  }
   if (requestKind === "create_improve_planner") return "create_improve";
   if (requestKind === "context_compaction") return "compaction";
-  if (requestKind === "subagent") return "goal";
-  if (requestKind === "goal_control") return "goal";
+  if (requestKind === "subagent") return "chat";
   return "chat";
 }
 
@@ -271,9 +249,7 @@ function usageWorkflowKind(
 ): ModelUsageAttribution["workflowKind"] {
   if (requestKind === "create_improve_planner") return "planner";
   if (requestKind === "context_compaction") return "summary";
-  if (requestKind === "insights_scan" || requestKind === "insights_question") return "scan";
   if (requestKind === "subagent") return "subagent";
-  if (requestKind === "goal_control") return "goal_control";
   if (commandName || requestKind === "slash_command") return "slash_command";
   return requestOrdinal === 0 ? "direct_chat" : "tool_loop";
 }
@@ -304,38 +280,6 @@ function commandSourceFromTurn(
   const requestSource = turn?.createImproveRun?.metadata?.source;
   if (requestSource === "native_model_tool") return "model_tool";
   return commandName ? "prompt_parse" : null;
-}
-
-function insightRunIdFromTurn(turn: Turn | null): string | null {
-  if (!turn) return null;
-  const metadata = turn.metadata?.insightsRun;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const id = (metadata as Record<string, unknown>).id;
-  return typeof id === "string" && id.trim() ? id.trim() : null;
-}
-
-function insightsQuestionFromTurn(turn: Turn | null): boolean {
-  if (!turn) return false;
-  const metadata = turn.metadata?.insightsQuestion;
-  return Boolean(metadata && typeof metadata === "object" && !Array.isArray(metadata));
-}
-
-function insightSourceEventSequenceFromTurn(turn: Turn | null): number | null {
-  if (!turn) return null;
-  const metadata = turn.metadata?.insightsRun;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const sourceEventSequence = (metadata as Record<string, unknown>).sourceEventSequence;
-  return Number.isInteger(sourceEventSequence) && Number(sourceEventSequence) >= 0
-    ? Number(sourceEventSequence)
-    : null;
-}
-
-function goalIdFromTurn(turn: Turn | null): string | null {
-  if (!turn) return null;
-  const metadata = turn.metadata?.threadGoal;
-  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
-  const id = (metadata as Record<string, unknown>).id;
-  return typeof id === "string" && id.trim() ? id.trim() : null;
 }
 
 function errorType(error: unknown): string {

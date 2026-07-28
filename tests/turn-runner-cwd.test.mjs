@@ -161,12 +161,6 @@ function createMemoryStore({ events, turns, approvals = [], createImproveRuns = 
         event.sessionId === sessionId && event.name === "assistant.delta" && event.output?.trim()
       )?.output?.trim() ?? null;
     },
-    async currentOpenPondThreadGoal() {
-      return null;
-    },
-    async openPondThreadGoalById() {
-      return null;
-    },
     async latestTurnForSession(sessionId, status) {
       return turns.findLast((turn) =>
         turn.sessionId === sessionId && (!status || turn.status === status)

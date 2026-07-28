@@ -37,11 +37,6 @@ import { useRightChatHistorySubscriptions } from "./useRightChatHistorySubscript
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
-type RightChatInsights = {
-  runScan: () => Promise<{ summary?: { activeCount?: number } } | null>;
-  summary: { activeCount?: number } | null;
-};
-
 export function useRightChatPanels(input: {
   activeModel: string;
   activeProvider: RightChatPanel["provider"];
@@ -52,8 +47,6 @@ export function useRightChatPanels(input: {
   connectedAppMentions: ConnectedAppMentionOption[];
   connection: ClientConnection | null;
   contextCompaction: AppPreferences["contextCompaction"];
-  insights: RightChatInsights;
-  openLabSuggestions: () => void;
   openLabTraining: (input: { objective: string | null; sessionId: string | null }) => void;
   locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
@@ -87,8 +80,6 @@ export function useRightChatPanels(input: {
     connectedAppMentions,
     connection,
     contextCompaction,
-    insights,
-    openLabSuggestions,
     openLabTraining,
     locallyActiveCodexHistorySessionIds,
     openPondCommandAccessMode,
@@ -308,14 +299,6 @@ export function useRightChatPanels(input: {
       const commandPolicy = command
         ? rightChatCommandPolicy(command, panelPromptForSubmit)
         : null;
-      if (commandPolicy?.kind === "open_insights") {
-        openLabSuggestions();
-        if (!options.preservePrompt) updateRightChatPrompt(panelId, "");
-        const payload = await insights.runScan();
-        const activeCount = payload?.summary?.activeCount ?? insights.summary?.activeCount ?? 0;
-        showToast(`${activeCount} active insight${activeCount === 1 ? "" : "s"}.`, "info");
-        return true;
-      }
       if (commandPolicy?.kind === "open_training") {
         if (attachments.length > 0) {
           showToast("/train uses this chat; add other chats from Lab.", "error");
@@ -420,9 +403,6 @@ export function useRightChatPanels(input: {
       rightChatPanels,
       runtimeIndexes,
       selectedSessionId,
-      insights.runScan,
-      insights.summary?.activeCount,
-      openLabSuggestions,
       openLabTraining,
       openPondCommandAccessMode,
       sendPrompt,

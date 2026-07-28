@@ -1,12 +1,11 @@
 import {
   type AppPreferences,
-  type RuntimeEvent,
   type Session,
   type SubagentDelegationMode,
   type SubagentRoleSettings,
   type SubagentRun,
 } from "@openpond/contracts";
-import { recordFromUnknown, stringFromRecord } from "../turns/value-utils.js";
+import { recordFromUnknown } from "../turns/value-utils.js";
 
 export function subagentRunAccepted(run: SubagentRun): boolean {
   return run.status === "completed";
@@ -14,10 +13,6 @@ export function subagentRunAccepted(run: SubagentRun): boolean {
 
 export function subagentRunDismissed(run: SubagentRun): boolean {
   return run.status === "failed" || run.status === "cancelled";
-}
-
-export function subagentRunResolvedForGoal(run: SubagentRun): boolean {
-  return run.status === "completed" || run.status === "failed" || run.status === "cancelled";
 }
 
 export function assertSubagentRunAccessible(session: Session, run: SubagentRun): void {
@@ -89,7 +84,7 @@ function subagentDelegationInstruction(resolution: SubagentDelegationResolution)
     "Do not poll child status, run sleep commands, or interrupt a child merely for progress. Use join once when you truly need to wait; it blocks briefly. Otherwise end the turn and let the automatic completion continue you.",
     "Reserve interrupt-priority messages for genuinely changed urgent instructions, never status requests.",
     "Before starting a child, reuse an existing conversation for that role with openpond_subagent_followup when the work is a continuation, correction, or re-review.",
-    "Do not start a duplicate role conversation solely because the goal entered a new phase.",
+    "Do not start a duplicate role conversation solely because the parent task entered a new phase.",
     "A reviewer is an ordinary child role, not a required lifecycle stage.",
     "Run at most one repository-wide typecheck, build, or full test suite at a time.",
     "Explicit user delegation instructions take priority over this default.",
@@ -104,23 +99,4 @@ export function subagentSystemContextForSession(
   const subagent = recordFromUnknown(recordFromUnknown(session.metadata)?.subagent);
   const systemContext = typeof subagent?.systemContext === "string" ? subagent.systemContext.trim() : "";
   return systemContext || null;
-}
-
-export function activeThreadGoalId(events: RuntimeEvent[], sessionId: string): string | null {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const item = events[index];
-    if (item.sessionId !== sessionId || item.name !== "diagnostic") continue;
-    const data = item.data;
-    if (!data || typeof data !== "object" || Array.isArray(data)) continue;
-    const record = data as Record<string, unknown>;
-    if (record.kind === "thread_goal_cleared") return null;
-    if (record.kind !== "thread_goal") continue;
-    const goal = record.goal;
-    if (!goal || typeof goal !== "object" || Array.isArray(goal)) continue;
-    const goalRecord = goal as Record<string, unknown>;
-    const status = stringFromRecord(goalRecord, "status")?.toLowerCase() ?? "active";
-    if (["completed", "complete", "failed", "stopped"].includes(status)) return null;
-    return stringFromRecord(goalRecord, "id");
-  }
-  return null;
 }

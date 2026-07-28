@@ -1,5 +1,4 @@
 import type {
-  InsightItem,
   LocalAgentSchedule,
   LocalAgentScheduleRun,
   LocalAgentScheduleRunStatus,
@@ -19,38 +18,6 @@ import { sanitizeRuntimeEvent } from "../runtime/runtime-event-sanitizer.js";
 
 export type EventPagePayloadRow = PayloadRow & {
   sequence: number;
-};
-
-export type OpenPondThreadGoalRow = {
-  session_id: string;
-  goal_id: string;
-  status: string;
-  provisional: number;
-  updated_at: string;
-};
-
-export type OpenPondThreadGoalMutation =
-  | { kind: "clear"; sessionId: string }
-  | { kind: "upsert"; sessionId: string; goalId: string; status: string; updatedAt: string };
-
-export type InsightItemRow = {
-  id: string;
-  scope_type: string;
-  scope_id: string;
-  severity: string;
-  type: string;
-  status: string;
-  fingerprint: string;
-  title: string;
-  summary: string;
-  payload: string;
-  last_run_id: string | null;
-  last_run_session_id: string | null;
-  last_run_turn_id: string | null;
-  created_at: string;
-  updated_at: string;
-  resolved_at: string | null;
-  dismissed_at: string | null;
 };
 
 export type ModelUsageRecordRow = {
@@ -104,7 +71,6 @@ export type SubagentRunRow = PayloadRow & {
   id: string;
   parent_session_id: string;
   parent_turn_id: string | null;
-  parent_goal_id: string | null;
   child_session_id: string | null;
   role_id: string;
   status: SubagentRun["status"];
@@ -114,7 +80,6 @@ export type SubagentRunRow = PayloadRow & {
 
 export type SubagentMessageRow = PayloadRow & {
   id: string;
-  parent_goal_id: string | null;
   from_run_id: string;
   to_run_id: string | null;
   to_role: string | null;
@@ -144,36 +109,6 @@ export type ThreadDetailProjection = {
   updatedAt: string;
 };
 
-export function openPondThreadGoalMutationFromEvent(event: RuntimeEvent): OpenPondThreadGoalMutation | null {
-  if (event.name !== "diagnostic" || !event.sessionId) return null;
-  const data = recordValue(event.data);
-  const provider = stringValue(data?.provider);
-  if (data?.kind === "thread_goal_cleared") {
-    return provider && provider !== "openpond" ? null : { kind: "clear", sessionId: event.sessionId };
-  }
-  if (data?.kind !== "thread_goal") return null;
-  const goal = recordValue(data.goal);
-  const goalProvider = provider ?? stringValue(goal?.provider) ?? "openpond";
-  const goalId = stringValue(goal?.id);
-  const status = stringValue(goal?.status);
-  if (goalProvider !== "openpond" || !goalId || !status) return null;
-  return {
-    kind: "upsert",
-    sessionId: event.sessionId,
-    goalId,
-    status,
-    updatedAt: stringValue(goal?.updatedAt) ?? event.timestamp,
-  };
-}
-
-export function isTerminalOpenPondGoalStatus(status: string): boolean {
-  return status === "completed" ||
-    status === "complete" ||
-    status === "failed" ||
-    status === "cancelled" ||
-    status === "stopped";
-}
-
 export function recordValue(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -202,7 +137,6 @@ export function subagentRunParams(run: SubagentRun, updatedAt: string): unknown[
     payload.id,
     payload.parentSessionId,
     payload.parentTurnId,
-    payload.parentGoalId,
     payload.childSessionId,
     payload.roleId,
     payload.status,
@@ -219,7 +153,6 @@ export function subagentMessageFromRow(row: SubagentMessageRow): SubagentMessage
 export function subagentMessageParams(message: SubagentMessage): unknown[] {
   return [
     message.id,
-    message.parentGoalId,
     message.fromRunId,
     message.toRunId,
     message.toRole,
@@ -258,50 +191,6 @@ export function localAgentScheduleRunParams(run: LocalAgentScheduleRun): unknown
     JSON.stringify(run),
     run.createdAt,
     run.updatedAt,
-  ];
-}
-
-export function insightItemFromRow(row: InsightItemRow): InsightItem {
-  return {
-    id: row.id,
-    scopeType: row.scope_type as InsightItem["scopeType"],
-    scopeId: row.scope_id,
-    severity: row.severity as InsightItem["severity"],
-    type: row.type,
-    status: row.status as InsightItem["status"],
-    fingerprint: row.fingerprint,
-    title: row.title,
-    summary: row.summary,
-    payload: JSON.parse(row.payload) as InsightItem["payload"],
-    lastRunId: row.last_run_id,
-    lastRunSessionId: row.last_run_session_id,
-    lastRunTurnId: row.last_run_turn_id,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    resolvedAt: row.resolved_at,
-    dismissedAt: row.dismissed_at,
-  };
-}
-
-export function insightItemParams(item: InsightItem): unknown[] {
-  return [
-    item.id,
-    item.scopeType,
-    item.scopeId,
-    item.severity,
-    item.type,
-    item.status,
-    item.fingerprint,
-    item.title,
-    item.summary,
-    JSON.stringify(item.payload),
-    item.lastRunId ?? null,
-    item.lastRunSessionId ?? null,
-    item.lastRunTurnId ?? null,
-    item.createdAt,
-    item.updatedAt,
-    item.resolvedAt,
-    item.dismissedAt,
   ];
 }
 

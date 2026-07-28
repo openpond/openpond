@@ -28,7 +28,7 @@ type CompletionNotification = {
   messageId: string;
   queuedAt: string;
   settledAt: string | null;
-  outcome: "continued" | "goal_not_running" | "joined" | null;
+  outcome: "continued" | "joined" | null;
 };
 
 export function createSubagentCompletionRuntime(deps: {
@@ -40,7 +40,6 @@ export function createSubagentCompletionRuntime(deps: {
   getSession(sessionId: string): Promise<Session>;
   hasParentWakeTurn(sessionId: string, messageId: string): Promise<boolean>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
-  currentGoal(sessionId: string): Promise<unknown>;
   turnFollowUpQueue: BackgroundWorkerQueue;
   parentWakeJobs: KeyedRegistry<BackgroundWorkReceipt>;
   getActiveTurn(sessionId: string): { sessionId: string; turn: { id: string } } | null;
@@ -79,7 +78,6 @@ export function createSubagentCompletionRuntime(deps: {
     });
     const message = SubagentMessageSchema.parse({
       id: messageId,
-      parentGoalId: input.run.parentGoalId,
       fromRunId: input.run.id,
       toRunId: null,
       toRole: "parent",
@@ -170,7 +168,6 @@ export function createSubagentCompletionRuntime(deps: {
           while (deps.getActiveTurn(parentSession.id)) {
             await new Promise<void>((resolve) => setTimeout(resolve, PARENT_IDLE_POLL_MS));
           }
-          const goal = await deps.currentGoal(parentSession.id).catch(() => null) as { status?: unknown } | null;
           const batch = pendingByParent.get(parentSession.id) ?? [];
           pendingByParent.delete(parentSession.id);
           if (batch.length === 0) return;
@@ -184,10 +181,6 @@ export function createSubagentCompletionRuntime(deps: {
           }
           if (consumed.length > 0) await settleNotifications(consumed, "joined");
           if (unconsumed.length === 0) return;
-          if (goal && goal.status !== "running") {
-            await settleNotifications(unconsumed, "goal_not_running");
-            return;
-          }
           // Settle the durable completion before yielding control to the parent.
           // `sendTurn` resolves only after the parent turn ends, and that turn may
           // queue a follow-up on this same run. A lifecycle write after it returns
@@ -296,7 +289,7 @@ function completionNotifications(run: SubagentRun): CompletionNotification[] {
     if (!item || typeof item !== "object") return [];
     const record = item as Record<string, unknown>;
     if (typeof record.messageId !== "string" || typeof record.queuedAt !== "string") return [];
-    const outcome = record.outcome === "continued" || record.outcome === "goal_not_running" || record.outcome === "joined"
+    const outcome = record.outcome === "continued" || record.outcome === "joined"
       ? record.outcome
       : null;
     return [{

@@ -50,8 +50,6 @@ import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
 import { KeyedRegistry } from "./turns/keyed-registry.js";
-import { createGoalSubagentLifecycle } from "./goals/subagent-lifecycle.js";
-import { createGoalControlRuntime } from "./goals/control-runtime.js";
 import type { ActiveTurn, TurnRunner, TurnRunnerDependencies } from "./turns/ports.js";
 import { createProfileSkillCommandRuntime } from "./turns/profile-skill-command-runtime.js";
 import { createInterruptionRuntime } from "./turns/interruption-runtime.js";
@@ -70,16 +68,14 @@ import { createSubagentMessagingRuntime } from "./subagents/messaging-runtime.js
 import { createSubagentChildTurnRuntime } from "./subagents/child-turn-runtime.js";
 import { createSubagentCompletionRuntime } from "./subagents/completion-runtime.js";
 import { createSubagentToolRuntime } from "./subagents/tool-runtime.js";
-import type { GoalSubagentPort, SubagentLifecycleControl, SubagentToolHandlers, SubagentTurnHooks } from "./subagents/facets.js";
+import type { SubagentLifecycleControl, SubagentToolHandlers, SubagentTurnHooks } from "./subagents/facets.js";
+import { createSubagentLifecycleRuntime } from "./subagents/lifecycle-runtime.js";
 import { createSubagentRepositoryRuntime } from "./subagents/repository-runtime.js";
 import {
   subagentRoleLabel,
   subagentToolResultFromRun,
   uniqueSubagentRefs,
 } from "./subagents/tool-results.js";
-import {
-  threadGoalFromTurnMetadata,
-} from "./create-pipeline/snapshots.js";
 import {
   authoringCommandRoute,
   authoringCommandRouteFromLegacyAgentRun,
@@ -218,11 +214,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
   } = deps;
-  const enableGoalContinuations = deps.enableGoalContinuations ?? true;
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
   const subagentParentWakeJobs = new KeyedRegistry<BackgroundWorkReceipt>("subagent parent wake job");
-  const goalContinuationJobs = new KeyedRegistry<BackgroundWorkReceipt>("goal continuation job");
   const connectedAppsForTurn = createConnectedAppTurnResolver({
     listIntegrationConnections,
     appendRuntimeEvent,
@@ -284,7 +278,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const turnRunnerLifecycle = createTurnRunnerLifecycle({
     activeTurns,
     interruptActiveTurn,
-    jobRegistries: [subagentParentWakeJobs, goalContinuationJobs],
+    jobRegistries: [subagentParentWakeJobs],
     queues: [turnFollowUpQueue, ...(subagentQueue ? [subagentQueue] : [])],
   });
 
@@ -454,7 +448,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     withSubagentInterruptWakeMetadata,
   } = createSubagentMessagingRuntime({
     requireSubagentDeps,
-    currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
     getSession,
     latestTurnForSession: (sessionId) => store.latestPersistedTurnForSession(sessionId),
     appendRuntimeEvent,
@@ -480,7 +473,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     getSession,
     hasParentWakeTurn: (sessionId, messageId) => store.hasSubagentParentWakeTurn(sessionId, messageId),
     appendRuntimeEvent,
-    currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
     turnFollowUpQueue,
     parentWakeJobs: subagentParentWakeJobs,
     getActiveTurn: (sessionId) => {
@@ -526,83 +518,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     notifyParentOfSubagentCompletion,
   });
   const {
-    applyGoalLifecycleToSubagents,
     archiveSubagentChildSession,
-    markGoalSubagentsNeedsResume,
     subagentLifecycleActionNextStep,
-  } = createGoalSubagentLifecycle({
-    subagentToolsAvailable,
-    requireSubagentDeps,
-    interruptSessionTurn,
-    cleanupSubagentRun,
-    appendSubagentReceipt,
+  } = createSubagentLifecycleRuntime({
+    getRun: (runId) => requireSubagentDeps().getRun(runId),
+    upsertRun: (run) => requireSubagentDeps().upsertRun(run),
     getSession,
     updateSession,
-    loadAppPreferences,
-    subagentChildTurnPermissions,
-    runSubagentChildTurn,
-    enqueueSubagentResume: (descriptor, work) => requireSubagentDeps().queue.enqueue(descriptor, work),
-  }) satisfies GoalSubagentPort;
-  const { startGoalControlFromModelTool } = createGoalControlRuntime({
-    enableGoalContinuations,
-    subagentToolsAvailable,
-    requireSubagentDeps,
-    currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
-    goalById: (sessionId, goalId) => store.openPondThreadGoalById(sessionId, goalId),
-    claimGoal: store.claimOpenPondThreadGoal
-      ? (input) => store.claimOpenPondThreadGoal!(input)
-      : null,
-    releaseGoalClaim: store.releaseOpenPondThreadGoalClaim
-      ? (sessionId, goalId) => store.releaseOpenPondThreadGoalClaim!(sessionId, goalId)
-      : null,
-    appendRuntimeEvent,
-    turnFollowUpQueue,
-    goalContinuationJobs,
-    sendTurn,
-    activeInProgressTurn,
-    findInProgressTurn,
-    markGoalSubagentsNeedsResume,
-    applyGoalLifecycleToSubagents,
+    appendSubagentReceipt,
   });
-  async function pauseSessionGoal(sessionId: string): Promise<unknown> {
-    const session = await getSession(sessionId);
-    const currentTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
-    const eventTurn = currentTurn ?? await store.latestTurnForSession(sessionId);
-    const request = {
-      action: "pause" as const,
-      reason: "User paused the goal from the composer.",
-    };
-    const controller = new AbortController();
-    const result = await startGoalControlFromModelTool({
-      session,
-      turnId: eventTurn?.id ?? `goal_control_${randomUUID()}`,
-      turnPermissions: {
-        sandbox: "read-only",
-        codexPermissionMode: "auto-review",
-        approvalPolicy: "never",
-      },
-      provider: session.provider,
-      model: session.modelRef?.modelId ?? DEFAULT_OPENPOND_CHAT_MODEL,
-      callId: `goal_control_${randomUUID()}`,
-      args: request,
-      signal: controller.signal,
-      workspaceDiffBaseline: null,
-      mentionedApps: [],
-      userPrompt: "Pause the active goal.",
-      turnMetadata: eventTurn?.metadata ?? {},
-    }, request);
-    // Persist the paused goal and interrupt its active children before interrupting
-    // the parent turn. This closes the race where a lifecycle wake starts the
-    // next child between an interrupt and the goal status update.
-    await interruptSessionTurn(sessionId, "Goal paused by user").catch((error) => {
-      if (
-        error instanceof Error &&
-        (error.message === "No active turn to stop." || error.message === "Turn not found")
-      ) return;
-      throw error;
-    });
-    return result;
-  }
   const {
     cancelSubagentFromModelTool,
     cleanupExpiredRetainedSubagentWorkspace,
@@ -614,7 +538,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = createSubagentToolRuntime({
     requireSubagentDeps,
     loadAppPreferences,
-    currentGoal: (sessionId) => store.currentOpenPondThreadGoal(sessionId),
     getSession,
     appendSubagentReceipt,
     subagentWorkspaceTargetKeyForSession,
@@ -632,7 +555,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   }) satisfies SubagentToolHandlers;
   const capabilityCatalogDefinitions = createCapabilityCatalogRuntime({
     handlers: {
-      startGoalControl: startGoalControlFromModelTool,
       startSubagent: startSubagentFromModelTool,
       statusSubagents: statusSubagentsFromModelTool,
       joinSubagent: joinSubagentFromModelTool,
@@ -713,6 +635,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    const requestedProvider =
+      input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
+    if (/^\/goal(?:\s|$)/i.test(input.prompt.trimStart()) && requestedProvider !== "codex") {
+      throw new Error("/goal is only available with the Codex provider.");
+    }
     const selectedProfileRef = session.currentProfile ??
       (loadOpenPondProfileLibrary ? (await loadOpenPondProfileLibrary()).lastUsed : null);
     if (!session.currentProfile && selectedProfileRef) {
@@ -930,21 +857,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               : "Question dismissed.",
             data: { resolution: userQuestionResolution },
           }),
-        );
-      }
-      const threadGoal = threadGoalFromTurnMetadata(input.metadata);
-      if (threadGoal) {
-        await appendRuntimeEvent(
-          event({
-            sessionId,
-            turnId: turn.id,
-            name: "diagnostic",
-            source: "server",
-            appId: session.appId,
-            status: "completed",
-            output: threadGoal.output,
-            data: threadGoal.data,
-          })
         );
       }
       if (profileSkillCommand) {
@@ -1276,7 +1188,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     sendTurn,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),
     interruptSessionTurn,
-    pauseSessionGoal,
     interruptAll: turnRunnerLifecycle.interruptAll,
     close: turnRunnerLifecycle.close,
     applyCreateImproveAction: applyCreateImproveActionPayload,

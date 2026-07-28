@@ -27,9 +27,7 @@ describe("Right chat panel stack", () => {
       agent: { kind: "send_prompt", prompt: "/agent Review account health" },
       skill: { kind: "send_prompt", prompt: "/skill Review account health" },
       goal: { kind: "send_prompt", prompt: "/goal Review account health" },
-      "goal-local": { kind: "send_prompt", prompt: "/goal-local Review account health" },
       train: { kind: "open_training", objective: "Review account health" },
-      insights: { kind: "open_insights" },
       "sync-cloud": { kind: "send_prompt", prompt: "/sync-cloud Review account health" },
     });
     expect(policies["submit-issue"]).toMatchObject({ kind: "send_prompt" });

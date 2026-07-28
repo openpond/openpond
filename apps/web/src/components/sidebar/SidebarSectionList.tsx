@@ -2,12 +2,9 @@ import type { Session } from "@openpond/contracts";
 import { useEffect, useState } from "react";
 import {
   Cloud,
-  Eye,
-  EyeOff,
   FolderOpen,
   FolderPlus,
   ListFilter,
-  MoreHorizontal,
   Plus,
   Settings,
   SquarePen,
@@ -70,7 +67,6 @@ export function SidebarSectionList({
   dockSessionRight,
   expandedProjectIds,
   expandProject,
-  insightsSystemProjectHidden,
   onToggleChatsCollapsed,
   onTogglePinnedCollapsed,
   onToggleProjectsCollapsed,
@@ -131,9 +127,7 @@ export function SidebarSectionList({
   startCloudProjectFromScratch,
   startProjectFromScratch,
   switchProjectWorkspaceTarget,
-  toggleInsightsSystemProjectVisibility,
   toggleProjectPinned,
-  toggleSystemProjectVisibility,
   toggleProjectExpanded,
   toggleSessionPinned,
   toggleSessionSavedForLater,
@@ -406,11 +400,6 @@ export function SidebarSectionList({
                   onMoveToCloud={row.item.kind === "local" ? () => moveProjectToCloud(row.item) : undefined}
                   onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(row.item.id, target)}
                   onTogglePin={() => toggleProjectPinned(row.item)}
-                  onToggleSystemVisibility={
-                    row.item.kind === "local" && row.item.project.systemKind
-                      ? () => toggleSystemProjectVisibility(row.item)
-                      : undefined
-                  }
                   onRemove={() => removeProject(row.item)}
                   onDragStart={(event) => startPinnedDrag(event, { type: "project", id: row.id })}
                   onDragEnd={clearSidebarDrag}
@@ -577,39 +566,6 @@ export function SidebarSectionList({
                 </div>
               )}
             </div>
-            <div className="section-menu">
-              <button
-                type="button"
-                className={`section-icon ${sectionMenuOpen === "projects-options" ? "active" : ""}`}
-                data-tooltip="Projects options"
-                aria-label="Projects options"
-                aria-haspopup="menu"
-                aria-expanded={sectionMenuOpen === "projects-options"}
-                onClick={() =>
-                  setSectionMenuOpen((current) => (current === "projects-options" ? null : "projects-options"))
-                }
-              >
-                <MoreHorizontal size={14} />
-              </button>
-              {sectionMenuOpen === "projects-options" && (
-                <div className="section-menu-popover" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    disabled={insightsSystemProjectHidden === null}
-                    onClick={() => {
-                      setSectionMenuOpen(null);
-                      toggleInsightsSystemProjectVisibility();
-                    }}
-                  >
-                    {insightsSystemProjectHidden === false ? <EyeOff size={13} /> : <Eye size={13} />}
-                    <span>
-                      {insightsSystemProjectHidden === false ? "Hide Insights folder" : "Show Insights folder"}
-                    </span>
-                  </button>
-                </div>
-              )}
-            </div>
           </>
         }
       >
@@ -630,9 +586,6 @@ export function SidebarSectionList({
               onMoveToCloud={item.kind === "local" ? () => moveProjectToCloud(item) : undefined}
               onWorkspaceTargetSelect={(target) => switchProjectWorkspaceTarget(item.id, target)}
               onTogglePin={() => toggleProjectPinned(item)}
-              onToggleSystemVisibility={
-                item.kind === "local" && item.project.systemKind ? () => toggleSystemProjectVisibility(item) : undefined
-              }
               onRemove={() => removeProject(item)}
             />
             {renderProjectChildren(item)}

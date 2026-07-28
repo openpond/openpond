@@ -16,7 +16,6 @@ describe("GoalDetailsView subagents", () => {
         goalRuntime: {
           objective: "Ship simple subagent orchestration",
           status: "active",
-          subagents: null,
           timeUsedSeconds: 42,
           tokensUsed: 1200,
           tokenBudget: 5000,
@@ -77,13 +76,13 @@ describe("GoalDetailsView subagents", () => {
       runId: "run_done",
       roleId: "coding",
       status: "completed",
-      objective: "Clean up insights notification behavior",
-      summary: "Suppressed unchanged insight notifications.",
-      findings: ["No notification is sent when the insights payload is unchanged."],
-      changedFiles: ["apps/server/src/insights/insights-system.ts"],
-      refs: [{ kind: "diff", id: "subagent-run:run_done:diff", label: "Insights diff" }],
-      testsRun: ["pnpm test tests/insights-system.test.ts"],
-      validationAttempts: ["pnpm test tests/insights-system.test.ts"],
+      objective: "Clean up task suggestion behavior",
+      summary: "Suppressed duplicate task suggestions.",
+      findings: ["Duplicate suggestions are merged before display."],
+      changedFiles: ["apps/server/src/training/task-miner.ts"],
+      refs: [{ kind: "diff", id: "subagent-run:run_done:diff", label: "Task Miner diff" }],
+      testsRun: ["pnpm test tests/task-miner-detectors.test.ts"],
+      validationAttempts: ["pnpm test tests/task-miner-detectors.test.ts"],
       blockers: [],
       confidence: "high",
       importantMessages: [
@@ -116,10 +115,10 @@ describe("GoalDetailsView subagents", () => {
     );
 
     expect(html).toContain("Child Results");
-    expect(html).toContain("Suppressed unchanged insight notifications.");
-    expect(html).toContain("apps/server/src/insights/insights-system.ts");
-    expect(html).toContain("pnpm test tests/insights-system.test.ts");
-    expect(html).toContain("diff: Insights diff");
+    expect(html).toContain("Suppressed duplicate task suggestions.");
+    expect(html).toContain("apps/server/src/training/task-miner.ts");
+    expect(html).toContain("pnpm test tests/task-miner-detectors.test.ts");
+    expect(html).toContain("diff: Task Miner diff");
     expect(html).toContain("Workspace: retained until");
     expect(html).toContain("Child Completion");
     expect(html).toContain("Handoff: Implementation finished.");
@@ -133,7 +132,6 @@ function runFixture(overrides: Partial<SubagentRun> = {}): SubagentRun {
     id: "run_coding",
     parentSessionId: "session_1",
     parentTurnId: "turn_1",
-    parentGoalId: "goal_1",
     childSessionId: "child_coding",
     roleId: "coding",
     objective: "Implement the patch",
@@ -141,7 +139,7 @@ function runFixture(overrides: Partial<SubagentRun> = {}): SubagentRun {
     isolationMode: "copy_on_write",
     toolPolicy: "workspace_write",
     background: true,
-    peerMessages: "goal_scoped",
+    peerMessages: "parent_scoped",
     status: "running",
     progress: {
       latestMeaningfulActivity: "Inspecting files",

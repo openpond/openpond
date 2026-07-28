@@ -8,22 +8,6 @@ import { buildRuntimeIndexes, latestGoalRuntimeForSession } from "../apps/web/sr
 const NOW = "2026-07-02T12:00:00.000Z";
 
 describe("running session state", () => {
-  test("does not expose Insights system goals as user-interruptible running sessions", () => {
-    const insightsSession = session({
-      id: "insights_session",
-      status: "active",
-      systemKind: "openpond.insights",
-      hiddenFromDefaultSidebar: true,
-    });
-    const indexes = buildRuntimeIndexes([activeGoalEvent(insightsSession.id)], []);
-
-    const html = renderRunningProbe(insightsSession, [insightsSession], indexes);
-
-    expect(html).toContain("selected=false");
-    expect(html).toContain("running=");
-    expect(html).not.toContain("insights_session");
-  });
-
   test("keeps normal active goal chats in the running set", () => {
     const chatSession = session({ id: "chat_session", status: "idle" });
     const indexes = buildRuntimeIndexes([activeGoalEvent(chatSession.id)], []);
@@ -205,6 +189,7 @@ function activeGoalEvent(sessionId: string): RuntimeEvent {
     status: "completed",
     data: {
       kind: "thread_goal",
+      provider: "codex",
       goal: {
         id: `${sessionId}_goal`,
         objective: "Review recent activity.",

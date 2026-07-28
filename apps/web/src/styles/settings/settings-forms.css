@@ -825,22 +825,6 @@
   max-width: none;
 }
 
-.insights-settings .provider-settings-form > .settings-check-row {
-  padding: 12px 16px;
-}
-
-.insights-settings .settings-check-grid {
-  display: grid;
-  gap: 10px;
-  padding: 14px 16px 16px;
-}
-
-.insights-settings .settings-check-grid .settings-check-row.compact {
-  max-width: none;
-  min-height: 58px;
-  padding: 10px 12px;
-}
-
 .subagents-settings {
   max-width: 980px;
 }

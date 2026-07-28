@@ -4,7 +4,6 @@ import type {
   AppPreferences,
   BootstrapPayload,
   ChatProvider,
-  InsightsEvidenceSourceSettings,
   ProviderSettings,
   SubagentIsolationMode,
   SubagentDelegationMode,
@@ -31,20 +30,10 @@ export function useDefaultsSettings({
 }) {
   const [defaultBranchPrefix, setDefaultBranchPrefix] = useState(preferences.defaultBranchPrefix);
   const [defaultNewProjectDirectory, setDefaultNewProjectDirectory] = useState(preferences.defaultNewProjectDirectory);
-  const [goalStorageLocation, setGoalStorageLocation] = useState(preferences.goalStorageLocation);
   const [advancedWorkspaceControls, setAdvancedWorkspaceControls] = useState(preferences.advancedWorkspaceControls);
   const [contextCompactionAutoEnabled, setContextCompactionAutoEnabled] = useState(
     preferences.contextCompaction.autoEnabled,
   );
-  const [insightsEnabled, setInsightsEnabled] = useState(preferences.insightsEnabled);
-  const [insightsUseDefaultModel, setInsightsUseDefaultModel] = useState(!preferences.insightsModelRef);
-  const [insightsProvider, setInsightsProvider] = useState<ChatProvider>(
-    preferences.insightsModelRef?.providerId ?? preferences.defaultChatProvider,
-  );
-  const [insightsModel, setInsightsModel] = useState(
-    preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel,
-  );
-  const [insightsEvidenceSources, setInsightsEvidenceSources] = useState(preferences.insightsEvidenceSources);
   const [subagentsEnabled, setSubagentsEnabled] = useState(preferences.subagents.enabled);
   const [subagentDelegationMode, setSubagentDelegationMode] = useState(
     preferences.subagents.delegationMode,
@@ -82,14 +71,8 @@ export function useDefaultsSettings({
   useEffect(() => {
     setDefaultBranchPrefix(preferences.defaultBranchPrefix);
     setDefaultNewProjectDirectory(preferences.defaultNewProjectDirectory);
-    setGoalStorageLocation(preferences.goalStorageLocation);
     setAdvancedWorkspaceControls(preferences.advancedWorkspaceControls);
     setContextCompactionAutoEnabled(preferences.contextCompaction.autoEnabled);
-    setInsightsEnabled(preferences.insightsEnabled);
-    setInsightsUseDefaultModel(!preferences.insightsModelRef);
-    setInsightsProvider(preferences.insightsModelRef?.providerId ?? preferences.defaultChatProvider);
-    setInsightsModel(preferences.insightsModelRef?.modelId ?? preferences.defaultChatModel);
-    setInsightsEvidenceSources(preferences.insightsEvidenceSources);
     setSubagentsEnabled(preferences.subagents.enabled);
     setSubagentDelegationMode(preferences.subagents.delegationMode);
     setSubagentsUseDefaultModel(!preferences.subagents.defaultModelRef);
@@ -104,19 +87,10 @@ export function useDefaultsSettings({
     preferences.defaultChatModel,
     preferences.defaultBranchPrefix,
     preferences.defaultNewProjectDirectory,
-    preferences.goalStorageLocation,
     preferences.advancedWorkspaceControls,
     preferences.contextCompaction.autoEnabled,
-    preferences.insightsEnabled,
-    preferences.insightsModelRef,
-    preferences.insightsEvidenceSources,
     preferences.subagents,
   ]);
-
-  function changeInsightsProvider(provider: ChatProvider) {
-    setInsightsProvider(provider);
-    setInsightsModel((current) => normalizeChatModel(provider, current, providers));
-  }
 
   function changeSubagentsProvider(provider: ChatProvider) {
     setSubagentsProvider(provider);
@@ -217,17 +191,11 @@ export function useDefaultsSettings({
         await api.savePreferences(connection, {
           defaultBranchPrefix: normalizeBranchPrefix(defaultBranchPrefix),
           defaultNewProjectDirectory: defaultNewProjectDirectory.trim(),
-          goalStorageLocation,
           advancedWorkspaceControls,
           contextCompaction: {
             ...preferences.contextCompaction,
             autoEnabled: contextCompactionAutoEnabled,
           },
-          insightsEnabled,
-          insightsModelRef: insightsUseDefaultModel
-            ? null
-            : modelRefForTurn(insightsProvider, insightsModel, providers) ?? null,
-          insightsEvidenceSources,
           subagents: {
             enabled: subagentsEnabled,
             workspaceDefaultsVersion: preferences.subagents.workspaceDefaultsVersion,
@@ -259,12 +227,6 @@ export function useDefaultsSettings({
     contextCompactionAutoEnabled,
     defaultBranchPrefix,
     defaultNewProjectDirectory,
-    goalStorageLocation,
-    insightsEnabled,
-    insightsUseDefaultModel,
-    insightsProvider,
-    insightsModel,
-    insightsEvidenceSources,
     subagentsEnabled,
     subagentDelegationMode,
     subagentsUseDefaultModel,
@@ -278,21 +240,14 @@ export function useDefaultsSettings({
     saving,
     chooseDefaultProjectDirectory,
     saveDefaults,
-    changeInsightsProvider,
     changeSubagentsProvider,
     changeSubagentRoleProvider,
     setAdvancedWorkspaceControls,
     setContextCompactionAutoEnabled,
     setDefaultBranchPrefix,
     setDefaultNewProjectDirectory,
-    setGoalStorageLocation,
-    setInsightsEnabled,
-    setInsightsUseDefaultModel,
-    setInsightsModel,
     setSubagentsUseDefaultModel,
     setSubagentsModel,
-    setInsightsEvidenceSourceEnabled: (key: keyof InsightsEvidenceSourceSettings, enabled: boolean) =>
-      setInsightsEvidenceSources((current) => ({ ...current, [key]: enabled })),
     setSubagentsEnabled,
     setSubagentDelegationMode: (value: SubagentDelegationMode) => setSubagentDelegationMode(value),
     setSubagentsMaxConcurrentRuns: (value: number) => setSubagentsMaxConcurrentRuns(clampInteger(value, 1, 32)),

@@ -70,7 +70,6 @@ describe("desktop harness runner", () => {
       "subagent-running-state",
       "subagent-handoff-parent-wake",
       "subagent-blocked-approval",
-      "goal-scoped-subagent-details",
     ]);
   });
 

@@ -60,7 +60,7 @@ describe("SettingsNavigation", () => {
 
     expect(markup.indexOf("Harness")).toBeLessThan(markup.indexOf("Profiles"));
     expect(markup.indexOf("Profiles")).toBeLessThan(markup.indexOf("Skills"));
-    expect(markup.indexOf("Skills")).toBeLessThan(markup.indexOf("Goals"));
+    expect(markup).not.toContain("Goals");
     expect(markup).toContain("Profiles");
     expect(markup).toContain('class="settings-nav-item active"');
   });
@@ -91,7 +91,7 @@ describe("SettingsNavigation", () => {
         onSectionChange: () => undefined,
       }),
     );
-    expect(markup.indexOf("Insights")).toBeLessThan(markup.indexOf("Training"));
+    expect(markup).not.toContain("Insights");
     expect(markup.indexOf("Training")).toBeLessThan(markup.indexOf("Subagents"));
     expect(markup).toContain('class="settings-nav-item active"');
   });

@@ -174,7 +174,7 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).toContain(
       "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn.",
     );
-    expect(prompt).toContain("- goal_control: start, restart, pause, resume, or stop OpenPond goals");
+    expect(prompt).not.toContain("goal_control");
     expect(prompt).toContain("- Capability names are not slash commands.");
     expect(prompt.indexOf("OpenPond capabilities:")).toBeLessThan(prompt.indexOf("OpenPond profile skills:"));
     expect(prompt).not.toContain("/create");

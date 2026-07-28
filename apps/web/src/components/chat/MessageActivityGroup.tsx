@@ -500,7 +500,6 @@ function subagentMessageFacts(message: NonNullable<ActivityItem["subagentMessage
       ? { label: "Model", value: `${message.modelRef.providerId}/${message.modelRef.modelId}` }
       : null,
     message.childSessionId ? { label: "Child", value: message.childSessionId } : null,
-    message.parentGoalId ? { label: "Goal", value: message.parentGoalId } : null,
     message.toRunId ? { label: "To run", value: message.toRunId } : null,
     message.toRole ? { label: "To role", value: message.toRole } : null,
     message.deliveryStatus ? { label: "Delivery", value: message.deliveryStatus } : null,

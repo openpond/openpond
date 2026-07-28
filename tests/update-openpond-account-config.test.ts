@@ -27,7 +27,6 @@ async function writeConfig(value: unknown): Promise<string> {
 describe("updateOpenPondAccountConfig", () => {
   test("updates endpoint metadata without replacing the saved API key", async () => {
     const configPath = await writeConfig({
-      goalStorageLocation: "workspace",
       activeProfile: { handle: "qa", baseUrl: "https://old-web.example" },
       accounts: [
         {
@@ -66,7 +65,6 @@ describe("updateOpenPondAccountConfig", () => {
     const context = JSON.parse(stdout);
     const saved = JSON.parse(await readFile(configPath, "utf8"));
 
-    expect(saved.goalStorageLocation).toBe("workspace");
     expect(saved.activeProfile).toEqual({ handle: "qa", baseUrl: "https://new-web.example" });
     expect(saved.accounts).toEqual([
       {

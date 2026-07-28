@@ -3,15 +3,10 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   CompactSessionRequestSchema,
-  InsightsAskRequestSchema,
-  PatchInsightRequestSchema,
   RunSessionCommandRequestSchema,
   normalizeSidebarFilePath,
   type Approval,
   type ChatProvider,
-  type InsightStatus,
-  type InsightsListResponse,
-  type InsightsScanResponse,
   type ModelUsageRecord,
   type RuntimeEvent,
   type ServerStatus,
@@ -108,8 +103,6 @@ import {
 } from "./openpond/sandboxes.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
-import { createInsightsService } from "./insights/create-edit-insights.js";
-import { createInsightsBackgroundLoop } from "./insights/insights-background-loop.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
 import { createLocalAgentScheduleLoop } from "./agents/local-agent-scheduler.js";
 import {
@@ -139,7 +132,6 @@ import {
   createImproveLimit,
   createImproveTargetKind,
   findRecentCodexCompactionCompleted,
-  isInsightEvidenceSourceFilter,
   parseModelJudgeResult,
   resolveMaxHostedWorkspaceToolRounds,
 } from "./server-entry-helpers.js";
@@ -925,7 +917,6 @@ export async function createOpenPondServer(
   const {
     sendTurn,
     interruptSessionTurn,
-    pauseSessionGoal,
     applyCreateImproveAction,
     getCreateImproveRun,
     listCreateImproveRuns,
@@ -933,22 +924,6 @@ export async function createOpenPondServer(
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
   } = turnRunner;
-  const insightsService = createInsightsService({
-    store,
-    storeDir,
-    createSession,
-    updateSession,
-    sendTurn,
-    appendRuntimeEvent,
-    loadAppPreferences,
-    logger,
-  });
-  const insightsBackgroundLoop = createInsightsBackgroundLoop({
-    service: insightsService,
-    queue: workQueues.insights,
-    isClosing: () => closing,
-    logger,
-  });
   const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({
     service: taskMinerService,
     loadProfileState: loadOpenPondProfileState,
@@ -1357,90 +1332,6 @@ export async function createOpenPondServer(
     return usageRecordsPayload({ requestUrl, store });
   }
 
-  async function listInsightsPayload(requestUrl: URL): Promise<unknown> {
-    const rawStatus = requestUrl.searchParams.get("status");
-    const status =
-      rawStatus === "active" ||
-      rawStatus === "resolved" ||
-      rawStatus === "dismissed" ||
-      rawStatus === "all"
-        ? rawStatus
-        : "all";
-    const rawLimit = Number(requestUrl.searchParams.get("limit") ?? "200");
-    const limit = Number.isFinite(rawLimit) ? rawLimit : 200;
-    const rawEvidenceSource = requestUrl.searchParams.get("evidenceSource");
-    const evidenceSource = isInsightEvidenceSourceFilter(rawEvidenceSource)
-      ? rawEvidenceSource
-      : "all";
-    const rawRunStatus = requestUrl.searchParams.get("runStatus");
-    const runStatus =
-      rawRunStatus === "running" ||
-      rawRunStatus === "completed" ||
-      rawRunStatus === "failed" ||
-      rawRunStatus === "skipped" ||
-      rawRunStatus === "all"
-        ? rawRunStatus
-        : "all";
-    const rawRunTrigger = requestUrl.searchParams.get("runTrigger");
-    const runTrigger =
-      rawRunTrigger === "startup" ||
-      rawRunTrigger === "interval" ||
-      rawRunTrigger === "manual" ||
-      rawRunTrigger === "slash_command" ||
-      rawRunTrigger === "all"
-        ? rawRunTrigger
-        : "all";
-    const runModel = requestUrl.searchParams.get("runModel");
-    return withInsightsSchedule(
-      await insightsService.list({
-        status,
-        limit,
-        evidenceSource,
-        runStatus,
-        runTrigger,
-        runModel,
-      })
-    );
-  }
-
-  async function runInsightsScanPayload(requestUrl?: URL): Promise<unknown> {
-    const rawTrigger = requestUrl?.searchParams.get("trigger");
-    const trigger = rawTrigger === "slash_command" ? "slash_command" : "manual";
-    return withInsightsSchedule(
-      await insightsBackgroundLoop.scanNow({ force: true, trigger })
-    );
-  }
-
-  async function askInsightsPayload(payload: unknown): Promise<unknown> {
-    const input = InsightsAskRequestSchema.parse(payload);
-    return withInsightsSchedule(await insightsService.ask(input.question));
-  }
-
-  async function patchInsightPayload(
-    insightId: string,
-    payload: unknown
-  ): Promise<unknown> {
-    const input = PatchInsightRequestSchema.parse(payload);
-    return withInsightsSchedule(
-      await insightsService.patchStatus(
-        insightId,
-        input.status as InsightStatus
-      )
-    );
-  }
-
-  function withInsightsSchedule<
-    T extends InsightsListResponse | InsightsScanResponse
-  >(payload: T): T {
-    const status = insightsBackgroundLoop.status();
-    return {
-      ...payload,
-      nextScanAt: status.nextScanAt,
-      scanRunning: status.scanRunning,
-      scanStartedAt: status.scanStartedAt,
-    };
-  }
-
   async function listLocalAgentSchedulesPayload(
     payload?: unknown
   ): Promise<unknown> {
@@ -1579,10 +1470,6 @@ export async function createOpenPondServer(
       eventPagePayload,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
-      listInsightsPayload,
-      runInsightsScanPayload,
-      askInsightsPayload,
-      patchInsightPayload,
       trainingPayload,
       fireworksRftPayload: trainingService.handleFireworksRft,
       computePayload,
@@ -1707,7 +1594,6 @@ export async function createOpenPondServer(
       },
       applyCreateImproveAction,
       interruptSessionTurn,
-      pauseSessionGoal,
       compactSession,
       executeWorkspaceTool,
       runSubagentLifecycleAction,
@@ -1730,7 +1616,6 @@ export async function createOpenPondServer(
     serverId,
   });
   await turnRunner.recoverPendingSubagentCompletions();
-  insightsBackgroundLoop.start();
   taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
 
@@ -1754,7 +1639,6 @@ export async function createOpenPondServer(
       closing = true;
     },
     backgroundLoops: [
-      insightsBackgroundLoop,
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
     ],

@@ -170,7 +170,6 @@ describe("subagent child lifecycle", () => {
         id: "run_child",
         parentSessionId: "session_1",
         parentTurnId: "turn_parent",
-        parentGoalId: "goal_1",
         childSessionId: "session_child",
         roleId: "research",
         objective: "Inspect the focused behavior",
@@ -178,7 +177,7 @@ describe("subagent child lifecycle", () => {
         isolationMode: "none",
         toolPolicy: "read_only",
         background: true,
-        peerMessages: "goal_scoped",
+        peerMessages: "parent_scoped",
         status: "running",
         required: true,
         createdAt: "2026-07-07T10:00:00.000Z",
@@ -187,7 +186,6 @@ describe("subagent child lifecycle", () => {
     harness.sessions.set("session_child", baseSession({
       id: "session_child",
       parentSessionId: "session_1",
-      parentGoalId: "goal_1",
       subagentRunId: "run_child",
       subagentRoleId: "research",
     }));
@@ -209,7 +207,6 @@ describe("subagent child lifecycle", () => {
       id: `run_${roleId}`,
       parentSessionId: "session_1",
       parentTurnId: "turn_parent",
-      parentGoalId: "goal_1",
       childSessionId: `session_child_${index + 1}`,
       roleId,
       objective: `Complete ${roleId}`,
@@ -217,7 +214,7 @@ describe("subagent child lifecycle", () => {
       isolationMode: "none",
       toolPolicy: roleId === "coding" ? "workspace_write" : "read_only",
       background: true,
-      peerMessages: "goal_scoped",
+      peerMessages: "parent_scoped",
       status: "completed",
       required: true,
       report: { summary: `${roleId} result` },
@@ -226,7 +223,6 @@ describe("subagent child lifecycle", () => {
     }));
     const messages = runs.map((run, index) => SubagentMessageSchema.parse({
       id: `subagent_completion_turn_child_${index + 1}`,
-      parentGoalId: "goal_1",
       fromRunId: run.id,
       toRole: "parent",
       kind: "handoff",
@@ -256,7 +252,6 @@ describe("subagent child lifecycle", () => {
         id: run.childSessionId!,
         parentSessionId: "session_1",
         parentTurnId: "turn_parent",
-        parentGoalId: "goal_1",
         subagentRunId: run.id,
         subagentRoleId: run.roleId,
       }),
@@ -280,7 +275,6 @@ describe("subagent child lifecycle", () => {
       id: "run_joined",
       parentSessionId: "session_1",
       parentTurnId: "turn_parent",
-      parentGoalId: "goal_1",
       childSessionId: "session_child_joined",
       roleId: "coding",
       objective: "Complete the bounded edit",
@@ -288,7 +282,7 @@ describe("subagent child lifecycle", () => {
       isolationMode: "none",
       toolPolicy: "workspace_write",
       background: true,
-      peerMessages: "goal_scoped",
+      peerMessages: "parent_scoped",
       status: "completed",
       report: { summary: "Joined result" },
       metadata: {
@@ -304,7 +298,6 @@ describe("subagent child lifecycle", () => {
     });
     const message = SubagentMessageSchema.parse({
       id: "subagent_completion_turn_joined",
-      parentGoalId: "goal_1",
       fromRunId: run.id,
       toRole: "parent",
       kind: "handoff",
@@ -332,7 +325,6 @@ describe("subagent child lifecycle", () => {
       id: run.childSessionId!,
       parentSessionId: "session_1",
       parentTurnId: "turn_parent",
-      parentGoalId: "goal_1",
       subagentRunId: run.id,
       subagentRoleId: run.roleId,
     }));

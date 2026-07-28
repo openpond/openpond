@@ -121,7 +121,6 @@ describe("chat message projection", () => {
           message: {
             id: "message_1",
             fromRunId: "run_review",
-            parentGoalId: "goal_1",
             kind: "status",
             priority: "interrupt",
             body: "The hidden-directory hypothesis was disproven.",
@@ -213,7 +212,6 @@ describe("chat message projection", () => {
       hiddenFromDefaultSidebar: true,
       parentSessionId: "session_parent",
       parentTurnId: "turn_parent",
-      parentGoalId: null,
       subagentRunId: "run_live",
       subagentRoleId: "research",
       title: "Research: live child",
@@ -608,63 +606,6 @@ describe("chat message projection", () => {
     expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
   });
 
-  test("renders Insights scan prompts as compact evidence cards", () => {
-    const evidenceItems = Array.from({ length: 6 }, (_, index) => ({
-      evidenceSource: index % 2 === 0 ? "tool_failure" : "stuck_turn",
-      evidenceKey: `evidence_${index}`,
-      fingerprint: `fingerprint_${index}`,
-      insight: {
-        severity: index === 0 ? "blocker" : "concern",
-        type: "insight",
-        title: `Insight ${index}`,
-        summary: `Evidence summary ${index}`,
-        sourceSessionId: `session_${index}`,
-        sourceTurnId: `turn_${index}`,
-        createPipelineState: null,
-        sourceEventSequence: index + 1,
-      },
-    }));
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "insights_turn_started",
-        name: "turn.started",
-        sessionId: "insights_session",
-        turnId: "insights_turn",
-        args: {
-          prompt: "You are the built-in OpenPond Insights agent.\n\nEvidence JSON:\n{}",
-          insightsRun: {
-            id: "insights_run_1",
-            trigger: "interval",
-            status: "completed",
-            evidenceSources: ["stuck_turn", "tool_failure"],
-            findingCount: 6,
-          },
-          insightsEvidencePreview: {
-            afterSequence: 10,
-            latestSequence: 20,
-            eventCount: 11,
-            evidenceSources: ["stuck_turn", "tool_failure"],
-            totalCount: evidenceItems.length,
-            truncated: true,
-            items: evidenceItems,
-          },
-        },
-      }),
-    ]);
-
-    expect(messages[0]?.content).toBeUndefined();
-    expect(messages[0]?.insightsRunPrompt?.items).toHaveLength(6);
-
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[0]! }));
-    expect(html).toContain("Insights scan");
-    expect(html).toContain("6 evidence items");
-    expect(html).toContain("Insight 0");
-    expect(html).toContain("Insight 4");
-    expect(html).not.toContain("Insight 5");
-    expect(html).toContain("Show 1 more");
-    expect(html).not.toContain("Evidence JSON");
-  });
-
   test("renders OpChat quota failures as a billing action card", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -690,45 +631,6 @@ describe("chat message projection", () => {
     expect(html).toContain("OpenPond Chat allowance reached");
     expect(html).toContain("https://qa.openpond.example/sandboxes/example-org/billing");
     expect(html).not.toContain("OpenPond OpChat stream failed");
-  });
-
-  test("recovers Insights evidence rows from truncated prompt JSON", () => {
-    const prompt = [
-      "You are the built-in OpenPond Insights agent.",
-      "",
-      "Evidence JSON:",
-      "{",
-      '  "eventCount": 12,',
-      '  "evidenceSources": ["tool_failure"],',
-      '  "evidence": [',
-      '    {"evidenceSource":"tool_failure","evidenceKey":"tool_1","fingerprint":"one","insight":{"title":"Tool failed","summary":"Command exited 1","severity":"concern","type":"tool","sourceSessionId":"session_1","sourceTurnId":"turn_1","createPipelineState":null,"sourceEventSequence":7}},',
-      '    {"evidenceSource":"tool_failure","evidenceKey":"tool_2","fingerprint":"two","insight":{"title":"Tool failed again","summary":"Command exited 2","severity":"concern","type":"tool","sourceSessionId":"session_2","sourceTurnId":"turn_2","createPipelineState":null,"sourceEventSequence":8}}',
-      "",
-      "...truncated",
-    ].join("\n");
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "insights_turn_started",
-        name: "turn.started",
-        sessionId: "insights_session",
-        turnId: "insights_turn",
-        args: {
-          prompt,
-          insightsRun: {
-            id: "insights_run_1",
-            trigger: "startup",
-            status: "completed",
-            evidenceSources: ["tool_failure"],
-          },
-        },
-      }),
-    ]);
-
-    expect(messages[0]?.insightsRunPrompt?.eventCount).toBe(12);
-    expect(messages[0]?.insightsRunPrompt?.items.map((item) => item.title)).toEqual([
-      "Tool failed",
-      "Tool failed again",
-    ]);
   });
 
   test("renders image attachments as inline user message previews", () => {
@@ -1386,65 +1288,17 @@ describe("chat message projection", () => {
           },
         },
       }),
-      runtimeEvent({
-        id: "skill_started",
-        name: "tool.started",
-        turnId: "turn_1",
-        action: "openpond_profile_skill_goal",
-        status: "started",
-        args: { objective: "Draft reusable release notes." },
-      }),
-      runtimeEvent({
-        id: "skill_completed",
-        name: "tool.completed",
-        turnId: "turn_1",
-        action: "openpond_profile_skill_goal",
-        status: "completed",
-        output: JSON.stringify({ ok: true, output: "Started profile skill goal: Create release notes." }),
-        data: {
-          result: {
-            nextStep: "Started profile skill goal: Create release notes.",
-          },
-        },
-      }),
-      runtimeEvent({
-        id: "goal_started",
-        name: "tool.started",
-        turnId: "turn_1",
-        action: "openpond_goal_control",
-        status: "started",
-        args: { reason: "User asked to restart this goal." },
-      }),
-      runtimeEvent({
-        id: "goal_completed",
-        name: "tool.completed",
-        turnId: "turn_1",
-        action: "openpond_goal_control",
-        status: "completed",
-        output: JSON.stringify({ ok: true, output: "OpenPond goal restarted." }),
-        data: {
-          result: {
-            nextStep: "OpenPond goal restarted.",
-          },
-        },
-      }),
     ]);
 
     expect(messages[1]?.role).toBe("activity_group");
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
       "Started Create Pipeline",
-      "Created profile skill",
-      "Updated goal",
     ]);
     expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
       "Create a support triage agent.",
-      "Draft reusable release notes.",
-      "User asked to restart this goal.",
     ]);
     expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual([
       "Create Pipeline plan is ready for review.",
-      "Started profile skill goal: Create release notes.",
-      "OpenPond goal restarted.",
     ]);
   });
 
