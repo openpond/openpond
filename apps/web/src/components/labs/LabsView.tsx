@@ -11,6 +11,7 @@ import {
 import "../../styles/training/training.css";
 import "../../styles/labs/labs.css";
 import "../../styles/labs/labs-detail.css";
+import "../../styles/labs/labs-model-detail.css";
 
 export type LabPrimaryTab =
   | "workproducts"

@@ -65,6 +65,14 @@ import {
   filterModelToolsForExperience,
   workspaceToolExperienceBlocker,
 } from "../experience-policy.js";
+import { hostedTrainingHarnessRound } from "./training-harness-round.js";
+import {
+  PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS,
+  READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS,
+  RESOURCE_TEXT_FALLBACK_ACTIONS,
+} from "./tool-loop-action-policy.js";
+
+export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
 type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 type HostedToolLoopStreamOptions = {
@@ -72,81 +80,6 @@ type HostedToolLoopStreamOptions = {
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
 };
-
-const RESOURCE_TEXT_FALLBACK_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
-  "resource_search",
-  "resource_read",
-]);
-const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<
-  WorkspaceToolRequest["action"]
->([
-  "resource_search",
-  "resource_read",
-  "workspace_status",
-  "list_files",
-  "read_files",
-  "search_files",
-  "git_status",
-  "git_diff",
-  "sandbox_status",
-  "sandbox_list_files",
-  "sandbox_read_file",
-  "sandbox_search_files",
-  "sandbox_git_status",
-  "sandbox_git_diff",
-  "sandbox_git_export_patch",
-  "sandbox_snapshot_catalog",
-  "sandbox_templates",
-  "sandbox_replays",
-  "sandbox_replay_get",
-  "sandbox_replay_logs",
-  "sandbox_replay_artifacts",
-  "sandbox_logs",
-  "sandbox_receipts",
-]);
-const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
-  "subagent.message",
-]);
-
-export function hostedTrainingHarnessRound(input: {
-  trainingHarness:
-    | {
-        actionBindings: HarnessActionBinding[];
-      }
-    | null
-    | undefined;
-  completedActionCount: number;
-  nativeTools: HostedChatTool[];
-}): {
-  tools: HostedChatTool[];
-  toolChoice: HostedChatToolChoice;
-  requiredToolName: string | null;
-} | null {
-  if (!input.trainingHarness) return null;
-  const requiredToolName =
-    input.trainingHarness.actionBindings[input.completedActionCount]
-      ?.modelToolName ?? null;
-  if (!requiredToolName) {
-    return {
-      tools: [],
-      toolChoice: "none",
-      requiredToolName: null,
-    };
-  }
-  const requiredToolIndex = input.nativeTools.findIndex(
-    (tool) => tool.function?.name === requiredToolName
-  );
-  if (requiredToolIndex < 0) {
-    throw new Error(
-      `Training harness tool ${requiredToolName} is unavailable to the hosted model.`
-    );
-  }
-  return {
-    tools: input.nativeTools.slice(0, requiredToolIndex + 1),
-    toolChoice: "required",
-    requiredToolName,
-  };
-}
 
 export function createHostedToolLoopRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;

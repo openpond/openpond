@@ -11,13 +11,7 @@ import {
 } from "react";
 import type {
   ChatAttachment,
-  ChatProvider,
-  CodexPermissionMode,
-  CodexReasoningEffort,
-  Experience,
-  OpenPondCommandAccessMode,
   OpenPondApp,
-  ProviderSettings,
   TeamChatMember,
 } from "@openpond/contracts";
 import {
@@ -27,16 +21,7 @@ import {
   providerOptionsFromSettings,
   type DropdownOption,
 } from "../../lib/app-models";
-import type { ContextWindowStatus } from "../../lib/context-window";
-import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
-import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
-import type {
-  WorkspaceTargetState,
-  WorkspaceTargetValue,
-} from "../../lib/workspace-location";
-import type { ClientConnection } from "../../api";
-import type { ShowAppToast } from "../../app/app-state";
 import {
   activeMentionQuery,
   mentionTextForChatApp,
@@ -69,11 +54,8 @@ import {
   ComposerProjectTargetControl,
   ComposerProfileTargetControl,
   WorkspaceActionControl,
-  type ComposerProjectTargetState,
-  type ComposerProfileTargetState,
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
-import type { ComposerCreateImproveRuntime } from "./ComposerCreateImproveStrip";
 import { ComposerSteerQueue } from "./ComposerSteerQueue";
 import {
   composerSteerDraftsForScope,
@@ -87,7 +69,6 @@ import {
   type ComposerSteerDraft,
   type ComposerSteerDraftScopeState,
 } from "./composer-steer-queue";
-import { addMenuAnchorStyle, slashMenuAnchorStyle } from "./ComposerLayout";
 import {
   ComposerInlineInput,
   type ComposerInlineInputHandle,
@@ -125,6 +106,8 @@ import {
   slashAppContextMatchesForQuery,
   slashCommandMatchesForQuery,
 } from "./composer-input-helpers";
+import type { ComposerProps } from "./composer-types";
+import { useComposerMenuInteractions } from "./useComposerMenuInteractions";
 
 export {
   hasComposerSubmittableInput,
@@ -150,80 +133,11 @@ export type {
   ComposerProjectTargetOptionKind,
   ComposerProjectTargetState,
 } from "./ComposerControls";
-
-export type ComposerProps = {
-  experience?: Experience;
-  mode: "dock" | "start";
-  surface?: "chat" | "team";
-  teamUseModel?: boolean;
-  teamUseModelLocked?: boolean;
-  teamMentionMembers?: TeamChatMember[];
-  onTeamUseModelChange?: (value: boolean) => void;
-  prompt: string;
-  composeNotice?: ComposerNotice | null;
-  mentionApps?: OpenPondApp[];
-  connectedAppMentions?: ConnectedAppMentionOption[];
-  profileSkills?: ComposerSkillMenuItem[];
-  selectedMentionAppId?: string | null;
-  contextWindowStatus: ContextWindowStatus;
-  goalRuntime?: GoalRuntimeStatus | null;
-  subagentRuntime?: SubagentRuntimeStatus | null;
-  createImproveRuntime?: ComposerCreateImproveRuntime | null;
-  busy: boolean;
-  running?: boolean;
-  submissionScopeKey?: string;
-  initialSteerDrafts?: ComposerSteerDraft[];
-  steerAutoDispatchReady?: boolean;
-  steerAutoDispatchBlocked?: boolean;
-  showProjectFooter?: boolean;
-  autoFocus?: boolean;
-  focusRequestId?: number;
-  attachmentRequest?: { id: number; file: File } | null;
-  connection: ClientConnection | null;
-  providerSettings?: ProviderSettings | null;
-  provider: ChatProvider;
-  model: string;
-  projectTarget: ComposerProjectTargetState;
-  profileTarget?: ComposerProfileTargetState | null;
-  actionCatalog?: SandboxActionCatalogEntry[];
-  requestedAction?: { actionId: string; requestId: number } | null;
-  workspaceTarget: WorkspaceTargetState;
-  codexPermissionMode: CodexPermissionMode;
-  codexReasoningEffort: CodexReasoningEffort;
-  openPondCommandAccessMode: OpenPondCommandAccessMode;
-  onProviderChange: (value: ChatProvider) => void;
-  onProviderSetupOpen?: () => void;
-  onProjectTargetChange: (value: string) => void;
-  onProfileTargetChange?: (value: string) => void;
-  onWorkspaceTargetChange: (value: WorkspaceTargetValue) => void;
-  onModelChange: (value: string) => void;
-  onCodexPermissionModeChange: (value: CodexPermissionMode) => void;
-  onCodexReasoningEffortChange: (value: CodexReasoningEffort) => void;
-  onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
-  onPromptChange: (value: string) => void;
-  onMentionAppSelect?: (appId: string | null) => void;
-  showToast: ShowAppToast;
-  onSubmit: (
-    attachments?: ChatAttachment[],
-    action?: SandboxActionCatalogEntry | null,
-    command?: ComposerSlashCommand | null,
-    options?: ComposerSubmitOptions
-  ) => Promise<boolean>;
-  onStop: () => Promise<boolean | void> | boolean | void;
-  onPauseGoal?: () => Promise<boolean | void> | boolean | void;
-};
-
-export type ComposerSubmitOptions = {
-  displayPrompt?: string;
-  preservePrompt?: boolean;
-  promptOverride?: string;
-  turnMetadata?: Record<string, unknown>;
-};
-
-export type ComposerNotice = {
-  message: string;
-  tone: "info" | "warning";
-};
+export type {
+  ComposerNotice,
+  ComposerProps,
+  ComposerSubmitOptions,
+} from "./composer-types";
 
 const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
 
@@ -328,10 +242,6 @@ export function Composer({
   const [skillMenuDismissedPrompt, setSkillMenuDismissedPrompt] = useState<
     string | null
   >(null);
-  const [mentionMenuStyle, setMentionMenuStyle] = useState<CSSProperties>({});
-  const [skillMenuStyle, setSkillMenuStyle] = useState<CSSProperties>({});
-  const [actionMenuStyle, setActionMenuStyle] = useState<CSSProperties>({});
-  const [addMenuStyle, setAddMenuStyle] = useState<CSSProperties>({});
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(
     initialRequestedAction?.actionId ?? null
@@ -884,18 +794,6 @@ export function Composer({
   }, [focusRequestId, inputDisabled, prompt.length]);
 
   useEffect(() => {
-    setMentionIndex(0);
-  }, [mentionContext?.query]);
-
-  useEffect(() => {
-    setSkillIndex(0);
-  }, [activeSkillContext?.query, skillMatches.length]);
-
-  useEffect(() => {
-    setActionIndex(0);
-  }, [activeSlashContext?.query, slashMatches.length]);
-
-  useEffect(() => {
     if (!goalRuntime) setGoalDetailsOpen(false);
   }, [goalRuntime]);
 
@@ -947,191 +845,43 @@ export function Composer({
     }
   }, [mentionApps, onMentionAppSelect, prompt, selectedMentionAppId]);
 
-  useEffect(() => {
-    const input = inputRef.current?.element;
-    const container = input?.parentElement;
-    if (!input || !container || typeof ResizeObserver === "undefined") return;
-
-    const observer = new ResizeObserver(() => inputRef.current?.resize());
-    observer.observe(container);
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!addMenuOpen) return;
-    function handlePointerDown(event: PointerEvent) {
-      const target = event.target as Node;
-      const inputArea = inputRef.current?.element?.parentElement;
-      if (
-        !addMenuRef.current?.contains(target) &&
-        !addMenuPanelRef.current?.contains(target) &&
-        !inputArea?.contains(target)
-      ) {
-        setAddMenuOpen(false);
-        setAddMenuQuery("");
-        setMentionMenuDismissedPrompt(activeMentionKey);
-        setActionMenuDismissedPrompt(activeSlashKey);
-        setSkillMenuDismissedPrompt(activeSkillKey);
-      }
-    }
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setAddMenuOpen(false);
-        setAddMenuQuery("");
-        setMentionMenuDismissedPrompt(activeMentionKey);
-        setActionMenuDismissedPrompt(activeSlashKey);
-        setSkillMenuDismissedPrompt(activeSkillKey);
-        return;
-      }
-      if (addMenuItems.length === 0) return;
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setAddMenuIndex((current) => (current + 1) % addMenuItems.length);
-        return;
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setAddMenuIndex(
-          (current) => (current - 1 + addMenuItems.length) % addMenuItems.length
-        );
-        return;
-      }
-      if (event.key === "Home") {
-        event.preventDefault();
-        setAddMenuIndex(0);
-        return;
-      }
-      if (event.key === "End") {
-        event.preventDefault();
-        setAddMenuIndex(addMenuItems.length - 1);
-        return;
-      }
-      if (event.key === "Enter") {
-        event.preventDefault();
-        const item = addMenuItems[addMenuIndex] ?? addMenuItems[0];
-        if (item) selectAddMenuItem(item);
-      }
-    }
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [
-    activeMentionKey,
-    activeSkillKey,
-    activeSlashKey,
-    addMenuIndex,
-    addMenuItems,
-    addMenuOpen,
-  ]);
-
-  useLayoutEffect(() => {
-    if (!addMenuOpen) return;
-    const inputShell = inputShellRef.current;
-    if (!inputShell) return;
-    const inputShellElement = inputShell;
-
-    function updateAddMenuPosition() {
-      setAddMenuStyle(addMenuAnchorStyle(inputShellElement));
-    }
-
-    updateAddMenuPosition();
-    window.addEventListener("resize", updateAddMenuPosition);
-    window.addEventListener("scroll", updateAddMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateAddMenuPosition);
-      window.removeEventListener("scroll", updateAddMenuPosition, true);
-    };
-  }, [addMenuOpen, attachments.length, createImproveRuntime, goalRuntime]);
-
-  useLayoutEffect(() => {
-    if (!showActionMenu) return;
-    const input = inputRef.current?.element;
-    const composer = composerRef.current;
-    if (!input || !composer) return;
-    const inputElement = input;
-    const composerElement = composer;
-
-    function updateSlashMenuPosition() {
-      setActionMenuStyle(slashMenuAnchorStyle(inputElement, composerElement));
-    }
-
-    updateSlashMenuPosition();
-    window.addEventListener("resize", updateSlashMenuPosition);
-    window.addEventListener("scroll", updateSlashMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateSlashMenuPosition);
-      window.removeEventListener("scroll", updateSlashMenuPosition, true);
-    };
-  }, [
-    attachments.length,
-    createImproveRuntime,
-    goalRuntime,
-    prompt,
-    selectedActionId,
-    showActionMenu,
-  ]);
-
-  useLayoutEffect(() => {
-    if (!showSkillMenu) return;
-    const input = inputRef.current?.element;
-    const composer = composerRef.current;
-    if (!input || !composer) return;
-    const inputElement = input;
-    const composerElement = composer;
-
-    function updateSkillMenuPosition() {
-      setSkillMenuStyle(slashMenuAnchorStyle(inputElement, composerElement));
-    }
-
-    updateSkillMenuPosition();
-    window.addEventListener("resize", updateSkillMenuPosition);
-    window.addEventListener("scroll", updateSkillMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateSkillMenuPosition);
-      window.removeEventListener("scroll", updateSkillMenuPosition, true);
-    };
-  }, [
-    attachments.length,
-    createImproveRuntime,
-    goalRuntime,
-    prompt,
-    selectedActionId,
-    showSkillMenu,
-  ]);
-
-  useLayoutEffect(() => {
-    if (!showMentionMenu) return;
-    const input = inputRef.current?.element;
-    const composer = composerRef.current;
-    if (!input || !composer) return;
-    const inputElement = input;
-    const composerElement = composer;
-
-    function updateMentionMenuPosition() {
-      setMentionMenuStyle(slashMenuAnchorStyle(inputElement, composerElement));
-    }
-
-    updateMentionMenuPosition();
-    window.addEventListener("resize", updateMentionMenuPosition);
-    window.addEventListener("scroll", updateMentionMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", updateMentionMenuPosition);
-      window.removeEventListener("scroll", updateMentionMenuPosition, true);
-    };
-  }, [
-    attachments.length,
-    createImproveRuntime,
-    goalRuntime,
-    prompt,
-    selectedActionId,
-    showMentionMenu,
-  ]);
-
+  const { actionMenuStyle, addMenuStyle, mentionMenuStyle, skillMenuStyle } =
+    useComposerMenuInteractions({
+      activeMentionKey,
+      activeSkillKey,
+      activeSlashKey,
+      addMenuIndex,
+      addMenuItems,
+      addMenuOpen,
+      addMenuPanelRef,
+      addMenuRef,
+      attachmentCount: attachments.length,
+      composerRef,
+      createImproveActive: Boolean(createImproveRuntime),
+      goalRuntimeActive: Boolean(goalRuntime),
+      inputRef,
+      inputShellRef,
+      mentionQuery: mentionContext?.query,
+      prompt,
+      selectedActionId,
+      selectAddMenuItem,
+      setActionIndex,
+      setActionMenuDismissedPrompt,
+      setAddMenuIndex,
+      setAddMenuOpen,
+      setAddMenuQuery,
+      setMentionMenuDismissedPrompt,
+      setMentionIndex,
+      setSkillIndex,
+      setSkillMenuDismissedPrompt,
+      skillMatchCount: skillMatches.length,
+      skillQuery: activeSkillContext?.query,
+      slashMatchCount: slashMatches.length,
+      slashQuery: activeSlashContext?.query,
+      showActionMenu,
+      showMentionMenu,
+      showSkillMenu,
+    });
   function clearSelectedInvocation() {
     setSelectedActionId(null);
     setSelectedCommandId(null);

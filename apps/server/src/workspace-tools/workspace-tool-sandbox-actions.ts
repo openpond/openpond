@@ -1,8 +1,6 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import {
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
   type LocalProject,
   type OutputValidationEvidence,
   type Session,
@@ -30,6 +28,11 @@ import {
   stringValue,
 } from "./workspace-tool-arguments.js";
 import { editSandboxFile } from "./workspace-tool-sandbox-file-edit.js";
+import {
+  previewPortArg,
+  sandboxCatalogPayload,
+  sandboxName,
+} from "./workspace-tool-sandbox-display.js";
 
 type SandboxToolAction = Extract<
   WorkspaceToolRequest["action"],
@@ -1992,39 +1995,4 @@ function mergeSandboxPreviewResult(
     sandbox: previewPayload.sandbox ?? sandboxPayload.sandbox,
     account: previewPayload.account ?? sandboxPayload.account,
   };
-}
-
-function sandboxCatalogPayload(
-  args: Record<string, unknown>
-): Record<string, unknown> {
-  return {
-    teamId: stringArg(args, "teamId", ""),
-    projectId: stringArg(args, "projectId", ""),
-    agentId: stringArg(args, "agentId", ""),
-    q: stringArg(args, "q", ""),
-    name: stringArg(args, "name", ""),
-    version: stringArg(args, "version", ""),
-    tag: stringArg(args, "tag", ""),
-    useCase: stringArg(args, "useCase", ""),
-  };
-}
-
-function previewPortArg(args: Record<string, unknown>): number | undefined {
-  const value = Number(args.previewPort);
-  if (
-    !Number.isInteger(value) ||
-    value < SANDBOX_TEMPLATE_PREVIEW_PORT_MIN ||
-    value > SANDBOX_TEMPLATE_PREVIEW_PORT_MAX
-  ) {
-    return undefined;
-  }
-  return value;
-}
-
-function sandboxName(sandbox: Record<string, unknown>): string {
-  const repo = typeof sandbox.repo === "string" ? sandbox.repo : "";
-  if (!repo) return typeof sandbox.id === "string" ? sandbox.id : "Sandbox";
-  const trimmed = repo.replace(/\.git$/, "").replace(/\/$/, "");
-  const parts = trimmed.split("/");
-  return parts.slice(-2).join("/");
 }
