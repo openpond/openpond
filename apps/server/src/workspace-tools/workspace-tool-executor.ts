@@ -297,6 +297,7 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
       } else {
         const capabilities = resolveWorkspaceCapabilities({
           session,
+          localProject,
         });
         const blockedMessage = workspaceToolBlockedMessage({
           action: input.action,
