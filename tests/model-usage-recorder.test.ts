@@ -300,7 +300,6 @@ function usageCreateImproveRun() {
       profileId: "default",
       conversationId: "session_usage",
       originTurnId: "turn_usage",
-      workItemId: null,
       projectId: "project_usage",
       targetProject: null,
     },

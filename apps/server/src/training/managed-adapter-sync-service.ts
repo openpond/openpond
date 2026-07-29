@@ -286,11 +286,11 @@ async function reconcileLineage(input: {
         "Select an OpenPond team before reconciling managed adapters."
       );
     }
-    const baseProfileId = assertQualifiedBase(
-      source,
-      jobArtifacts,
-      await input.baseProfilesForTeam(teamId)
-    );
+    const baseProfiles = await input.baseProfilesForTeam(teamId);
+    const baseProfileId =
+      source === "openpond_training"
+        ? assertRetainedProjectionBase(input.lineage, baseProfiles)
+        : assertQualifiedBase(source, jobArtifacts, baseProfiles);
     const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
@@ -313,6 +313,11 @@ async function reconcileLineage(input: {
       if (source === "sandbox_managed_rft") {
         throw new Error(
           "Sandbox has not finished canonical publication for this managed training job."
+        );
+      }
+      if (source === "openpond_training") {
+        throw new Error(
+          "Sandbox no longer exposes the retained canonical OpenPond training artifact."
         );
       }
       const job = await input.store.getTrainingJob(input.lineage.jobId);
@@ -464,12 +469,19 @@ function portableUploadFiles(artifacts: TrainingArtifact[]) {
 
 type ManagedLineageSource =
   | "openpond_fireworks"
+  | "openpond_training"
   | "sandbox_managed_rft";
 
 function lineageSource(
   lineage: ModelArtifactLineage,
   artifacts: TrainingArtifact[]
 ): ManagedLineageSource | null {
+  if (
+    lineage.managedServing?.source === "openpond_training" &&
+    lineage.managedServing.canonicalArtifactId
+  ) {
+    return "openpond_training";
+  }
   if (
     lineage.status === "imported" &&
     artifacts.some((artifact) => artifact.metadata.provider === "sandbox")
@@ -479,6 +491,23 @@ function lineageSource(
   )
     ? "openpond_fireworks"
     : null;
+}
+
+function assertRetainedProjectionBase(
+  lineage: ModelArtifactLineage,
+  baseProfiles: ManagedRegistryBaseProfile[]
+): string {
+  const baseProfileId = lineage.managedServing?.baseProfileId?.trim();
+  const profile = baseProfiles.find(
+    (candidate) =>
+      candidate.id === baseProfileId && candidate.status === "qualified"
+  );
+  if (!baseProfileId || !profile) {
+    throw new Error(
+      "The retained OpenPond training artifact no longer matches a Sandbox-qualified base profile."
+    );
+  }
+  return baseProfileId;
 }
 
 function assertQualifiedBase(

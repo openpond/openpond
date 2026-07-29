@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RuntimeEvent, Session, SubagentDelegationMode } from "@openpond/contracts";
+import type {
+  RuntimeEvent,
+  Session,
+  SubagentDelegationMode,
+} from "@openpond/contracts";
 import { api } from "../api";
 import { modelRefForTurn } from "../lib/app-models";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
-import { hybridWorkspaceSessionMetadata, isHybridWorkspaceSession, type WorkspaceTargetValue } from "../lib/workspace-location";
+import {
+  hybridWorkspaceSessionMetadata,
+  isHybridWorkspaceSession,
+  type WorkspaceTargetValue,
+} from "../lib/workspace-location";
 import { useAppPanelActions } from "../hooks/useAppPanelActions";
 import { useBrowserRevealRequests } from "../hooks/useBrowserRevealRequests";
 import { useChatActions } from "../hooks/useChatActions";
@@ -27,65 +35,168 @@ const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
 export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   const {
-    composerDraftStore, appDispatch, mentionedAppId, setMentionedAppId, cloudSetupDialog, setCloudSetupDialog,
-    setRightPanelTabRequest, workspaceDiffPanelViewState, setWorkspaceDiffPanelViewState, rightChatHistoryEvents, setRightChatHistoryEvents, locallyActiveCodexHistorySessionIds,
-    setCodexHistoryTurnLocallyActive, draftSubagentDelegationMode, setDraftSubagentDelegationMode, confirmProjectAction, view,
-    selectedAppId, selectedProjectId, selectedSessionId, draftProvider, draftModel, codexPermissionMode,
-    codexReasoningEffort, openPondCommandAccessMode, busy, diffPanelOpen, diffPanelExpanded, rightPanelMode,
-    rightChatPanels, newProjectMode, newProjectName, newProjectPath, newProjectBusy, commitMessage,
-    commitIncludeUnstaged, commitNextStep, branchDialogName, setSectionMenuOpen, setSidebarOpen,
-    setView, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setPrompt, setDraftProvider,
-    setDraftModel, setDiffPanelOpen, setRightPanelMode, setRightChatPanels, setSyncingWorkspaceAppId, setSettingsSection,
-    setNewProjectDialogOpen, setNewProjectMode, setNewProjectName, setNewProjectPath, setNewProjectBusy, setCommitDialogOpen,
-    setBranchDialogOpen, setError, showToast, appPreferences, applyBootstrapPayload, bootstrap,
-    connection, events, sessions, startup, setAppPreferences, setCodexHistorySessions,
-    setEvents, setSessions, revealProjectsSection, cloudProjectById, localProjectById,
-    selectedApp, selectedCloudProject, selectedProject, selectedProjectLinkedOpenPondApp, selectedSession, sidebarSessions,
-    runtimeIndexes, connectedAppMentions, codexHistoryEvents, setCodexHistoryEvents, account, accountPending,
-    accountSignedOut, activeModel, activeProvider, activeWorkspaceAppId, activeWorkspaceKind, activeWorkspaceLocation,
-    appDefaults, selectedSessionProjectId, workspaceName, accountScopeKey, teamChat, communities,
-    selectedProjectConfirmedCloudProject, activeOpenPondCommandAccessMode, viewWorkspaceAppId, viewWorkspaceId, viewWorkspaceKind, openPondActionCatalog,
-    selectedActionCatalog, expandProject, setExpandedProjectIds,
-    advanceTrainingModelChatAfterTurn, bindTrainingModelChatSession, prepareTrainingModelChatTurn, chatMessages, pendingChatUserMessages,
-    recordPendingChatUserMessage, runningSessionIds, workspaceBusy, visibleWorkspaceState, visibleWorkspaceDiff, rememberWorkspaceState,
-    refreshWorkspace, setWorkspaceBusy, refreshWorkspaceDiffWhenNeeded, setPendingWorkspaceTarget,
-    pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget, projectTarget, workspaceTarget,
+    composerDraftStore,
+    appDispatch,
+    mentionedAppId,
+    setMentionedAppId,
+    cloudSetupDialog,
+    setCloudSetupDialog,
+    setRightPanelTabRequest,
+    workspaceDiffPanelViewState,
+    setWorkspaceDiffPanelViewState,
+    rightChatHistoryEvents,
+    setRightChatHistoryEvents,
+    locallyActiveCodexHistorySessionIds,
+    setCodexHistoryTurnLocallyActive,
+    draftSubagentDelegationMode,
+    setDraftSubagentDelegationMode,
+    confirmProjectAction,
+    view,
+    selectedAppId,
+    selectedProjectId,
+    selectedSessionId,
+    draftProvider,
+    draftModel,
+    activeExperience,
+    codexPermissionMode,
+    codexReasoningEffort,
+    openPondCommandAccessMode,
+    busy,
+    diffPanelOpen,
+    diffPanelExpanded,
+    rightPanelMode,
+    rightChatPanels,
+    newProjectMode,
+    newProjectName,
+    newProjectPath,
+    newProjectBusy,
+    commitMessage,
+    commitIncludeUnstaged,
+    commitNextStep,
+    branchDialogName,
+    setSectionMenuOpen,
+    setSidebarOpen,
+    setView,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+    setPrompt,
+    setDraftProvider,
+    setDraftModel,
+    setDiffPanelOpen,
+    setRightPanelMode,
+    setRightChatPanels,
+    setSyncingWorkspaceAppId,
+    setSettingsSection,
+    setNewProjectDialogOpen,
+    setNewProjectMode,
+    setNewProjectName,
+    setNewProjectPath,
+    setNewProjectBusy,
+    setCommitDialogOpen,
+    setBranchDialogOpen,
+    setError,
+    showToast,
+    appPreferences,
+    applyBootstrapPayload,
+    bootstrap,
+    connection,
+    events,
+    sessions,
+    startup,
+    setAppPreferences,
+    setCodexHistorySessions,
+    setEvents,
+    setSessions,
+    revealProjectsSection,
+    cloudProjectById,
+    localProjectById,
+    selectedApp,
+    selectedCloudProject,
+    selectedProject,
+    selectedProjectLinkedOpenPondApp,
+    selectedSession,
+    sidebarSessions,
+    runtimeIndexes,
+    connectedAppMentions,
+    codexHistoryEvents,
+    setCodexHistoryEvents,
+    account,
+    accountPending,
+    accountSignedOut,
+    activeModel,
+    activeProvider,
+    activeWorkspaceAppId,
+    activeWorkspaceKind,
+    activeWorkspaceLocation,
+    appDefaults,
+    selectedSessionProjectId,
+    workspaceName,
+    accountScopeKey,
+    teamChat,
+    communities,
+    selectedProjectConfirmedCloudProject,
+    activeOpenPondCommandAccessMode,
+    viewWorkspaceAppId,
+    viewWorkspaceId,
+    viewWorkspaceKind,
+    openPondActionCatalog,
+    selectedActionCatalog,
+    expandProject,
+    setExpandedProjectIds,
+    advanceTrainingModelChatAfterTurn,
+    bindTrainingModelChatSession,
+    prepareTrainingModelChatTurn,
+    chatMessages,
+    pendingChatUserMessages,
+    recordPendingChatUserMessage,
+    runningSessionIds,
+    workspaceBusy,
+    visibleWorkspaceState,
+    visibleWorkspaceDiff,
+    rememberWorkspaceState,
+    refreshWorkspace,
+    setWorkspaceBusy,
+    refreshWorkspaceDiffWhenNeeded,
+    setPendingWorkspaceTarget,
+    pendingSidebarWorkspaceTarget,
+    setPendingSidebarWorkspaceTarget,
+    projectTarget,
+    workspaceTarget,
   } = primary;
   const title =
     view === "apps"
       ? "Apps"
       : view === "get-started"
-        ? "Get started"
-        : view === "labs"
-          ? "Lab"
-          : view === "team"
-            ? teamChat.detail
-              ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
-              : "Team"
-            : view === "community"
-              ? communities.preview?.displayName ?? "Communities"
-              : (selectedSession?.title ?? "New task");
-  const {
-    browserConversationId,
-    handleWorkspaceDiffPanelViewStateChange,
-  } = useConversationSidebarState({
-    appDispatch,
-    diffPanelExpanded,
-    diffPanelOpen,
-    rightChatPanels,
-    rightPanelMode,
-    selectedAppId,
-    selectedCloudProject,
-    selectedProjectId,
-    selectedSession,
-    selectedSessionId,
-    setWorkspaceDiffPanelViewState,
-    view,
-    viewWorkspaceAppId,
-    viewWorkspaceId,
-    viewWorkspaceKind,
-    workspaceDiffPanelViewState,
-  });
+      ? "Get started"
+      : view === "labs"
+      ? "Lab"
+      : view === "team"
+      ? teamChat.detail
+        ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
+        : "Team"
+      : view === "community"
+      ? communities.preview?.displayName ?? "Communities"
+      : selectedSession?.title ?? "New task";
+  const { browserConversationId, handleWorkspaceDiffPanelViewStateChange } =
+    useConversationSidebarState({
+      appDispatch,
+      diffPanelExpanded,
+      diffPanelOpen,
+      rightChatPanels,
+      rightPanelMode,
+      selectedAppId,
+      selectedCloudProject,
+      selectedProjectId,
+      selectedSession,
+      selectedSessionId,
+      setWorkspaceDiffPanelViewState,
+      view,
+      viewWorkspaceAppId,
+      viewWorkspaceId,
+      viewWorkspaceKind,
+      workspaceDiffPanelViewState,
+    });
   const openSessionInChat = useCallback(
     (sessionId: string) => {
       setSelectedSessionId(sessionId);
@@ -93,14 +204,19 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       setSelectedProjectId(null);
       setView("chat");
     },
-    [setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView],
+    [setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]
   );
   const openExistingProjectPathDialog = useCallback(() => {
     setNewProjectMode("existing-local");
     setNewProjectName("");
     setNewProjectPath("");
     setNewProjectDialogOpen(true);
-  }, [setNewProjectDialogOpen, setNewProjectMode, setNewProjectName, setNewProjectPath]);
+  }, [
+    setNewProjectDialogOpen,
+    setNewProjectMode,
+    setNewProjectName,
+    setNewProjectPath,
+  ]);
   const {
     addProjectFolder,
     addProjectFolderPath,
@@ -125,32 +241,33 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setView,
     showToast,
   });
-  const { changeProjectTarget, submitNewProjectDialog } = useProjectTargetActions({
-    addProjectFolder,
-    addProjectFolderPath,
-    appDispatch,
-    busy,
-    cloudProjectById,
-    createCloudProjectFromScratch,
-    createProjectFromScratch,
-    expandProject,
-    localProjectById,
-    newProjectBusy,
-    newProjectMode,
-    newProjectName,
-    newProjectPath,
-    projectTargetValue: projectTarget.value,
-    setDiffPanelOpen,
-    setDraftModel,
-    setDraftProvider,
-    setError,
-    setNewProjectBusy,
-    setNewProjectDialogOpen,
-    setNewProjectName,
-    setNewProjectPath,
-    showToast,
-    workspaceBusy,
-  });
+  const { changeProjectTarget, submitNewProjectDialog } =
+    useProjectTargetActions({
+      addProjectFolder,
+      addProjectFolderPath,
+      appDispatch,
+      busy,
+      cloudProjectById,
+      createCloudProjectFromScratch,
+      createProjectFromScratch,
+      expandProject,
+      localProjectById,
+      newProjectBusy,
+      newProjectMode,
+      newProjectName,
+      newProjectPath,
+      projectTargetValue: projectTarget.value,
+      setDiffPanelOpen,
+      setDraftModel,
+      setDraftProvider,
+      setError,
+      setNewProjectBusy,
+      setNewProjectDialogOpen,
+      setNewProjectName,
+      setNewProjectPath,
+      showToast,
+      workspaceBusy,
+    });
   const {
     changeWorkspaceBranch,
     openCommitDialog,
@@ -214,10 +331,11 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   const subagentDelegationMode =
     selectedSession?.subagentDelegationMode ?? draftSubagentDelegationMode;
   const subagentDelegationAvailable = Boolean(
-    bootstrap?.preferences.subagents.enabled &&
-    activeProvider !== "codex" &&
-    !isCodexHistorySessionId(selectedSessionId) &&
-    !selectedSession?.subagentRunId,
+    activeExperience === "development" &&
+      bootstrap?.preferences.subagents.enabled &&
+      activeProvider !== "codex" &&
+      !isCodexHistorySessionId(selectedSessionId) &&
+      !selectedSession?.subagentRunId
   );
   const changeSubagentDelegationMode = useCallback(
     (mode: SubagentDelegationMode | null) => {
@@ -235,14 +353,18 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       const previousMode = selectedSession.subagentDelegationMode ?? null;
       setSessions((current) =>
         current.map((session) =>
-          session.id === sessionId ? { ...session, subagentDelegationMode: mode } : session,
-        ),
+          session.id === sessionId
+            ? { ...session, subagentDelegationMode: mode }
+            : session
+        )
       );
       void api
         .patchSession(connection, sessionId, { subagentDelegationMode: mode })
         .then((updated) => {
           setSessions((current) =>
-            current.map((session) => (session.id === updated.id ? updated : session)),
+            current.map((session) =>
+              session.id === updated.id ? updated : session
+            )
           );
         })
         .catch((caught) => {
@@ -250,26 +372,29 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
             current.map((session) =>
               session.id === sessionId
                 ? { ...session, subagentDelegationMode: previousMode }
-                : session,
-            ),
+                : session
+            )
           );
           setError(caught instanceof Error ? caught.message : String(caught));
         });
     },
-    [connection, selectedSession, setError, setSessions],
+    [connection, selectedSession, setError, setSessions]
   );
   const applyRightCodexHistoryPayload = useCallback(
     (payload: { session: Session; events: RuntimeEvent[] }) => {
       setRightChatHistoryEvents((current) =>
         current[payload.session.id] === payload.events
           ? current
-          : { ...current, [payload.session.id]: payload.events },
+          : { ...current, [payload.session.id]: payload.events }
       );
       setCodexHistorySessions((current) =>
-        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
+        upsertSessionPreservingLocalSidebarStateAndRecency(
+          current,
+          payload.session
+        )
       );
     },
-    [setCodexHistorySessions],
+    [setCodexHistorySessions]
   );
   const {
     answerCreateImproveQuestion,
@@ -277,7 +402,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     approveCreateImproveRun,
     cancelCreateImproveRun,
     changeDraftProvider,
-    openCreateImprovePullRequest, reconcileCreateImprovePullRequest, rejectCreateImproveCandidate,
+    openCreateImprovePullRequest,
+    reconcileCreateImprovePullRequest,
+    rejectCreateImproveCandidate,
     pauseCreateImproveRun,
     resumeCreateImproveRun,
     reviseCreateImproveRun,
@@ -293,6 +420,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     openPondCommandAccessMode: activeOpenPondCommandAccessMode,
     draftModel,
     draftProvider,
+    experience: activeExperience,
     expandProject,
     getPrompt: composerDraftStore.getSnapshot,
     apps: bootstrap?.apps ?? [],
@@ -312,7 +440,8 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     selectedSession,
     sessions,
     workspaceTarget: workspaceTarget.value,
-    subagentDelegationMode: selectedSession?.subagentDelegationMode ?? draftSubagentDelegationMode,
+    subagentDelegationMode:
+      selectedSession?.subagentDelegationMode ?? draftSubagentDelegationMode,
     setDraftModel,
     setDraftProvider,
     setError,
@@ -394,7 +523,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
           selectedSession?.cloudTeamId ??
           null;
         if (accountPending) {
-          showToast("Checking OpenPond account. Try again in a moment.", "info");
+          showToast(
+            "Checking OpenPond account. Try again in a moment.",
+            "info"
+          );
           return;
         }
         if (accountSignedOut) {
@@ -403,7 +535,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
         }
         if (!linkedCloudProjectId || !linkedCloudTeamId) {
           setPendingWorkspaceTarget(null);
-          showToast("Upload/sync this Project to Cloud before using Hybrid.", "error");
+          showToast(
+            "Upload/sync this Project to Cloud before using Hybrid.",
+            "error"
+          );
           return;
         }
         if (selectedSession && !isCodexHistorySessionId(selectedSession.id)) {
@@ -412,34 +547,54 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
             showToast("OpenPond App server is not connected.", "error");
             return;
           }
-          const updated = await api.patchSession(connection, selectedSession.id, {
-            provider: draftProvider,
-            modelRef: modelRefForTurn(draftProvider, draftModel, bootstrap?.providers ?? null),
-            appId: null,
-            appName: null,
-            workspaceKind: "sandbox",
-            workspaceId: null,
-            workspaceName:
-              selectedCloudProject?.name ??
-              selectedProjectConfirmedCloudProject?.name ??
-              selectedProject?.name ??
-              selectedSession.workspaceName ??
-              "Hybrid workspace",
-            localProjectId: selectedProject?.id ?? selectedSession.localProjectId ?? null,
-            cloudProjectId: linkedCloudProjectId,
-            cloudTeamId: linkedCloudTeamId,
-            metadata: hybridWorkspaceSessionMetadata(selectedSession.metadata),
-            cwd: selectedProject?.workspacePath ?? selectedSession.cwd ?? null,
-          });
+          const updated = await api.patchSession(
+            connection,
+            selectedSession.id,
+            {
+              provider: draftProvider,
+              modelRef: modelRefForTurn(
+                draftProvider,
+                draftModel,
+                bootstrap?.providers ?? null
+              ),
+              appId: null,
+              appName: null,
+              workspaceKind: "sandbox",
+              workspaceId: null,
+              workspaceName:
+                selectedCloudProject?.name ??
+                selectedProjectConfirmedCloudProject?.name ??
+                selectedProject?.name ??
+                selectedSession.workspaceName ??
+                "Hybrid workspace",
+              localProjectId:
+                selectedProject?.id ?? selectedSession.localProjectId ?? null,
+              cloudProjectId: linkedCloudProjectId,
+              cloudTeamId: linkedCloudTeamId,
+              metadata: hybridWorkspaceSessionMetadata(
+                selectedSession.metadata
+              ),
+              cwd:
+                selectedProject?.workspacePath ?? selectedSession.cwd ?? null,
+            }
+          );
           setSessions((current) =>
-            current.map((session) => (session.id === updated.id ? updated : session)),
+            current.map((session) =>
+              session.id === updated.id ? updated : session
+            )
           );
           setPendingWorkspaceTarget(null);
-          showToast("Hybrid will use your selected model with hosted sandbox edits.", "info");
+          showToast(
+            "Hybrid will use your selected model with hosted sandbox edits.",
+            "info"
+          );
           return;
         }
         setPendingWorkspaceTarget("hybrid");
-        showToast("Next message will use Hybrid with a hosted sandbox.", "info");
+        showToast(
+          "Next message will use Hybrid with a hosted sandbox.",
+          "info"
+        );
         return;
       }
       setPendingWorkspaceTarget(null);
@@ -465,7 +620,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       selectedSession,
       setSessions,
       showToast,
-    ],
+    ]
   );
   const switchProjectWorkspaceTarget = useCallback(
     (projectId: string, target: WorkspaceTargetValue) => {
@@ -476,7 +631,13 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       expandProject(projectId);
       setPendingSidebarWorkspaceTarget({ projectId, target });
     },
-    [expandProject, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView],
+    [
+      expandProject,
+      setSelectedAppId,
+      setSelectedProjectId,
+      setSelectedSessionId,
+      setView,
+    ]
   );
   useEffect(() => {
     if (!pendingSidebarWorkspaceTarget) return;
@@ -539,7 +700,10 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setNewProjectName,
     setRightPanelMode,
   });
-  const browserRevealSessionIds = useMemo(() => sessions.map((session) => session.id), [sessions]);
+  const browserRevealSessionIds = useMemo(
+    () => sessions.map((session) => session.id),
+    [sessions]
+  );
   useBrowserRevealRequests({
     browserConversationId,
     sessionIds: browserRevealSessionIds,
@@ -548,17 +712,17 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const [rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest] =
     useState<TrainingLaunchRequest | null>(null);
-  const openLabTraining = useCallback((input: {
-    objective: string | null;
-    sessionId: string | null;
-  }) => {
-    setRightChatTrainingLaunchRequest({
-      id: Date.now(),
-      objective: input.objective,
-      initialSessionIds: input.sessionId ? [input.sessionId] : [],
-    });
-    setView("labs");
-  }, [setView]);
+  const openLabTraining = useCallback(
+    (input: { objective: string | null; sessionId: string | null }) => {
+      setRightChatTrainingLaunchRequest({
+        id: Date.now(),
+        objective: input.objective,
+        initialSessionIds: input.sessionId ? [input.sessionId] : [],
+      });
+      setView("labs");
+    },
+    [setView]
+  );
   const {
     activateRightChatPanel,
     closeRightChatPanel,
@@ -613,9 +777,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     () =>
       mergeLiveRuntimeEventLists(
         bootstrap?.diagnostics ?? EMPTY_RUNTIME_EVENTS,
-        events.filter((event) => event.name === "diagnostic"),
+        events.filter((event) => event.name === "diagnostic")
       ),
-    [bootstrap?.diagnostics, events],
+    [bootstrap?.diagnostics, events]
   );
   const toggleRightSidebar = useCallback(() => {
     if (diffPanelOpen) {
@@ -630,24 +794,82 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     }
     setRightPanelMode("home");
     setDiffPanelOpen(true);
-  }, [diffPanelOpen, setDiffPanelOpen, setRightPanelMode, setRightPanelTabRequest, view]);
+  }, [
+    diffPanelOpen,
+    setDiffPanelOpen,
+    setRightPanelMode,
+    setRightPanelTabRequest,
+    view,
+  ]);
   return {
-    title, browserConversationId, handleWorkspaceDiffPanelViewStateChange, openSessionInChat,
-    openExistingProjectPathDialog, addProjectFolder, removeProject,
-    changeProjectTarget, submitNewProjectDialog, changeWorkspaceBranch, openCommitDialog, openCreateWorkspaceBranchDialog,
-    openDefaultsSettingsFromBranchDialog, runWorkspaceTool, submitCommitDialog, submitCreateWorkspaceBranch, syncWorkspaceLocally,
-    subagentDelegationDefaultMode, subagentDelegationMode, subagentDelegationAvailable, changeSubagentDelegationMode, answerCreateImproveQuestion,
-    applyCreateImproveCandidate, approveCreateImproveRun, cancelCreateImproveRun, changeDraftProvider, openCreateImprovePullRequest,
-    reconcileCreateImprovePullRequest, rejectCreateImproveCandidate, pauseCreateImproveRun, resumeCreateImproveRun, reviseCreateImproveRun,
-    sendPrompt, stopTurn, archiveSession, restoreSession, renameSession,
-    toggleProjectPinned, toggleSessionPinned, toggleSessionSavedForLater, moveProjectToCloud, startCloudSetupUpload, changeWorkspaceTarget,
-    switchProjectWorkspaceTarget, sendPromptFromMainComposer, openSandboxWorkspace, createCloudEnvironmentFromSidebar, openCloudProjectDialog,
-    openUrlInBrowserPanel, showBrowserPanel, showChangesPanel, showGoalSidebarTab,
-    rightChatTrainingLaunchRequest, setRightChatTrainingLaunchRequest,
-    closeRightChatPanel, openRightChatPanel, rightChatPanelViews, showRightChatPanel,
-    showRightPanelDiffTab, submitRightChatPrompt, activateRightChatPanel,
-    updateRightChatModel, updateRightChatPrompt, updateRightChatProvider, updateRightChatScrollState,
-    openProfileSettings, diagnosticEvents, toggleRightSidebar,
+    title,
+    browserConversationId,
+    handleWorkspaceDiffPanelViewStateChange,
+    openSessionInChat,
+    openExistingProjectPathDialog,
+    addProjectFolder,
+    removeProject,
+    changeProjectTarget,
+    submitNewProjectDialog,
+    changeWorkspaceBranch,
+    openCommitDialog,
+    openCreateWorkspaceBranchDialog,
+    openDefaultsSettingsFromBranchDialog,
+    runWorkspaceTool,
+    submitCommitDialog,
+    submitCreateWorkspaceBranch,
+    syncWorkspaceLocally,
+    subagentDelegationDefaultMode,
+    subagentDelegationMode,
+    subagentDelegationAvailable,
+    changeSubagentDelegationMode,
+    answerCreateImproveQuestion,
+    applyCreateImproveCandidate,
+    approveCreateImproveRun,
+    cancelCreateImproveRun,
+    changeDraftProvider,
+    openCreateImprovePullRequest,
+    reconcileCreateImprovePullRequest,
+    rejectCreateImproveCandidate,
+    pauseCreateImproveRun,
+    resumeCreateImproveRun,
+    reviseCreateImproveRun,
+    sendPrompt,
+    stopTurn,
+    archiveSession,
+    restoreSession,
+    renameSession,
+    toggleProjectPinned,
+    toggleSessionPinned,
+    toggleSessionSavedForLater,
+    moveProjectToCloud,
+    startCloudSetupUpload,
+    changeWorkspaceTarget,
+    switchProjectWorkspaceTarget,
+    sendPromptFromMainComposer,
+    openSandboxWorkspace,
+    createCloudEnvironmentFromSidebar,
+    openCloudProjectDialog,
+    openUrlInBrowserPanel,
+    showBrowserPanel,
+    showChangesPanel,
+    showGoalSidebarTab,
+    rightChatTrainingLaunchRequest,
+    setRightChatTrainingLaunchRequest,
+    closeRightChatPanel,
+    openRightChatPanel,
+    rightChatPanelViews,
+    showRightChatPanel,
+    showRightPanelDiffTab,
+    submitRightChatPrompt,
+    activateRightChatPanel,
+    updateRightChatModel,
+    updateRightChatPrompt,
+    updateRightChatProvider,
+    updateRightChatScrollState,
+    openProfileSettings,
+    diagnosticEvents,
+    toggleRightSidebar,
   };
 }
 

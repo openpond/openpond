@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   CreateSessionRequestSchema,
+  DEFAULT_SESSION_EXPERIENCE,
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   OpenPondCommandAccessModeSchema,
   PatchSessionRequestSchema,
@@ -20,23 +21,34 @@ export function createSessionStore(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
 }) {
-  const { store, defaultSessionCwd, loadAppPreferences, appendRuntimeEvent, loadLastUsedProfile } = deps;
+  const {
+    store,
+    defaultSessionCwd,
+    loadAppPreferences,
+    appendRuntimeEvent,
+    loadLastUsedProfile,
+  } = deps;
 
   async function createSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
     const createdAt = now();
     const sessionCount = await store.sessionCount();
-    const workspaceKind = input.workspaceKind ?? (input.appId ? "sandbox_app" : undefined);
+    const workspaceKind =
+      input.workspaceKind ?? (input.appId ? "sandbox_app" : undefined);
     const openPondCommandAccessMode =
       input.openPondCommandAccessMode ??
-      (loadAppPreferences ? (await loadAppPreferences()).openPondCommandAccessMode : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE);
-    const currentProfile = input.currentProfile !== undefined
-      ? input.currentProfile
-      : loadLastUsedProfile
+      (loadAppPreferences
+        ? (await loadAppPreferences()).openPondCommandAccessMode
+        : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE);
+    const currentProfile =
+      input.currentProfile !== undefined
+        ? input.currentProfile
+        : loadLastUsedProfile
         ? await loadLastUsedProfile()
         : null;
     const session: Session = {
       id: randomUUID(),
+      experience: input.experience ?? DEFAULT_SESSION_EXPERIENCE,
       provider: input.provider,
       modelRef: input.modelRef ?? null,
       openPondCommandAccessMode,
@@ -75,13 +87,20 @@ export function createSessionStore(deps: {
         name: "session.started",
         source: "server",
         appId: session.appId,
-        data: { provider: session.provider, appName: session.appName, cwd: session.cwd },
+        data: {
+          provider: session.provider,
+          appName: session.appName,
+          cwd: session.cwd,
+        },
       })
     );
     return session;
   }
 
-  async function patchSession(sessionId: string, payload: unknown): Promise<Session> {
+  async function patchSession(
+    sessionId: string,
+    payload: unknown
+  ): Promise<Session> {
     const input = PatchSessionRequestSchema.parse(payload);
     const updated = await store.updateSession(sessionId, (session) =>
       normalizeSession(
@@ -90,8 +109,8 @@ export function createSessionStore(deps: {
           ...input,
           updatedAt: session.updatedAt,
         },
-        input,
-      ),
+        input
+      )
     );
     if (!updated) throw new Error("Session not found");
     return updated;
@@ -103,19 +122,26 @@ export function createSessionStore(deps: {
     return normalizeSession(session);
   }
 
-  async function updateSession(sessionId: string, patch: Partial<Session>): Promise<Session> {
+  async function updateSession(
+    sessionId: string,
+    patch: Partial<Session>
+  ): Promise<Session> {
     const updated = await store.updateSession(sessionId, (session) =>
       normalizeSession({
         ...session,
         ...patch,
         updatedAt: now(),
-      }),
+      })
     );
     if (!updated) throw new Error("Session not found");
     return updated;
   }
 
-  async function completeTurn(sessionId: string, turnId: string, providerTurnId?: string | null): Promise<Turn> {
+  async function completeTurn(
+    sessionId: string,
+    turnId: string,
+    providerTurnId?: string | null
+  ): Promise<Turn> {
     const completedAt = now();
     const completed = await store.updateTurn(turnId, (turn) => ({
       ...turn,
@@ -128,7 +154,11 @@ export function createSessionStore(deps: {
     return completed;
   }
 
-  async function failTurn(session: Session, turnId: string, message: string): Promise<Turn> {
+  async function failTurn(
+    session: Session,
+    turnId: string,
+    message: string
+  ): Promise<Turn> {
     const failed = await store.updateTurn(turnId, (turn) => ({
       ...turn,
       completedAt: now(),
@@ -151,7 +181,11 @@ export function createSessionStore(deps: {
     return failed;
   }
 
-  async function interruptTurn(session: Session, turnId: string, message = "Stopped by user"): Promise<Turn> {
+  async function interruptTurn(
+    session: Session,
+    turnId: string,
+    message = "Stopped by user"
+  ): Promise<Turn> {
     let changed = false;
     const interrupted = await store.updateTurn(turnId, (current) => {
       if (current.status !== "in_progress") return current;
@@ -194,10 +228,14 @@ export function createSessionStore(deps: {
 
 function normalizeSession(
   session: Session,
-  sidebarPatch?: Pick<PatchSessionRequest, "archived" | "pinned" | "savedForLater">,
+  sidebarPatch?: Pick<
+    PatchSessionRequest,
+    "archived" | "pinned" | "savedForLater"
+  >
 ): Session {
   const parsed = OpenPondCommandAccessModeSchema.safeParse(
-    (session as Session & { openPondCommandAccessMode?: unknown }).openPondCommandAccessMode,
+    (session as Session & { openPondCommandAccessMode?: unknown })
+      .openPondCommandAccessMode
   );
   let pinned = Boolean(session.pinned);
   let savedForLater = Boolean(session.savedForLater);
@@ -222,7 +260,10 @@ function normalizeSession(
   }
   return {
     ...session,
-    openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    experience: session.experience ?? DEFAULT_SESSION_EXPERIENCE,
+    openPondCommandAccessMode: parsed.success
+      ? parsed.data
+      : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
     currentProfile: session.currentProfile ?? null,
     pinned,
     savedForLater,

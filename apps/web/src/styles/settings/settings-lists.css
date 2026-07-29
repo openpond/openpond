@@ -12,9 +12,17 @@
   font-size: 13px;
 }
 
+.account-list-note {
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #9b9b9b;
+  font-size: 12px;
+}
+
 .account-row {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto auto;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
   min-height: 66px;
@@ -339,11 +347,27 @@
 }
 
 .inline-action {
+  gap: 5px;
   min-height: 24px;
   border-radius: 12px;
   padding: 0 10px;
   white-space: nowrap;
   font-size: 12px;
+}
+
+.inline-action.danger {
+  background: rgba(235, 87, 87, 0.1);
+  color: #ff9b9b;
+}
+
+.inline-action.danger:hover:not(:disabled) {
+  background: rgba(235, 87, 87, 0.18);
+  color: #ffc0c0;
+}
+
+.account-remove-action {
+  width: 24px;
+  padding: 0;
 }
 
 .account-state {
@@ -675,13 +699,14 @@
     max-width: 100%;
     text-align: left;
   }
-
 }
 
 .settings-footnote {
   display: flex;
   justify-content: space-between;
   gap: 18px;
+  min-width: 0;
+  max-width: 100%;
   padding: 12px 16px;
 }
 
@@ -691,12 +716,24 @@
 
 .settings-footnote strong {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
   color: #d9d9d9;
   font-size: 12px;
   font-weight: 500;
+}
+
+.account-error-footnote {
+  align-items: flex-start;
+}
+
+.account-error-footnote strong {
+  flex: 1 1 420px;
+  max-width: min(620px, 75%);
+  color: #ffbd96;
+  line-height: 1.45;
+  text-align: right;
 }
 
 .diagnostics-log-panel {
@@ -799,7 +836,8 @@
   background: #0f0f0f;
   color: #dcdcdc;
   padding: 9px 10px;
-  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -835,13 +873,15 @@
 
 .diagnostics-log-source {
   color: #8f8f8f;
-  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
   white-space: nowrap;
 }
 
 .diagnostics-log-entry code {
   color: #dcdcdc;
-  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", monospace;
   white-space: pre;
 }
 

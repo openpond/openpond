@@ -74,4 +74,4 @@ Channel declarations describe setup and response rendering. Do not encode Slack,
 
 ## Editing Policy
 
-Use `editable(...)` to describe Builder Chat/source edit behavior. The platform owns work items, source refs, credentials, commits, PRs, and publish. The SDK owns inspect, validate, build, eval, traces, and generated artifacts.
+Use `editable(...)` to describe Work-based Agent authoring and source-edit policy. The platform owns versioned Agent packages, source refs, credentials, commits, PRs, and publish. The SDK owns inspect, validate, build, eval, traces, and generated artifacts.

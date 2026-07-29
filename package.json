@@ -37,7 +37,7 @@
     "build:web": "pnpm --dir apps/web run build",
     "build:desktop": "tsc -b apps/desktop && tsx scripts/build/bundle-desktop.ts",
     "electron:runtime:check": "tsx scripts/check-electron-runtime.ts",
-    "stage:desktop": "tsx scripts/stage-desktop-runtime.ts",
+    "stage:desktop": "pnpm run agent-sdk:build && tsx scripts/stage-desktop-runtime.ts",
     "build:artifacts": "pnpm run bundle:server && pnpm run build:web && pnpm run build:desktop",
     "build": "pnpm run typecheck && pnpm run build:artifacts",
     "budgets:warn": "tsx scripts/check-performance-budgets.ts",

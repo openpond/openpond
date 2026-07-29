@@ -19,7 +19,10 @@ import {
   type Turn,
 } from "../packages/contracts/src";
 import { runProfileSkillCommand } from "../packages/cloud/src/profile/profile-skill-mutations";
-import { loadProfileSkills, readProfileSkill } from "../packages/cloud/src/profile/profile-skills";
+import {
+  loadProfileSkills,
+  readProfileSkill,
+} from "../packages/cloud/src/profile/profile-skills";
 import {
   baseSession,
   createByokTurnRunnerHarness,
@@ -29,6 +32,34 @@ import {
 } from "./helpers/byok-turn-runner-harness";
 
 describe("BYOK turn runner dispatch", () => {
+  test.each([
+    ["chat", false],
+    ["work", true],
+  ] as const)(
+    "%s direct answers do not provision workspace compute",
+    async (experience, exposesWorkTools) => {
+      const harness = createByokTurnRunnerHarness({
+        toolArgs: null,
+        sessionOverrides: { experience },
+        finalText: "Answered directly.",
+      });
+
+      const turn = await harness.runner.sendTurn("session_1", {
+        prompt: "Explain the supplied information.",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      });
+
+      expect(turn.status).toBe("completed");
+      expect(harness.streamInputs).toHaveLength(1);
+      const toolNames = harness.streamInputs[0].tools.map(
+        (tool: any) => tool.function.name
+      );
+      expect(toolNames.includes("work_environment")).toBe(exposesWorkTools);
+      expect(toolNames).not.toContain("sandbox_create");
+      expect(toolNames).not.toContain("sandbox_exec");
+    }
+  );
+
   test("finalizes generated local-adapter turns through the persisted chat-attempt boundary", async () => {
     const finalized: Array<Record<string, unknown>> = [];
     const harness = createByokTurnRunnerHarness({
@@ -43,7 +74,11 @@ describe("BYOK turn runner dispatch", () => {
       },
       finalizeCrossSystemTurn: async (input) => {
         finalized.push(input);
-        return { attemptId: `attempt_chat_${input.turnId}`, gradeId: "grade_chat", generatedTaskId: input.taskId };
+        return {
+          attemptId: `attempt_chat_${input.turnId}`,
+          gradeId: "grade_chat",
+          generatedTaskId: input.taskId,
+        };
       },
     });
 
@@ -63,9 +98,14 @@ describe("BYOK turn runner dispatch", () => {
       userPrompt: "Generated question",
       taskId: "cso_generated_1",
     });
-    expect(harness.events.some((item) => (
-      item.name === "diagnostic" && item.output === "Persisted and graded the generated Cross-System Operations chat attempt."
-    ))).toBe(true);
+    expect(
+      harness.events.some(
+        (item) =>
+          item.name === "diagnostic" &&
+          item.output ===
+            "Persisted and graded the generated Cross-System Operations chat attempt."
+      )
+    ).toBe(true);
   });
 
   test("finalizes failed generated local-adapter turns and classifies model protocol failures as policy evidence", async () => {
@@ -85,7 +125,11 @@ describe("BYOK turn runner dispatch", () => {
       },
       finalizeCrossSystemTurn: async (input) => {
         finalized.push(input);
-        return { attemptId: `attempt_chat_${input.turnId}`, gradeId: "grade_failed_chat", generatedTaskId: input.taskId };
+        return {
+          attemptId: `attempt_chat_${input.turnId}`,
+          gradeId: "grade_failed_chat",
+          generatedTaskId: input.taskId,
+        };
       },
     });
 
@@ -105,9 +149,14 @@ describe("BYOK turn runner dispatch", () => {
         failureClass: "policy_failure",
       },
     });
-    expect(harness.events.some((item) => (
-      item.name === "diagnostic" && item.output === "Persisted and graded the failed generated Cross-System Operations chat attempt."
-    ))).toBe(true);
+    expect(
+      harness.events.some(
+        (item) =>
+          item.name === "diagnostic" &&
+          item.output ===
+            "Persisted and graded the failed generated Cross-System Operations chat attempt."
+      )
+    ).toBe(true);
   });
 
   test("omits workflow delegation tools for terminal one-shot turns", async () => {
@@ -129,11 +178,15 @@ describe("BYOK turn runner dispatch", () => {
     });
 
     expect(turn.status).toBe("completed");
-    const toolNames = harness.streamInputs[0].tools.map((tool: any) => tool.function.name);
+    const toolNames = harness.streamInputs[0].tools.map(
+      (tool: any) => tool.function.name
+    );
     expect(toolNames).not.toContain("openpond_create_improve");
     expect(toolNames).not.toContain("openpond_goal_control");
     expect(toolNames).not.toContain("openpond_profile_skill_goal");
-    expect(toolNames).toEqual(expect.arrayContaining(["resource_search", "resource_read"]));
+    expect(toolNames).toEqual(
+      expect.arrayContaining(["resource_search", "resource_read"])
+    );
   });
 
   test("rejects /goal before invoking a non-Codex provider", async () => {
@@ -142,10 +195,14 @@ describe("BYOK turn runner dispatch", () => {
       providerId: "openrouter",
     });
 
-    await expect(harness.runner.sendTurn("session_1", {
-      prompt: "/goal review this repository",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-    })).rejects.toThrow("/goal is only available with the Codex provider.");
+    await expect(
+      harness.runner.sendTurn("session_1", {
+        prompt: "/goal review this repository",
+        modelRef: { providerId: "openrouter", modelId: "test/model" },
+      })
+    ).rejects.toThrow(
+      "/goal is only available in Development with the Codex provider."
+    );
     expect(harness.streamInputs).toHaveLength(0);
   });
 
@@ -261,11 +318,21 @@ describe("BYOK turn runner dispatch", () => {
     });
 
     expect(turn.status).toBe("completed");
-    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(true);
-    expect(harness.events.some((event) => event.name === "session.compaction.completed")).toBe(true);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.started"
+      )
+    ).toBe(true);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.completed"
+      )
+    ).toBe(true);
     expect(harness.usageRecords).toHaveLength(2);
 
-    const compactionUsage = harness.usageRecords.find((record) => record.requestKind === "context_compaction");
+    const compactionUsage = harness.usageRecords.find(
+      (record) => record.requestKind === "context_compaction"
+    );
     expect(compactionUsage).toMatchObject({
       requestId: `${turn.id}:context-compaction:0`,
       requestOrdinal: 0,
@@ -290,7 +357,9 @@ describe("BYOK turn runner dispatch", () => {
     });
     expect(compactionUsage?.firstTokenMs).not.toBeNull();
 
-    const chatUsage = harness.usageRecords.find((record) => record.requestKind === "chat_turn");
+    const chatUsage = harness.usageRecords.find(
+      (record) => record.requestKind === "chat_turn"
+    );
     expect(chatUsage).toMatchObject({
       requestId: `${turn.id}:model:0`,
       source: "provider_usage",
@@ -334,8 +403,16 @@ describe("BYOK turn runner dispatch", () => {
 
     expect(turn.status).toBe("failed");
     expect(turn.error).toContain("Start a new chat or turn auto compaction on");
-    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
-    expect(harness.events.some((event) => event.name === "session.compaction.completed")).toBe(false);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.started"
+      )
+    ).toBe(false);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.completed"
+      )
+    ).toBe(false);
     expect(harness.usageRecords).toHaveLength(0);
     expect(harness.streamInputs).toHaveLength(0);
   });
@@ -372,13 +449,17 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.streamInputs[1].messages).toContainEqual(
       expect.objectContaining({
         role: "system",
-        content: expect.stringContaining("Conversation summary from earlier turns"),
-      }),
+        content: expect.stringContaining(
+          "Conversation summary from earlier turns"
+        ),
+      })
     );
     expect(JSON.stringify(harness.streamInputs[1].messages)).not.toContain(
-      "We need to preserve the durable support workflow requirements.",
+      "We need to preserve the durable support workflow requirements."
     );
-    const completed = harness.events.find((event) => event.name === "session.compaction.completed");
+    const completed = harness.events.find(
+      (event) => event.name === "session.compaction.completed"
+    );
     expect(completed?.data).toMatchObject({
       provider: "openrouter",
       model: "test/model",
@@ -418,8 +499,14 @@ describe("BYOK turn runner dispatch", () => {
     });
 
     expect(turn.status).toBe("completed");
-    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(true);
-    const failed = harness.events.find((event) => event.name === "session.compaction.failed");
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.started"
+      )
+    ).toBe(true);
+    const failed = harness.events.find(
+      (event) => event.name === "session.compaction.failed"
+    );
     expect(failed).toMatchObject({
       status: "failed",
       error: "stream failed on pass 1",
@@ -429,9 +516,11 @@ describe("BYOK turn runner dispatch", () => {
       expect.objectContaining({
         role: "user",
         content: "answer after failed BYOK compaction",
-      }),
+      })
     );
-    expect(harness.usageRecords.map((record) => [record.requestKind, record.status])).toEqual([
+    expect(
+      harness.usageRecords.map((record) => [record.requestKind, record.status])
+    ).toEqual([
       ["context_compaction", "failed"],
       ["chat_turn", "completed"],
     ]);
@@ -467,7 +556,11 @@ describe("BYOK turn runner dispatch", () => {
 
     expect(turn.status).toBe("failed");
     expect(turn.error).toContain("Start a new chat or turn auto compaction on");
-    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.started"
+      )
+    ).toBe(false);
     expect(harness.streamInputs).toHaveLength(0);
     expect(harness.usageRecords).toHaveLength(0);
   });
@@ -486,7 +579,9 @@ describe("BYOK turn runner dispatch", () => {
     });
 
     expect(turn.status).toBe("completed");
-    const contextEvents = harness.events.filter((event) => event.name === "session.context.updated");
+    const contextEvents = harness.events.filter(
+      (event) => event.name === "session.context.updated"
+    );
     expect(contextEvents).toHaveLength(2);
     expect(contextEvents.at(-1)?.data).toMatchObject({
       provider: "openrouter",
@@ -497,7 +592,11 @@ describe("BYOK turn runner dispatch", () => {
       percentFull: 13,
       source: "provider_usage",
     });
-    expect(harness.events.some((event) => event.name === "session.compaction.started")).toBe(false);
+    expect(
+      harness.events.some(
+        (event) => event.name === "session.compaction.started"
+      )
+    ).toBe(false);
   });
 
   test("records tool-loop follow-up requests with stable request ordinals", async () => {
@@ -522,16 +621,32 @@ describe("BYOK turn runner dispatch", () => {
       `${turn.id}:model:0`,
       `${turn.id}:model:1`,
     ]);
-    expect(harness.usageRecords.map((record) => record.requestOrdinal)).toEqual([0, 1]);
-    expect(harness.usageRecords.map((record) => record.requestKind)).toEqual(["chat_turn", "tool_loop"]);
-    expect(harness.usageRecords.map((record) => record.totalTokens)).toEqual([32, 45]);
-    expect(harness.usageRecords[0]?.attribution.workflowKind).toBe("direct_chat");
+    expect(harness.usageRecords.map((record) => record.requestOrdinal)).toEqual(
+      [0, 1]
+    );
+    expect(harness.usageRecords.map((record) => record.requestKind)).toEqual([
+      "chat_turn",
+      "tool_loop",
+    ]);
+    expect(harness.usageRecords.map((record) => record.totalTokens)).toEqual([
+      32, 45,
+    ]);
+    expect(harness.usageRecords[0]?.attribution.workflowKind).toBe(
+      "direct_chat"
+    );
     expect(harness.usageRecords[1]?.attribution.workflowKind).toBe("tool_loop");
-    expect(harness.events.some((event) => event.name === "tool.completed" && event.action === "missing_test_tool")).toBe(true);
+    expect(
+      harness.events.some(
+        (event) =>
+          event.name === "tool.completed" &&
+          event.action === "missing_test_tool"
+      )
+    ).toBe(true);
   });
 
   test("replays ZAI preserved thinking with assistant tool calls", async () => {
-    const reasoningContent = "I need to complete the tool call before I can report completion.";
+    const reasoningContent =
+      "I need to complete the tool call before I can report completion.";
     const harness = createByokTurnRunnerHarness({
       providerId: "zai",
       modelId: "glm-5.2",
@@ -539,7 +654,10 @@ describe("BYOK turn runner dispatch", () => {
         unexpected: true,
       },
       reasoningTextOnToolCall: reasoningContent,
-      continuationOnToolCall: { kind: "chat_completions_reasoning", reasoningContent },
+      continuationOnToolCall: {
+        kind: "chat_completions_reasoning",
+        reasoningContent,
+      },
       finalText: "Tool loop completed.",
     });
 
@@ -550,20 +668,25 @@ describe("BYOK turn runner dispatch", () => {
 
     expect(turn.status).toBe("completed");
     expect(harness.streamInputs).toHaveLength(2);
-    expect(harness.streamInputs[1].messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        role: "assistant",
-        content: "",
-        continuation: { kind: "chat_completions_reasoning", reasoningContent },
-        tool_calls: expect.arrayContaining([
-          expect.objectContaining({ id: "call_test_tool" }),
-        ]),
-      }),
-      expect.objectContaining({
-        role: "tool",
-        tool_call_id: "call_test_tool",
-      }),
-    ]));
+    expect(harness.streamInputs[1].messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: "assistant",
+          content: "",
+          continuation: {
+            kind: "chat_completions_reasoning",
+            reasoningContent,
+          },
+          tool_calls: expect.arrayContaining([
+            expect.objectContaining({ id: "call_test_tool_1_0" }),
+          ]),
+        }),
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_test_tool_1_0",
+        }),
+      ])
+    );
   });
 
   test("records failed provider requests in the usage ledger", async () => {
@@ -602,7 +725,10 @@ describe("BYOK turn runner dispatch", () => {
   test("allows concurrent turns in different sessions while rejecting duplicate turns in one session", async () => {
     const sessions = new Map<string, Session>([
       ["session_1", baseSession()],
-      ["session_2", baseSession({ id: "session_2", title: "Second BYOK chat" })],
+      [
+        "session_2",
+        baseSession({ id: "session_2", title: "Second BYOK chat" }),
+      ],
     ]);
     const turns: Turn[] = [];
     const events: RuntimeEvent[] = [];
@@ -631,11 +757,15 @@ describe("BYOK turn runner dispatch", () => {
           return turns[index]!;
         },
         async getApproval(approvalId) {
-          return approvals.find((approval) => approval.id === approvalId) ?? null;
+          return (
+            approvals.find((approval) => approval.id === approvalId) ?? null
+          );
         },
       }),
       upsertApproval: async (approval) => {
-        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        const index = approvals.findIndex(
+          (candidate) => candidate.id === approval.id
+        );
         if (index === -1) approvals.push(approval);
         else approvals[index] = approval;
       },
@@ -713,9 +843,14 @@ describe("BYOK turn runner dispatch", () => {
         await releaseStreams.promise;
         const turnId = input.requestId?.split(":model:")[0] ?? null;
         const turn = turns.find((candidate) => candidate.id === turnId);
-        yield { text: `BYOK done ${turn?.sessionId ?? "unknown"}`, raw: { ok: true } };
+        yield {
+          text: `BYOK done ${turn?.sessionId ?? "unknown"}`,
+          raw: { ok: true },
+        };
       },
-      turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-concurrent" }),
+      turnFollowUpQueue: createBackgroundWorkerQueue({
+        queueId: "turn-follow-up-concurrent",
+      }),
       maxHostedWorkspaceToolRounds: 1,
       maxRepeatedInvalidToolRequests: 1,
     });
@@ -730,7 +865,7 @@ describe("BYOK turn runner dispatch", () => {
       runner.sendTurn("session_1", {
         prompt: "duplicate",
         modelRef: { providerId: "openrouter", modelId: "test/model" },
-      }),
+      })
     ).rejects.toThrow("A turn is already running for this chat.");
 
     const secondTurnPromise = runner.sendTurn("session_2", {
@@ -740,14 +875,32 @@ describe("BYOK turn runner dispatch", () => {
     await secondStreamStarted.promise;
 
     releaseStreams.resolve();
-    const [firstTurn, secondTurn] = await Promise.all([firstTurnPromise, secondTurnPromise]);
+    const [firstTurn, secondTurn] = await Promise.all([
+      firstTurnPromise,
+      secondTurnPromise,
+    ]);
 
     expect(firstTurn.status).toBe("completed");
     expect(secondTurn.status).toBe("completed");
     expect(streamStarts).toBe(2);
-    expect(turns.map((turn) => turn.prompt).sort()).toEqual(["first", "second"]);
-    expect(events.some((event) => event.sessionId === "session_1" && event.output === "BYOK done session_1")).toBe(true);
-    expect(events.some((event) => event.sessionId === "session_2" && event.output === "BYOK done session_2")).toBe(true);
+    expect(turns.map((turn) => turn.prompt).sort()).toEqual([
+      "first",
+      "second",
+    ]);
+    expect(
+      events.some(
+        (event) =>
+          event.sessionId === "session_1" &&
+          event.output === "BYOK done session_1"
+      )
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) =>
+          event.sessionId === "session_2" &&
+          event.output === "BYOK done session_2"
+      )
+    ).toBe(true);
   });
 
   test("allows a follow-up turn after interrupting a still-unwinding active turn", async () => {
@@ -779,17 +932,23 @@ describe("BYOK turn runner dispatch", () => {
           return turns[index]!;
         },
         async getApproval(approvalId) {
-          return approvals.find((approval) => approval.id === approvalId) ?? null;
+          return (
+            approvals.find((approval) => approval.id === approvalId) ?? null
+          );
         },
         async upsertModelUsageRecord(record) {
-          const index = usageRecords.findIndex((candidate) => candidate.requestId === record.requestId);
+          const index = usageRecords.findIndex(
+            (candidate) => candidate.requestId === record.requestId
+          );
           if (index === -1) usageRecords.push(record);
           else usageRecords[index] = record;
           return record;
         },
       }),
       upsertApproval: async (approval) => {
-        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        const index = approvals.findIndex(
+          (candidate) => candidate.id === approval.id
+        );
         if (index === -1) approvals.push(approval);
         else approvals[index] = approval;
       },
@@ -861,15 +1020,24 @@ describe("BYOK turn runner dispatch", () => {
         } else {
           secondStreamStarted.resolve();
         }
-        yield { text: `BYOK done ${turn?.prompt ?? "unknown"}`, raw: { ok: true } };
+        yield {
+          text: `BYOK done ${turn?.prompt ?? "unknown"}`,
+          raw: { ok: true },
+        };
         if (turn?.prompt === "second") {
           yield {
-            usage: { prompt_tokens: 10, completion_tokens: 3, total_tokens: 13 },
+            usage: {
+              prompt_tokens: 10,
+              completion_tokens: 3,
+              total_tokens: 13,
+            },
             raw: { ok: true, usage: true },
           };
         }
       },
-      turnFollowUpQueue: createBackgroundWorkerQueue({ queueId: "turn-follow-up-interrupt" }),
+      turnFollowUpQueue: createBackgroundWorkerQueue({
+        queueId: "turn-follow-up-interrupt",
+      }),
       maxHostedWorkspaceToolRounds: 1,
       maxRepeatedInvalidToolRequests: 1,
     });
@@ -890,14 +1058,19 @@ describe("BYOK turn runner dispatch", () => {
     await secondStreamStarted.promise;
 
     releaseFirstStream.resolve();
-    const [firstTurn, secondTurn] = await Promise.all([firstTurnPromise, secondTurnPromise]);
+    const [firstTurn, secondTurn] = await Promise.all([
+      firstTurnPromise,
+      secondTurnPromise,
+    ]);
 
     expect(firstTurn.status).toBe("interrupted");
     expect(secondTurn.status).toBe("completed");
     expect(turns.map((turn) => turn.prompt)).toEqual(["first", "second"]);
     expect(usageRecords).toHaveLength(2);
 
-    const interruptedUsage = usageRecords.find((record) => record.turnId === firstTurn.id);
+    const interruptedUsage = usageRecords.find(
+      (record) => record.turnId === firstTurn.id
+    );
     expect(interruptedUsage).toMatchObject({
       requestId: `${firstTurn.id}:model:0`,
       sessionId: "session_1",
@@ -924,7 +1097,9 @@ describe("BYOK turn runner dispatch", () => {
     });
     expect(interruptedUsage?.durationMs).not.toBeNull();
 
-    const completedUsage = usageRecords.find((record) => record.turnId === secondTurn.id);
+    const completedUsage = usageRecords.find(
+      (record) => record.turnId === secondTurn.id
+    );
     expect(completedUsage).toMatchObject({
       requestId: `${secondTurn.id}:model:0`,
       status: "completed",

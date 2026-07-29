@@ -1,6 +1,9 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import type { ChatAttachment, ChatAttachmentSummary } from "@openpond/contracts";
+import type {
+  ChatAttachment,
+  ChatAttachmentSummary,
+} from "@openpond/contracts";
 
 const ATTACHMENT_CONTEXT_TEXT_LIMIT = 120_000;
 const MAX_CHAT_ATTACHMENT_IMAGE_BYTES = 15 * 1024 * 1024;
@@ -11,7 +14,9 @@ const CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES = new Map<string, string>([
   [".png", "image/png"],
   [".webp", "image/webp"],
 ]);
-const CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES = new Set(CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.values());
+const CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES = new Set(
+  CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.values()
+);
 
 export type ChatAttachmentContextItem = ChatAttachmentSummary & {
   localPath?: string;
@@ -38,7 +43,7 @@ export async function materializeChatAttachments(input: {
   const turnDir = path.join(
     input.attachmentRootDir,
     safeChatAttachmentPathSegment(input.sessionId),
-    safeChatAttachmentPathSegment(input.turnId),
+    safeChatAttachmentPathSegment(input.turnId)
   );
   const usedNames = new Set<string>();
   const contexts: ChatAttachmentContextItem[] = [];
@@ -52,9 +57,18 @@ export async function materializeChatAttachments(input: {
 
     if (attachment.contentsBase64) {
       await fs.mkdir(turnDir, { recursive: true });
-      const safeName = uniqueSafeFileName(attachment.name, usedNames, index + 1);
+      const safeName = uniqueSafeFileName(
+        attachment.relativePath || attachment.name,
+        usedNames,
+        index + 1
+      );
       const localPath = path.join(turnDir, safeName);
-      await fs.writeFile(localPath, Buffer.from(attachment.contentsBase64, "base64"), { mode: 0o600 });
+      await fs.mkdir(path.dirname(localPath), { recursive: true });
+      await fs.writeFile(
+        localPath,
+        Buffer.from(attachment.contentsBase64, "base64"),
+        { mode: 0o600 }
+      );
       context.localPath = localPath;
       context.storageName = safeName;
     }
@@ -71,13 +85,18 @@ export function chatAttachmentSummaries(
     sessionId: string;
     turnId: string;
     materialized: ChatAttachmentContextItem[];
-  },
+  }
 ): ChatAttachmentSummary[] {
-  const materializedById = new Map(previewContext?.materialized.map((item) => [item.id, item]) ?? []);
+  const materializedById = new Map(
+    previewContext?.materialized.map((item) => [item.id, item]) ?? []
+  );
   return (attachments ?? []).map((attachment) => {
     const summary = chatAttachmentSummary(attachment);
     const materialized = materializedById.get(attachment.id);
-    const previewContentType = chatAttachmentImageContentType(attachment.mediaType, materialized?.storageName ?? attachment.name);
+    const previewContentType = chatAttachmentImageContentType(
+      attachment.mediaType,
+      materialized?.storageName ?? attachment.name
+    );
     if (
       previewContext &&
       summary.kind === "image" &&
@@ -100,26 +119,37 @@ export function chatAttachmentSummaries(
   });
 }
 
-export function chatAttachmentContext(attachments?: ChatAttachmentContextItem[]): string {
+export function chatAttachmentContext(
+  attachments?: ChatAttachmentContextItem[]
+): string {
   if (!attachments || attachments.length === 0) return "";
 
   const lines = [
     "<attachments>",
-    `The user attached ${attachments.length} file${attachments.length === 1 ? "" : "s"} with this message.`,
+    `The user attached ${attachments.length} file${
+      attachments.length === 1 ? "" : "s"
+    } with this message.`,
   ];
   let remainingTextChars = ATTACHMENT_CONTEXT_TEXT_LIMIT;
 
   for (const [index, attachment] of attachments.entries()) {
-    const location = attachment.localPath ? ` Saved locally at: ${attachment.localPath}` : "";
+    const location = attachment.localPath
+      ? ` Saved locally at: ${attachment.localPath}`
+      : "";
     lines.push(
-      `${index + 1}. ${attachment.name} (${attachment.mediaType}, ${formatBytes(attachment.sizeBytes)}, ${attachment.kind}).${location}`,
+      `${index + 1}. ${attachment.name} (${attachment.mediaType}, ${formatBytes(
+        attachment.sizeBytes
+      )}, ${attachment.kind}).${location}`
     );
 
     const text = attachment.text?.trim();
     if (text && remainingTextChars > 0) {
       const value =
         text.length > remainingTextChars
-          ? `${text.slice(0, Math.max(0, remainingTextChars - 34))}\n[attachment text truncated]`
+          ? `${text.slice(
+              0,
+              Math.max(0, remainingTextChars - 34)
+            )}\n[attachment text truncated]`
           : text;
       lines.push("Text content:");
       lines.push("~~~text");
@@ -133,19 +163,29 @@ export function chatAttachmentContext(attachments?: ChatAttachmentContextItem[])
   return lines.join("\n");
 }
 
-export function formatPromptWithAttachmentContext(prompt: string, attachmentContext: string): string {
+export function formatPromptWithAttachmentContext(
+  prompt: string,
+  attachmentContext: string
+): string {
   const trimmedPrompt = prompt.trim() || "Please review the attached files.";
   const trimmedContext = attachmentContext.trim();
-  return trimmedContext ? `${trimmedPrompt}\n\n${trimmedContext}` : trimmedPrompt;
+  return trimmedContext
+    ? `${trimmedPrompt}\n\n${trimmedContext}`
+    : trimmedPrompt;
 }
 
-function chatAttachmentSummary(attachment: ChatAttachment): ChatAttachmentSummary {
+function chatAttachmentSummary(
+  attachment: ChatAttachment
+): ChatAttachmentSummary {
   return {
     id: attachment.id,
     name: attachment.name,
     mediaType: attachment.mediaType,
     sizeBytes: attachment.sizeBytes,
     kind: attachment.kind,
+    ...(attachment.relativePath
+      ? { relativePath: attachment.relativePath }
+      : {}),
   };
 }
 
@@ -159,16 +199,25 @@ export async function readChatAttachmentImageFile(input: {
   const sessionSegment = safeChatAttachmentPathSegment(input.sessionId);
   const turnSegment = safeChatAttachmentPathSegment(input.turnId);
   const storageName = cleanStorageName(input.storageName);
-  const contentType = chatAttachmentImageContentType(input.contentType, storageName ?? "");
+  const contentType = chatAttachmentImageContentType(
+    input.contentType,
+    storageName ?? ""
+  );
   if (!storageName || !contentType) return null;
 
-  const turnDir = path.resolve(input.attachmentRootDir, sessionSegment, turnSegment);
+  const turnDir = path.resolve(
+    input.attachmentRootDir,
+    sessionSegment,
+    turnSegment
+  );
   const target = path.resolve(turnDir, storageName);
-  if (target !== turnDir && !target.startsWith(`${turnDir}${path.sep}`)) return null;
+  if (target !== turnDir && !target.startsWith(`${turnDir}${path.sep}`))
+    return null;
 
   try {
     const stat = await fs.lstat(target);
-    if (!stat.isFile() || stat.size > MAX_CHAT_ATTACHMENT_IMAGE_BYTES) return null;
+    if (!stat.isFile() || stat.size > MAX_CHAT_ATTACHMENT_IMAGE_BYTES)
+      return null;
     return {
       path: storageName,
       contentType,
@@ -180,24 +229,49 @@ export async function readChatAttachmentImageFile(input: {
   }
 }
 
-export function chatAttachmentImageContentType(mediaType: string, fileName: string): string | null {
-  const normalizedMediaType = mediaType.split(";")[0]?.trim().toLowerCase() ?? "";
-  if (CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES.has(normalizedMediaType)) return normalizedMediaType;
-  return CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.get(path.extname(fileName).toLowerCase()) ?? null;
+export function chatAttachmentImageContentType(
+  mediaType: string,
+  fileName: string
+): string | null {
+  const normalizedMediaType =
+    mediaType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES.has(normalizedMediaType))
+    return normalizedMediaType;
+  return (
+    CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.get(
+      path.extname(fileName).toLowerCase()
+    ) ?? null
+  );
 }
 
 export function safeChatAttachmentPathSegment(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "item";
+  return (
+    value
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "item"
+  );
 }
 
 function cleanStorageName(value: string): string | null {
   const trimmed = value.trim();
-  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed)) return null;
+  if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed))
+    return null;
   return path.basename(trimmed);
 }
 
-function uniqueSafeFileName(name: string, usedNames: Set<string>, fallbackIndex: number): string {
-  const normalized = path.basename(name).replace(/[^a-zA-Z0-9._ -]+/g, "-").trim();
+function uniqueSafeFileName(
+  name: string,
+  usedNames: Set<string>,
+  fallbackIndex: number
+): string {
+  const normalized = name
+    .replaceAll("\\", "/")
+    .split("/")
+    .filter((part) => part && part !== "." && part !== "..")
+    .map((part) => part.replace(/[^a-zA-Z0-9._ -]+/g, "-").trim())
+    .filter(Boolean)
+    .join("/");
   const safeName = normalized || `attachment-${fallbackIndex}`;
   let candidate = safeName;
   let index = 2;

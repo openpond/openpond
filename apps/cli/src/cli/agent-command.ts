@@ -14,7 +14,7 @@ import {
   parseAgentTriggerType,
 } from "./project-agent-inputs";
 import { formatAgentLine } from "./project-agent-formatters";
-import { runAgentEditWorkflow, runAgentSourceWorkflow } from "./agent-source-workflows";
+import { runAgentSourceWorkflow } from "./agent-source-workflows";
 import {
   runLocalAgentSdkCommand,
   shouldDelegateLocalAgentSdkCommand,
@@ -163,11 +163,6 @@ export async function runAgentCommand(
         2
       )
     );
-    return;
-  }
-
-  if (subcommand === "edit") {
-    await runAgentEditWorkflow(client, options, rest);
     return;
   }
 

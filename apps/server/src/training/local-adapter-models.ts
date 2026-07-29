@@ -6,6 +6,7 @@ import {
   ProviderModelSchema,
   ProviderSettingsSchema,
   ProviderStatusSchema,
+  managedAdapterProjectionReady,
   type ProviderModel,
   type ProviderSettings,
   type Taskset,
@@ -15,12 +16,13 @@ import type { SqliteStore } from "../store/store.js";
 export const LOCAL_ADAPTER_PROVIDER_ID = "local-adapter" as const;
 
 export async function listLocalAdapterProviderModels(store: SqliteStore): Promise<ProviderModel[]> {
-  const [lineages, artifacts, jobs, plans, bindings] = await Promise.all([
+  const [lineages, artifacts, jobs, plans, bindings, modelProjects] = await Promise.all([
     store.listModelArtifactLineage(),
     store.listTrainingArtifacts(),
     store.listTrainingJobs(),
     store.listTrainingPlans(),
     store.listModelBindings(),
+    store.listModelProjects(),
   ]);
   const tasksets = (await Promise.all(
     [...new Set(lineages.map((lineage) => lineage.tasksetId))].map((tasksetId) => store.getTaskset(tasksetId)),
@@ -29,6 +31,7 @@ export async function listLocalAdapterProviderModels(store: SqliteStore): Promis
   const tasksetById = new Map(tasksets.map((taskset) => [taskset.id, taskset]));
   const jobById = new Map(jobs.map((job) => [job.id, job]));
   const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  const modelProjectById = new Map(modelProjects.map((project) => [project.id, project]));
   const activeBindingsByLineage = new Map<string, string[]>();
   for (const binding of bindings) {
     if (binding.status !== "active") continue;
@@ -49,14 +52,23 @@ export async function listLocalAdapterProviderModels(store: SqliteStore): Promis
       const job = jobById.get(lineage.jobId);
       const taskset = tasksetById.get(lineage.tasksetId);
       const plan = job ? planById.get(job.planId) : null;
-      if (!artifact || artifact.kind !== "adapter" || !job || job.status !== "succeeded" || !taskset || !plan) {
+      const retainedManagedProjection =
+        lineage.managedServing?.source === "openpond_training" &&
+        managedAdapterProjectionReady(lineage.managedServing);
+      if (
+        !artifact ||
+        artifact.kind !== "adapter" ||
+        !taskset ||
+        (!retainedManagedProjection &&
+          (!job || job.status !== "succeeded" || !plan))
+      ) {
         return null;
       }
       const toolCalling = supportsCrossSystemToolCalling(taskset);
       return ProviderModelSchema.parse({
         id: lineage.id,
         providerId: LOCAL_ADAPTER_PROVIDER_ID,
-        displayName: taskset.name,
+        displayName: modelProjectById.get(lineage.modelId)?.name ?? taskset.name,
         contextWindow: lineage.chatConfiguration.contextWindowTokens,
         outputLimit: lineage.chatConfiguration.maxOutputTokens,
         lifecycleStatus: "preview",
@@ -71,12 +83,16 @@ export async function listLocalAdapterProviderModels(store: SqliteStore): Promis
         raw: {
           lineageId: lineage.id,
           artifactId: artifact.id,
-          jobId: job.id,
+          jobId: lineage.jobId,
           tasksetId: taskset.id,
           baseModelId: artifact.baseModelId,
           nonProduction: artifact.nonProduction,
           chatConfiguration: lineage.chatConfiguration,
-          trainingMethod: plan.recipe.method,
+          trainingMethod:
+            plan?.recipe.method ??
+            (typeof taskset.metadata.trainingMethod === "string"
+              ? taskset.metadata.trainingMethod
+              : null),
           toolContractHash: toolCalling ? CROSS_SYSTEM_TOOL_CONTRACT_HASH : null,
           activeBindingRoles: activeBindingsByLineage.get(lineage.id) ?? [],
         },
@@ -114,7 +130,7 @@ export function withLocalAdapterProviderModels(
   });
   const status = ProviderStatusSchema.parse({
     id: LOCAL_ADAPTER_PROVIDER_ID,
-    displayName: "Local trained models",
+    displayName: "My Models",
     lifecycleStatus: "preview",
     credentialModes: [],
     routing: { localRuntime: true },

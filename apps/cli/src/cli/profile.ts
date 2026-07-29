@@ -354,14 +354,6 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
           throw new Error(hostedSourceChecks.dispatchResult.error ?? "hosted_source_check_dispatch_failed");
         }
         if (hostedSourceChecks.dispatchResult?.status === "completed") {
-          const refreshed = await refreshHostedSourceCheckStatus({
-            client,
-            teamId,
-            checkResult: hostedSourceChecks,
-          });
-          if (refreshed) {
-            hostedSourceChecks = refreshed as typeof hostedSourceChecks;
-          }
           const sourceCheckStatus = record((hostedSourceChecks as Record<string, unknown>).sourceCheckStatus);
           if (sourceCheckStatusPassed(sourceCheckStatus)) {
             await bindValidatedHostedRuntimeSource({
@@ -425,7 +417,6 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
         ...(pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? result.sourceUpload.sourceCommitSha
           ? { expectedSourceCommitSha: pushStatus.hostedSourceMaterialization?.sourceCommitSha ?? result.sourceUpload.sourceCommitSha }
           : {}),
-        ...(optionString(options, "workItemId") ? { workItemId: optionString(options, "workItemId") } : {}),
       });
       pushStatus = {
         ...pushStatus,
@@ -595,10 +586,7 @@ async function runProfilePushCommand(options: CliOptions): Promise<void> {
     );
   }
   if (pushStatus.hostedSourceCheck) {
-    console.log(
-      `Hosted source checks: ${pushStatus.hostedSourceCheck.status}` +
-        (pushStatus.hostedSourceCheck.workItemId ? ` ${pushStatus.hostedSourceCheck.workItemId}` : "")
-    );
+    console.log(`Hosted source checks: ${pushStatus.hostedSourceCheck.status}`);
   }
   if (pushStatus.hostedPublish) {
     console.log(
@@ -718,26 +706,6 @@ function resolveHostedRuntimeAgentIdForRun(
     return materialization.runtimeAgentId;
   }
   return hostedRunAgentId;
-}
-
-async function refreshHostedSourceCheckStatus(input: {
-  client: Awaited<ReturnType<typeof resolveSandboxClient>>;
-  teamId: string;
-  checkResult: Awaited<ReturnType<Awaited<ReturnType<typeof resolveSandboxClient>>["agents"]["requestSourceChecks"]>>;
-}): Promise<Record<string, unknown> | null> {
-  const workItemId = text(record(input.checkResult.workItem)?.id);
-  if (!workItemId) return null;
-  const status = await input.client.workItems.status(workItemId, {
-    teamId: input.teamId,
-    includeArchived: true,
-    limit: 50,
-  });
-  return {
-    ...input.checkResult,
-    workItem: status.workItem,
-    activity: status.activity,
-    sourceCheckStatus: status.sourceCheckStatus,
-  };
 }
 
 async function bindValidatedHostedRuntimeSource(input: {
@@ -944,7 +912,6 @@ function printProfileState(state: Awaited<ReturnType<typeof loadOpenPondProfileS
     if (state.hosted.hostedSourceCheck) {
       console.log(
         `Hosted checks: ${state.hosted.hostedSourceCheck.status}` +
-          (state.hosted.hostedSourceCheck.workItemId ? ` ${state.hosted.hostedSourceCheck.workItemId}` : "") +
           (state.hosted.hostedSourceCheck.sandboxId ? ` sandbox ${state.hosted.hostedSourceCheck.sandboxId}` : "")
       );
     }

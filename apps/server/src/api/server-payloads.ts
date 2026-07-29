@@ -8,6 +8,7 @@ import {
   PatchSidebarFileBookmarkRequestSchema,
   RecordClientDiagnosticRequestSchema,
   RecordPreflightTurnFailureRequestSchema,
+  RemoveOpenPondAccountRequestSchema,
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
@@ -44,17 +45,27 @@ import {
 import {
   loadOpenPondAccountContext,
   loadOpenPondApps,
+  removeOpenPondAccount,
   saveOpenPondAccount,
   switchOpenPondAccount,
   updateOpenPondAccountConfig,
 } from "@openpond/runtime";
 import {
-  createGithubExtensionManager, emptyProfileState, initLocalProfileRepo,
-  loadOpenPondProfileLibrary, loadOpenPondProfileState,
+  createGithubExtensionManager,
+  emptyProfileState,
+  initLocalProfileRepo,
+  loadOpenPondProfileLibrary,
+  loadOpenPondProfileState,
 } from "@openpond/cloud";
-import { APP_PREFERENCES_CACHE_KEY, APP_PREFERENCES_CACHE_TYPE } from "../constants.js";
+import {
+  APP_PREFERENCES_CACHE_KEY,
+  APP_PREFERENCES_CACHE_TYPE,
+} from "../constants.js";
 import { normalizeAppPreferences } from "../preferences.js";
-import { loadPersonalizationSettings, savePersonalizationSettings } from "../openpond/personalization.js";
+import {
+  loadPersonalizationSettings,
+  savePersonalizationSettings,
+} from "../openpond/personalization.js";
 import {
   loadCodexPersonalSkills,
   readCodexPersonalSkillFile,
@@ -113,9 +124,7 @@ import {
   listLocalProjects,
   updateLocalProjectAgentSetup,
 } from "../workspace/local-projects.js";
-import {
-  previewLocalProjectSourceUpload,
-} from "../workspace/local-project-source-upload.js";
+import { previewLocalProjectSourceUpload } from "../workspace/local-project-source-upload.js";
 import { createServerWorkspacePayloads } from "../workspace/server-workspace-payloads.js";
 import {
   fetchCloudProjects,
@@ -173,7 +182,8 @@ export function createServerPayloads(deps: {
     appendRuntimeEvent,
     isClosing,
   } = deps;
-  const attachmentRootDir = deps.attachmentRootDir ?? path.join(storeDir, "attachments");
+  const attachmentRootDir =
+    deps.attachmentRootDir ?? path.join(storeDir, "attachments");
   const {
     appendAppPage,
     loadOpenPondData,
@@ -202,7 +212,7 @@ export function createServerPayloads(deps: {
           providerId: "openai",
           patch: { enabled: true },
           updatedAt: now(),
-        }),
+        })
       );
     },
   });
@@ -227,7 +237,10 @@ export function createServerPayloads(deps: {
   } = createCodexHistoryPayloads({ attachmentRootDir, store, version });
 
   async function loadAppPreferences(): Promise<AppPreferences> {
-    const entry = await store.getCacheEntry<unknown>(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY);
+    const entry = await store.getCacheEntry<unknown>(
+      APP_PREFERENCES_CACHE_TYPE,
+      APP_PREFERENCES_CACHE_KEY
+    );
     return normalizeAppPreferences(entry?.payload);
   }
 
@@ -255,26 +268,33 @@ export function createServerPayloads(deps: {
     return { file: resolved.file, catalog: resolved.catalog };
   }
 
-  async function loadProviderSettings(input: {
-    account?: AccountState | null;
-    codex?: CodexStatus | null;
-    refreshCatalog?: boolean;
-  } = {}): Promise<ProviderSettings> {
+  async function loadProviderSettings(
+    input: {
+      account?: AccountState | null;
+      codex?: CodexStatus | null;
+      refreshCatalog?: boolean;
+    } = {}
+  ): Promise<ProviderSettings> {
     const [providerState, secrets, localAdapterModels] = await Promise.all([
       loadProvidersFileWithCatalog({ refresh: input.refreshCatalog ?? true }),
       readProviderSecrets(providerSecretPaths),
       listLocalAdapterProviderModels(store),
     ]);
-    return withLocalAdapterProviderModels(buildProviderSettings({
-      file: providerState.file,
-      secrets,
-      account: input.account,
-      codex: input.codex ?? getCodexStatus(),
-      catalog: providerState.catalog,
-    }), localAdapterModels);
+    return withLocalAdapterProviderModels(
+      buildProviderSettings({
+        file: providerState.file,
+        secrets,
+        account: input.account,
+        codex: input.codex ?? getCodexStatus(),
+        catalog: providerState.catalog,
+      }),
+      localAdapterModels
+    );
   }
 
-  async function updateAppPreferencesPayload(payload: unknown): Promise<{ preferences: AppPreferences }> {
+  async function updateAppPreferencesPayload(
+    payload: unknown
+  ): Promise<{ preferences: AppPreferences }> {
     const input = UpdateAppPreferencesRequestSchema.parse(payload);
     let updatedPreferences: AppPreferences | null = null;
     const update = appPreferencesUpdateQueue.then(async () => {
@@ -282,15 +302,21 @@ export function createServerPayloads(deps: {
       const next = normalizeAppPreferences({ ...current, ...input });
       updatedPreferences = next;
       if (JSON.stringify(next) !== JSON.stringify(current)) {
-        await store.setCacheEntry(APP_PREFERENCES_CACHE_TYPE, APP_PREFERENCES_CACHE_KEY, next);
+        await store.setCacheEntry(
+          APP_PREFERENCES_CACHE_TYPE,
+          APP_PREFERENCES_CACHE_KEY,
+          next
+        );
       }
     });
     appPreferencesUpdateQueue = update.catch(() => undefined);
     await update;
-    return { preferences: updatedPreferences ?? await loadAppPreferences() };
+    return { preferences: updatedPreferences ?? (await loadAppPreferences()) };
   }
 
-  async function updateProviderSettingsPayload(payload: unknown): Promise<ProviderSettings> {
+  async function updateProviderSettingsPayload(
+    payload: unknown
+  ): Promise<ProviderSettings> {
     const input = UpdateProviderSettingsRequestSchema.parse(payload);
     await updateProvidersFile(providersFilePath, (current) => {
       let next = current;
@@ -310,19 +336,23 @@ export function createServerPayloads(deps: {
 
   async function providerSettingsPayload(): Promise<ProviderSettings> {
     return providerDiagnostics.track("provider_settings", null, async () => {
-      const [openPond, providerState, secrets, localAdapterModels] = await Promise.all([
-        loadOpenPondData({ force: false }),
-        loadProvidersFileWithCatalog({ refresh: true }),
-        readProviderSecrets(providerSecretPaths),
-        listLocalAdapterProviderModels(store),
-      ]);
-      return withLocalAdapterProviderModels(buildProviderSettings({
-        file: providerState.file,
-        secrets,
-        account: openPond.account,
-        codex: getCodexStatus(),
-        catalog: providerState.catalog,
-      }), localAdapterModels);
+      const [openPond, providerState, secrets, localAdapterModels] =
+        await Promise.all([
+          loadOpenPondData({ force: false }),
+          loadProvidersFileWithCatalog({ refresh: true }),
+          readProviderSecrets(providerSecretPaths),
+          listLocalAdapterProviderModels(store),
+        ]);
+      return withLocalAdapterProviderModels(
+        buildProviderSettings({
+          file: providerState.file,
+          secrets,
+          account: openPond.account,
+          codex: getCodexStatus(),
+          catalog: providerState.catalog,
+        }),
+        localAdapterModels
+      );
     });
   }
 
@@ -342,20 +372,29 @@ export function createServerPayloads(deps: {
       file,
       secrets,
       catalog,
-      settings: withLocalAdapterProviderModels(buildProviderSettings({
-        file,
-        secrets,
-        codex: getCodexStatus(),
-        catalog,
-      }), localAdapterModels),
+      settings: withLocalAdapterProviderModels(
+        buildProviderSettings({
+          file,
+          secrets,
+          codex: getCodexStatus(),
+          catalog,
+        }),
+        localAdapterModels
+      ),
     };
   }
 
-  async function listProviderModelsPayload(providerIdValue: string, payload: unknown): Promise<unknown> {
+  async function listProviderModelsPayload(
+    providerIdValue: string,
+    payload: unknown
+  ): Promise<unknown> {
     const providerId = parseProviderId(providerIdValue);
     const request = parseProviderModelsRequest(payload);
     if (request.refresh) {
-      return refreshProviderModelsPayload(providerId, { query: request.query, force: true });
+      return refreshProviderModelsPayload(providerId, {
+        query: request.query,
+        force: true,
+      });
     }
     const providers = await providerSettingsPayload();
     return {
@@ -364,7 +403,10 @@ export function createServerPayloads(deps: {
     };
   }
 
-  async function refreshProviderModelsPayload(providerIdValue: string, payload: unknown): Promise<unknown> {
+  async function refreshProviderModelsPayload(
+    providerIdValue: string,
+    payload: unknown
+  ): Promise<unknown> {
     const providerId = parseProviderId(providerIdValue);
     if (providerId === LOCAL_ADAPTER_PROVIDER_ID) {
       const request = parseProviderModelsRefreshRequest(payload);
@@ -378,67 +420,73 @@ export function createServerPayloads(deps: {
         providers,
       };
     }
-    return providerDiagnostics.track("model_discovery", providerId, async () => {
-      const request = parseProviderModelsRefreshRequest(payload);
-      const state = await localProviderRuntimeState();
-      let cache = buildProviderModelCache({
-        providerId,
-        file: state.file,
-        fetchedAt: now(),
-        catalog: state.catalog,
-      });
-      if (isOpenAiCompatibleProviderId(providerId)) {
-        try {
-          const models = await listOpenAiCompatibleProviderModels({
-            providerId,
-            settings: state.settings,
-            secrets: state.secrets,
-          });
-          cache = ProviderModelCacheSchema.parse({
-            providerId,
-            models,
-            fetchedAt: now(),
-            lastError: null,
-            source: "provider",
-          });
-        } catch (error) {
-          cache = ProviderModelCacheSchema.parse({
-            ...cache,
-            fetchedAt: now(),
-            lastError: error instanceof Error ? error.message : String(error),
-          });
+    return providerDiagnostics.track(
+      "model_discovery",
+      providerId,
+      async () => {
+        const request = parseProviderModelsRefreshRequest(payload);
+        const state = await localProviderRuntimeState();
+        let cache = buildProviderModelCache({
+          providerId,
+          file: state.file,
+          fetchedAt: now(),
+          catalog: state.catalog,
+        });
+        if (isOpenAiCompatibleProviderId(providerId)) {
+          try {
+            const models = await listOpenAiCompatibleProviderModels({
+              providerId,
+              settings: state.settings,
+              secrets: state.secrets,
+            });
+            cache = ProviderModelCacheSchema.parse({
+              providerId,
+              models,
+              fetchedAt: now(),
+              lastError: null,
+              source: "provider",
+            });
+          } catch (error) {
+            cache = ProviderModelCacheSchema.parse({
+              ...cache,
+              fetchedAt: now(),
+              lastError: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
+        await updateProvidersFile(providersFilePath, (current) =>
+          normalizeProvidersFile({
+            ...current,
+            modelCaches: {
+              ...(current.modelCaches ?? {}),
+              [providerId]: cache,
+            },
+          })
+        );
+        const providers = await providerSettingsPayload();
+        return {
+          ...listProviderModels(providers, providerId, {
+            query: request.query,
+            refresh: false,
+            limit: 100,
+          }),
+          providers,
+        };
       }
-      await updateProvidersFile(providersFilePath, (current) =>
-        normalizeProvidersFile({
-          ...current,
-          modelCaches: {
-            ...(current.modelCaches ?? {}),
-            [providerId]: cache,
-          },
-        }),
-      );
-      const providers = await providerSettingsPayload();
-      return {
-        ...listProviderModels(providers, providerId, {
-          query: request.query,
-          refresh: false,
-          limit: 100,
-        }),
-        providers,
-      };
-    });
+    );
   }
 
   async function writeProviderCredentialPayload(
     providerIdValue: string,
-    payload: unknown,
+    payload: unknown
   ): Promise<ProviderSettings> {
     const providerId = parseProviderId(providerIdValue);
     const current = await loadProvidersFile();
     const catalog = cachedProviderCatalog(current);
     if (!providerAllowsLocalCredential(providerId, catalog)) {
-      throw new Error(`Provider ${providerId} does not accept local credentials.`);
+      throw new Error(
+        `Provider ${providerId} does not accept local credentials.`
+      );
     }
     await writeProviderCredential({
       paths: providerSecretPaths,
@@ -452,18 +500,20 @@ export function createServerPayloads(deps: {
         providerId,
         patch: { enabled: true },
         updatedAt: now(),
-      }),
+      })
     );
     return providerSettingsPayload();
   }
 
   async function deleteProviderCredentialPayload(
     providerIdValue: string,
-    payload: unknown,
+    payload: unknown
   ): Promise<ProviderSettings> {
     const providerId = parseProviderId(providerIdValue);
     const current = await loadProvidersFile();
-    if (!providerAllowsLocalCredential(providerId, cachedProviderCatalog(current))) {
+    if (
+      !providerAllowsLocalCredential(providerId, cachedProviderCatalog(current))
+    ) {
       throw new Error(`Provider ${providerId} does not use local credentials.`);
     }
     await deleteProviderCredential({
@@ -474,8 +524,13 @@ export function createServerPayloads(deps: {
     return providerSettingsPayload();
   }
 
-  async function startOpenAiSubscriptionAuthPayload(payload: unknown): Promise<unknown> {
-    const input = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  async function startOpenAiSubscriptionAuthPayload(
+    payload: unknown
+  ): Promise<unknown> {
+    const input =
+      payload && typeof payload === "object"
+        ? (payload as Record<string, unknown>)
+        : {};
     const method = input.method === "device" ? "device" : "browser";
     if (method === "device") {
       const result = await openAiSubscriptionAuth.startDeviceLogin();
@@ -495,109 +550,140 @@ export function createServerPayloads(deps: {
 
   async function validateProviderCredentialPayload(
     providerIdValue: string,
-    payload: unknown,
+    payload: unknown
   ): Promise<unknown> {
     const providerId = parseProviderId(providerIdValue);
-    return providerDiagnostics.track("provider_validation", providerId, async () => {
-      const request = parseProviderValidationRequest(payload);
-      const state = await localProviderRuntimeState();
-      const status = state.settings.statuses[providerId];
-      const config = state.settings.providers[providerId];
-      if (!status || !config) throw new Error(`Unknown provider: ${providerId}`);
+    return providerDiagnostics.track(
+      "provider_validation",
+      providerId,
+      async () => {
+        const request = parseProviderValidationRequest(payload);
+        const state = await localProviderRuntimeState();
+        const status = state.settings.statuses[providerId];
+        const config = state.settings.providers[providerId];
+        if (!status || !config)
+          throw new Error(`Unknown provider: ${providerId}`);
 
-      if (providerId === "codex") {
-        const codex = refreshCodexStatus ? await refreshCodexStatus() : getCodexStatus();
-        const modelId =
-          request.modelId ?? config.defaultModel ?? state.settings.modelCaches[providerId]?.models[0]?.id ?? null;
-        const errors: string[] = [];
-        if (!codex.available) {
-          errors.push("Codex CLI was not found. Install Codex or set CODEX_BINARY to the Codex executable.");
-        } else if (codex.authHealth !== "signed_in") {
-          errors.push("Sign in with ChatGPT through Codex before using subscription-backed models.");
+        if (providerId === "codex") {
+          const codex = refreshCodexStatus
+            ? await refreshCodexStatus()
+            : getCodexStatus();
+          const modelId =
+            request.modelId ??
+            config.defaultModel ??
+            state.settings.modelCaches[providerId]?.models[0]?.id ??
+            null;
+          const errors: string[] = [];
+          if (!codex.available) {
+            errors.push(
+              "Codex CLI was not found. Install Codex or set CODEX_BINARY to the Codex executable."
+            );
+          } else if (codex.authHealth !== "signed_in") {
+            errors.push(
+              "Sign in with ChatGPT through Codex before using subscription-backed models."
+            );
+          }
+          if (!modelId)
+            errors.push("OpenAI Codex has no selected or cached model.");
+
+          const providers = await providerSettingsPayload();
+          return {
+            providerId,
+            ok: errors.length === 0,
+            live: false,
+            baseUrl: null,
+            modelId,
+            credential:
+              providers.statuses[providerId]?.credential ?? status.credential,
+            errors,
+            providers,
+          };
         }
-        if (!modelId) errors.push("OpenAI Codex has no selected or cached model.");
+
+        if (isOpenAiCompatibleProviderId(providerId)) {
+          try {
+            const validation = await validateOpenAiCompatibleProvider({
+              providerId,
+              settings: state.settings,
+              secrets: state.secrets,
+              baseUrl: request.baseUrl,
+              modelId: request.modelId,
+            });
+            await updateProviderCredentialValidation({
+              paths: providerSecretPaths,
+              providerId,
+              timestamp: now(),
+              lastError: validation.ok ? null : validation.errors.join("; "),
+            });
+            const providers = await providerSettingsPayload();
+            return {
+              ...validation,
+              credential:
+                providers.statuses[providerId]?.credential ?? status.credential,
+              providers,
+            };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            await updateProviderCredentialValidation({
+              paths: providerSecretPaths,
+              providerId,
+              timestamp: now(),
+              lastError: message,
+            });
+            const providers = await providerSettingsPayload();
+            return {
+              providerId,
+              ok: false,
+              live: true,
+              baseUrl: request.baseUrl ?? config.baseUrl,
+              modelId: request.modelId ?? config.defaultModel ?? null,
+              credential:
+                providers.statuses[providerId]?.credential ?? status.credential,
+              errors: [message],
+              providers,
+            };
+          }
+        }
+
+        const baseUrl = request.baseUrl ?? config.baseUrl;
+        const modelId =
+          request.modelId ??
+          config.defaultModel ??
+          state.settings.modelCaches[providerId]?.models[0]?.id ??
+          null;
+        const errors: string[] = [];
+        if (!status.credential.connected) {
+          errors.push(
+            status.credential.lastError ??
+              `Provider ${providerId} has no connected credential.`
+          );
+        }
+        if (!modelId) {
+          errors.push(
+            `Provider ${providerId} has no selected or cached model.`
+          );
+        }
 
         const providers = await providerSettingsPayload();
         return {
           providerId,
           ok: errors.length === 0,
           live: false,
-          baseUrl: null,
+          baseUrl,
           modelId,
-          credential: providers.statuses[providerId]?.credential ?? status.credential,
+          credential:
+            providers.statuses[providerId]?.credential ?? status.credential,
           errors,
           providers,
         };
       }
-
-      if (isOpenAiCompatibleProviderId(providerId)) {
-        try {
-          const validation = await validateOpenAiCompatibleProvider({
-            providerId,
-            settings: state.settings,
-            secrets: state.secrets,
-            baseUrl: request.baseUrl,
-            modelId: request.modelId,
-          });
-          await updateProviderCredentialValidation({
-            paths: providerSecretPaths,
-            providerId,
-            timestamp: now(),
-            lastError: validation.ok ? null : validation.errors.join("; "),
-          });
-          const providers = await providerSettingsPayload();
-          return {
-            ...validation,
-            credential: providers.statuses[providerId]?.credential ?? status.credential,
-            providers,
-          };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          await updateProviderCredentialValidation({
-            paths: providerSecretPaths,
-            providerId,
-            timestamp: now(),
-            lastError: message,
-          });
-          const providers = await providerSettingsPayload();
-          return {
-            providerId,
-            ok: false,
-            live: true,
-            baseUrl: request.baseUrl ?? config.baseUrl,
-            modelId: request.modelId ?? config.defaultModel ?? null,
-            credential: providers.statuses[providerId]?.credential ?? status.credential,
-            errors: [message],
-            providers,
-          };
-        }
-      }
-
-      const baseUrl = request.baseUrl ?? config.baseUrl;
-      const modelId = request.modelId ?? config.defaultModel ?? state.settings.modelCaches[providerId]?.models[0]?.id ?? null;
-      const errors: string[] = [];
-      if (!status.credential.connected) {
-        errors.push(status.credential.lastError ?? `Provider ${providerId} has no connected credential.`);
-      }
-      if (!modelId) {
-        errors.push(`Provider ${providerId} has no selected or cached model.`);
-      }
-
-      const providers = await providerSettingsPayload();
-      return {
-        providerId,
-        ok: errors.length === 0,
-        live: false,
-        baseUrl,
-        modelId,
-        credential: providers.statuses[providerId]?.credential ?? status.credential,
-        errors,
-        providers,
-      };
-    });
+    );
   }
 
-  function providerSettingsBootstrapSummary(settings: ProviderSettings): ProviderSettings {
+  function providerSettingsBootstrapSummary(
+    settings: ProviderSettings
+  ): ProviderSettings {
     const modelCaches: ProviderSettings["modelCaches"] = {};
     for (const [providerId, cache] of Object.entries(settings.modelCaches)) {
       modelCaches[providerId] = {
@@ -616,7 +702,9 @@ export function createServerPayloads(deps: {
     return providerDiagnostics.snapshot(state.settings);
   }
 
-  async function recordClientDiagnosticPayload(payload: unknown): Promise<{ diagnostic: RuntimeEvent }> {
+  async function recordClientDiagnosticPayload(
+    payload: unknown
+  ): Promise<{ diagnostic: RuntimeEvent }> {
     const input = RecordClientDiagnosticRequestSchema.parse(payload);
     const diagnostic = event({
       name: "diagnostic",
@@ -634,7 +722,9 @@ export function createServerPayloads(deps: {
     return { diagnostic };
   }
 
-  async function updatePersonalizationPayload(payload: unknown): Promise<BootstrapPayload> {
+  async function updatePersonalizationPayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
     const input = UpdatePersonalizationRequestSchema.parse(payload);
     await savePersonalizationSettings(store, storeDir, input);
     return bootstrapPayload();
@@ -656,7 +746,7 @@ export function createServerPayloads(deps: {
   async function skillSourceFilePayload(
     scope: "codex" | "profile" | "extension",
     skillName: string,
-    filePath: string,
+    filePath: string
   ) {
     if (scope === "codex") {
       return readCodexPersonalSkillFile(skillName, filePath);
@@ -671,7 +761,9 @@ export function createServerPayloads(deps: {
       });
     }
     const profile = await loadBootstrapProfile(false);
-    const skill = profile.skills.find((candidate) => candidate.name === skillName);
+    const skill = profile.skills.find(
+      (candidate) => candidate.name === skillName
+    );
     if (!skill) throw new Error(`Profile skill not found: ${skillName}`);
     const absoluteSkillPath = path.resolve(skill.sourcePath, skill.path);
     return readSkillSourceFile({
@@ -687,19 +779,27 @@ export function createServerPayloads(deps: {
     if (existing) return existing;
     const refresh = (async () => {
       const projects = await fetchCloudProjects();
-      const entry = await store.setCacheEntry(CLOUD_PROJECT_CACHE_TYPE, scope, projects, null);
-      return entry.payload;
-    })().catch(async (error) => {
-      await store.setCacheError(
+      const entry = await store.setCacheEntry(
         CLOUD_PROJECT_CACHE_TYPE,
         scope,
-        [],
-        error instanceof Error ? error.message : String(error),
+        projects,
+        null
       );
-      throw error;
-    }).finally(() => {
-      if (cloudProjectRefreshes.get(scope) === refresh) cloudProjectRefreshes.delete(scope);
-    });
+      return entry.payload;
+    })()
+      .catch(async (error) => {
+        await store.setCacheError(
+          CLOUD_PROJECT_CACHE_TYPE,
+          scope,
+          [],
+          error instanceof Error ? error.message : String(error)
+        );
+        throw error;
+      })
+      .finally(() => {
+        if (cloudProjectRefreshes.get(scope) === refresh)
+          cloudProjectRefreshes.delete(scope);
+      });
     cloudProjectRefreshes.set(scope, refresh);
     return refresh;
   }
@@ -714,25 +814,34 @@ export function createServerPayloads(deps: {
           source: "server",
           status: "failed",
           output: error instanceof Error ? error.message : String(error),
-        }),
+        })
       );
     });
   }
 
   async function loadCloudProjectsForBootstrap(
     account: AccountState,
-    options: { force?: boolean } = {},
+    options: { force?: boolean; refreshIfMissing?: boolean } = {}
   ): Promise<CloudProject[]> {
     if (account.state !== "signed_in") return [];
     const scope = openPondCacheScope(account);
     if (options.force) return refreshCloudProjects(scope);
-    const cached = await store.getCacheEntry<CloudProject[]>(CLOUD_PROJECT_CACHE_TYPE, scope);
-    if (!cached) refreshCloudProjectsInBackground(scope);
+    const cached = await store.getCacheEntry<CloudProject[]>(
+      CLOUD_PROJECT_CACHE_TYPE,
+      scope
+    );
+    if (!cached && options.refreshIfMissing !== false) {
+      refreshCloudProjectsInBackground(scope);
+    }
     return cached?.payload ?? [];
   }
 
   async function bootstrapPayload(
-    bootstrapOptions: { forceOpenPond?: boolean; ensureProfile?: boolean } = {},
+    bootstrapOptions: {
+      forceOpenPond?: boolean;
+      refreshCloudProjects?: boolean;
+      ensureProfile?: boolean;
+    } = {}
   ): Promise<BootstrapPayload> {
     const [
       sessionShells,
@@ -762,27 +871,37 @@ export function createServerPayloads(deps: {
       extensionManager.list(),
     ]);
     const codex = getCodexStatus();
-    const providers = providerSettingsBootstrapSummary(await loadProviderSettings({
-      account: openPond.account,
-      codex,
-      refreshCatalog: false,
-    }));
-    const cloudProjects = await loadCloudProjectsForBootstrap(openPond.account, {
-      force: bootstrapOptions.forceOpenPond,
-    });
+    const providers = providerSettingsBootstrapSummary(
+      await loadProviderSettings({
+        account: openPond.account,
+        codex,
+        refreshCatalog: false,
+      })
+    );
+    const cloudProjects = await loadCloudProjectsForBootstrap(
+      openPond.account,
+      {
+        force: bootstrapOptions.refreshCloudProjects === true,
+        refreshIfMissing: bootstrapOptions.refreshCloudProjects !== false,
+      }
+    );
     const openPondCodexThreadIds = new Set(
       sessionShells
         .map((session) => session.codexThreadId)
-        .filter((threadId): threadId is string => Boolean(threadId)),
+        .filter((threadId): threadId is string => Boolean(threadId))
     );
-    const [codexHistorySessions, codexHistorySidebarPreferences] = await Promise.all([
-      loadCodexHistorySessions({
-        excludeThreadIds: openPondCodexThreadIds,
-        metadataLimit: BOOTSTRAP_CODEX_HISTORY_LIMIT,
-      }).catch(() => []),
-      loadCodexHistorySidebarPreferences(store),
-    ]);
-    const linkedLocalProjects = await inferLocalProjectOpenPondLinks(localProjects, openPond.apps);
+    const [codexHistorySessions, codexHistorySidebarPreferences] =
+      await Promise.all([
+        loadCodexHistorySessions({
+          excludeThreadIds: openPondCodexThreadIds,
+          metadataLimit: BOOTSTRAP_CODEX_HISTORY_LIMIT,
+        }).catch(() => []),
+        loadCodexHistorySidebarPreferences(store),
+      ]);
+    const linkedLocalProjects = await inferLocalProjectOpenPondLinks(
+      localProjects,
+      openPond.apps
+    );
     const scope = openPondCacheScope(openPond.account);
     const [sidebarAppPreferences, sidebarFileBookmarks] = await Promise.all([
       store.getSidebarAppPreferences(scope),
@@ -812,8 +931,11 @@ export function createServerPayloads(deps: {
       extensionCatalog,
       codexHistorySessions: validBootstrapSessions(
         codexHistorySessionsWithLiveStatus(
-          applyCodexHistorySidebarPreferences(codexHistorySessions, codexHistorySidebarPreferences),
-        ),
+          applyCodexHistorySidebarPreferences(
+            codexHistorySessions,
+            codexHistorySidebarPreferences
+          )
+        )
       ),
       sidebarAppPreferences,
       sidebarFileBookmarks,
@@ -838,7 +960,7 @@ export function createServerPayloads(deps: {
 
   async function recordPreflightTurnFailure(
     sessionId: string,
-    payload: unknown,
+    payload: unknown
   ): Promise<BootstrapPayload> {
     const input = RecordPreflightTurnFailureRequestSchema.parse(payload);
     const session = await store.getSession(sessionId);
@@ -863,7 +985,7 @@ export function createServerPayloads(deps: {
             target: input.target,
           },
         },
-      }),
+      })
     );
     await appendRuntimeEvent(
       event({
@@ -879,13 +1001,15 @@ export function createServerPayloads(deps: {
             target: input.target,
           },
         },
-      }),
+      })
     );
     return bootstrapPayload({ forceOpenPond: false });
   }
 
   function validBootstrapSessions(sessions: Session[]): Session[] {
-    return sessions.filter((session) => SessionSchema.safeParse(session).success);
+    return sessions.filter(
+      (session) => SessionSchema.safeParse(session).success
+    );
   }
 
   async function findOpenPondApp(appId: string): Promise<OpenPondApp> {
@@ -913,16 +1037,22 @@ export function createServerPayloads(deps: {
   }
 
   async function extensionPreviewPayload(payload: unknown) {
-    return extensionManager.preview(OpenPondExtensionSourceRequestSchema.parse(payload));
+    return extensionManager.preview(
+      OpenPondExtensionSourceRequestSchema.parse(payload)
+    );
   }
 
   async function extensionAddPayload(payload: unknown) {
-    const extension = await extensionManager.add(OpenPondExtensionSourceRequestSchema.parse(payload));
+    const extension = await extensionManager.add(
+      OpenPondExtensionSourceRequestSchema.parse(payload)
+    );
     return { extension, catalog: await extensionManager.list() };
   }
 
   async function extensionUpdatePayload(payload: unknown) {
-    const extension = await extensionManager.update(OpenPondExtensionSourceRequestSchema.parse(payload));
+    const extension = await extensionManager.update(
+      OpenPondExtensionSourceRequestSchema.parse(payload)
+    );
     return { extension, catalog: await extensionManager.list() };
   }
 
@@ -938,7 +1068,7 @@ export function createServerPayloads(deps: {
 
   async function previewLocalProjectCloudSourcePayload(
     projectId: string,
-    payload: unknown = {},
+    payload: unknown = {}
   ): Promise<{
     localProject: LocalProject;
     preview: {
@@ -959,12 +1089,9 @@ export function createServerPayloads(deps: {
 
     const linkedProject = localProject.linkedSandboxProject ?? null;
     const branch =
-      input.branch?.trim() ||
-      linkedProject?.defaultBranch?.trim() ||
-      "main";
+      input.branch?.trim() || linkedProject?.defaultBranch?.trim() || "main";
     const targetProjectName =
-      linkedProject?.projectName?.trim() ||
-      localProject.name;
+      linkedProject?.projectName?.trim() || localProject.name;
     const fallbackReadme = `# ${targetProjectName}\n\nUploaded from OpenPond Desktop.\n`;
     const preview = await previewLocalProjectSourceUpload(localProject);
 
@@ -988,7 +1115,7 @@ export function createServerPayloads(deps: {
 
   async function uploadLocalProjectCloudSourcePayload(
     projectId: string,
-    payload: unknown,
+    payload: unknown
   ): Promise<{
     project: CloudProject;
     localProject: LocalProject;
@@ -1013,9 +1140,7 @@ export function createServerPayloads(deps: {
         ? localProject.linkedSandboxProject
         : null;
     const branch =
-      input.branch?.trim() ||
-      linkedProject?.defaultBranch?.trim() ||
-      "main";
+      input.branch?.trim() || linkedProject?.defaultBranch?.trim() || "main";
     const projectName =
       input.projectName?.trim() ||
       linkedProject?.projectName?.trim() ||
@@ -1024,7 +1149,8 @@ export function createServerPayloads(deps: {
       ? {
           sessionId: input.chatSessionId,
           turnId: `cloud_source_upload_${randomUUID()}`,
-          displayPrompt: input.displayPrompt?.trim() || `/sync-cloud ${localProject.name}`,
+          displayPrompt:
+            input.displayPrompt?.trim() || `/sync-cloud ${localProject.name}`,
         }
       : null;
     if (chatContext) {
@@ -1039,7 +1165,8 @@ export function createServerPayloads(deps: {
 
     try {
       const internalRepoPath =
-        linkedProject?.sourceRepoUrl?.trim() || internalRepoPathForLocalProject(localProject);
+        linkedProject?.sourceRepoUrl?.trim() ||
+        internalRepoPathForLocalProject(localProject);
       const fallbackReadme = `# ${projectName}\n\nUploaded from OpenPond Desktop.\n`;
       const initialProjectRecord = linkedProject?.projectId
         ? await sandboxProjectRecordOrFallback({
@@ -1063,21 +1190,26 @@ export function createServerPayloads(deps: {
             localProjectId: localProject.id,
           });
       const targetProjectId = stringValue(initialProjectRecord.id);
-      if (!targetProjectId) throw new Error("OpenPond Cloud Project was created without an id.");
+      if (!targetProjectId)
+        throw new Error("OpenPond Cloud Project was created without an id.");
 
       const gitPayload = asRecord(
         await sandboxRequestPayload({
           type: "project_git",
           projectId: targetProjectId,
           payload: { teamId: input.teamId },
-        }),
+        })
       );
       const repo = asRecord(gitPayload.repo);
       const repoUrl = stringValue(repo.repoUrl);
-      if (!repoUrl) throw new Error("OpenPond Cloud Project did not return a Git remote URL.");
+      if (!repoUrl)
+        throw new Error(
+          "OpenPond Cloud Project did not return a Git remote URL."
+        );
       const accountContext = await loadOpenPondAccountContext();
       const apiKey = accountContext.token?.trim();
-      if (!apiKey) throw new Error("OpenPond account API key is required to push source.");
+      if (!apiKey)
+        throw new Error("OpenPond account API key is required to push source.");
 
       const commitMessage = `Upload ${localProject.name} from OpenPond Desktop`;
       const uploadResult = await uploadLocalProjectCloudSource({
@@ -1096,30 +1228,37 @@ export function createServerPayloads(deps: {
         Object.keys(uploadedProjectRecord).length > 0
           ? uploadedProjectRecord
           : Object.keys(asRecord(gitPayload.project)).length > 0
-            ? asRecord(gitPayload.project)
-            : initialProjectRecord;
+          ? asRecord(gitPayload.project)
+          : initialProjectRecord;
       const project = cloudProjectFromSandboxRecord(
         { ...projectRecord, teamId: input.teamId },
         input.teamId,
         projectName,
-        branch,
+        branch
       );
-      const updatedLocalProject = await updateLocalProjectAgentSetup(store, localProject.id, {
-        linkedSandboxProject: {
-          teamId: input.teamId,
-          projectId: project.id,
-          projectSlug: project.slug,
-          projectName: project.name,
-          sourceRepoUrl: repoUrl,
-          defaultBranch: project.defaultBranch ?? stringValue(repo.defaultBranch) ?? uploadResult.branch,
-          lastUploadedCommit: uploadResult.headCommit,
-          lastUploadTransport: uploadResult.transport,
-          manifestPath: project.manifestPath,
-          manifestHash: project.manifestHash,
-          syncedAt: project.syncedAt ?? now(),
-          linkedAt: linkedProject?.linkedAt ?? now(),
-        },
-      });
+      const updatedLocalProject = await updateLocalProjectAgentSetup(
+        store,
+        localProject.id,
+        {
+          linkedSandboxProject: {
+            teamId: input.teamId,
+            projectId: project.id,
+            projectSlug: project.slug,
+            projectName: project.name,
+            sourceRepoUrl: repoUrl,
+            defaultBranch:
+              project.defaultBranch ??
+              stringValue(repo.defaultBranch) ??
+              uploadResult.branch,
+            lastUploadedCommit: uploadResult.headCommit,
+            lastUploadTransport: uploadResult.transport,
+            manifestPath: project.manifestPath,
+            manifestHash: project.manifestHash,
+            syncedAt: project.syncedAt ?? now(),
+            linkedAt: linkedProject?.linkedAt ?? now(),
+          },
+        }
+      );
       const upload = {
         rootPath: uploadResult.rootPath,
         branch: uploadResult.branch,
@@ -1164,7 +1303,7 @@ export function createServerPayloads(deps: {
 
   async function updateCloudSourceUploadChatSession(
     sessionId: string,
-    patch: Partial<Session>,
+    patch: Partial<Session>
   ): Promise<Session> {
     const updated = await store.updateSession(sessionId, (session) => ({
       ...session,
@@ -1182,10 +1321,13 @@ export function createServerPayloads(deps: {
     projectName: string;
     teamId: string;
   }): Promise<void> {
-    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
-      status: "active",
-      title: `Sync ${input.localProject.name} to Cloud`,
-    });
+    const session = await updateCloudSourceUploadChatSession(
+      input.chatContext.sessionId,
+      {
+        status: "active",
+        title: `Sync ${input.localProject.name} to Cloud`,
+      }
+    );
     await appendRuntimeEvent(
       event({
         sessionId: session.id,
@@ -1197,7 +1339,7 @@ export function createServerPayloads(deps: {
           prompt: input.chatContext.displayPrompt,
           command: "/sync-cloud",
         },
-      }),
+      })
     );
     await appendRuntimeEvent(
       event({
@@ -1215,7 +1357,7 @@ export function createServerPayloads(deps: {
           projectName: input.projectName,
           teamId: input.teamId,
         },
-      }),
+      })
     );
   }
 
@@ -1233,11 +1375,14 @@ export function createServerPayloads(deps: {
       transport?: "git_head" | "snapshot" | "api_source_upload";
     };
   }): Promise<void> {
-    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
-      cloudProjectId: input.project.id,
-      cloudTeamId: input.project.teamId,
-      status: "idle",
-    });
+    const session = await updateCloudSourceUploadChatSession(
+      input.chatContext.sessionId,
+      {
+        cloudProjectId: input.project.id,
+        cloudTeamId: input.project.teamId,
+        status: "idle",
+      }
+    );
     await appendRuntimeEvent(
       event({
         sessionId: session.id,
@@ -1270,7 +1415,7 @@ export function createServerPayloads(deps: {
           },
           upload: input.upload,
         },
-      }),
+      })
     );
     await appendRuntimeEvent(
       event({
@@ -1280,7 +1425,7 @@ export function createServerPayloads(deps: {
         source: "chat_action",
         appId: session.appId,
         status: "completed",
-      }),
+      })
     );
   }
 
@@ -1289,10 +1434,14 @@ export function createServerPayloads(deps: {
     error: unknown;
     localProject: LocalProject;
   }): Promise<void> {
-    const message = input.error instanceof Error ? input.error.message : String(input.error);
-    const session = await updateCloudSourceUploadChatSession(input.chatContext.sessionId, {
-      status: "failed",
-    });
+    const message =
+      input.error instanceof Error ? input.error.message : String(input.error);
+    const session = await updateCloudSourceUploadChatSession(
+      input.chatContext.sessionId,
+      {
+        status: "failed",
+      }
+    );
     await appendRuntimeEvent(
       event({
         sessionId: session.id,
@@ -1304,7 +1453,7 @@ export function createServerPayloads(deps: {
         status: "failed",
         output: `Upload failed for ${input.localProject.name}.`,
         error: message,
-      }),
+      })
     );
     await appendRuntimeEvent(
       event({
@@ -1315,7 +1464,7 @@ export function createServerPayloads(deps: {
         appId: session.appId,
         status: "failed",
         error: message,
-      }),
+      })
     );
   }
 
@@ -1327,10 +1476,16 @@ export function createServerPayloads(deps: {
     headCommit: string | null;
     skippedCount: number;
   }): string {
-    const commit = input.headCommit ? `local ${input.headCommit.slice(0, 7)}` : "no local commit";
+    const commit = input.headCommit
+      ? `local ${input.headCommit.slice(0, 7)}`
+      : "no local commit";
     return [
-      `Uploaded ${input.fileCount} file${input.fileCount === 1 ? "" : "s"} to OpenPond Git.`,
-      `${formatByteCount(input.byteCount)} · ${input.skippedCount} skipped · ${commit} · ${input.branch}`,
+      `Uploaded ${input.fileCount} file${
+        input.fileCount === 1 ? "" : "s"
+      } to OpenPond Git.`,
+      `${formatByteCount(input.byteCount)} · ${
+        input.skippedCount
+      } skipped · ${commit} · ${input.branch}`,
       `Cloud project ${input.cloudProjectId} is ready for Hybrid or Cloud workspace use.`,
     ].join("\n");
   }
@@ -1346,10 +1501,15 @@ export function createServerPayloads(deps: {
     return openPondCacheScope(context.accountState);
   }
 
-  async function resolveSidebarFileAvailability(item: SidebarFileBookmark): Promise<boolean> {
+  async function resolveSidebarFileAvailability(
+    item: SidebarFileBookmark
+  ): Promise<boolean> {
     try {
       if (item.workspaceKind === "local") {
-        await workspacePayloads.workspaceFilePayload(item.workspaceId, item.path);
+        await workspacePayloads.workspaceFilePayload(
+          item.workspaceId,
+          item.path
+        );
       } else {
         await sandboxRequestPayload({
           type: "stat_file",
@@ -1363,20 +1523,28 @@ export function createServerPayloads(deps: {
     }
   }
 
-  async function listSidebarFileBookmarksForScope(scope: string): Promise<SidebarFileBookmark[]> {
+  async function listSidebarFileBookmarksForScope(
+    scope: string
+  ): Promise<SidebarFileBookmark[]> {
     const items = await store.listSidebarFileBookmarks(scope);
-    return Promise.all(items.map(async (item) => ({
-      ...item,
-      available: await resolveSidebarFileAvailability(item),
-    })));
+    return Promise.all(
+      items.map(async (item) => ({
+        ...item,
+        available: await resolveSidebarFileAvailability(item),
+      }))
+    );
   }
 
   async function listSidebarFileBookmarksPayload(): Promise<SidebarFileBookmarksResponse> {
-    return { items: await listSidebarFileBookmarksForScope(await currentSidebarScope()) };
+    return {
+      items: await listSidebarFileBookmarksForScope(
+        await currentSidebarScope()
+      ),
+    };
   }
 
   async function patchSidebarFileBookmarkPayload(
-    payload: unknown,
+    payload: unknown
   ): Promise<SidebarFileBookmarksResponse> {
     const parsed = PatchSidebarFileBookmarkRequestSchema.parse(payload);
     const input: PatchSidebarFileBookmarkRequest = {
@@ -1388,42 +1556,79 @@ export function createServerPayloads(deps: {
     return { items: await listSidebarFileBookmarksForScope(scope) };
   }
 
-  async function patchSidebarAppPreference(appId: string, payload: unknown): Promise<SidebarAppPreference> {
+  async function patchSidebarAppPreference(
+    appId: string,
+    payload: unknown
+  ): Promise<SidebarAppPreference> {
     const input = PatchSidebarAppPreferenceRequestSchema.parse(payload);
-    return store.patchSidebarAppPreference(await currentSidebarScope(), appId, input);
+    return store.patchSidebarAppPreference(
+      await currentSidebarScope(),
+      appId,
+      input
+    );
   }
 
-  async function reorderSidebarApps(payload: unknown): Promise<SidebarAppPreferences> {
+  async function reorderSidebarApps(
+    payload: unknown
+  ): Promise<SidebarAppPreferences> {
     const input = ReorderSidebarAppsRequestSchema.parse(payload);
     return store.reorderSidebarApps(await currentSidebarScope(), input.appIds);
   }
 
   async function refreshOpenPondPayload(): Promise<BootstrapPayload> {
-    const payload = await bootstrapPayload({ forceOpenPond: true });
+    const payload = await bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: false,
+    });
     await appendRuntimeEvent(
       event({
         name: "diagnostic",
         source: "server",
-        status: payload.appsError ? "failed" : "completed",
-        output: payload.appsError
-          ? `OpenPond refresh failed: ${payload.appsError}`
-          : `OpenPond refresh loaded ${payload.apps.length} app${payload.apps.length === 1 ? "" : "s"}.`,
+        status: payload.account.error ? "failed" : "completed",
+        output: payload.account.error
+          ? `OpenPond account refresh failed: ${payload.account.error}`
+          : "OpenPond account refreshed.",
       })
     );
     return payload;
   }
 
-  async function loadMoreOpenPondAppsPayload(requestUrl: URL): Promise<unknown> {
-    const limit = Math.min(Math.max(Number(requestUrl.searchParams.get("limit") ?? "10") || 10, 1), 50);
-    const offset = Math.max(Number(requestUrl.searchParams.get("offset") ?? "20") || 20, 0);
-    const result = await loadOpenPondApps({ limit, offset, includeScheduled: true });
+  async function loadMoreOpenPondAppsPayload(
+    requestUrl: URL
+  ): Promise<unknown> {
+    const limit = Math.min(
+      Math.max(Number(requestUrl.searchParams.get("limit") ?? "10") || 10, 1),
+      50
+    );
+    const offset = Math.max(
+      Number(requestUrl.searchParams.get("offset") ?? "20") || 20,
+      0
+    );
+    const result = await loadOpenPondApps({
+      limit,
+      offset,
+      includeScheduled: true,
+    });
     const account = AccountStateSchema.parse(result.account);
     const scope = openPondCacheScope(account);
-    const cachedApps = await store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope);
+    const cachedApps = await store.getCacheEntry<OpenPondApp[]>(
+      "openpond.apps",
+      scope
+    );
     const existing = cachedApps?.payload ?? [];
     const merged = appendAppPage(existing, result.apps);
-    await store.setCacheEntry("openpond.account", scope, account, account.error);
-    const appsEntry = await store.setCacheEntry("openpond.apps", scope, merged.apps, result.error);
+    await store.setCacheEntry(
+      "openpond.account",
+      scope,
+      account,
+      account.error
+    );
+    const appsEntry = await store.setCacheEntry(
+      "openpond.apps",
+      scope,
+      merged.apps,
+      result.error
+    );
     const payload = await bootstrapPayload();
     return {
       bootstrap: {
@@ -1439,7 +1644,9 @@ export function createServerPayloads(deps: {
     };
   }
 
-  async function switchOpenPondPayload(payload: unknown): Promise<BootstrapPayload> {
+  async function switchOpenPondPayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
     const input = SwitchOpenPondAccountRequestSchema.parse(payload);
     await switchOpenPondAccount(input);
     await appendRuntimeEvent(
@@ -1451,10 +1658,15 @@ export function createServerPayloads(deps: {
         output: `Switched OpenPond account to ${input.handle}.`,
       })
     );
-    return bootstrapPayload({ forceOpenPond: true });
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: true,
+    });
   }
 
-  async function saveOpenPondAccountPayload(payload: unknown): Promise<BootstrapPayload> {
+  async function saveOpenPondAccountPayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
     const input = SaveOpenPondAccountRequestSchema.parse(payload);
     await saveOpenPondAccount({
       handle: input.handle,
@@ -1474,10 +1686,35 @@ export function createServerPayloads(deps: {
         output: "Saved OpenPond account.",
       })
     );
-    return bootstrapPayload({ forceOpenPond: true });
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: true,
+    });
   }
 
-  async function updateOpenPondAccountConfigPayload(payload: unknown): Promise<BootstrapPayload> {
+  async function removeOpenPondAccountPayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
+    const input = RemoveOpenPondAccountRequestSchema.parse(payload);
+    await removeOpenPondAccount(input);
+    await appendRuntimeEvent(
+      event({
+        name: "diagnostic",
+        source: "server",
+        action: "openpond.account.remove",
+        status: "completed",
+        output: `Removed saved OpenPond account ${input.handle}.`,
+      })
+    );
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: false,
+    });
+  }
+
+  async function updateOpenPondAccountConfigPayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
     const input = UpdateOpenPondAccountConfigRequestSchema.parse(payload);
     await updateOpenPondAccountConfig({
       handle: input.handle,
@@ -1497,7 +1734,10 @@ export function createServerPayloads(deps: {
         output: `Updated OpenPond account config for ${input.handle}.`,
       })
     );
-    return bootstrapPayload({ forceOpenPond: true });
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: true,
+    });
   }
 
   const profilePayloads = createProfilePayloads({ appendRuntimeEvent });
@@ -1547,6 +1787,7 @@ export function createServerPayloads(deps: {
     loadMoreOpenPondAppsPayload,
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
+    removeOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
     ...profilePayloads,
     waitForOpenPondRefresh,

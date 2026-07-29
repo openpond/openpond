@@ -13,28 +13,39 @@ import { handleAppWorkspaceToolAction } from "./workspace-tool-app-handlers.js";
 import { handleSandboxWorkspaceToolAction } from "./workspace-tool-sandbox-actions.js";
 import type { WorkspaceToolExecutorDeps } from "./workspace-tool-executor-types.js";
 import { event, textFromUnknown } from "../utils.js";
-import { resolveWorkspaceCapabilities, workspaceToolBlockedMessage } from "../workspace/workspace-capabilities.js";
+import {
+  resolveWorkspaceCapabilities,
+  workspaceToolBlockedMessage,
+} from "../workspace/workspace-capabilities.js";
 import {
   resolveWorkspaceExecutionTarget,
   type WorkspaceExecutionTarget,
 } from "../workspace/workspace-execution-target.js";
 import { createCloudSessionReadinessService } from "../workspace/cloud-session-readiness.js";
+import { workspaceToolExperienceBlocker } from "../runtime/experience-policy.js";
 
 export type { WorkspaceToolExecutorDeps } from "./workspace-tool-executor-types.js";
 
 function dataWithWorkspaceToolCallId(
   data: unknown,
   workspaceToolCallId: string,
-  extra: Record<string, unknown> = {},
+  extra: Record<string, unknown> = {}
 ): Record<string, unknown> {
   if (data && typeof data === "object" && !Array.isArray(data)) {
-    return { ...(data as Record<string, unknown>), ...extra, workspaceToolCallId };
+    return {
+      ...(data as Record<string, unknown>),
+      ...extra,
+      workspaceToolCallId,
+    };
   }
   if (data === undefined) return { ...extra, workspaceToolCallId };
   return { value: data, ...extra, workspaceToolCallId };
 }
 
-function workspaceToolTiming(input: { startedAtMs: number; completedAtMs?: number }): Record<string, unknown> {
+function workspaceToolTiming(input: {
+  startedAtMs: number;
+  completedAtMs?: number;
+}): Record<string, unknown> {
   const startedAt = new Date(input.startedAtMs).toISOString();
   if (typeof input.completedAtMs !== "number") return { startedAt };
   return {
@@ -44,7 +55,9 @@ function workspaceToolTiming(input: { startedAtMs: number; completedAtMs?: numbe
   };
 }
 
-function workspaceExecutionTargetData(target: WorkspaceExecutionTarget): Record<string, unknown> {
+function workspaceExecutionTargetData(
+  target: WorkspaceExecutionTarget
+): Record<string, unknown> {
   if (target.target === "sandbox") {
     return {
       target: target.target,
@@ -85,9 +98,15 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
   executeWorkspaceTool: (
     sessionId: string,
     payload: unknown,
-    options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null }
+    options?: {
+      turnId?: string;
+      workspaceDiffBaseline?: WorkspaceDiffSummary | null;
+    }
   ) => Promise<WorkspaceToolResult>;
-  ensureCloudWorkspaceReady: (sessionId: string, payload: unknown) => Promise<unknown>;
+  ensureCloudWorkspaceReady: (
+    sessionId: string,
+    payload: unknown
+  ) => Promise<unknown>;
   closeCloudWorkspaceReadiness: () => Promise<void>;
 } {
   const {
@@ -112,7 +131,10 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
   async function executeWorkspaceTool(
     sessionId: string,
     payload: unknown,
-    options: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null } = {}
+    options: {
+      turnId?: string;
+      workspaceDiffBaseline?: WorkspaceDiffSummary | null;
+    } = {}
   ): Promise<WorkspaceToolResult> {
     const workspaceToolCallId = randomUUID();
     const workspaceToolStartedAt = Date.now();
@@ -166,7 +188,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         args: input.args,
         status: "started",
         data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId, {
-          workspaceToolTiming: workspaceToolTiming({ startedAtMs: workspaceToolStartedAt }),
+          workspaceToolTiming: workspaceToolTiming({
+            startedAtMs: workspaceToolStartedAt,
+          }),
         }),
       })
     );
@@ -186,13 +210,19 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           appId: startedAppId,
           status: progress.status ?? "pending",
           output: progress.output,
-          data: dataWithWorkspaceToolCallId(progress.data, workspaceToolCallId, {
-            workspaceToolTiming: workspaceToolTiming({ startedAtMs: workspaceToolStartedAt }),
-          }),
+          data: dataWithWorkspaceToolCallId(
+            progress.data,
+            workspaceToolCallId,
+            {
+              workspaceToolTiming: workspaceToolTiming({
+                startedAtMs: workspaceToolStartedAt,
+              }),
+            }
+          ),
         })
       );
     };
-  
+
     let executionTarget: WorkspaceExecutionTarget | null = null;
     try {
       let result: WorkspaceToolResult;
@@ -200,72 +230,150 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
         session.workspaceKind === "local_project" && session.workspaceId
           ? session.workspaceId
           : session.localProjectId ?? null;
-      const localProject = localProjectId ? await findLocalWorkspace(localProjectId) : null;
-      executionTarget = resolveWorkspaceExecutionTarget({ session, localProject });
-      const capabilities = resolveWorkspaceCapabilities({ session, localProject });
-      const blockedMessage = workspaceToolBlockedMessage({
-        action: input.action,
+      const localProject = localProjectId
+        ? await findLocalWorkspace(localProjectId)
+        : null;
+      executionTarget = resolveWorkspaceExecutionTarget({
         session,
         localProject,
-        capabilities,
       });
-      if (blockedMessage) throw new Error(blockedMessage);
-
-      const appAction = await handleAppWorkspaceToolAction({
-        input,
+      const experienceBlockedMessage = workspaceToolExperienceBlocker({
         session,
-        reportProgress: reportWorkspaceProgress,
-        gitBaseUrlFromContext,
-        findLocalWorkspace,
-        linkLocalProjectOpenPondApp,
-        openPondCacheScope,
-        updateSession,
-        upsertScaffoldApp,
+        action: input.action,
+        args: input.args,
       });
-      if (appAction) {
-        session = appAction.session;
-        result = appAction.result;
-      } else {
-        const sandboxAction = await handleSandboxWorkspaceToolAction({
-          request: input,
-          session,
-          updateSession,
-          findLocalWorkspace,
-        });
-        if (sandboxAction) {
-          result = sandboxAction;
+      if (experienceBlockedMessage) throw new Error(experienceBlockedMessage);
+      if (
+        input.action === "work_agent_package_install" ||
+        input.action === "work_output_delete" ||
+        input.action === "work_output_read"
+      ) {
+        const outputId =
+          typeof input.args.outputId === "string"
+            ? input.args.outputId.trim()
+            : "";
+        const revision =
+          typeof input.args.revision === "number" &&
+          Number.isInteger(input.args.revision) &&
+          input.args.revision > 0
+            ? input.args.revision
+            : null;
+        let outputData: unknown;
+        if (input.action === "work_agent_package_install") {
+          if (!deps.promoteWorkAgentPackage) {
+            throw new Error("Agent package installation is not configured.");
+          }
+          outputData = await deps.promoteWorkAgentPackage({
+            session,
+            outputId,
+            revision,
+            overwrite: input.args.overwrite === true,
+          });
         } else {
-          const { app, state } = await activeWorkspace(session);
-          const activeCapabilities = resolveWorkspaceCapabilities({ session, localProject, state });
-          const activeBlockedMessage = workspaceToolBlockedMessage({
-            action: input.action,
+          const outputAction =
+            input.action === "work_output_delete"
+              ? deps.deleteWorkOutput
+              : deps.readWorkOutput;
+          if (!outputAction) {
+            throw new Error(
+              input.action === "work_output_delete"
+                ? "Work output deletion is not configured."
+                : "Work output reading is not configured."
+            );
+          }
+          outputData = await outputAction({ session, outputId, revision });
+        }
+        result = WorkspaceToolResultSchema.parse({
+          ok: true,
+          action: input.action,
+          output:
+            input.action === "work_agent_package_install"
+              ? "Agent package installed."
+              : input.action === "work_output_delete"
+              ? "Work output deleted."
+              : "Work output loaded.",
+          data: outputData,
+        });
+      } else {
+        const capabilities = resolveWorkspaceCapabilities({
+          session,
+          localProject,
+        });
+        const blockedMessage = workspaceToolBlockedMessage({
+          action: input.action,
+          session,
+          localProject,
+          capabilities,
+        });
+        if (blockedMessage) throw new Error(blockedMessage);
+
+        const appAction = await handleAppWorkspaceToolAction({
+          input,
+          session,
+          reportProgress: reportWorkspaceProgress,
+          gitBaseUrlFromContext,
+          findLocalWorkspace,
+          linkLocalProjectOpenPondApp,
+          openPondCacheScope,
+          updateSession,
+          upsertScaffoldApp,
+        });
+        if (appAction) {
+          session = appAction.session;
+          result = appAction.result;
+        } else {
+          const sandboxAction = await handleSandboxWorkspaceToolAction({
+            request: input,
             session,
-            localProject,
-            state,
-            capabilities: activeCapabilities,
+            updateSession,
+            findLocalWorkspace,
+            sourceTurnId: options.turnId,
+            prepareWorkAgent: deps.prepareWorkAgent,
+            saveWorkAgentPackage: deps.saveWorkAgentPackage,
+            saveWorkOutput: deps.saveWorkOutput,
           });
-          if (activeBlockedMessage) throw new Error(activeBlockedMessage);
-          result = await handleActiveWorkspaceToolAction({
-            app,
-            input,
-            session,
-            state,
-            turnId: options.turnId,
-            refreshLocalProjectWorkspace,
-            withWorkspaceLock,
-            runPostEditChecks,
-            runPostEditWorkflow,
-          });
+          if (sandboxAction) {
+            result = sandboxAction;
+          } else {
+            const { app, state } = await activeWorkspace(session);
+            const activeCapabilities = resolveWorkspaceCapabilities({
+              session,
+              localProject,
+              state,
+            });
+            const activeBlockedMessage = workspaceToolBlockedMessage({
+              action: input.action,
+              session,
+              localProject,
+              state,
+              capabilities: activeCapabilities,
+            });
+            if (activeBlockedMessage) throw new Error(activeBlockedMessage);
+            result = await handleActiveWorkspaceToolAction({
+              app,
+              input,
+              session,
+              state,
+              turnId: options.turnId,
+              refreshLocalProjectWorkspace,
+              withWorkspaceLock,
+              runPostEditChecks,
+              runPostEditWorkflow,
+            });
+          }
         }
       }
-  
+
       const resultSession = await getSession(sessionId).catch(() => session);
       const resultLocalProjectId =
-        resultSession.workspaceKind === "local_project" && resultSession.workspaceId
+        resultSession.workspaceKind === "local_project" &&
+        resultSession.workspaceId
           ? resultSession.workspaceId
           : resultSession.localProjectId ?? null;
       const resultLocalProject = resultLocalProjectId
-        ? await findLocalWorkspace(resultLocalProjectId).catch(() => localProject)
+        ? await findLocalWorkspace(resultLocalProjectId).catch(
+            () => localProject
+          )
         : null;
       const resultExecutionTarget = resolveWorkspaceExecutionTarget({
         session: resultSession,
@@ -284,7 +392,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           output: result.output,
           error: result.ok ? undefined : result.output,
           data: dataWithWorkspaceToolCallId(result.data, workspaceToolCallId, {
-            workspaceExecutionTarget: workspaceExecutionTargetData(resultExecutionTarget),
+            workspaceExecutionTarget: workspaceExecutionTargetData(
+              resultExecutionTarget
+            ),
             workspaceToolTiming: workspaceToolTiming({
               startedAtMs: workspaceToolStartedAt,
               completedAtMs: workspaceToolCompletedAt,
@@ -302,7 +412,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
       }
       if (
         options.turnId &&
-        MUTATING_WORKSPACE_TOOL_ACTIONS.includes(input.action as (typeof MUTATING_WORKSPACE_TOOL_ACTIONS)[number]) &&
+        MUTATING_WORKSPACE_TOOL_ACTIONS.includes(
+          input.action as (typeof MUTATING_WORKSPACE_TOOL_ACTIONS)[number]
+        ) &&
         result.data
       ) {
         await appendWorkspaceDiffEvent(
@@ -354,7 +466,12 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           output: message,
           error: message,
           data: dataWithWorkspaceToolCallId(undefined, workspaceToolCallId, {
-            ...(executionTarget ? { workspaceExecutionTarget: workspaceExecutionTargetData(executionTarget) } : {}),
+            ...(executionTarget
+              ? {
+                  workspaceExecutionTarget:
+                    workspaceExecutionTargetData(executionTarget),
+                }
+              : {}),
             workspaceToolTiming: workspaceToolTiming({
               startedAtMs: workspaceToolStartedAt,
               completedAtMs: workspaceToolCompletedAt,
@@ -386,5 +503,9 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
     executeWorkspaceTool,
     sandboxRequest: deps.sandboxRequest,
   });
-  return { closeCloudWorkspaceReadiness, ensureCloudWorkspaceReady, executeWorkspaceTool };
+  return {
+    closeCloudWorkspaceReadiness,
+    ensureCloudWorkspaceReady,
+    executeWorkspaceTool,
+  };
 }

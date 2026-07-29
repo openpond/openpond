@@ -3,7 +3,9 @@ import { ProviderSettingsSchema, SubagentPreferencesSchema, type AppPreferences 
 
 import {
   DEFAULT_APP_PREFERENCES,
+  chatModelLabel,
   chatProviderLabel,
+  modelOptionsForProvider,
   modelSelectionForSession,
   providerOptionsFromSettings,
   subagentModelRefForRole,
@@ -18,6 +20,51 @@ describe("app model labels", () => {
     expect(chatProviderLabel("codex", null)).toBe("OpenAI Codex");
     expect(providerOptionsFromSettings(null).find((option) => option.value === "codex")?.label).toBe(
       "OpenAI Codex",
+    );
+  });
+
+  test("shows a trained model name instead of its internal lineage id", () => {
+    const modelId = "model_lineage_ead2e300ba77d6fa0860d94c";
+    const providerSettings = ProviderSettingsSchema.parse({
+      providers: {
+        "local-adapter": {
+          enabled: true,
+          defaultModel: modelId,
+        },
+      },
+      statuses: {
+        "local-adapter": {
+          id: "local-adapter",
+          displayName: "My Models",
+          enabled: true,
+          available: true,
+          defaultModel: modelId,
+          modelIds: [modelId],
+        },
+      },
+      modelCaches: {
+        "local-adapter": {
+          providerId: "local-adapter",
+          source: "manual",
+          models: [
+            {
+              id: modelId,
+              providerId: "local-adapter",
+              displayName: "Evidence-based marketing portfolio allocation · Qwen3 0.6B",
+              source: "cache",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(
+      modelOptionsForProvider("local-adapter", providerSettings).find(
+        (option) => option.value === modelId,
+      )?.label,
+    ).toBe("Evidence-based marketing portfolio allocation · Qwen3 0.6B");
+    expect(chatModelLabel(modelId, providerSettings, "local-adapter")).toBe(
+      "Evidence-based marketing portfolio allocation · Qwen3 0.6B",
     );
   });
 

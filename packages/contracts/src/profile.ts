@@ -114,7 +114,6 @@ export const OpenPondProfileDiffSummarySchema = z.object({
 export const OpenPondProfileHostedSourceCheckStatusSchema = z.object({
   status: z.string(),
   agentId: z.string().nullable().optional(),
-  workItemId: z.string().nullable().optional(),
   deployPlanStatus: z.string().nullable().optional(),
   canRun: z.boolean().nullable().optional(),
   canDeploy: z.boolean().nullable().optional(),

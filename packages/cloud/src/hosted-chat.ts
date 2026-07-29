@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_OPENPOND_OPCHAT_API_BASE_URL } from "./urls.js";
+import { withVercelProtectionBypass } from "./api/vercel-protection.js";
 
 export type HostedChatRole = "system" | "user" | "assistant" | "tool";
 
@@ -248,6 +249,7 @@ function requireToken(value: string): string {
 }
 
 function hostedHeaders(
+  requestUrl: string,
   token: string,
   accept: string,
   requestId?: string
@@ -258,7 +260,7 @@ function hostedHeaders(
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-code");
   headers.set("x-openpond-request-id", requestId || randomUUID());
-  return headers;
+  return withVercelProtectionBypass(requestUrl, headers);
 }
 
 async function readError(response: Response): Promise<string> {
@@ -336,9 +338,10 @@ export async function listOpChatModels(
   options: HostedModelsRequestOptions
 ): Promise<HostedModelsResponse> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
-  const response = await fetch(`${apiBaseUrl}/models`, {
+  const requestUrl = `${apiBaseUrl}/models`;
+  const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    headers: hostedHeaders(requestUrl, options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -355,11 +358,12 @@ export async function getOpChatModel(
   options: HostedModelRequestOptions
 ): Promise<HostedModel> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
+  const requestUrl = `${apiBaseUrl}/models/${encodeURIComponent(options.model)}`;
   const response = await fetch(
-    `${apiBaseUrl}/models/${encodeURIComponent(options.model)}`,
+    requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      headers: hostedHeaders(requestUrl, options.token, "application/json"),
       signal: options.signal,
     }
   );
@@ -379,9 +383,10 @@ export async function listOpChatProviders(
   options: HostedProvidersRequestOptions
 ): Promise<HostedProvidersResponse> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
-  const response = await fetch(`${apiBaseUrl}/providers`, {
+  const requestUrl = `${apiBaseUrl}/providers`;
+  const response = await fetch(requestUrl, {
     method: "GET",
-    headers: hostedHeaders(options.token, "application/json"),
+    headers: hostedHeaders(requestUrl, options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -398,11 +403,12 @@ export async function getOpChatProvider(
   options: HostedProviderRequestOptions
 ): Promise<HostedProvider> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
+  const requestUrl = `${apiBaseUrl}/providers/${encodeURIComponent(options.provider)}`;
   const response = await fetch(
-    `${apiBaseUrl}/providers/${encodeURIComponent(options.provider)}`,
+    requestUrl,
     {
       method: "GET",
-      headers: hostedHeaders(options.token, "application/json"),
+      headers: hostedHeaders(requestUrl, options.token, "application/json"),
       signal: options.signal,
     }
   );
@@ -422,9 +428,11 @@ export async function sendHostedChatTurn(
   options: HostedChatRequestOptions
 ): Promise<HostedChatCompletion> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
-  const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+  const requestUrl = `${apiBaseUrl}/chat/completions`;
+  const response = await fetch(requestUrl, {
     method: "POST",
     headers: hostedHeaders(
+      requestUrl,
       options.token,
       "application/json",
       options.requestId
@@ -499,9 +507,11 @@ export async function* streamHostedChatTurn(
   options: HostedChatRequestOptions
 ): AsyncGenerator<HostedChatStreamDelta, void, unknown> {
   const apiBaseUrl = normalizeApiBaseUrl(options.apiBaseUrl);
-  const response = await fetch(`${apiBaseUrl}/chat/completions`, {
+  const requestUrl = `${apiBaseUrl}/chat/completions`;
+  const response = await fetch(requestUrl, {
     method: "POST",
     headers: hostedHeaders(
+      requestUrl,
       options.token,
       "text/event-stream",
       options.requestId

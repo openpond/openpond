@@ -63,14 +63,12 @@ export function buildComposerCreateImproveRun(input: {
     hosted: {
       teamId: input.session?.cloudTeamId ?? input.payload?.preferences.defaultTeamId ?? null,
       projectId: input.session?.cloudProjectId ?? null,
-      workItemId: null,
     },
     actor: {
       id: input.payload?.account.activeProfile?.handle ?? null,
       label: input.payload?.account.label ?? null,
     },
     session: input.session,
-    workItemId: null,
     targetAgentId,
     targetAgentName: input.parsed.command === "edit"
       ? editTarget?.agentId ?? input.session?.appName ?? null
@@ -120,14 +118,12 @@ export function buildLabAgentCreateImproveRun(input: {
     hosted: {
       teamId: input.session.cloudTeamId ?? input.payload?.preferences.defaultTeamId ?? null,
       projectId: input.session.cloudProjectId ?? null,
-      workItemId: null,
     },
     actor: {
       id: input.payload?.account.activeProfile?.handle ?? null,
       label: input.payload?.account.label ?? null,
     },
     session: input.session,
-    workItemId: null,
     targetAgentId,
     targetAgentName: null,
     context: {
@@ -178,14 +174,12 @@ export function buildLabAgentImproveRun(input: {
     hosted: {
       teamId: input.session.cloudTeamId ?? input.payload?.preferences.defaultTeamId ?? null,
       projectId: input.session.cloudProjectId ?? null,
-      workItemId: null,
     },
     actor: {
       id: input.payload?.account.activeProfile?.handle ?? null,
       label: input.payload?.account.label ?? null,
     },
     session: input.session,
-    workItemId: null,
     targetAgentId,
     targetAgentName: input.agentName?.trim() || targetAgentId,
     context: {
@@ -512,12 +506,11 @@ function baseCreateImproveRun(input: {
     hostedSourceRef: string | null;
     hostedSourceCommit: string | null;
   };
-  hosted: { teamId: string | null; projectId: string | null; workItemId: string | null };
+  hosted: { teamId: string | null; projectId: string | null };
   actor: { id: string | null; label: string | null };
   session: Session | null;
   conversationId?: string | null;
   project?: CloudProject;
-  workItemId: string | null;
   targetAgentId: string | null;
   targetAgentName: string | null;
   context: {
@@ -563,7 +556,6 @@ function baseCreateImproveRun(input: {
           activeProfile: input.profile.id,
           sourceRef: input.profile.hostedSourceRef,
           baseSha: input.profile.hostedSourceCommit,
-          workItemId: input.hosted.workItemId,
           confirmationPolicy: "always_require_plan_approval",
         },
     actor: { id: input.actor.id, kind: "user", label: input.actor.label },
@@ -571,7 +563,6 @@ function baseCreateImproveRun(input: {
       profileId: input.profile.id,
       conversationId: input.conversationId ?? input.session?.id ?? null,
       originTurnId: null,
-      workItemId: input.workItemId,
       projectId,
       targetProject: input.project
         ? {
@@ -665,7 +656,6 @@ function workflowCaptureForRun(run: CreateImproveRun, timestamp: string) {
     metadata: {
       source: run.metadata.source ?? "create_improve",
       conversationId: run.scope.conversationId,
-      workItemId: run.scope.workItemId,
       projectId: run.scope.projectId,
     },
     createdAt: timestamp,

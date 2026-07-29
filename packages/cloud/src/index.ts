@@ -8,3 +8,4 @@ export * from "./profile/hosted-run-idempotency.js";
 export * from "./profile/local-profile.js";
 export * from "./profile/profile-skills.js";
 export * from "./profile/profile-skill-mutations.js";
+export * from "./api/vercel-protection.js";

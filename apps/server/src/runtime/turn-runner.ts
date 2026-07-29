@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
+  DEFAULT_SESSION_EXPERIENCE,
   LocalModelChatConfigurationSchema,
   SendTurnRequestSchema,
   SessionUserQuestionResolutionSchema,
@@ -34,9 +35,7 @@ import {
   nativeToolTransportEnabledForProvider,
   resolveHostedToolRolloutFlags,
 } from "./hosted-turn/rollout.js";
-import {
-  createConnectedAppTurnResolver,
-} from "./hosted-turn/connected-apps.js";
+import { createConnectedAppTurnResolver } from "./hosted-turn/connected-apps.js";
 import { resolveMentionedAppsForTurn } from "./hosted-turn/mentioned-apps.js";
 import { createHostedCompactionRuntime } from "./hosted-turn/compaction-runtime.js";
 import {
@@ -50,25 +49,37 @@ import { createCreateImproveRuntime } from "./create-pipeline/runtime.js";
 import { createCreateImproveTurnHandler } from "./create-pipeline/send-turn.js";
 import { ActiveTurnRegistry } from "./turns/active-turn-registry.js";
 import { KeyedRegistry } from "./turns/keyed-registry.js";
-import type { ActiveTurn, TurnRunner, TurnRunnerDependencies } from "./turns/ports.js";
+import type {
+  ActiveTurn,
+  TurnRunner,
+  TurnRunnerDependencies,
+} from "./turns/ports.js";
 import { createProfileSkillCommandRuntime } from "./turns/profile-skill-command-runtime.js";
 import { createInterruptionRuntime } from "./turns/interruption-runtime.js";
-import { createActiveTurnSettlement, createTurnRunnerLifecycle } from "./turns/lifecycle-runtime.js";
+import {
+  createActiveTurnSettlement,
+  createTurnRunnerLifecycle,
+} from "./turns/lifecycle-runtime.js";
 import { createSafeModelUsagePersistence } from "./turns/model-usage-persistence.js";
 import {
   resolveSubagentDelegation,
   subagentSystemContextForSession,
 } from "./subagents/policies-and-prompts.js";
-import { applySubagentPatch, createSubagentPatchApprovalRuntime } from "./subagents/patch-approval.js";
-import { createSubagentWorkspaceRuntime } from "./subagents/workspace-runtime.js";
 import {
-  createSubagentContinuationRuntime,
-} from "./subagents/continuation-runtime.js";
+  applySubagentPatch,
+  createSubagentPatchApprovalRuntime,
+} from "./subagents/patch-approval.js";
+import { createSubagentWorkspaceRuntime } from "./subagents/workspace-runtime.js";
+import { createSubagentContinuationRuntime } from "./subagents/continuation-runtime.js";
 import { createSubagentMessagingRuntime } from "./subagents/messaging-runtime.js";
 import { createSubagentChildTurnRuntime } from "./subagents/child-turn-runtime.js";
 import { createSubagentCompletionRuntime } from "./subagents/completion-runtime.js";
 import { createSubagentToolRuntime } from "./subagents/tool-runtime.js";
-import type { SubagentLifecycleControl, SubagentToolHandlers, SubagentTurnHooks } from "./subagents/facets.js";
+import type {
+  SubagentLifecycleControl,
+  SubagentToolHandlers,
+  SubagentTurnHooks,
+} from "./subagents/facets.js";
 import { createSubagentLifecycleRuntime } from "./subagents/lifecycle-runtime.js";
 import { createSubagentRepositoryRuntime } from "./subagents/repository-runtime.js";
 import {
@@ -80,56 +91,85 @@ import {
   authoringCommandRoute,
   authoringCommandRouteFromLegacyAgentRun,
 } from "./authoring-command-routing.js";
+import {
+  experienceAllowsAuthoring,
+  experienceAllowsConnectedApps,
+  experienceAllowsProfileSkills,
+} from "./experience-policy.js";
 
 export * from "./turns/public-api.js";
 
 function parseUserQuestionResolution(
   value: unknown,
-  priorEvents: RuntimeEvent[],
+  priorEvents: RuntimeEvent[]
 ): SessionUserQuestionResolution | null {
   if (value === undefined) return null;
   const parsed = SessionUserQuestionResolutionSchema.parse(value);
   const asked = priorEvents.find((runtimeEvent) => {
     if (runtimeEvent.name !== "user_question.asked") return false;
-    const data = runtimeEvent.data && typeof runtimeEvent.data === "object" && !Array.isArray(runtimeEvent.data)
-      ? runtimeEvent.data as Record<string, unknown>
-      : null;
-    const question = data?.question && typeof data.question === "object" && !Array.isArray(data.question)
-      ? data.question as Record<string, unknown>
-      : null;
+    const data =
+      runtimeEvent.data &&
+      typeof runtimeEvent.data === "object" &&
+      !Array.isArray(runtimeEvent.data)
+        ? (runtimeEvent.data as Record<string, unknown>)
+        : null;
+    const question =
+      data?.question &&
+      typeof data.question === "object" &&
+      !Array.isArray(data.question)
+        ? (data.question as Record<string, unknown>)
+        : null;
     return question?.id === parsed.questionId;
   });
-  if (!asked) throw new Error(`Pending user question not found: ${parsed.questionId}`);
+  if (!asked)
+    throw new Error(`Pending user question not found: ${parsed.questionId}`);
   const alreadyResolved = priorEvents.some((runtimeEvent) => {
-    if (runtimeEvent.name !== "user_question.answered" && runtimeEvent.name !== "user_question.dismissed") {
+    if (
+      runtimeEvent.name !== "user_question.answered" &&
+      runtimeEvent.name !== "user_question.dismissed"
+    ) {
       return false;
     }
-    const data = runtimeEvent.data && typeof runtimeEvent.data === "object" && !Array.isArray(runtimeEvent.data)
-      ? runtimeEvent.data as Record<string, unknown>
-      : null;
-    const resolution = data?.resolution && typeof data.resolution === "object" && !Array.isArray(data.resolution)
-      ? data.resolution as Record<string, unknown>
-      : null;
+    const data =
+      runtimeEvent.data &&
+      typeof runtimeEvent.data === "object" &&
+      !Array.isArray(runtimeEvent.data)
+        ? (runtimeEvent.data as Record<string, unknown>)
+        : null;
+    const resolution =
+      data?.resolution &&
+      typeof data.resolution === "object" &&
+      !Array.isArray(data.resolution)
+        ? (data.resolution as Record<string, unknown>)
+        : null;
     return resolution?.questionId === parsed.questionId;
   });
-  if (alreadyResolved) throw new Error(`User question is already resolved: ${parsed.questionId}`);
+  if (alreadyResolved)
+    throw new Error(`User question is already resolved: ${parsed.questionId}`);
 
-  const askedData = asked.data && typeof asked.data === "object" && !Array.isArray(asked.data)
-    ? asked.data as Record<string, unknown>
-    : {};
-  const askedQuestion = askedData.question && typeof askedData.question === "object" && !Array.isArray(askedData.question)
-    ? askedData.question as Record<string, unknown>
-    : {};
-  const options = Array.isArray(askedQuestion.options) ? askedQuestion.options : [];
+  const askedData =
+    asked.data && typeof asked.data === "object" && !Array.isArray(asked.data)
+      ? (asked.data as Record<string, unknown>)
+      : {};
+  const askedQuestion =
+    askedData.question &&
+    typeof askedData.question === "object" &&
+    !Array.isArray(askedData.question)
+      ? (askedData.question as Record<string, unknown>)
+      : {};
+  const options = Array.isArray(askedQuestion.options)
+    ? askedQuestion.options
+    : [];
   if (
     parsed.action === "answer" &&
     parsed.optionId &&
-    !options.some((option) => (
-      option &&
-      typeof option === "object" &&
-      !Array.isArray(option) &&
-      (option as Record<string, unknown>).id === parsed.optionId
-    ))
+    !options.some(
+      (option) =>
+        option &&
+        typeof option === "object" &&
+        !Array.isArray(option) &&
+        (option as Record<string, unknown>).id === parsed.optionId
+    )
   ) {
     throw new Error(`Question option not found: ${parsed.optionId}`);
   }
@@ -141,21 +181,26 @@ function parseUserQuestionResolution(
 
 function promptWithUserQuestionResolution(
   prompt: string,
-  resolution: SessionUserQuestionResolution | null,
+  resolution: SessionUserQuestionResolution | null
 ): string {
   if (!resolution) return prompt;
-  const structured = resolution.action === "answer"
-    ? [
-        `The user explicitly answered pending question ${resolution.questionId}.`,
-        resolution.optionId ? `Selected option ID: ${resolution.optionId}.` : null,
-        resolution.text ? `Answer: ${resolution.text}` : null,
-        "Continue the same task using this answer.",
-      ]
-    : [
-        `The user explicitly dismissed pending question ${resolution.questionId}.`,
-        "Continue only if the task can proceed safely without that answer; otherwise explain the blocker.",
-      ];
-  return `${prompt}\n\n[OpenPond question resolution]\n${structured.filter(Boolean).join("\n")}`;
+  const structured =
+    resolution.action === "answer"
+      ? [
+          `The user explicitly answered pending question ${resolution.questionId}.`,
+          resolution.optionId
+            ? `Selected option ID: ${resolution.optionId}.`
+            : null,
+          resolution.text ? `Answer: ${resolution.text}` : null,
+          "Continue the same task using this answer.",
+        ]
+      : [
+          `The user explicitly dismissed pending question ${resolution.questionId}.`,
+          "Continue only if the task can proceed safely without that answer; otherwise explain the blocker.",
+        ];
+  return `${prompt}\n\n[OpenPond question resolution]\n${structured
+    .filter(Boolean)
+    .join("\n")}`;
 }
 
 export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
@@ -207,6 +252,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendHostedContextUsage,
     streamLocalByokChatTurn,
     streamOpenPondHostedChatTurn = defaultStreamOpenPondHostedChatTurn,
+    runLocalCreatePipelineChecks,
     planCreateImprove,
     turnFollowUpQueue,
     subagentQueue,
@@ -216,7 +262,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = deps;
   const hostedToolFlags = resolveHostedToolRolloutFlags(deps.hostedToolFlags);
   const activeTurns = new ActiveTurnRegistry();
-  const subagentParentWakeJobs = new KeyedRegistry<BackgroundWorkReceipt>("subagent parent wake job");
+  const subagentParentWakeJobs = new KeyedRegistry<BackgroundWorkReceipt>(
+    "subagent parent wake job"
+  );
   const connectedAppsForTurn = createConnectedAppTurnResolver({
     listIntegrationConnections,
     appendRuntimeEvent,
@@ -237,14 +285,27 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   }
 
   function browserControlAvailable(session: Session): boolean {
-    return browserToolExecutor?.available({ sessionId: session.id, conversationId: session.id }) ?? false;
+    return (
+      browserToolExecutor?.available({
+        sessionId: session.id,
+        conversationId: session.id,
+      }) ?? false
+    );
   }
 
   function actionCatalogInstructionModeForProvider(
-    provider: ChatProvider,
+    provider: ChatProvider
   ): "text_fallback" | "native_tool" | "none" {
-    if (nativeToolsEnabledForProvider(provider) && hostedToolFlags.dynamicActionTools) return "native_tool";
-    if (hostedToolInstructionModeForProvider(hostedToolFlags, provider) === "full_text_fallback") return "text_fallback";
+    if (
+      nativeToolsEnabledForProvider(provider) &&
+      hostedToolFlags.dynamicActionTools
+    )
+      return "native_tool";
+    if (
+      hostedToolInstructionModeForProvider(hostedToolFlags, provider) ===
+      "full_text_fallback"
+    )
+      return "text_fallback";
     return "none";
   }
 
@@ -254,7 +315,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
 
   async function updateStoredTurn(
     turnId: string,
-    updater: (turn: Turn) => Turn,
+    updater: (turn: Turn) => Turn
   ): Promise<Turn | null> {
     return store.updateTurn(turnId, updater);
   }
@@ -272,7 +333,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     activeTurns,
     getSession,
     getTurn: getStoredTurn,
-    latestTurnForSession: (sessionId, status) => store.latestTurnForSession(sessionId, status),
+    latestTurnForSession: (sessionId, status) =>
+      store.latestTurnForSession(sessionId, status),
     interruptTurn,
   });
   const turnRunnerLifecycle = createTurnRunnerLifecycle({
@@ -285,9 +347,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   const subagentRepositoryRuntime = createSubagentRepositoryRuntime({
     createSession,
     queue: subagentQueue,
-    upsertRun: store.upsertSubagentRun ? (run) => store.upsertSubagentRun!(run) : undefined,
-    getRun: store.getSubagentRun ? (runId) => store.getSubagentRun!(runId) : undefined,
-    listRuns: store.listSubagentRuns ? (query) => store.listSubagentRuns!(query) : undefined,
+    upsertRun: store.upsertSubagentRun
+      ? (run) => store.upsertSubagentRun!(run)
+      : undefined,
+    getRun: store.getSubagentRun
+      ? (runId) => store.getSubagentRun!(runId)
+      : undefined,
+    listRuns: store.listSubagentRuns
+      ? (query) => store.listSubagentRuns!(query)
+      : undefined,
     appendMessage: store.appendSubagentMessage
       ? (message) => store.appendSubagentMessage!(message)
       : undefined,
@@ -299,7 +367,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   });
   const subagentToolsAvailable = subagentRepositoryRuntime.available;
   const requireSubagentDeps = subagentRepositoryRuntime.requireDependencies;
-  const upsertSubagentRunAndNotify = subagentRepositoryRuntime.upsertRunAndNotify;
+  const upsertSubagentRunAndNotify =
+    subagentRepositoryRuntime.upsertRunAndNotify;
   const appendSubagentReceipt = subagentRepositoryRuntime.appendReceipt;
 
   const createImproveRuntime = createCreateImproveRuntime({
@@ -309,11 +378,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     getCreateImproveRun: (runId) => store.getCreateImproveRun(runId),
     listCreateImproveRuns: (query) => store.listCreateImproveRuns(query),
     upsertCreateImproveRun: (run) => store.upsertCreateImproveRun(run),
-    mutateCreateImproveRun: (action, updater) => store.mutateCreateImproveRun(action, updater),
+    mutateCreateImproveRun: (action, updater) =>
+      store.mutateCreateImproveRun(action, updater),
     getApproval: (approvalId) => store.getApproval(approvalId),
     upsertApproval,
     appendRuntimeEvent,
     ensureCodexRuntime,
+    runLocalCreatePipelineChecks,
     planCreateImprove,
     turnFollowUpQueue,
     streamLocalByokChatTurn,
@@ -371,8 +442,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     loadProfileState: loadOpenPondProfileStateForRef
       ? (session) => loadOpenPondProfileStateForRef(session.currentProfile)
       : loadOpenPondProfileState
-        ? () => loadOpenPondProfileState()
-        : undefined,
+      ? () => loadOpenPondProfileState()
+      : undefined,
     readProfileSkill: readOpenPondProfileSkill,
     loadBuiltInSkills: deps.loadBuiltInOpenPondSkills,
     readBuiltInSkill: deps.readBuiltInOpenPondSkill,
@@ -392,7 +463,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     createNativeModelToolDefinitions,
     profileSkillInstructionModeForProvider,
     subagentToolsAvailable,
-    runtimeEventsForSession: (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
+    runtimeEventsForSession: (sessionId, query) =>
+      store.runtimeEventsForSession(sessionId, query),
     getSession,
     getTaskset: store.getTaskset
       ? (tasksetId) => store.getTaskset!(tasksetId)
@@ -420,7 +492,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     forkSandboxForSubagent,
     cleanupSandboxForSubagent,
     appendSubagentReceipt,
-    requireSubagentPersistence: () => ({ upsertRun: requireSubagentDeps().upsertRun }),
+    requireSubagentPersistence: () => ({
+      upsertRun: requireSubagentDeps().upsertRun,
+    }),
   }) satisfies SubagentLifecycleControl;
   const {
     finalizeSubagentContinuationTurn,
@@ -434,9 +508,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = createSubagentContinuationRuntime({
     requireSubagentDeps,
     runtimeEventsForSession: store.persistedRuntimeEventsForSession
-      ? (sessionId, query) => store.persistedRuntimeEventsForSession!(sessionId, query)
+      ? (sessionId, query) =>
+          store.persistedRuntimeEventsForSession!(sessionId, query)
       : (sessionId, query) => store.runtimeEventsForSession(sessionId, query),
-    latestAssistantTextForSession: (sessionId) => store.latestAssistantTextForSession(sessionId),
+    latestAssistantTextForSession: (sessionId) =>
+      store.latestAssistantTextForSession(sessionId),
     loadAppPreferences,
     getTurn: getStoredTurn,
     getSession,
@@ -449,7 +525,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   } = createSubagentMessagingRuntime({
     requireSubagentDeps,
     getSession,
-    latestTurnForSession: (sessionId) => store.latestPersistedTurnForSession(sessionId),
+    latestTurnForSession: (sessionId) =>
+      store.latestPersistedTurnForSession(sessionId),
     appendRuntimeEvent,
     appendSubagentReceipt,
     getActiveTurn: (sessionId) => {
@@ -458,41 +535,47 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     },
     interruptActiveTurn: (active, reason) => {
       const current = activeTurns.get(active.sessionId);
-      if (!current) throw new Error(`No active turn for session ${active.sessionId}`);
+      if (!current)
+        throw new Error(`No active turn for session ${active.sessionId}`);
       return interruptActiveTurn(current, reason);
     },
   });
-  const { notifyParentOfSubagentCompletion, recoverPendingCompletions } = createSubagentCompletionRuntime({
-    appendMessage: (message) => requireSubagentDeps().appendMessage(message),
-    listMessages: store.listSubagentMessages
-      ? (input) => store.listSubagentMessages!(input)
-      : async () => [],
-    getRun: (runId) => requireSubagentDeps().getRun(runId),
-    listRuns: (input) => requireSubagentDeps().listRuns(input),
-    upsertRun: upsertSubagentRunAndNotify,
-    getSession,
-    hasParentWakeTurn: (sessionId, messageId) => store.hasSubagentParentWakeTurn(sessionId, messageId),
-    appendRuntimeEvent,
-    turnFollowUpQueue,
-    parentWakeJobs: subagentParentWakeJobs,
-    getActiveTurn: (sessionId) => {
-      const active = activeTurns.get(sessionId);
-      return active ? { sessionId, turn: { id: active.turn.id } } : null;
-    },
-    sendTurn,
-  });
-  const { resolveSubagentPatchApplyApproval } = createSubagentPatchApprovalRuntime({
-    getApproval: (approvalId) => store.getApproval(approvalId),
-    getSubagentRun: store.getSubagentRun ? (runId) => store.getSubagentRun!(runId) : null,
-    canPersistSubagentRun: Boolean(store.upsertSubagentRun),
-    getSession,
-    upsertSubagentRunAndNotify,
-    upsertApproval,
-    appendRuntimeEvent,
-    appendSubagentReceipt,
-    appendWorkspaceDiffEvent,
-    cleanupSubagentRun,
-  });
+  const { notifyParentOfSubagentCompletion, recoverPendingCompletions } =
+    createSubagentCompletionRuntime({
+      appendMessage: (message) => requireSubagentDeps().appendMessage(message),
+      listMessages: store.listSubagentMessages
+        ? (input) => store.listSubagentMessages!(input)
+        : async () => [],
+      getRun: (runId) => requireSubagentDeps().getRun(runId),
+      listRuns: (input) => requireSubagentDeps().listRuns(input),
+      upsertRun: upsertSubagentRunAndNotify,
+      getSession,
+      hasParentWakeTurn: (sessionId, messageId) =>
+        store.hasSubagentParentWakeTurn(sessionId, messageId),
+      appendRuntimeEvent,
+      turnFollowUpQueue,
+      parentWakeJobs: subagentParentWakeJobs,
+      getActiveTurn: (sessionId) => {
+        const active = activeTurns.get(sessionId);
+        return active ? { sessionId, turn: { id: active.turn.id } } : null;
+      },
+      sendTurn,
+    });
+  const { resolveSubagentPatchApplyApproval } =
+    createSubagentPatchApprovalRuntime({
+      getApproval: (approvalId) => store.getApproval(approvalId),
+      getSubagentRun: store.getSubagentRun
+        ? (runId) => store.getSubagentRun!(runId)
+        : null,
+      canPersistSubagentRun: Boolean(store.upsertSubagentRun),
+      getSession,
+      upsertSubagentRunAndNotify,
+      upsertApproval,
+      appendRuntimeEvent,
+      appendSubagentReceipt,
+      appendWorkspaceDiffEvent,
+      cleanupSubagentRun,
+    });
   const { runSubagentChildTurn } = createSubagentChildTurnRuntime({
     requireSubagentDeps,
     sendTurn,
@@ -504,8 +587,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ? (run) => store.upsertPersistedSubagentRun!(run)
       : (run) => store.upsertSubagentRun!(run),
     notifyRunStateChanged: notifySubagentRunStateChanged,
-    latestTurnForSession: (sessionId) => store.latestPersistedTurnForSession(sessionId),
-    latestAssistantTextForSession: (sessionId) => store.latestAssistantTextForSession(sessionId),
+    latestTurnForSession: (sessionId) =>
+      store.latestPersistedTurnForSession(sessionId),
+    latestAssistantTextForSession: (sessionId) =>
+      store.latestAssistantTextForSession(sessionId),
     appendSubagentReceipt,
     subagentRuntimeDerivedProgress,
     subagentUsageAttribution,
@@ -517,16 +602,14 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     withSubagentInterruptWakeMetadata,
     notifyParentOfSubagentCompletion,
   });
-  const {
-    archiveSubagentChildSession,
-    subagentLifecycleActionNextStep,
-  } = createSubagentLifecycleRuntime({
-    getRun: (runId) => requireSubagentDeps().getRun(runId),
-    upsertRun: (run) => requireSubagentDeps().upsertRun(run),
-    getSession,
-    updateSession,
-    appendSubagentReceipt,
-  });
+  const { archiveSubagentChildSession, subagentLifecycleActionNextStep } =
+    createSubagentLifecycleRuntime({
+      getRun: (runId) => requireSubagentDeps().getRun(runId),
+      upsertRun: (run) => requireSubagentDeps().upsertRun(run),
+      getSession,
+      updateSession,
+      appendSubagentReceipt,
+    });
   const {
     cancelSubagentFromModelTool,
     cleanupExpiredRetainedSubagentWorkspace,
@@ -563,11 +646,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       sendSubagentMessage: sendSubagentMessageFromModelTool,
       ...(manageSidebarFile
         ? {
-            manageSidebarFile: (context, input) => manageSidebarFile({
-              session: context.session,
-              action: input.action,
-              path: input.path,
-            }),
+            manageSidebarFile: (context, input) =>
+              manageSidebarFile({
+                session: context.session,
+                action: input.action,
+                path: input.path,
+              }),
           }
         : {}),
       ...(executeDatasetBuilderAction
@@ -608,14 +692,18 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         taskId: string;
         actionBindings: import("@openpond/contracts").HarnessActionBinding[];
       };
-    } = {},
+      workInputs?: ReadonlyArray<{
+        localPath?: string;
+        storageName?: string;
+      }>;
+    } = {}
   ) {
     return capabilityCatalogDefinitions(
       openPondActionCatalog,
       runtimeEvents,
       profileSkillRuntime,
       connectedApps,
-      options,
+      options
     );
   }
   async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
@@ -627,68 +715,120 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     }
   }
 
-  async function executeTurn(sessionId: string, payload: unknown): Promise<Turn> {
+  async function executeTurn(
+    sessionId: string,
+    payload: unknown
+  ): Promise<Turn> {
     const input = SendTurnRequestSchema.parse(payload);
     let turnPermissions = turnPermissionsFromSendTurnInput(input);
-    const existingTurn = (await activeInProgressTurn(sessionId)) ?? (await findInProgressTurn(sessionId));
+    const existingTurn =
+      (await activeInProgressTurn(sessionId)) ??
+      (await findInProgressTurn(sessionId));
     if (existingTurn) {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    session = {
+      ...session,
+      experience: session.experience ?? DEFAULT_SESSION_EXPERIENCE,
+    };
     const requestedProvider =
-      input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
-    if (/^\/goal(?:\s|$)/i.test(input.prompt.trimStart()) && requestedProvider !== "codex") {
-      throw new Error("/goal is only available with the Codex provider.");
+      input.modelRef?.providerId ??
+      session.modelRef?.providerId ??
+      session.provider;
+    if (requestedProvider === "codex" && session.experience !== "development") {
+      throw new Error("The Codex provider is available in Development.");
     }
-    const selectedProfileRef = session.currentProfile ??
-      (loadOpenPondProfileLibrary ? (await loadOpenPondProfileLibrary()).lastUsed : null);
+    if (
+      /^\/goal(?:\s|$)/i.test(input.prompt.trimStart()) &&
+      (requestedProvider !== "codex" || session.experience !== "development")
+    ) {
+      throw new Error(
+        "/goal is only available in Development with the Codex provider."
+      );
+    }
+    const selectedProfileRef =
+      session.currentProfile ??
+      (loadOpenPondProfileLibrary
+        ? (await loadOpenPondProfileLibrary()).lastUsed
+        : null);
     if (!session.currentProfile && selectedProfileRef) {
-      session = await updateSession(sessionId, { currentProfile: selectedProfileRef });
+      session = await updateSession(sessionId, {
+        currentProfile: selectedProfileRef,
+      });
     }
     const selectedProfile = loadOpenPondProfileStateForRef
       ? await loadOpenPondProfileStateForRef(selectedProfileRef)
       : loadOpenPondProfileState
-        ? await loadOpenPondProfileState()
-        : null;
+      ? await loadOpenPondProfileState()
+      : null;
     let subagentContinuation = await prepareSubagentContinuationTurn({
       session,
       request: input,
       requestedTurnPermissions: turnPermissions,
     });
-    if (subagentContinuation) turnPermissions = subagentContinuation.turnPermissions;
-    const activeProvider = input.modelRef?.providerId ?? session.modelRef?.providerId ?? session.provider;
-    const activeModelId = input.modelRef?.modelId ?? input.model ?? session.modelRef?.modelId ?? null;
-    const appPreferences = nativeToolsEnabledForProvider(activeProvider) && subagentToolsAvailable()
-      ? await loadAppPreferences()
-      : null;
-    const subagentDelegation = resolveSubagentDelegation(session, appPreferences);
+    if (subagentContinuation)
+      turnPermissions = subagentContinuation.turnPermissions;
+    const activeProvider =
+      input.modelRef?.providerId ??
+      session.modelRef?.providerId ??
+      session.provider;
+    const activeModelId =
+      input.modelRef?.modelId ??
+      input.model ??
+      session.modelRef?.modelId ??
+      null;
+    const appPreferences =
+      nativeToolsEnabledForProvider(activeProvider) && subagentToolsAvailable()
+        ? await loadAppPreferences()
+        : null;
+    const subagentDelegation = resolveSubagentDelegation(
+      session,
+      appPreferences
+    );
     const turnModelRef: ChatModelRef | null = activeModelId
       ? { providerId: activeProvider, modelId: activeModelId }
       : input.modelRef ?? session.modelRef ?? null;
     const legacyAgentAuthoringRoute = input.createImproveRun
       ? authoringCommandRouteFromLegacyAgentRun(input.createImproveRun)
       : null;
-    const authoringRoute = authoringCommandRoute(input.prompt) ?? legacyAgentAuthoringRoute;
-    const activeCreateImproveRun = legacyAgentAuthoringRoute ? null : input.createImproveRun;
-    const profileSkillCommand = !authoringRoute && executeProfileSkillCommand
-      ? await executeProfileSkillCommand({
-          prompt: input.prompt,
-          profileRef: selectedProfileRef,
-        })
-      : null;
+    const authoringRoute =
+      authoringCommandRoute(input.prompt) ?? legacyAgentAuthoringRoute;
+    if (authoringRoute && !experienceAllowsAuthoring(session.experience)) {
+      throw new Error(
+        "Agent and Skill authoring are available in Development."
+      );
+    }
+    const activeCreateImproveRun = legacyAgentAuthoringRoute
+      ? null
+      : input.createImproveRun;
+    const profileSkillCommand =
+      !authoringRoute &&
+      experienceAllowsProfileSkills(session.experience) &&
+      executeProfileSkillCommand
+        ? await executeProfileSkillCommand({
+            prompt: input.prompt,
+            profileRef: selectedProfileRef,
+          })
+        : null;
     const priorEvents = await store.runtimeEventsForSession(sessionId);
     const userQuestionResolution = parseUserQuestionResolution(
       input.metadata?.userQuestionResolution,
-      priorEvents,
+      priorEvents
     );
 
     const startedAt = now();
-    const effectiveUsageAttribution = input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
+    const effectiveUsageAttribution =
+      input.usageAttribution ?? subagentContinuation?.usageAttribution ?? null;
     const createImproveMetadata = {
       ...(input.metadata ? input.metadata : {}),
       ...(subagentDelegation ? { subagentDelegation } : {}),
-      ...(effectiveUsageAttribution ? { usageAttribution: effectiveUsageAttribution } : {}),
-      ...(activeCreateImproveRun ? { createImproveRun: activeCreateImproveRun } : {}),
+      ...(effectiveUsageAttribution
+        ? { usageAttribution: effectiveUsageAttribution }
+        : {}),
+      ...(activeCreateImproveRun
+        ? { createImproveRun: activeCreateImproveRun }
+        : {}),
       ...(authoringRoute
         ? {
             authoringIntent: authoringRoute.intent,
@@ -709,18 +849,28 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       metadata: createImproveMetadata,
       createImproveRun: activeCreateImproveRun ?? null,
       profileSnapshot:
-        selectedProfileRef && selectedProfile && selectedProfile.mode !== "none" && !selectedProfile.error
+        selectedProfileRef &&
+        selectedProfile &&
+        selectedProfile.mode !== "none" &&
+        !selectedProfile.error
           ? {
               ref: selectedProfileRef,
               revision: selectedProfile.git?.head ?? null,
               sourceHash: createHash("sha256")
-                .update(JSON.stringify({
-                  profile: selectedProfile.activeProfile,
-                  revision: selectedProfile.git?.head ?? null,
-                  agents: selectedProfile.agents,
-                  skills: selectedProfile.skills.map((skill) => [skill.name, skill.sourceHash]),
-                  actions: selectedProfile.actionCatalog.map((action) => action.id),
-                }))
+                .update(
+                  JSON.stringify({
+                    profile: selectedProfile.activeProfile,
+                    revision: selectedProfile.git?.head ?? null,
+                    agents: selectedProfile.agents,
+                    skills: selectedProfile.skills.map((skill) => [
+                      skill.name,
+                      skill.sourceHash,
+                    ]),
+                    actions: selectedProfile.actionCatalog.map(
+                      (action) => action.id
+                    ),
+                  })
+                )
                 .digest("hex"),
             }
           : null,
@@ -733,16 +883,27 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.cwd ??
       (await resolveSessionWorkspaceCwd(session, { ensureOpenPond: false })) ??
       session.cwd ??
-      (session.appId || activeProvider === "codex" ? defaultSessionCwd(session.appId) : null);
+      (session.appId || activeProvider === "codex"
+        ? defaultSessionCwd(session.appId)
+        : null);
     session = await updateSession(sessionId, {
+      experience: session.experience,
       provider: activeProvider,
       modelRef: turnModelRef,
       status: "active",
-      title: session.title === "New chat" ? input.prompt.slice(0, 64) : session.title,
+      title:
+        session.title === "New chat"
+          ? input.prompt.slice(0, 64)
+          : session.title,
       cwd: initialCwd,
     });
     const controller = new AbortController();
-    const activeTurn: ActiveTurn = { session, turn, controller, ...createActiveTurnSettlement() };
+    const activeTurn: ActiveTurn = {
+      session,
+      turn,
+      controller,
+      ...createActiveTurnSettlement(),
+    };
     turnRunnerLifecycle.registerActiveTurn(sessionId, activeTurn);
     const persistGeneratedCrossSystemAttempt = async (input: {
       completedAt: string;
@@ -751,17 +912,26 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         failureClass: "policy_failure" | "infrastructure_failure";
       } | null;
     }) => {
-      const generatedTaskId = typeof turn.metadata.crossSystemTaskId === "string"
-        ? turn.metadata.crossSystemTaskId.trim()
-        : "";
+      const generatedTaskId =
+        typeof turn.metadata.crossSystemTaskId === "string"
+          ? turn.metadata.crossSystemTaskId.trim()
+          : "";
       const modelId = turnModelRef?.modelId ?? activeModelId;
-      if (activeProvider !== "local-adapter" || !modelId || !generatedTaskId || !finalizeCrossSystemTurn) return;
+      if (
+        activeProvider !== "local-adapter" ||
+        !modelId ||
+        !generatedTaskId ||
+        !finalizeCrossSystemTurn
+      )
+        return;
       try {
         const persisted = await finalizeCrossSystemTurn({
           modelId,
-          localProjectId: session.localProjectId ?? (
-            session.workspaceKind === "local_project" ? (session.workspaceId ?? null) : null
-          ),
+          localProjectId:
+            session.localProjectId ??
+            (session.workspaceKind === "local_project"
+              ? session.workspaceId ?? null
+              : null),
           sessionId,
           turnId: turn.id,
           userPrompt: turn.prompt,
@@ -771,30 +941,34 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           terminalFailure: input.terminalFailure ?? null,
         });
         if (persisted) {
-          await appendRuntimeEvent(event({
+          await appendRuntimeEvent(
+            event({
+              sessionId,
+              turnId: turn.id,
+              name: "diagnostic",
+              source: "server",
+              appId: session.appId,
+              status: "completed",
+              output: input.terminalFailure
+                ? "Persisted and graded the failed generated Cross-System Operations chat attempt."
+                : "Persisted and graded the generated Cross-System Operations chat attempt.",
+              data: persisted,
+            })
+          );
+        }
+      } catch (error) {
+        await appendRuntimeEvent(
+          event({
             sessionId,
             turnId: turn.id,
             name: "diagnostic",
             source: "server",
             appId: session.appId,
-            status: "completed",
-            output: input.terminalFailure
-              ? "Persisted and graded the failed generated Cross-System Operations chat attempt."
-              : "Persisted and graded the generated Cross-System Operations chat attempt.",
-            data: persisted,
-          }));
-        }
-      } catch (error) {
-        await appendRuntimeEvent(event({
-          sessionId,
-          turnId: turn.id,
-          name: "diagnostic",
-          source: "server",
-          appId: session.appId,
-          status: "failed",
-          output: error instanceof Error ? error.message : String(error),
-          data: { generatedTaskId },
-        }));
+            status: "failed",
+            output: error instanceof Error ? error.message : String(error),
+            data: { generatedTaskId },
+          })
+        );
       }
     };
     try {
@@ -811,7 +985,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       const attachmentContext = chatAttachmentContext(attachmentContexts);
       const providerPrompt = formatPromptWithAttachmentContext(
         promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
-        attachmentContext,
+        attachmentContext
       );
       await appendRuntimeEvent(
         event({
@@ -845,22 +1019,28 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           event({
             sessionId,
             turnId: turn.id,
-            name: userQuestionResolution.action === "answer"
-              ? "user_question.answered"
-              : "user_question.dismissed",
+            name:
+              userQuestionResolution.action === "answer"
+                ? "user_question.answered"
+                : "user_question.dismissed",
             source: "ui_button",
             action: "ask_user",
             appId: session.appId,
             status: "completed",
-            output: userQuestionResolution.action === "answer"
-              ? userQuestionResolution.text
-              : "Question dismissed.",
+            output:
+              userQuestionResolution.action === "answer"
+                ? userQuestionResolution.text
+                : "Question dismissed.",
             data: { resolution: userQuestionResolution },
-          }),
+          })
         );
       }
       if (profileSkillCommand) {
-        return handleProfileSkillCommand({ session, turn, command: profileSkillCommand });
+        return handleProfileSkillCommand({
+          session,
+          turn,
+          command: profileSkillCommand,
+        });
       }
       if (activeCreateImproveRun) {
         return await handleCreateImproveTurn({
@@ -871,54 +1051,100 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         });
       }
       const initialWorkspaceDiff = await workspaceDiffBaseline(session);
-      const mentionedApps = await resolveMentionedAppsForTurn(input.mentionedAppIds, findOpenPondApp);
-      const connectedApps = await connectedAppsForTurn({
-        refs: input.mentionedConnectedApps,
-        prompt: providerPrompt,
+      const mentionedApps =
+        session.experience === "development"
+          ? await resolveMentionedAppsForTurn(
+              input.mentionedAppIds,
+              findOpenPondApp
+            )
+          : [];
+      const connectedApps = experienceAllowsConnectedApps(session.experience)
+        ? await connectedAppsForTurn({
+            refs: input.mentionedConnectedApps,
+            prompt: providerPrompt,
+            session,
+            turnId: turn.id,
+          })
+        : [];
+      session = await maybeCreateScaffoldForTurn(
         session,
-        turnId: turn.id,
-      });
-      session = await maybeCreateScaffoldForTurn(session, turn.id, providerPrompt);
+        turn.id,
+        providerPrompt
+      );
       activeTurn.session = session;
       throwIfInterrupted(controller.signal);
       const personalizationSoul = await loadPersonalizationSoul();
       const shouldLoadProfileSkills =
-        session.provider === "openpond" || isOpenAiCompatibleProviderId(session.provider);
+        experienceAllowsProfileSkills(session.experience) &&
+        (session.provider === "openpond" ||
+          isOpenAiCompatibleProviderId(session.provider));
       if (authoringRoute && !shouldLoadProfileSkills) {
         throw new Error(
-          `${authoringRoute.intent.artifact === "agent" ? "Agent" : "Skill"} authoring requires an OpenPond hosted-tool provider so the bundled authoring skill and validation tools are available.`,
+          `${
+            authoringRoute.intent.artifact === "agent" ? "Agent" : "Skill"
+          } authoring requires an OpenPond hosted-tool provider so the bundled authoring skill and validation tools are available.`
         );
       }
       const profileSkillRuntime: ProfileSkillRuntime = shouldLoadProfileSkills
-        ? await loadProfileSkillRuntime({ session, turnId: turn.id, profile: selectedProfile })
+        ? await loadProfileSkillRuntime({
+            session,
+            turnId: turn.id,
+            profile: selectedProfile,
+          })
         : { profileSourcePath: null, skills: [], readSkill: null };
       const loadedProfileSkills = shouldLoadProfileSkills
         ? await preloadExplicitProfileSkills({
             session,
             turnId: turn.id,
             prompt: providerPrompt,
-            selectedSkillNames: authoringRoute ? [authoringRoute.skillName] : [],
+            selectedSkillNames: authoringRoute
+              ? [authoringRoute.skillName]
+              : [],
             runtime: profileSkillRuntime,
             signal: controller.signal,
           })
         : [];
-      const extraSystemContext = subagentSystemContextForSession(session, subagentDelegation);
+      const extraSystemContext = subagentSystemContextForSession(
+        session,
+        subagentDelegation
+      );
       if (session.provider === "openpond") {
         const providerTurnId = `openpond-${turn.id}`;
-        const model = turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
-        await updateStoredTurn(turn.id, (current) => ({ ...current, providerTurnId }));
-        const systemPrompt = await hostedSystemPrompt(HOSTED_CHAT_SYSTEM_PROMPT, personalizationSoul, session, {
-          mentionedApps,
-          openPondActionCatalog: input.openPondActionCatalog,
-          openPondProfileSkills: profileSkillRuntime.skills,
-          loadedProfileSkills,
-          connectedApps,
-          toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, "openpond"),
-          actionCatalogInstructionMode: actionCatalogInstructionModeForProvider("openpond"),
-          profileSkillInstructionMode: profileSkillInstructionModeForProvider("openpond", profileSkillRuntime),
-          browserControlAvailable: browserControlAvailable(session),
-          extraSystemContext,
-        });
+        const model =
+          turnModelRef?.modelId || input.model || DEFAULT_OPENPOND_CHAT_MODEL;
+        await updateStoredTurn(turn.id, (current) => ({
+          ...current,
+          providerTurnId,
+        }));
+        const systemPrompt = await hostedSystemPrompt(
+          HOSTED_CHAT_SYSTEM_PROMPT,
+          personalizationSoul,
+          session,
+          {
+            mentionedApps,
+            openPondActionCatalog:
+              session.experience === "development"
+                ? input.openPondActionCatalog
+                : [],
+            openPondProfileSkills: profileSkillRuntime.skills,
+            loadedProfileSkills,
+            connectedApps,
+            toolInstructionMode: hostedToolInstructionModeForProvider(
+              hostedToolFlags,
+              "openpond"
+            ),
+            actionCatalogInstructionMode:
+              actionCatalogInstructionModeForProvider("openpond"),
+            profileSkillInstructionMode: profileSkillInstructionModeForProvider(
+              "openpond",
+              profileSkillRuntime
+            ),
+            browserControlAvailable:
+              session.experience === "development" &&
+              browserControlAvailable(session),
+            extraSystemContext,
+          }
+        );
         const hostedPriorEvents = await maybeAutoCompactHostedContext({
           session,
           turn,
@@ -929,7 +1155,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           systemPrompt,
           signal: controller.signal,
         });
-        const messages = buildChatMessagesForProvider(hostedPriorEvents, providerPrompt, systemPrompt);
+        const messages = buildChatMessagesForProvider(
+          hostedPriorEvents,
+          providerPrompt,
+          systemPrompt
+        );
         await throwIfAutoCompactionOffWouldExceedLimit({
           provider: "openpond",
           model,
@@ -946,8 +1176,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           resourceEvents: hostedPriorEvents,
           mentionedApps,
           connectedApps,
-          openPondActionCatalog: input.openPondActionCatalog ?? [],
+          openPondActionCatalog:
+            session.experience === "development"
+              ? input.openPondActionCatalog ?? []
+              : [],
           profileSkillRuntime,
+          workInputs:
+            session.experience === "work" ? attachmentContexts : undefined,
           userPrompt: providerPrompt,
           workspaceDiffBaseline: initialWorkspaceDiff,
           signal: controller.signal,
@@ -961,11 +1196,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: controller.signal,
             })) {
-              if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };
-              if (delta.type === "reasoning_delta" && delta.text) yield { reasoningText: delta.text, raw: delta.raw };
-              if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls, raw: delta.raw };
-              if (delta.type === "usage") yield { raw: delta.raw, usage: delta.usage };
-              if (delta.type === "finish") yield { finishReason: delta.finishReason, raw: delta.raw };
+              if (delta.type === "text_delta" && delta.text)
+                yield { text: delta.text, raw: delta.raw };
+              if (delta.type === "reasoning_delta" && delta.text)
+                yield { reasoningText: delta.text, raw: delta.raw };
+              if (delta.type === "tool_call_delta")
+                yield { toolCalls: delta.toolCalls, raw: delta.raw };
+              if (delta.type === "usage")
+                yield { raw: delta.raw, usage: delta.usage };
+              if (delta.type === "finish")
+                yield { finishReason: delta.finishReason, raw: delta.raw };
             }
           },
         });
@@ -985,68 +1225,124 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (isOpenAiCompatibleProviderId(session.provider)) {
         const providerTurnId = `${session.provider}-${turn.id}`;
         const model = turnModelRef?.modelId ?? input.model ?? null;
-        const providerSettings = loadProviderSettings ? await loadProviderSettings() : null;
+        const providerSettings = loadProviderSettings
+          ? await loadProviderSettings()
+          : null;
         const runtimeModel =
           model ??
           providerSettings?.providers[session.provider]?.defaultModel ??
-          providerSettings?.modelCaches[session.provider]?.models.find((candidate) => candidate.id.trim())?.id ??
+          providerSettings?.modelCaches[session.provider]?.models.find(
+            (candidate) => candidate.id.trim()
+          )?.id ??
           null;
-        const providerModel = providerSettings?.modelCaches[session.provider]?.models.find((candidate) => candidate.id === runtimeModel);
-        const localModelConfiguration = session.provider === "local-adapter"
-          ? LocalModelChatConfigurationSchema.safeParse(providerModel?.raw?.chatConfiguration).data ?? null
-          : null;
-        if (authoringRoute && localModelConfiguration?.systemPromptMode !== undefined && localModelConfiguration.systemPromptMode !== "full_harness") {
-          throw new Error("Authoring requires the full OpenPond harness system prompt.");
+        const providerModel = providerSettings?.modelCaches[
+          session.provider
+        ]?.models.find((candidate) => candidate.id === runtimeModel);
+        const localModelConfiguration =
+          session.provider === "local-adapter"
+            ? LocalModelChatConfigurationSchema.safeParse(
+                providerModel?.raw?.chatConfiguration
+              ).data ?? null
+            : null;
+        if (
+          authoringRoute &&
+          localModelConfiguration?.systemPromptMode !== undefined &&
+          localModelConfiguration.systemPromptMode !== "full_harness"
+        ) {
+          throw new Error(
+            "Authoring requires the full OpenPond harness system prompt."
+          );
         }
-        const contextLimitTokens = localModelConfiguration?.contextWindowTokens ?? trustedProviderContextLimit({ provider: session.provider, model: runtimeModel, settings: providerSettings });
-        await updateStoredTurn(turn.id, (current) => ({ ...current, providerTurnId }));
-        const systemPrompt = localModelConfiguration && localModelConfiguration.systemPromptMode !== "full_harness"
-          ? localModelSystemPrompt(localModelConfiguration)
-          : await hostedSystemPrompt(HOSTED_CHAT_SYSTEM_PROMPT, personalizationSoul, session, {
-              mentionedApps,
-              openPondActionCatalog: input.openPondActionCatalog,
-              openPondProfileSkills: profileSkillRuntime.skills,
-              loadedProfileSkills,
-              connectedApps,
-              toolInstructionMode: hostedToolInstructionModeForProvider(hostedToolFlags, session.provider),
-              actionCatalogInstructionMode: actionCatalogInstructionModeForProvider(session.provider),
-              profileSkillInstructionMode: profileSkillInstructionModeForProvider(session.provider, profileSkillRuntime),
-              browserControlAvailable: browserControlAvailable(session),
-              extraSystemContext,
-            });
-        const canCompactLocalModel = !localModelConfiguration || (
-          localModelConfiguration.compaction === "when_needed" &&
-          priorEvents.some((item) => item.name === "turn.started")
+        const contextLimitTokens =
+          localModelConfiguration?.contextWindowTokens ??
+          trustedProviderContextLimit({
+            provider: session.provider,
+            model: runtimeModel,
+            settings: providerSettings,
+          });
+        await updateStoredTurn(turn.id, (current) => ({
+          ...current,
+          providerTurnId,
+        }));
+        const systemPrompt =
+          localModelConfiguration &&
+          localModelConfiguration.systemPromptMode !== "full_harness"
+            ? localModelSystemPrompt(localModelConfiguration)
+            : await hostedSystemPrompt(
+                HOSTED_CHAT_SYSTEM_PROMPT,
+                personalizationSoul,
+                session,
+                {
+                  mentionedApps,
+                  openPondActionCatalog:
+                    session.experience === "development"
+                      ? input.openPondActionCatalog
+                      : [],
+                  openPondProfileSkills: profileSkillRuntime.skills,
+                  loadedProfileSkills,
+                  connectedApps,
+                  toolInstructionMode: hostedToolInstructionModeForProvider(
+                    hostedToolFlags,
+                    session.provider
+                  ),
+                  actionCatalogInstructionMode:
+                    actionCatalogInstructionModeForProvider(session.provider),
+                  profileSkillInstructionMode:
+                    profileSkillInstructionModeForProvider(
+                      session.provider,
+                      profileSkillRuntime
+                    ),
+                  browserControlAvailable:
+                    session.experience === "development" &&
+                    browserControlAvailable(session),
+                  extraSystemContext,
+                }
+              );
+        const canCompactLocalModel =
+          !localModelConfiguration ||
+          (localModelConfiguration.compaction === "when_needed" &&
+            priorEvents.some((item) => item.name === "turn.started"));
+        const hostedPriorEvents = canCompactLocalModel
+          ? await maybeAutoCompactHostedContext({
+              session,
+              turn,
+              provider: session.provider,
+              model: runtimeModel ?? "default",
+              maxContextTokens: contextLimitTokens,
+              priorEvents,
+              prompt: providerPrompt,
+              systemPrompt,
+              signal: controller.signal,
+              streamCompactionChatTurn: async function* (streamInput) {
+                if (!streamLocalByokChatTurn) {
+                  throw new Error(
+                    `Provider ${session.provider} is not configured for local BYOK chat.`
+                  );
+                }
+                for await (const delta of streamLocalByokChatTurn({
+                  providerId: session.provider,
+                  modelId: runtimeModel,
+                  messages: streamInput.messages,
+                  requestId: streamInput.requestId,
+                  reasoningEffort: turnPermissions.codexReasoningEffort,
+                  signal: streamInput.signal ?? controller.signal,
+                })) {
+                  if (delta.text) yield { text: delta.text, raw: delta.raw };
+                  if (delta.reasoningText)
+                    yield {
+                      reasoningText: delta.reasoningText,
+                      raw: delta.raw,
+                    };
+                  if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
+                }
+              },
+            })
+          : priorEvents;
+        const messages = buildChatMessagesForProvider(
+          hostedPriorEvents,
+          providerPrompt,
+          systemPrompt
         );
-        const hostedPriorEvents = canCompactLocalModel ? await maybeAutoCompactHostedContext({
-          session,
-          turn,
-          provider: session.provider,
-          model: runtimeModel ?? "default",
-          maxContextTokens: contextLimitTokens,
-          priorEvents,
-          prompt: providerPrompt,
-          systemPrompt,
-          signal: controller.signal,
-          streamCompactionChatTurn: async function* (streamInput) {
-            if (!streamLocalByokChatTurn) {
-              throw new Error(`Provider ${session.provider} is not configured for local BYOK chat.`);
-            }
-            for await (const delta of streamLocalByokChatTurn({
-              providerId: session.provider,
-              modelId: runtimeModel,
-              messages: streamInput.messages,
-              requestId: streamInput.requestId,
-              reasoningEffort: turnPermissions.codexReasoningEffort,
-              signal: streamInput.signal ?? controller.signal,
-            })) {
-              if (delta.text) yield { text: delta.text, raw: delta.raw };
-              if (delta.reasoningText) yield { reasoningText: delta.reasoningText, raw: delta.raw };
-              if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
-            }
-          },
-        }) : priorEvents;
-        const messages = buildChatMessagesForProvider(hostedPriorEvents, providerPrompt, systemPrompt);
         await throwIfAutoCompactionOffWouldExceedLimit({
           provider: session.provider,
           model: runtimeModel ?? "default",
@@ -1065,14 +1361,21 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           resourceEvents: hostedPriorEvents,
           mentionedApps,
           connectedApps,
-          openPondActionCatalog: input.openPondActionCatalog ?? [],
+          openPondActionCatalog:
+            session.experience === "development"
+              ? input.openPondActionCatalog ?? []
+              : [],
           profileSkillRuntime,
+          workInputs:
+            session.experience === "work" ? attachmentContexts : undefined,
           userPrompt: providerPrompt,
           workspaceDiffBaseline: initialWorkspaceDiff,
           signal: controller.signal,
           stream: async function* (loopMessages, options) {
             if (!streamLocalByokChatTurn) {
-              throw new Error(`Provider ${session.provider} is not configured for local BYOK chat.`);
+              throw new Error(
+                `Provider ${session.provider} is not configured for local BYOK chat.`
+              );
             }
             for await (const delta of streamLocalByokChatTurn({
               providerId: session.provider,
@@ -1084,11 +1387,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               signal: controller.signal,
             })) {
               if (delta.text) yield { text: delta.text, raw: delta.raw };
-              if (delta.reasoningText) yield { reasoningText: delta.reasoningText, raw: delta.raw };
-              if (delta.continuation) yield { continuation: delta.continuation, raw: delta.raw };
-              if (delta.toolCalls) yield { toolCalls: delta.toolCalls, raw: delta.raw };
+              if (delta.reasoningText)
+                yield { reasoningText: delta.reasoningText, raw: delta.raw };
+              if (delta.continuation)
+                yield { continuation: delta.continuation, raw: delta.raw };
+              if (delta.toolCalls)
+                yield { toolCalls: delta.toolCalls, raw: delta.raw };
               if (delta.usage) yield { raw: delta.raw, usage: delta.usage };
-              if (delta.finishReason !== undefined) yield { finishReason: delta.finishReason, raw: delta.raw };
+              if (delta.finishReason !== undefined)
+                yield { finishReason: delta.finishReason, raw: delta.raw };
             }
           },
         });
@@ -1110,7 +1417,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         return completeTurn(sessionId, turn.id, providerTurnId);
       }
 
-      if (session.provider !== "codex") throw new Error(`Unsupported provider: ${session.provider}`);
+      if (session.provider !== "codex")
+        throw new Error(`Unsupported provider: ${session.provider}`);
       const codexModel = turnModelRef?.modelId ?? input.model ?? null;
       const turnCwd =
         input.cwd ??
@@ -1118,7 +1426,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           ensureOpenPond: session.workspaceKind !== "local_project",
         })) ??
         session.cwd;
-      if (turnCwd && turnCwd !== session.cwd) session = await updateSession(session.id, { cwd: turnCwd });
+      if (turnCwd && turnCwd !== session.cwd)
+        session = await updateSession(session.id, { cwd: turnCwd });
       activeTurn.session = session;
       const runtime = await ensureCodexRuntime(session, {
         ...input,
@@ -1141,17 +1450,32 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       activeTurn.codexTurnId = providerTurn.turnId;
       if (controller.signal.aborted) {
         await runtime.client
-          .interruptTurn({ threadId: runtime.threadId, turnId: providerTurn.turnId })
+          .interruptTurn({
+            threadId: runtime.threadId,
+            turnId: providerTurn.turnId,
+          })
           .catch(() => undefined);
         throw interruptedError();
       }
-      await updateStoredTurn(turn.id, (current) => ({ ...current, providerTurnId: providerTurn.turnId }));
-      await Promise.race([runtime.client.waitForTurn(providerTurn.turnId), waitForInterrupt(controller.signal)]);
-      await appendWorkspaceDiffEvent(session, turn.id, { baseline: initialWorkspaceDiff });
+      await updateStoredTurn(turn.id, (current) => ({
+        ...current,
+        providerTurnId: providerTurn.turnId,
+      }));
+      await Promise.race([
+        runtime.client.waitForTurn(providerTurn.turnId),
+        waitForInterrupt(controller.signal),
+      ]);
+      await appendWorkspaceDiffEvent(session, turn.id, {
+        baseline: initialWorkspaceDiff,
+      });
       return completeTurn(sessionId, turn.id, providerTurn.turnId);
     } catch (error) {
       if (controller.signal.aborted || (await turnWasInterrupted(turn.id))) {
-        return interruptTurn(session, turn.id, activeTurn.interruptionReason ?? "Stopped by user");
+        return interruptTurn(
+          session,
+          turn.id,
+          activeTurn.interruptionReason ?? "Stopped by user"
+        );
       }
       const message = error instanceof Error ? error.message : String(error);
       if (activeCreateImproveRun) {
@@ -1167,9 +1491,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         completedAt: failed.completedAt ?? now(),
         terminalFailure: {
           message,
-          failureClass: error instanceof Error && error.name === "LocalAdapterToolProtocolError"
-            ? "policy_failure"
-            : "infrastructure_failure",
+          failureClass:
+            error instanceof Error &&
+            error.name === "LocalAdapterToolProtocolError"
+              ? "policy_failure"
+              : "infrastructure_failure",
         },
       });
       return failed;
@@ -1179,7 +1505,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         childSession: session,
         childTurnId: turn.id,
       }).catch(() => undefined);
-      if (activeTurns.get(sessionId)?.turn.id === turn.id) activeTurns.delete(sessionId);
+      if (activeTurns.get(sessionId)?.turn.id === turn.id)
+        activeTurns.delete(sessionId);
       activeTurn.settle();
     }
   }
@@ -1201,8 +1528,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   };
 }
 
-function localModelSystemPrompt(configuration: LocalModelChatConfiguration): string {
-  if (configuration.systemPromptMode === "custom" && configuration.customSystemPrompt) {
+function localModelSystemPrompt(
+  configuration: LocalModelChatConfiguration
+): string {
+  if (
+    configuration.systemPromptMode === "custom" &&
+    configuration.customSystemPrompt
+  ) {
     return configuration.customSystemPrompt;
   }
   return "You are a helpful assistant. Answer the user directly and concisely. Follow the behavior learned for this task when it applies.";

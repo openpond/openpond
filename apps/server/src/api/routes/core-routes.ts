@@ -186,13 +186,11 @@ export async function handleCoreRoutes({
   ) {
     const payload = await bootstrapPayload({
       forceOpenPond: requestUrl.searchParams.get("refresh") === "1",
+      refreshCloudProjects: false,
     });
     sendJson(response, 200, {
       account: payload.account,
       accountMeta: payload.accountMeta,
-      apps: payload.apps,
-      appsError: payload.appsError,
-      appsMeta: payload.appsMeta,
     });
     return true;
   }

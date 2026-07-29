@@ -94,7 +94,6 @@ export const CreateImproveExecutionAdapterSchema = z.discriminatedUnion("kind", 
     activeProfile: z.string().trim().min(1).nullable(),
     sourceRef: NullableStringSchema,
     baseSha: NullableStringSchema,
-    workItemId: NullableStringSchema,
     confirmationPolicy: CreateImproveConfirmationPolicySchema.default(
       "always_require_plan_approval",
     ),
@@ -134,7 +133,6 @@ export const CreateImproveScopeSchema = z.object({
   profileId: z.string().trim().min(1),
   conversationId: NullableStringSchema,
   originTurnId: NullableStringSchema,
-  workItemId: NullableStringSchema,
   projectId: NullableStringSchema,
   targetProject: z
     .object({
@@ -493,7 +491,7 @@ export const CreateImproveIterationPolicySchema = z.object({
 });
 
 export const CreateImproveExternalExecutionRefSchema = z.object({
-  kind: z.enum(["candidate_authoring", "local_apply", "hosted_work_item", "training_job", "evaluation", "pull_request", "release"]),
+  kind: z.enum(["candidate_authoring", "local_apply", "hosted_turn", "training_job", "evaluation", "pull_request", "release"]),
   id: z.string().trim().min(1),
   status: NullableStringSchema,
   metadata: MetadataSchema,

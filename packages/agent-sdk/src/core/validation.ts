@@ -520,12 +520,6 @@ function validateEnvSecrets(project: AgentProjectDefinition, issues: ValidationI
 
 function validateEditable(project: AgentProjectDefinition, issues: ValidationIssue[]) {
   if (!project.editable?.enabled) return;
-  if (project.editable.backend !== "openpond-coding-work-item") addIssue(issues, {
-    code: "editable_backend_invalid",
-    severity: "error",
-    path: "editable.backend",
-    message: "Editable backend must be openpond-coding-work-item.",
-  });
   if (project.editable.allowedPaths.length === 0) addIssue(issues, {
     code: "editable_allowed_paths_missing",
     severity: "error",

@@ -277,6 +277,12 @@ interface Window {
     };
     files?: {
       reveal: (input: { path: string }) => Promise<{ ok: boolean; error?: string }>;
+      saveAs: (input: { path: string; suggestedName: string }) => Promise<{
+        ok: boolean;
+        canceled: boolean;
+        path?: string | null;
+        error?: string;
+      }>;
     };
     retryStartup?: () => Promise<{ ok: boolean; error?: string }>;
     openLogsFolder?: () => Promise<{ ok: boolean; error?: string }>;

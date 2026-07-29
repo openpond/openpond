@@ -13,6 +13,7 @@ import {
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import {
+  installAgentPackageIntoActiveProfile,
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
   loadOpenPondProfileStateForRef,
@@ -95,6 +96,9 @@ import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
+import { createWorkOutputService } from "./work/work-output-service.js";
+import { createWorkAgentPackageService } from "./work/work-agent-package-service.js";
+import { createWorkAgentSdkArchiveLoader } from "./work/work-agent-sdk-archive.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
 import {
@@ -152,9 +156,7 @@ import { createManagedAdapterSyncService } from "./training/managed-adapter-sync
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
 import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
-import {
-  createCrossSystemChatToolRuntime,
-} from "./training/cross-system-operations/index.js";
+import { createCrossSystemChatToolRuntime } from "./training/cross-system-operations/index.js";
 import {
   LOCAL_ADAPTER_PROVIDER_ID,
   listLocalAdapterProviderModels,
@@ -200,6 +202,20 @@ export async function createOpenPondServer(
   const store = new SqliteStore(storeDir, { logger });
   const startedAt = now();
   const serverId = randomUUID();
+  const workOutputService = createWorkOutputService({
+    deviceId: serverId,
+    storeDir,
+    runtimeEventsForSession: (sessionId) =>
+      store.runtimeEventsForSession(sessionId),
+  });
+  const workAgentPackageService = createWorkAgentPackageService({
+    deviceId: serverId,
+    storeDir,
+    runtimeEventsForSession: (sessionId) =>
+      store.runtimeEventsForSession(sessionId),
+    loadAgentSdkArchive: createWorkAgentSdkArchiveLoader({ storeDir }),
+    installAgentPackage: installAgentPackageIntoActiveProfile,
+  });
   const {
     appendRuntimeEvent,
     closeEventSubscribers,
@@ -301,11 +317,16 @@ export async function createOpenPondServer(
     loadMoreOpenPondAppsPayload,
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
+    removeOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
-    profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
-    profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
+    profileSelectPayload,
+    profileRemovePayload,
+    profilePublicationPreviewPayload,
+    profilePublicationPublishPayload,
+    profileInstallPayload,
+    profileUpdatePayload,
     profileInitPayload,
     profileLoadPayload,
     profileCheckPayload,
@@ -353,7 +374,8 @@ export async function createOpenPondServer(
     defaultSessionCwd,
     loadAppPreferences,
     appendRuntimeEvent,
-    loadLastUsedProfile: async () => (await loadOpenPondProfileLibrary()).lastUsed,
+    loadLastUsedProfile: async () =>
+      (await loadOpenPondProfileLibrary()).lastUsed,
   });
 
   const {
@@ -392,6 +414,12 @@ export async function createOpenPondServer(
     upsertScaffoldApp,
     gitBaseUrlFromContext,
     sandboxRequest: sandboxRequestPayload,
+    deleteWorkOutput: workOutputService.deleteWorkOutput,
+    readWorkOutput: workOutputService.readWorkOutput,
+    prepareWorkAgent: workAgentPackageService.prepareWorkAgent,
+    promoteWorkAgentPackage: workAgentPackageService.promoteWorkAgentPackage,
+    saveWorkAgentPackage: workAgentPackageService.saveWorkAgentPackage,
+    saveWorkOutput: workOutputService.saveWorkOutput,
   });
   const openPondCommandAccess = createOpenPondCommandAccessService({
     upsertApproval,
@@ -425,15 +453,13 @@ export async function createOpenPondServer(
       ),
     };
   }
-  const {
-    resolveFireworksCredential,
-    trainingModelText,
-  } = createTrainingModelRuntime({
-    providerSecretPaths,
-    loadLocalByokRuntimeState: localByokRuntimeState,
-    getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
-    streamOpenPondHostedChatTurn,
-  });
+  const { resolveFireworksCredential, trainingModelText } =
+    createTrainingModelRuntime({
+      providerSecretPaths,
+      loadLocalByokRuntimeState: localByokRuntimeState,
+      getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
+      streamOpenPondHostedChatTurn,
+    });
 
   const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
   const taskCreatorService = createTaskCreatorService({
@@ -472,7 +498,7 @@ export async function createOpenPondServer(
     workerProjectDir: path.resolve(
       process.cwd(),
       "python",
-      "openpond-training",
+      "openpond-training"
     ),
   });
   const taskEvaluationService = createTaskEvaluationService({
@@ -521,7 +547,7 @@ export async function createOpenPondServer(
     resolveSelectedTeamId: async () => {
       const entry = await store.getCacheEntry<unknown>(
         APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY,
+        APP_PREFERENCES_CACHE_KEY
       );
       return normalizeAppPreferences(entry?.payload).defaultTeamId;
     },
@@ -547,12 +573,13 @@ export async function createOpenPondServer(
     }
     throw new Error(`Unknown compute action ${action}.`);
   };
-  const portableTrainingDependencies =
-    createPortableTrainingServerDependencies({
+  const portableTrainingDependencies = createPortableTrainingServerDependencies(
+    {
       storeDir,
       environment: process.env,
       computeInventory: computeService.inventory,
-    });
+    }
+  );
   const trainingService = createTrainingService({
     store,
     storeDir,
@@ -564,13 +591,14 @@ export async function createOpenPondServer(
     revalidateCompute: async () => void (await computeService.scan()),
     resolveModelPath: computeService.modelPath,
     prepareModel: (model) => computeService.ensureModel(model),
-    modelArtifactStore: async () => (await computeService.settings()).modelStorePath,
+    modelArtifactStore: async () =>
+      (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
     ...portableTrainingDependencies,
     resolveManagedTrainingAccess: async () => {
       const entry = await store.getCacheEntry<unknown>(
         APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY,
+        APP_PREFERENCES_CACHE_KEY
       );
       const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
       return resolveManagedAdapterUserAccess({ teamId });
@@ -625,7 +653,7 @@ export async function createOpenPondServer(
     workerProjectDir: path.resolve(
       process.cwd(),
       "python",
-      "openpond-training",
+      "openpond-training"
     ),
     datasetStorageRoot: async () =>
       (await computeService.settings()).datasetStorePath,
@@ -703,13 +731,22 @@ export async function createOpenPondServer(
       sandboxRequestPayload({ type: "delete", sandboxId }),
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
-    executeDatasetBuilderAction: async ({ session, provider, model, action, payload }) => {
+    executeDatasetBuilderAction: async ({
+      session,
+      provider,
+      model,
+      action,
+      payload,
+    }) => {
       const profile = session.currentProfile
         ? await loadOpenPondProfileStateForRef(session.currentProfile)
         : await loadOpenPondProfileState();
-      const profileId = session.currentProfile?.profileId ?? profile.activeProfile ?? "default";
-      const creationId = typeof payload.creationId === "string" ? payload.creationId : null;
-      const tasksetId = typeof payload.tasksetId === "string" ? payload.tasksetId : null;
+      const profileId =
+        session.currentProfile?.profileId ?? profile.activeProfile ?? "default";
+      const creationId =
+        typeof payload.creationId === "string" ? payload.creationId : null;
+      const tasksetId =
+        typeof payload.tasksetId === "string" ? payload.tasksetId : null;
       if (action === "start") {
         return trainingApi.request("start_creation", {
           profileId,
@@ -731,9 +768,21 @@ export async function createOpenPondServer(
           },
         });
       }
-      if (action === "status") return trainingApi.request("state", { profileId });
-      if (!creationId && ["revise", "answer_questions", "approve_disclosure", "materialize", "cancel"].includes(action)) {
-        throw new Error("creationId is required for this Dataset Builder action.");
+      if (action === "status")
+        return trainingApi.request("state", { profileId });
+      if (
+        !creationId &&
+        [
+          "revise",
+          "answer_questions",
+          "approve_disclosure",
+          "materialize",
+          "cancel",
+        ].includes(action)
+      ) {
+        throw new Error(
+          "creationId is required for this Dataset Builder action."
+        );
       }
       if (action === "revise") {
         return trainingApi.request("chat_creation", {
@@ -762,7 +811,8 @@ export async function createOpenPondServer(
       if (action === "cancel") {
         return trainingApi.request("cancel_creation", { creationId });
       }
-      if (!tasksetId) throw new Error("tasksetId is required for Dataset testing.");
+      if (!tasksetId)
+        throw new Error("tasksetId is required for Dataset testing.");
       if (action === "audit_graders") {
         return trainingApi.request("audit_graders", { tasksetId });
       }
@@ -776,10 +826,12 @@ export async function createOpenPondServer(
         tasksetId,
         models: [{ providerId: provider, modelId: model }],
         seeds: [17],
-        attemptsPerTask: typeof payload.attemptsPerTask === "number"
-          ? payload.attemptsPerTask
-          : 4,
-        taskLimit: typeof payload.taskLimit === "number" ? payload.taskLimit : 8,
+        attemptsPerTask:
+          typeof payload.attemptsPerTask === "number"
+            ? payload.attemptsPerTask
+            : 4,
+        taskLimit:
+          typeof payload.taskLimit === "number" ? payload.taskLimit : 8,
         split: payload.split ?? "train",
         selectionStrategy: "rft_easy_curriculum_v1",
       });
@@ -792,11 +844,13 @@ export async function createOpenPondServer(
     readOpenPondProfileSkill: readProfileSkill,
     loadBuiltInOpenPondSkills: async () => [
       await loadTasksetAuthoringProfileSkill(),
-      ...await loadBundledAuthoringSkills(),
+      ...(await loadBundledAuthoringSkills()),
     ],
     readBuiltInOpenPondSkill: async (name) => {
-      if (name === "openpond-taskset-authoring") return readTasksetAuthoringProfileSkill();
-      if (isBundledAuthoringSkillName(name)) return readBundledAuthoringProfileSkill(name);
+      if (name === "openpond-taskset-authoring")
+        return readTasksetAuthoringProfileSkill();
+      if (isBundledAuthoringSkillName(name))
+        return readBundledAuthoringProfileSkill(name);
       throw new Error(`Built-in OpenPond skill not found: ${name}`);
     },
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
@@ -810,44 +864,61 @@ export async function createOpenPondServer(
         return {
           ...response,
           changed: null,
-          nextStep: response.items.length === 0
-            ? "There are no pinned or saved files."
-            : `Listed ${response.items.length} sidebar file${response.items.length === 1 ? "" : "s"}.`,
+          nextStep:
+            response.items.length === 0
+              ? "There are no pinned or saved files."
+              : `Listed ${response.items.length} sidebar file${
+                  response.items.length === 1 ? "" : "s"
+                }.`,
         };
       }
       const path = normalizeSidebarFilePath(requestedPath ?? "");
-      const workspaceId = session.workspaceId ?? session.localProjectId ?? session.appId;
+      const workspaceId =
+        session.workspaceId ?? session.localProjectId ?? session.appId;
       if (!workspaceId) {
-        throw new Error("This chat is not attached to a workspace, so it cannot manage a workspace file.");
+        throw new Error(
+          "This chat is not attached to a workspace, so it cannot manage a workspace file."
+        );
       }
-      const workspaceKind = session.workspaceKind === "local_project" ? "local" : "sandbox";
-      const workspaceName = session.workspaceName ?? session.appName ?? session.title ?? workspaceId;
+      const workspaceKind =
+        session.workspaceKind === "local_project" ? "local" : "sandbox";
+      const workspaceName =
+        session.workspaceName ??
+        session.appName ??
+        session.title ??
+        workspaceId;
       const response = await patchSidebarFileBookmarkPayload({
         workspaceKind,
         workspaceId,
         workspaceName,
         path,
-        status: action === "pin"
-          ? "pinned"
-          : action === "save_for_later"
+        status:
+          action === "pin"
+            ? "pinned"
+            : action === "save_for_later"
             ? "saved_for_later"
             : "none",
         sourceSessionId: session.id,
       });
-      const changed = response.items.find((item) =>
-        item.workspaceKind === workspaceKind &&
-        item.workspaceId === workspaceId &&
-        item.path === path
-      ) ?? null;
-      const verb = action === "pin"
-        ? "Pinned"
-        : action === "save_for_later"
+      const changed =
+        response.items.find(
+          (item) =>
+            item.workspaceKind === workspaceKind &&
+            item.workspaceId === workspaceId &&
+            item.path === path
+        ) ?? null;
+      const verb =
+        action === "pin"
+          ? "Pinned"
+          : action === "save_for_later"
           ? "Saved"
           : "Removed";
       return {
         ...response,
         changed,
-        nextStep: `${verb} ${path}${action === "save_for_later" ? " for later" : ""}.`,
+        nextStep: `${verb} ${path}${
+          action === "save_for_later" ? " for later" : ""
+        }.`,
       };
     },
     listIntegrationConnections: listSandboxIntegrationConnections,
@@ -1486,11 +1557,16 @@ export async function createOpenPondServer(
       refreshOpenPondPayload,
       switchOpenPondPayload,
       saveOpenPondAccountPayload,
+      removeOpenPondAccountPayload,
       updateOpenPondAccountConfigPayload,
       profileCurrentPayload,
       profileCatalogPayload,
-      profileSelectPayload, profileRemovePayload, profilePublicationPreviewPayload,
-      profilePublicationPublishPayload, profileInstallPayload, profileUpdatePayload,
+      profileSelectPayload,
+      profileRemovePayload,
+      profilePublicationPreviewPayload,
+      profilePublicationPublishPayload,
+      profileInstallPayload,
+      profileUpdatePayload,
       profileInitPayload,
       profileLoadPayload,
       profileCheckPayload,
@@ -1638,10 +1714,7 @@ export async function createOpenPondServer(
     markClosing: () => {
       closing = true;
     },
-    backgroundLoops: [
-      taskMinerBackgroundLoop,
-      localAgentScheduleLoop,
-    ],
+    backgroundLoops: [taskMinerBackgroundLoop, localAgentScheduleLoop],
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,
@@ -1678,7 +1751,9 @@ export async function createOpenPondServer(
 
 if (isCliEntrypoint(import.meta.url)) {
   void runOpenPondServerCli(createOpenPondServer).catch((error) => {
-    console.error(error instanceof Error ? error.message : String(error));
+    console.error(
+      error instanceof Error ? error.stack ?? error.message : String(error)
+    );
     process.exit(1);
   });
 }

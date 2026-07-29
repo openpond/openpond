@@ -45,11 +45,13 @@ describe("canonical Create/Improve planner", () => {
           directActionHint: null,
           artifactPolicy: "Persist the trace and run summary.",
         },
-        sourcePlan: [{
-          path: "agents/support-items",
-          operation: "create",
-          reason: "Implement the Agent.",
-        }],
+        sourcePlan: [
+          {
+            path: "agents/support-items",
+            operation: "create",
+            reason: "Implement the Agent.",
+          },
+        ],
         requirements: [],
         checks: [{ name: "eval", command: "pnpm agent:eval", required: true }],
       },
@@ -73,7 +75,7 @@ describe("canonical Create/Improve planner", () => {
     });
   });
 
-  test.skip("legacy Agent Create/Improve planner rename behavior is retired", async () => {
+  test("renames an Agent target while preserving its default action contract", async () => {
     const run = createImproveRunFixture({
       target: {
         kind: "agent",
@@ -111,7 +113,9 @@ describe("canonical Create/Improve planner", () => {
       id: "account-health-agent",
       defaultActionKey: "account-health-agent.chat",
     });
-    expect(planned.plan?.defaultChatAction.key).toBe("account-health-agent.chat");
+    expect(planned.plan?.defaultChatAction.key).toBe(
+      "account-health-agent.chat"
+    );
   });
 
   test("normalizes question and source-operation aliases before validation", async () => {
@@ -119,13 +123,15 @@ describe("canonical Create/Improve planner", () => {
       schemaVersion: "openpond.createImprove.plannerDecision.v1",
       decision: "questions",
       summary: "Need one choice.",
-      questions: [{
-        kind: "dropdown",
-        title: "Output",
-        prompt: "Which output should the Agent create?",
-        required: true,
-        options: [{ label: "Summary", value: "summary" }],
-      }],
+      questions: [
+        {
+          kind: "dropdown",
+          title: "Output",
+          prompt: "Which output should the Agent create?",
+          required: true,
+          options: [{ label: "Summary", value: "summary" }],
+        },
+      ],
     });
     expect(questionRun.questions[0]?.kind).toBe("single_choice");
 
@@ -138,11 +144,13 @@ describe("canonical Create/Improve planner", () => {
         summary: "Update support.",
         capturedContextSummary: "Fixture.",
         actionShape: actionShape(),
-        sourcePlan: [{
-          path: "agents/support",
-          operation: "modify",
-          reason: "Revise the source.",
-        }],
+        sourcePlan: [
+          {
+            path: "agents/support",
+            operation: "modify",
+            reason: "Revise the source.",
+          },
+        ],
         requirements: [],
         checks: [],
       },
@@ -167,7 +175,10 @@ describe("canonical Create/Improve planner", () => {
               { question: "Which files should the Agent prioritize?" },
               {
                 text: "Choose the preferred search strategy.",
-                options: ["Repository files", { name: "Attached documents", value: "attachments" }],
+                options: [
+                  "Repository files",
+                  { name: "Attached documents", value: "attachments" },
+                ],
               },
             ],
           }),
@@ -195,12 +206,13 @@ describe("canonical Create/Improve planner", () => {
     ]);
   });
 
-  test.skip("legacy Lab Agent implementation planning is retired", async () => {
+  test("plans a Lab Agent improvement without a second model call", async () => {
     const run = createImproveRunFixture({
       operation: "improve",
       surface: "lab_improve",
       command: "lab_improve",
-      objective: "I think my agent can be better at finding the right files before answering.",
+      objective:
+        "I think my agent can be better at finding the right files before answering.",
       target: {
         kind: "agent",
         id: "default",
@@ -224,7 +236,8 @@ describe("canonical Create/Improve planner", () => {
     expect(planned.state).toBe("awaiting_plan_approval");
     expect(planned.questions).toEqual([]);
     expect(planned.plan).toMatchObject({
-      summary: "Improve default: I think my agent can be better at finding the right files before answering.",
+      summary:
+        "Improve default: I think my agent can be better at finding the right files before answering.",
       defaultChatAction: {
         key: "default.chat",
         label: "default",
@@ -249,7 +262,7 @@ describe("canonical Create/Improve planner", () => {
     });
   });
 
-  test.skip("legacy deterministic Lab Agent planning is retired", async () => {
+  test("preserves deterministic Lab Agent action-shape decisions", async () => {
     const run = createImproveRunFixture({
       operation: "improve",
       surface: "lab_improve",
@@ -276,7 +289,12 @@ describe("canonical Create/Improve planner", () => {
       mode: "chat_and_direct_actions",
       defaultActionKey: "account-health-agent.chat",
     });
-    expect(String(planned.plan?.metadata.actionShape && (planned.plan.metadata.actionShape as any).directActionHint)).toContain("summarize-account");
+    expect(
+      String(
+        planned.plan?.metadata.actionShape &&
+          (planned.plan.metadata.actionShape as any).directActionHint
+      )
+    ).toContain("summarize-account");
   });
 
   test("repairs invalid requirement bullets without creating a second run", async () => {
@@ -290,35 +308,37 @@ describe("canonical Create/Improve planner", () => {
       stream: async function* () {
         calls += 1;
         yield {
-          text: JSON.stringify(calls === 1
-            ? {
-                schemaVersion: "openpond.createImprove.plannerDecision.v1",
-                decision: "plan",
-                plan: {
-                  targetId: "support",
-                  targetName: "Support",
-                  summary: "Create support.",
-                  capturedContextSummary: "Fixture.",
-                  actionShape: actionShape(),
-                  sourcePlan: [],
-                  requirements: ["Must answer customers"],
-                  checks: [],
-                },
-              }
-            : {
-                schemaVersion: "openpond.createImprove.plannerDecision.v1",
-                decision: "plan",
-                plan: {
-                  targetId: "support",
-                  targetName: "Support",
-                  summary: "Create support.",
-                  capturedContextSummary: "Fixture.",
-                  actionShape: actionShape(),
-                  sourcePlan: [],
-                  requirements: [],
-                  checks: [],
-                },
-              }),
+          text: JSON.stringify(
+            calls === 1
+              ? {
+                  schemaVersion: "openpond.createImprove.plannerDecision.v1",
+                  decision: "plan",
+                  plan: {
+                    targetId: "support",
+                    targetName: "Support",
+                    summary: "Create support.",
+                    capturedContextSummary: "Fixture.",
+                    actionShape: actionShape(),
+                    sourcePlan: [],
+                    requirements: ["Must answer customers"],
+                    checks: [],
+                  },
+                }
+              : {
+                  schemaVersion: "openpond.createImprove.plannerDecision.v1",
+                  decision: "plan",
+                  plan: {
+                    targetId: "support",
+                    targetName: "Support",
+                    summary: "Create support.",
+                    capturedContextSummary: "Fixture.",
+                    actionShape: actionShape(),
+                    sourcePlan: [],
+                    requirements: [],
+                    checks: [],
+                  },
+                }
+          ),
         };
       },
     });
@@ -375,15 +395,17 @@ describe("canonical Create/Improve planner", () => {
       trainingPlanId: "plan_support",
       trainingJobId: "job_support",
       artifactId: "artifact_support",
-      evaluations: [{
-        subject: "candidate",
-        attemptRefs: ["attempt_support"],
-        gradeRefs: ["grade_support"],
-        total: 1,
-        passed: 1,
-        failed: 0,
-        executionContractHash: "contract_support",
-      }],
+      evaluations: [
+        {
+          subject: "candidate",
+          attemptRefs: ["attempt_support"],
+          gradeRefs: ["grade_support"],
+          total: 1,
+          passed: 1,
+          failed: 0,
+          executionContractHash: "contract_support",
+        },
+      ],
       completed: true,
     });
     expect(updated.target).toMatchObject({
@@ -393,21 +415,27 @@ describe("canonical Create/Improve planner", () => {
       artifactId: "artifact_support",
     });
     expect(updated.state).toBe("ready");
-    expect(updated.externalExecutionRefs).toContainEqual(expect.objectContaining({
-      kind: "training_job",
-      id: "job_support",
-    }));
+    expect(updated.externalExecutionRefs).toContainEqual(
+      expect.objectContaining({
+        kind: "training_job",
+        id: "job_support",
+      })
+    );
   });
 
   test("rejects invalid transitions and advances valid revisions exactly once", () => {
     expect(() => assertCreateImproveTransition("planning", "ready")).toThrow(
-      "Invalid Create/Improve transition",
+      "Invalid Create/Improve transition"
     );
     const run = createImproveRunFixture();
-    const next = nextCreateImproveRunRevision(run, {
-      state: "awaiting_plan_approval",
-      updatedAt: "2026-07-01T10:00:01.000Z",
-    }, "action_1");
+    const next = nextCreateImproveRunRevision(
+      run,
+      {
+        state: "awaiting_plan_approval",
+        updatedAt: "2026-07-01T10:00:01.000Z",
+      },
+      "action_1"
+    );
     expect(next.revision).toBe(1);
     expect(next.appliedActionIds).toEqual(["action_1"]);
   });
@@ -417,57 +445,63 @@ describe("canonical Create/Improve planner", () => {
     const run = createImproveRunFixture({
       operation: "improve",
       state: "awaiting_promotion",
-      candidates: [{
-        id: candidateId,
-        target: {
-          kind: "agent",
-          id: "fixture-agent",
-          displayName: "Fixture Agent",
-          defaultActionKey: "fixture-agent.chat",
+      candidates: [
+        {
+          id: candidateId,
+          target: {
+            kind: "agent",
+            id: "fixture-agent",
+            displayName: "Fixture Agent",
+            defaultActionKey: "fixture-agent.chat",
+          },
+          status: "evaluated",
+          git: {
+            baseBranch: "main",
+            baseCommit: "a".repeat(40),
+            branch: "openpond/improve/fixture",
+            headCommit: "b".repeat(40),
+            remoteName: "origin",
+            remoteUrl: "git@github.com:openpond/profile.git",
+            worktreePath: "/tmp/candidate",
+            changedPaths: [
+              "profiles/default/agents/fixture-agent/agent/agent.ts",
+            ],
+            diffStat: "1 file changed",
+            pullRequest: null,
+          },
+          sourceRefs: [],
+          artifactRefs: [],
+          checkRefs: [],
+          evaluationReceiptRefs: ["candidate_eval"],
+          createdAt: "2026-07-01T10:00:00.000Z",
+          updatedAt: "2026-07-01T10:00:00.000Z",
+          metadata: {},
         },
-        status: "evaluated",
-        git: {
-          baseBranch: "main",
-          baseCommit: "a".repeat(40),
-          branch: "openpond/improve/fixture",
-          headCommit: "b".repeat(40),
-          remoteName: "origin",
-          remoteUrl: "git@github.com:openpond/profile.git",
-          worktreePath: "/tmp/candidate",
-          changedPaths: ["profiles/default/agents/fixture-agent/agent/agent.ts"],
-          diffStat: "1 file changed",
-          pullRequest: null,
+      ],
+      evaluationReceipts: [
+        {
+          id: "candidate_eval",
+          candidateId,
+          target: {
+            kind: "agent",
+            id: "fixture-agent",
+            displayName: "Fixture Agent",
+            defaultActionKey: "fixture-agent.chat",
+          },
+          evaluatorKind: "agent_sdk",
+          subject: "candidate",
+          sourceCommit: "b".repeat(40),
+          sourceBranch: "openpond/improve/fixture",
+          status: "passed",
+          publishGate: "passed",
+          summaryCounts: { total: 1, passed: 1, failed: 0 },
+          evalRefs: ["fixture"],
+          artifactRefs: [],
+          summary: "1/1 passed",
+          createdAt: "2026-07-01T10:00:00.000Z",
+          metadata: {},
         },
-        sourceRefs: [],
-        artifactRefs: [],
-        checkRefs: [],
-        evaluationReceiptRefs: ["candidate_eval"],
-        createdAt: "2026-07-01T10:00:00.000Z",
-        updatedAt: "2026-07-01T10:00:00.000Z",
-        metadata: {},
-      }],
-      evaluationReceipts: [{
-        id: "candidate_eval",
-        candidateId,
-        target: {
-          kind: "agent",
-          id: "fixture-agent",
-          displayName: "Fixture Agent",
-          defaultActionKey: "fixture-agent.chat",
-        },
-        evaluatorKind: "agent_sdk",
-        subject: "candidate",
-        sourceCommit: "b".repeat(40),
-        sourceBranch: "openpond/improve/fixture",
-        status: "passed",
-        publishGate: "passed",
-        summaryCounts: { total: 1, passed: 1, failed: 0 },
-        evalRefs: ["fixture"],
-        artifactRefs: [],
-        summary: "1/1 passed",
-        createdAt: "2026-07-01T10:00:00.000Z",
-        metadata: {},
-      }],
+      ],
     });
 
     const opening = applyCreateImproveRunAction(run, {
@@ -492,7 +526,10 @@ describe("canonical Create/Improve planner", () => {
     const forged = createImproveRunFixture({
       ...run,
       tasksetRef,
-      candidates: run.candidates.map((candidate) => ({ ...candidate, tasksetRef })),
+      candidates: run.candidates.map((candidate) => ({
+        ...candidate,
+        tasksetRef,
+      })),
       evaluationReceipts: run.evaluationReceipts.map((receipt) => ({
         ...receipt,
         tasksetId: taskset.id,
@@ -501,13 +538,15 @@ describe("canonical Create/Improve planner", () => {
         metadata: { executionContractHash: "candidate-controlled" },
       })),
     });
-    expect(() => applyCreateImproveRunAction(forged, {
-      type: "apply_candidate",
-      runId: forged.id,
-      expectedRevision: forged.revision,
-      actionId: "apply_forged",
-      candidateId,
-    })).toThrow("trusted receipt");
+    expect(() =>
+      applyCreateImproveRunAction(forged, {
+        type: "apply_candidate",
+        runId: forged.id,
+        expectedRevision: forged.revision,
+        actionId: "apply_forged",
+        candidateId,
+      })
+    ).toThrow("trusted receipt");
 
     const rejected = applyCreateImproveRunAction(run, {
       type: "reject_candidate",
@@ -526,7 +565,10 @@ describe("canonical Create/Improve planner", () => {
   });
 });
 
-async function planner(run: ReturnType<typeof createImproveRunFixture>, decision: unknown) {
+async function planner(
+  run: ReturnType<typeof createImproveRunFixture>,
+  decision: unknown
+) {
   return runModelBackedCreateImprovePlanner({
     run,
     modelRef: { providerId: "openpond", modelId: "openpond-chat" },

@@ -15,8 +15,15 @@ export type {
   SaveOpenPondAccountInput,
   UpdateOpenPondAccountConfigInput,
 } from "./types.js";
-export { loadOpenPondAccountContext, switchOpenPondAccount } from "./account-context.js";
-export { createOpenPondRepoApp, loadOpenPondApps } from "./apps.js";
+export {
+  loadOpenPondAccountContext,
+  switchOpenPondAccount,
+} from "./account-context.js";
+export {
+  createOpenPondRepoApp,
+  loadOpenPondAccountState,
+  loadOpenPondApps,
+} from "./apps.js";
 export {
   loadOpenPondHostedModels,
   loadOpenPondHostedProviders,
@@ -26,6 +33,7 @@ export {
   streamOpenPondHostedChatTurn,
 } from "./chat.js";
 export { saveOpenPondAccount } from "./save-account.js";
+export { removeOpenPondAccount } from "./remove-account.js";
 export { updateOpenPondAccountConfig } from "./update-account-config.js";
 export {
   deleteOpenPondSchedule,
@@ -45,7 +53,10 @@ export {
   updateOpenPondAppEnvironment,
 } from "./actions.js";
 export { getBundledRuntimeVersion } from "./version.js";
-export { createReadyLineParser, type ReadyLineParser } from "./ready-line-parser.js";
+export {
+  createReadyLineParser,
+  type ReadyLineParser,
+} from "./ready-line-parser.js";
 export {
   openUrlWithSystemBrowser,
   resolveSystemBrowserCommand,

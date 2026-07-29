@@ -14,6 +14,7 @@ export type TerminalOptions = {
   model: string | null;
   cwd: string;
   cwdExplicit?: boolean;
+  agent?: string | null;
   project: string | null;
   resume: string | null;
   noServerStart: boolean;
@@ -52,6 +53,7 @@ export function parseTerminalArgs(
     provider: DEFAULT_CHAT_PROVIDER,
     model: null,
     cwd: defaultCwd,
+    agent: null,
     project: null,
     resume: null,
     noServerStart: false,
@@ -78,6 +80,8 @@ export function parseTerminalArgs(
     } else if (arg === "--cwd") {
       options.cwd = path.resolve(rest[++i] ?? options.cwd);
       options.cwdExplicit = true;
+    } else if (arg === "--agent") {
+      options.agent = readStringArg(rest, ++i, "agent");
     } else if (arg === "--project") {
       options.project = rest[++i] ?? null;
     } else if (arg === "--resume") {

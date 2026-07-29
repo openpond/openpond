@@ -8,13 +8,21 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ignoredTracked = splitNullTerminated(
   await captureGit(["ls-files", "-ci", "--exclude-standard", "-z"]),
 );
+const intentionallyIgnoredTrackedPrefixes = [
+  // Research is local-first. Existing published research stays tracked while new
+  // drafts and supporting assets remain ignored unless explicitly force-added.
+  "docs/research/",
+] as const;
+const unexpectedIgnoredTracked = ignoredTracked.filter(
+  (file) => !intentionallyIgnoredTrackedPrefixes.some((prefix) => file.startsWith(prefix)),
+);
 const tracked = splitNullTerminated(await captureGit(["ls-files", "-z"]));
 const forbiddenTracked = tracked.filter(isGeneratedOutputPath);
 
-if (ignoredTracked.length > 0 || forbiddenTracked.length > 0) {
-  if (ignoredTracked.length > 0) {
+if (unexpectedIgnoredTracked.length > 0 || forbiddenTracked.length > 0) {
+  if (unexpectedIgnoredTracked.length > 0) {
     console.error("[repository-hygiene] ignored files are still tracked:");
-    for (const file of ignoredTracked) console.error(`  ${file}`);
+    for (const file of unexpectedIgnoredTracked) console.error(`  ${file}`);
   }
   if (forbiddenTracked.length > 0) {
     console.error("[repository-hygiene] generated output is tracked:");
@@ -23,7 +31,7 @@ if (ignoredTracked.length > 0 || forbiddenTracked.length > 0) {
   process.exitCode = 1;
 } else {
   console.log(
-    `Repository hygiene check passed: ${tracked.length} tracked files, no ignored or generated output tracked.`,
+    `Repository hygiene check passed: ${tracked.length} tracked files, no unexpected ignored or generated output tracked.`,
   );
 }
 

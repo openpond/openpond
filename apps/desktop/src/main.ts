@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, ipcMain, shell, systemPreferences, type MenuItemConstructorOptions } from "electron";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   appDisplayName,
@@ -522,6 +523,35 @@ function registerIpcHandlers(): void {
     }
     shell.showItemInFolder(path.resolve(rawPath));
     return { ok: true };
+  });
+  handleTrackedIpc("openpond:file:saveAs", async (event, payload) => {
+    const record =
+      payload && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : {};
+    const rawPath = record.path;
+    const suggestedName = record.suggestedName;
+    if (typeof rawPath !== "string" || !path.isAbsolute(rawPath)) {
+      return { ok: false, canceled: false, error: "An absolute local file path is required." };
+    }
+    const sourcePath = path.resolve(rawPath);
+    const defaultPath =
+      typeof suggestedName === "string" && suggestedName.trim()
+        ? path.basename(suggestedName.trim())
+        : path.basename(sourcePath);
+    const window = BrowserWindow.fromWebContents(event.sender) ?? mainWindow;
+    const options = {
+      title: "Save Work output",
+      defaultPath,
+    } satisfies Electron.SaveDialogOptions;
+    const result = window
+      ? await dialog.showSaveDialog(window, options)
+      : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) {
+      return { ok: false, canceled: true, path: null };
+    }
+    await fs.copyFile(sourcePath, result.filePath);
+    return { ok: true, canceled: false, path: result.filePath };
   });
   handleTrackedIpc("openpond:microphone:request", () => requestMicrophoneAccess());
   handleTrackedIpc("openpond:renderer:error", (_event, payload) => {

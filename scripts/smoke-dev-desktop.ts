@@ -1,4 +1,8 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  spawn,
+  spawnSync,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -44,14 +48,19 @@ type SmokeOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 60_000;
+const BACKGROUND_SIDEBAR_COMMIT_TOLERANCE = 2;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const startedAt = Date.now();
-  const appHome = await mkdtemp(path.join(os.tmpdir(), "openpond-dev-smoke-home-"));
-  const userData = await mkdtemp(path.join(os.tmpdir(), "openpond-dev-smoke-user-data-"));
+  const appHome = await mkdtemp(
+    path.join(os.tmpdir(), "openpond-dev-smoke-home-")
+  );
+  const userData = await mkdtemp(
+    path.join(os.tmpdir(), "openpond-dev-smoke-user-data-")
+  );
   const webPort = await freePort();
   const devtoolsPort = await freePort();
   const webUrl = `http://127.0.0.1:${webPort}`;
@@ -75,8 +84,10 @@ async function main(): Promise<void> {
       webPort,
     });
 
-    const target = await waitForDevtoolsTarget(devtoolsPort, timeoutMs, (candidate) =>
-      isMainRendererTarget(candidate, webUrl),
+    const target = await waitForDevtoolsTarget(
+      devtoolsPort,
+      timeoutMs,
+      (candidate) => isMainRendererTarget(candidate, webUrl)
     );
     const devtoolsTargetMs = Date.now() - launchedAt;
     cdp = await CdpClient.connect(target.webSocketDebuggerUrl);
@@ -95,15 +106,22 @@ async function main(): Promise<void> {
         token: connection.token,
         platform: connection.platform,
         hasBrowserBridge: typeof window.openpond.browser?.open === "function"
-      }))`,
+      }))`
     );
-    if (!connection.token) throw new Error("Dev Electron renderer connection did not include a capability token.");
+    if (!connection.token)
+      throw new Error(
+        "Dev Electron renderer connection did not include a capability token."
+      );
 
     const healthStartedAt = Date.now();
-    const health = await fetchJson<{ ok?: boolean; server?: string }>(`${connection.serverUrl}/health`);
+    const health = await fetchJson<{ ok?: boolean; server?: string }>(
+      `${connection.serverUrl}/health`
+    );
     const serverHealthMs = Date.now() - healthStartedAt;
     if (health.ok !== true || health.server !== "openpond-app-server") {
-      throw new Error(`Dev Electron server health failed: ${JSON.stringify(health)}`);
+      throw new Error(
+        `Dev Electron server health failed: ${JSON.stringify(health)}`
+      );
     }
 
     const [profile, bootstrap, browserStatus] = await Promise.all([
@@ -113,24 +131,39 @@ async function main(): Promise<void> {
         activeProfile?: string | null;
         git?: { dirty?: boolean; head?: string | null } | null;
         actionCatalog?: Array<{ name?: string | null; id?: string | null }>;
-        agents?: Array<{ id?: string | null; enabled?: boolean; path?: string | null }>;
+        agents?: Array<{
+          id?: string | null;
+          enabled?: boolean;
+          path?: string | null;
+        }>;
       }>(`${connection.serverUrl}/v1/profile`, connection.token),
       fetchJsonAuth<{
         account?: {
+          state?: string;
           profile?: { handle?: string | null } | null;
           activeProfile?: { handle?: string | null } | null;
           activeAccount?: { handle?: string | null } | null;
         };
-      }>(`${connection.serverUrl}/v1/bootstrap?refreshCodex=1`, connection.token),
+      }>(
+        `${connection.serverUrl}/v1/bootstrap?refreshCodex=1`,
+        connection.token
+      ),
       fetchJsonAuth<{
         connected?: boolean;
         pendingCount?: number;
         inFlightCount?: number;
         instanceId?: string | null;
-      }>(`${connection.serverUrl}/v1/desktop/browser-control/status`, connection.token),
+      }>(
+        `${connection.serverUrl}/v1/desktop/browser-control/status`,
+        connection.token
+      ),
     ]);
     if (browserStatus.connected !== true) {
-      throw new Error(`Dev Electron browser-control worker was not connected: ${JSON.stringify(browserStatus)}`);
+      throw new Error(
+        `Dev Electron browser-control worker was not connected: ${JSON.stringify(
+          browserStatus
+        )}`
+      );
     }
 
     const sharedSurfaceStyles = await verifySharedSurfaceStyles(cdp);
@@ -138,14 +171,21 @@ async function main(): Promise<void> {
 
     const chat = options.skipChat
       ? null
-      : await runDesktopChatSmoke({
+      : bootstrap.account?.state === "signed_in"
+      ? await runDesktopChatSmoke({
           serverUrl: connection.serverUrl,
           token: connection.token,
           timeoutMs,
-        });
+        })
+      : {
+          skipped: true,
+          reason: "OpenPond account is signed out.",
+        };
 
     await triggerWindowClose(cdp);
-    const exitedAfterClose = desktop ? await waitForExit(desktop.child, 10_000) : false;
+    const exitedAfterClose = desktop
+      ? await waitForExit(desktop.child, 10_000)
+      : false;
 
     const report = {
       ok: true,
@@ -183,14 +223,19 @@ async function main(): Promise<void> {
         gitDirty: profile.git?.dirty ?? null,
         gitHead: profile.git?.head?.slice(0, 12) ?? null,
         actions: Array.isArray(profile.actionCatalog)
-          ? profile.actionCatalog.map((action) => action.name ?? action.id).filter(Boolean).slice(0, 10)
+          ? profile.actionCatalog
+              .map((action) => action.name ?? action.id)
+              .filter(Boolean)
+              .slice(0, 10)
           : [],
         agents: Array.isArray(profile.agents)
-          ? profile.agents.map((agent) => ({
-              id: agent.id ?? null,
-              enabled: agent.enabled ?? null,
-              path: agent.path ?? null,
-            })).slice(0, 10)
+          ? profile.agents
+              .map((agent) => ({
+                id: agent.id ?? null,
+                enabled: agent.enabled ?? null,
+                path: agent.path ?? null,
+              }))
+              .slice(0, 10)
           : [],
       },
       chat,
@@ -222,24 +267,27 @@ async function main(): Promise<void> {
 }
 
 async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
-  insightsButtonWidth: number;
-  insightsButtonHeight: number;
-  insightsDropdownHidden: boolean;
+  experienceMenuStyled: boolean;
+  experienceOptions: string[];
+  activeExperience: string | null;
+  keyboardMenuPassed: boolean;
+  workStarterCount: number;
+  workStarterPopulatedComposer: boolean;
+  ambientHandoffAbsent: boolean;
+  topBarSelectorAbsent: boolean;
   teamRowStyled: boolean;
 }> {
-  const styles = await evaluateValue<{
-    buttonWidth: number;
-    buttonHeight: number;
-    buttonDisplay: string;
-    dropdownVisibility: string | null;
-    dropdownPointerEvents: string | null;
+  const initial = await evaluateValue<{
+    triggerDisplay: string;
+    triggerLabel: string | null;
+    visibleExperience: string | null;
     teamRowDisplay: string | null;
     teamRowBackgroundColor: string | null;
   }>(
     cdp,
     `(() => {
-      const button = document.querySelector(".topbar-insights-button");
-      const dropdown = document.querySelector(".topbar-insights-dropdown");
+      const trigger = document.querySelector(".sidebar-experience-trigger");
+      if (!(trigger instanceof HTMLButtonElement)) throw new Error("Experience menu trigger is missing.");
       const existingTeamRow = document.querySelector(".team-sidebar-row");
       const teamRow = existingTeamRow instanceof HTMLElement
         ? existingTeamRow
@@ -249,104 +297,375 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
         teamRow.style.visibility = "hidden";
         document.body.append(teamRow);
       }
-      if (!(button instanceof HTMLElement)) throw new Error("Insights top-bar button is missing.");
-      const buttonStyle = getComputedStyle(button);
-      const dropdownStyle = dropdown instanceof HTMLElement ? getComputedStyle(dropdown) : null;
       const teamRowStyle = getComputedStyle(teamRow);
       const result = {
-        buttonWidth: button.getBoundingClientRect().width,
-        buttonHeight: button.getBoundingClientRect().height,
-        buttonDisplay: buttonStyle.display,
-        dropdownVisibility: dropdownStyle?.visibility ?? null,
-        dropdownPointerEvents: dropdownStyle?.pointerEvents ?? null,
+        triggerDisplay: getComputedStyle(trigger).display,
+        triggerLabel: trigger.getAttribute("aria-label"),
+        visibleExperience: trigger.querySelector(".sidebar-experience-label")?.textContent?.trim() ?? null,
         teamRowDisplay: teamRowStyle.display,
         teamRowBackgroundColor: teamRowStyle.backgroundColor
       };
       if (!existingTeamRow) teamRow.remove();
       return result;
-    })()`,
+    })()`
   );
-  if (
-    !["grid", "inline-grid"].includes(styles.buttonDisplay) ||
-    Math.abs(styles.buttonWidth - 28) > 0.1 ||
-    Math.abs(styles.buttonHeight - 28) > 0.1
-  ) {
-    throw new Error(`Insights top-bar styles were not loaded: ${JSON.stringify(styles)}`);
-  }
-  const insightsDropdownHidden =
-    styles.dropdownVisibility === null ||
-    (styles.dropdownVisibility === "hidden" && styles.dropdownPointerEvents === "none");
-  if (!insightsDropdownHidden) {
-    throw new Error(`Insights dropdown was exposed at rest: ${JSON.stringify(styles)}`);
+
+  const experienceMenuStyled =
+    ["flex", "inline-flex"].includes(initial.triggerDisplay) &&
+    initial.triggerLabel === "OpenPond experience: Chat" &&
+    initial.visibleExperience === "Chat";
+  if (!experienceMenuStyled) {
+    throw new Error(
+      `Experience menu styles were not loaded: ${JSON.stringify(initial)}`
+    );
   }
   const teamRowStyled =
-    styles.teamRowDisplay === "grid" && styles.teamRowBackgroundColor === "rgba(0, 0, 0, 0)";
+    initial.teamRowDisplay === "grid" &&
+    initial.teamRowBackgroundColor === "rgba(0, 0, 0, 0)";
   if (!teamRowStyled) {
-    throw new Error(`Team sidebar row styles were not loaded: ${JSON.stringify(styles)}`);
+    throw new Error(
+      `Team sidebar row styles were not loaded: ${JSON.stringify(initial)}`
+    );
   }
+
+  await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const trigger = document.querySelector(".sidebar-experience-trigger");
+      if (!(trigger instanceof HTMLButtonElement)) return false;
+      trigger.focus();
+      return document.activeElement === trigger;
+    })()`
+  );
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "ArrowDown",
+    code: "ArrowDown",
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "ArrowDown",
+    code: "ArrowDown",
+  });
+  const keyboardMenu = await waitFor(
+    async () =>
+      evaluateValue<{
+        labels: string[];
+        focusedExperience: string | null;
+      } | null>(
+        cdp,
+        `(() => {
+          const menu = document.querySelector(".sidebar-experience-popover");
+          if (!(menu instanceof HTMLElement)) return null;
+          return {
+            labels: [...menu.querySelectorAll("[role='menuitemradio'] strong")]
+              .map((item) => item.textContent?.trim() ?? ""),
+            focusedExperience:
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement.dataset.experience ?? null
+                : null
+          };
+        })()`
+      ),
+    5_000,
+    "Experience menu did not open from the keyboard."
+  );
+  const keyboardMenuPassed =
+    keyboardMenu.labels.join(",") === "Chat,Work,Development" &&
+    keyboardMenu.focusedExperience === "chat";
+  if (!keyboardMenuPassed) {
+    throw new Error(
+      `Experience keyboard menu failed: ${JSON.stringify(keyboardMenu)}`
+    );
+  }
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Escape",
+    code: "Escape",
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Escape",
+    code: "Escape",
+  });
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `!document.querySelector(".sidebar-experience-popover") &&
+          document.activeElement === document.querySelector(".sidebar-experience-trigger")`
+      ),
+    5_000,
+    "Experience menu did not close and restore focus on Escape."
+  );
+
+  const experienceOptions = keyboardMenu.labels;
+  await selectExperience(cdp, "work", "Work");
+  const workState = await waitFor(
+    async () =>
+      evaluateValue<{
+        starterCount: number;
+        handoffCount: number;
+        topBarSelectorCount: number;
+      } | null>(
+        cdp,
+        `(() => {
+          const starters = document.querySelectorAll(".work-starter-prompt");
+          if (starters.length !== 4) return null;
+          return {
+            starterCount: starters.length,
+            handoffCount: document.querySelectorAll(".experience-handoff-bar").length,
+            topBarSelectorCount: document.querySelectorAll(".experience-selector").length
+          };
+        })()`
+      ),
+    5_000,
+    "Work starter examples did not render."
+  );
+  if (workState.handoffCount !== 0 || workState.topBarSelectorCount !== 0) {
+    throw new Error(
+      `Work rendered retired global UI: ${JSON.stringify(workState)}`
+    );
+  }
+  await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const starter = document.querySelector(".work-starter-prompt");
+      if (!(starter instanceof HTMLButtonElement)) return false;
+      starter.click();
+      return true;
+    })()`
+  );
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `(() => {
+          const input = document.querySelector(".composer-inline-input[role='textbox']");
+          return Boolean(input?.textContent?.includes("Turn my notes and attached source material"));
+        })()`
+      ),
+    5_000,
+    "Work starter did not populate the composer."
+  );
+  const workStarterPopulatedComposer = await evaluateValue<boolean>(
+    cdp,
+    `document.activeElement === document.querySelector(".composer-inline-input[role='textbox']")`
+  );
+  if (!workStarterPopulatedComposer) {
+    throw new Error(
+      "Work starter populated the composer but did not focus it."
+    );
+  }
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "a",
+    code: "KeyA",
+    modifiers: 2,
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "a",
+    code: "KeyA",
+    modifiers: 2,
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Backspace",
+    code: "Backspace",
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Backspace",
+    code: "Backspace",
+  });
+
+  await selectExperience(cdp, "development", "Development");
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `Boolean(
+          document.querySelector("[aria-label='Lab']") &&
+          !document.querySelector(".work-starter-prompts")
+        )`
+      ),
+    5_000,
+    "Development controls did not return after switching experiences."
+  );
+  await selectExperience(cdp, "chat", "Chat");
+
   return {
-    insightsButtonWidth: styles.buttonWidth,
-    insightsButtonHeight: styles.buttonHeight,
-    insightsDropdownHidden,
+    experienceMenuStyled,
+    experienceOptions,
+    activeExperience: "Chat",
+    keyboardMenuPassed,
+    workStarterCount: workState.starterCount,
+    workStarterPopulatedComposer,
+    ambientHandoffAbsent: workState.handoffCount === 0,
+    topBarSelectorAbsent: workState.topBarSelectorCount === 0,
     teamRowStyled,
   };
 }
 
+async function selectExperience(
+  cdp: CdpClient,
+  experience: "chat" | "work" | "development",
+  label: string
+): Promise<void> {
+  const opened = await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const trigger = document.querySelector(".sidebar-experience-trigger");
+      if (!(trigger instanceof HTMLButtonElement)) return false;
+      trigger.click();
+      return true;
+    })()`
+  );
+  if (!opened)
+    throw new Error(`Could not open the experience menu for ${label}.`);
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `document.querySelector(".sidebar-experience-popover") instanceof HTMLElement`
+      ),
+    5_000,
+    `Experience menu did not open for ${label}.`
+  );
+  const selected = await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const option = document.querySelector(
+        ${JSON.stringify(
+          `.sidebar-experience-popover [data-experience="${experience}"]`
+        )}
+      );
+      if (!(option instanceof HTMLButtonElement)) return false;
+      option.click();
+      return true;
+    })()`
+  );
+  if (!selected) throw new Error(`Could not select the ${label} experience.`);
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label") ===
+          ${JSON.stringify(`OpenPond experience: ${label}`)}`
+      ),
+    5_000,
+    `${label} did not become the active experience.`
+  );
+}
+
 async function runComposerCommitProof(cdp: CdpClient): Promise<{
   composerCommits: number;
+  sidebarBaselineCommits: number;
+  sidebarCommitBudget: number;
   sidebarCommits: number;
   typedCharacters: number;
 }> {
   const proofText = "renderer commit boundary proof";
-  await waitFor(async () => {
-    await evaluateValue<boolean>(cdp, "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)");
-    await delay(300);
-    const idle = await evaluateValue<Record<string, { commits?: number }>>(
-      cdp,
-      "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}",
-    );
-    return Object.values(idle).every((metric) => (metric.commits ?? 0) === 0);
-  }, 5_000, "Renderer did not reach a quiet commit window before the typing proof.");
-  await evaluateValue<boolean>(
+  const composerFocused = await evaluateValue<boolean>(
     cdp,
     `(() => {
-      window.__OPENPOND_RENDER_COMMITS__?.reset();
       const input = document.querySelector(".composer-inline-input[role='textbox'], [role='textbox'][contenteditable], textarea");
       if (!(input instanceof HTMLElement)) return false;
       input.focus();
       return true;
-    })()`,
+    })()`
+  );
+  if (!composerFocused)
+    throw new Error(
+      "Composer input could not be focused for the commit-budget proof."
+    );
+  await delay(300);
+  await evaluateValue<boolean>(
+    cdp,
+    "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)"
+  );
+  for (const _character of proofText) {
+    await cdp.send("Runtime.evaluate", { expression: "true" });
+  }
+  const baselineMetrics = await evaluateValue<
+    Record<string, { commits?: number }>
+  >(cdp, "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}");
+  const sidebarBaselineCommits = baselineMetrics.sidebar?.commits ?? 0;
+  const sidebarCommitBudget = Math.max(
+    BACKGROUND_SIDEBAR_COMMIT_TOLERANCE,
+    sidebarBaselineCommits
+  );
+  await evaluateValue<boolean>(
+    cdp,
+    "(window.__OPENPOND_RENDER_COMMITS__?.reset(), true)"
   );
   for (const character of proofText) {
     await cdp.send("Input.insertText", { text: character });
   }
-  await waitFor(async () => evaluateValue<boolean>(
-    cdp,
-    `(() => {
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `(() => {
       const input = document.querySelector(".composer-inline-input[role='textbox'], [role='textbox'][contenteditable], textarea");
       const value = input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement
         ? input.value
         : input?.textContent ?? "";
       return value.includes(${JSON.stringify(proofText)});
-    })()`,
-  ), 5_000, "Composer did not accept commit-budget proof input.");
+    })()`
+      ),
+    5_000,
+    "Composer did not accept commit-budget proof input."
+  );
   const metrics = await evaluateValue<Record<string, { commits?: number }>>(
     cdp,
-    "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}",
+    "window.__OPENPOND_RENDER_COMMITS__?.get() ?? {}"
   );
   const composerCommits = metrics.composer?.commits ?? 0;
   const sidebarCommits = metrics.sidebar?.commits ?? 0;
   if (composerCommits < 1 || composerCommits > proofText.length + 2) {
-    throw new Error(`Composer commit budget failed: ${composerCommits} commits for ${proofText.length} characters.`);
+    throw new Error(
+      `Composer commit budget failed: ${composerCommits} commits for ${proofText.length} characters.`
+    );
   }
-  if (sidebarCommits !== 0) {
-    throw new Error(`Composer typing crossed the sidebar render boundary: ${sidebarCommits} commits.`);
+  if (sidebarCommits > sidebarCommitBudget) {
+    throw new Error(
+      `Composer typing added sidebar commits: ${JSON.stringify({
+        baseline: baselineMetrics.sidebar ?? null,
+        typing: metrics.sidebar ?? null,
+      })}.`
+    );
   }
-  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 2 });
-  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 2 });
-  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
-  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
-  return { composerCommits, sidebarCommits, typedCharacters: proofText.length };
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "a",
+    code: "KeyA",
+    modifiers: 2,
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "a",
+    code: "KeyA",
+    modifiers: 2,
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyDown",
+    key: "Backspace",
+    code: "Backspace",
+  });
+  await cdp.send("Input.dispatchKeyEvent", {
+    type: "keyUp",
+    key: "Backspace",
+    code: "Backspace",
+  });
+  return {
+    composerCommits,
+    sidebarBaselineCommits,
+    sidebarCommitBudget,
+    sidebarCommits,
+    typedCharacters: proofText.length,
+  };
 }
 
 function parseArgs(args: string[]): SmokeOptions {
@@ -354,7 +673,9 @@ function parseArgs(args: string[]): SmokeOptions {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]!;
     if (arg === "--help" || arg === "-h") {
-      console.log("usage: pnpm run smoke:desktop:dev [--timeout-ms <ms>] [--json <path>] [--skip-chat]");
+      console.log(
+        "usage: pnpm run smoke:desktop:dev [--timeout-ms <ms>] [--json <path>] [--skip-chat]"
+      );
       process.exit(0);
     }
     if (arg === "--json") {
@@ -379,7 +700,10 @@ function parseArgs(args: string[]): SmokeOptions {
     }
     throw new Error(`Unknown argument: ${arg}`);
   }
-  if (options.timeoutMs !== undefined && (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0)) {
+  if (
+    options.timeoutMs !== undefined &&
+    (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0)
+  ) {
     throw new Error("--timeout-ms must be a positive number.");
   }
   return options;
@@ -392,7 +716,8 @@ function runSetup(label: string, command: [string, ...string[]]): void {
     env: process.env,
     stdio: "inherit",
   });
-  if (result.status !== 0) throw new Error(`${label} failed with code ${result.status ?? "unknown"}`);
+  if (result.status !== 0)
+    throw new Error(`${label} failed with code ${result.status ?? "unknown"}`);
 }
 
 function startRenderer(webPort: number): ProcessHandle {
@@ -422,7 +747,12 @@ function launchDevElectron(input: {
     "--disable-gpu",
     "--no-sandbox",
   ];
-  const electron = path.join(ROOT, "node_modules", ".bin", process.platform === "win32" ? "electron.cmd" : "electron");
+  const electron = path.join(
+    ROOT,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "electron.cmd" : "electron"
+  );
   const wrapped = wrapForDisplay(electron, appArgs);
   const child = spawn(wrapped.command, wrapped.args, {
     cwd: path.join(ROOT, "apps", "desktop"),
@@ -440,46 +770,71 @@ function launchDevElectron(input: {
   return trackDesktopHarnessProcess("desktop", child);
 }
 
-function wrapForDisplay(command: string, args: string[]): { command: string; args: string[] } {
-  if (process.platform !== "linux" || process.env.DISPLAY) return { command, args };
-  if (commandExists("xvfb-run")) return { command: "xvfb-run", args: ["-a", command, ...args] };
-  throw new Error("No DISPLAY is available. Install xvfb and rerun through xvfb-run for Linux dev desktop smoke.");
+function wrapForDisplay(
+  command: string,
+  args: string[]
+): { command: string; args: string[] } {
+  if (process.platform !== "linux" || process.env.DISPLAY)
+    return { command, args };
+  if (commandExists("xvfb-run"))
+    return { command: "xvfb-run", args: ["-a", command, ...args] };
+  throw new Error(
+    "No DISPLAY is available. Install xvfb and rerun through xvfb-run for Linux dev desktop smoke."
+  );
 }
 
 function commandExists(command: string): boolean {
   const pathValue = process.env.PATH ?? "";
-  const extensions = process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
-  return pathValue.split(path.delimiter).some((dir) =>
-    extensions.some((extension) => existsSync(path.join(dir, `${command}${extension}`))),
-  );
+  const extensions =
+    process.platform === "win32" ? [".exe", ".cmd", ".bat", ""] : [""];
+  return pathValue
+    .split(path.delimiter)
+    .some((dir) =>
+      extensions.some((extension) =>
+        existsSync(path.join(dir, `${command}${extension}`))
+      )
+    );
 }
 
 async function waitForUrl(url: string, timeoutMs: number): Promise<void> {
-  await waitFor(async () => {
-    try {
-      const response = await fetch(url);
-      return response.ok;
-    } catch {
-      return false;
-    }
-  }, timeoutMs, `Timed out waiting for ${url}`);
+  await waitFor(
+    async () => {
+      try {
+        const response = await fetch(url);
+        return response.ok;
+      } catch {
+        return false;
+      }
+    },
+    timeoutMs,
+    `Timed out waiting for ${url}`
+  );
 }
 
 async function waitForDevtoolsTarget(
   port: number,
   timeoutMs: number,
-  predicate: (candidate: Required<DevtoolsTarget>) => boolean,
+  predicate: (candidate: Required<DevtoolsTarget>) => boolean
 ): Promise<Required<DevtoolsTarget>> {
-  return waitFor(async () => {
-    const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
-      .then((response) => (response.ok ? response.json() : null))
-      .catch(() => null);
-    if (!Array.isArray(targets)) return null;
-    return targets.find((target) => isUsableTarget(target) && predicate(target)) ?? null;
-  }, timeoutMs, "Timed out waiting for dev Electron renderer DevTools target.");
+  return waitFor(
+    async () => {
+      const targets = await fetch(`http://127.0.0.1:${port}/json/list`)
+        .then((response) => (response.ok ? response.json() : null))
+        .catch(() => null);
+      if (!Array.isArray(targets)) return null;
+      return (
+        targets.find((target) => isUsableTarget(target) && predicate(target)) ??
+        null
+      );
+    },
+    timeoutMs,
+    "Timed out waiting for dev Electron renderer DevTools target."
+  );
 }
 
-function isUsableTarget(target: DevtoolsTarget): target is Required<DevtoolsTarget> {
+function isUsableTarget(
+  target: DevtoolsTarget
+): target is Required<DevtoolsTarget> {
   return (
     target.type === "page" &&
     typeof target.webSocketDebuggerUrl === "string" &&
@@ -489,24 +844,38 @@ function isUsableTarget(target: DevtoolsTarget): target is Required<DevtoolsTarg
   );
 }
 
-function isMainRendererTarget(target: Required<DevtoolsTarget>, webUrl: string): boolean {
-  return target.url === webUrl || target.url.startsWith(`${webUrl}/`) || target.url.startsWith(`${webUrl}?`);
+function isMainRendererTarget(
+  target: Required<DevtoolsTarget>,
+  webUrl: string
+): boolean {
+  return (
+    target.url === webUrl ||
+    target.url.startsWith(`${webUrl}/`) ||
+    target.url.startsWith(`${webUrl}?`)
+  );
 }
 
-async function waitForRendererBridge(cdp: CdpClient, timeoutMs: number): Promise<void> {
-  await waitFor(async () =>
-    evaluateValue<boolean>(
-      cdp,
-      `document.readyState !== "loading" &&
+async function waitForRendererBridge(
+  cdp: CdpClient,
+  timeoutMs: number
+): Promise<void> {
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `document.readyState !== "loading" &&
         typeof window.openpond === "object" &&
         typeof window.openpond.getConnection === "function" &&
-        typeof window.openpond.browser?.open === "function"`,
-    ), timeoutMs, "Timed out waiting for dev Electron preload bridge.");
+        typeof window.openpond.browser?.open === "function"`
+      ),
+    timeoutMs,
+    "Timed out waiting for dev Electron preload bridge."
+  );
 }
 
 async function waitForRendererReady(
   cdp: CdpClient,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<{
   href: string;
   title: string;
@@ -516,19 +885,20 @@ async function waitForRendererReady(
   hasContentShell: boolean;
   hasComposer: boolean;
 }> {
-  return waitFor(async () => {
-    const state = await evaluateValue<{
-      href: string;
-      title: string;
-      readyState: string;
-      connecting: boolean;
-      hasSidebar: boolean;
-      hasContentShell: boolean;
-      hasComposer: boolean;
-      errorText: string | null;
-    }>(
-      cdp,
-      `(() => {
+  return waitFor(
+    async () => {
+      const state = await evaluateValue<{
+        href: string;
+        title: string;
+        readyState: string;
+        connecting: boolean;
+        hasSidebar: boolean;
+        hasContentShell: boolean;
+        hasComposer: boolean;
+        errorText: string | null;
+      }>(
+        cdp,
+        `(() => {
         const text = document.body?.innerText || "";
         const errorText = document.querySelector(".error-boundary, [role='alert']")?.textContent || null;
         return {
@@ -541,14 +911,24 @@ async function waitForRendererReady(
           hasComposer: Boolean(document.querySelector(".composer-inline-input[role='textbox'], [role='textbox'][contenteditable], textarea")),
           errorText
         };
-      })()`,
-    );
-    if (state.errorText) throw new Error(`Renderer error screen visible: ${state.errorText.slice(0, 500)}`);
-    if (state.readyState === "complete" && !state.connecting && (state.hasSidebar || state.hasContentShell || state.hasComposer)) {
-      return state;
-    }
-    return null;
-  }, timeoutMs, "Timed out waiting for dev Electron app shell to render.");
+      })()`
+      );
+      if (state.errorText)
+        throw new Error(
+          `Renderer error screen visible: ${state.errorText.slice(0, 500)}`
+        );
+      if (
+        state.readyState === "complete" &&
+        !state.connecting &&
+        (state.hasSidebar || state.hasContentShell || state.hasComposer)
+      ) {
+        return state;
+      }
+      return null;
+    },
+    timeoutMs,
+    "Timed out waiting for dev Electron app shell to render."
+  );
 }
 
 async function runDesktopChatSmoke(input: {
@@ -562,17 +942,21 @@ async function runDesktopChatSmoke(input: {
   eventCount: number;
   assistantDeltaSeen: boolean;
 }> {
-  const session = await fetchJsonAuth<{ id: string }>(`${input.serverUrl}/v1/sessions`, input.token, {
-    method: "POST",
-    body: {
-      provider: "openpond",
-      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
-      title: `dev-desktop-opchat-smoke-${Date.now()}`,
-      hiddenFromDefaultSidebar: true,
-      cwd: ROOT,
-      metadata: { smoke: "dev-desktop-opchat" },
-    },
-  });
+  const session = await fetchJsonAuth<{ id: string }>(
+    `${input.serverUrl}/v1/sessions`,
+    input.token,
+    {
+      method: "POST",
+      body: {
+        provider: "openpond",
+        modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+        title: `dev-desktop-opchat-smoke-${Date.now()}`,
+        hiddenFromDefaultSidebar: true,
+        cwd: ROOT,
+        metadata: { smoke: "dev-desktop-opchat" },
+      },
+    }
+  );
   const turn = await fetchJsonAuth<{ id: string }>(
     `${input.serverUrl}/v1/sessions/${encodeURIComponent(session.id)}/turns`,
     input.token,
@@ -586,40 +970,54 @@ async function runDesktopChatSmoke(input: {
         sandbox: "read-only",
         metadata: { smoke: "dev-desktop-opchat" },
       },
-    },
+    }
   );
 
-  return waitFor(async () => {
-    const bootstrap = await fetchJsonAuth<{ events?: Array<Record<string, unknown>> }>(
-      `${input.serverUrl}/v1/bootstrap`,
-      input.token,
-    );
-    const events = Array.isArray(bootstrap.events)
-      ? bootstrap.events.filter((event) => event.sessionId === session.id)
-      : [];
-    const terminal = events.find((event) =>
-      event.turnId === turn.id &&
-      (event.name === "turn.completed" || event.name === "turn.failed" || event.name === "turn.interrupted")
-    );
-    if (!terminal) return null;
-    if (terminal.name !== "turn.completed") {
-      throw new Error(`Dev desktop OpChat turn did not complete: ${JSON.stringify(terminal)}`);
-    }
-    return {
-      sessionId: session.id,
-      turnId: turn.id,
-      status: String(terminal.name),
-      eventCount: events.length,
-      assistantDeltaSeen: events.some((event) => event.turnId === turn.id && event.name === "assistant.delta"),
-    };
-  }, input.timeoutMs, `Timed out waiting for dev desktop OpChat turn ${turn.id}.`);
+  return waitFor(
+    async () => {
+      const bootstrap = await fetchJsonAuth<{
+        events?: Array<Record<string, unknown>>;
+      }>(`${input.serverUrl}/v1/bootstrap`, input.token);
+      const events = Array.isArray(bootstrap.events)
+        ? bootstrap.events.filter((event) => event.sessionId === session.id)
+        : [];
+      const terminal = events.find(
+        (event) =>
+          event.turnId === turn.id &&
+          (event.name === "turn.completed" ||
+            event.name === "turn.failed" ||
+            event.name === "turn.interrupted")
+      );
+      if (!terminal) return null;
+      if (terminal.name !== "turn.completed") {
+        throw new Error(
+          `Dev desktop OpChat turn did not complete: ${JSON.stringify(
+            terminal
+          )}`
+        );
+      }
+      return {
+        sessionId: session.id,
+        turnId: turn.id,
+        status: String(terminal.name),
+        eventCount: events.length,
+        assistantDeltaSeen: events.some(
+          (event) =>
+            event.turnId === turn.id && event.name === "assistant.delta"
+        ),
+      };
+    },
+    input.timeoutMs,
+    `Timed out waiting for dev desktop OpChat turn ${turn.id}.`
+  );
 }
 
 async function triggerWindowClose(cdp: CdpClient): Promise<void> {
   try {
     await evaluateValue<boolean>(cdp, "window.openpond.closeWindow()");
   } catch (error) {
-    if (error instanceof Error && /CDP socket closed/i.test(error.message)) return;
+    if (error instanceof Error && /CDP socket closed/i.test(error.message))
+      return;
     throw error;
   }
 }
@@ -627,7 +1025,7 @@ async function triggerWindowClose(cdp: CdpClient): Promise<void> {
 async function waitFor<T>(
   probe: () => Promise<T | null | false>,
   timeoutMs: number,
-  message: string,
+  message: string
 ): Promise<T> {
   const started = Date.now();
   let lastError: unknown;
@@ -640,10 +1038,15 @@ async function waitFor<T>(
     }
     await delay(250);
   }
-  throw new Error(lastError ? `${message} Last error: ${String(lastError)}` : message);
+  throw new Error(
+    lastError ? `${message} Last error: ${String(lastError)}` : message
+  );
 }
 
-async function evaluateValue<T>(cdp: CdpClient, expression: string): Promise<T> {
+async function evaluateValue<T>(
+  cdp: CdpClient,
+  expression: string
+): Promise<T> {
   const result = await cdp.send<CdpEvaluation>("Runtime.evaluate", {
     expression,
     awaitPromise: true,
@@ -651,21 +1054,26 @@ async function evaluateValue<T>(cdp: CdpClient, expression: string): Promise<T> 
     userGesture: true,
   });
   if (result.exceptionDetails) {
-    throw new Error(result.exceptionDetails.exception?.description ?? result.exceptionDetails.text ?? "Renderer evaluation failed.");
+    throw new Error(
+      result.exceptionDetails.exception?.description ??
+        result.exceptionDetails.text ??
+        "Renderer evaluation failed."
+    );
   }
   return result.result?.value as T;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`${redactUrl(url)} returned HTTP ${response.status}`);
-  return await response.json() as T;
+  if (!response.ok)
+    throw new Error(`${redactUrl(url)} returned HTTP ${response.status}`);
+  return (await response.json()) as T;
 }
 
 async function fetchJsonAuth<T>(
   url: string,
   token: string,
-  init: { method?: "GET" | "POST"; body?: Record<string, unknown> } = {},
+  init: { method?: "GET" | "POST"; body?: Record<string, unknown> } = {}
 ): Promise<T> {
   const response = await fetch(url, {
     method: init.method ?? "GET",
@@ -677,12 +1085,19 @@ async function fetchJsonAuth<T>(
   });
   if (!response.ok) {
     const body = await response.text().catch(() => "");
-    throw new Error(`${redactUrl(url)} returned HTTP ${response.status}${body ? `: ${body.slice(0, 500)}` : ""}`);
+    throw new Error(
+      `${redactUrl(url)} returned HTTP ${response.status}${
+        body ? `: ${body.slice(0, 500)}` : ""
+      }`
+    );
   }
-  return await response.json() as T;
+  return (await response.json()) as T;
 }
 
-async function writeSmokeReport(report: Record<string, unknown>, jsonPath?: string): Promise<void> {
+async function writeSmokeReport(
+  report: Record<string, unknown>,
+  jsonPath?: string
+): Promise<void> {
   if (!jsonPath) return;
   const outputPath = path.resolve(jsonPath);
   await mkdir(path.dirname(outputPath), { recursive: true });
@@ -700,11 +1115,15 @@ async function freePort(): Promise<number> {
   });
   const address = server.address();
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  if (!address || typeof address === "string") throw new Error("Could not reserve a local port.");
+  if (!address || typeof address === "string")
+    throw new Error("Could not reserve a local port.");
   return address.port;
 }
 
-async function waitForExit(child: ChildProcessWithoutNullStreams, timeoutMs: number): Promise<boolean> {
+async function waitForExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number
+): Promise<boolean> {
   if (child.exitCode !== null) return true;
   return await new Promise<boolean>((resolve) => {
     const timer = setTimeout(() => {
@@ -745,24 +1164,32 @@ function pnpmBinary(): string {
 
 class CdpClient {
   private nextId = 1;
-  private readonly pending = new Map<number, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-  }>();
+  private readonly pending = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (error: Error) => void;
+    }
+  >();
 
   private constructor(private readonly socket: WebSocket) {
     socket.addEventListener("message", (event) => {
-      const data = typeof event.data === "string" ? event.data : event.data.toString();
+      const data =
+        typeof event.data === "string" ? event.data : event.data.toString();
       const message = JSON.parse(data) as CdpResponse;
       if (!message.id) return;
       const pending = this.pending.get(message.id);
       if (!pending) return;
       this.pending.delete(message.id);
-      if (message.error) pending.reject(new Error(message.error.message ?? "CDP command failed."));
+      if (message.error)
+        pending.reject(
+          new Error(message.error.message ?? "CDP command failed.")
+        );
       else pending.resolve(message.result);
     });
     socket.addEventListener("close", () => {
-      for (const pending of this.pending.values()) pending.reject(new Error("CDP socket closed."));
+      for (const pending of this.pending.values())
+        pending.reject(new Error("CDP socket closed."));
       this.pending.clear();
     });
   }
@@ -771,12 +1198,19 @@ class CdpClient {
     const socket = new WebSocket(url);
     await new Promise<void>((resolve, reject) => {
       socket.addEventListener("open", () => resolve(), { once: true });
-      socket.addEventListener("error", () => reject(new Error("CDP socket failed to open.")), { once: true });
+      socket.addEventListener(
+        "error",
+        () => reject(new Error("CDP socket failed to open.")),
+        { once: true }
+      );
     });
     return new CdpClient(socket);
   }
 
-  async send<T>(method: string, params: Record<string, unknown> = {}): Promise<T> {
+  async send<T>(
+    method: string,
+    params: Record<string, unknown> = {}
+  ): Promise<T> {
     const id = this.nextId++;
     const result = new Promise<T>((resolve, reject) => {
       this.pending.set(id, {
@@ -793,7 +1227,10 @@ class CdpClient {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   void main().catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

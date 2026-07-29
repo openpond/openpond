@@ -17,13 +17,19 @@ import {
   Search,
   SquareTerminal,
 } from "../icons";
-import { WindowControls, isDesktopShell, isMacPlatform } from "./WindowControls";
+import {
+  WindowControls,
+  isDesktopShell,
+  isMacPlatform,
+} from "./WindowControls";
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
 
 const WorkspaceEnvironmentMenu = lazy(() =>
-  import("../chat/WorkspaceEnvironmentMenu").then((module) => ({ default: module.WorkspaceEnvironmentMenu })),
+  import("../chat/WorkspaceEnvironmentMenu").then((module) => ({
+    default: module.WorkspaceEnvironmentMenu,
+  }))
 );
 
 export type TopBarBreadcrumb = {
@@ -97,22 +103,28 @@ export function AppTopBar({
   onRunTerminalCommand: (command: string) => void;
   onWorkspaceToolAction: (
     action: WorkspaceToolRequest["action"],
-    args?: Record<string, unknown>,
+    args?: Record<string, unknown>
   ) => Promise<WorkspaceToolResult | null>;
   onOpenCommitDialog: (nextStep?: CommitNextStep) => void;
   onWorkspaceBranchChange?: (branch: string) => void;
   onWorkspaceBranchCreate?: () => void;
   connection: ClientConnection | null;
   onBootstrap: (payload: BootstrapPayload) => void;
-  onOpenSandboxWorkspace: (input: { sandboxId: string; name: string | null }) => Promise<void> | void;
+  onOpenSandboxWorkspace: (input: {
+    sandboxId: string;
+    name: string | null;
+  }) => Promise<void> | void;
   onShowSidebar: () => void;
   platform?: string | null;
   showWorkspaceControls?: boolean;
 }) {
   const filesChanged = workspaceDiff?.filesChanged ?? 0;
   const showWindowControls = isDesktopShell() && !isMacPlatform(platform);
-  const showRightControls = showWorkspaceControls || rightSidebarAvailable || showWindowControls;
-  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(null);
+  const showRightControls =
+    showWorkspaceControls || rightSidebarAvailable || showWindowControls;
+  const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(
+    null
+  );
 
   useEffect(() => {
     if (!titleMenu) return;
@@ -147,12 +159,22 @@ export function AppTopBar({
     <header className="app-titlebar">
       <div className="titlebar-left">
         {!sidebarOpen && (
-          <button className="titlebar-icon" title="Show sidebar" onClick={onShowSidebar}>
+          <button
+            className="titlebar-icon"
+            title="Show sidebar"
+            onClick={onShowSidebar}
+          >
             <PanelLeft size={16} />
           </button>
         )}
         {backAction ? (
-          <button className="titlebar-icon" type="button" aria-label={backAction.label} title={backAction.label} onClick={backAction.onSelect}>
+          <button
+            className="titlebar-icon"
+            type="button"
+            aria-label={backAction.label}
+            title={backAction.label}
+            onClick={backAction.onSelect}
+          >
             <ArrowLeft size={16} />
           </button>
         ) : null}
@@ -161,7 +183,10 @@ export function AppTopBar({
             {breadcrumbs.map((item, index) => {
               const isLast = index === breadcrumbs.length - 1;
               return (
-                <div className="titlebar-breadcrumb-item" key={`${item.label}-${index}`}>
+                <div
+                  className="titlebar-breadcrumb-item"
+                  key={`${item.label}-${index}`}
+                >
                   {item.onSelect && !isLast ? (
                     <button type="button" onClick={item.onSelect}>
                       {item.label}
@@ -239,8 +264,12 @@ export function AppTopBar({
               {showDiffControls && (
                 <button
                   type="button"
-                  className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
-                  title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar${filesChanged ? `, ${filesChanged} changed files` : ""}`}
+                  className={`topbar-diff-button ${
+                    rightSidebarOpen ? "active" : ""
+                  }`}
+                  title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar${
+                    filesChanged ? `, ${filesChanged} changed files` : ""
+                  }`}
                   aria-label={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                   aria-pressed={rightSidebarOpen}
                   onClick={onToggleDiffPanel}
@@ -250,11 +279,15 @@ export function AppTopBar({
               )}
             </div>
           )}
-          {rightSidebarAvailable && onToggleRightSidebar && !showDiffControls ? (
+          {rightSidebarAvailable &&
+          onToggleRightSidebar &&
+          !showDiffControls ? (
             <div className="titlebar-actions">
               <button
                 type="button"
-                className={`topbar-diff-button ${rightSidebarOpen ? "active" : ""}`}
+                className={`topbar-diff-button ${
+                  rightSidebarOpen ? "active" : ""
+                }`}
                 title={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                 aria-label={`${rightSidebarOpen ? "Hide" : "Show"} sidebar`}
                 aria-pressed={rightSidebarOpen}
@@ -275,11 +308,19 @@ export function AppTopBar({
           style={{ left: titleMenu.x, top: titleMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <button type="button" role="menuitem" onClick={() => copyTitleValue(title)}>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => copyTitleValue(title)}
+          >
             Copy title
           </button>
           {conversationId && (
-            <button type="button" role="menuitem" onClick={() => copyTitleValue(conversationId)}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => copyTitleValue(conversationId)}
+            >
               Copy conversation ID
             </button>
           )}

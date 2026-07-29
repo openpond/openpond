@@ -107,11 +107,10 @@ Command reference:
 - `openpond apps tools execute <appId> <deploymentId> <tool> [--body <json>] [--method <METHOD>] [--headers <json>]`: execute a tool for a specific deployment.
 - `openpond opentool <init|validate|build> [args]`: run OpenTool CLI commands via `npx opentool`.
 
-Agent source/edit status:
+Agent source operations:
 
-- `openpond agent edit check-status <workItemId> --team-id <id> [--limit <n>] [--json]`: return the compact source-check status for an agent edit work item.
-- `openpond agent source check-status <workItemId> --team-id <id> [--limit <n>] [--json]`: alias for the same work-item status projection under the source command group.
-- The machine-readable status contract is documented in [`docs/agent-edit-check-status-json.md`](docs/agent-edit-check-status-json.md).
+- `openpond agent source checks <agentId> --team-id <id> [--check-kind <kind>]`: request validation or eval checks for an Agent source version.
+- `openpond agent source publish <agentId> --team-id <id> [--expected-manifest-hash <hash>]`: publish a validated Agent source version.
 
 ## TypeScript package
 

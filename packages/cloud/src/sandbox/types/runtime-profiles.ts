@@ -1,5 +1,8 @@
 export const SANDBOX_RUNTIME_PROFILE_IDS = [
+  "openpond-generic-firecracker-v1",
+  "openpond-work-v1",
   "openpond-coding-core-v1",
+  "openpond-agent-harness-v1",
 ] as const;
 
 export type SandboxRuntimeProfileId =
@@ -12,7 +15,8 @@ export type SandboxRuntimeProfileCapability =
   | "pty"
   | "ports"
   | "preview"
-  | "git";
+  | "git"
+  | "coding_task";
 
 export type SandboxRuntimeProfile = {
   id: SandboxRuntimeProfileId;

@@ -34,7 +34,10 @@ export function useComposerAttachments() {
     (files: File[]) => {
       if (files.length === 0) return;
 
-      const slotsAvailable = Math.max(0, CHAT_ATTACHMENT_LIMITS.maxAttachments - attachments.length);
+      const slotsAvailable = Math.max(
+        0,
+        CHAT_ATTACHMENT_LIMITS.maxAttachments - attachments.length
+      );
       const accepted: ComposerAttachmentDraft[] = [];
       let rejectedForSize = 0;
       let skippedForCount = 0;
@@ -48,6 +51,12 @@ export function useComposerAttachments() {
           skippedForCount += 1;
           continue;
         }
+        const relativePath =
+          "webkitRelativePath" in file &&
+          typeof file.webkitRelativePath === "string" &&
+          file.webkitRelativePath.trim()
+            ? file.webkitRelativePath.trim()
+            : undefined;
         accepted.push({
           id: createAttachmentId(),
           file,
@@ -55,7 +64,10 @@ export function useComposerAttachments() {
           mediaType: file.type || "application/octet-stream",
           sizeBytes: file.size,
           kind: composerAttachmentKind(file),
-          ...(file.type.startsWith("image/") ? { previewUrl: URL.createObjectURL(file) } : {}),
+          ...(relativePath ? { relativePath } : {}),
+          ...(file.type.startsWith("image/")
+            ? { previewUrl: URL.createObjectURL(file) }
+            : {}),
         });
       }
 
@@ -68,16 +80,22 @@ export function useComposerAttachments() {
         const messages = [];
         if (rejectedForSize > 0) {
           messages.push(
-            `${rejectedForSize} file${rejectedForSize === 1 ? "" : "s"} exceeded ${formatBytes(CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes)}`,
+            `${rejectedForSize} file${
+              rejectedForSize === 1 ? "" : "s"
+            } exceeded ${formatBytes(
+              CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes
+            )}`
           );
         }
         if (skippedForCount > 0) {
-          messages.push(`maximum ${CHAT_ATTACHMENT_LIMITS.maxAttachments} attachments`);
+          messages.push(
+            `maximum ${CHAT_ATTACHMENT_LIMITS.maxAttachments} attachments`
+          );
         }
         setAttachmentError(messages.join("; "));
       }
     },
-    [attachments],
+    [attachments]
   );
 
   const removeAttachment = useCallback((id: string) => {
@@ -109,31 +127,33 @@ export function useComposerAttachments() {
     return staged;
   }, []);
 
-  const settleStagedAttachments = useCallback((
-    staged: ComposerAttachmentDraft[],
-    outcome: "dispose" | "restore",
-  ) => {
-    if (staged.length === 0) return;
-    const stagedIds = new Set(staged.map((attachment) => attachment.id));
-    stagedAttachmentsRef.current = stagedAttachmentsRef.current.filter(
-      (attachment) => !stagedIds.has(attachment.id),
-    );
-    if (outcome === "restore" && !unmountedRef.current) {
-      setAttachments((current) => {
-        const currentIds = new Set(current.map((attachment) => attachment.id));
-        const next = [
-          ...staged.filter((attachment) => !currentIds.has(attachment.id)),
-          ...current,
-        ];
-        attachmentsRef.current = next;
-        return next;
-      });
-      return;
-    }
-    for (const attachment of staged) {
-      revokeAttachmentPreview(attachment);
-    }
-  }, []);
+  const settleStagedAttachments = useCallback(
+    (staged: ComposerAttachmentDraft[], outcome: "dispose" | "restore") => {
+      if (staged.length === 0) return;
+      const stagedIds = new Set(staged.map((attachment) => attachment.id));
+      stagedAttachmentsRef.current = stagedAttachmentsRef.current.filter(
+        (attachment) => !stagedIds.has(attachment.id)
+      );
+      if (outcome === "restore" && !unmountedRef.current) {
+        setAttachments((current) => {
+          const currentIds = new Set(
+            current.map((attachment) => attachment.id)
+          );
+          const next = [
+            ...staged.filter((attachment) => !currentIds.has(attachment.id)),
+            ...current,
+          ];
+          attachmentsRef.current = next;
+          return next;
+        });
+        return;
+      }
+      for (const attachment of staged) {
+        revokeAttachmentPreview(attachment);
+      }
+    },
+    []
+  );
 
   return {
     attachmentError,

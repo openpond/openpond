@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { createElement, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { OpenPondApp } from "@openpond/contracts";
+import type { Experience } from "@openpond/contracts";
 
 import { SidebarNavigation } from "../apps/web/src/components/sidebar/SidebarNavigation";
 import type { SidebarSectionMenuId } from "../apps/web/src/app/app-state";
@@ -9,18 +10,30 @@ import type { AppView } from "../apps/web/src/lib/app-models";
 
 const noopDispatch = (() => undefined) as Dispatch<SetStateAction<never>>;
 
-function renderSidebarNavigation(view: AppView): string {
-  const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<SetStateAction<AppView>>;
+function renderSidebarNavigation(
+  view: AppView,
+  experience: Experience = "development"
+): string {
+  const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<
+    SetStateAction<AppView>
+  >;
   return renderToStaticMarkup(
     createElement(SidebarNavigation, {
+      experience,
       beginNewChat: (_app?: OpenPondApp | null) => undefined,
-      setSectionMenuOpen: noopDispatch as Dispatch<SetStateAction<SidebarSectionMenuId | null>>,
+      setSectionMenuOpen: noopDispatch as Dispatch<
+        SetStateAction<SidebarSectionMenuId | null>
+      >,
       setSelectedAppId: noopDispatch as Dispatch<SetStateAction<string | null>>,
-      setSelectedProjectId: noopDispatch as Dispatch<SetStateAction<string | null>>,
-      setSelectedSessionId: noopDispatch as Dispatch<SetStateAction<string | null>>,
+      setSelectedProjectId: noopDispatch as Dispatch<
+        SetStateAction<string | null>
+      >,
+      setSelectedSessionId: noopDispatch as Dispatch<
+        SetStateAction<string | null>
+      >,
       setView,
       view,
-    }),
+    })
   );
 }
 
@@ -55,5 +68,17 @@ describe("Sidebar navigation", () => {
     expect(markup).not.toContain("sidebar-profile-change-dot");
     expect(markup).not.toContain("Local profile changes are not committed");
     expect(markup).toContain('aria-label="Lab"');
+  });
+
+  test("keeps Chat minimal and exposes Apps without Lab in Work", () => {
+    const chat = renderSidebarNavigation("chat", "chat");
+    const work = renderSidebarNavigation("chat", "work");
+
+    expect(chat).toContain("New chat");
+    expect(chat).not.toContain("Lab");
+    expect(chat).not.toContain("Apps");
+    expect(work).toContain("New task");
+    expect(work).not.toContain("Lab");
+    expect(work).toContain("Apps");
   });
 });

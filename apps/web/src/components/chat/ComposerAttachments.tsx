@@ -30,6 +30,7 @@ export type ComposerAttachmentDraft = {
   mediaType: string;
   sizeBytes: number;
   kind: ChatAttachment["kind"];
+  relativePath?: string;
   previewUrl?: string;
 };
 
@@ -40,7 +41,12 @@ export function ComposerAttachmentPreview({
   attachment: ComposerAttachmentDraft;
   onRemove: () => void;
 }) {
-  const Icon = attachment.kind === "image" ? ImageIcon : attachment.kind === "text" ? FileText : Paperclip;
+  const Icon =
+    attachment.kind === "image"
+      ? ImageIcon
+      : attachment.kind === "text"
+      ? FileText
+      : Paperclip;
   const showMeta = attachment.kind !== "image";
   return (
     <div className={`composer-attachment-card ${attachment.kind}`}>
@@ -70,7 +76,10 @@ export function ComposerAttachmentPreview({
 }
 
 export function createAttachmentId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return (
+    globalThis.crypto?.randomUUID?.() ??
+    `attachment-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
 }
 
 export function composerAttachmentKind(file: File): ChatAttachment["kind"] {
@@ -80,10 +89,14 @@ export function composerAttachmentKind(file: File): ChatAttachment["kind"] {
   return TEXT_ATTACHMENT_EXTENSIONS.has(extension) ? "text" : "file";
 }
 
-export async function readComposerAttachmentPayload(attachment: ComposerAttachmentDraft): Promise<ChatAttachment> {
+export async function readComposerAttachmentPayload(
+  attachment: ComposerAttachmentDraft
+): Promise<ChatAttachment> {
   const [contentsBase64, text] = await Promise.all([
     fileToBase64(attachment.file),
-    attachment.kind === "text" ? fileToText(attachment.file) : Promise.resolve(undefined),
+    attachment.kind === "text"
+      ? fileToText(attachment.file)
+      : Promise.resolve(undefined),
   ]);
   return {
     id: attachment.id,
@@ -91,6 +104,9 @@ export async function readComposerAttachmentPayload(attachment: ComposerAttachme
     mediaType: attachment.mediaType,
     sizeBytes: attachment.sizeBytes,
     kind: attachment.kind,
+    ...(attachment.relativePath
+      ? { relativePath: attachment.relativePath }
+      : {}),
     contentsBase64,
     ...(text ? { text: trimAttachmentText(text) } : {}),
   };
@@ -115,7 +131,8 @@ function fileToBase64(file: File): Promise<string> {
       const [, base64 = ""] = result.split(",", 2);
       resolve(base64);
     };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read file"));
     reader.readAsDataURL(file);
   });
 }
@@ -123,8 +140,10 @@ function fileToBase64(file: File): Promise<string> {
 function fileToText(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.onload = () =>
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () =>
+      reject(reader.error ?? new Error("Failed to read file"));
     reader.readAsText(file);
   });
 }
@@ -132,5 +151,8 @@ function fileToText(file: File): Promise<string> {
 function trimAttachmentText(value: string): string {
   if (value.length <= CHAT_ATTACHMENT_LIMITS.maxTextChars) return value;
   const suffix = "\n[attachment text truncated]";
-  return `${value.slice(0, Math.max(0, CHAT_ATTACHMENT_LIMITS.maxTextChars - suffix.length))}${suffix}`;
+  return `${value.slice(
+    0,
+    Math.max(0, CHAT_ATTACHMENT_LIMITS.maxTextChars - suffix.length)
+  )}${suffix}`;
 }

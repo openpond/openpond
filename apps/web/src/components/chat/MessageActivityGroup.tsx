@@ -28,13 +28,11 @@ import {
 } from "../../lib/chat-activity-summary";
 import {
   formatWorkTraceDuration,
-  isInlineWorkTraceActivity,
   workTracePresentation,
 } from "../../lib/chat-work-trace";
 import { workspaceFileName } from "../../lib/workspace-images";
 import { revealLocalFile } from "../../lib/desktop-files";
 import { ImageLightbox } from "../common/ImageLightbox";
-import { MarkdownText } from "./MarkdownText";
 
 const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
@@ -46,69 +44,102 @@ export function ActivityGroup({
   activeWorkspaceAppId,
   connection,
   message,
-  onOpenBrowserLink,
   onOpenFileInSidebar,
   onOpenSession,
-  workspaceRootPath,
 }: {
   activeWorkspaceAppId: string | null;
   connection: ClientConnection | null;
   message: ChatMessage;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
-  workspaceRootPath?: string | null;
 }) {
   const [toolsExpanded, setToolsExpanded] = useState(false);
-  const [openImage, setOpenImage] = useState<ActivityItem["imagePreview"] | null>(null);
+  const [openImage, setOpenImage] = useState<
+    ActivityItem["imagePreview"] | null
+  >(null);
   const toolListId = useId();
   const activities = message.activities ?? [];
-  const summary = useMemo(() => summarizeActivityGroup(activities), [activities]);
+  const summary = useMemo(
+    () => summarizeActivityGroup(activities),
+    [activities]
+  );
   const presentation = useMemo(
     () => workTracePresentation(activities, toolsExpanded),
-    [activities, toolsExpanded],
+    [activities, toolsExpanded]
   );
-  const summaryImage = activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
+  const summaryImage =
+    activities.find((activity) => activity.imagePreview)?.imagePreview ?? null;
   const artifacts = message.deliverables ?? [];
-  const openImageSrc = useActivityImageUrl(openImage, connection, activeWorkspaceAppId);
+  const openImageSrc = useActivityImageUrl(
+    openImage,
+    connection,
+    activeWorkspaceAppId
+  );
   const running = message.traceState === "running";
-  const danger = message.traceState === "failed" || message.traceState === "interrupted";
-  const duration = formatWorkTraceDuration(message.traceStartedAt, message.traceCompletedAt);
-  const summaryText = workTraceSummaryText(summary.text, message.traceState, duration);
+  const danger =
+    message.traceState === "failed" || message.traceState === "interrupted";
+  const duration = formatWorkTraceDuration(
+    message.traceStartedAt,
+    message.traceCompletedAt
+  );
+  const summaryText = workTraceSummaryText(
+    summary.text,
+    message.traceState,
+    duration
+  );
   const summaryOpenSessions = subagentOpenSessions(activities);
-  const childMessageSummary = activities.length > 0 && activities.every((activity) => activity.subagentMessage);
+  const childMessageSummary =
+    activities.length > 0 &&
+    activities.every((activity) => activity.subagentMessage);
 
   if (childMessageSummary) {
-    return (
-      <SubagentMessageActivityGroup
-        activities={activities}
-      />
-    );
+    return <SubagentMessageActivityGroup activities={activities} />;
   }
 
   return (
-    <article className={`activity-group work-trace ${running ? "running" : "settled"}`}>
+    <article
+      className={`activity-group work-trace ${running ? "running" : "settled"}`}
+    >
       <div className="activity-summary-row">
         {presentation.toolCount > 0 ? (
           <button
             type="button"
             aria-controls={toolListId}
             aria-expanded={presentation.toolsExpanded}
-            className={`activity-summary ${danger ? "danger" : ""} ${running ? "working" : ""}`}
+            className={`activity-summary ${danger ? "danger" : ""} ${
+              running ? "working" : ""
+            }`}
             onClick={() => setToolsExpanded((current) => !current)}
           >
             {summaryImage ? (
-              <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
+              <ActivitySummaryImage
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                connection={connection}
+                image={summaryImage}
+              />
             ) : (
               <ActivitySummaryIcon kind={summary.kind} />
             )}
             <ActivitySummaryText summary={summaryText} />
-            <ChevronDown className={`activity-summary-toggle ${presentation.toolsExpanded ? "expanded" : ""}`} size={14} />
+            <ChevronDown
+              className={`activity-summary-toggle ${
+                presentation.toolsExpanded ? "expanded" : ""
+              }`}
+              size={14}
+            />
           </button>
         ) : (
-          <div className={`activity-summary static ${danger ? "danger" : ""} ${running ? "working" : ""}`}>
+          <div
+            className={`activity-summary static ${danger ? "danger" : ""} ${
+              running ? "working" : ""
+            }`}
+          >
             {summaryImage ? (
-              <ActivitySummaryImage activeWorkspaceAppId={activeWorkspaceAppId} connection={connection} image={summaryImage} />
+              <ActivitySummaryImage
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                connection={connection}
+                image={summaryImage}
+              />
             ) : (
               <ActivitySummaryIcon kind={summary.kind} />
             )}
@@ -133,26 +164,14 @@ export function ActivityGroup({
       {presentation.visibleActivities.length > 0 ? (
         <div className="work-trace-flow" id={toolListId}>
           {presentation.visibleActivities.map((activity) => (
-            isInlineWorkTraceActivity(activity) ? (
-              <InlineReasoningActivity
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                activity={activity}
-                connection={connection}
-                key={activity.id}
-                onOpenBrowserLink={onOpenBrowserLink}
-                onOpenFileInSidebar={onOpenFileInSidebar}
-                workspaceRootPath={workspaceRootPath}
-              />
-            ) : (
-              <ActivityToolRow
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                activity={activity}
-                connection={connection}
-                key={activity.id}
-                onOpenImage={setOpenImage}
-                onOpenSession={onOpenSession}
-              />
-            )
+            <ActivityToolRow
+              activeWorkspaceAppId={activeWorkspaceAppId}
+              activity={activity}
+              connection={connection}
+              key={activity.id}
+              onOpenImage={setOpenImage}
+              onOpenSession={onOpenSession}
+            />
           ))}
         </div>
       ) : null}
@@ -163,36 +182,6 @@ export function ActivityGroup({
         onClose={() => setOpenImage(null)}
       />
     </article>
-  );
-}
-
-function InlineReasoningActivity({
-  activeWorkspaceAppId,
-  activity,
-  connection,
-  onOpenBrowserLink,
-  onOpenFileInSidebar,
-  workspaceRootPath,
-}: {
-  activeWorkspaceAppId: string | null;
-  activity: ActivityItem;
-  connection: ClientConnection | null;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
-  onOpenFileInSidebar?: (path: string) => void;
-  workspaceRootPath?: string | null;
-}) {
-  if (!activity.content) return null;
-  return (
-    <div className="work-trace-inline-reasoning">
-      <MarkdownText
-        activeWorkspaceAppId={activeWorkspaceAppId}
-        connection={connection}
-        content={activity.content}
-        onOpenBrowserLink={onOpenBrowserLink}
-        onOpenFileInSidebar={onOpenFileInSidebar}
-        workspaceRootPath={workspaceRootPath}
-      />
-    </div>
   );
 }
 
@@ -211,12 +200,20 @@ function ActivityToolRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
-  const imageSrc = useActivityImageUrl(activity.imagePreview ?? null, connection, activeWorkspaceAppId);
+  const imageSrc = useActivityImageUrl(
+    activity.imagePreview ?? null,
+    connection,
+    activeWorkspaceAppId
+  );
   if (activity.subagentMessage) {
     return <SubagentMessageDetailRow activity={activity} />;
   }
   return (
-    <div className={`activity-tool-row ${activity.controlKind === "turn_aborted" ? "danger" : ""}`}>
+    <div
+      className={`activity-tool-row ${
+        activity.controlKind === "turn_aborted" ? "danger" : ""
+      }`}
+    >
       <button
         type="button"
         aria-controls={detailsId}
@@ -224,7 +221,10 @@ function ActivityToolRow({
         className="activity-tool-summary"
         onClick={() => setExpanded((current) => !current)}
       >
-        <ChevronDown className={`activity-tool-toggle ${expanded ? "expanded" : ""}`} size={13} />
+        <ChevronDown
+          className={`activity-tool-toggle ${expanded ? "expanded" : ""}`}
+          size={13}
+        />
         <span>{activityToolRowLabel(activity)}</span>
       </button>
       {expanded ? (
@@ -239,9 +239,13 @@ function ActivityToolRow({
             )
           ) : null}
           {activity.detail ? (
-            <pre className="activity-detail-output">{activity.detail.replace(/\r\n/g, "\n").trimEnd()}</pre>
+            <pre className="activity-detail-output">
+              {activity.detail.replace(/\r\n/g, "\n").trimEnd()}
+            </pre>
           ) : null}
-          {activity.meta ? <small className="activity-detail-meta">{activity.meta}</small> : null}
+          {activity.meta ? (
+            <small className="activity-detail-meta">{activity.meta}</small>
+          ) : null}
           {activity.imagePreview && imageSrc ? (
             <button
               type="button"
@@ -293,17 +297,33 @@ function ActivityArtifacts({
           );
         }
         if (artifact.contentType.startsWith("image/")) {
-          return <ActivityImageArtifact artifact={artifact} connection={connection} key={artifact.path} />;
+          return (
+            <ActivityImageArtifact
+              artifact={artifact}
+              connection={connection}
+              key={artifact.path}
+            />
+          );
         }
         return (
-          <div className="activity-artifact" key={artifact.path} title={artifact.path}>
+          <button
+            type="button"
+            className="activity-artifact"
+            key={artifact.path}
+            title={`Show ${artifact.path} in its folder`}
+            onClick={() => void revealLocalFile(artifact.path)}
+          >
             <FileText aria-hidden size={14} />
             <span>
               <strong>{artifact.title}</strong>
               <code>{artifact.path}</code>
             </span>
-            <small>{artifact.sizeBytes == null ? artifact.contentType : formatArtifactSize(artifact.sizeBytes)}</small>
-          </div>
+            <small>
+              {artifact.sizeBytes == null
+                ? artifact.contentType
+                : formatArtifactSize(artifact.sizeBytes)}
+            </small>
+          </button>
         );
       })}
     </div>
@@ -321,7 +341,12 @@ function ActivityImageArtifact({
   const src = useLocalImageUrl(connection, artifact.path);
   return (
     <div className="activity-artifact-image" title={artifact.path}>
-      <button type="button" disabled={!src} onClick={() => setOpen(true)} title={`Open ${artifact.title}`}>
+      <button
+        type="button"
+        disabled={!src}
+        onClick={() => setOpen(true)}
+        title={`Open ${artifact.title}`}
+      >
         {src ? (
           <img alt={artifact.title} decoding="async" loading="lazy" src={src} />
         ) : (
@@ -329,7 +354,12 @@ function ActivityImageArtifact({
         )}
       </button>
       <strong>{artifact.title}</strong>
-      <ImageLightbox open={open && Boolean(src)} src={src} title={artifact.title} onClose={() => setOpen(false)} />
+      <ImageLightbox
+        open={open && Boolean(src)}
+        src={src}
+        title={artifact.title}
+        onClose={() => setOpen(false)}
+      />
     </div>
   );
 }
@@ -349,7 +379,10 @@ function ActivityVideoArtifact({
   const startPlayback = () => {
     const video = videoRef.current;
     if (!video) return;
-    void video.play().then(() => setStarted(true)).catch(() => undefined);
+    void video
+      .play()
+      .then(() => setStarted(true))
+      .catch(() => undefined);
   };
   return (
     <div className="activity-artifact-video" title={artifact.path}>
@@ -363,10 +396,17 @@ function ActivityVideoArtifact({
             src={src}
           />
         ) : (
-          <div className="activity-artifact-video-loading">Preparing video…</div>
+          <div className="activity-artifact-video-loading">
+            Preparing video…
+          </div>
         )}
         {src && !started ? (
-          <button type="button" className="activity-artifact-video-play" onClick={startPlayback} aria-label={`Play ${artifact.title}`}>
+          <button
+            type="button"
+            className="activity-artifact-video-play"
+            onClick={startPlayback}
+            aria-label={`Play ${artifact.title}`}
+          >
             <Play aria-hidden fill="currentColor" size={22} />
           </button>
         ) : null}
@@ -383,7 +423,11 @@ function ActivityVideoArtifact({
             <strong>{artifact.title}</strong>
             <code>{artifact.path}</code>
           </span>
-          <small>{artifact.sizeBytes == null ? artifact.contentType : formatArtifactSize(artifact.sizeBytes)}</small>
+          <small>
+            {artifact.sizeBytes == null
+              ? artifact.contentType
+              : formatArtifactSize(artifact.sizeBytes)}
+          </small>
         </button>
         {onOpenFileInSidebar ? (
           <button
@@ -408,21 +452,27 @@ function formatArtifactSize(value: number): string {
   return `${(value / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function SubagentMessageDetailRow({
-  activity,
-}: {
-  activity: ActivityItem;
-}) {
+function SubagentMessageDetailRow({ activity }: { activity: ActivityItem }) {
   const [bodyExpanded, setBodyExpanded] = useState(false);
   const message = activity.subagentMessage;
   if (!message) return null;
-  const roleLabel = `${subagentRoleLabel(message.roleId ?? activity.openSession?.roleId)} subagent`;
-  const baseTitle = message.direction === "received" ? `${roleLabel} update` : `Message to ${roleLabel.toLowerCase()}`;
-  const title = message.modelRef?.modelId ? `${baseTitle} · ${message.modelRef.modelId}` : baseTitle;
+  const roleLabel = `${subagentRoleLabel(
+    message.roleId ?? activity.openSession?.roleId
+  )} subagent`;
+  const baseTitle =
+    message.direction === "received"
+      ? `${roleLabel} update`
+      : `Message to ${roleLabel.toLowerCase()}`;
+  const title = message.modelRef?.modelId
+    ? `${baseTitle} · ${message.modelRef.modelId}`
+    : baseTitle;
   const facts = subagentMessageFacts(message);
   const collapsible = subagentMessageNeedsCollapse(message.body);
   return (
-    <div className={`activity-child-message ${message.direction}`} key={activity.id}>
+    <div
+      className={`activity-child-message ${message.direction}`}
+      key={activity.id}
+    >
       <div className="activity-child-message-card">
         <div className="activity-child-message-header">
           <span className="activity-child-message-title">
@@ -433,7 +483,12 @@ function SubagentMessageDetailRow({
         </div>
         <p
           className={collapsible && !bodyExpanded ? "collapsed" : undefined}
-          style={{ "--subagent-message-visible-lines": SUBAGENT_MESSAGE_VISIBLE_LINES } as CSSProperties}
+          style={
+            {
+              "--subagent-message-visible-lines":
+                SUBAGENT_MESSAGE_VISIBLE_LINES,
+            } as CSSProperties
+          }
         >
           {message.body}
         </p>
@@ -449,7 +504,10 @@ function SubagentMessageDetailRow({
         ) : null}
         <details className="activity-child-message-details">
           <summary>Message details</summary>
-          <div className="activity-child-message-facts" aria-label="Child message metadata">
+          <div
+            className="activity-child-message-facts"
+            aria-label="Child message metadata"
+          >
             {facts.map((fact) => (
               <span key={fact.label}>
                 <small>{fact.label}</small>
@@ -459,7 +517,10 @@ function SubagentMessageDetailRow({
           </div>
         </details>
         {message.refs?.length ? (
-          <div className="activity-child-message-refs" aria-label="Child message references">
+          <div
+            className="activity-child-message-refs"
+            aria-label="Child message references"
+          >
             {message.refs.map((ref) => (
               <span key={`${ref.kind}:${ref.id}`}>
                 {ref.kind}:{ref.id} ({ref.label})
@@ -481,35 +542,44 @@ function SubagentMessageActivityGroup({
   return (
     <article className={`activity-child-message-group ${direction}`}>
       {activities.map((activity) => (
-        <SubagentMessageDetailRow
-          activity={activity}
-          key={activity.id}
-        />
+        <SubagentMessageDetailRow activity={activity} key={activity.id} />
       ))}
     </article>
   );
 }
 
-function subagentMessageFacts(message: NonNullable<ActivityItem["subagentMessage"]>): Array<{ label: string; value: string }> {
+function subagentMessageFacts(
+  message: NonNullable<ActivityItem["subagentMessage"]>
+): Array<{ label: string; value: string }> {
   return [
     { label: "Message", value: message.messageId },
     { label: "Kind", value: message.kind },
     { label: "From", value: message.fromRunId },
     message.roleId ? { label: "Role", value: message.roleId } : null,
     message.modelRef
-      ? { label: "Model", value: `${message.modelRef.providerId}/${message.modelRef.modelId}` }
+      ? {
+          label: "Model",
+          value: `${message.modelRef.providerId}/${message.modelRef.modelId}`,
+        }
       : null,
-    message.childSessionId ? { label: "Child", value: message.childSessionId } : null,
+    message.childSessionId
+      ? { label: "Child", value: message.childSessionId }
+      : null,
     message.toRunId ? { label: "To run", value: message.toRunId } : null,
     message.toRole ? { label: "To role", value: message.toRole } : null,
-    message.deliveryStatus ? { label: "Delivery", value: message.deliveryStatus } : null,
+    message.deliveryStatus
+      ? { label: "Delivery", value: message.deliveryStatus }
+      : null,
     message.wakeReason ? { label: "Wake", value: message.wakeReason } : null,
     message.createdAt ? { label: "Created", value: message.createdAt } : null,
   ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
 }
 
 export function subagentMessageNeedsCollapse(body: string): boolean {
-  return body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS || body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES;
+  return (
+    body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS ||
+    body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES
+  );
 }
 
 function ActivitySummaryText({ summary }: { summary: string }) {
@@ -523,17 +593,23 @@ function ActivitySummaryText({ summary }: { summary: string }) {
 function workTraceSummaryText(
   summary: string,
   traceState: ChatMessage["traceState"],
-  duration: string | null,
+  duration: string | null
 ): string {
   if (traceState === "running") return "Working…";
   if (traceState === "failed") {
-    return `${duration ? `Failed after ${duration}` : "Failed"}${summary ? ` · ${summary}` : ""}`;
+    return `${duration ? `Failed after ${duration}` : "Failed"}${
+      summary ? ` · ${summary}` : ""
+    }`;
   }
   if (traceState === "interrupted") {
-    return `${duration ? `Interrupted after ${duration}` : "Interrupted"}${summary ? ` · ${summary}` : ""}`;
+    return `${duration ? `Interrupted after ${duration}` : "Interrupted"}${
+      summary ? ` · ${summary}` : ""
+    }`;
   }
   if (traceState === "completed") {
-    return `${duration ? `Worked for ${duration}` : "Worked"}${summary ? ` · ${summary}` : ""}`;
+    return `${duration ? `Worked for ${duration}` : "Worked"}${
+      summary ? ` · ${summary}` : ""
+    }`;
   }
   return summary;
 }
@@ -541,33 +617,49 @@ function workTraceSummaryText(
 function activityToolRowLabel(activity: ActivityItem): string {
   if (activity.kind !== "command") return activity.label;
   if (activity.state === "failed") return "Command failed";
-  return summarizeShellCommand(activity.content, activity.state)
-    ?? (activity.state === "running" ? "Running command" : "Ran command");
+  return (
+    summarizeShellCommand(activity.content, activity.state) ??
+    (activity.state === "running" ? "Running command" : "Ran command")
+  );
 }
 
 function ShellCommandBlock({ command }: { command: string }) {
   return (
     <pre className="activity-detail-output activity-tool-command">
-      <code className="shell-command-code">{highlightShellCommand(command)}</code>
+      <code className="shell-command-code">
+        {highlightShellCommand(command)}
+      </code>
     </pre>
   );
 }
 
 function highlightShellCommand(command: string) {
   return tokenizeShellCommand(command).map((token, index) => (
-    <span className={`shell-token ${token.kind}`} key={`${index}-${token.text}`}>
+    <span
+      className={`shell-token ${token.kind}`}
+      key={`${index}-${token.text}`}
+    >
       {token.text}
     </span>
   ));
 }
 
 type ShellToken = {
-  kind: "plain" | "command" | "flag" | "string" | "operator" | "variable" | "path";
+  kind:
+    | "plain"
+    | "command"
+    | "flag"
+    | "string"
+    | "operator"
+    | "variable"
+    | "path";
   text: string;
 };
 
 function tokenizeShellCommand(command: string): ShellToken[] {
-  const tokens = command.match(/"[^"]*"|'[^']*'|&&|\|\||[|;&()<>]|\s+|[^\s|;&()<>]+/g) ?? [command];
+  const tokens = command.match(
+    /"[^"]*"|'[^']*'|&&|\|\||[|;&()<>]|\s+|[^\s|;&()<>]+/g
+  ) ?? [command];
   let expectsCommand = true;
   return tokens.map((text) => {
     if (/^\s+$/.test(text)) return { kind: "plain", text };
@@ -576,13 +668,15 @@ function tokenizeShellCommand(command: string): ShellToken[] {
       return { kind: "operator", text };
     }
     if (/^(['"]).*\1$/.test(text)) return { kind: "string", text };
-    if (/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(text)) return { kind: "variable", text };
+    if (/^[A-Za-z_][A-Za-z0-9_]*=.*/.test(text))
+      return { kind: "variable", text };
     if (expectsCommand) {
       expectsCommand = false;
       return { kind: "command", text };
     }
     if (/^-{1,2}[\w-]/.test(text)) return { kind: "flag", text };
-    if (/^(?:\.{0,2}\/|~\/|[\w.-]+\/)/.test(text)) return { kind: "path", text };
+    if (/^(?:\.{0,2}\/|~\/|[\w.-]+\/)/.test(text))
+      return { kind: "path", text };
     return { kind: "plain", text };
   });
 }
@@ -598,12 +692,27 @@ function ActivitySummaryImage({
 }) {
   const src = useActivityImageUrl(image, connection, activeWorkspaceAppId);
   if (!src) return null;
-  return <img aria-hidden className="activity-summary-image" decoding="async" loading="lazy" src={src} alt="" />;
+  return (
+    <img
+      aria-hidden
+      className="activity-summary-image"
+      decoding="async"
+      loading="lazy"
+      src={src}
+      alt=""
+    />
+  );
 }
 
 function ActivitySummaryIcon({ kind }: { kind: ActivityGroupSummaryKind }) {
   const Icon = activitySummaryIcon(kind);
-  return <Icon aria-hidden className={`activity-summary-kind-icon ${kind}`} size={14} />;
+  return (
+    <Icon
+      aria-hidden
+      className={`activity-summary-kind-icon ${kind}`}
+      size={14}
+    />
+  );
 }
 
 function activitySummaryIcon(kind: ActivityGroupSummaryKind): LucideIcon {
@@ -647,10 +756,14 @@ function SubagentAvatarGroup({
       {hiddenCount > 0 ? (
         <button
           type="button"
-          aria-label={`Show ${hiddenCount} more subagent conversation${hiddenCount === 1 ? "" : "s"}`}
+          aria-label={`Show ${hiddenCount} more subagent conversation${
+            hiddenCount === 1 ? "" : "s"
+          }`}
           className="activity-subagent-avatar activity-subagent-avatar-count"
           onClick={onShowAll}
-          title={`Show ${hiddenCount} more subagent conversation${hiddenCount === 1 ? "" : "s"}`}
+          title={`Show ${hiddenCount} more subagent conversation${
+            hiddenCount === 1 ? "" : "s"
+          }`}
         >
           +{hiddenCount}
         </button>
@@ -689,7 +802,11 @@ function SubagentAvatarButton({
 function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   if (roleId === "coding") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <path d="M9.4 7.2 4.8 12l4.6 4.8" />
         <path d="m14.6 7.2 4.6 4.8-4.6 4.8" />
         <path d="m12.9 5.7-1.8 12.6" />
@@ -698,7 +815,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "research") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <circle cx="10.8" cy="10.8" r="5.2" />
         <path d="m15 15 4 4" />
         <path d="M8.6 10.8h4.4" />
@@ -708,7 +829,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "review") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <path d="M7 4.8h7.2L18 8.6v10.6H7z" />
         <path d="M14 4.8v4h4" />
         <path d="m8.9 14.2 2 2 4.3-4.7" />
@@ -717,7 +842,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "test") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <path d="M9.2 4.8h5.6" />
         <path d="M10.4 4.8v5.4l-4 6.8a1.8 1.8 0 0 0 1.6 2.7h8a1.8 1.8 0 0 0 1.6-2.7l-4-6.8V4.8" />
         <path d="M8.2 15.8h7.6" />
@@ -726,7 +855,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "docs") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <path d="M7 4.8h7.2L18 8.6v10.6H7z" />
         <path d="M14 4.8v4h4" />
         <path d="M9.2 11.4h5.6" />
@@ -737,7 +870,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "planner") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <circle cx="7.2" cy="7.2" r="2.1" />
         <circle cx="16.8" cy="7.2" r="2.1" />
         <circle cx="12" cy="16.8" r="2.1" />
@@ -749,7 +886,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   }
   if (roleId === "summarizer") {
     return (
-      <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+      <svg
+        aria-hidden
+        viewBox="0 0 24 24"
+        className="activity-subagent-avatar-svg"
+      >
         <path d="M7 6.8h10" />
         <path d="M7 10.4h8.2" />
         <path d="M7 14h6.2" />
@@ -758,7 +899,11 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
     );
   }
   return (
-    <svg aria-hidden viewBox="0 0 24 24" className="activity-subagent-avatar-svg">
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className="activity-subagent-avatar-svg"
+    >
       <circle cx="12" cy="8.2" r="3.2" />
       <path d="M6.5 19.2c.6-3 2.5-5 5.5-5s4.9 2 5.5 5" />
       <path d="M5.2 11.8h2" />
@@ -767,7 +912,9 @@ function SubagentRoleGlyph({ roleId }: { roleId: string }) {
   );
 }
 
-function subagentOpenSessions(activities: ActivityItem[]): SubagentOpenSession[] {
+function subagentOpenSessions(
+  activities: ActivityItem[]
+): SubagentOpenSession[] {
   const bySession = new Map<string, SubagentOpenSession>();
   for (const activity of activities) {
     const openSession = activity.openSession;
@@ -788,11 +935,13 @@ function subagentAvatarLabel(openSession: SubagentOpenSession): string {
 
 function subagentRoleLabel(roleId: string | undefined): string {
   const normalized = normalizedSubagentRole(roleId);
-  return normalized
-    .split(/[-_]+/)
-    .filter(Boolean)
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(" ") || "Subagent";
+  return (
+    normalized
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+      .join(" ") || "Subagent"
+  );
 }
 
 function normalizedSubagentRole(roleId: string | undefined): string {
@@ -808,17 +957,24 @@ function normalizedSubagentStatus(status: string | undefined): string {
 function useActivityImageUrl(
   image: ActivityItem["imagePreview"] | null,
   connection: ClientConnection | null,
-  activeWorkspaceAppId: string | null,
+  activeWorkspaceAppId: string | null
 ): string | null {
-  const localPath = image && isAbsoluteLocalImagePath(image.path) ? image.path : null;
+  const localPath =
+    image && isAbsoluteLocalImagePath(image.path) ? image.path : null;
   const appId = image?.appId ?? activeWorkspaceAppId;
   const localUrl = useLocalImageUrl(connection, localPath);
-  const workspaceUrl = useWorkspaceImageUrl(connection, localPath ? null : appId, localPath ? null : image?.path);
+  const workspaceUrl = useWorkspaceImageUrl(
+    connection,
+    localPath ? null : appId,
+    localPath ? null : image?.path
+  );
   return localPath ? localUrl : workspaceUrl;
 }
 
 function isAbsoluteLocalImagePath(path: string): boolean {
-  return /^file:\/\//i.test(path) || /^\//.test(path) || /^[A-Za-z]:[\\/]/.test(path);
+  return (
+    /^file:\/\//i.test(path) || /^\//.test(path) || /^[A-Za-z]:[\\/]/.test(path)
+  );
 }
 
 function isMultilineActivity(value: string): boolean {

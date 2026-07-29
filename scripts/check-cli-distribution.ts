@@ -65,7 +65,7 @@ async function checkNpmPackage() {
     "dist/web/index.html",
     "LICENSE",
     "README.md",
-    "docs/agent-edit-check-status-json.md",
+    "docs/command-reference.md",
   ]);
   enforce("npm CLI entry bytes", fileMap.get("dist/cli.js")!, 64 * 1024);
 

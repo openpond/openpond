@@ -5,6 +5,7 @@ import type {
   HostedChatToolCall,
   HostedChatToolChoice,
 } from "@openpond/cloud";
+import { withVercelProtectionBypass } from "@openpond/cloud";
 import type { ModelBinding, TrainingArtifact } from "@openpond/contracts";
 import {
   registryArtifacts,
@@ -92,6 +93,7 @@ export type ManagedAdapterRegistryClientDependencies = {
   readFileImpl?: typeof readFile;
   resolveRegistryAccess?: ManagedAdapterAccessResolver;
   resolveInferenceAccess?: ManagedAdapterAccessResolver;
+  env?: Record<string, string | undefined>;
 };
 
 type ManagedAdapterAccessResolver = (
@@ -117,14 +119,19 @@ export function createManagedAdapterRegistryClient(
   ): Promise<T> {
     const access = await resolveAccess(teamId);
     assertResolvedTeam(access.teamId, teamId);
-    const headers = hostedApiAuthHeaders(access.token);
+    const requestUrl = `${access.apiBaseUrl}${path}`;
+    const headers = withVercelProtectionBypass(
+      requestUrl,
+      hostedApiAuthHeaders(access.token),
+      dependencies.env
+    );
     headers.set("accept", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
     if (init.body) headers.set("content-type", "application/json");
     new Headers(init.headers).forEach((value, name) => {
       headers.set(name, value);
     });
-    const response = await fetchImpl(`${access.apiBaseUrl}${path}`, {
+    const response = await fetchImpl(requestUrl, {
       ...init,
       headers,
     });
@@ -352,14 +359,19 @@ export function createManagedAdapterRegistryClient(
   }): AsyncGenerator<ManagedAdapterChatDelta, void, unknown> {
     const access = await resolveInferenceAccess(input.teamId);
     assertResolvedTeam(access.teamId, input.teamId);
-    const headers = hostedApiAuthHeaders(access.token);
+    const requestUrl = `${access.apiBaseUrl}/v1/chat/completions`;
+    const headers = withVercelProtectionBypass(
+      requestUrl,
+      hostedApiAuthHeaders(access.token),
+      dependencies.env
+    );
     headers.set("accept", "text/event-stream");
     headers.set("content-type", "application/json");
     headers.set("x-openpond-team-id", access.teamId);
     headers.set("idempotency-key", input.requestId);
     headers.set("x-request-id", input.requestId);
     const response = await fetchImpl(
-      `${access.apiBaseUrl}/v1/chat/completions`,
+      requestUrl,
       {
         method: "POST",
         headers,

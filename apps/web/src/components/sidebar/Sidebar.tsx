@@ -2,7 +2,7 @@ import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import { SidebarNavigation } from "./SidebarNavigation";
 import { SidebarSectionList } from "./SidebarSectionList";
-import { SidebarBrandButton } from "./SidebarBrandButton";
+import { SidebarExperienceMenu } from "./SidebarExperienceMenu";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
@@ -12,6 +12,8 @@ export function Sidebar(props: SidebarProps) {
     beginNewChat,
     arch,
     currentVersion,
+    experience,
+    onExperienceChange,
     onSidebarResizeStart,
     platform,
     setSectionMenuOpen,
@@ -29,15 +31,24 @@ export function Sidebar(props: SidebarProps) {
     arch,
     enabled: isDesktopShell(),
   });
-  const availableUpdate = updateCheck.status === "available" ? updateCheck.update : null;
+  const availableUpdate =
+    updateCheck.status === "available" ? updateCheck.update : null;
 
   return (
     <aside className="sidebar">
       <div className="sidebar-toolbar">
-        <button className="sidebar-icon" data-tooltip="Hide sidebar" aria-label="Hide sidebar" onClick={() => setSidebarOpen(false)}>
+        <button
+          className="sidebar-icon"
+          data-tooltip="Hide sidebar"
+          aria-label="Hide sidebar"
+          onClick={() => setSidebarOpen(false)}
+        >
           <PanelLeft size={16} />
         </button>
-        <SidebarBrandButton onOpenHome={() => beginNewChat(null)} />
+        <SidebarExperienceMenu
+          value={experience}
+          onChange={onExperienceChange}
+        />
         {availableUpdate && (
           <button
             type="button"
@@ -53,6 +64,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
 
       <SidebarNavigation
+        experience={experience}
         beginNewChat={beginNewChat}
         setSectionMenuOpen={setSectionMenuOpen}
         setSelectedAppId={setSelectedAppId}
@@ -91,7 +103,10 @@ export function Sidebar(props: SidebarProps) {
 async function openUpdateDownload(url: string): Promise<void> {
   const browser = window.openpond?.browser;
   if (browser?.openExternal) {
-    const result = await browser.openExternal({ conversationId: "openpond-update", url });
+    const result = await browser.openExternal({
+      conversationId: "openpond-update",
+      url,
+    });
     if (result.ok) return;
   }
   window.open(url, "_blank", "noopener,noreferrer");

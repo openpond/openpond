@@ -33,6 +33,8 @@ const productionLineLimitAllowlist = new Set([
   "apps/server/src/workspace-tools/workspace-tool-app-handlers.ts",
   "apps/server/src/workspace-tools/workspace-tool-sandbox-actions.ts",
   "apps/web/src/api.ts",
+  "apps/web/src/app/AppRuntimeView.tsx",
+  "apps/web/src/app/useAppPrimaryRuntime.ts",
   "apps/web/src/components/app-shell/MainPane.tsx",
   "apps/web/src/components/chat/Composer.tsx",
   "apps/web/src/components/chat/WorkspaceEnvironmentMenu.tsx",

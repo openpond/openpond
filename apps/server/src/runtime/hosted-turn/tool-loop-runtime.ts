@@ -2,6 +2,7 @@ import {
   SubagentMessageDeliverySchema,
   SubagentMessageSchema,
   SubagentRunSchema,
+  DEFAULT_SESSION_EXPERIENCE,
   type AppPreferences,
   type ChatProvider,
   type HarnessActionBinding,
@@ -17,10 +18,7 @@ import {
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
 } from "@openpond/contracts";
-import type {
-  HostedChatTool,
-  HostedChatToolChoice,
-} from "@openpond/cloud";
+import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import { trustedProviderContextLimit } from "../../openpond/context-usage.js";
 import {
@@ -53,13 +51,28 @@ import {
 } from "./rollout.js";
 import type { ProfileSkillRuntime } from "./native-tools-runtime.js";
 import type { SubagentTurnPermissions } from "../subagents/continuation-runtime.js";
-import type { HostedToolLoopDelta, TurnRunnerDependencies } from "../turns/ports.js";
+import type {
+  HostedToolLoopDelta,
+  TurnRunnerDependencies,
+} from "../turns/ports.js";
 import { isTerminalOneShotTurn } from "../turns/request-context.js";
 import {
   recordFromUnknown,
   truncateForModelAside,
 } from "../turns/value-utils.js";
 import { normalizeMentionedSandboxToolRequest } from "../create-pipeline/snapshots.js";
+import {
+  filterModelToolsForExperience,
+  workspaceToolExperienceBlocker,
+} from "../experience-policy.js";
+import { hostedTrainingHarnessRound } from "./training-harness-round.js";
+import {
+  PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS,
+  READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS,
+  RESOURCE_TEXT_FALLBACK_ACTIONS,
+} from "./tool-loop-action-policy.js";
+
+export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
 type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 type HostedToolLoopStreamOptions = {
@@ -67,76 +80,6 @@ type HostedToolLoopStreamOptions = {
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
 };
-
-const RESOURCE_TEXT_FALLBACK_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
-  "resource_search",
-  "resource_read",
-]);
-const READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
-  "resource_search",
-  "resource_read",
-  "workspace_status",
-  "list_files",
-  "read_files",
-  "search_files",
-  "git_status",
-  "git_diff",
-  "sandbox_status",
-  "sandbox_list_files",
-  "sandbox_read_file",
-  "sandbox_search_files",
-  "sandbox_git_status",
-  "sandbox_git_diff",
-  "sandbox_git_export_patch",
-  "sandbox_snapshot_catalog",
-  "sandbox_templates",
-  "sandbox_replays",
-  "sandbox_replay_get",
-  "sandbox_replay_logs",
-  "sandbox_replay_artifacts",
-  "sandbox_logs",
-  "sandbox_receipts",
-]);
-const PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS = new Set<RuntimeEvent["name"]>([
-  "subagent.message",
-]);
-
-export function hostedTrainingHarnessRound(input: {
-  trainingHarness: {
-    actionBindings: HarnessActionBinding[];
-  } | null | undefined;
-  completedActionCount: number;
-  nativeTools: HostedChatTool[];
-}): {
-  tools: HostedChatTool[];
-  toolChoice: HostedChatToolChoice;
-  requiredToolName: string | null;
-} | null {
-  if (!input.trainingHarness) return null;
-  const requiredToolName =
-    input.trainingHarness.actionBindings[input.completedActionCount]
-      ?.modelToolName ?? null;
-  if (!requiredToolName) {
-    return {
-      tools: [],
-      toolChoice: "none",
-      requiredToolName: null,
-    };
-  }
-  const requiredToolIndex = input.nativeTools.findIndex(
-    (tool) => tool.function?.name === requiredToolName,
-  );
-  if (requiredToolIndex < 0) {
-    throw new Error(
-      `Training harness tool ${requiredToolName} is unavailable to the hosted model.`,
-    );
-  }
-  return {
-    tools: input.nativeTools.slice(0, requiredToolIndex + 1),
-    toolChoice: "required",
-    requiredToolName,
-  };
-}
 
 export function createHostedToolLoopRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;
@@ -154,18 +97,25 @@ export function createHostedToolLoopRuntime(deps: {
         taskId: string;
         actionBindings: HarnessActionBinding[];
       };
-    },
+      workInputs?: ReadonlyArray<{
+        localPath?: string;
+        storageName?: string;
+      }>;
+    }
   ): ModelToolDefinition[];
   profileSkillInstructionModeForProvider(
     provider: ChatProvider,
-    runtime: ProfileSkillRuntime,
+    runtime: ProfileSkillRuntime
   ): ProfileSkillInstructionMode;
   subagentToolsAvailable(): boolean;
-  runtimeEventsForSession(sessionId: string, query?: {
-    afterSequence?: number | null;
-    names?: readonly RuntimeEvent["name"][];
-    limit?: number | null;
-  }): Promise<RuntimeEvent[]>;
+  runtimeEventsForSession(
+    sessionId: string,
+    query?: {
+      afterSequence?: number | null;
+      names?: readonly RuntimeEvent["name"][];
+      limit?: number | null;
+    }
+  ): Promise<RuntimeEvent[]>;
   getSession(sessionId: string): Promise<Session>;
   getTaskset?: (tasksetId: string) => Promise<Taskset | null>;
   appendHostedContextUsage: TurnRunnerDependencies["appendHostedContextUsage"];
@@ -201,8 +151,10 @@ export function createHostedToolLoopRuntime(deps: {
 }) {
   const hostedToolFlags = deps.hostedToolFlags;
   const nativeToolsEnabledForProvider = deps.nativeToolsEnabledForProvider;
-  const createNativeModelToolDefinitions = deps.createNativeModelToolDefinitions;
-  const profileSkillInstructionModeForProvider = deps.profileSkillInstructionModeForProvider;
+  const createNativeModelToolDefinitions =
+    deps.createNativeModelToolDefinitions;
+  const profileSkillInstructionModeForProvider =
+    deps.profileSkillInstructionModeForProvider;
   const subagentToolsAvailable = deps.subagentToolsAvailable;
   const appendHostedContextUsage = deps.appendHostedContextUsage;
   const maxHostedWorkspaceToolRounds = deps.maxHostedWorkspaceToolRounds;
@@ -229,57 +181,90 @@ export function createHostedToolLoopRuntime(deps: {
     connectedApps: ResolvedConnectedAppContext[];
     openPondActionCatalog: OpenPondActionCatalogEntry[];
     profileSkillRuntime: ProfileSkillRuntime;
+    workInputs?: ReadonlyArray<{
+      localPath?: string;
+      storageName?: string;
+    }>;
     userPrompt: string;
     workspaceDiffBaseline: WorkspaceDiffSummary | null;
     signal: AbortSignal;
     stream: (
       messages: HostedMessages,
-      options?: HostedToolLoopStreamOptions,
+      options?: HostedToolLoopStreamOptions
     ) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
     appPreferences: AppPreferences | null;
   }): Promise<Session> {
     let session = params.session;
     const messages = [...params.messages];
     const contextLimitTokens =
-      params.contextLimitTokens ?? trustedProviderContextLimit({ provider: params.provider, model: params.model });
+      params.contextLimitTokens ??
+      trustedProviderContextLimit({
+        provider: params.provider,
+        model: params.model,
+      });
     const invalidRequestCounts = new Map<string, number>();
     let workspaceToolResultCount = 0;
     let toolRequiredCorrectionSent = false;
     const appPreferences = params.appPreferences;
     const trainingHarness = await trainingHarnessForTurn(
       params.turn,
-      deps.getTaskset,
+      deps.getTaskset
     );
     const nativeToolDefinitions = nativeToolsEnabledForProvider(params.provider)
-      ? enabledModelToolDefinitions(createNativeModelToolDefinitions(
-          params.openPondActionCatalog,
-          params.resourceEvents,
-        params.profileSkillRuntime,
-        params.connectedApps,
-        {
-          disableWorkflowDelegationTools: isTerminalOneShotTurn(params.turn),
-          subagentRoles: appPreferences?.subagents.roles.filter((role) => role.enabled),
-          subagentToolsEnabled: appPreferences?.subagents.enabled ?? false,
-          trainingHarness,
-        },
-      ), {
+      ? filterModelToolsForExperience(
           session,
-          provider: params.provider,
-          model: params.model,
-          mentionedApps: params.mentionedApps,
-        })
+          enabledModelToolDefinitions(
+            createNativeModelToolDefinitions(
+              params.openPondActionCatalog,
+              params.resourceEvents,
+              params.profileSkillRuntime,
+              params.connectedApps,
+              {
+                disableWorkflowDelegationTools: isTerminalOneShotTurn(
+                  params.turn
+                ),
+                subagentRoles: appPreferences?.subagents.roles.filter(
+                  (role) => role.enabled
+                ),
+                subagentToolsEnabled:
+                  appPreferences?.subagents.enabled ?? false,
+                trainingHarness,
+                workInputs: params.workInputs,
+              }
+            ),
+            {
+              session,
+              provider: params.provider,
+              model: params.model,
+              mentionedApps: params.mentionedApps,
+            }
+          )
+        )
       : [];
-    const nativeTools = nativeToolDefinitions.map(modelToolDefinitionToHostedTool);
-    const nativeToolDefinitionByName = new Map(nativeToolDefinitions.map((definition) => [definition.name, definition]));
+    const nativeTools = nativeToolDefinitions.map(
+      modelToolDefinitionToHostedTool
+    );
+    const nativeToolDefinitionByName = new Map(
+      nativeToolDefinitions.map((definition) => [definition.name, definition])
+    );
     let completedTrainingHarnessActions = 0;
-    const textFallbackMode = hostedToolInstructionModeForProvider(hostedToolFlags, params.provider);
-    const profileSkillMode = profileSkillInstructionModeForProvider(params.provider, params.profileSkillRuntime);
-    const initialEventIds = new Set(params.resourceEvents.map((item) => item.id));
+    const textFallbackMode = hostedToolInstructionModeForProvider(
+      hostedToolFlags,
+      params.provider
+    );
+    const profileSkillMode = profileSkillInstructionModeForProvider(
+      params.provider,
+      params.profileSkillRuntime
+    );
+    const initialEventIds = new Set(
+      params.resourceEvents.map((item) => item.id)
+    );
     let lastDeliveredSubagentAsideSequence = session.subagentRunId
       ? 0
       : params.resourceEvents.reduce(
-          (latest, runtimeEvent) => Math.max(latest, runtimeEvent.sequence ?? 0),
-          0,
+          (latest, runtimeEvent) =>
+            Math.max(latest, runtimeEvent.sequence ?? 0),
+          0
         );
     const deliveredSubagentAsideKeys = new Set<string>();
     async function appendContextUsage(input: {
@@ -305,8 +290,9 @@ export function createHostedToolLoopRuntime(deps: {
         afterSequence: lastDeliveredSubagentAsideSequence,
       });
       lastDeliveredSubagentAsideSequence = pendingEvents.reduce(
-        (latest, runtimeEvent) => Math.max(latest, runtimeEvent.sequence ?? latest),
-        lastDeliveredSubagentAsideSequence,
+        (latest, runtimeEvent) =>
+          Math.max(latest, runtimeEvent.sequence ?? latest),
+        lastDeliveredSubagentAsideSequence
       );
       const asideMessages = subagentModelAsideMessages({
         session,
@@ -326,7 +312,9 @@ export function createHostedToolLoopRuntime(deps: {
       await appendContextUsage({ messages });
       let assistantText = "";
       let reasoningText = "";
-      let latestContinuation: import("@openpond/cloud").HostedChatContinuation | null = null;
+      let latestContinuation:
+        | import("@openpond/cloud").HostedChatContinuation
+        | null = null;
       let latestUsage: unknown;
       let finishReason: string | null | undefined;
       const nativeToolAccumulator = new NativeToolCallAccumulator();
@@ -353,7 +341,7 @@ export function createHostedToolLoopRuntime(deps: {
           messages,
           requestTools.length > 0
             ? { tools: requestTools, toolChoice, requestId: usageRequestId }
-            : { requestId: usageRequestId },
+            : { requestId: usageRequestId }
         )) {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
@@ -362,14 +350,16 @@ export function createHostedToolLoopRuntime(deps: {
           if (delta.reasoningText) reasoningText += delta.reasoningText;
           if (delta.continuation) latestContinuation = delta.continuation;
           if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
-          if (delta.finishReason !== undefined) finishReason = delta.finishReason;
+          if (delta.finishReason !== undefined)
+            finishReason = delta.finishReason;
         }
       } catch (error) {
         await usageRecorder.fail(
           error,
-          params.signal.aborted || (error instanceof Error && error.name === "AbortError")
+          params.signal.aborted ||
+            (error instanceof Error && error.name === "AbortError")
             ? "interrupted"
-            : "failed",
+            : "failed"
         );
         throw error;
       }
@@ -383,17 +373,15 @@ export function createHostedToolLoopRuntime(deps: {
             source: "provider",
             appId: session.appId,
             output: reasoningText,
-          }),
+          })
         );
       }
 
       const nativeToolCalls = nativeToolAccumulator.completed();
       if (
         trainingHarnessRound?.requiredToolName &&
-        (
-          nativeToolCalls.length !== 1 ||
-          nativeToolCalls[0]?.name !== trainingHarnessRound.requiredToolName
-        )
+        (nativeToolCalls.length !== 1 ||
+          nativeToolCalls[0]?.name !== trainingHarnessRound.requiredToolName)
       ) {
         await appendRuntimeEvent(
           event({
@@ -410,7 +398,7 @@ export function createHostedToolLoopRuntime(deps: {
               requiredToolName: trainingHarnessRound.requiredToolName,
               receivedToolNames: nativeToolCalls.map((call) => call.name),
             },
-          }),
+          })
         );
         await appendContextUsage({
           messages,
@@ -424,9 +412,11 @@ export function createHostedToolLoopRuntime(deps: {
         continue;
       }
       if (nativeToolCalls.length > 0) {
-        messages.push(assistantMessageForNativeToolCalls(assistantText, nativeToolCalls, {
-          continuation: latestContinuation,
-        }));
+        messages.push(
+          assistantMessageForNativeToolCalls(assistantText, nativeToolCalls, {
+            continuation: latestContinuation,
+          })
+        );
         const nativeResults = await executeNativeToolCalls({
           session,
           turnId: params.turn.id,
@@ -447,24 +437,31 @@ export function createHostedToolLoopRuntime(deps: {
           messages.push(toolResultMessage(result));
         }
         const blockingQuestion = nativeResults.find(
-          (result) => result.turnControl === "await_user_input",
+          (result) => result.turnControl === "await_user_input"
         );
         if (blockingQuestion) {
-          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          await appendContextUsage({
+            messages,
+            usage: latestUsage,
+            includeCompletion: true,
+          });
           return session;
         }
         if (
           trainingHarnessRound?.requiredToolName &&
           nativeResults.some(
             (result) =>
-              result.name === trainingHarnessRound.requiredToolName &&
-              result.ok,
+              result.name === trainingHarnessRound.requiredToolName && result.ok
           )
         ) {
           completedTrainingHarnessActions += 1;
         }
-        session = await getSession(session.id);
-        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+        session = withDefaultExperience(await getSession(session.id));
+        await appendContextUsage({
+          messages,
+          usage: latestUsage,
+          includeCompletion: true,
+        });
         continue;
       }
 
@@ -477,9 +474,10 @@ export function createHostedToolLoopRuntime(deps: {
             source: "server",
             appId: session.appId,
             status: "failed",
-            output: "Provider finished with tool_calls but did not stream a complete native tool call.",
+            output:
+              "Provider finished with tool_calls but did not stream a complete native tool call.",
             data: { provider: params.provider, model: params.model },
-          }),
+          })
         );
         messages.push({
           role: "user",
@@ -495,15 +493,23 @@ export function createHostedToolLoopRuntime(deps: {
         role: "assistant" as const,
         content: assistantText.trim() || "Requesting workspace tool execution.",
       };
-      const extractedRequests = textFallbackMode === "none" ? [] : extractWorkspaceToolRequests(assistantText);
-      const skillReadRequests = profileSkillMode === "text_fallback"
-        ? extractProfileSkillReadRequests(assistantText)
-        : [];
+      const extractedRequests =
+        textFallbackMode === "none"
+          ? []
+          : extractWorkspaceToolRequests(assistantText);
+      const skillReadRequests =
+        profileSkillMode === "text_fallback"
+          ? extractProfileSkillReadRequests(assistantText)
+          : [];
       const deniedTextFallbackRequests = extractedRequests.filter(
-        (request) => textFallbackMode === "resource_text_fallback" && !RESOURCE_TEXT_FALLBACK_ACTIONS.has(request.action),
+        (request) =>
+          textFallbackMode === "resource_text_fallback" &&
+          !RESOURCE_TEXT_FALLBACK_ACTIONS.has(request.action)
       );
       const requests = extractedRequests.filter(
-        (request) => textFallbackMode !== "resource_text_fallback" || RESOURCE_TEXT_FALLBACK_ACTIONS.has(request.action),
+        (request) =>
+          textFallbackMode !== "resource_text_fallback" ||
+          RESOURCE_TEXT_FALLBACK_ACTIONS.has(request.action)
       );
       const deniedSubagentPolicyResults = deniedTextFallbackRequests
         .map((request) => {
@@ -525,17 +531,23 @@ export function createHostedToolLoopRuntime(deps: {
         .filter((result): result is string => Boolean(result));
       if (skillReadRequests.length > 0) {
         messages.push(assistantMessage);
-        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+        await appendContextUsage({
+          messages,
+          usage: latestUsage,
+          includeCompletion: true,
+        });
         const skillResults: string[] = [];
         for (const request of skillReadRequests.slice(0, 3)) {
           throwIfInterrupted(params.signal);
-          skillResults.push(await readProfileSkillForModel({
-            session,
-            turnId: params.turn.id,
-            runtime: params.profileSkillRuntime,
-            name: request.name,
-            source: "provider",
-          }));
+          skillResults.push(
+            await readProfileSkillForModel({
+              session,
+              turnId: params.turn.id,
+              runtime: params.profileSkillRuntime,
+              name: request.name,
+              source: "provider",
+            })
+          );
         }
         messages.push({
           role: "user",
@@ -549,7 +561,11 @@ export function createHostedToolLoopRuntime(deps: {
       }
       if (deniedSubagentPolicyResults.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
-        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+        await appendContextUsage({
+          messages,
+          usage: latestUsage,
+          includeCompletion: true,
+        });
         messages.push({
           role: "user",
           content: [
@@ -562,12 +578,18 @@ export function createHostedToolLoopRuntime(deps: {
       }
       if (deniedTextFallbackRequests.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
-        await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+        await appendContextUsage({
+          messages,
+          usage: latestUsage,
+          includeCompletion: true,
+        });
         messages.push({
           role: "user",
           content: [
             "That text fallback tool action is not available in this mode.",
-            `Unavailable action${deniedTextFallbackRequests.length === 1 ? "" : "s"}: ${deniedTextFallbackRequests
+            `Unavailable action${
+              deniedTextFallbackRequests.length === 1 ? "" : "s"
+            }: ${deniedTextFallbackRequests
               .map((request) => request.action)
               .join(", ")}.`,
             "Use native tool calls when available. If text fallback is necessary, only use resource_search or resource_read.",
@@ -578,7 +600,11 @@ export function createHostedToolLoopRuntime(deps: {
       if (requests.length === 0) {
         messages.push(assistantMessage);
         if (await appendPendingSubagentAsides()) {
-          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          await appendContextUsage({
+            messages,
+            usage: latestUsage,
+            includeCompletion: true,
+          });
           continue;
         }
         if (
@@ -586,10 +612,17 @@ export function createHostedToolLoopRuntime(deps: {
           !toolRequiredCorrectionSent &&
           requiresWorkspaceToolForPrompt(session, params.userPrompt)
         ) {
-          await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+          await appendContextUsage({
+            messages,
+            usage: latestUsage,
+            includeCompletion: true,
+          });
           messages.push({
             role: "user",
-            content: workspaceToolCorrectionMessage(textFallbackMode, nativeTools.length > 0),
+            content: workspaceToolCorrectionMessage(
+              textFallbackMode,
+              nativeTools.length > 0
+            ),
           });
           toolRequiredCorrectionSent = true;
           continue;
@@ -604,7 +637,11 @@ export function createHostedToolLoopRuntime(deps: {
       }
 
       messages.push(assistantMessage);
-      await appendContextUsage({ messages, usage: latestUsage, includeCompletion: true });
+      await appendContextUsage({
+        messages,
+        usage: latestUsage,
+        includeCompletion: true,
+      });
 
       const toolResults: string[] = [];
       for (const request of requests) {
@@ -618,42 +655,62 @@ export function createHostedToolLoopRuntime(deps: {
           userPrompt: params.userPrompt,
         });
         const validationIssues = validateWorkspaceToolRequest(toolRequest);
-        const policyBlocker = subagentWorkspaceToolPolicyBlocker(session, toolRequest);
-        if (policyBlocker) {
-          toolResults.push(formatWorkspaceToolResultForModel({
-            ok: false,
-            action: toolRequest.action,
-            output: policyBlocker,
-            data: {
-              code: "subagent_tool_policy_blocked",
-              toolPolicy: "read_only",
-              subagentRunId: session.subagentRunId ?? null,
-              subagentRoleId: session.subagentRoleId ?? null,
-            },
-          }));
+        const policyBlocker = subagentWorkspaceToolPolicyBlocker(
+          session,
+          toolRequest
+        );
+        const experienceBlocker = workspaceToolExperienceBlocker({
+          session,
+          action: toolRequest.action,
+        });
+        if (policyBlocker || experienceBlocker) {
+          toolResults.push(
+            formatWorkspaceToolResultForModel({
+              ok: false,
+              action: toolRequest.action,
+              output:
+                policyBlocker ?? experienceBlocker ?? "Workspace tool blocked.",
+              data: {
+                code: policyBlocker
+                  ? "subagent_tool_policy_blocked"
+                  : "experience_tool_policy_blocked",
+                toolPolicy: policyBlocker ? "read_only" : session.experience,
+                subagentRunId: session.subagentRunId ?? null,
+                subagentRoleId: session.subagentRoleId ?? null,
+              },
+            })
+          );
           continue;
         }
         if (validationIssues.length > 0) {
-          const key = `${toolRequest.action}:${validationIssues.map((issue) => `${issue.path}:${issue.expected}`).join("|")}`;
+          const key = `${toolRequest.action}:${validationIssues
+            .map((issue) => `${issue.path}:${issue.expected}`)
+            .join("|")}`;
           const count = (invalidRequestCounts.get(key) ?? 0) + 1;
           invalidRequestCounts.set(key, count);
           if (count >= maxRepeatedInvalidToolRequests) {
             throw new Error(
-              `Hosted workspace tool produced repeated invalid ${toolRequest.action} requests: ${validationIssues
+              `Hosted workspace tool produced repeated invalid ${
+                toolRequest.action
+              } requests: ${validationIssues
                 .map((issue) => `${issue.path} expected ${issue.expected}`)
                 .join("; ")}`
             );
           }
-          toolResults.push(formatWorkspaceToolValidationErrorForModel(toolRequest, validationIssues));
+          toolResults.push(
+            formatWorkspaceToolValidationErrorForModel(
+              toolRequest,
+              validationIssues
+            )
+          );
           continue;
         }
-        const result = await executeWorkspaceTool(
-          session.id,
-          toolRequest,
-          { turnId: params.turn.id, workspaceDiffBaseline: params.workspaceDiffBaseline }
-        );
+        const result = await executeWorkspaceTool(session.id, toolRequest, {
+          turnId: params.turn.id,
+          workspaceDiffBaseline: params.workspaceDiffBaseline,
+        });
         workspaceToolResultCount += 1;
-        session = await getSession(session.id);
+        session = withDefaultExperience(await getSession(session.id));
         toolResults.push(formatWorkspaceToolResultForModel(result));
       }
 
@@ -681,7 +738,7 @@ export function createHostedToolLoopRuntime(deps: {
     return session;
   }
 
-function subagentModelAsideMessages(input: {
+  function subagentModelAsideMessages(input: {
     session: Session;
     events: RuntimeEvent[];
     initialEventIds: Set<string>;
@@ -714,7 +771,8 @@ function subagentModelAsideMessages(input: {
     if (item.sessionId !== input.session.id) return null;
     if (input.initialEventIds.has(item.id)) return null;
     if (!PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS.has(item.name)) return null;
-    if (item.name === "subagent.message") return parentSubagentMessageAside(input.session, item);
+    if (item.name === "subagent.message")
+      return parentSubagentMessageAside(input.session, item);
     const run = subagentRunFromRuntimeEvent(item);
     if (!run || run.parentSessionId !== input.session.id) return null;
     const report = run.report;
@@ -726,22 +784,37 @@ function subagentModelAsideMessages(input: {
       `status: ${run.status}`,
       run.childSessionId ? `child session: ${run.childSessionId}` : null,
       item.output ? `receipt: ${item.output}` : null,
-      report?.summary ? `summary: ${truncateForModelAside(report.summary, 1200)}` : null,
-      report?.blockers.length ? `blockers: ${report.blockers.slice(0, 4).join(" | ")}` : null,
-      report?.testsRun.length ? `tests: ${report.testsRun.slice(0, 4).join(" | ")}` : null,
-      report?.patchRef ? `patch: ${report.patchRef.kind}:${report.patchRef.id} (${report.patchRef.label})` : null,
-      report?.diffRef ? `diff: ${report.diffRef.kind}:${report.diffRef.id} (${report.diffRef.label})` : null,
+      report?.summary
+        ? `summary: ${truncateForModelAside(report.summary, 1200)}`
+        : null,
+      report?.blockers.length
+        ? `blockers: ${report.blockers.slice(0, 4).join(" | ")}`
+        : null,
+      report?.testsRun.length
+        ? `tests: ${report.testsRun.slice(0, 4).join(" | ")}`
+        : null,
+      report?.patchRef
+        ? `patch: ${report.patchRef.kind}:${report.patchRef.id} (${report.patchRef.label})`
+        : null,
+      report?.diffRef
+        ? `diff: ${report.diffRef.kind}:${report.diffRef.id} (${report.diffRef.label})`
+        : null,
       "Use this pushed receipt. Do not poll unless you need a fresh diagnostic snapshot.",
     ].filter(Boolean);
     return details.join("\n");
   }
 
-  function parentSubagentMessageAside(session: Session, item: RuntimeEvent): string | null {
+  function parentSubagentMessageAside(
+    session: Session,
+    item: RuntimeEvent
+  ): string | null {
     const data = recordFromUnknown(item.data);
     const parsed = SubagentMessageSchema.safeParse(data?.message);
     if (!parsed.success) return null;
     const message = parsed.data;
-    const delivery = SubagentMessageDeliverySchema.safeParse(data?.delivery ?? message.delivery).success
+    const delivery = SubagentMessageDeliverySchema.safeParse(
+      data?.delivery ?? message.delivery
+    ).success
       ? SubagentMessageDeliverySchema.parse(data?.delivery ?? message.delivery)
       : null;
     if (delivery?.deliveredParentSessionId !== session.id) return null;
@@ -752,20 +825,35 @@ function subagentModelAsideMessages(input: {
       `from: ${message.fromRunId}`,
       `body: ${truncateForModelAside(message.body, 4000)}`,
       message.refs.length
-        ? `refs: ${message.refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(", ")}`
+        ? `refs: ${message.refs
+            .slice(0, 8)
+            .map((ref) => `${ref.kind}:${ref.id} (${ref.label})`)
+            .join(", ")}`
         : null,
       "This is the child's bounded final result. Decide what it means and what to do next; the runtime does not accept, reject, review, or advance work for you.",
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
-  function childSubagentMailboxAside(session: Session, item: RuntimeEvent): string | null {
-    if (item.sessionId !== session.id || item.name !== "subagent.message") return null;
+  function childSubagentMailboxAside(
+    session: Session,
+    item: RuntimeEvent
+  ): string | null {
+    if (item.sessionId !== session.id || item.name !== "subagent.message")
+      return null;
     const data = recordFromUnknown(item.data);
     const parsed = SubagentMessageSchema.safeParse(data?.message);
     if (!parsed.success) return null;
     const message = parsed.data;
-    const deliveredToRunId = typeof data?.deliveredToRunId === "string" ? data.deliveredToRunId : null;
-    if (deliveredToRunId && session.subagentRunId && deliveredToRunId !== session.subagentRunId) return null;
+    const deliveredToRunId =
+      typeof data?.deliveredToRunId === "string" ? data.deliveredToRunId : null;
+    if (
+      deliveredToRunId &&
+      session.subagentRunId &&
+      deliveredToRunId !== session.subagentRunId
+    )
+      return null;
     const priority = message.priority ?? "normal";
     return [
       `Subagent mailbox ${priority === "interrupt" ? "interrupt" : "update"}:`,
@@ -776,12 +864,17 @@ function subagentModelAsideMessages(input: {
       message.toRole ? `to role: ${message.toRole}` : null,
       `body: ${truncateForModelAside(message.body, 2000)}`,
       message.refs.length
-        ? `refs: ${message.refs.slice(0, 8).map((ref) => `${ref.kind}:${ref.id} (${ref.label})`).join(", ")}`
+        ? `refs: ${message.refs
+            .slice(0, 8)
+            .map((ref) => `${ref.kind}:${ref.id} (${ref.label})`)
+            .join(", ")}`
         : null,
       priority === "interrupt"
         ? "Treat this as high-priority steering at this safe model boundary."
         : "Use this message as goal-scoped coordination context.",
-    ].filter(Boolean).join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   function subagentRunFromRuntimeEvent(item: RuntimeEvent): SubagentRun | null {
@@ -791,38 +884,54 @@ function subagentModelAsideMessages(input: {
   }
 
   function subagentAsideEventKey(item: RuntimeEvent): string {
-    return typeof item.sequence === "number" ? `seq:${item.sequence}` : `id:${item.id}`;
+    return typeof item.sequence === "number"
+      ? `seq:${item.sequence}`
+      : `id:${item.id}`;
   }
 
-  function subagentWorkspaceToolPolicyBlocker(session: Session, request: WorkspaceToolRequest): string | null {
+  function subagentWorkspaceToolPolicyBlocker(
+    session: Session,
+    request: WorkspaceToolRequest
+  ): string | null {
     const policy = subagentToolPolicyForSession(session);
     if (policy !== "read_only") return null;
-    if (READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS.has(request.action)) return null;
+    if (READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS.has(request.action))
+      return null;
     return [
       `Workspace action ${request.action} is blocked by the read_only subagent tool policy.`,
       "Use read/search/status/diff tools only, or report that this child assignment needs a write-capable isolated workspace.",
     ].join(" ");
   }
 
-  function subagentToolPolicyForSession(session: Session): SubagentRoleSettings["toolPolicy"] | null {
+  function subagentToolPolicyForSession(
+    session: Session
+  ): SubagentRoleSettings["toolPolicy"] | null {
     if (!session.subagentRunId) return null;
-    const subagent = recordFromUnknown(recordFromUnknown(session.metadata)?.subagent);
-    const toolPolicy = typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
-    if (toolPolicy === "read_only" || toolPolicy === "workspace_write" || toolPolicy === "full_tools") return toolPolicy;
+    const subagent = recordFromUnknown(
+      recordFromUnknown(session.metadata)?.subagent
+    );
+    const toolPolicy =
+      typeof subagent?.toolPolicy === "string" ? subagent.toolPolicy : null;
+    if (
+      toolPolicy === "read_only" ||
+      toolPolicy === "workspace_write" ||
+      toolPolicy === "full_tools"
+    )
+      return toolPolicy;
     return "read_only";
   }
 
   function workspaceToolCorrectionMessage(
     textFallbackMode: HostedToolInstructionMode,
-    nativeToolsAvailable: boolean,
+    nativeToolsAvailable: boolean
   ): string {
     const toolCallInstruction = nativeToolsAvailable
       ? "Call an appropriate native tool now."
       : textFallbackMode === "resource_text_fallback"
-        ? "Call a resource_search or resource_read openpond_tool block now."
-        : textFallbackMode === "full_text_fallback"
-          ? "Call the appropriate openpond_tool block now."
-          : "Explain the blocker instead of claiming the workspace changed.";
+      ? "Call a resource_search or resource_read openpond_tool block now."
+      : textFallbackMode === "full_text_fallback"
+      ? "Call the appropriate openpond_tool block now."
+      : "Explain the blocker instead of claiming the workspace changed.";
     return [
       "Your previous response did not call a workspace tool.",
       "The user's request appears to require inspecting or changing the active workspace.",
@@ -834,13 +943,14 @@ function subagentModelAsideMessages(input: {
 
   async function trainingHarnessForTurn(
     turn: Turn,
-    getTaskset:
-      | ((tasksetId: string) => Promise<Taskset | null>)
-      | undefined,
-  ): Promise<{
-    taskId: string;
-    actionBindings: HarnessActionBinding[];
-  } | undefined> {
+    getTaskset: ((tasksetId: string) => Promise<Taskset | null>) | undefined
+  ): Promise<
+    | {
+        taskId: string;
+        actionBindings: HarnessActionBinding[];
+      }
+    | undefined
+  > {
     const tasksetId =
       typeof turn.metadata.trainingTasksetId === "string"
         ? turn.metadata.trainingTasksetId.trim()
@@ -863,11 +973,15 @@ function subagentModelAsideMessages(input: {
     });
     if (!task) return undefined;
     const actionBindings = taskset.environment.actionBindings ?? [];
-    return actionBindings.length
-      ? { taskId, actionBindings }
-      : undefined;
+    return actionBindings.length ? { taskId, actionBindings } : undefined;
   }
 
-
   return { runHostedToolLoop };
+}
+
+function withDefaultExperience(session: Session): Session {
+  return {
+    ...session,
+    experience: session.experience ?? DEFAULT_SESSION_EXPERIENCE,
+  };
 }

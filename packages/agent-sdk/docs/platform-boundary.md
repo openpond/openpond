@@ -20,7 +20,7 @@ The SDK owns source authoring, local inspection, generated runtime artifacts, va
 - Schedule enablement, scheduler sync, and schedule delivery auth.
 - draft source refs, preserved source checkpoints, live source refs, and publish promotion.
 - Hosted runtime provisioning, agent binding, and run history.
-- Durable conversations, Builder Chat, coding work items, trace/eval artifact refs, and UI projections.
+- Durable conversations, Work-based Agent authoring, versioned Agent packages, trace/eval artifact refs, and UI projections.
 
 ## Boundary Contract
 

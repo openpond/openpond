@@ -97,6 +97,9 @@ apps/web/public/tutorials/*.mp4
 docs/research/post-training-course/**/*.wav
 docs/research/post-training-course/**/*.mp4
 
+# Local research
+docs/research/
+
 # Local databases and process diagnostics
 *.sqlite
 *.sqlite-*

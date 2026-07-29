@@ -10,6 +10,7 @@ import type {
 const AGENT_MANIFEST_PATH = ".openpond/agent-manifest.json";
 const ACTION_REGISTRY_PATH = ".openpond/action-registry.json";
 const SOURCE_UPLOAD_METADATA_PATH = ".openpond/source-upload-metadata.json";
+const AGENT_PACKAGE_ORIGIN_PATH = ".openpond/agent-package-origin.json";
 
 type LoadedProfileCatalog = {
   catalog: OpenPondProfileCatalogState;
@@ -23,7 +24,9 @@ export type ProfileActionCatalogSource = {
   preferred?: boolean;
 };
 
-export async function loadProfileActionCatalog(sourcePath: string): Promise<LoadedProfileCatalog> {
+export async function loadProfileActionCatalog(
+  sourcePath: string
+): Promise<LoadedProfileCatalog> {
   return loadProfileActionCatalogSource({
     agentId: "default",
     sourcePath,
@@ -32,7 +35,7 @@ export async function loadProfileActionCatalog(sourcePath: string): Promise<Load
 }
 
 export async function loadProfileActionCatalogForSources(
-  sources: ProfileActionCatalogSource[],
+  sources: ProfileActionCatalogSource[]
 ): Promise<LoadedProfileCatalog> {
   if (sources.length === 0) {
     return {
@@ -52,7 +55,9 @@ export async function loadProfileActionCatalogForSources(
     ...sources.filter((source) => source.preferred),
     ...sources.filter((source) => !source.preferred),
   ];
-  const results = await Promise.all(sortedSources.map(loadProfileActionCatalogSource));
+  const results = await Promise.all(
+    sortedSources.map(loadProfileActionCatalogSource)
+  );
   const byId = new Map<string, OpenPondProfileActionCatalogEntry>();
   const actionCatalog: OpenPondProfileActionCatalogEntry[] = [];
   for (const result of results) {
@@ -60,42 +65,65 @@ export async function loadProfileActionCatalogForSources(
       const uniqueId = byId.has(action.id)
         ? `${action.agentId ?? "agent"}.${action.sourceActionId ?? action.id}`
         : action.id;
-      const next = uniqueId === action.id ? action : { ...action, id: uniqueId };
+      const next =
+        uniqueId === action.id ? action : { ...action, id: uniqueId };
       byId.set(uniqueId, next);
       actionCatalog.push(next);
     }
   }
-  const generatedAt = latestIso(results.map((result) => result.catalog.generatedAt));
+  const generatedAt = latestIso(
+    results.map((result) => result.catalog.generatedAt)
+  );
   const errors = results.map((result) => result.catalog.error).filter(Boolean);
   return {
     catalog: {
       actionCount: actionCatalog.length,
       generatedAt,
-      manifestPath: results.find((result) => result.catalog.manifestPath)?.catalog.manifestPath ?? null,
-      registryPath: results.find((result) => result.catalog.registryPath)?.catalog.registryPath ?? null,
+      manifestPath:
+        results.find((result) => result.catalog.manifestPath)?.catalog
+          .manifestPath ?? null,
+      registryPath:
+        results.find((result) => result.catalog.registryPath)?.catalog
+          .registryPath ?? null,
       stale: results.some((result) => result.catalog.stale),
       error: errors.length > 0 ? errors.join("; ") : null,
     },
     actionCatalog,
-    sourceSetupRequirements: results.flatMap((result) => result.sourceSetupRequirements),
+    sourceSetupRequirements: results.flatMap(
+      (result) => result.sourceSetupRequirements
+    ),
   };
 }
 
 async function loadProfileActionCatalogSource(
-  source: ProfileActionCatalogSource,
+  source: ProfileActionCatalogSource
 ): Promise<LoadedProfileCatalog> {
   const sourcePath = source.sourcePath;
   const manifestPath = path.join(sourcePath, AGENT_MANIFEST_PATH);
   const registryPath = path.join(sourcePath, ACTION_REGISTRY_PATH);
-  const sourceUploadMetadataPath = path.join(sourcePath, SOURCE_UPLOAD_METADATA_PATH);
+  const sourceUploadMetadataPath = path.join(
+    sourcePath,
+    SOURCE_UPLOAD_METADATA_PATH
+  );
+  const agentPackageOriginPath = path.join(
+    sourcePath,
+    AGENT_PACKAGE_ORIGIN_PATH
+  );
   try {
     const manifest = await readJsonIfExists(manifestPath);
     const registry = await readJsonIfExists(registryPath);
-    const sourceUploadMetadata = await readJsonIfExists(sourceUploadMetadataPath);
+    const sourceUploadMetadata = await readJsonIfExists(
+      sourceUploadMetadataPath
+    );
+    const agentPackageOrigin = asRecord(
+      await readJsonIfExists(agentPackageOriginPath)
+    );
     const namedInputSchemas = asRecord(asRecord(manifest)?.inputSchemas);
     const sourceSetupRequirements =
       recordArray(asRecord(sourceUploadMetadata)?.setupRequirements) ?? [];
-    const sourceRequirementsByAction = sourceSetupRequirementsByAction(sourceSetupRequirements);
+    const sourceRequirementsByAction = sourceSetupRequirementsByAction(
+      sourceSetupRequirements
+    );
     const byId = new Map<string, OpenPondProfileActionCatalogEntry>();
 
     for (const record of [
@@ -112,8 +140,10 @@ async function loadProfileActionCatalogSource(
         actionName: text(record.name),
       });
       const setupRequirements = mergeSetupRequirements(
-        recordArray(record.setupRequirements) ?? existing?.setupRequirements ?? [],
-        actionSourceRequirements,
+        recordArray(record.setupRequirements) ??
+          existing?.setupRequirements ??
+          [],
+        actionSourceRequirements
       );
       const next: OpenPondProfileActionCatalogEntry = {
         id,
@@ -123,19 +153,28 @@ async function loadProfileActionCatalogSource(
         name: text(record.name) ?? existing?.name ?? id,
         label: text(record.label) ?? existing?.label ?? titleFromActionId(id),
         description: text(record.description) ?? existing?.description ?? null,
-        visibility: text(record.visibility) ?? existing?.visibility ?? "default",
+        visibility:
+          text(record.visibility) ?? existing?.visibility ?? "default",
         inputSchema:
           resolvedSchemaValue(record.inputSchema, namedInputSchemas) ??
           existing?.inputSchema ??
           null,
-        outputSchema: schemaValue(record.outputSchema) ?? existing?.outputSchema ?? null,
-        approvalPolicy: asRecord(record.approvalPolicy) ?? existing?.approvalPolicy ?? null,
-        artifactPolicy: asRecord(record.artifactPolicy) ?? existing?.artifactPolicy ?? null,
+        outputSchema:
+          schemaValue(record.outputSchema) ?? existing?.outputSchema ?? null,
+        approvalPolicy:
+          asRecord(record.approvalPolicy) ?? existing?.approvalPolicy ?? null,
+        artifactPolicy:
+          asRecord(record.artifactPolicy) ?? existing?.artifactPolicy ?? null,
         setupRequirements,
         mcp: asRecord(record.mcp) ?? existing?.mcp ?? null,
-        schedulePolicy: asRecord(record.schedulePolicy) ?? existing?.schedulePolicy ?? null,
-        trace: asRecord(record.trace) ?? existing?.trace ?? null,
-        implementation: asRecord(record.implementation) ?? existing?.implementation ?? null,
+        schedulePolicy:
+          asRecord(record.schedulePolicy) ?? existing?.schedulePolicy ?? null,
+        trace: mergeAgentPackageTrace(
+          asRecord(record.trace) ?? existing?.trace ?? null,
+          agentPackageOrigin
+        ),
+        implementation:
+          asRecord(record.implementation) ?? existing?.implementation ?? null,
         invokesModel:
           typeof record.invokesModel === "boolean"
             ? record.invokesModel
@@ -145,7 +184,8 @@ async function loadProfileActionCatalogSource(
     }
 
     const actionCatalog = Array.from(byId.values()).filter(
-      (action) => action.visibility !== "internal" && action.visibility !== "debug",
+      (action) =>
+        action.visibility !== "internal" && action.visibility !== "debug"
     );
     const missingArtifacts = [
       ...(!manifest ? [AGENT_MANIFEST_PATH] : []),
@@ -159,9 +199,10 @@ async function loadProfileActionCatalogSource(
         manifestPath: existsSync(manifestPath) ? manifestPath : null,
         registryPath: existsSync(registryPath) ? registryPath : null,
         stale: missingArtifacts.length > 0,
-        error: missingArtifacts.length > 0
-          ? missingSourceArtifactsMessage(source, missingArtifacts)
-          : null,
+        error:
+          missingArtifacts.length > 0
+            ? missingSourceArtifactsMessage(source, missingArtifacts)
+            : null,
       },
       actionCatalog,
       sourceSetupRequirements,
@@ -182,6 +223,32 @@ async function loadProfileActionCatalogSource(
   }
 }
 
+function mergeAgentPackageTrace(
+  trace: Record<string, unknown> | null,
+  origin: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  if (!origin) return trace;
+  const versionId = text(origin.versionId);
+  const digest = text(origin.digest);
+  if (!versionId || !digest) return trace;
+  return {
+    ...(trace ?? {}),
+    agentVersionId: versionId,
+    agentPackageDigest: digest,
+    validationReceiptIds: stringArray(origin.validationReceiptIds),
+    evalReceiptIds: stringArray(origin.evalReceiptIds),
+  };
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.trim().length > 0
+      )
+    : [];
+}
+
 function latestIso(values: Array<string | null>): string | null {
   let latest = 0;
   for (const value of values) {
@@ -193,7 +260,7 @@ function latestIso(values: Array<string | null>): string | null {
 }
 
 function sourceSetupRequirementsByAction(
-  records: Record<string, unknown>[],
+  records: Record<string, unknown>[]
 ): Map<string, Record<string, unknown>[]> {
   const byAction = new Map<string, Record<string, unknown>[]>();
   for (const record of records) {
@@ -230,7 +297,7 @@ function setupRequirementsForActionSource(input: {
 
 function mergeSetupRequirements(
   primary: Record<string, unknown>[],
-  sourceUploadMetadata: Record<string, unknown>[],
+  sourceUploadMetadata: Record<string, unknown>[]
 ): Record<string, unknown>[] {
   if (sourceUploadMetadata.length === 0) return primary;
   const merged: Record<string, unknown>[] = [];
@@ -246,7 +313,10 @@ function mergeSetupRequirements(
 
 function setupRequirementIdentity(record: Record<string, unknown>): string {
   return [
-    text(record.actionId) ?? text(record.sourceActionId) ?? text(record.actionName) ?? "",
+    text(record.actionId) ??
+      text(record.sourceActionId) ??
+      text(record.actionName) ??
+      "",
     text(record.kind) ?? text(record.type) ?? "",
     text(record.name) ??
       text(record.key) ??
@@ -262,9 +332,14 @@ function setupRequirementIdentity(record: Record<string, unknown>): string {
   ].join(":");
 }
 
-function missingSourceArtifactsMessage(source: ProfileActionCatalogSource, missingArtifacts: string[]): string {
+function missingSourceArtifactsMessage(
+  source: ProfileActionCatalogSource,
+  missingArtifacts: string[]
+): string {
   return [
-    `Profile agent ${source.agentId} at ${source.sourcePath} is missing SDK catalog artifact(s): ${missingArtifacts.join(", ")}.`,
+    `Profile agent ${source.agentId} at ${
+      source.sourcePath
+    } is missing SDK catalog artifact(s): ${missingArtifacts.join(", ")}.`,
     "Run `openpond profile check --kind all` after source materialization so each enabled profile agent has inspect/build artifacts.",
   ].join(" ");
 }
@@ -292,13 +367,17 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function records(value: unknown): Record<string, unknown>[] {
   return Array.isArray(value)
-    ? value.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)))
+    ? value.filter((item): item is Record<string, unknown> =>
+        Boolean(asRecord(item))
+      )
     : [];
 }
 
 function recordArray(value: unknown): Record<string, unknown>[] | null {
   if (!Array.isArray(value)) return null;
-  return value.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)));
+  return value.filter((item): item is Record<string, unknown> =>
+    Boolean(asRecord(item))
+  );
 }
 
 function text(value: unknown): string | null {
@@ -311,7 +390,7 @@ function schemaValue(value: unknown): string | Record<string, unknown> | null {
 
 function resolvedSchemaValue(
   value: unknown,
-  namedSchemas: Record<string, unknown> | null,
+  namedSchemas: Record<string, unknown> | null
 ): string | Record<string, unknown> | null {
   const schema = schemaValue(value);
   if (typeof schema !== "string") return schema;

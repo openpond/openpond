@@ -17,39 +17,7 @@ export function useLabDetailNavigation(active: boolean) {
   const backAction = null;
   const breadcrumbs = useMemo(() => {
     if (!active) return undefined;
-    if (!detailLocation) return [{ label: "Lab" }];
-    if (detailLocation.kind === "dataset") {
-      return [
-        { label: "Lab", onSelect: () => requestClose(null) },
-        { label: "Datasets", onSelect: () => requestClose("dataset") },
-        ...(detailLocation.workproductLabel
-          ? [{
-              label: detailLocation.workproductLabel,
-              onSelect: detailLocation.workproductOnSelect,
-            }]
-          : []),
-        ...detailLocation.segments,
-      ];
-    }
-    return [
-      {
-        label: "Lab",
-        onSelect: detailLocation.kindOnSelect ?? (() => requestClose(null)),
-      },
-      {
-        label: detailLocation.kindLabel,
-        onSelect:
-          detailLocation.kindOnSelect ??
-          (() => requestClose(detailLocation.kind === "model" ? null : detailLocation.kind)),
-      },
-      ...(detailLocation.workproductLabel
-        ? [{
-            label: detailLocation.workproductLabel,
-            onSelect: detailLocation.workproductOnSelect,
-          }]
-        : []),
-      ...detailLocation.segments,
-    ];
+    return buildLabDetailBreadcrumbs(detailLocation, requestClose);
   }, [active, detailLocation, requestClose]);
 
   return {
@@ -59,4 +27,43 @@ export function useLabDetailNavigation(active: boolean) {
     closeDetailRequestId: closeDetailRequest.id,
     onDetailOpenChange,
   };
+}
+
+export function buildLabDetailBreadcrumbs(
+  detailLocation: LabDetailLocation | null,
+  requestClose: (kind: LabDetailKind | null) => void,
+) {
+  if (!detailLocation) return [{ label: "Lab" }];
+  if (detailLocation.kind === "dataset") {
+    return [
+      { label: "Lab", onSelect: () => requestClose(null) },
+      { label: "Datasets", onSelect: () => requestClose("dataset") },
+      ...(detailLocation.workproductLabel
+        ? [{
+            label: detailLocation.workproductLabel,
+            onSelect: detailLocation.workproductOnSelect,
+          }]
+        : []),
+      ...detailLocation.segments,
+    ];
+  }
+  return [
+    {
+      label: "Lab",
+      onSelect: () => requestClose(null),
+    },
+    {
+      label: detailLocation.kindLabel,
+      onSelect:
+        detailLocation.kindOnSelect ??
+        (() => requestClose(detailLocation.kind === "model" ? null : detailLocation.kind)),
+    },
+    ...(detailLocation.workproductLabel
+      ? [{
+          label: detailLocation.workproductLabel,
+          onSelect: detailLocation.workproductOnSelect,
+        }]
+      : []),
+    ...detailLocation.segments,
+  ];
 }

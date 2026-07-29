@@ -20,4 +20,7 @@ export const MUTATING_WORKSPACE_TOOL_ACTIONS = [
   "sandbox_git_pull",
   "sandbox_git_push",
   "sandbox_run_action",
+  "sandbox_prepare_agent",
+  "sandbox_save_agent_package",
+  "work_agent_package_install",
 ] as const;

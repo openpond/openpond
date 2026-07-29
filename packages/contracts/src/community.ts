@@ -115,7 +115,6 @@ export const CommunityMessageRefSchema = z.object({
   messageId: z.string(),
   refType: z.enum([
     "hosted_ai_thread",
-    "coding_work_item",
     "goal",
     "openpond_session",
     "project",
@@ -161,7 +160,7 @@ export const CommunityMessageSchema = z.object({
   authorUserId: z.string().nullable(),
   authorAgentId: z.string().nullable(),
   sequence: z.number().int().nonnegative(),
-  kind: z.enum(["text", "system", "command_result", "work_item_card"]),
+  kind: z.enum(["text", "system", "command_result"]),
   body: z.string(),
   metadata: MetadataSchema,
   editedAt: NullableTimestampSchema,

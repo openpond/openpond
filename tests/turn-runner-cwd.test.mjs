@@ -54,7 +54,6 @@ function createImproveRun(overrides = {}) {
       profileId: "default",
       conversationId: "session_1",
       originTurnId: "turn_1",
-      workItemId: null,
       projectId: "project_1",
       targetProject: null,
     },
@@ -98,7 +97,11 @@ function createImproveRun(overrides = {}) {
       updatedAt: NOW,
     },
     workflowCapture: null,
-    executionPolicy: { mode: "background", pauseAllowed: true, cancellationAllowed: true },
+    executionPolicy: {
+      mode: "background",
+      pauseAllowed: true,
+      cancellationAllowed: true,
+    },
     iterationPolicy: { mode: "single", maximumAttempts: 1, currentAttempt: 0 },
     approvalIds: ["approval_create_improve_contract"],
     questionIds: [],
@@ -143,28 +146,48 @@ function baseTurn(createImproveRun = null) {
   };
 }
 
-function createMemoryStore({ events, turns, approvals = [], createImproveRuns = [] }) {
+function createMemoryStore({
+  events,
+  turns,
+  approvals = [],
+  createImproveRuns = [],
+}) {
   const actionReceipts = new Map();
   return {
     async runtimeEventsForSession(sessionId, query = {}) {
       return events
-        .map((event, index) => ({ ...event, sequence: event.sequence ?? index + 1 }))
-        .filter((event) =>
-          event.sessionId === sessionId
-          && (query.afterSequence == null || event.sequence > query.afterSequence)
-          && (!query.names?.length || query.names.includes(event.name))
+        .map((event, index) => ({
+          ...event,
+          sequence: event.sequence ?? index + 1,
+        }))
+        .filter(
+          (event) =>
+            event.sessionId === sessionId &&
+            (query.afterSequence == null ||
+              event.sequence > query.afterSequence) &&
+            (!query.names?.length || query.names.includes(event.name))
         )
         .slice(0, query.limit ?? undefined);
     },
     async latestAssistantTextForSession(sessionId) {
-      return events.findLast((event) =>
-        event.sessionId === sessionId && event.name === "assistant.delta" && event.output?.trim()
-      )?.output?.trim() ?? null;
+      return (
+        events
+          .findLast(
+            (event) =>
+              event.sessionId === sessionId &&
+              event.name === "assistant.delta" &&
+              event.output?.trim()
+          )
+          ?.output?.trim() ?? null
+      );
     },
     async latestTurnForSession(sessionId, status) {
-      return turns.findLast((turn) =>
-        turn.sessionId === sessionId && (!status || turn.status === status)
-      ) ?? null;
+      return (
+        turns.findLast(
+          (turn) =>
+            turn.sessionId === sessionId && (!status || turn.status === status)
+        ) ?? null
+      );
     },
     async countTurnsForSession(sessionId) {
       return turns.filter((turn) => turn.sessionId === sessionId).length;
@@ -191,15 +214,21 @@ function createMemoryStore({ events, turns, approvals = [], createImproveRuns = 
       return approvals.find((approval) => approval.id === approvalId) ?? null;
     },
     async getCreateImproveRun(runId) {
-      return createImproveRuns.find((run) => run.id === runId)
-        ?? turns.map((turn) => turn.createImproveRun).find((run) => run?.id === runId)
-        ?? null;
+      return (
+        createImproveRuns.find((run) => run.id === runId) ??
+        turns
+          .map((turn) => turn.createImproveRun)
+          .find((run) => run?.id === runId) ??
+        null
+      );
     },
     async listCreateImproveRuns() {
       return createImproveRuns;
     },
     async upsertCreateImproveRun(run) {
-      const index = createImproveRuns.findIndex((candidate) => candidate.id === run.id);
+      const index = createImproveRuns.findIndex(
+        (candidate) => candidate.id === run.id
+      );
       if (index === -1) createImproveRuns.push(run);
       else createImproveRuns[index] = run;
       return run;
@@ -226,7 +255,9 @@ function createMemoryStore({ events, turns, approvals = [], createImproveRuns = 
 
 function upsertApprovalInto(approvals) {
   return async (approval) => {
-    const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+    const index = approvals.findIndex(
+      (candidate) => candidate.id === approval.id
+    );
     if (index === -1) approvals.push(approval);
     else approvals[index] = approval;
   };
@@ -262,7 +293,8 @@ function createManualQueue() {
           entry.receipt.status = "completed";
         } catch (error) {
           entry.receipt.status = "failed";
-          entry.receipt.error = error instanceof Error ? error.message : String(error);
+          entry.receipt.error =
+            error instanceof Error ? error.message : String(error);
         }
         entry.receipt.completedAt = NOW;
       }
@@ -273,7 +305,10 @@ function createManualQueue() {
     pendingReceipts() {
       return entries
         .map((entry) => entry.receipt)
-        .filter((receipt) => receipt.status === "queued" || receipt.status === "running");
+        .filter(
+          (receipt) =>
+            receipt.status === "queued" || receipt.status === "running"
+        );
     },
   };
 }
@@ -304,7 +339,11 @@ function runnerDependencies({
         status: "completed",
       })),
     failTurn: async (_session, turnId, message) =>
-      store.updateTurn(turnId, (turn) => ({ ...turn, status: "failed", error: message })),
+      store.updateTurn(turnId, (turn) => ({
+        ...turn,
+        status: "failed",
+        error: message,
+      })),
     interruptTurn: async (_session, turnId) =>
       store.updateTurn(turnId, (turn) => ({ ...turn, status: "interrupted" })),
     defaultSessionCwd: (appId) => `/default/${appId ?? "none"}`,
@@ -330,40 +369,59 @@ function runnerDependencies({
 }
 
 describe("turn runner workspace cwd", () => {
-  test("rejects retired Agent Create/Improve approval without mutating or queueing the run", async () => {
+  test("uses one revisioned Agent Create/Improve run for approval and queued execution", async () => {
     const run = createImproveRun();
     const turns = [baseTurn(run)];
     const events = [];
     const approvals = [];
     const runs = [run];
     const queue = createManualQueue();
-    const store = createMemoryStore({ events, turns, approvals, createImproveRuns: runs });
-    const runner = createTurnRunner(runnerDependencies({
-      session: baseSession({ cwd: "/tmp/openpond-profile" }),
-      store,
-      approvals,
+    const store = createMemoryStore({
       events,
-      queue,
-      ensureCodexRuntime: async () => {
-        throw new Error("intentional contract execution failure");
-      },
-    }));
-
-    await assert.rejects(
-      runner.applyCreateImproveAction(run.id, {
-        runId: run.id,
-        expectedRevision: 0,
-        actionId: "approve_create_improve_contract",
-        type: "approve_plan",
-      }),
-      /Agent Create\/Improve runs are retired\. Use a normal \/agent authoring turn\./,
+      turns,
+      approvals,
+      createImproveRuns: runs,
+    });
+    const runner = createTurnRunner(
+      runnerDependencies({
+        session: baseSession({ cwd: "/tmp/openpond-profile" }),
+        store,
+        approvals,
+        events,
+        queue,
+        ensureCodexRuntime: async () => {
+          throw new Error("intentional contract execution failure");
+        },
+      })
     );
 
+    const approved = await runner.applyCreateImproveAction(run.id, {
+      runId: run.id,
+      expectedRevision: 0,
+      actionId: "approve_create_improve_contract",
+      type: "approve_plan",
+    });
+
+    assert.equal(approved.revision, 1);
+    assert.equal(approved.state, "applying_source");
+    assert.deepEqual(approved.appliedActionIds, [
+      "approve_create_improve_contract",
+    ]);
     assert.equal(turns[0].createImproveRun.id, run.id);
-    assert.equal(turns[0].createImproveRun.revision, 0);
-    assert.equal(turns[0].createImproveRun.state, "awaiting_plan_approval");
-    assert.equal(queue.pendingReceipts().length, 0);
-    assert.equal(events.some((event) => event.name === "create_improve.updated"), false);
+    assert.equal(turns[0].createImproveRun.state, "applying_source");
+    assert.equal(queue.pendingReceipts().length, 1);
+
+    await queue.drain();
+
+    assert.equal(turns[0].createImproveRun.state, "blocked");
+    assert.ok(turns[0].createImproveRun.blockedReason);
+    assert.ok(
+      events.some(
+        (event) =>
+          event.name === "create_improve.updated" &&
+          event.data?.createImproveRun?.id === run.id
+      )
+    );
   });
 
   test("keeps linked local project Codex turns in the local project checkout", async () => {
@@ -374,33 +432,39 @@ describe("turn runner workspace cwd", () => {
     let codexRuntimeSession = null;
     let codexStartTurn = null;
     const store = createMemoryStore({ events, turns, approvals });
-    const runner = createTurnRunner(runnerDependencies({
-      session: baseSession(),
-      store,
-      approvals,
-      events,
-      queue: createManualQueue(),
-      resolveSessionWorkspaceCwd: async (candidate, options = {}) => {
-        resolveCalls.push({ workspaceKind: candidate.workspaceKind, appId: candidate.appId, options });
-        return "/home/glu/Projects/all/templates-qa/mpp-service-tool";
-      },
-      ensureCodexRuntime: async (candidate, turnInput) => {
-        codexRuntimeSession = { ...candidate };
-        return {
-          client: {
-            startTurn: async (params) => {
-              codexStartTurn = params;
-              return { turnId: "codex_turn_1" };
+    const runner = createTurnRunner(
+      runnerDependencies({
+        session: baseSession(),
+        store,
+        approvals,
+        events,
+        queue: createManualQueue(),
+        resolveSessionWorkspaceCwd: async (candidate, options = {}) => {
+          resolveCalls.push({
+            workspaceKind: candidate.workspaceKind,
+            appId: candidate.appId,
+            options,
+          });
+          return "/home/glu/Projects/all/templates-qa/mpp-service-tool";
+        },
+        ensureCodexRuntime: async (candidate, turnInput) => {
+          codexRuntimeSession = { ...candidate };
+          return {
+            client: {
+              startTurn: async (params) => {
+                codexStartTurn = params;
+                return { turnId: "codex_turn_1" };
+              },
+              waitForTurn: async () => undefined,
+              interruptTurn: async () => undefined,
             },
-            waitForTurn: async () => undefined,
-            interruptTurn: async () => undefined,
-          },
-          threadId: "codex_thread_1",
-          cwd: candidate.cwd,
-          permissionMode: turnInput.codexPermissionMode,
-        };
-      },
-    }));
+            threadId: "codex_thread_1",
+            cwd: candidate.cwd,
+            permissionMode: turnInput.codexPermissionMode,
+          };
+        },
+      })
+    );
 
     const turn = await runner.sendTurn("session_1", {
       prompt: "rename call-mpp-service",
@@ -410,9 +474,18 @@ describe("turn runner workspace cwd", () => {
     });
 
     assert.equal(turn.status, "completed");
-    assert.equal(codexRuntimeSession.cwd, "/home/glu/Projects/all/templates-qa/mpp-service-tool");
-    assert.equal(codexStartTurn.cwd, "/home/glu/Projects/all/templates-qa/mpp-service-tool");
+    assert.equal(
+      codexRuntimeSession.cwd,
+      "/home/glu/Projects/all/templates-qa/mpp-service-tool"
+    );
+    assert.equal(
+      codexStartTurn.cwd,
+      "/home/glu/Projects/all/templates-qa/mpp-service-tool"
+    );
     assert.equal(resolveCalls.length, 2);
-    assert.deepEqual(resolveCalls.map((call) => call.options.ensureOpenPond), [false, false]);
+    assert.deepEqual(
+      resolveCalls.map((call) => call.options.ensureOpenPond),
+      [false, false]
+    );
   });
 });

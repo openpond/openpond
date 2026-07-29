@@ -45,6 +45,7 @@ export type ComposerMentionMenuItem =
 
 export type ComposerCommandMenuItem =
   | { kind: "files" }
+  | { kind: "folder" }
   | { kind: "slash"; item: SlashMenuItem }
   | { kind: "mention"; item: ComposerMentionMenuItem };
 
@@ -60,12 +61,14 @@ export type ComposerCommandMenuSection = {
 
 function isAgentAction(action: SandboxActionCatalogEntry): boolean {
   const implementationType = action.implementation?.type;
-  return implementationType === "openpond-agent"
-    || implementationType === "local-profile-agent"
-    || (
-      implementationType === "openpond-profile-action"
-      && (action.sourceActionId === "chat" || action.id === "chat" || action.id.endsWith(".chat"))
-    );
+  return (
+    implementationType === "openpond-agent" ||
+    implementationType === "local-profile-agent" ||
+    (implementationType === "openpond-profile-action" &&
+      (action.sourceActionId === "chat" ||
+        action.id === "chat" ||
+        action.id.endsWith(".chat")))
+  );
 }
 
 function slashMenuItemKey(item: SlashMenuItem): string {
@@ -76,7 +79,8 @@ function slashMenuItemKey(item: SlashMenuItem): string {
 }
 
 function slashMenuItemLabel(item: SlashMenuItem): string {
-  if (item.kind === "command") return `${item.command.command} ${item.command.label}`;
+  if (item.kind === "command")
+    return `${item.command.command} ${item.command.label}`;
   if (item.kind === "app-context") return item.app.name;
   if (item.kind === "skill") return profileSkillInvocationText(item.skill);
   return composerActionCatalogLabel(item.action);
@@ -85,7 +89,13 @@ function slashMenuItemLabel(item: SlashMenuItem): string {
 function slashMenuItemDetail(item: SlashMenuItem): string {
   if (item.kind === "command") return composerSlashCommandDetail(item.command);
   if (item.kind === "app-context") {
-    return `Planning context${item.app.description ? `: ${item.app.description}` : item.app.gitRepo ? `: ${item.app.gitRepo}` : ""}`;
+    return `Planning context${
+      item.app.description
+        ? `: ${item.app.description}`
+        : item.app.gitRepo
+        ? `: ${item.app.gitRepo}`
+        : ""
+    }`;
   }
   if (item.kind === "skill") return item.skill.description || item.skill.path;
   return item.action.description || composerActionCatalogHint(item.action);
@@ -93,7 +103,8 @@ function slashMenuItemDetail(item: SlashMenuItem): string {
 
 function mentionMenuItemKey(item: ComposerMentionMenuItem): string {
   if (item.kind === "app") return `app:${item.app.id}`;
-  if (item.kind === "connected-app") return `connected-app:${item.app.provider}`;
+  if (item.kind === "connected-app")
+    return `connected-app:${item.app.provider}`;
   if (item.kind === "team-member") return `team-member:${item.member.userId}`;
   if (item.kind === "skill") return `skill:${item.skill.name}`;
   return `action:${item.action.id}`;
@@ -114,51 +125,69 @@ function mentionMenuItemDetail(item: ComposerMentionMenuItem): string {
     return item.member.handle ? `@${item.member.handle}` : "Team member";
   }
   if (item.kind === "skill") return item.skill.description || item.skill.path;
-  const actionNames = item.app.sandboxActionRegistry?.actions.map((action) => action.name) ?? [];
+  const actionNames =
+    item.app.sandboxActionRegistry?.actions.map((action) => action.name) ?? [];
   return actionNames.length > 0
-    ? `Actions: ${actionNames.slice(0, 4).join(", ")}${actionNames.length > 4 ? ` +${actionNames.length - 4}` : ""}`
+    ? `Actions: ${actionNames.slice(0, 4).join(", ")}${
+        actionNames.length > 4 ? ` +${actionNames.length - 4}` : ""
+      }`
     : item.app.sandboxManifestError
-      ? "Manifest registry unavailable"
-      : item.app.description || item.app.gitRepo || item.app.id;
+    ? "Manifest registry unavailable"
+    : item.app.description || item.app.gitRepo || item.app.id;
 }
 
 function menuItemKey(item: ComposerCommandMenuItem): string {
   if (item.kind === "files") return "files";
+  if (item.kind === "folder") return "folder";
   if (item.kind === "slash") return `slash:${slashMenuItemKey(item.item)}`;
   return `mention:${mentionMenuItemKey(item.item)}`;
 }
 
 function menuItemLabel(item: ComposerCommandMenuItem): string {
   if (item.kind === "files") return "Files and folders";
+  if (item.kind === "folder") return "Local folder";
   if (item.kind === "slash") return slashMenuItemLabel(item.item);
   return mentionMenuItemLabel(item.item);
 }
 
 function menuItemDetail(item: ComposerCommandMenuItem): string {
   if (item.kind === "files") return "Attach images, documents, or other files";
+  if (item.kind === "folder") {
+    return "Share a bounded folder as Work input";
+  }
   if (item.kind === "slash") return slashMenuItemDetail(item.item);
   return mentionMenuItemDetail(item.item);
 }
 
-function menuItemMatchesQuery(item: ComposerCommandMenuItem, query: string): boolean {
+function menuItemMatchesQuery(
+  item: ComposerCommandMenuItem,
+  query: string
+): boolean {
   const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (terms.length === 0) return true;
-  const haystack = `${menuItemLabel(item)} ${menuItemDetail(item)}`.toLowerCase();
+  const haystack = `${menuItemLabel(item)} ${menuItemDetail(
+    item
+  )}`.toLowerCase();
   return terms.every((term) => haystack.includes(term));
 }
 
 export function filterComposerCommandMenuSections(
   sections: ComposerCommandMenuSection[],
-  rawQuery: string,
+  rawQuery: string
 ): ComposerCommandMenuSection[] {
   const query = rawQuery.trimStart();
-  const scope = query.startsWith("/") ? "slash" : query.startsWith("@") ? "mentions" : null;
+  const scope = query.startsWith("/")
+    ? "slash"
+    : query.startsWith("@")
+    ? "mentions"
+    : null;
   const searchQuery = scope ? query.slice(1).trimStart() : query;
   const scopedSections = scope
-    ? sections.filter((section) =>
-        section.id === scope
-        || section.queryScope === scope
-        || section.queryScopes?.includes(scope)
+    ? sections.filter(
+        (section) =>
+          section.id === scope ||
+          section.queryScope === scope ||
+          section.queryScopes?.includes(scope)
       )
     : sections;
   if (!searchQuery) return scopedSections;
@@ -166,25 +195,31 @@ export function filterComposerCommandMenuSections(
   const matches = scopedSections
     .map((section) => ({
       ...section,
-      items: section.items.filter((item) => menuItemMatchesQuery(item, searchQuery)),
+      items: section.items.filter((item) =>
+        menuItemMatchesQuery(item, searchQuery)
+      ),
     }))
     .filter((section) => section.items.length > 0);
   if (matches.length > 0) return matches;
 
   const emptySection = scope ? scopedSections[0] : null;
-  return [{
-    ...(emptySection ?? { id: "results", label: "Results" }),
-    emptyLabel: scope === "slash"
-      ? "No slash commands match"
-      : scope === "mentions"
-        ? "No mentions match"
-        : "No commands match",
-    items: [],
-  }];
+  return [
+    {
+      ...(emptySection ?? { id: "results", label: "Results" }),
+      emptyLabel:
+        scope === "slash"
+          ? "No slash commands match"
+          : scope === "mentions"
+          ? "No mentions match"
+          : "No commands match",
+      items: [],
+    },
+  ];
 }
 
 function menuItemIcon(item: ComposerCommandMenuItem) {
   if (item.kind === "files") return <Paperclip size={14} />;
+  if (item.kind === "folder") return <Paperclip size={14} />;
   if (item.kind === "slash") {
     const slashItem = item.item;
     if (slashItem.kind === "command") {
@@ -194,7 +229,11 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
     }
     if (slashItem.kind === "app-context") return <AtSign size={14} />;
     if (slashItem.kind === "skill") return <FileText size={14} />;
-    return isAgentAction(slashItem.action) ? <Bot size={14} /> : <Workflow size={14} />;
+    return isAgentAction(slashItem.action) ? (
+      <Bot size={14} />
+    ) : (
+      <Workflow size={14} />
+    );
   }
   const mentionItem = item.item;
   if (mentionItem.kind === "connected-app") {
@@ -208,15 +247,21 @@ function menuItemIcon(item: ComposerCommandMenuItem) {
     );
   }
   if (mentionItem.kind === "action") {
-    return isAgentAction(mentionItem.action) ? <Bot size={14} /> : <Workflow size={14} />;
+    return isAgentAction(mentionItem.action) ? (
+      <Bot size={14} />
+    ) : (
+      <Workflow size={14} />
+    );
   }
   if (mentionItem.kind === "skill") return <FileText size={14} />;
   return <AtSign size={14} />;
 }
 
 function appContextId(item: ComposerCommandMenuItem): string | undefined {
-  if (item.kind === "slash" && item.item.kind === "app-context") return item.item.app.id;
-  if (item.kind === "mention" && item.item.kind === "app") return item.item.app.id;
+  if (item.kind === "slash" && item.item.kind === "app-context")
+    return item.item.app.id;
+  if (item.kind === "mention" && item.item.kind === "app")
+    return item.item.app.id;
   return undefined;
 }
 
@@ -244,11 +289,16 @@ export function ComposerCommandMenu({
   variant: "add" | "typed";
 }) {
   const selectedOptionRef = useRef<HTMLButtonElement | null>(null);
-  const itemCount = sections.reduce((count, section) => count + section.items.length, 0);
+  const itemCount = sections.reduce(
+    (count, section) => count + section.items.length,
+    0
+  );
 
   useEffect(() => {
     if (variant === "add" && menuIndex === 0) {
-      const menu = selectedOptionRef.current?.closest<HTMLElement>(".composer-command-menu");
+      const menu = selectedOptionRef.current?.closest<HTMLElement>(
+        ".composer-command-menu"
+      );
       if (menu) menu.scrollTop = 0;
       return;
     }
@@ -270,12 +320,16 @@ export function ComposerCommandMenu({
         itemOffset += section.items.length;
         return (
           <div
-            className={`composer-command-section ${section.grid ? "composer-command-section-grid" : ""}`.trim()}
+            className={`composer-command-section ${
+              section.grid ? "composer-command-section-grid" : ""
+            }`.trim()}
             key={section.id}
             role="group"
             aria-label={section.label}
           >
-            <div className="composer-command-section-title">{section.label}</div>
+            <div className="composer-command-section-title">
+              {section.label}
+            </div>
             {section.items.length > 0 ? (
               section.items.map((item, index) => {
                 const menuItemIndex = sectionOffset + index;
@@ -287,7 +341,9 @@ export function ComposerCommandMenu({
                     role={variant === "add" ? "menuitem" : "option"}
                     ref={selected ? selectedOptionRef : undefined}
                     aria-selected={variant === "typed" ? selected : undefined}
-                    className={`composer-project-option ${selected ? "selected" : ""} composer-command-option`}
+                    className={`composer-project-option ${
+                      selected ? "selected" : ""
+                    } composer-command-option`}
                     data-app-context-id={appContextId(item)}
                     onFocus={() => onSelectIndex(menuItemIndex)}
                     onMouseEnter={() => onSelectIndex(menuItemIndex)}
@@ -301,12 +357,18 @@ export function ComposerCommandMenu({
                       <strong>{menuItemLabel(item)}</strong>
                       <small>{menuItemDetail(item)}</small>
                     </span>
-                    {variant === "typed" && selected ? <Check size={14} /> : <span aria-hidden="true" />}
+                    {variant === "typed" && selected ? (
+                      <Check size={14} />
+                    ) : (
+                      <span aria-hidden="true" />
+                    )}
                   </button>
                 );
               })
             ) : (
-              <div className="composer-menu-empty">{section.emptyLabel ?? "No items available"}</div>
+              <div className="composer-menu-empty">
+                {section.emptyLabel ?? "No items available"}
+              </div>
             )}
           </div>
         );

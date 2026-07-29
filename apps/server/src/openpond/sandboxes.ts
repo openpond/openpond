@@ -1,4 +1,8 @@
-import { createOpenPondSandboxClient, normalizeSandboxApiUrl } from "@openpond/cloud";
+import {
+  createOpenPondSandboxClient,
+  normalizeSandboxApiUrl,
+} from "@openpond/cloud";
+import { apiFetch } from "@openpond/cloud/api";
 import type {
   OpenPondSandboxClient,
   OpenPondOrganization,
@@ -7,9 +11,7 @@ import type {
   SandboxIntegrationConnectionStatusFilter,
   SandboxScheduleCreateInput,
 } from "@openpond/cloud";
-import {
-  buildConnectedAppStatusRows,
-} from "@openpond/contracts";
+import { buildConnectedAppStatusRows } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
 import {
@@ -53,7 +55,6 @@ export {
   normalizeSandboxEnvRefsForApp,
 } from "./sandbox-inputs.js";
 
-
 export type SandboxRequestAction =
   | { type: "list"; payload?: unknown }
   | { type: "snapshot_catalog"; payload: unknown }
@@ -68,9 +69,17 @@ export type SandboxRequestAction =
   | { type: "sandbox_runtime_list"; payload?: unknown }
   | { type: "sandbox_runtime_get"; runtimeId: string; payload?: unknown }
   | { type: "sandbox_runtime_create"; payload: unknown }
-  | { type: "sandbox_runtime_sandbox_create"; runtimeId: string; payload: unknown }
+  | {
+      type: "sandbox_runtime_sandbox_create";
+      runtimeId: string;
+      payload: unknown;
+    }
   | { type: "sandbox_runtime_resume"; runtimeId: string; payload?: unknown }
-  | { type: "sandbox_runtime_preserve_source"; runtimeId: string; payload: unknown }
+  | {
+      type: "sandbox_runtime_preserve_source";
+      runtimeId: string;
+      payload: unknown;
+    }
   | { type: "sandbox_runtime_promote"; runtimeId: string; payload: unknown }
   | { type: "project_list"; payload: unknown }
   | { type: "profile_get"; payload: unknown }
@@ -90,12 +99,28 @@ export type SandboxRequestAction =
   | { type: "agent_source_publish"; agentId: string; payload: unknown }
   | { type: "create"; payload: unknown }
   | { type: "get"; sandboxId: string }
+  | { type: "start"; sandboxId: string }
   | { type: "delete"; sandboxId: string; failOnUnpreservedChanges?: boolean }
   | { type: "exec"; sandboxId: string; payload: unknown }
-  | { type: "action_run"; sandboxId: string; actionName: string; payload?: unknown }
+  | {
+      type: "action_run";
+      sandboxId: string;
+      actionName: string;
+      payload?: unknown;
+    }
   | { type: "open_port"; sandboxId: string; payload: unknown }
-  | { type: "snapshot_update"; sandboxId: string; snapshotId: string; payload: unknown }
-  | { type: "snapshot_validate"; sandboxId: string; snapshotId: string; payload: unknown }
+  | {
+      type: "snapshot_update";
+      sandboxId: string;
+      snapshotId: string;
+      payload: unknown;
+    }
+  | {
+      type: "snapshot_validate";
+      sandboxId: string;
+      snapshotId: string;
+      payload: unknown;
+    }
   | { type: "snapshot_publish"; sandboxId: string; snapshotId: string }
   | { type: "replays"; payload: unknown }
   | { type: "replay_start"; payload: unknown }
@@ -109,7 +134,12 @@ export type SandboxRequestAction =
   | { type: "receipts"; sandboxId: string }
   | { type: "logs"; sandboxId: string }
   | { type: "process_start"; sandboxId: string; payload: unknown }
-  | { type: "process_get"; sandboxId: string; processId: string; payload: unknown }
+  | {
+      type: "process_get";
+      sandboxId: string;
+      processId: string;
+      payload: unknown;
+    }
   | { type: "upload_file"; sandboxId: string; payload: unknown }
   | { type: "download_file"; sandboxId: string; payload: unknown }
   | { type: "list_files"; sandboxId: string; payload: unknown }
@@ -139,21 +169,30 @@ export async function resolveOpenPondSandboxClient(): Promise<OpenPondSandboxCli
 
 const DEFAULT_OPENPOND_SANDBOX_BASE_URL = "https://api.openpond.ai";
 
-export async function sandboxRequestPayload(action: SandboxRequestAction): Promise<unknown> {
-  const { client, context, apiKey, sandboxApiUrl } = await resolveSandboxClient();
+export async function sandboxRequestPayload(
+  action: SandboxRequestAction
+): Promise<unknown> {
+  const { client, context, apiKey, sandboxApiUrl } =
+    await resolveSandboxClient();
   const account = sandboxAccountSummary(context, sandboxApiUrl);
 
   if (action.type === "list") {
-    return { sandboxes: await client.list(normalizeSandboxListInput(action.payload)), account };
+    return {
+      sandboxes: await client.list(normalizeSandboxListInput(action.payload)),
+      account,
+    };
   }
   if (action.type === "snapshot_catalog") {
     const input = asRecord(action.payload);
     const teamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
-    const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
-    const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+    const projectId =
+      typeof input.projectId === "string" ? input.projectId.trim() : "";
+    const agentId =
+      typeof input.agentId === "string" ? input.agentId.trim() : "";
     const query = typeof input.q === "string" ? input.q.trim() : "";
     const tag = typeof input.tag === "string" ? input.tag.trim() : "";
-    const useCase = typeof input.useCase === "string" ? input.useCase.trim() : "";
+    const useCase =
+      typeof input.useCase === "string" ? input.useCase.trim() : "";
     const replayState =
       input.replayState === "draft" ||
       input.replayState === "validated" ||
@@ -177,7 +216,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.createSnapshot(
         action.sandboxId,
-        normalizeSnapshotCreateInput(action.payload),
+        normalizeSnapshotCreateInput(action.payload)
       )),
       account,
     };
@@ -185,12 +224,15 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   if (action.type === "template_catalog") {
     const input = asRecord(action.payload);
     const teamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
-    const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
+    const projectId =
+      typeof input.projectId === "string" ? input.projectId.trim() : "";
     const query = typeof input.q === "string" ? input.q.trim() : "";
     const name = typeof input.name === "string" ? input.name.trim() : "";
-    const version = typeof input.version === "string" ? input.version.trim() : "";
+    const version =
+      typeof input.version === "string" ? input.version.trim() : "";
     const tag = typeof input.tag === "string" ? input.tag.trim() : "";
-    const useCase = typeof input.useCase === "string" ? input.useCase.trim() : "";
+    const useCase =
+      typeof input.useCase === "string" ? input.useCase.trim() : "";
     return {
       ...(await client.templates({
         ...(teamId ? { teamId } : {}),
@@ -207,8 +249,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   if (action.type === "integration_connections") {
     const input = asRecord(action.payload);
     const teamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
-    const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
-    const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+    const projectId =
+      typeof input.projectId === "string" ? input.projectId.trim() : "";
+    const agentId =
+      typeof input.agentId === "string" ? input.agentId.trim() : "";
     const status = normalizeIntegrationStatusFilter(input.status);
     const query = {
       ...(projectId ? { projectId } : {}),
@@ -217,9 +261,9 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     };
     const result = teamId
       ? await client.integrationConnections({
-        teamId,
-        ...query,
-      })
+          teamId,
+          ...query,
+        })
       : await resolveImplicitConnectedAppStatusConnections(client, query);
     return {
       ...result,
@@ -228,9 +272,12 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "connected_app_status") {
     const input = asRecord(action.payload);
-    const explicitTeamId = typeof input.teamId === "string" ? input.teamId.trim() : "";
-    const projectId = typeof input.projectId === "string" ? input.projectId.trim() : "";
-    const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+    const explicitTeamId =
+      typeof input.teamId === "string" ? input.teamId.trim() : "";
+    const projectId =
+      typeof input.projectId === "string" ? input.projectId.trim() : "";
+    const agentId =
+      typeof input.agentId === "string" ? input.agentId.trim() : "";
     const status = normalizeIntegrationStatusFilter(input.status) ?? "all";
     const query = {
       ...(projectId ? { projectId } : {}),
@@ -239,9 +286,9 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     };
     const result = explicitTeamId
       ? await client.integrationConnections({
-        teamId: explicitTeamId,
-        ...query,
-      })
+          teamId: explicitTeamId,
+          ...query,
+        })
       : await resolveImplicitConnectedAppStatusConnections(client, query);
     return {
       teamId: result.teamId,
@@ -251,7 +298,9 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "sandbox_runtime_list") {
     return {
-      runtimes: await client.listSandboxRuntimes(normalizeSandboxListInput(action.payload)),
+      runtimes: await client.listSandboxRuntimes(
+        normalizeSandboxListInput(action.payload)
+      ),
       account,
     };
   }
@@ -264,7 +313,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   if (action.type === "sandbox_runtime_create") {
     return {
       runtime: await client.createSandboxRuntime(
-        normalizeSandboxRuntimeCreateInput(action.payload),
+        normalizeSandboxRuntimeCreateInput(action.payload)
       ),
       account,
     };
@@ -274,7 +323,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await client.createSandboxRuntimeSandbox(
         action.runtimeId,
         normalizeSandboxRuntimeSandboxCreateInput(action.payload),
-        { respondAsync: true },
+        { respondAsync: true }
       )),
       account,
     };
@@ -306,7 +355,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
             : {}),
           ...(input.source === "profile" ? { source: "profile" as const } : {}),
         },
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -321,14 +370,15 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
             typeof input.expectedTargetSha === "string"
               ? input.expectedTargetSha.trim()
               : "",
-          ...(input.validationState === "pending" || input.validationState === "passed"
+          ...(input.validationState === "pending" ||
+          input.validationState === "passed"
             ? { validationState: input.validationState }
             : {}),
           ...(typeof input.summary === "string" && input.summary.trim()
             ? { summary: input.summary.trim() }
             : {}),
         },
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -338,7 +388,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/projects", normalizeSandboxListInput(action.payload)),
+        path: sandboxScopedCollectionPath(
+          "/projects",
+          normalizeSandboxListInput(action.payload)
+        ),
       })),
       account,
     };
@@ -348,7 +401,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/profile", normalizeSandboxListInput(action.payload)),
+        path: sandboxScopedCollectionPath(
+          "/profile",
+          normalizeSandboxListInput(action.payload)
+        ),
       })),
       account,
     };
@@ -358,7 +414,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/profile/ensure", normalizeSandboxListInput(action.payload)),
+        path: sandboxScopedCollectionPath(
+          "/profile/ensure",
+          normalizeSandboxListInput(action.payload)
+        ),
         method: "POST",
       })),
       account,
@@ -371,7 +430,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/profile/push", normalizeSandboxListInput(payload)),
+        path: sandboxScopedCollectionPath(
+          "/profile/push",
+          normalizeSandboxListInput(payload)
+        ),
         method: "POST",
         body,
       })),
@@ -397,7 +459,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}`,
-          normalizeSandboxListInput(action.payload),
+          normalizeSandboxListInput(action.payload)
         ),
       })),
       account,
@@ -410,7 +472,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}/git`,
-          normalizeSandboxListInput(action.payload),
+          normalizeSandboxListInput(action.payload)
         ),
         method: "POST",
       })),
@@ -424,7 +486,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}/sync`,
-          normalizeSandboxListInput(action.payload),
+          normalizeSandboxListInput(action.payload)
         ),
         method: "POST",
       })),
@@ -440,7 +502,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}/source`,
-          normalizeSandboxListInput(payload),
+          normalizeSandboxListInput(payload)
         ),
         method: "POST",
         body,
@@ -455,7 +517,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}`,
-          normalizeSandboxListInput(action.payload),
+          normalizeSandboxListInput(action.payload)
         ),
         method: "DELETE",
       })),
@@ -467,7 +529,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: sandboxScopedCollectionPath("/agents", normalizeSandboxListInput(action.payload)),
+        path: sandboxScopedCollectionPath(
+          "/agents",
+          normalizeSandboxListInput(action.payload)
+        ),
       })),
       account,
     };
@@ -503,7 +568,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/agents/${encodeURIComponent(action.agentId)}/source/deploy-plan`,
-          normalizeSandboxListInput(action.payload),
+          normalizeSandboxListInput(action.payload)
         ),
       })),
       account,
@@ -518,7 +583,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/agents/${encodeURIComponent(action.agentId)}/source/checks`,
-          normalizeSandboxListInput(payload),
+          normalizeSandboxListInput(payload)
         ),
         method: "POST",
         body,
@@ -535,7 +600,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/agents/${encodeURIComponent(action.agentId)}/source/publish`,
-          normalizeSandboxListInput(payload),
+          normalizeSandboxListInput(payload)
         ),
         method: "POST",
         body,
@@ -544,18 +609,35 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     };
   }
   if (action.type === "create") {
-    return { sandbox: await client.create(normalizeCreateInput(action.payload)), account };
+    return {
+      sandbox: await client.create(normalizeCreateInput(action.payload)),
+      account,
+    };
   }
   if (action.type === "get") {
     return { sandbox: await client.get(action.sandboxId), account };
   }
+  if (action.type === "start") {
+    return { ...(await client.start(action.sandboxId)), account };
+  }
   if (action.type === "delete") {
-    const options = await sandboxLifecycleRequestOptions(client, action.sandboxId, {
-      failOnUnpreservedChanges: action.failOnUnpreservedChanges,
-    });
-    const sandbox = await client.delete(action.sandboxId, options).catch((error) =>
-      throwSandboxLifecycleRequestFailure("delete", client, action.sandboxId, error)
+    const options = await sandboxLifecycleRequestOptions(
+      client,
+      action.sandboxId,
+      {
+        failOnUnpreservedChanges: action.failOnUnpreservedChanges,
+      }
     );
+    const sandbox = await client
+      .delete(action.sandboxId, options)
+      .catch((error) =>
+        throwSandboxLifecycleRequestFailure(
+          "delete",
+          client,
+          action.sandboxId,
+          error
+        )
+      );
     assertTerminalSandboxLifecycleSettled("delete", sandbox);
     return {
       sandbox,
@@ -564,7 +646,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "exec") {
     return {
-      ...(await client.exec(action.sandboxId, normalizeExecInput(action.payload))),
+      ...(await client.exec(
+        action.sandboxId,
+        normalizeExecInput(action.payload)
+      )),
       account,
     };
   }
@@ -574,7 +659,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
         apiKey,
         sandboxApiUrl,
         path: `/sandboxes/${encodeURIComponent(
-          action.sandboxId,
+          action.sandboxId
         )}/actions/${encodeURIComponent(action.actionName)}/run`,
         method: "POST",
         body: asRecord(action.payload),
@@ -584,7 +669,10 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "open_port") {
     return {
-      ...(await client.openPort(action.sandboxId, normalizeOpenPortInput(action.payload))),
+      ...(await client.openPort(
+        action.sandboxId,
+        normalizeOpenPortInput(action.payload)
+      )),
       account,
     };
   }
@@ -593,7 +681,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await client.updateSnapshot(
         action.sandboxId,
         action.snapshotId,
-        normalizeSnapshotUpdateInput(action.payload),
+        normalizeSnapshotUpdateInput(action.payload)
       )),
       account,
     };
@@ -603,7 +691,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await client.validateSnapshot(
         action.sandboxId,
         action.snapshotId,
-        normalizeSnapshotValidateInput(action.payload),
+        normalizeSnapshotValidateInput(action.payload)
       )),
       account,
     };
@@ -630,7 +718,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.getReplay(
         action.replayId,
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -639,7 +727,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.getReplayLogs(
         action.replayId,
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -648,7 +736,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.getReplayArtifacts(
         action.replayId,
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -657,7 +745,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.cancelReplay(
         action.replayId,
-        normalizeSandboxListInput(action.payload),
+        normalizeSandboxListInput(action.payload)
       )),
       account,
     };
@@ -665,30 +753,46 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   if (action.type === "schedule_create") {
     return {
       ...(await client.createSchedule(
-        asRecord(action.payload) as SandboxScheduleCreateInput,
+        asRecord(action.payload) as SandboxScheduleCreateInput
       )),
       account,
     };
   }
   if (action.type === "template_launch") {
     return {
-      ...(await client.launchTemplate(normalizeTemplateLaunchInput(action.payload))),
+      ...(await client.launchTemplate(
+        normalizeTemplateLaunchInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "fork") {
     return {
-      ...(await client.fork(action.sandboxId, normalizeForkInput(action.payload))),
+      ...(await client.fork(
+        action.sandboxId,
+        normalizeForkInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "stop") {
-    const options = await sandboxLifecycleRequestOptions(client, action.sandboxId, {
-      failOnUnpreservedChanges: action.failOnUnpreservedChanges,
-    });
-    const result = await client.stop(action.sandboxId, options).catch((error) =>
-      throwSandboxLifecycleRequestFailure("stop", client, action.sandboxId, error)
+    const options = await sandboxLifecycleRequestOptions(
+      client,
+      action.sandboxId,
+      {
+        failOnUnpreservedChanges: action.failOnUnpreservedChanges,
+      }
     );
+    const result = await client
+      .stop(action.sandboxId, options)
+      .catch((error) =>
+        throwSandboxLifecycleRequestFailure(
+          "stop",
+          client,
+          action.sandboxId,
+          error
+        )
+      );
     assertTerminalSandboxLifecycleSettled("stop", result.sandbox);
     return {
       ...result,
@@ -708,7 +812,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.attachIntegrationConnection(
         action.sandboxId,
-        normalizeIntegrationAttachInput(action.payload),
+        normalizeIntegrationAttachInput(action.payload)
       )),
       account,
     };
@@ -717,14 +821,17 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     return {
       ...(await client.removeIntegrationLease(
         action.sandboxId,
-        normalizeIntegrationLeaseId(action.payload),
+        normalizeIntegrationLeaseId(action.payload)
       )),
       account,
     };
   }
   if (action.type === "process_start") {
     return {
-      ...(await client.startProcess(action.sandboxId, normalizeProcessStartInput(action.payload))),
+      ...(await client.startProcess(
+        action.sandboxId,
+        normalizeProcessStartInput(action.payload)
+      )),
       account,
     };
   }
@@ -733,7 +840,7 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
       ...(await client.getProcess(
         action.sandboxId,
         action.processId,
-        normalizeProcessCursorInput(action.payload),
+        normalizeProcessCursorInput(action.payload)
       )),
       account,
     };
@@ -742,8 +849,16 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
     const input = normalizeUploadFileInput(action.payload);
     return {
       ...(input.contentsBase64
-        ? await client.uploadFileBase64(action.sandboxId, input.path, input.contentsBase64)
-        : await client.uploadFile(action.sandboxId, input.path, input.contents)),
+        ? await client.uploadFileBase64(
+            action.sandboxId,
+            input.path,
+            input.contentsBase64
+          )
+        : await client.uploadFile(
+            action.sandboxId,
+            input.path,
+            input.contents
+          )),
       account,
     };
   }
@@ -756,13 +871,19 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "list_files") {
     return {
-      ...(await client.listFiles(action.sandboxId, normalizeListFilesInput(action.payload))),
+      ...(await client.listFiles(
+        action.sandboxId,
+        normalizeListFilesInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "search_files") {
     return {
-      ...(await client.searchFiles(action.sandboxId, normalizeSearchFilesInput(action.payload))),
+      ...(await client.searchFiles(
+        action.sandboxId,
+        normalizeSearchFilesInput(action.payload)
+      )),
       account,
     };
   }
@@ -804,7 +925,8 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "git_diff") {
     const input = asRecord(action.payload);
-    const baseRef = typeof input.baseRef === "string" ? input.baseRef.trim() : "";
+    const baseRef =
+      typeof input.baseRef === "string" ? input.baseRef.trim() : "";
     return {
       ...(await client.gitDiff(action.sandboxId, {
         ...(baseRef ? { baseRef } : {}),
@@ -814,7 +936,8 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "git_export_patch") {
     const input = asRecord(action.payload);
-    const baseRef = typeof input.baseRef === "string" ? input.baseRef.trim() : "";
+    const baseRef =
+      typeof input.baseRef === "string" ? input.baseRef.trim() : "";
     return {
       ...(await client.gitExportPatch(action.sandboxId, {
         ...(baseRef ? { baseRef } : {}),
@@ -824,37 +947,53 @@ export async function sandboxRequestPayload(action: SandboxRequestAction): Promi
   }
   if (action.type === "git_branch") {
     return {
-      ...(await client.gitBranch(action.sandboxId, normalizeGitBranchInput(action.payload))),
+      ...(await client.gitBranch(
+        action.sandboxId,
+        normalizeGitBranchInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "git_commit") {
     return {
-      ...(await client.gitCommit(action.sandboxId, normalizeGitCommitInput(action.payload))),
+      ...(await client.gitCommit(
+        action.sandboxId,
+        normalizeGitCommitInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "git_pull") {
     return {
-      ...(await client.gitPull(action.sandboxId, normalizeGitPullInput(action.payload))),
+      ...(await client.gitPull(
+        action.sandboxId,
+        normalizeGitPullInput(action.payload)
+      )),
       account,
     };
   }
   if (action.type === "git_push") {
     return {
-      ...(await client.gitPush(action.sandboxId, normalizeGitPushInput(action.payload))),
+      ...(await client.gitPush(
+        action.sandboxId,
+        normalizeGitPushInput(action.payload)
+      )),
       account,
     };
   }
-  throw new Error(`Unsupported sandbox action: ${(action as { type: string }).type}`);
+  throw new Error(
+    `Unsupported sandbox action: ${(action as { type: string }).type}`
+  );
 }
 
-export async function listSandboxIntegrationConnections(input: {
-  teamId?: string;
-  projectId?: string;
-  agentId?: string;
-  status?: SandboxIntegrationConnectionStatusFilter;
-} = {}) {
+export async function listSandboxIntegrationConnections(
+  input: {
+    teamId?: string;
+    projectId?: string;
+    agentId?: string;
+    status?: SandboxIntegrationConnectionStatusFilter;
+  } = {}
+) {
   const { client } = await resolveSandboxClient();
   if (input.teamId) return client.integrationConnections(input);
   return resolveImplicitConnectedAppStatusConnections(client, {
@@ -872,9 +1011,10 @@ type SandboxLifecycleRequestOptions = {
 async function sandboxLifecycleRequestOptions(
   client: OpenPondSandboxClient,
   sandboxId: string,
-  input: { failOnUnpreservedChanges?: boolean } = {},
+  input: { failOnUnpreservedChanges?: boolean } = {}
 ): Promise<SandboxLifecycleRequestOptions> {
-  const respondAsync = await client.get(sandboxId)
+  const respondAsync = await client
+    .get(sandboxId)
     .then((sandbox) => !sandboxLifecycleRequiresSynchronousAccounting(sandbox))
     .catch(() => true);
   return {
@@ -884,20 +1024,22 @@ async function sandboxLifecycleRequestOptions(
 }
 
 export function sandboxLifecycleRequiresSynchronousAccounting(
-  sandbox: Pick<SandboxRecord, "state" | "reservation">,
+  sandbox: Pick<SandboxRecord, "state" | "reservation">
 ): boolean {
-  return sandbox.state === "creating" && sandbox.reservation.status === "reserved";
+  return (
+    sandbox.state === "creating" && sandbox.reservation.status === "reserved"
+  );
 }
 
 export function assertTerminalSandboxLifecycleSettled(
   operation: "delete" | "stop",
-  sandbox: Pick<SandboxRecord, "id" | "state" | "reservation">,
+  sandbox: Pick<SandboxRecord, "id" | "state" | "reservation">
 ): void {
   if (!terminalSandboxLifecycleStates.has(sandbox.state)) return;
   if (sandbox.reservation.status !== "reserved") return;
   throw new Error(
     `Sandbox ${operation} reached ${sandbox.state}, but reservation ${sandbox.reservation.id} is still reserved. ` +
-    "Cleanup accounting has not settled; retry status before treating cleanup as complete.",
+      "Cleanup accounting has not settled; retry status before treating cleanup as complete."
   );
 }
 
@@ -905,14 +1047,15 @@ async function throwSandboxLifecycleRequestFailure(
   operation: "delete" | "stop",
   client: OpenPondSandboxClient,
   sandboxId: string,
-  error: unknown,
+  error: unknown
 ): Promise<never> {
   const latest = await client.get(sandboxId).catch(() => null);
   if (latest && sandboxLifecycleRequiresSynchronousAccounting(latest)) {
-    const originalMessage = error instanceof Error ? error.message : String(error);
+    const originalMessage =
+      error instanceof Error ? error.message : String(error);
     throw new Error(
       `Sandbox ${operation} failed while sandbox ${sandboxId} is still creating with active reservation ${latest.reservation.id}. ` +
-      `Cleanup accounting has not settled; retry status before treating cleanup as complete. Original error: ${originalMessage}`,
+        `Cleanup accounting has not settled; retry status before treating cleanup as complete. Original error: ${originalMessage}`
     );
   }
   throw error instanceof Error ? error : new Error(String(error));
@@ -936,13 +1079,16 @@ export async function resolveImplicitConnectedAppStatusConnections(
     projectId?: string;
     agentId?: string;
     status: SandboxIntegrationConnectionStatusFilter;
-  },
+  }
 ): Promise<ConnectedAppStatusConnectionsResult> {
   const organizations = await client.listOrganizations().catch(() => {
-    throw new Error("Connected app status is unavailable because organizations could not be loaded.");
+    throw new Error(
+      "Connected app status is unavailable because organizations could not be loaded."
+    );
   });
   const teamIds = implicitConnectedAppStatusTeamIds(organizations);
-  const fallbackTeamId = selectImplicitConnectedAppStatusTeamId(organizations) || null;
+  const fallbackTeamId =
+    selectImplicitConnectedAppStatusTeamId(organizations) || null;
 
   if (teamIds.length === 0) {
     return {
@@ -953,15 +1099,18 @@ export async function resolveImplicitConnectedAppStatusConnections(
 
   const results = await Promise.all(
     teamIds.map((teamId) =>
-      client.integrationConnections({
-        teamId,
-        ...(query.projectId ? { projectId: query.projectId } : {}),
-        ...(query.agentId ? { agentId: query.agentId } : {}),
-        status: query.status,
-      }).catch(() => null),
-    ),
+      client
+        .integrationConnections({
+          teamId,
+          ...(query.projectId ? { projectId: query.projectId } : {}),
+          ...(query.agentId ? { agentId: query.agentId } : {}),
+          status: query.status,
+        })
+        .catch(() => null)
+    )
   );
-  const successfulResults = successfulConnectedAppStatusConnectionResults(results);
+  const successfulResults =
+    successfulConnectedAppStatusConnectionResults(results);
   return {
     teamId:
       connectedAppStatusTeamIdWithConnections(successfulResults) ??
@@ -973,7 +1122,10 @@ export async function resolveImplicitConnectedAppStatusConnections(
 }
 
 function connectedAppStatusTeamIdWithConnections(
-  results: Array<{ teamId?: string | null; connections?: SandboxIntegrationConnection[] | null }>,
+  results: Array<{
+    teamId?: string | null;
+    connections?: SandboxIntegrationConnection[] | null;
+  }>
 ): string | null {
   for (const result of results) {
     if ((result.connections?.length ?? 0) === 0) continue;
@@ -984,17 +1136,19 @@ function connectedAppStatusTeamIdWithConnections(
 }
 
 export function mergeConnectedAppStatusConnectionResults(
-  results: Array<{ connections?: SandboxIntegrationConnection[] | null }>,
+  results: Array<{ connections?: SandboxIntegrationConnection[] | null }>
 ): SandboxIntegrationConnection[] {
   const out: SandboxIntegrationConnection[] = [];
   const seen = new Set<string>();
   for (const result of results) {
     for (const connection of result.connections ?? []) {
-      const key = connection.id.trim() || [
-        connection.teamId,
-        connection.provider,
-        connection.providerAccountId,
-      ].join(":");
+      const key =
+        connection.id.trim() ||
+        [
+          connection.teamId,
+          connection.provider,
+          connection.providerAccountId,
+        ].join(":");
       if (seen.has(key)) continue;
       seen.add(key);
       out.push(connection);
@@ -1004,36 +1158,49 @@ export function mergeConnectedAppStatusConnectionResults(
 }
 
 export function successfulConnectedAppStatusConnectionResults<T>(
-  results: Array<(T & { connections?: SandboxIntegrationConnection[] | null }) | null>,
+  results: Array<
+    (T & { connections?: SandboxIntegrationConnection[] | null }) | null
+  >
 ): T[] {
-  const successfulResults = results.filter((result): result is T & { connections?: SandboxIntegrationConnection[] | null } =>
-    result !== null,
+  const successfulResults = results.filter(
+    (
+      result
+    ): result is T & { connections?: SandboxIntegrationConnection[] | null } =>
+      result !== null
   );
   const failedCount = results.length - successfulResults.length;
   const successfulConnectionCount = successfulResults.reduce(
     (count, result) => count + (result.connections?.length ?? 0),
-    0,
+    0
   );
   if (failedCount > 0 && successfulConnectionCount === 0) {
-    throw new Error("Connected app status is unavailable because one or more team integration connection lookups could not be loaded.");
+    throw new Error(
+      "Connected app status is unavailable because one or more team integration connection lookups could not be loaded."
+    );
   }
   return successfulResults;
 }
 
 export function selectImplicitConnectedAppStatusTeamId(
-  organizations: OpenPondOrganization[],
+  organizations: OpenPondOrganization[]
 ): string {
-  const active = organizations.filter((organization) => organizationStatus(organization) === "active");
+  const active = organizations.filter(
+    (organization) => organizationStatus(organization) === "active"
+  );
   return (
-    organizationTeamId(active.find((organization) => organization.role === "owner")) ??
-    organizationTeamId(active.find((organization) => organization.role === "admin")) ??
+    organizationTeamId(
+      active.find((organization) => organization.role === "owner")
+    ) ??
+    organizationTeamId(
+      active.find((organization) => organization.role === "admin")
+    ) ??
     organizationTeamId(active[0]) ??
     ""
   );
 }
 
 export function implicitConnectedAppStatusTeamIds(
-  organizations: OpenPondOrganization[],
+  organizations: OpenPondOrganization[]
 ): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
@@ -1048,7 +1215,7 @@ export function implicitConnectedAppStatusTeamIds(
 }
 
 function organizationTeamId(
-  organization: OpenPondOrganization | undefined,
+  organization: OpenPondOrganization | undefined
 ): string | null {
   if (!organization) return null;
   const legacyId = (organization as unknown as { id?: unknown }).id;
@@ -1056,20 +1223,24 @@ function organizationTeamId(
     typeof organization.teamId === "string"
       ? organization.teamId
       : typeof legacyId === "string"
-        ? legacyId
-        : "";
+      ? legacyId
+      : "";
   const trimmed = value.trim();
   return trimmed || null;
 }
 
 function organizationStatus(
-  organization: OpenPondOrganization,
+  organization: OpenPondOrganization
 ): OpenPondOrganization["status"] {
-  return typeof organization.status === "string" ? organization.status : "active";
+  return typeof organization.status === "string"
+    ? organization.status
+    : "active";
 }
 
 async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
-  const configuredSandboxApiUrl = normalizeOptionalUrl(process.env.OPENPOND_SANDBOX_API_URL);
+  const configuredSandboxApiUrl = normalizeOptionalUrl(
+    process.env.OPENPOND_SANDBOX_API_URL
+  );
   const configuredSandboxApiKey = process.env.OPENPOND_SANDBOX_API_KEY?.trim();
   if (configuredSandboxApiKey && configuredSandboxApiUrl) {
     return {
@@ -1086,12 +1257,17 @@ async function resolveSandboxClient(): Promise<ResolvedSandboxClient> {
   const context = await loadOpenPondAccountContext();
   const apiKey = context.token?.trim();
   if (!apiKey) {
-    throw new Error("OpenPond account API key is required to manage sandboxes.");
+    throw new Error(
+      "OpenPond account API key is required to manage sandboxes."
+    );
   }
 
   if (configuredSandboxApiUrl) {
     return {
-      client: createOpenPondSandboxClient({ apiKey, sandboxApiUrl: configuredSandboxApiUrl }),
+      client: createOpenPondSandboxClient({
+        apiKey,
+        sandboxApiUrl: configuredSandboxApiUrl,
+      }),
       context,
       apiKey,
       sandboxApiUrl: normalizeSandboxApiUrl(configuredSandboxApiUrl),
@@ -1121,7 +1297,7 @@ function sandboxPublicApiRootUrl(sandboxApiUrl: string): string {
 
 function sandboxScopedCollectionPath(
   path: string,
-  queryInput: { teamId?: string; projectId?: string; agentId?: string },
+  queryInput: { teamId?: string; projectId?: string; agentId?: string }
 ): string {
   const query = new URLSearchParams();
   if (queryInput.teamId) query.set("teamId", queryInput.teamId);
@@ -1137,14 +1313,15 @@ async function requestSandboxApiRoot(params: {
   method?: "GET" | "POST" | "DELETE";
   body?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-  const response = await fetch(`${sandboxApiRootUrl(params.sandboxApiUrl)}${params.path}`, {
-    method: params.method ?? "GET",
-    headers: {
-      "openpond-api-key": params.apiKey,
-      ...(params.body ? { "content-type": "application/json" } : {}),
-    },
-    ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-  });
+  const response = await apiFetch(
+    sandboxApiRootUrl(params.sandboxApiUrl),
+    params.apiKey,
+    params.path,
+    {
+      method: params.method ?? "GET",
+      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
+    }
+  );
   const payload = (await response.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -1166,14 +1343,15 @@ async function requestSandboxPublicApiRoot(params: {
   method?: "GET" | "POST" | "DELETE";
   body?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-  const response = await fetch(`${sandboxPublicApiRootUrl(params.sandboxApiUrl)}${params.path}`, {
-    method: params.method ?? "GET",
-    headers: {
-      "openpond-api-key": params.apiKey,
-      ...(params.body ? { "content-type": "application/json" } : {}),
-    },
-    ...(params.body ? { body: JSON.stringify(params.body) } : {}),
-  });
+  const response = await apiFetch(
+    sandboxPublicApiRootUrl(params.sandboxApiUrl),
+    params.apiKey,
+    params.path,
+    {
+      method: params.method ?? "GET",
+      ...(params.body ? { body: JSON.stringify(params.body) } : {}),
+    }
+  );
   const payload = (await response.json().catch(() => ({}))) as Record<
     string,
     unknown
@@ -1188,7 +1366,10 @@ async function requestSandboxPublicApiRoot(params: {
   return payload;
 }
 
-function sandboxAccountSummary(context: RuntimeAccountContext | null, sandboxApiUrl: string) {
+function sandboxAccountSummary(
+  context: RuntimeAccountContext | null,
+  sandboxApiUrl: string
+) {
   if (!context) {
     return {
       label: "Sandbox API",

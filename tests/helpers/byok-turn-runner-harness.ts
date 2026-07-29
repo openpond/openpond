@@ -18,6 +18,10 @@ export function createByokTurnRunnerHarness(input: {
   providerId?: "local-adapter" | "openpond" | "openrouter" | "zai";
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
+  toolCallsByPass?: Record<
+    number,
+    Array<{ name: string; args: Record<string, unknown> }>
+  >;
   reasoningTextOnToolCall?: string;
   continuationOnToolCall?: import("../../packages/cloud/src/hosted-chat").HostedChatContinuation;
   initialEvents?: RuntimeEvent[];
@@ -29,10 +33,18 @@ export function createByokTurnRunnerHarness(input: {
   failure?: Error;
   preferences?: AppPreferences;
   providerSettings?: ProviderSettings;
-  finalizeCrossSystemTurn?: NonNullable<Parameters<typeof createTurnRunner>[0]["finalizeCrossSystemTurn"]>;
+  finalizeCrossSystemTurn?: NonNullable<
+    Parameters<typeof createTurnRunner>[0]["finalizeCrossSystemTurn"]
+  >;
+  executeWorkspaceTool?: NonNullable<
+    Parameters<typeof createTurnRunner>[0]["executeWorkspaceTool"]
+  >;
+  maxHostedWorkspaceToolRounds?: number;
 }) {
   const providerId = input.providerId ?? "openrouter";
-  const modelId = input.modelId ?? (providerId === "openpond" ? "openpond-chat" : "test/model");
+  const modelId =
+    input.modelId ??
+    (providerId === "openpond" ? "openpond-chat" : "test/model");
   const sessions = new Map<string, Session>([
     [
       "session_1",
@@ -49,7 +61,9 @@ export function createByokTurnRunnerHarness(input: {
   const approvals: Approval[] = [];
   const streamInputs: any[] = [];
   const usageRecords: ModelUsageRecord[] = [];
-  const turnFollowUpQueue = createBackgroundWorkerQueue({ queueId: "turn-follow-up-byok" });
+  const turnFollowUpQueue = createBackgroundWorkerQueue({
+    queueId: "turn-follow-up-byok",
+  });
   let streamPass = 0;
   const runner = createTurnRunner({
     attachmentRootDir: "/tmp/openpond-test-attachments",
@@ -73,14 +87,18 @@ export function createByokTurnRunnerHarness(input: {
         return approvals.find((approval) => approval.id === approvalId) ?? null;
       },
       async upsertModelUsageRecord(record) {
-        const index = usageRecords.findIndex((candidate) => candidate.requestId === record.requestId);
+        const index = usageRecords.findIndex(
+          (candidate) => candidate.requestId === record.requestId
+        );
         if (index === -1) usageRecords.push(record);
         else usageRecords[index] = record;
         return record;
       },
     }),
     upsertApproval: async (approval) => {
-      const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+      const index = approvals.findIndex(
+        (candidate) => candidate.id === approval.id
+      );
       if (index === -1) approvals.push(approval);
       else approvals[index] = approval;
     },
@@ -133,13 +151,18 @@ export function createByokTurnRunnerHarness(input: {
     appendRuntimeEvent: async (event) => {
       events.push(event);
     },
-    executeWorkspaceTool: async () => {
-      throw new Error("workspace tool execution should not be needed");
-    },
+    executeWorkspaceTool:
+      input.executeWorkspaceTool ??
+      (async () => {
+        throw new Error("workspace tool execution should not be needed");
+      }),
     finalizeCrossSystemTurn: input.finalizeCrossSystemTurn,
     loadPersonalizationSoul: async () => "",
-    loadAppPreferences: async () => input.preferences ?? AppPreferencesSchema.parse({}),
-    loadProviderSettings: input.providerSettings ? async () => input.providerSettings! : undefined,
+    loadAppPreferences: async () =>
+      input.preferences ?? AppPreferencesSchema.parse({}),
+    loadProviderSettings: input.providerSettings
+      ? async () => input.providerSettings!
+      : undefined,
     maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
     hostedSystemPrompt: async () => "System prompt",
     appendAssistantText: async (nextSession, turnId, text) => {
@@ -182,46 +205,76 @@ export function createByokTurnRunnerHarness(input: {
         toolChoice: streamInput.toolChoice,
       });
       for await (const delta of harnessStreamDeltas()) {
-        if (delta.text) yield { type: "text_delta", text: delta.text, raw: delta.raw };
-        if (delta.reasoningText) yield { type: "reasoning_delta", text: delta.reasoningText, raw: delta.raw };
-        if (delta.toolCalls) yield { type: "tool_call_delta", toolCalls: delta.toolCalls, raw: delta.raw };
-        if (delta.usage) yield { type: "usage", usage: delta.usage, raw: delta.raw };
-        if (delta.finishReason !== undefined) yield { type: "finish", finishReason: delta.finishReason, raw: delta.raw };
+        if (delta.text)
+          yield { type: "text_delta", text: delta.text, raw: delta.raw };
+        if (delta.reasoningText)
+          yield {
+            type: "reasoning_delta",
+            text: delta.reasoningText,
+            raw: delta.raw,
+          };
+        if (delta.toolCalls)
+          yield {
+            type: "tool_call_delta",
+            toolCalls: delta.toolCalls,
+            raw: delta.raw,
+          };
+        if (delta.usage)
+          yield { type: "usage", usage: delta.usage, raw: delta.raw };
+        if (delta.finishReason !== undefined)
+          yield {
+            type: "finish",
+            finishReason: delta.finishReason,
+            raw: delta.raw,
+          };
       }
     },
     streamLocalByokChatTurn: async function* (streamInput) {
-      if (providerId === "openpond") throw new Error("BYOK stream should not be used for OpenPond hosted tests");
+      if (providerId === "openpond")
+        throw new Error(
+          "BYOK stream should not be used for OpenPond hosted tests"
+        );
       streamInputs.push(streamInput);
       yield* harnessStreamDeltas();
     },
     turnFollowUpQueue,
-    maxHostedWorkspaceToolRounds: 3,
+    maxHostedWorkspaceToolRounds: input.maxHostedWorkspaceToolRounds ?? 3,
     maxRepeatedInvalidToolRequests: 2,
   });
 
   async function* harnessStreamDeltas() {
     streamPass += 1;
     const pass = streamPass;
-    if (input.failOnPass === pass) throw input.failure ?? new Error(`stream failed on pass ${pass}`);
-    if (pass === 1 && input.toolArgs) {
+    if (input.failOnPass === pass)
+      throw input.failure ?? new Error(`stream failed on pass ${pass}`);
+    const plannedToolCalls =
+      input.toolCallsByPass?.[pass] ??
+      (pass === 1 && input.toolArgs
+        ? [{ name: "missing_test_tool", args: input.toolArgs }]
+        : []);
+    if (plannedToolCalls.length > 0) {
       if (input.reasoningTextOnToolCall) {
-        yield { reasoningText: input.reasoningTextOnToolCall, raw: { pass, reasoning: true } };
+        yield {
+          reasoningText: input.reasoningTextOnToolCall,
+          raw: { pass, reasoning: true },
+        };
       }
       if (input.continuationOnToolCall) {
-        yield { continuation: input.continuationOnToolCall, raw: { pass, continuation: true } };
+        yield {
+          continuation: input.continuationOnToolCall,
+          raw: { pass, continuation: true },
+        };
       }
       yield {
-        toolCalls: [
-          {
-            index: 0,
-            id: "call_test_tool",
-            type: "function",
-            function: {
-              name: "missing_test_tool",
-              arguments: JSON.stringify(input.toolArgs),
-            },
+        toolCalls: plannedToolCalls.map((toolCall, index) => ({
+          index,
+          id: `call_test_tool_${pass}_${index}`,
+          type: "function",
+          function: {
+            name: toolCall.name,
+            arguments: JSON.stringify(toolCall.args),
           },
-        ],
+        })),
         raw: { pass },
       };
       const usage = usageForPass(pass);
@@ -235,10 +288,21 @@ export function createByokTurnRunnerHarness(input: {
   }
 
   function usageForPass(pass: number): unknown {
-    if (input.usageByPass && Object.prototype.hasOwnProperty.call(input.usageByPass, pass)) {
+    if (
+      input.usageByPass &&
+      Object.prototype.hasOwnProperty.call(input.usageByPass, pass)
+    ) {
       return input.usageByPass[pass];
     }
-    const fallbackPass = input.toolArgs ? 2 : 1;
+    const plannedPasses = Object.keys(input.toolCallsByPass ?? {})
+      .map(Number)
+      .filter(Number.isFinite);
+    const fallbackPass =
+      plannedPasses.length > 0
+        ? Math.max(...plannedPasses) + 1
+        : input.toolArgs
+        ? 2
+        : 1;
     return pass === fallbackPass ? input.usage : undefined;
   }
 
@@ -254,7 +318,9 @@ export function createByokTurnRunnerHarness(input: {
   };
 }
 
-export function openRouterProviderSettingsWithContextWindow(contextWindow: number): ProviderSettings {
+export function openRouterProviderSettingsWithContextWindow(
+  contextWindow: number
+): ProviderSettings {
   return ProviderSettingsSchema.parse({
     providers: {
       openrouter: {
@@ -284,7 +350,9 @@ export function openRouterProviderSettingsWithContextWindow(contextWindow: numbe
   });
 }
 
-export function hostedCompactionPriorEvents(paddingCharacters = 0): RuntimeEvent[] {
+export function hostedCompactionPriorEvents(
+  paddingCharacters = 0
+): RuntimeEvent[] {
   return [
     {
       id: "prior_turn_1_started",
@@ -293,7 +361,10 @@ export function hostedCompactionPriorEvents(paddingCharacters = 0): RuntimeEvent
       name: "turn.started",
       timestamp: "2026-07-03T09:00:00.000Z",
       source: "server",
-      args: { prompt: "We need to preserve the durable support workflow requirements." },
+      args: {
+        prompt:
+          "We need to preserve the durable support workflow requirements.",
+      },
     },
     {
       id: "prior_turn_1_assistant",
@@ -356,6 +427,7 @@ export function deferred() {
 export function baseSession(overrides: Partial<Session> = {}): Session {
   return {
     id: "session_1",
+    experience: "development",
     provider: "openrouter",
     modelRef: { providerId: "openrouter", modelId: "test/model" },
     title: "BYOK chat",

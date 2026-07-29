@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { getOpenPondAccount, listApps, saveProfileApiKey } from "@openpond/cloud";
+import { getOpenPondAccount, saveProfileApiKey } from "@openpond/cloud";
 import type { RuntimeAccountContext, SaveOpenPondAccountInput } from "./types.js";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import {
@@ -33,21 +33,7 @@ async function deriveHandleForApiKey(input: SaveOpenPondAccountInput, apiBaseUrl
       normalizeDerivedHandle(account.id);
     if (fromProfile) return fromProfile;
   } catch {
-    // Fall back to app ownership when /account is temporarily unavailable.
-  }
-
-  try {
-    const apps = await listApps(apiBaseUrl, input.apiKey);
-    const counts = new Map<string, number>();
-    for (const app of apps) {
-      const handle = normalizeDerivedHandle(app.handle);
-      if (!handle) continue;
-      counts.set(handle, (counts.get(handle) ?? 0) + 1);
-    }
-    const [handle] = Array.from(counts.entries()).sort((left, right) => right[1] - left[1])[0] ?? [];
-    if (handle) return handle;
-  } catch {
-    // Use a deterministic non-secret label if neither profile nor apps can identify the account.
+    // Use a deterministic non-secret label if the profile is unavailable.
   }
 
   return fallbackHandleForApiKey(input.apiKey);

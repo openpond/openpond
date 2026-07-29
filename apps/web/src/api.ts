@@ -39,6 +39,7 @@ import type {
   ProviderValidationRequest,
   ReorderSidebarAppsRequest,
   RecordClientDiagnosticRequest,
+  RemoveOpenPondAccountRequest,
   ResolveApprovalRequest,
   RemoteAccessStatus,
   RemoteAccessToggleResponse,
@@ -185,50 +186,62 @@ export const api = {
     apiFetch<OpenPondExtensionCatalog>(connection, "/v1/extensions"),
   extensionPreview: (
     connection: ClientConnection,
-    input: { source: string; ref?: string },
-  ) => apiFetch<OpenPondExtensionPreview>(connection, "/v1/extensions/preview", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+    input: { source: string; ref?: string }
+  ) =>
+    apiFetch<OpenPondExtensionPreview>(connection, "/v1/extensions/preview", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   extensionAdd: (
     connection: ClientConnection,
-    input: { source: string; ref?: string },
-  ) => apiFetch<ExtensionMutationPayload>(connection, "/v1/extensions", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+    input: { source: string; ref?: string }
+  ) =>
+    apiFetch<ExtensionMutationPayload>(connection, "/v1/extensions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   extensionUpdate: (
     connection: ClientConnection,
     extension: Pick<OpenPondExtension, "owner" | "repo">,
-    input: { ref?: string } = {},
-  ) => apiFetch<ExtensionMutationPayload>(
-    connection,
-    `/v1/extensions/github/${encodeURIComponent(extension.owner)}/${encodeURIComponent(extension.repo)}/update`,
-    { method: "POST", body: JSON.stringify(input) },
-  ),
-  extensionUpdateAll: (connection: ClientConnection) => apiFetch<{
-    updated: OpenPondExtension[];
-    unchanged: OpenPondExtension[];
-    failed: Array<{ id: string; error: string }>;
-    catalog: OpenPondExtensionCatalog;
-  }>(connection, "/v1/extensions/update-all", { method: "POST" }),
+    input: { ref?: string } = {}
+  ) =>
+    apiFetch<ExtensionMutationPayload>(
+      connection,
+      `/v1/extensions/github/${encodeURIComponent(
+        extension.owner
+      )}/${encodeURIComponent(extension.repo)}/update`,
+      { method: "POST", body: JSON.stringify(input) }
+    ),
+  extensionUpdateAll: (connection: ClientConnection) =>
+    apiFetch<{
+      updated: OpenPondExtension[];
+      unchanged: OpenPondExtension[];
+      failed: Array<{ id: string; error: string }>;
+      catalog: OpenPondExtensionCatalog;
+    }>(connection, "/v1/extensions/update-all", { method: "POST" }),
   extensionRemove: (
     connection: ClientConnection,
-    extension: Pick<OpenPondExtension, "owner" | "repo">,
-  ) => apiFetch<ExtensionRemovalPayload>(
-    connection,
-    `/v1/extensions/github/${encodeURIComponent(extension.owner)}/${encodeURIComponent(extension.repo)}`,
-    { method: "DELETE" },
-  ),
+    extension: Pick<OpenPondExtension, "owner" | "repo">
+  ) =>
+    apiFetch<ExtensionRemovalPayload>(
+      connection,
+      `/v1/extensions/github/${encodeURIComponent(
+        extension.owner
+      )}/${encodeURIComponent(extension.repo)}`,
+      { method: "DELETE" }
+    ),
   skillSourceFile: (
     connection: ClientConnection,
     scope: SkillSourceScope,
     skillName: string,
-    filePath: string,
-  ) => apiFetch<SkillSourceFile>(
-    connection,
-    `/v1/skills/${scope}/${encodeURIComponent(skillName)}/source?path=${encodeURIComponent(filePath)}`,
-  ),
+    filePath: string
+  ) =>
+    apiFetch<SkillSourceFile>(
+      connection,
+      `/v1/skills/${scope}/${encodeURIComponent(
+        skillName
+      )}/source?path=${encodeURIComponent(filePath)}`
+    ),
   teamChatMembers: (connection: ClientConnection, teamId: string) =>
     apiFetch<{ members: TeamChatMember[] }>(
       connection,
@@ -559,14 +572,14 @@ export const api = {
   portableTrainingCatalog: (
     connection: ClientConnection,
     query = "",
-    method?: "sft" | "dpo" | "grpo" | "ppo",
+    method?: "sft" | "dpo" | "grpo" | "ppo"
   ) => {
     const params = new URLSearchParams();
     if (query.trim()) params.set("query", query.trim());
     if (method) params.set("method", method);
     return apiFetch<TrainingCatalog>(
       connection,
-      `/v1/training/catalog${params.size ? `?${params.toString()}` : ""}`,
+      `/v1/training/catalog${params.size ? `?${params.toString()}` : ""}`
     );
   },
   datasetCatalog: (connection: ClientConnection, profileId: string) =>
@@ -587,9 +600,10 @@ export const api = {
   ) =>
     apiFetch<T>(connection, `/v1/training${path}`, {
       method,
-      body: method === "GET" || method === "DELETE"
-        ? undefined
-        : JSON.stringify(input),
+      body:
+        method === "GET" || method === "DELETE"
+          ? undefined
+          : JSON.stringify(input),
     }),
   computeState: (connection: ClientConnection) =>
     apiFetch<ComputeStateResponse>(connection, "/v1/compute"),
@@ -688,13 +702,11 @@ export const api = {
       `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/runs${query}`
     );
   },
-  refreshOpenPond: (connection: ClientConnection) =>
-    apiFetch<BootstrapPayload>(connection, "/v1/openpond/apps/refresh", {
+  refreshOpenPondAccounts: (connection: ClientConnection) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/refresh", {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  refreshOpenPondAccounts: (connection: ClientConnection) =>
-    apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshOpenPond=1"),
   refreshOpenPondAccount: (connection: ClientConnection) =>
     apiFetch<{
       account: BootstrapPayload["account"];
@@ -722,6 +734,14 @@ export const api = {
   ) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/switch", {
       method: "POST",
+      body: JSON.stringify(input),
+    }),
+  removeOpenPondAccount: (
+    connection: ClientConnection,
+    input: RemoveOpenPondAccountRequest
+  ) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts", {
+      method: "DELETE",
       body: JSON.stringify(input),
     }),
   saveOpenPondAccount: (
@@ -866,11 +886,13 @@ export const api = {
   profileCatalog: (connection: ClientConnection) =>
     apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/catalog"),
   profileSelect: (connection: ClientConnection, ref: OpenPondProfileRef) =>
-    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(
-      connection,
-      "/v1/profile/select",
-      { method: "POST", body: JSON.stringify({ ref }) },
-    ),
+    apiFetch<{
+      profile: BootstrapPayload["profile"];
+      library: OpenPondProfileLibrary;
+    }>(connection, "/v1/profile/select", {
+      method: "POST",
+      body: JSON.stringify({ ref }),
+    }),
   profileRemove: (connection: ClientConnection, ref: OpenPondProfileRef) =>
     apiFetch<OpenPondProfileLibrary>(connection, "/v1/profile/remove", {
       method: "POST",
@@ -878,18 +900,28 @@ export const api = {
     }),
   profilePublicationPreview: (
     connection: ClientConnection,
-    input: OpenPondProfilePublicationPreviewRequest,
-  ) => apiFetch<OpenPondProfilePublicationPreview>(connection, "/v1/profile/publication/preview", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+    input: OpenPondProfilePublicationPreviewRequest
+  ) =>
+    apiFetch<OpenPondProfilePublicationPreview>(
+      connection,
+      "/v1/profile/publication/preview",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   profilePublicationPublish: (
     connection: ClientConnection,
-    input: OpenPondProfilePublicationPublishRequest,
-  ) => apiFetch<OpenPondProfilePublicationResult>(connection, "/v1/profile/publication/publish", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+    input: OpenPondProfilePublicationPublishRequest
+  ) =>
+    apiFetch<OpenPondProfilePublicationResult>(
+      connection,
+      "/v1/profile/publication/publish",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ),
   profileInstall: (
     connection: ClientConnection,
     input: {
@@ -897,13 +929,20 @@ export const api = {
       repositoryId: string;
       url?: string | null;
       profile?: string | null;
-    },
-  ) => apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/install", {
-    method: "POST",
-    body: JSON.stringify(input),
-  }),
+    }
+  ) =>
+    apiFetch<{
+      profile: BootstrapPayload["profile"];
+      library: OpenPondProfileLibrary;
+    }>(connection, "/v1/profile/install", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   profileUpdate: (connection: ClientConnection, ref: OpenPondProfileRef) =>
-    apiFetch<{ profile: BootstrapPayload["profile"]; library: OpenPondProfileLibrary }>(connection, "/v1/profile/update", {
+    apiFetch<{
+      profile: BootstrapPayload["profile"];
+      library: OpenPondProfileLibrary;
+    }>(connection, "/v1/profile/update", {
       method: "POST",
       body: JSON.stringify({ ref }),
     }),
@@ -980,7 +1019,6 @@ export const api = {
       hostedRunInput?: Record<string, unknown> | null;
       hostedRunRetry?: boolean;
       expectedManifestHash?: string | null;
-      workItemId?: string | null;
     }
   ) =>
     apiFetch<{
@@ -1118,11 +1156,12 @@ export const api = {
     apiFetch<SidebarFileBookmarksResponse>(connection, "/v1/sidebar/files"),
   patchSidebarFile: (
     connection: ClientConnection,
-    input: PatchSidebarFileBookmarkRequest,
-  ) => apiFetch<SidebarFileBookmarksResponse>(connection, "/v1/sidebar/files", {
-    method: "PATCH",
-    body: JSON.stringify(input),
-  }),
+    input: PatchSidebarFileBookmarkRequest
+  ) =>
+    apiFetch<SidebarFileBookmarksResponse>(connection, "/v1/sidebar/files", {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }),
   workspaceStatus: (
     connection: ClientConnection,
     appId: string,

@@ -1,12 +1,15 @@
 import {
-  checkOpenPondApiHealth,
   createRepo,
   getOpenPondAccount,
   listApps,
 } from "@openpond/cloud";
 import type { CreateRepoRequest, CreateRepoResponse, OpenPondAccountResponse } from "@openpond/cloud";
 import { SandboxAppActionRegistrySchema, type OpenPondApp } from "@openpond/contracts";
-import type { AppsLoadResult, RuntimeAccountContext } from "./types.js";
+import type {
+  AccountLoadResult,
+  AppsLoadResult,
+  RuntimeAccountContext,
+} from "./types.js";
 import { toAccountState } from "./account-state.js";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import { errorMessage } from "./errors.js";
@@ -130,6 +133,7 @@ function normalizeScheduleSummary(input: unknown): OpenPondApp["scheduleSummary"
 type AccountProfileLookup = {
   response: OpenPondAccountResponse | null;
   authFailed: boolean;
+  error: string | null;
 };
 
 async function loadAccountProfileLookups(context: RuntimeAccountContext): Promise<Record<string, AccountProfileLookup>> {
@@ -139,7 +143,10 @@ async function loadAccountProfileLookups(context: RuntimeAccountContext): Promis
       const key = profileKey(account.handle, account.baseUrl);
       const token = accountToken(account);
       if (!token) {
-        return [key, { response: null, authFailed: false }] as const;
+        return [
+          key,
+          { response: null, authFailed: false, error: null },
+        ] as const;
       }
       try {
         return [
@@ -147,82 +154,88 @@ async function loadAccountProfileLookups(context: RuntimeAccountContext): Promis
           {
             response: await getOpenPondAccount(resolvePublicApiBaseUrl(account, context.config), token),
             authFailed: false,
+            error: null,
           },
         ] as const;
-      } catch {
-        return [key, { response: null, authFailed: true }] as const;
+      } catch (error) {
+        return [
+          key,
+          {
+            response: null,
+            authFailed: true,
+            error: errorMessage(error),
+          },
+        ] as const;
       }
     })
   );
   return Object.fromEntries(entries);
 }
 
-export async function loadOpenPondApps(options: LoadOpenPondAppsOptions = {}): Promise<AppsLoadResult> {
+async function loadOpenPondAccountStateForContext(
+  context: RuntimeAccountContext
+): Promise<AccountLoadResult> {
+  const accountProfiles = await loadAccountProfileLookups(context);
+  const activeLookup = context.account
+    ? accountProfiles[
+        profileKey(context.account.handle, context.account.baseUrl)
+      ] ?? null
+    : null;
+  const accountResponse = activeLookup?.response ?? null;
+  const authError =
+    context.token && activeLookup?.authFailed
+      ? activeLookup.error || "OpenPond account authentication failed."
+      : null;
+  return {
+    account: toAccountState({
+      ...context,
+      accountResponse,
+      accountProfiles,
+      authFailed: Boolean(authError),
+      error: authError,
+    }),
+  };
+}
+
+export async function loadOpenPondAccountState(): Promise<AccountLoadResult> {
+  return loadOpenPondAccountStateForContext(
+    await loadOpenPondAccountContext()
+  );
+}
+
+export async function loadOpenPondApps(
+  options: LoadOpenPondAppsOptions = {}
+): Promise<AppsLoadResult> {
   const context = await loadOpenPondAccountContext();
+  const accountPromise = loadOpenPondAccountStateForContext(context);
   if (!context.token) {
-    const accountProfiles = await loadAccountProfileLookups(context);
     return {
-      account: toAccountState({ ...context, accountProfiles }),
+      ...(await accountPromise),
       apps: [],
       error: "No OpenPond API key or session token is configured.",
     };
   }
 
-  const [healthResult, accountResult, appsResult, accountProfilesResult] = await Promise.allSettled([
-    checkOpenPondApiHealth(context.apiBaseUrl, context.token),
-    getOpenPondAccount(context.apiBaseUrl, context.token),
+  const [accountResult, appsResult] = await Promise.allSettled([
+    accountPromise,
     listApps(context.apiBaseUrl, context.token, {
       handle: context.account?.handle,
       limit: options.limit ?? 20,
       offset: options.offset ?? 0,
       includeScheduled: options.includeScheduled ?? true,
     }),
-    loadAccountProfileLookups(context),
   ]);
-  const health = healthResult.status === "fulfilled" ? healthResult.value : null;
-  const accountResponse = accountResult.status === "fulfilled" ? accountResult.value : null;
-  const accountProfiles = accountProfilesResult.status === "fulfilled" ? accountProfilesResult.value : {};
-  if (accountResult.status === "fulfilled" && context.account) {
-    accountProfiles[profileKey(context.account.handle, context.account.baseUrl)] = {
-      response: accountResult.value,
-      authFailed: false,
-    };
-  }
-  const appsSucceeded = appsResult.status === "fulfilled";
-  const accountSucceeded = accountResult.status === "fulfilled";
-  const anyAuthenticatedCallSucceeded = appsSucceeded || accountSucceeded || health?.authenticated === true;
-  const allAuthenticatedCallsFailed = !appsSucceeded && !accountSucceeded && health?.authenticated !== true;
-  const authError =
-    health?.authenticated === false && !anyAuthenticatedCallSucceeded
-      ? health.error || "OpenPond account authentication failed."
-      : allAuthenticatedCallsFailed
-        ? appsResult.status === "rejected"
-          ? errorMessage(appsResult.reason)
-          : accountResult.status === "rejected"
-            ? errorMessage(accountResult.reason)
-            : null
-        : null;
-  const profileError =
-    accountResult.status === "rejected" && anyAuthenticatedCallSucceeded
-      ? `Profile unavailable: ${errorMessage(accountResult.reason)}`
-      : null;
-  const appsError = appsResult.status === "rejected" ? errorMessage(appsResult.reason) : null;
-  const effectiveHealth = health && anyAuthenticatedCallSucceeded ? { ...health, authenticated: true, error: undefined } : health;
-
+  if (accountResult.status === "rejected") throw accountResult.reason;
   return {
-    account: toAccountState({
-      ...context,
-      accountResponse,
-      accountProfiles,
-      health: effectiveHealth,
-      authFailed: Boolean(authError),
-      error: authError ?? profileError,
-    }),
+    account: accountResult.value.account,
     apps:
       appsResult.status === "fulfilled"
-        ? (appsResult.value as unknown[]).map(normalizeApp).filter((value): value is OpenPondApp => Boolean(value))
+        ? (appsResult.value as unknown[])
+            .map(normalizeApp)
+            .filter((value): value is OpenPondApp => Boolean(value))
         : [],
-    error: appsError,
+    error:
+      appsResult.status === "rejected" ? errorMessage(appsResult.reason) : null,
   };
 }
 

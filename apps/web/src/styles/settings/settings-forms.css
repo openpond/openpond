@@ -1,6 +1,5 @@
 .account-summary,
 .account-list,
-.account-login-form,
 .provider-settings-form,
 .diagnostics-log-panel,
 .settings-footnote {
@@ -26,8 +25,6 @@
 .account-summary small,
 .account-list-heading small,
 .account-details span,
-.account-form-grid label span,
-.account-environment-field > span,
 .product-row span,
 .settings-footnote span,
 .empty-account-list span {
@@ -119,51 +116,6 @@
 .private-account-email:focus-visible {
   outline: 1px solid rgba(58, 163, 255, 0.55);
   outline-offset: 2px;
-}
-
-.account-login-form {
-  overflow: hidden;
-}
-
-.account-signin-panel {
-  display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(58, 163, 255, 0.055);
-}
-
-.account-signin-panel > svg {
-  color: #77bdff;
-}
-
-.account-signin-panel > div {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-.account-signin-panel strong {
-  color: #f6f6f6;
-  font-size: 13px;
-  font-weight: 580;
-}
-
-.account-signin-panel span {
-  color: #a8b6c5;
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.account-api-key-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  padding: 0 10px;
-  text-decoration: none;
 }
 
 .provider-settings-form {
@@ -569,41 +521,9 @@
   white-space: pre-line;
 }
 
-.account-form-grid {
+.account-dialog-advanced-fields {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  padding: 14px 16px 12px;
-}
-
-.account-form-grid label,
-.account-environment-field {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-}
-
-.account-form-grid input {
-  width: 100%;
-  min-width: 0;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  outline: 0;
-  background: #101010;
-  color: var(--text);
-  padding: 0 10px;
-  font-size: 13px;
-}
-
-.account-form-grid input:focus {
-  border-color: rgba(58, 163, 255, 0.45);
-}
-
-.account-form-env-toggle {
-  justify-self: start;
-  min-height: 34px;
-  border-radius: 17px;
 }
 
 .provider-settings-grid {

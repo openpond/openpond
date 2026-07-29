@@ -144,6 +144,12 @@ export function buildDevRunnerPlan(
   const serverEnv = {
     ...baseEnv,
     OPENPOND_REMOTE_ACCESS_TARGET: webUrl,
+    ...(env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()
+      ? {
+          VERCEL_AUTOMATION_BYPASS_SECRET:
+            env.VERCEL_AUTOMATION_BYPASS_SECRET.trim(),
+        }
+      : {}),
   };
   const rendererEnv = {
     ...baseEnv,
@@ -562,6 +568,58 @@ function defaultServerPort(env: NodeJS.ProcessEnv): number {
   return env.OPENPOND_APP_CHANNEL === "nightly" ? 17875 : 17874;
 }
 
+function devEnvironmentWithVercelBypass(
+  env: NodeJS.ProcessEnv
+): NodeJS.ProcessEnv {
+  if (env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim()) return env;
+  const executable =
+    process.platform === "win32" ? "vercel.cmd" : "vercel";
+  const linkedProjectDir =
+    env.OPENPOND_VERCEL_PROJECT_DIR?.trim() ||
+    path.resolve(ROOT, "../sandbox");
+  const result = spawnSync(
+    executable,
+    ["project", "protection", "--format", "json"],
+    {
+      cwd: linkedProjectDir,
+      env,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }
+  );
+  if (
+    result.status !== 0 ||
+    typeof result.stdout !== "string" ||
+    !result.stdout.trim()
+  ) {
+    return env;
+  }
+  const secret = vercelProtectionBypassSecret(result.stdout);
+  return secret
+    ? { ...env, VERCEL_AUTOMATION_BYPASS_SECRET: secret }
+    : env;
+}
+
+export function vercelProtectionBypassSecret(
+  rawProtectionJson: string
+): string | null {
+  try {
+    const payload = JSON.parse(rawProtectionJson) as {
+      protectionBypass?: Record<
+        string,
+        { isEnvVar?: boolean } | null
+      >;
+    };
+    const entries = Object.entries(payload.protectionBypass ?? {});
+    const selected =
+      entries.find(([, metadata]) => metadata?.isEnvVar === true) ??
+      entries[0];
+    return selected?.[0]?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function pnpmBinary(env: NodeJS.ProcessEnv): string {
   return env.PNPM_BINARY || (process.platform === "win32" ? "pnpm.cmd" : "pnpm");
 }
@@ -618,7 +676,10 @@ function valueAfterFlag(argv: string[], index: number, flag: string): string {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const options = parseDevRunnerArgs(process.argv.slice(2));
-  const plan = buildDevRunnerPlan(options);
+  const runtimeEnv = options.printPlan
+    ? { ...process.env, VERCEL_AUTOMATION_BYPASS_SECRET: undefined }
+    : devEnvironmentWithVercelBypass(process.env);
+  const plan = buildDevRunnerPlan(options, runtimeEnv);
   if (options.printPlan) {
     console.log(JSON.stringify(plan, null, 2));
   } else {

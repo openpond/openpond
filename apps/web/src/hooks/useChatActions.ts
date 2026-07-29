@@ -6,6 +6,7 @@ import type {
   CloudProject,
   CodexPermissionMode,
   CodexReasoningEffort,
+  Experience,
   CreateImproveRun,
   LocalProject,
   LocalProjectOpenPondLink,
@@ -58,7 +59,10 @@ import {
 } from "../lib/hybrid-workspace-session";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
-import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
+import {
+  canManageOpenPondOrganization,
+  type OpenPondOrganization,
+} from "../lib/organization-types";
 import { implicitOrganization } from "../lib/project-agent-setup";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import type {
@@ -90,6 +94,7 @@ type UseChatActionsInput = {
   openPondCommandAccessMode: OpenPondCommandAccessMode;
   draftModel: string;
   draftProvider: ChatProvider;
+  experience: Experience;
   expandProject: (projectId: string) => void;
   ensureCloudSessionReady?: (session: Session) => Promise<Session>;
   getPrompt: () => string;
@@ -98,7 +103,10 @@ type UseChatActionsInput = {
   apps: OpenPondApp[];
   connectedAppMentions: ConnectedAppMentionOption[];
   mentionedAppId: string | null;
-  refreshWorkspace: (appId: string | null | undefined, ensure?: boolean) => Promise<WorkspaceState | null>;
+  refreshWorkspace: (
+    appId: string | null | undefined,
+    ensure?: boolean
+  ) => Promise<WorkspaceState | null>;
   refreshWorkspaceDiff: (appId?: string | null | undefined) => Promise<unknown>;
   selectedApp: OpenPondApp | null;
   selectedActionCatalog: SandboxActionCatalogEntry[];
@@ -119,7 +127,10 @@ type UseChatActionsInput = {
   setMentionedAppId: Dispatch<SetStateAction<string | null>>;
   setCodexHistoryEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
-  onCodexHistoryTurnActivityChange?: (sessionId: string, active: boolean) => void;
+  onCodexHistoryTurnActivityChange?: (
+    sessionId: string,
+    active: boolean
+  ) => void;
   onCodexHistoryTurnPayload?: (payload: CodexHistoryTurnPayload) => void;
   onPendingUserMessage?: (message: PendingChatUserMessage) => void;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
@@ -166,13 +177,23 @@ export function sendTurnModelSelectionPayload({
   };
 }
 
-function appendRuntimeEventIfMissing(events: RuntimeEvent[], event: RuntimeEvent): RuntimeEvent[] {
-  return events.some((candidate) => candidate.id === event.id) ? events : [...events, event];
+function appendRuntimeEventIfMissing(
+  events: RuntimeEvent[],
+  event: RuntimeEvent
+): RuntimeEvent[] {
+  return events.some((candidate) => candidate.id === event.id)
+    ? events
+    : [...events, event];
 }
 
-function optimisticCodexHistoryTurnStartedEvent(sessionId: string, prompt: string): RuntimeEvent {
+function optimisticCodexHistoryTurnStartedEvent(
+  sessionId: string,
+  prompt: string
+): RuntimeEvent {
   const timestamp = new Date().toISOString();
-  const localId = `codex_history_optimistic_${timestamp}_${Math.random().toString(36).slice(2, 8)}`;
+  const localId = `codex_history_optimistic_${timestamp}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
   return {
     id: localId,
     sessionId,
@@ -185,7 +206,10 @@ function optimisticCodexHistoryTurnStartedEvent(sessionId: string, prompt: strin
   };
 }
 
-function optimisticCodexHistoryTurnFailedEvent(startedEvent: RuntimeEvent, error: unknown): RuntimeEvent {
+function optimisticCodexHistoryTurnFailedEvent(
+  startedEvent: RuntimeEvent,
+  error: unknown
+): RuntimeEvent {
   return {
     id: `${startedEvent.id}_failed`,
     sessionId: startedEvent.sessionId,
@@ -215,8 +239,8 @@ function directActionRunEvents({
     runPayload.run.status === "failed"
       ? "failed"
       : runPayload.run.status === "succeeded"
-        ? "completed"
-        : "started";
+      ? "completed"
+      : "started";
   return [
     {
       id: `${turnId}_user`,
@@ -269,6 +293,7 @@ export function useChatActions({
   openPondCommandAccessMode,
   draftModel,
   draftProvider,
+  experience,
   expandProject,
   ensureCloudSessionReady,
   getPrompt,
@@ -311,33 +336,39 @@ export function useChatActions({
   const activeTurnSessionIdsRef = useRef<Set<string>>(new Set());
   const providerSettings = bootstrap?.providers ?? null;
 
-  function commandAccessModeForProvider(provider: ChatProvider, mode: OpenPondCommandAccessMode) {
+  function commandAccessModeForProvider(
+    provider: ChatProvider,
+    mode: OpenPondCommandAccessMode
+  ) {
     return provider === "codex" ? undefined : mode;
   }
 
-  function isDirectCommandSession(session: Session | null | undefined): session is Session {
+  function isDirectCommandSession(
+    session: Session | null | undefined
+  ): session is Session {
     return Boolean(
       session &&
         session.provider !== "codex" &&
-        (
-          (session.workspaceKind === "local_project" && session.cwd?.trim()) ||
-          (
-            (session.workspaceKind === "sandbox" ||
-              session.workspaceKind === "sandbox_template" ||
-              session.workspaceKind === "sandbox_app") &&
-            session.workspaceId
-          )
-        ),
+        ((session.workspaceKind === "local_project" && session.cwd?.trim()) ||
+          ((session.workspaceKind === "sandbox" ||
+            session.workspaceKind === "sandbox_template" ||
+            session.workspaceKind === "sandbox_app") &&
+            session.workspaceId))
     );
   }
 
   function changeDraftProvider(provider: ChatProvider) {
     setDraftProvider(provider);
-    setDraftModel((current) => normalizeChatModel(provider, current, providerSettings));
+    setDraftModel((current) =>
+      normalizeChatModel(provider, current, providerSettings)
+    );
     setView("chat");
   }
 
-  async function sandboxAgentForProject(projectId: string, teamId: string): Promise<SandboxAgent | null> {
+  async function sandboxAgentForProject(
+    projectId: string,
+    teamId: string
+  ): Promise<SandboxAgent | null> {
     const cachedAgents = readSandboxAgentsFromMemory(teamId, accountScopeKey);
     const agents =
       cachedAgents ??
@@ -345,7 +376,9 @@ export function useChatActions({
         teamId,
         accountKey: accountScopeKey,
         fetchAgents: async (nextTeamId) => {
-          const agentsPayload = await api.listSandboxAgents(connection!, { teamId: nextTeamId });
+          const agentsPayload = await api.listSandboxAgents(connection!, {
+            teamId: nextTeamId,
+          });
           return agentsPayload.agents;
         },
       }));
@@ -355,19 +388,28 @@ export function useChatActions({
   async function resolveSyncCloudOrganization(): Promise<OpenPondOrganization> {
     if (!connection) throw new Error("OpenPond App server is not connected.");
     if (bootstrap?.account.state !== "signed_in") {
-      throw new Error("Add an OpenPond account before syncing a Project to Cloud.");
+      throw new Error(
+        "Add an OpenPond account before syncing a Project to Cloud."
+      );
     }
     const organizationPayload = await api.organizations(connection);
     const organization = implicitOrganization(
       organizationPayload.organizations
         .map(normalizeOpenPondOrganization)
-        .filter((candidate): candidate is OpenPondOrganization => Boolean(candidate))
+        .filter((candidate): candidate is OpenPondOrganization =>
+          Boolean(candidate)
+        )
         .filter((candidate) => candidate.status === "active"),
-      bootstrap?.preferences.defaultTeamId ?? null,
+      bootstrap?.preferences.defaultTeamId ?? null
     );
-    if (!organization) throw new Error("Add an OpenPond account before syncing a Project to Cloud.");
+    if (!organization)
+      throw new Error(
+        "Add an OpenPond account before syncing a Project to Cloud."
+      );
     if (!canManageOpenPondOrganization(organization)) {
-      throw new Error(`You need owner or admin access to create projects in ${organization.displayName}.`);
+      throw new Error(
+        `You need owner or admin access to create projects in ${organization.displayName}.`
+      );
     }
     return organization;
   }
@@ -384,13 +426,24 @@ export function useChatActions({
       throw new Error("Select a local Project before using /sync-cloud.");
     }
     const organization = await resolveSyncCloudOrganization();
-    const branch = project.linkedSandboxProject?.defaultBranch?.trim() || "main";
+    const branch =
+      project.linkedSandboxProject?.defaultBranch?.trim() || "main";
     const projectKey = projectSelectionKey("local", project.id);
-    const confirmedCloudProject = confirmedLinkedCloudProject(project, cloudProjects);
+    const confirmedCloudProject = confirmedLinkedCloudProject(
+      project,
+      cloudProjects
+    );
     const session = await api.createSession(connection, {
       provider: "openpond",
-      modelRef: modelRefForTurn("openpond", DEFAULT_OPENPOND_CHAT_MODEL, providerSettings),
-      openPondCommandAccessMode: commandAccessModeForProvider("openpond", openPondCommandAccessMode),
+      modelRef: modelRefForTurn(
+        "openpond",
+        DEFAULT_OPENPOND_CHAT_MODEL,
+        providerSettings
+      ),
+      openPondCommandAccessMode: commandAccessModeForProvider(
+        "openpond",
+        openPondCommandAccessMode
+      ),
       appId: null,
       appName: null,
       workspaceKind: "local_project",
@@ -414,13 +467,17 @@ export function useChatActions({
     input.clearPromptForTurn();
     setWorkspaceBusy(true);
     try {
-      const upload = await api.uploadLocalProjectCloudSource(connection, project.id, {
-        teamId: organization.teamId,
-        projectName: project.name,
-        branch,
-        chatSessionId: session.id,
-        displayPrompt: input.displayPrompt,
-      });
+      const upload = await api.uploadLocalProjectCloudSource(
+        connection,
+        project.id,
+        {
+          teamId: organization.teamId,
+          projectName: project.name,
+          branch,
+          chatSessionId: session.id,
+          displayPrompt: input.displayPrompt,
+        }
+      );
       applyBootstrapPayload(upload.bootstrap);
       expandProject(projectKey);
       expandProject(projectSelectionKey("cloud", upload.project.id));
@@ -445,7 +502,10 @@ export function useChatActions({
     selectSession: boolean;
   }): Promise<boolean> {
     if (!connection) return false;
-    if (input.providerForTurn === "codex" || input.selectedSessionForTurn?.provider === "codex") {
+    if (
+      input.providerForTurn === "codex" ||
+      input.selectedSessionForTurn?.provider === "codex"
+    ) {
       return false;
     }
 
@@ -457,14 +517,21 @@ export function useChatActions({
     }
     if (!session) {
       if (selectedCloudProject) {
-        const projectKey = projectSelectionKey("cloud", selectedCloudProject.id);
+        const projectKey = projectSelectionKey(
+          "cloud",
+          selectedCloudProject.id
+        );
         const sessionProvider = input.providerForTurn;
         session = await api.createSession(connection, {
           provider: sessionProvider,
-          modelRef: modelRefForTurn(sessionProvider, input.modelForTurnValue, providerSettings),
+          modelRef: modelRefForTurn(
+            sessionProvider,
+            input.modelForTurnValue,
+            providerSettings
+          ),
           openPondCommandAccessMode: commandAccessModeForProvider(
             sessionProvider,
-            input.openPondCommandAccessModeForTurn,
+            input.openPondCommandAccessModeForTurn
           ),
           appId: null,
           appName: null,
@@ -491,15 +558,22 @@ export function useChatActions({
         if (!project) {
           throw new Error("Select a project to use this.");
         }
-        const confirmedCloudProject = confirmedLinkedCloudProject(project, cloudProjects);
+        const confirmedCloudProject = confirmedLinkedCloudProject(
+          project,
+          cloudProjects
+        );
         const projectKey = projectSelectionKey("local", project.id);
         const sessionProvider = input.providerForTurn;
         session = await api.createSession(connection, {
           provider: sessionProvider,
-          modelRef: modelRefForTurn(sessionProvider, input.modelForTurnValue, providerSettings),
+          modelRef: modelRefForTurn(
+            sessionProvider,
+            input.modelForTurnValue,
+            providerSettings
+          ),
           openPondCommandAccessMode: commandAccessModeForProvider(
             sessionProvider,
-            input.openPondCommandAccessModeForTurn,
+            input.openPondCommandAccessModeForTurn
           ),
           appId: null,
           appName: null,
@@ -532,7 +606,9 @@ export function useChatActions({
       command: input.command,
       cwd: session.cwd,
     });
-    setSessions((current) => upsertSessionPreservingLocalSidebarState(current, payload.session));
+    setSessions((current) =>
+      upsertSessionPreservingLocalSidebarState(current, payload.session)
+    );
     setEvents((current) => mergeLiveRuntimeEventLists(current, payload.events));
     return true;
   }
@@ -541,25 +617,40 @@ export function useChatActions({
     attachments: ChatAttachment[] = [],
     selectedAction: SandboxActionCatalogEntry | null = null,
     promptOverride?: string,
-    options: SendPromptOptions = {},
+    options: SendPromptOptions = {}
   ): Promise<boolean> {
     const promptForTurn = promptOverride ?? getPrompt();
-    let value = promptForTurn.trim() || (attachments.length > 0 ? "Please review the attached files." : "");
+    let value =
+      promptForTurn.trim() ||
+      (attachments.length > 0 ? "Please review the attached files." : "");
     if (!connection || !value) return false;
     const displayPromptForTurn = options.displayPrompt?.trim() || value;
     const providerForTurn = options.provider ?? draftProvider;
     const modelForTurnValue = options.model ?? draftModel;
-    const openPondCommandAccessModeForTurn = options.openPondCommandAccessMode ?? openPondCommandAccessMode;
+    const openPondCommandAccessModeForTurn =
+      options.openPondCommandAccessMode ?? openPondCommandAccessMode;
     const explicitTurnContext = options.session !== undefined;
-    const selectedSessionForTurn = explicitTurnContext ? options.session ?? null : selectedSession;
-    const selectedAppForTurn = explicitTurnContext ? null : selectedApp;
-    const selectedProjectForTurn = explicitTurnContext ? null : selectedProject;
-    const selectedCloudProjectForTurn = explicitTurnContext ? null : selectedCloudProject;
-    const selectedProjectLinkedOpenPondAppForTurn = explicitTurnContext ? null : selectedProjectLinkedOpenPondApp;
-    const hybridTargetForTurn = !explicitTurnContext && workspaceTarget === "hybrid";
+    const selectedSessionForTurn = explicitTurnContext
+      ? options.session ?? null
+      : selectedSession;
+    const experienceForTurn = selectedSessionForTurn?.experience ?? experience;
+    const developmentTurn = experienceForTurn === "development";
+    const selectedAppForTurn =
+      explicitTurnContext || !developmentTurn ? null : selectedApp;
+    const selectedProjectForTurn =
+      explicitTurnContext || !developmentTurn ? null : selectedProject;
+    const selectedCloudProjectForTurn =
+      explicitTurnContext || !developmentTurn ? null : selectedCloudProject;
+    const selectedProjectLinkedOpenPondAppForTurn =
+      explicitTurnContext || !developmentTurn
+        ? null
+        : selectedProjectLinkedOpenPondApp;
+    const hybridTargetForTurn =
+      !explicitTurnContext && developmentTurn && workspaceTarget === "hybrid";
     const shouldSelectSession = options.selectSession ?? true;
     const turnChatMessages = options.chatMessages ?? chatMessages;
-    const mentionedAppIdForTurn = options.session !== undefined ? null : mentionedAppId;
+    const mentionedAppIdForTurn =
+      options.session !== undefined ? null : mentionedAppId;
     const clearPromptForTurn =
       options.clearPrompt === undefined
         ? () => {
@@ -570,26 +661,53 @@ export function useChatActions({
     const actionMentionResolution = selectedAction
       ? null
       : resolveMentionedAction(value, selectedActionCatalog);
-    const selectedActionForTurn = selectedAction ?? actionMentionResolution?.action ?? null;
+    const selectedActionForTurn =
+      selectedAction ?? actionMentionResolution?.action ?? null;
     const actionPromptForRun = actionMentionResolution?.prompt || value;
-    const directCommandForTurn = selectedActionForTurn ? null : parseComposerDirectCommandPrompt(value);
+    const directCommandForTurn =
+      developmentTurn && !selectedActionForTurn
+        ? parseComposerDirectCommandPrompt(value)
+        : null;
     const parsedSlashCommandForTurn =
-      selectedActionForTurn || directCommandForTurn ? null : parseComposerSlashCommandPrompt(value);
-    const usageAttributionForTurn = options.usageAttribution ?? (
-      parsedSlashCommandForTurn
+      selectedActionForTurn || directCommandForTurn
+        ? null
+        : parseComposerSlashCommandPrompt(value);
+    const disallowedExperienceSlashCommand =
+      parsedSlashCommandForTurn &&
+      !developmentTurn &&
+      !(
+        experienceForTurn === "work" &&
+        parsedSlashCommandForTurn.command === "submit-issue"
+      )
+        ? parsedSlashCommandForTurn
+        : null;
+    const usageAttributionForTurn =
+      options.usageAttribution ??
+      (parsedSlashCommandForTurn
         ? {
             surface: "chat" as const,
             workflowKind: "slash_command" as const,
             commandName: `/${parsedSlashCommandForTurn.command}`,
             commandSource: "prompt_parse" as const,
           }
-        : undefined
-    );
+        : undefined);
     setError(null);
     let turnSessionId: string | null = null;
     let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
-      if (directCommandForTurn && providerForTurn !== "codex" && selectedSessionForTurn?.provider !== "codex") {
+      if (!developmentTurn && providerForTurn === "codex") {
+        throw new Error("The Codex provider is available in Development.");
+      }
+      if (disallowedExperienceSlashCommand) {
+        throw new Error(
+          `/${disallowedExperienceSlashCommand.command} is only available in Development.`
+        );
+      }
+      if (
+        directCommandForTurn &&
+        providerForTurn !== "codex" &&
+        selectedSessionForTurn?.provider !== "codex"
+      ) {
         if (attachments.length > 0) {
           throw new Error("Direct commands do not accept attachments.");
         }
@@ -604,7 +722,10 @@ export function useChatActions({
           selectSession: shouldSelectSession,
         });
       }
-      if (!explicitTurnContext && parsedSlashCommandForTurn?.command === "sync-cloud") {
+      if (
+        !explicitTurnContext &&
+        parsedSlashCommandForTurn?.command === "sync-cloud"
+      ) {
         return await runSyncCloudCommand({
           clearPromptForTurn,
           displayPrompt: displayPromptForTurn,
@@ -613,42 +734,55 @@ export function useChatActions({
         });
       }
       if (selectedActionForTurn) {
-          const selectedAgent = openPondAgentSlashCommandInfo(selectedActionForTurn);
-          if (selectedAgent) {
-            let session = selectedSessionForTurn;
-            if (!session || session.cloudProjectId !== selectedAgent.projectId) {
-              session = await api.createSession(connection, {
-                provider: "openpond",
-                modelRef: modelRefForTurn("openpond", modelForTurnValue, providerSettings),
-                openPondCommandAccessMode: commandAccessModeForProvider("openpond", openPondCommandAccessModeForTurn),
-                appId: null,
-                appName: null,
-                workspaceKind: "sandbox",
-                workspaceId: selectedAgent.projectId,
-                workspaceName: selectedAgent.projectName ?? selectedAgent.agentName,
-                localProjectId: null,
-                cloudProjectId: selectedAgent.projectId,
-                cloudTeamId: selectedAgent.teamId,
-                cwd: null,
-                title: displayPromptForTurn.slice(0, 64),
-              });
-              setSessions((current) => [session!, ...current]);
-              options.onSessionCreated?.(session);
+        const selectedAgent = openPondAgentSlashCommandInfo(
+          selectedActionForTurn
+        );
+        if (selectedAgent) {
+          let session = selectedSessionForTurn;
+          if (!session || session.cloudProjectId !== selectedAgent.projectId) {
+            session = await api.createSession(connection, {
+              provider: "openpond",
+              modelRef: modelRefForTurn(
+                "openpond",
+                modelForTurnValue,
+                providerSettings
+              ),
+              openPondCommandAccessMode: commandAccessModeForProvider(
+                "openpond",
+                openPondCommandAccessModeForTurn
+              ),
+              appId: null,
+              appName: null,
+              workspaceKind: "sandbox",
+              workspaceId: selectedAgent.projectId,
+              workspaceName:
+                selectedAgent.projectName ?? selectedAgent.agentName,
+              localProjectId: null,
+              cloudProjectId: selectedAgent.projectId,
+              cloudTeamId: selectedAgent.teamId,
+              cwd: null,
+              title: displayPromptForTurn.slice(0, 64),
+            });
+            setSessions((current) => [session!, ...current]);
+            options.onSessionCreated?.(session);
             if (shouldSelectSession) setSelectedSessionId(session.id);
-            const projectKey = projectSelectionKey("cloud", selectedAgent.projectId);
+            const projectKey = projectSelectionKey(
+              "cloud",
+              selectedAgent.projectId
+            );
             if (shouldSelectSession) setSelectedProjectId(projectKey);
             if (shouldSelectSession) expandProject(projectKey);
           }
-            const runPayload = await api.runSandboxAgent(
-              connection,
-              selectedAgent.agentId,
-              buildOpenPondAgentRunInput({
-                agent: selectedAgent,
-                attachments,
-                displayPrompt: displayPromptForTurn,
-                prompt: actionPromptForRun,
-              }),
-            );
+          const runPayload = await api.runSandboxAgent(
+            connection,
+            selectedAgent.agentId,
+            buildOpenPondAgentRunInput({
+              agent: selectedAgent,
+              attachments,
+              displayPrompt: displayPromptForTurn,
+              prompt: actionPromptForRun,
+            })
+          );
           const payload = await api.bootstrap(connection);
           applyBootstrapPayload(payload);
           clearPromptForTurn();
@@ -660,44 +794,53 @@ export function useChatActions({
                 prompt: displayPromptForTurn,
                 runPayload,
                 sessionId: session!.id,
-              }),
-            ),
+              })
+            )
           );
           return true;
         }
 
-        const selectedProfileAction = openPondProfileActionInfo(selectedActionForTurn);
+        const selectedProfileAction = openPondProfileActionInfo(
+          selectedActionForTurn
+        );
         if (selectedProfileAction) {
           let session = selectedSessionForTurn;
           if (!session || session.provider !== "openpond") {
             session = await api.createSession(connection, {
               provider: "openpond",
-              modelRef: modelRefForTurn("openpond", modelForTurnValue, providerSettings),
-              openPondCommandAccessMode: commandAccessModeForProvider("openpond", openPondCommandAccessModeForTurn),
+              modelRef: modelRefForTurn(
+                "openpond",
+                modelForTurnValue,
+                providerSettings
+              ),
+              openPondCommandAccessMode: commandAccessModeForProvider(
+                "openpond",
+                openPondCommandAccessModeForTurn
+              ),
               appId: null,
               appName: null,
               workspaceId: null,
-                workspaceName: "OpenPond profile",
-                localProjectId: null,
-                cloudProjectId: null,
-                cloudTeamId: null,
-                cwd: null,
-                title: displayPromptForTurn.slice(0, 64),
-              });
+              workspaceName: "OpenPond profile",
+              localProjectId: null,
+              cloudProjectId: null,
+              cloudTeamId: null,
+              cwd: null,
+              title: displayPromptForTurn.slice(0, 64),
+            });
             setSessions((current) => [session!, ...current]);
             options.onSessionCreated?.(session);
             if (shouldSelectSession) setSelectedSessionId(session.id);
           }
-            await api.runProfileAction(
-              connection,
-              buildOpenPondProfileActionRunInput({
-                action: selectedProfileAction,
-                attachments,
-                displayPrompt: displayPromptForTurn,
-                prompt: actionPromptForRun,
-                sessionId: session.id,
-              }),
-            );
+          await api.runProfileAction(
+            connection,
+            buildOpenPondProfileActionRunInput({
+              action: selectedProfileAction,
+              attachments,
+              displayPrompt: displayPromptForTurn,
+              prompt: actionPromptForRun,
+              sessionId: session.id,
+            })
+          );
           const payload = await api.bootstrap(connection);
           applyBootstrapPayload(payload);
           clearPromptForTurn();
@@ -710,25 +853,34 @@ export function useChatActions({
           selectedProject,
         });
         if (!actionProjectTarget) {
-          throw new Error("Select a Project linked to an OpenPond Cloud Project before running an action.");
+          throw new Error(
+            "Select a Project linked to an OpenPond Cloud Project before running an action."
+          );
         }
         let session = selectedSessionForTurn;
         if (!session || session.cloudProjectId !== actionProjectTarget.id) {
           session = await api.createSession(connection, {
             provider: "openpond",
-            modelRef: modelRefForTurn("openpond", modelForTurnValue, providerSettings),
-            openPondCommandAccessMode: commandAccessModeForProvider("openpond", openPondCommandAccessModeForTurn),
+            modelRef: modelRefForTurn(
+              "openpond",
+              modelForTurnValue,
+              providerSettings
+            ),
+            openPondCommandAccessMode: commandAccessModeForProvider(
+              "openpond",
+              openPondCommandAccessModeForTurn
+            ),
             appId: null,
             appName: null,
             workspaceKind: "sandbox",
             workspaceId: actionProjectTarget.id,
-              workspaceName: actionProjectTarget.name,
-              localProjectId: actionProjectTarget.localProjectId,
-              cloudProjectId: actionProjectTarget.id,
-              cloudTeamId: actionProjectTarget.teamId,
-              cwd: null,
-              title: displayPromptForTurn.slice(0, 64),
-            });
+            workspaceName: actionProjectTarget.name,
+            localProjectId: actionProjectTarget.localProjectId,
+            cloudProjectId: actionProjectTarget.id,
+            cloudTeamId: actionProjectTarget.teamId,
+            cwd: null,
+            title: displayPromptForTurn.slice(0, 64),
+          });
           setSessions((current) => [session!, ...current]);
           options.onSessionCreated?.(session);
           if (shouldSelectSession) {
@@ -737,22 +889,25 @@ export function useChatActions({
             expandProject(actionProjectTarget.selectionKey);
           }
         }
-        const agent = await sandboxAgentForProject(actionProjectTarget.id, actionProjectTarget.teamId);
+        const agent = await sandboxAgentForProject(
+          actionProjectTarget.id,
+          actionProjectTarget.teamId
+        );
         if (!agent) {
           throw new Error("No OpenPond Agent is available for this Project.");
         }
         clearPromptForTurn();
-          const runPayload = await api.runSandboxAgent(
-            connection,
-            agent.id,
-            buildOpenPondAppActionRunInput({
-              action: selectedActionForTurn,
-              attachments,
-              displayPrompt: displayPromptForTurn,
-              prompt: actionPromptForRun,
-              teamId: actionProjectTarget.teamId,
-            }),
-          );
+        const runPayload = await api.runSandboxAgent(
+          connection,
+          agent.id,
+          buildOpenPondAppActionRunInput({
+            action: selectedActionForTurn,
+            attachments,
+            displayPrompt: displayPromptForTurn,
+            prompt: actionPromptForRun,
+            teamId: actionProjectTarget.teamId,
+          })
+        );
         const payload = await api.bootstrap(connection);
         applyBootstrapPayload(payload);
         setEvents((current) =>
@@ -763,8 +918,8 @@ export function useChatActions({
               prompt: displayPromptForTurn,
               runPayload,
               sessionId: session!.id,
-            }),
-          ),
+            })
+          )
         );
         return true;
       }
@@ -781,17 +936,24 @@ export function useChatActions({
         activeTurnSessionIdsRef.current.add(turnSessionId);
         onPendingUserMessage?.(pendingUserMessage);
         onCodexHistoryTurnActivityChange?.(turnSessionId, true);
-        const optimisticStartedEvent = optimisticCodexHistoryTurnStartedEvent(session.id, value);
+        const optimisticStartedEvent = optimisticCodexHistoryTurnStartedEvent(
+          session.id,
+          value
+        );
         const applyOptimisticEvent = (event: RuntimeEvent) => {
           if (!explicitTurnContext || selectedSession?.id === session!.id) {
-            setCodexHistoryEvents((current) => appendRuntimeEventIfMissing(current, event));
+            setCodexHistoryEvents((current) =>
+              appendRuntimeEventIfMissing(current, event)
+            );
           }
           options.onCodexHistoryOptimisticEvent?.(event);
         };
         applyOptimisticEvent(optimisticStartedEvent);
         setCodexHistorySessions((current) =>
           current.map((candidate) =>
-            candidate.id === session!.id ? { ...candidate, status: "active" } : candidate
+            candidate.id === session!.id
+              ? { ...candidate, status: "active" }
+              : candidate
           )
         );
         const payload = await api
@@ -799,20 +961,29 @@ export function useChatActions({
             prompt: value,
             attachments: attachments.length > 0 ? attachments : undefined,
             model: modelForTurn("codex", modelForTurnValue, providerSettings),
-            modelRef: modelRefForTurn("codex", modelForTurnValue, providerSettings),
+            modelRef: modelRefForTurn(
+              "codex",
+              modelForTurnValue,
+              providerSettings
+            ),
             ...codexPermissionTurnInput(codexPermissionMode),
             codexPermissionMode,
             codexReasoningEffort,
           })
           .catch((codexHistoryError) => {
-            applyOptimisticEvent(optimisticCodexHistoryTurnFailedEvent(optimisticStartedEvent, codexHistoryError));
+            applyOptimisticEvent(
+              optimisticCodexHistoryTurnFailedEvent(
+                optimisticStartedEvent,
+                codexHistoryError
+              )
+            );
             throw codexHistoryError;
           });
         if (!explicitTurnContext || selectedSession?.id === session.id) {
           setCodexHistoryEvents(payload.events);
         }
         setCodexHistorySessions((current) =>
-          upsertSessionPreservingLocalSidebarState(current, payload.session),
+          upsertSessionPreservingLocalSidebarState(current, payload.session)
         );
         onCodexHistoryTurnPayload?.(payload);
         const refreshedBootstrap = await api.bootstrap(connection);
@@ -820,15 +991,32 @@ export function useChatActions({
         return true;
       }
       const selectedMentionedSandboxApp = mentionedAppIdForTurn
-        ? apps.find((app) => app.id === mentionedAppIdForTurn && promptContainsChatAppMention(promptForTurn, app) && app.sandbox) ?? null
+        ? apps.find(
+            (app) =>
+              app.id === mentionedAppIdForTurn &&
+              promptContainsChatAppMention(promptForTurn, app) &&
+              app.sandbox
+          ) ?? null
         : null;
       const mentionedSandboxApp =
-        selectedMentionedSandboxApp ?? resolveMentionedSandboxChatApp(promptForTurn, sandboxMentionApps(apps));
-      const mentionedConnectedApps = resolveMentionedConnectedApps(promptForTurn, connectedAppMentions)
-        .map((option) => option.ref);
+        selectedMentionedSandboxApp ??
+        resolveMentionedSandboxChatApp(promptForTurn, sandboxMentionApps(apps));
+      const mentionedConnectedApps =
+        experienceForTurn === "chat"
+          ? []
+          : resolveMentionedConnectedApps(
+              promptForTurn,
+              connectedAppMentions
+            ).map((option) => option.ref);
       if (!session) {
-        const sessionAppId = selectedProjectLinkedOpenPondAppForTurn?.appId ?? selectedAppForTurn?.id ?? null;
-        const sessionAppName = selectedProjectLinkedOpenPondAppForTurn?.appName ?? selectedAppForTurn?.name ?? null;
+        const sessionAppId =
+          selectedProjectLinkedOpenPondAppForTurn?.appId ??
+          selectedAppForTurn?.id ??
+          null;
+        const sessionAppName =
+          selectedProjectLinkedOpenPondAppForTurn?.appName ??
+          selectedAppForTurn?.name ??
+          null;
         const cloudProject = selectedCloudProjectForTurn;
         const confirmedCloudProject = explicitTurnContext
           ? null
@@ -844,72 +1032,115 @@ export function useChatActions({
           throw new Error(hybridWorkspaceTarget.message);
         }
         const useHybridWorkspace = hybridWorkspaceTarget?.kind === "ready";
-        const sessionProvider = useHybridWorkspace ? providerForTurn : cloudProject ? "openpond" : providerForTurn;
-        const sessionModelRef = modelRefForTurn(sessionProvider, modelForTurnValue, providerSettings);
+        const sessionProvider = useHybridWorkspace
+          ? providerForTurn
+          : cloudProject
+          ? "openpond"
+          : providerForTurn;
+        const sessionModelRef = modelRefForTurn(
+          sessionProvider,
+          modelForTurnValue,
+          providerSettings
+        );
         const sessionCommandAccessMode = commandAccessModeForProvider(
           sessionProvider,
-          openPondCommandAccessModeForTurn,
+          openPondCommandAccessModeForTurn
         );
         session = await api.createSession(
           connection,
           useHybridWorkspace
             ? {
-              ...buildHybridWorkspaceSessionRequest({
+                ...buildHybridWorkspaceSessionRequest({
                   modelRef: sessionModelRef,
                   provider: sessionProvider,
                   target: hybridWorkspaceTarget,
                   title: value.slice(0, 64),
                 }),
                 subagentDelegationMode,
-                ...(sessionCommandAccessMode ? { openPondCommandAccessMode: sessionCommandAccessMode } : {}),
+                ...(sessionCommandAccessMode
+                  ? { openPondCommandAccessMode: sessionCommandAccessMode }
+                  : {}),
               }
             : {
+                experience: experienceForTurn,
                 provider: sessionProvider,
                 modelRef: sessionModelRef,
                 subagentDelegationMode,
-                ...(sessionCommandAccessMode ? { openPondCommandAccessMode: sessionCommandAccessMode } : {}),
+                ...(sessionCommandAccessMode
+                  ? { openPondCommandAccessMode: sessionCommandAccessMode }
+                  : {}),
                 appId: sessionAppId,
                 appName: sessionAppName,
                 workspaceKind: cloudProject
                   ? "sandbox"
                   : selectedProjectForTurn
-                    ? "local_project"
-                    : selectedAppForTurn
-                      ? "sandbox_app"
-                      : undefined,
-                workspaceId: selectedProjectForTurn?.id ?? (selectedAppForTurn ? sessionAppId : undefined),
-                workspaceName: cloudProject?.name ?? selectedProjectForTurn?.name ?? sessionAppName,
+                  ? "local_project"
+                  : selectedAppForTurn
+                  ? "sandbox_app"
+                  : undefined,
+                workspaceId:
+                  selectedProjectForTurn?.id ??
+                  (selectedAppForTurn ? sessionAppId : undefined),
+                workspaceName:
+                  cloudProject?.name ??
+                  selectedProjectForTurn?.name ??
+                  sessionAppName,
                 localProjectId: selectedProjectForTurn?.id ?? null,
-                cloudProjectId: cloudProject?.id ?? confirmedCloudProject?.id ?? null,
-                cloudTeamId: cloudProject?.teamId ?? confirmedCloudProject?.teamId ?? null,
-                cwd: selectedProjectForTurn ? selectedProjectForTurn.workspacePath : null,
+                cloudProjectId:
+                  cloudProject?.id ?? confirmedCloudProject?.id ?? null,
+                cloudTeamId:
+                  cloudProject?.teamId ?? confirmedCloudProject?.teamId ?? null,
+                cwd: selectedProjectForTurn
+                  ? selectedProjectForTurn.workspacePath
+                  : null,
                 title: value.slice(0, 64),
-              },
+              }
         );
         setSessions((current) => [session!, ...current]);
         options.onSessionCreated?.(session);
         if (shouldSelectSession) {
           setSelectedSessionId(session.id);
-          if (cloudProject) setSelectedProjectId(projectSelectionKey("cloud", cloudProject.id));
-          if (session.workspaceKind === "local_project" && session.workspaceId) {
+          if (cloudProject)
+            setSelectedProjectId(projectSelectionKey("cloud", cloudProject.id));
+          if (
+            session.workspaceKind === "local_project" &&
+            session.workspaceId
+          ) {
             expandProject(projectSelectionKey("local", session.workspaceId));
           }
-          if (cloudProject) expandProject(projectSelectionKey("cloud", cloudProject.id));
+          if (cloudProject)
+            expandProject(projectSelectionKey("cloud", cloudProject.id));
         }
       }
-      if (isCloudWorkspaceKind(session.workspaceKind) && session.provider !== "openpond" && !isHybridWorkspaceSession(session)) {
-        throw new Error("Cloud workspaces use OpenPond Chat. Switch to Local to use local providers.");
+      if (
+        session.experience === "development" &&
+        isCloudWorkspaceKind(session.workspaceKind) &&
+        session.provider !== "openpond" &&
+        !isHybridWorkspaceSession(session)
+      ) {
+        throw new Error(
+          "Cloud workspaces use OpenPond Chat. Switch to Local to use local providers."
+        );
       }
-      if (isCloudWorkspaceKind(session.workspaceKind) && ensureCloudSessionReady) {
+      if (
+        session.experience === "development" &&
+        isCloudWorkspaceKind(session.workspaceKind) &&
+        ensureCloudSessionReady
+      ) {
         try {
           session = await ensureCloudSessionReady(session);
         } catch (preflightError) {
-          const message = preflightError instanceof Error ? preflightError.message : String(preflightError);
+          const message =
+            preflightError instanceof Error
+              ? preflightError.message
+              : String(preflightError);
           await api
             .recordPreflightTurnFailure(connection, session.id, {
               prompt: value,
               error: message,
-              target: isHybridWorkspaceSession(session) ? "hybrid_sandbox" : "cloud_workspace",
+              target: isHybridWorkspaceSession(session)
+                ? "hybrid_sandbox"
+                : "cloud_workspace",
             })
             .then(applyBootstrapPayload)
             .catch(() => undefined);
@@ -928,7 +1159,9 @@ export function useChatActions({
       onPendingUserMessage?.(pendingUserMessage);
       setSessions((current) =>
         current.map((candidate) =>
-          candidate.id === turnSessionId ? { ...candidate, status: "active" } : candidate
+          candidate.id === turnSessionId
+            ? { ...candidate, status: "active" }
+            : candidate
         )
       );
       const turnProvider = providerForTurn;
@@ -940,7 +1173,7 @@ export function useChatActions({
       const turnSupportsReasoningEffort = providerModelSupportsReasoning(
         turnProvider,
         turnModelPayload.model ?? modelForTurnValue,
-        providerSettings,
+        providerSettings
       );
       const codexTurnPermissions =
         turnProvider === "codex"
@@ -953,27 +1186,41 @@ export function useChatActions({
         prompt: value,
         metadata: options.turnMetadata,
         attachments: attachments.length > 0 ? attachments : undefined,
-        mentionedAppIds: mentionedSandboxApp ? [mentionedSandboxApp.id] : undefined,
-        mentionedConnectedApps: mentionedConnectedApps.length > 0 ? mentionedConnectedApps : undefined,
+        mentionedAppIds: mentionedSandboxApp
+          ? [mentionedSandboxApp.id]
+          : undefined,
+        mentionedConnectedApps:
+          mentionedConnectedApps.length > 0
+            ? mentionedConnectedApps
+            : undefined,
         openPondActionCatalog:
           openPondActionCatalog.length > 0 ? openPondActionCatalog : undefined,
         usageAttribution: usageAttributionForTurn,
         ...turnModelPayload,
         ...codexTurnPermissions,
-        codexPermissionMode: turnProvider === "codex" ? codexPermissionMode : "default",
-        codexReasoningEffort: turnSupportsReasoningEffort ? codexReasoningEffort : undefined,
+        codexPermissionMode:
+          turnProvider === "codex" ? codexPermissionMode : "default",
+        codexReasoningEffort: turnSupportsReasoningEffort
+          ? codexReasoningEffort
+          : undefined,
       });
       const payload = await api.bootstrap(connection);
       applyBootstrapPayload(payload);
       const workspaceId = session.workspaceId ?? session.appId;
-      if (workspaceId && session.workspaceKind !== "sandbox" && session.workspaceKind !== "sandbox_template") {
+      if (
+        workspaceId &&
+        session.workspaceKind !== "sandbox" &&
+        session.workspaceKind !== "sandbox_template"
+      ) {
         void refreshWorkspace(workspaceId, false).then((state) => {
           if (state?.initialized) void refreshWorkspaceDiff(workspaceId);
         });
       }
       return true;
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : String(sendError));
+      setError(
+        sendError instanceof Error ? sendError.message : String(sendError)
+      );
       return false;
     } finally {
       if (turnSessionId) activeTurnSessionIdsRef.current.delete(turnSessionId);
@@ -1003,41 +1250,59 @@ export function useChatActions({
   }
 
   async function stopTurn(sessionId?: string | null): Promise<boolean> {
-    const fallbackActiveSessionId = activeTurnSessionIdsRef.current.values().next().value ?? null;
-    const activeSessionId = sessionId ?? selectedSession?.id ?? fallbackActiveSessionId;
+    const fallbackActiveSessionId =
+      activeTurnSessionIdsRef.current.values().next().value ?? null;
+    const activeSessionId =
+      sessionId ?? selectedSession?.id ?? fallbackActiveSessionId;
     if (!connection || !activeSessionId) return false;
     setError(null);
     if (isCodexHistorySessionId(activeSessionId)) {
       try {
-        const result = await api.interruptCodexHistoryTurn(connection, activeSessionId);
+        const result = await api.interruptCodexHistoryTurn(
+          connection,
+          activeSessionId
+        );
         if (!result.interrupted) {
           if (result.reason === "no_active_openpond_turn") {
-            const payload = await api.codexHistoryThread(connection, activeSessionId, { tail: true });
+            const payload = await api.codexHistoryThread(
+              connection,
+              activeSessionId,
+              { tail: true }
+            );
             const session = { ...payload.session, status: "idle" as const };
-            if (selectedSession?.id === activeSessionId) setCodexHistoryEvents(payload.events);
+            if (selectedSession?.id === activeSessionId)
+              setCodexHistoryEvents(payload.events);
             setCodexHistorySessions((current) =>
-              upsertSessionPreservingLocalSidebarState(current, session),
+              upsertSessionPreservingLocalSidebarState(current, session)
             );
             setError(
-              "OpenPond no longer has a live interrupt handle for this Codex history turn. The chat was marked idle so you can send again.",
+              "OpenPond no longer has a live interrupt handle for this Codex history turn. The chat was marked idle so you can send again."
             );
             return true;
           }
-          setError("This Codex history turn is still starting. Try stopping it again in a moment.");
+          setError(
+            "This Codex history turn is still starting. Try stopping it again in a moment."
+          );
           return false;
         }
-        const payload = await api.codexHistoryThread(connection, activeSessionId, { tail: true });
-        if (selectedSession?.id === activeSessionId) setCodexHistoryEvents(payload.events);
+        const payload = await api.codexHistoryThread(
+          connection,
+          activeSessionId,
+          { tail: true }
+        );
+        if (selectedSession?.id === activeSessionId)
+          setCodexHistoryEvents(payload.events);
         setCodexHistorySessions((current) =>
-          upsertSessionPreservingLocalSidebarState(current, payload.session),
+          upsertSessionPreservingLocalSidebarState(current, payload.session)
         );
         return true;
       } catch (stopError) {
-        const message = stopError instanceof Error ? stopError.message : String(stopError);
+        const message =
+          stopError instanceof Error ? stopError.message : String(stopError);
         setError(
           message === "Not found"
             ? "OpenPond could not find this Codex history session, so it cannot interrupt it here."
-            : message,
+            : message
         );
         return false;
       }
@@ -1048,7 +1313,9 @@ export function useChatActions({
       applyBootstrapPayload(payload);
       return true;
     } catch (stopError) {
-      setError(stopError instanceof Error ? stopError.message : String(stopError));
+      setError(
+        stopError instanceof Error ? stopError.message : String(stopError)
+      );
       return false;
     }
   }
@@ -1065,7 +1332,7 @@ export function useChatActions({
       | { type: "open_pull_request"; candidateId: string }
       | { type: "apply_candidate"; candidateId: string }
       | { type: "reject_candidate"; candidateId: string; reason: string | null }
-      | { type: "reconcile_pull_request"; candidateId: string },
+      | { type: "reconcile_pull_request"; candidateId: string }
   ): Promise<void> {
     if (!connection) {
       setError("OpenPond App server is not connected.");
@@ -1082,25 +1349,35 @@ export function useChatActions({
     applyBootstrapPayload(payload);
   }
 
-  async function approveCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+  async function approveCreateImproveRun(input: {
+    run: CreateImproveRun;
+  }): Promise<void> {
     await applyCreateImproveRunAction(input.run, { type: "approve_plan" });
   }
 
-  async function cancelCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
-    await applyCreateImproveRunAction(input.run, { type: "cancel", reason: null });
+  async function cancelCreateImproveRun(input: {
+    run: CreateImproveRun;
+  }): Promise<void> {
+    await applyCreateImproveRunAction(input.run, {
+      type: "cancel",
+      reason: null,
+    });
   }
 
   async function reviseCreateImproveRun(
     input: { run: CreateImproveRun },
-    revision: string,
+    revision: string
   ): Promise<void> {
-    await applyCreateImproveRunAction(input.run, { type: "revise_plan", revision });
+    await applyCreateImproveRunAction(input.run, {
+      type: "revise_plan",
+      revision,
+    });
   }
 
   async function answerCreateImproveQuestion(
     input: { run: CreateImproveRun },
     questionId: string,
-    answerValue: string,
+    answerValue: string
   ): Promise<void> {
     await applyCreateImproveRunAction(input.run, {
       type: "answer_question",
@@ -1109,17 +1386,21 @@ export function useChatActions({
     });
   }
 
-  async function pauseCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+  async function pauseCreateImproveRun(input: {
+    run: CreateImproveRun;
+  }): Promise<void> {
     await applyCreateImproveRunAction(input.run, { type: "pause" });
   }
 
-  async function resumeCreateImproveRun(input: { run: CreateImproveRun }): Promise<void> {
+  async function resumeCreateImproveRun(input: {
+    run: CreateImproveRun;
+  }): Promise<void> {
     await applyCreateImproveRunAction(input.run, { type: "resume" });
   }
 
   async function openCreateImprovePullRequest(
     input: { run: CreateImproveRun },
-    candidateId: string,
+    candidateId: string
   ): Promise<void> {
     await applyCreateImproveRunAction(input.run, {
       type: "open_pull_request",
@@ -1129,7 +1410,7 @@ export function useChatActions({
 
   async function applyCreateImproveCandidate(
     input: { run: CreateImproveRun },
-    candidateId: string,
+    candidateId: string
   ): Promise<void> {
     await applyCreateImproveRunAction(input.run, {
       type: "apply_candidate",
@@ -1139,7 +1420,7 @@ export function useChatActions({
 
   async function rejectCreateImproveCandidate(
     input: { run: CreateImproveRun },
-    candidateId: string,
+    candidateId: string
   ): Promise<void> {
     await applyCreateImproveRunAction(input.run, {
       type: "reject_candidate",
@@ -1150,7 +1431,7 @@ export function useChatActions({
 
   async function reconcileCreateImprovePullRequest(
     input: { run: CreateImproveRun },
-    candidateId: string,
+    candidateId: string
   ): Promise<void> {
     await applyCreateImproveRunAction(input.run, {
       type: "reconcile_pull_request",

@@ -96,6 +96,34 @@ describe("native tool call accumulator", () => {
     ]);
   });
 
+  test("replays malformed tool arguments as a valid empty object", () => {
+    const accumulator = new NativeToolCallAccumulator();
+    accumulator.append([
+      {
+        index: 0,
+        id: "call_1",
+        type: "function",
+        function: {
+          name: "submit_budget_decision",
+          arguments: '{"scenarioId":"cmo_train_1", invalid}',
+        },
+      } as any,
+    ]);
+
+    expect(
+      assistantMessageForNativeToolCalls("", accumulator.completed()).tool_calls,
+    ).toEqual([
+      {
+        id: "call_1",
+        type: "function",
+        function: {
+          name: "submit_budget_decision",
+          arguments: "{}",
+        },
+      },
+    ]);
+  });
+
   test("preserves opaque Responses reasoning items on assistant tool-call messages", () => {
     const reasoningItem = {
       type: "reasoning",

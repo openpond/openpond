@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld("openpond", {
   },
   files: {
     reveal: (payload: unknown) => ipcRenderer.invoke("openpond:file:reveal", payload),
+    saveAs: (payload: unknown) => ipcRenderer.invoke("openpond:file:saveAs", payload),
   },
   retryStartup: () => ipcRenderer.invoke("openpond:startup:retry"),
   openLogsFolder: () => ipcRenderer.invoke("openpond:logs:open"),

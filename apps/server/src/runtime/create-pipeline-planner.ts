@@ -24,7 +24,9 @@ export type ModelBackedCreateImprovePlannerInput = {
   modelRef?: ChatModelRef | null;
   requestId: string;
   signal: AbortSignal;
-  stream: (messages: HostedChatMessage[]) => AsyncGenerator<PlannerStreamDelta, void, unknown>;
+  stream: (
+    messages: HostedChatMessage[]
+  ) => AsyncGenerator<PlannerStreamDelta, void, unknown>;
 };
 
 export type CreateImprovePlannerInput = {
@@ -35,7 +37,7 @@ export type CreateImprovePlannerInput = {
 };
 
 export type CreateImprovePlanner = (
-  input: CreateImprovePlannerInput,
+  input: CreateImprovePlannerInput
 ) => Promise<CreateImproveRun>;
 
 const PlannerQuestionOptionSchema = z.object({
@@ -49,7 +51,7 @@ const PlannerQuestionSchema = z.object({
   id: z.string().trim().min(1).optional(),
   kind: z.preprocess(
     normalizePlannerQuestionKind,
-    z.enum(["single_choice", "free_text"]).default("single_choice"),
+    z.enum(["single_choice", "free_text"]).default("single_choice")
   ),
   title: z.string().trim().min(1),
   prompt: z.string().trim().min(1),
@@ -61,7 +63,7 @@ const PlannerSourcePlanItemSchema = z.object({
   path: z.string().trim().min(1),
   operation: z.preprocess(
     normalizePlannerSourcePlanOperation,
-    z.enum(["create", "update", "delete", "inspect"]),
+    z.enum(["create", "update", "delete", "inspect"])
   ),
   reason: z.string().trim().min(1),
 });
@@ -75,6 +77,8 @@ const PlannerCheckSchema = z.object({
 const PlannerPlanDecisionSchema = z.object({
   targetId: z.string().trim().min(1).optional().nullable(),
   targetName: z.string().trim().min(1).optional().nullable(),
+  agentId: z.string().trim().min(1).optional().nullable(),
+  agentName: z.string().trim().min(1).optional().nullable(),
   summary: z.string().trim().min(1),
   capturedContextSummary: z.string().trim().min(1),
   actionShape: CreateImproveActionShapeSchema,
@@ -109,8 +113,16 @@ type PlannerDecision = z.infer<typeof PlannerDecisionSchema>;
 type PlannerPlanDecision = z.infer<typeof PlannerPlanDecisionSchema>;
 
 export async function runModelBackedCreateImprovePlanner(
-  input: ModelBackedCreateImprovePlannerInput,
+  input: ModelBackedCreateImprovePlannerInput
 ): Promise<CreateImproveRun> {
+  const labDecision = labImprovePlanDecision(input.run);
+  if (labDecision) {
+    return createImproveRunFromPlannerDecision({
+      run: input.run,
+      decision: labDecision,
+      modelRef: null,
+    });
+  }
   const messages = createImprovePlannerMessages(input.run);
   const content = await collectPlannerText(input.stream, messages);
   let decision: PlannerDecision;
@@ -122,12 +134,17 @@ export async function runModelBackedCreateImprovePlanner(
       invalidContent: content,
       error,
     });
-    const repairedContent = await collectPlannerText(input.stream, repairMessages);
+    const repairedContent = await collectPlannerText(
+      input.stream,
+      repairMessages
+    );
     try {
       decision = parsePlannerDecision(repairedContent);
     } catch (repairError) {
       throw new Error(
-        `Create/Improve planner repair failed: ${plannerErrorSummary(repairError)}; initial error: ${plannerErrorSummary(error)}`,
+        `Create/Improve planner repair failed: ${plannerErrorSummary(
+          repairError
+        )}; initial error: ${plannerErrorSummary(error)}`
       );
     }
   }
@@ -140,7 +157,7 @@ export async function runModelBackedCreateImprovePlanner(
 
 async function collectPlannerText(
   stream: ModelBackedCreateImprovePlannerInput["stream"],
-  messages: HostedChatMessage[],
+  messages: HostedChatMessage[]
 ): Promise<string> {
   let content = "";
   for await (const delta of stream(messages)) {
@@ -184,7 +201,7 @@ export function createBlockedCreateImprovePlannerRun(input: {
 function createQuestionRun(
   run: CreateImproveRun,
   decision: Extract<PlannerDecision, { decision: "questions" }>,
-  modelRef: ChatModelRef | null,
+  modelRef: ChatModelRef | null
 ): CreateImproveRun {
   const timestamp = new Date().toISOString();
   const questions = decision.questions.map((question, index) =>
@@ -204,7 +221,7 @@ function createQuestionRun(
       })),
       answer: null,
       metadata: {},
-    }),
+    })
   );
   return nextCreateImproveRunRevision(run, {
     state: "awaiting_questions",
@@ -227,22 +244,29 @@ function createQuestionRun(
 function createPlanRun(
   run: CreateImproveRun,
   decision: PlannerPlanDecision,
-  modelRef: ChatModelRef | null,
+  modelRef: ChatModelRef | null
 ): CreateImproveRun {
   const timestamp = new Date().toISOString();
   const planId = `create_improve_plan_${randomUUID()}`;
   const approvalId = `approval_${randomUUID()}`;
-  const target = plannedTarget(run.target, decision);
+  const target = plannedTarget(run.target, decision, run.objective);
   const sourceRoot = sourceRootForTarget(target);
   const actionShape = decision.actionShape;
-  const checks = decision.checks.length ? decision.checks : defaultChecks(target.kind);
+  const checks = decision.checks.length
+    ? decision.checks
+    : defaultChecks(target.kind);
   const sourcePlan = decision.sourcePlan.length
     ? decision.sourcePlan
     : defaultSourcePlan({ run: { ...run, target }, sourceRoot });
-  const defaultActionKey = decision.defaultChatAction?.key
-    ?? actionShape.defaultActionKey
-    ?? "chat";
-  const provenance = plannerProvenance(modelRef);
+  const defaultActionKey =
+    decision.defaultChatAction?.key ??
+    actionShape.defaultActionKey ??
+    (target.kind === "agent" ? target.defaultActionKey : null) ??
+    "chat";
+  const provenance =
+    run.surface === "lab_improve"
+      ? deterministicLabPlannerProvenance()
+      : plannerProvenance(modelRef);
   const plan = CreateImprovePlanSchema.parse({
     schemaVersion: "openpond.createImprove.plan.v1",
     id: planId,
@@ -266,15 +290,18 @@ function createPlanRun(
       ...provenance,
       target,
       actionShape,
-      actionShapeDecisionSource: run.surface === "lab_improve"
-        ? "lab_improve_default_planner"
-        : "model_planner",
+      actionShapeDecisionSource:
+        run.surface === "lab_improve"
+          ? "lab_improve_default_planner"
+          : "model_planner",
     },
     createdAt: timestamp,
     updatedAt: timestamp,
   });
   const answeredQuestions = run.questions.map((question) =>
-    question.status === "pending" ? { ...question, status: "skipped" as const } : question,
+    question.status === "pending"
+      ? { ...question, status: "skipped" as const }
+      : question
   );
 
   return nextCreateImproveRunRevision(run, {
@@ -298,18 +325,40 @@ function createPlanRun(
 function plannedTarget(
   target: CreateImproveTarget,
   decision: PlannerPlanDecision,
+  objective: string
 ): CreateImproveTarget {
+  const requestedId = decision.targetId ?? decision.agentId;
+  const requestedName = decision.targetName ?? decision.agentName;
+  if (target.kind !== "agent") {
+    return {
+      ...target,
+      id: target.id ?? requestedId ?? null,
+      displayName: target.displayName ?? requestedName ?? null,
+    };
+  }
+  const id =
+    normalizeTargetId(requestedId ?? "") ||
+    target.id ||
+    normalizeTargetId(requestedName ?? "") ||
+    targetIdFromObjective(objective);
+  const defaultActionKey =
+    target.id === id && target.defaultActionKey
+      ? target.defaultActionKey
+      : `${id}.chat`;
   return {
     ...target,
-    id: target.id ?? decision.targetId ?? null,
-    displayName: target.displayName ?? decision.targetName ?? null,
+    id,
+    displayName: requestedName ?? target.displayName,
+    defaultActionKey,
   };
 }
 
 function workflowCaptureForRun(run: CreateImproveRun) {
   if (run.workflowCapture) return run.workflowCapture;
   const timestamp = new Date().toISOString();
-  const outputArtifacts = uniqueNonEmpty(run.context.tools.flatMap((tool) => tool.artifactRefs));
+  const outputArtifacts = uniqueNonEmpty(
+    run.context.tools.flatMap((tool) => tool.artifactRefs)
+  );
   return CreateImproveWorkflowCaptureSchema.parse({
     schemaVersion: "openpond.createImprove.workflowCapture.v1",
     id: `workflow_capture_${randomUUID()}`,
@@ -320,7 +369,9 @@ function workflowCaptureForRun(run: CreateImproveRun) {
     attachments: run.context.attachments,
     apps: run.context.apps,
     tools: run.context.tools,
-    sideEffects: uniqueNonEmpty(run.context.tools.flatMap((tool) => tool.sideEffects)),
+    sideEffects: uniqueNonEmpty(
+      run.context.tools.flatMap((tool) => tool.sideEffects)
+    ),
     profileActions: uniqueNonEmpty(run.context.tools.map((tool) => tool.name)),
     externalProviders: uniqueNonEmpty([
       ...run.context.apps.map((app) => app.name),
@@ -329,26 +380,32 @@ function workflowCaptureForRun(run: CreateImproveRun) {
     environmentVariables: [],
     files: uniqueNonEmpty(
       run.context.attachments.map((attachment) =>
-        attachment.ref ? `${attachment.name} (${attachment.ref})` : attachment.name,
-      ),
+        attachment.ref
+          ? `${attachment.name} (${attachment.ref})`
+          : attachment.name
+      )
     ),
     schedules: [],
     webhooks: [],
     channelTargets: ["openpond_chat"],
     outputArtifacts,
     targetRepoAssumptions: run.context.targetRepoAssumptions,
-    traceRefs: outputArtifacts.filter((ref) => /\btrace\b|trace[:/-]/i.test(ref)),
+    traceRefs: outputArtifacts.filter((ref) =>
+      /\btrace\b|trace[:/-]/i.test(ref)
+    ),
     metadata: {
       source: "create_improve_model_planner",
       conversationId: run.scope.conversationId,
-      workItemId: run.scope.workItemId,
       projectId: run.scope.projectId,
     },
     createdAt: timestamp,
   });
 }
 
-function defaultSourcePlan(input: { run: CreateImproveRun; sourceRoot: string }) {
+function defaultSourcePlan(input: {
+  run: CreateImproveRun;
+  sourceRoot: string;
+}) {
   if (input.run.operation === "improve" && input.run.target.id) {
     return [
       {
@@ -377,7 +434,15 @@ function defaultSourcePlan(input: { run: CreateImproveRun; sourceRoot: string })
   ];
 }
 
-function defaultChecks(_kind: CreateImproveTarget["kind"]) {
+function defaultChecks(kind: CreateImproveTarget["kind"]) {
+  if (kind === "agent") {
+    return [
+      { name: "inspect", command: "pnpm agent:inspect", required: true },
+      { name: "build", command: "pnpm build", required: true },
+      { name: "validate", command: "pnpm agent:validate", required: true },
+      { name: "eval", command: "pnpm agent:eval", required: true },
+    ];
+  }
   return [
     { name: "build", command: "pnpm build", required: true },
     { name: "validate", command: "pnpm run typecheck", required: true },
@@ -385,8 +450,10 @@ function defaultChecks(_kind: CreateImproveTarget["kind"]) {
 }
 
 function sourceRootForTarget(target: CreateImproveTarget): string {
-  const id = normalizeTargetId(target.id ?? target.displayName ?? "") || "draft";
-  if (target.kind === "agent") return id === "default" ? "agent" : `agents/${id}`;
+  const id =
+    normalizeTargetId(target.id ?? target.displayName ?? "") || "draft";
+  if (target.kind === "agent")
+    return id === "default" ? "agent" : `agents/${id}`;
   if (target.kind === "skill") return `skills/${target.skillName ?? id}`;
   if (target.kind === "extension") return `extensions/${id}`;
   if (target.kind === "model") return `training/models/${id}`;
@@ -405,7 +472,20 @@ function plannerProvenance(modelRef: ChatModelRef | null) {
   };
 }
 
-function createImprovePlannerMessages(run: CreateImproveRun): HostedChatMessage[] {
+function deterministicLabPlannerProvenance() {
+  return {
+    planner: {
+      kind: "deterministic",
+      source: "lab_improve_default_planner",
+      providerId: null,
+      modelId: null,
+    },
+  };
+}
+
+function createImprovePlannerMessages(
+  run: CreateImproveRun
+): HostedChatMessage[] {
   return [
     { role: "system", content: CREATE_IMPROVE_PLANNER_SYSTEM_PROMPT },
     {
@@ -417,7 +497,7 @@ function createImprovePlannerMessages(run: CreateImproveRun): HostedChatMessage[
             "Return only openpond.createImprove.plannerDecision.v1 JSON. Ask questions only when the user cannot approve a meaningful plan yet.",
         },
         null,
-        2,
+        2
       ),
     },
   ];
@@ -430,7 +510,10 @@ function createImprovePlannerRepairMessages(input: {
 }): HostedChatMessage[] {
   return [
     ...input.messages,
-    { role: "assistant", content: truncatePlannerContent(input.invalidContent) },
+    {
+      role: "assistant",
+      content: truncatePlannerContent(input.invalidContent),
+    },
     {
       role: "user",
       content: [
@@ -449,12 +532,17 @@ function createImprovePlannerRepairMessages(input: {
 
 function parsePlannerDecision(content: string): PlannerDecision {
   const jsonText = extractJsonObject(content);
-  if (!jsonText) throw new Error("Create/Improve planner returned no JSON decision.");
+  if (!jsonText)
+    throw new Error("Create/Improve planner returned no JSON decision.");
   try {
-    return PlannerDecisionSchema.parse(normalizePlannerDecision(JSON.parse(jsonText)));
+    return PlannerDecisionSchema.parse(
+      normalizePlannerDecision(JSON.parse(jsonText))
+    );
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw new Error(`Create/Improve planner returned invalid JSON: ${error.message}`);
+      throw new Error(
+        `Create/Improve planner returned invalid JSON: ${error.message}`
+      );
     }
     throw error;
   }
@@ -462,13 +550,14 @@ function parsePlannerDecision(content: string): PlannerDecision {
 
 function normalizePlannerDecision(value: unknown): unknown {
   if (!isRecord(value)) return value;
-  const decision = value.decision === "questions" || value.decision === "plan"
-    ? value.decision
-    : Array.isArray(value.questions)
+  const decision =
+    value.decision === "questions" || value.decision === "plan"
+      ? value.decision
+      : Array.isArray(value.questions)
       ? "questions"
       : isRecord(value.plan)
-        ? "plan"
-        : value.decision;
+      ? "plan"
+      : value.decision;
   const normalized: Record<string, unknown> = {
     ...value,
     schemaVersion: "openpond.createImprove.plannerDecision.v1",
@@ -478,6 +567,53 @@ function normalizePlannerDecision(value: unknown): unknown {
     normalized.questions = value.questions.map(normalizePlannerQuestion);
   }
   return normalized;
+}
+
+function labImprovePlanDecision(run: CreateImproveRun): PlannerDecision | null {
+  if (run.operation !== "improve" || run.surface !== "lab_improve") {
+    return null;
+  }
+  const targetName = run.target.displayName ?? run.target.id ?? "Agent";
+  const accountHealth =
+    run.target.id === "account-health-agent" ||
+    /account health|renewal risk|weekly account review/i.test(run.objective);
+  const defaultActionKey =
+    run.target.kind === "agent"
+      ? run.target.defaultActionKey ?? `${run.target.id ?? "default"}.chat`
+      : "chat";
+  return PlannerDecisionSchema.parse({
+    schemaVersion: "openpond.createImprove.plannerDecision.v1",
+    decision: "plan",
+    plan: {
+      targetId: run.target.id,
+      targetName,
+      summary: `Improve ${targetName}: ${run.objective}`,
+      capturedContextSummary:
+        "The user supplied the desired outcome in Lab. Inspect the existing Profile source and choose the narrowest implementation that achieves it.",
+      actionShape: {
+        mode: accountHealth ? "chat_and_direct_actions" : "chat",
+        label: accountHealth ? "Account health chat and reviews" : "Chat",
+        detail: accountHealth
+          ? "Preserve chat plus the account summary, renewal triage, and weekly review actions while applying the correction."
+          : "Preserve the Agent's existing chat surface while improving the requested behavior.",
+        defaultActionKey,
+        directActionHint: accountHealth
+          ? "Preserve summarize-account, triage-renewal-risk, and build-weekly-account-review with their existing inputs and artifacts."
+          : null,
+        artifactPolicy: accountHealth
+          ? "Keep the source diff, checks, evaluations, and weekly-review Markdown and JSON artifacts with the candidate for review."
+          : "Keep the source diff, checks, and evaluation evidence with the candidate for review.",
+      },
+      defaultChatAction: {
+        key: defaultActionKey,
+        label: targetName,
+        required: true,
+      },
+      sourcePlan: [],
+      requirements: [],
+      checks: [],
+    },
+  });
 }
 
 function normalizePlannerQuestion(value: unknown, index: number): unknown {
@@ -501,10 +637,11 @@ function normalizePlannerQuestion(value: unknown, index: number): unknown {
     value.text,
     value.description,
     value.label,
-    value.title,
+    value.title
   );
-  const title = firstNonEmptyString(value.title, value.label)
-    ?? (prompt ? plannerQuestionTitle(prompt, index) : null);
+  const title =
+    firstNonEmptyString(value.title, value.label) ??
+    (prompt ? plannerQuestionTitle(prompt, index) : null);
   return {
     ...value,
     kind: value.kind ?? (options.length ? "single_choice" : "free_text"),
@@ -521,7 +658,12 @@ function normalizePlannerQuestionOption(value: unknown): unknown {
     return { label, value: label };
   }
   if (!isRecord(value)) return value;
-  const label = firstNonEmptyString(value.label, value.name, value.title, value.value);
+  const label = firstNonEmptyString(
+    value.label,
+    value.name,
+    value.title,
+    value.value
+  );
   return {
     ...value,
     label,
@@ -535,7 +677,9 @@ function plannerQuestionTitle(prompt: string, index: number): string {
     .replace(/[?.!]+$/g, "")
     .trim();
   if (!normalized) return `Question ${index + 1}`;
-  return normalized.length <= 64 ? normalized : `${normalized.slice(0, 61).trimEnd()}...`;
+  return normalized.length <= 64
+    ? normalized
+    : `${normalized.slice(0, 61).trimEnd()}...`;
 }
 
 function firstNonEmptyString(...values: unknown[]): string | null {
@@ -565,44 +709,101 @@ function truncatePlannerContent(content: string): string {
 function normalizePlannerQuestionKind(value: unknown): unknown {
   if (value == null || value === "") return undefined;
   if (typeof value !== "string") return value;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if ([
-    "single_choice",
-    "single_select",
-    "single",
-    "choice",
-    "select",
-    "select_one",
-    "radio",
-    "dropdown",
-    "multiple_choice",
-    "multi_choice",
-    "multi_select",
-    "multiple_select",
-    "checkbox",
-    "checkboxes",
-  ].includes(normalized)) return "single_choice";
-  if ([
-    "free_text",
-    "text",
-    "freeform",
-    "free_form",
-    "open_text",
-    "open_ended",
-    "short_answer",
-    "textarea",
-    "string",
-  ].includes(normalized)) return "free_text";
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (
+    [
+      "single_choice",
+      "single_select",
+      "single",
+      "choice",
+      "select",
+      "select_one",
+      "radio",
+      "dropdown",
+      "multiple_choice",
+      "multi_choice",
+      "multi_select",
+      "multiple_select",
+      "checkbox",
+      "checkboxes",
+    ].includes(normalized)
+  )
+    return "single_choice";
+  if (
+    [
+      "free_text",
+      "text",
+      "freeform",
+      "free_form",
+      "open_text",
+      "open_ended",
+      "short_answer",
+      "textarea",
+      "string",
+    ].includes(normalized)
+  )
+    return "free_text";
   return value;
 }
 
 function normalizePlannerSourcePlanOperation(value: unknown): unknown {
   if (value == null || value === "" || typeof value !== "string") return value;
-  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
-  if (["create", "add", "author", "build", "generate", "implement", "init", "initialize", "materialize", "new", "scaffold", "write", "write_file"].includes(normalized)) return "create";
-  if (["update", "change", "configure", "edit", "enable", "modify", "patch", "register", "replace", "revise", "set", "upsert"].includes(normalized)) return "update";
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (
+    [
+      "create",
+      "add",
+      "author",
+      "build",
+      "generate",
+      "implement",
+      "init",
+      "initialize",
+      "materialize",
+      "new",
+      "scaffold",
+      "write",
+      "write_file",
+    ].includes(normalized)
+  )
+    return "create";
+  if (
+    [
+      "update",
+      "change",
+      "configure",
+      "edit",
+      "enable",
+      "modify",
+      "patch",
+      "register",
+      "replace",
+      "revise",
+      "set",
+      "upsert",
+    ].includes(normalized)
+  )
+    return "update";
   if (["delete", "remove", "unlink"].includes(normalized)) return "delete";
-  if (["inspect", "audit", "check", "discover", "read", "review", "validate", "verify"].includes(normalized)) return "inspect";
+  if (
+    [
+      "inspect",
+      "audit",
+      "check",
+      "discover",
+      "read",
+      "review",
+      "validate",
+      "verify",
+    ].includes(normalized)
+  )
+    return "inspect";
   return value;
 }
 
@@ -614,6 +815,17 @@ function extractJsonObject(content: string): string | null {
   const start = candidate.indexOf("{");
   const end = candidate.lastIndexOf("}");
   return start >= 0 && end > start ? candidate.slice(start, end + 1) : null;
+}
+
+function targetIdFromObjective(objective: string): string {
+  return normalizeTargetId(
+    objective
+      .toLowerCase()
+      .replace(/['"]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "created-agent"
+  );
 }
 
 function normalizeTargetId(value: string): string {
@@ -632,7 +844,9 @@ function providerNameFromTool(name: string): string {
 }
 
 function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
-  return Array.from(new Set(values.map((value) => value?.trim() ?? "").filter(Boolean)));
+  return Array.from(
+    new Set(values.map((value) => value?.trim() ?? "").filter(Boolean))
+  );
 }
 
 const CREATE_IMPROVE_PLANNER_SYSTEM_PROMPT = [

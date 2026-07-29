@@ -295,7 +295,6 @@ export function labWorkproductProjection(input: {
   }
 
   for (const run of input.runs) {
-    if (run.target.kind === "agent") continue;
     if (run.target.kind === "configuration" || run.target.kind === "unselected")
       continue;
     if (
@@ -312,7 +311,9 @@ export function labWorkproductProjection(input: {
     const key = workproductKey(kind, id);
     const existing = byKey.get(key);
     const candidateName =
-      kind === "model" && stableModelProjectIds.has(id)
+      kind === "agent"
+        ? agentWorkproductName(run, existing?.name ?? null)
+        : kind === "model" && stableModelProjectIds.has(id)
         ? existing?.name ?? run.target.displayName ?? draftName(run)
         : run.target.displayName ?? existing?.name ?? draftName(run);
     const name =
@@ -362,7 +363,6 @@ export function labWorkproductProjection(input: {
   });
 }
 
-
 function lifecycleModelRunStatus(
   status: "prepared" | "running" | "succeeded" | "failed" | "cancelled"
 ): string {
@@ -407,6 +407,38 @@ function hasActiveRun(
 function draftName(run: CreateImproveRun): string {
   const prefix = run.operation === "improve" ? "Improve" : "Create";
   return `${prefix} ${run.target.kind}`;
+}
+
+function agentWorkproductName(
+  run: CreateImproveRun,
+  profileName: string | null
+): string {
+  const targetName = meaningfulAgentName(run.target.displayName);
+  if (targetName) return targetName;
+  const persistedName = meaningfulAgentName(profileName);
+  if (persistedName) return persistedName;
+  const purposeClause = run.objective
+    .replace(
+      /^(?:please\s+)?(?:create|make|build|improve)\s+(?:an?\s+)?agent\s+(?:that\s+|to\s+)?/i,
+      ""
+    )
+    .trim();
+  const purposeTitle = conciseWorkproductName(purposeClause, "New agent");
+  return purposeTitle === "New agent"
+    ? purposeTitle
+    : `Agent for ${purposeTitle}`;
+}
+
+function meaningfulAgentName(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.toLowerCase().replace(/\s+/g, " ");
+  if (
+    /^(?:create|creating|improve|improving|new) (?:an )?agent$/.test(normalized)
+  ) {
+    return null;
+  }
+  return trimmed;
 }
 
 function runStatusLabel(run: CreateImproveRun): string {

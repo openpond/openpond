@@ -37,7 +37,6 @@ export type LocalOpenPondProfileCheckStatus = {
 export type LocalOpenPondProfileHostedSourceCheckStatus = {
   status: string;
   agentId?: string | null;
-  workItemId?: string | null;
   deployPlanStatus?: string | null;
   canRun?: boolean | null;
   canDeploy?: boolean | null;
@@ -510,7 +509,6 @@ function sanitizeHostedSourceCheckStatus(
   return {
     status,
     ...nullableStringProp(input, "agentId"),
-    ...nullableStringProp(input, "workItemId"),
     ...nullableStringProp(input, "deployPlanStatus"),
     ...nullableBooleanProp(input, "canRun"),
     ...nullableBooleanProp(input, "canDeploy"),

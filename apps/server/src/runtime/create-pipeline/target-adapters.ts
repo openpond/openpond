@@ -4,12 +4,30 @@ import {
   type CreateImproveEvaluationReceipt,
   type CreateImproveTarget,
 } from "@openpond/contracts";
+import {
+  applyApprovedLocalCreateImproveRun,
+  type LocalCreatePipelineCheckInput,
+  type LocalCreatePipelineCheckResult,
+} from "../local-create-pipeline.js";
 import type { RuntimeCodexSession } from "../../types.js";
-import type { GradeResult, RuntimeEvent, SendTurnRequest, Session, TaskAttemptResult, Taskset, Turn } from "@openpond/contracts";
+import type {
+  GradeResult,
+  RuntimeEvent,
+  SendTurnRequest,
+  Session,
+  TaskAttemptResult,
+  Taskset,
+  Turn,
+} from "@openpond/contracts";
+import { authorAgentImprovementCandidate } from "./agent-improvement.js";
 
 type CodexTurnInput = Pick<
   SendTurnRequest,
-  "approvalPolicy" | "sandbox" | "model" | "codexPermissionMode" | "codexReasoningEffort"
+  | "approvalPolicy"
+  | "sandbox"
+  | "model"
+  | "codexPermissionMode"
+  | "codexReasoningEffort"
 >;
 
 export type CreateImproveTargetExecutionContext = {
@@ -17,14 +35,25 @@ export type CreateImproveTargetExecutionContext = {
   turn: Turn;
   ensureCodexRuntime: (
     session: Session,
-    turnInput: CodexTurnInput,
+    turnInput: CodexTurnInput
   ) => Promise<RuntimeCodexSession>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   setProviderTurnId: (providerTurnId: string) => Promise<void>;
   onRun: (run: CreateImproveRun) => Promise<void>;
   model: string | null;
-  resolveTaskset?: (tasksetId: string, revision: number, contentHash: string) => Promise<Taskset | null>;
-  gradeTaskAttempt?: (input: { tasksetId: string; taskId: string; attempt: TaskAttemptResult }) => Promise<GradeResult>;
+  runChecks?: (
+    input: LocalCreatePipelineCheckInput
+  ) => Promise<LocalCreatePipelineCheckResult>;
+  resolveTaskset?: (
+    tasksetId: string,
+    revision: number,
+    contentHash: string
+  ) => Promise<Taskset | null>;
+  gradeTaskAttempt?: (input: {
+    tasksetId: string;
+    taskId: string;
+    attempt: TaskAttemptResult;
+  }) => Promise<GradeResult>;
 };
 
 export type CreateImproveTargetAdapter = {
@@ -35,18 +64,48 @@ export type CreateImproveTargetAdapter = {
     requirements: NonNullable<CreateImproveRun["plan"]>["requirements"];
   };
   allowedPaths(run: CreateImproveRun): string[];
-  checks(run: CreateImproveRun): NonNullable<CreateImproveRun["plan"]>["checks"];
+  checks(
+    run: CreateImproveRun
+  ): NonNullable<CreateImproveRun["plan"]>["checks"];
   evalRefs(run: CreateImproveRun): string[];
   canExecute(run: CreateImproveRun): boolean;
   execute(
     run: CreateImproveRun,
-    context: CreateImproveTargetExecutionContext,
+    context: CreateImproveTargetExecutionContext
   ): Promise<CreateImproveRun>;
   normalizeResult(run: CreateImproveRun): CreateImproveRun;
 };
 
+const agentTargetAdapter: CreateImproveTargetAdapter = {
+  kind: "agent",
+  planningContext: commonPlanningContext,
+  scaffold: commonScaffold,
+  allowedPaths: plannedPaths,
+  checks: plannedChecks,
+  evalRefs: (run) => run.context.evalRefs,
+  canExecute: (run) =>
+    run.target.kind === "agent" &&
+    run.adapter.kind === "local" &&
+    run.state === "applying_source" &&
+    run.plan?.status === "approved",
+  execute: (run, context) =>
+    run.operation === "improve"
+      ? authorAgentImprovementCandidate(run, context)
+      : applyApprovedLocalCreateImproveRun(run, {
+          session: context.session,
+          turn: context.turn,
+          ensureCodexRuntime: context.ensureCodexRuntime,
+          appendRuntimeEvent: context.appendRuntimeEvent,
+          setProviderTurnId: context.setProviderTurnId,
+          onSnapshot: context.onRun,
+          model: context.model,
+          runChecks: context.runChecks,
+        }),
+  normalizeResult: (run) => run,
+};
+
 const unsupportedSourceTargetAdapter = (
-  kind: Exclude<CreateImproveTarget["kind"], "model">,
+  kind: Exclude<CreateImproveTarget["kind"], "agent" | "model">
 ): CreateImproveTargetAdapter => ({
   kind,
   planningContext: commonPlanningContext,
@@ -58,9 +117,7 @@ const unsupportedSourceTargetAdapter = (
   execute: async (run) =>
     nextCreateImproveRunRevision(run, {
       state: "blocked",
-      blockedReason: kind === "agent"
-        ? "Agent Create/Improve runs are retired. Use a normal /agent authoring turn."
-        : `${kind} authoring is not registered in this OpenPond build.`,
+      blockedReason: `${kind} authoring is not registered in this OpenPond build.`,
       updatedAt: new Date().toISOString(),
     }),
   normalizeResult: (run) => run,
@@ -84,8 +141,11 @@ const modelTargetAdapter: CreateImproveTargetAdapter = {
   normalizeResult: (run) => run,
 };
 
-const TARGET_ADAPTERS = new Map<CreateImproveTarget["kind"], CreateImproveTargetAdapter>([
-  ["agent", unsupportedSourceTargetAdapter("agent")],
+const TARGET_ADAPTERS = new Map<
+  CreateImproveTarget["kind"],
+  CreateImproveTargetAdapter
+>([
+  ["agent", agentTargetAdapter],
   ["skill", unsupportedSourceTargetAdapter("skill")],
   ["extension", unsupportedSourceTargetAdapter("extension")],
   ["model", modelTargetAdapter],
@@ -94,10 +154,13 @@ const TARGET_ADAPTERS = new Map<CreateImproveTarget["kind"], CreateImproveTarget
 ]);
 
 export function createImproveTargetAdapter(
-  target: CreateImproveTarget,
+  target: CreateImproveTarget
 ): CreateImproveTargetAdapter {
   const adapter = TARGET_ADAPTERS.get(target.kind);
-  if (!adapter) throw new Error(`No Create/Improve target adapter is registered for ${target.kind}.`);
+  if (!adapter)
+    throw new Error(
+      `No Create/Improve target adapter is registered for ${target.kind}.`
+    );
   return adapter;
 }
 
@@ -122,7 +185,9 @@ export function attachModelTargetRefs(input: {
   timestamp?: string;
 }): CreateImproveRun {
   if (input.run.target.kind !== "model") {
-    throw new Error("Model refs can only be attached to a Model Create/Improve run.");
+    throw new Error(
+      "Model refs can only be attached to a Model Create/Improve run."
+    );
   }
   const currentTarget = input.run.target;
   const timestamp = input.timestamp ?? new Date().toISOString();
@@ -132,7 +197,7 @@ export function attachModelTargetRefs(input: {
     input.tasksetId !== input.run.tasksetRef.id
   ) {
     throw new Error(
-      `Model execution cannot replace approved Taskset ${input.run.tasksetRef.id} with ${input.tasksetId}.`,
+      `Model execution cannot replace approved Taskset ${input.run.tasksetRef.id} with ${input.tasksetId}.`
     );
   }
   const target = {
@@ -143,42 +208,44 @@ export function attachModelTargetRefs(input: {
       input.artifactId !== undefined
         ? input.artifactId
         : input.trainingJobId &&
-            input.trainingJobId !== currentTarget.trainingJobId
-          ? null
-          : currentTarget.artifactId,
+          input.trainingJobId !== currentTarget.trainingJobId
+        ? null
+        : currentTarget.artifactId,
   };
   const evaluationReceipts = (input.evaluations ?? []).map((evaluation) => ({
-    id: `model_eval_${input.run.id}_${input.trainingJobId ?? currentTarget.trainingJobId ?? input.run.revision + 1}_${evaluation.subject}`,
+    id: `model_eval_${input.run.id}_${
+      input.trainingJobId ??
+      currentTarget.trainingJobId ??
+      input.run.revision + 1
+    }_${evaluation.subject}`,
     evaluation,
   }));
   const candidateEvaluationReceiptIds = evaluationReceipts
     .filter(({ evaluation }) => evaluation.subject === "candidate")
     .map(({ id }) => id);
   const modelCandidates = input.run.candidates.filter(
-    (candidate) => candidate.target.kind === "model",
+    (candidate) => candidate.target.kind === "model"
   );
   const existingModelCandidate =
     modelCandidates.find(
       (candidate) =>
         candidate.target.kind === "model" &&
-        candidate.target.trainingJobId === target.trainingJobId,
+        candidate.target.trainingJobId === target.trainingJobId
     ) ??
     modelCandidates.find(
       (candidate) =>
         candidate.target.kind === "model" &&
         !candidate.target.trainingJobId &&
-        !candidate.target.artifactId,
+        !candidate.target.artifactId
     );
   const priorModelCandidate = modelCandidates.at(-1) ?? null;
   const modelCandidateId =
     existingModelCandidate?.id ??
-    (
-      modelCandidates.length && target.trainingJobId
-        ? `model_candidate_${input.run.id}_${target.trainingJobId}`
-        : `model_candidate_${input.run.id}`
-    );
+    (modelCandidates.length && target.trainingJobId
+      ? `model_candidate_${input.run.id}_${target.trainingJobId}`
+      : `model_candidate_${input.run.id}`);
   const updateModelCandidate = (
-    candidate: CreateImproveRun["candidates"][number],
+    candidate: CreateImproveRun["candidates"][number]
   ): CreateImproveRun["candidates"][number] => ({
     ...candidate,
     target,
@@ -191,7 +258,12 @@ export function attachModelTargetRefs(input: {
       ? [...new Set([...candidate.artifactRefs, target.artifactId])]
       : candidate.artifactRefs,
     evaluationReceiptRefs: candidateEvaluationReceiptIds.length
-      ? [...new Set([...candidate.evaluationReceiptRefs, ...candidateEvaluationReceiptIds])]
+      ? [
+          ...new Set([
+            ...candidate.evaluationReceiptRefs,
+            ...candidateEvaluationReceiptIds,
+          ]),
+        ]
       : candidate.evaluationReceiptRefs,
     updatedAt: timestamp,
     metadata: {
@@ -204,7 +276,8 @@ export function attachModelTargetRefs(input: {
     ? input.run.candidates.map((candidate) =>
         candidate.id === existingModelCandidate.id
           ? updateModelCandidate(candidate)
-          : candidate)
+          : candidate
+      )
     : [
         ...input.run.candidates,
         updateModelCandidate({
@@ -235,50 +308,67 @@ export function attachModelTargetRefs(input: {
     candidates,
     evaluationReceipts: evaluationReceipts.length
       ? [
-          ...input.run.evaluationReceipts.filter((receipt) => !evaluationReceipts.some(({ id }) => id === receipt.id)),
-          ...evaluationReceipts.map(({ id, evaluation }): CreateImproveEvaluationReceipt => ({
-            id,
-            candidateId: evaluation.subject === "candidate" ? modelCandidateId : null,
-            target,
-            evaluatorKind: "taskset",
-            subject: evaluation.subject,
-            sourceCommit: null,
-            sourceBranch: null,
-            tasksetId: input.run.tasksetRef?.id ?? null,
-            tasksetHash: input.run.tasksetRef?.contentHash ?? null,
-            taskAttemptRefs: evaluation.attemptRefs,
-            status: evaluation.evaluationComplete === false
-              ? "blocked" as const
-              : evaluation.failed === 0 && evaluation.total > 0
-                ? "passed" as const
-                : "failed" as const,
-            publishGate:
-              evaluation.evaluationComplete !== false &&
-              evaluation.failed === 0 &&
-              evaluation.total > 0
-                ? "passed" as const
-                : "failed" as const,
-            summaryCounts: {
-              total: evaluation.total,
-              passed: evaluation.passed,
-              failed: evaluation.failed,
-            },
-            evalRefs: evaluation.gradeRefs,
-            artifactRefs: target.artifactId ? [target.artifactId] : [],
-            summary: evaluation.evaluationComplete === false
-              ? `${evaluation.subject === "active" ? "Base" : "Trained"} frozen Taskset evaluation was blocked by ${evaluation.infrastructureFailureCount ?? 0} infrastructure failure${evaluation.infrastructureFailureCount === 1 ? "" : "s"}; no quality result was recorded.`
-              : `${evaluation.subject === "active" ? "Base" : "Trained"} frozen Taskset evaluation: ${evaluation.passed}/${evaluation.total} passed.`,
-            createdAt: timestamp,
-            metadata: {
-              trustedTasksetExecution: true,
-              tasksetRevision: input.run.tasksetRef?.revision ?? null,
-              gradeRefs: evaluation.gradeRefs,
-              executionContractHash: evaluation.executionContractHash,
-              evaluationComplete: evaluation.evaluationComplete ?? true,
-              infrastructureFailureCount:
-                evaluation.infrastructureFailureCount ?? 0,
-            },
-          })),
+          ...input.run.evaluationReceipts.filter(
+            (receipt) => !evaluationReceipts.some(({ id }) => id === receipt.id)
+          ),
+          ...evaluationReceipts.map(
+            ({ id, evaluation }): CreateImproveEvaluationReceipt => ({
+              id,
+              candidateId:
+                evaluation.subject === "candidate" ? modelCandidateId : null,
+              target,
+              evaluatorKind: "taskset",
+              subject: evaluation.subject,
+              sourceCommit: null,
+              sourceBranch: null,
+              tasksetId: input.run.tasksetRef?.id ?? null,
+              tasksetHash: input.run.tasksetRef?.contentHash ?? null,
+              taskAttemptRefs: evaluation.attemptRefs,
+              status:
+                evaluation.evaluationComplete === false
+                  ? ("blocked" as const)
+                  : evaluation.failed === 0 && evaluation.total > 0
+                  ? ("passed" as const)
+                  : ("failed" as const),
+              publishGate:
+                evaluation.evaluationComplete !== false &&
+                evaluation.failed === 0 &&
+                evaluation.total > 0
+                  ? ("passed" as const)
+                  : ("failed" as const),
+              summaryCounts: {
+                total: evaluation.total,
+                passed: evaluation.passed,
+                failed: evaluation.failed,
+              },
+              evalRefs: evaluation.gradeRefs,
+              artifactRefs: target.artifactId ? [target.artifactId] : [],
+              summary:
+                evaluation.evaluationComplete === false
+                  ? `${
+                      evaluation.subject === "active" ? "Base" : "Trained"
+                    } frozen Taskset evaluation was blocked by ${
+                      evaluation.infrastructureFailureCount ?? 0
+                    } infrastructure failure${
+                      evaluation.infrastructureFailureCount === 1 ? "" : "s"
+                    }; no quality result was recorded.`
+                  : `${
+                      evaluation.subject === "active" ? "Base" : "Trained"
+                    } frozen Taskset evaluation: ${evaluation.passed}/${
+                      evaluation.total
+                    } passed.`,
+              createdAt: timestamp,
+              metadata: {
+                trustedTasksetExecution: true,
+                tasksetRevision: input.run.tasksetRef?.revision ?? null,
+                gradeRefs: evaluation.gradeRefs,
+                executionContractHash: evaluation.executionContractHash,
+                evaluationComplete: evaluation.evaluationComplete ?? true,
+                infrastructureFailureCount:
+                  evaluation.infrastructureFailureCount ?? 0,
+              },
+            })
+          ),
         ]
       : input.run.evaluationReceipts,
     updatedAt: timestamp,
@@ -312,10 +402,12 @@ function plannedChecks(run: CreateImproveRun) {
 
 function mergeExternalModelRefs(
   run: CreateImproveRun,
-  target: Extract<CreateImproveTarget, { kind: "model" }>,
+  target: Extract<CreateImproveTarget, { kind: "model" }>
 ) {
   const byKey = new Map(
-    run.externalExecutionRefs.map((ref) => [`${ref.kind}:${ref.id}`, ref] as const),
+    run.externalExecutionRefs.map(
+      (ref) => [`${ref.kind}:${ref.id}`, ref] as const
+    )
   );
   if (target.trainingJobId) {
     byKey.set(`training_job:${target.trainingJobId}`, {

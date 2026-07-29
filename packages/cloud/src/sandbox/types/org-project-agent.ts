@@ -297,7 +297,6 @@ export type SandboxAgentManifestSnapshot = {
   buildStatus: string | null;
   validationStatus: string | null;
   evalStatus: string | null;
-  workItemId: string | null;
   taskRunId: string | null;
   traceArtifactRef: string | null;
   evalResultArtifactRef: string | null;
@@ -408,77 +407,7 @@ export type SandboxAgentSourceChecksRequestInput = {
   metadata?: Record<string, unknown>;
 };
 
-export type SandboxCodingWorkItem = Record<string, unknown> & {
-  id: string;
-};
-
-export type SandboxCodingWorkItemActivity = Record<string, unknown> & {
-  id: string;
-};
-
-export type SandboxCodingWorkItemMessage = Record<string, unknown> & {
-  id: string;
-};
-
-export type SandboxCodingWorkItemArtifact = Record<string, unknown> & {
-  id: string;
-  ref?: string | null;
-  kind?: string | null;
-};
-
-export type SandboxAgentEditWorkItemOpenInput = {
-  teamId: string;
-  projectId: string;
-  initialMessage?: string | null;
-  sourceRef?: string | null;
-  baseSha?: string | null;
-  createImproveRun?: Record<string, unknown> | null;
-};
-
-export type SandboxAgentEditWorkItemOpenResult = {
-  workItem: SandboxCodingWorkItem;
-  created: boolean;
-  detail?: Record<string, unknown>;
-};
-
-export type SandboxCodingWorkItemChatInput = {
-  teamId: string;
-  message: string;
-  mode?: "sync_cloud" | "queue_cloud";
-  sourceRef?: string | null;
-  baseSha?: string | null;
-  payload?: Record<string, unknown>;
-};
-
-export type SandboxCodingWorkItemChatResult = Record<string, unknown> & {
-  userMessage?: SandboxCodingWorkItemMessage;
-  assistantMessage?: SandboxCodingWorkItemMessage;
-  activity?: SandboxCodingWorkItemActivity;
-};
-
-export type SandboxCodingWorkItemBackgroundInput = {
-  teamId: string;
-  prompt?: string | null;
-  sourceRef?: string | null;
-  baseSha?: string | null;
-  sourceRuntimeId?: string | null;
-  sourceSandboxId?: string | null;
-  agentId?: string | null;
-  agentEdit?: Record<string, unknown> | null;
-  setup?: { commands: string[] } | null;
-  validation?: { commands: string[] } | null;
-  branchPolicy?: Record<string, unknown> | null;
-  payload?: Record<string, unknown>;
-};
-
-export type SandboxCodingWorkItemBackgroundResult = Record<string, unknown> & {
-  workItem?: SandboxCodingWorkItem;
-  activity?: SandboxCodingWorkItemActivity;
-};
-
-export type SandboxCodingWorkItemSourceCheckStatus = Record<string, unknown> & {
-  workItemId: string;
-  workItemStatus?: string | null;
+export type SandboxAgentSourceCheckStatus = Record<string, unknown> & {
   latestTaskRunId?: string | null;
   latestRuntimeId?: string | null;
   latestSandboxId?: string | null;
@@ -500,32 +429,8 @@ export type SandboxCodingWorkItemSourceCheckStatus = Record<string, unknown> & {
   publishBlockers?: string[];
 };
 
-export type SandboxCodingWorkItemStatusResult = {
-  workItem: SandboxCodingWorkItem;
-  activity: SandboxCodingWorkItemActivity[];
-  sourceCheckStatus: SandboxCodingWorkItemSourceCheckStatus;
-};
-
-export type SandboxCodingWorkItemPromotionInput = {
-  teamId: string;
-  ref: string;
-  metadata?: Record<string, unknown>;
-};
-
-export type SandboxCodingWorkItemActivityListInput = {
-  teamId: string;
-  limit?: number;
-};
-
-export type SandboxCodingWorkItemGetInput = {
-  teamId: string;
-  includeArchived?: boolean;
-};
-
-export type SandboxAgentSourceChecksRequestResult = {
-  workItem: SandboxCodingWorkItem;
-  createdEditWorkItem: boolean;
-  activity: SandboxCodingWorkItemActivity;
+export type SandboxAgentSourceChecksRequestResult = Record<string, unknown> & {
+  sourceCheckStatus?: SandboxAgentSourceCheckStatus | null;
   deployPlan: SandboxAgentSourceDeployPlan | null;
   dispatchResult?: {
     status: "not_requested" | "completed" | "failed";
@@ -539,7 +444,6 @@ export type SandboxAgentSourcePublishInput = {
   expectedManifestHash?: string | null;
   expectedSourceCommitSha?: string | null;
   evalStatus?: string | null;
-  workItemId?: string | null;
   taskRunId?: string | null;
   traceArtifactRef?: string | null;
   evalResultArtifactRef?: string | null;

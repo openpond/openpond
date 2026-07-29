@@ -11,7 +11,11 @@ import os from "node:os";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { DEFAULT_OPENPOND_COMMAND_ACCESS_MODE } from "@openpond/contracts";
-import type { ChatAttachmentSummary, RuntimeEvent, Session } from "@openpond/contracts";
+import type {
+  ChatAttachmentSummary,
+  RuntimeEvent,
+  Session,
+} from "@openpond/contracts";
 import {
   chatAttachmentImageContentType,
   safeChatAttachmentPathSegment,
@@ -114,14 +118,19 @@ type ParseCodexSessionInput = {
   threadId: string;
 };
 
-const metadataCache = new Map<string, { mtimeMs: number; size: number; metadata: SessionMetadata }>();
+const metadataCache = new Map<
+  string,
+  { mtimeMs: number; size: number; metadata: SessionMetadata }
+>();
 const threadLookupCache = new Map<string, CodexHistoryThread>();
 
 export function codexHistorySessionId(threadId: string): string {
   return `${CODEX_HISTORY_SESSION_PREFIX}${threadId}`;
 }
 
-export function codexHistoryThreadIdFromSessionId(sessionId: string): string | null {
+export function codexHistoryThreadIdFromSessionId(
+  sessionId: string
+): string | null {
   return sessionId.startsWith(CODEX_HISTORY_SESSION_PREFIX)
     ? sessionId.slice(CODEX_HISTORY_SESSION_PREFIX.length)
     : null;
@@ -131,17 +140,21 @@ export function isCodexHistorySessionId(sessionId: string): boolean {
   return sessionId.startsWith(CODEX_HISTORY_SESSION_PREFIX);
 }
 
-export async function loadCodexHistorySessions(options: {
-  codexHome?: string;
-  excludeThreadIds?: ReadonlySet<string>;
-  includeThreadId?: string | null;
-  metadataLimit?: number;
-} = {}): Promise<Session[]> {
+export async function loadCodexHistorySessions(
+  options: {
+    codexHome?: string;
+    excludeThreadIds?: ReadonlySet<string>;
+    includeThreadId?: string | null;
+    metadataLimit?: number;
+  } = {}
+): Promise<Session[]> {
   const threads = await loadCodexHistoryThreads(options);
   return threads.map((thread) => thread.session);
 }
 
-export async function loadCodexHistorySearchFiles(codexHome = codexHomePath()): Promise<CodexHistoryFile[]> {
+export async function loadCodexHistorySearchFiles(
+  codexHome = codexHomePath()
+): Promise<CodexHistoryFile[]> {
   return loadCodexHistoryFileIndex(codexHome);
 }
 
@@ -153,7 +166,7 @@ export async function readCodexHistoryThreadPayload(
     maxEvents?: number;
     tail?: boolean;
     tailBytes?: number;
-  } = {},
+  } = {}
 ): Promise<CodexHistoryThreadPayload> {
   const threadId = codexHistoryThreadIdFromSessionId(sessionId);
   if (!threadId) throw new Error("Codex history session not found");
@@ -188,24 +201,28 @@ export async function readCodexHistoryThreadPayload(
       ...thread.session,
       metadata: sessionMetadataWithCodexGoalRuntime(
         thread.session.metadata,
-        parsed.goalRuntime ?? codexGoalRuntimeFromSessionMetadata(thread.session.metadata),
+        parsed.goalRuntime ??
+          codexGoalRuntimeFromSessionMetadata(thread.session.metadata)
       ),
       status: parsed.status === "active" ? "active" : thread.session.status,
       updatedAt: latestIso([parsed.updatedAt, thread.session.updatedAt]),
-      title: thread.session.title === "Codex chat" && parsed.firstPrompt
-        ? truncateText(normalizeTitleText(parsed.firstPrompt), 80)
-        : thread.session.title,
+      title:
+        thread.session.title === "Codex chat" && parsed.firstPrompt
+          ? truncateText(normalizeTitleText(parsed.firstPrompt), 80)
+          : thread.session.title,
     },
     events: parsed.events,
   };
 }
 
-export async function loadCodexHistoryThreads(options: {
-  codexHome?: string;
-  excludeThreadIds?: ReadonlySet<string>;
-  includeThreadId?: string | null;
-  metadataLimit?: number;
-} = {}): Promise<CodexHistoryThread[]> {
+export async function loadCodexHistoryThreads(
+  options: {
+    codexHome?: string;
+    excludeThreadIds?: ReadonlySet<string>;
+    includeThreadId?: string | null;
+    metadataLimit?: number;
+  } = {}
+): Promise<CodexHistoryThread[]> {
   const codexHome = options.codexHome ?? codexHomePath();
   const [files, history, index, globalState] = await Promise.all([
     loadCodexHistoryFileIndex(codexHome),
@@ -217,7 +234,11 @@ export async function loadCodexHistoryThreads(options: {
   const limit = Math.max(1, options.metadataLimit ?? metadataLimit());
   const filesByThreadId = new Map(files.map((file) => [file.threadId, file]));
   const ranked = files
-    .filter((file) => !excludeThreadIds.has(file.threadId) || file.threadId === options.includeThreadId)
+    .filter(
+      (file) =>
+        !excludeThreadIds.has(file.threadId) ||
+        file.threadId === options.includeThreadId
+    )
     .map((file) => ({
       file,
       updatedMs: latestMillis([
@@ -231,7 +252,11 @@ export async function loadCodexHistoryThreads(options: {
   const selected = ranked.slice(0, limit).map((item) => item.file);
   if (options.includeThreadId) {
     const explicit = filesByThreadId.get(options.includeThreadId);
-    if (explicit && !selected.some((file) => file.threadId === explicit.threadId)) selected.unshift(explicit);
+    if (
+      explicit &&
+      !selected.some((file) => file.threadId === explicit.threadId)
+    )
+      selected.unshift(explicit);
   }
 
   const threads: CodexHistoryThread[] = [];
@@ -250,14 +275,18 @@ export async function loadCodexHistoryThreads(options: {
       metadata.createdAt ??
       prompt?.firstAt ??
       isoFromFileName(file.filePath) ??
-      new Date(file.stats.birthtimeMs || file.stats.ctimeMs || file.stats.mtimeMs).toISOString();
-    const cwd = metadata.cwd ?? globalState.workspaceRootHints.get(file.threadId) ?? null;
+      new Date(
+        file.stats.birthtimeMs || file.stats.ctimeMs || file.stats.mtimeMs
+      ).toISOString();
+    const cwd =
+      metadata.cwd ?? globalState.workspaceRootHints.get(file.threadId) ?? null;
     const tailStatus = await statusForCodexHistoryFile(file, updatedAt);
     threads.push({
       threadId: file.threadId,
       filePath: file.filePath,
       session: {
         id: codexHistorySessionId(file.threadId),
+        experience: "development",
         provider: "codex",
         openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
         title,
@@ -265,7 +294,10 @@ export async function loadCodexHistoryThreads(options: {
         appName: null,
         workspaceId: null,
         workspaceName: null,
-        metadata: sessionMetadataWithCodexGoalRuntime(undefined, tailStatus.goalRuntime),
+        metadata: sessionMetadataWithCodexGoalRuntime(
+          undefined,
+          tailStatus.goalRuntime
+        ),
         cwd,
         codexThreadId: file.threadId,
         createdAt,
@@ -281,7 +313,7 @@ export async function loadCodexHistoryThreads(options: {
   for (const thread of threads) {
     threadLookupCache.set(
       threadLookupCacheKey(codexHome, thread.threadId),
-      thread,
+      thread
     );
   }
   return threads;
@@ -293,14 +325,16 @@ function threadLookupCacheKey(codexHome: string, threadId: string): string {
 
 export function parseCodexSessionRecords(
   records: CodexRecord[],
-  input: ParseCodexSessionInput,
+  input: ParseCodexSessionInput
 ): ParsedCodexSession {
   const parser = createCodexRecordParser(input);
   for (const record of records) parser.accept(record);
   return parser.finish();
 }
 
-export async function readCodexHistorySearchText(thread: Pick<CodexHistoryThread, "filePath">): Promise<string> {
+export async function readCodexHistorySearchText(
+  thread: Pick<CodexHistoryThread, "filePath">
+): Promise<string> {
   const messages: string[] = [];
   await readJsonlRecords(thread.filePath, (record) => {
     const payload = asRecord(record.payload);
@@ -315,7 +349,9 @@ export async function readCodexHistorySearchText(thread: Pick<CodexHistoryThread
   return messages.join("\n");
 }
 
-async function parseCodexSessionFile(input: ParseCodexSessionInput & { filePath: string }): Promise<ParsedCodexSession> {
+async function parseCodexSessionFile(
+  input: ParseCodexSessionInput & { filePath: string }
+): Promise<ParsedCodexSession> {
   const parser = createCodexRecordParser(input);
   await readJsonlRecords(input.filePath, (record) => {
     parser.accept(record);
@@ -324,7 +360,7 @@ async function parseCodexSessionFile(input: ParseCodexSessionInput & { filePath:
 }
 
 async function parseCodexSessionTailFile(
-  input: ParseCodexSessionInput & { filePath: string; maxBytes: number },
+  input: ParseCodexSessionInput & { filePath: string; maxBytes: number }
 ): Promise<ParsedCodexSession> {
   const parser = createCodexRecordParser(input);
   const tail = await readTail(input.filePath, input.maxBytes);
@@ -370,7 +406,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     if (events.length > maxEvents) {
       const sessionStarted = events[0];
       events.splice(1, events.length - maxEvents);
-      if (sessionStarted && events[0] !== sessionStarted) events.unshift(sessionStarted);
+      if (sessionStarted && events[0] !== sessionStarted)
+        events.unshift(sessionStarted);
     }
   }
 
@@ -408,11 +445,13 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     timestamp: string,
     turnId: string | undefined,
     output = "Goal cleared",
-    synthetic = false,
+    synthetic = false
   ): void {
     push(
       historyEvent({
-        id: `${input.sessionId}_thread_goal_cleared_${safeId(`${timestamp}_${output}`)}`,
+        id: `${input.sessionId}_thread_goal_cleared_${safeId(
+          `${timestamp}_${output}`
+        )}`,
         sessionId: input.sessionId,
         ...(turnId ? { turnId } : {}),
         timestamp,
@@ -428,16 +467,22 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           threadId: input.threadId,
           synthetic,
         },
-      }),
+      })
     );
   }
 
-  function completeLifecycleTurn(timestamp: string, name: "turn.completed" | "turn.interrupted", output?: string): void {
+  function completeLifecycleTurn(
+    timestamp: string,
+    name: "turn.completed" | "turn.interrupted",
+    output?: string
+  ): void {
     const turnId = currentTurnId ?? activeTurnId();
     if (!currentTurnCompleted) {
       push(
         historyEvent({
-          id: `${turnId}_${name === "turn.completed" ? "completed" : "interrupted"}_${safeId(timestamp)}`,
+          id: `${turnId}_${
+            name === "turn.completed" ? "completed" : "interrupted"
+          }_${safeId(timestamp)}`,
           sessionId: input.sessionId,
           turnId,
           timestamp,
@@ -449,7 +494,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             source: CODEX_HISTORY_EVENT_SOURCE,
             codexThreadId: input.threadId,
           },
-        }),
+        })
       );
     }
     currentTurnCompleted = true;
@@ -470,7 +515,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         const goal = asRecord(payload.goal);
         if (!goal) return;
         goalActive = goalRecordIsActive(goal);
-        latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
+        latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(
+          goal,
+          timestamp
+        );
         const turnId = currentTurnId ?? undefined;
         push(
           historyEvent({
@@ -481,7 +529,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             name: "diagnostic",
             source: "provider",
             status: "completed",
-            output: truncateText(goalObjective(goal) ?? "Goal runtime updated", ASSISTANT_MAX_LENGTH),
+            output: truncateText(
+              goalObjective(goal) ?? "Goal runtime updated",
+              ASSISTANT_MAX_LENGTH
+            ),
             data: {
               source: CODEX_HISTORY_EVENT_SOURCE,
               codexThreadId: input.threadId,
@@ -489,7 +540,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
               provider: "codex",
               goal,
             },
-          }),
+          })
         );
         return;
       }
@@ -510,7 +561,11 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         return;
       }
       if (type === "turn_aborted") {
-        completeLifecycleTurn(timestamp, "turn.interrupted", turnAbortMessage(payload));
+        completeLifecycleTurn(
+          timestamp,
+          "turn.interrupted",
+          turnAbortMessage(payload)
+        );
         return;
       }
     }
@@ -523,7 +578,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       const content = textFromContent(rawContent);
       if (!content && !codexContentHasInputImage(rawContent)) return;
       if (role === "user") {
-        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(content, timestamp);
+        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
+          content,
+          timestamp
+        );
         if (internalGoalRuntime) {
           goalActive = true;
           latestKnownGoalRuntime ??= internalGoalRuntime;
@@ -533,11 +591,16 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           const turnId = currentTurnId ?? undefined;
           push(
             historyEvent({
-              id: `${input.sessionId}_${controlMessage.kind}_${safeId(timestamp)}`,
+              id: `${input.sessionId}_${controlMessage.kind}_${safeId(
+                timestamp
+              )}`,
               sessionId: input.sessionId,
               ...(turnId ? { turnId } : {}),
               timestamp,
-              name: controlMessage.kind === "turn_aborted" ? "turn.interrupted" : "diagnostic",
+              name:
+                controlMessage.kind === "turn_aborted"
+                  ? "turn.interrupted"
+                  : "diagnostic",
               source: "provider",
               status: "completed",
               output: truncateText(controlMessage.text, ASSISTANT_MAX_LENGTH),
@@ -546,7 +609,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
                 codexThreadId: input.threadId,
                 kind: controlMessage.kind,
               },
-            }),
+            })
           );
           if (controlMessage.kind === "turn_aborted") {
             currentTurnCompleted = true;
@@ -579,14 +642,16 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             source: "chat_action",
             args: {
               prompt: truncateText(userContent.prompt, PROMPT_MAX_LENGTH),
-              ...(userContent.attachments.length > 0 ? { attachments: userContent.attachments } : {}),
+              ...(userContent.attachments.length > 0
+                ? { attachments: userContent.attachments }
+                : {}),
             },
             status: "started",
             data: {
               source: CODEX_HISTORY_EVENT_SOURCE,
               codexThreadId: input.threadId,
             },
-          }),
+          })
         );
         return;
       }
@@ -610,7 +675,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
               codexThreadId: input.threadId,
               ...(phase ? { phase } : {}),
             },
-          }),
+          })
         );
         if (phase === "final_answer" || legacyFinalAnswer) {
           latestFinalAt = timestamp;
@@ -628,7 +693,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
                   source: CODEX_HISTORY_EVENT_SOURCE,
                   codexThreadId: input.threadId,
                 },
-              }),
+              })
             );
           }
           currentTurnCompleted = true;
@@ -640,9 +705,13 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     if (responsePayload.type === "function_call") {
       toolIndex += 1;
       const turnId = activeTurnId();
-      const callId = safeId(stringValue(responsePayload.call_id) ?? String(toolIndex));
+      const callId = safeId(
+        stringValue(responsePayload.call_id) ?? String(toolIndex)
+      );
       const name = stringValue(responsePayload.name) ?? "tool";
-      const parsedArgs = parseMaybeJson(stringValue(responsePayload.arguments) ?? "");
+      const parsedArgs = parseMaybeJson(
+        stringValue(responsePayload.arguments) ?? ""
+      );
       const command = commandFromToolCall(name, parsedArgs);
       push(
         historyEvent({
@@ -660,10 +729,11 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             codexThreadId: input.threadId,
             callId,
             tool: name,
-            arguments: parsedArgs ?? stringValue(responsePayload.arguments) ?? "",
+            arguments:
+              parsedArgs ?? stringValue(responsePayload.arguments) ?? "",
             command,
           },
-        }),
+        })
       );
       return;
     }
@@ -671,8 +741,13 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     if (responsePayload.type === "function_call_output") {
       toolIndex += 1;
       const turnId = activeTurnId();
-      const callId = safeId(stringValue(responsePayload.call_id) ?? String(toolIndex));
-      const output = truncateText(stringValue(responsePayload.output) ?? "", TOOL_OUTPUT_MAX_LENGTH);
+      const callId = safeId(
+        stringValue(responsePayload.call_id) ?? String(toolIndex)
+      );
+      const output = truncateText(
+        stringValue(responsePayload.output) ?? "",
+        TOOL_OUTPUT_MAX_LENGTH
+      );
       push(
         historyEvent({
           id: `${turnId}_tool_completed_${toolIndex}_${callId}`,
@@ -689,7 +764,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
             codexThreadId: input.threadId,
             callId,
           },
-        }),
+        })
       );
       if (output) {
         push(
@@ -706,16 +781,23 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
               codexThreadId: input.threadId,
               callId,
             },
-          }),
+          })
         );
       }
     }
   }
 
   function finish(): ParsedCodexSession {
-    const latestUserMs = Math.max(millisFromIso(latestUserAt), millisFromIso(latestLifecycleStartAt));
+    const latestUserMs = Math.max(
+      millisFromIso(latestUserAt),
+      millisFromIso(latestLifecycleStartAt)
+    );
     const latestFinalMs = millisFromIso(latestFinalAt);
-    const turnActive = Boolean(latestUserMs && (!latestFinalMs || latestUserMs > latestFinalMs) && !currentTurnCompleted);
+    const turnActive = Boolean(
+      latestUserMs &&
+        (!latestFinalMs || latestUserMs > latestFinalMs) &&
+        !currentTurnCompleted
+    );
     const status = goalActive || turnActive ? "active" : "idle";
     return {
       events,
@@ -729,7 +811,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   return { accept, finish };
 }
 
-async function readPromptHistory(codexHome: string): Promise<Map<string, CodexHistoryPromptEntry>> {
+async function readPromptHistory(
+  codexHome: string
+): Promise<Map<string, CodexHistoryPromptEntry>> {
   const entries = new Map<string, CodexHistoryPromptEntry>();
   await readJsonlRecords(path.join(codexHome, "history.jsonl"), (record) => {
     const payload = asRecord(record);
@@ -743,11 +827,17 @@ async function readPromptHistory(codexHome: string): Promise<Map<string, CodexHi
       firstAt: null,
       latestAt: null,
     };
-    if (!current.firstAt || millisFromIso(timestamp) < millisFromIso(current.firstAt)) {
+    if (
+      !current.firstAt ||
+      millisFromIso(timestamp) < millisFromIso(current.firstAt)
+    ) {
       current.firstAt = timestamp;
       current.firstPrompt = text;
     }
-    if (!current.latestAt || millisFromIso(timestamp) > millisFromIso(current.latestAt)) {
+    if (
+      !current.latestAt ||
+      millisFromIso(timestamp) > millisFromIso(current.latestAt)
+    ) {
       current.latestAt = timestamp;
       current.latestPrompt = text;
     }
@@ -756,18 +846,24 @@ async function readPromptHistory(codexHome: string): Promise<Map<string, CodexHi
   return entries;
 }
 
-async function readSessionIndex(codexHome: string): Promise<Map<string, CodexHistoryIndexEntry>> {
+async function readSessionIndex(
+  codexHome: string
+): Promise<Map<string, CodexHistoryIndexEntry>> {
   const entries = new Map<string, CodexHistoryIndexEntry>();
-  await readJsonlRecords(path.join(codexHome, "session_index.jsonl"), (record) => {
-    const payload = asRecord(record);
-    const id = stringValue(payload?.id);
-    if (!id) return;
-    entries.set(id, {
-      id,
-      threadName: normalizeTitleText(stringValue(payload?.thread_name) ?? "") || null,
-      updatedAt: isoTimestamp(stringValue(payload?.updated_at)),
-    });
-  }).catch(() => undefined);
+  await readJsonlRecords(
+    path.join(codexHome, "session_index.jsonl"),
+    (record) => {
+      const payload = asRecord(record);
+      const id = stringValue(payload?.id);
+      if (!id) return;
+      entries.set(id, {
+        id,
+        threadName:
+          normalizeTitleText(stringValue(payload?.thread_name) ?? "") || null,
+        updatedAt: isoTimestamp(stringValue(payload?.updated_at)),
+      });
+    }
+  ).catch(() => undefined);
   return entries;
 }
 
@@ -783,22 +879,38 @@ async function readGlobalState(codexHome: string): Promise<{
   }
   const state = asRecord(payload);
   return {
-    workspaceRootHints: stringMap(asRecord(state?.["thread-workspace-root-hints"])),
+    workspaceRootHints: stringMap(
+      asRecord(state?.["thread-workspace-root-hints"])
+    ),
   };
 }
 
-async function readCodexSessionMetadata(file: CodexHistoryFile): Promise<SessionMetadata> {
+async function readCodexSessionMetadata(
+  file: CodexHistoryFile
+): Promise<SessionMetadata> {
   const cached = metadataCache.get(file.filePath);
-  if (cached && cached.mtimeMs === file.stats.mtimeMs && cached.size === file.stats.size) return cached.metadata;
+  if (
+    cached &&
+    cached.mtimeMs === file.stats.mtimeMs &&
+    cached.size === file.stats.size
+  )
+    return cached.metadata;
   let metadata: SessionMetadata = { id: null, cwd: null, createdAt: null };
   await readInitialJsonlRecords(file.filePath, 80, (record) => {
     const payload = asRecord(record.payload);
     if (!payload) return;
     if (record.type === "session_meta") {
       metadata = {
-        id: metadata.id ?? stringValue(payload.id) ?? stringValue(payload.session_id),
+        id:
+          metadata.id ??
+          stringValue(payload.id) ??
+          stringValue(payload.session_id),
         cwd: metadata.cwd ?? stringValue(payload.cwd),
-        createdAt: metadata.createdAt ?? isoTimestamp(stringValue(payload.timestamp) ?? stringValue(record.timestamp)),
+        createdAt:
+          metadata.createdAt ??
+          isoTimestamp(
+            stringValue(payload.timestamp) ?? stringValue(record.timestamp)
+          ),
       };
     }
     if (record.type === "turn_context" && !metadata.cwd) {
@@ -816,11 +928,16 @@ async function readCodexSessionMetadata(file: CodexHistoryFile): Promise<Session
   return metadata;
 }
 
-async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdatedAt: string): Promise<TailStatus> {
+async function statusForCodexHistoryFile(
+  file: CodexHistoryFile,
+  fallbackUpdatedAt: string
+): Promise<TailStatus> {
   const recent = Date.now() - file.stats.mtimeMs <= DEFAULT_ACTIVE_WINDOW_MS;
-  if (!recent) return { status: "idle", latestMessageAt: null, goalRuntime: null };
+  if (!recent)
+    return { status: "idle", latestMessageAt: null, goalRuntime: null };
   const tail = await readTail(file.filePath, TAIL_BYTES).catch(() => "");
-  if (!tail) return { status: "idle", latestMessageAt: null, goalRuntime: null };
+  if (!tail)
+    return { status: "idle", latestMessageAt: null, goalRuntime: null };
   let latestUserAt: string | null = null;
   let latestFinalAt: string | null = null;
   let latestAssistantAt: string | null = null;
@@ -842,7 +959,10 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
         if (goal) {
           latestGoalAt = timestamp;
           goalActive = goalRecordIsActive(goal);
-          latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
+          latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(
+            goal,
+            timestamp
+          );
         }
       } else if (type === "thread_goal_cleared") {
         latestGoalAt = timestamp;
@@ -867,7 +987,10 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
       const role = stringValue(responsePayload.role);
       const content = textFromContent(responsePayload.content);
       if (role === "user" && content) {
-        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(content, timestamp);
+        const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
+          content,
+          timestamp
+        );
         if (internalGoalRuntime) {
           latestKnownGoalRuntime ??= internalGoalRuntime;
           latestGoalAt = timestamp;
@@ -875,37 +998,63 @@ async function statusForCodexHistoryFile(file: CodexHistoryFile, fallbackUpdated
         }
         const controlMessage = codexControlMessage(content);
         if (controlMessage?.kind === "turn_aborted") latestFinalAt = timestamp;
-        if (!controlMessage && !isCodexInjectedUserMessage(content)) latestUserAt = timestamp;
+        if (!controlMessage && !isCodexInjectedUserMessage(content))
+          latestUserAt = timestamp;
       }
       if (role === "assistant" && content) {
         latestAssistantAt = timestamp;
-        if (stringValue(responsePayload.phase) === "final_answer" || record.type === "message") {
+        if (
+          stringValue(responsePayload.phase) === "final_answer" ||
+          record.type === "message"
+        ) {
           latestFinalAt = timestamp;
         }
       }
     }
     if (
       responsePayload.type === "function_call_output" &&
-      /Process running with session ID/i.test(stringValue(responsePayload.output) ?? "")
+      /Process running with session ID/i.test(
+        stringValue(responsePayload.output) ?? ""
+      )
     ) {
       hasRunningMarker = true;
     }
   }
-  const latestUserMs = Math.max(millisFromIso(latestUserAt), millisFromIso(latestLifecycleStartAt));
+  const latestUserMs = Math.max(
+    millisFromIso(latestUserAt),
+    millisFromIso(latestLifecycleStartAt)
+  );
   const latestFinalMs = millisFromIso(latestFinalAt);
-  const active = Boolean(latestUserMs && (!latestFinalMs || latestUserMs > latestFinalMs));
-  const status = goalActive || active || (hasRunningMarker && !latestFinalMs) ? "active" : "idle";
+  const active = Boolean(
+    latestUserMs && (!latestFinalMs || latestUserMs > latestFinalMs)
+  );
+  const status =
+    goalActive || active || (hasRunningMarker && !latestFinalMs)
+      ? "active"
+      : "idle";
   if (status === "active" && !latestKnownGoalRuntime) {
-    latestKnownGoalRuntime = await latestKnownActiveGoalRuntimeForCodexHistoryFile(file, fallbackUpdatedAt);
+    latestKnownGoalRuntime =
+      await latestKnownActiveGoalRuntimeForCodexHistoryFile(
+        file,
+        fallbackUpdatedAt
+      );
   }
   return {
     status,
-    latestMessageAt: latestIso([latestAssistantAt, latestUserAt, latestGoalAt, latestLifecycleAt]),
+    latestMessageAt: latestIso([
+      latestAssistantAt,
+      latestUserAt,
+      latestGoalAt,
+      latestLifecycleAt,
+    ]),
     goalRuntime: latestKnownGoalRuntime,
   };
 }
 
-async function readJsonlRecords(filePath: string, onRecord: (record: CodexRecord) => void): Promise<void> {
+async function readJsonlRecords(
+  filePath: string,
+  onRecord: (record: CodexRecord) => void
+): Promise<void> {
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const reader = createInterface({ input: stream, crlfDelay: Infinity });
   for await (const line of reader) {
@@ -918,7 +1067,7 @@ async function readJsonlRecords(filePath: string, onRecord: (record: CodexRecord
 async function readInitialJsonlRecords(
   filePath: string,
   maxRecords: number,
-  onRecord: (record: CodexRecord) => void,
+  onRecord: (record: CodexRecord) => void
 ): Promise<void> {
   const stream = createReadStream(filePath, { encoding: "utf8" });
   const reader = createInterface({ input: stream, crlfDelay: Infinity });
@@ -960,18 +1109,32 @@ function historyEvent(input: RuntimeEvent): RuntimeEvent {
   return input;
 }
 
-function titleForThread(indexEntry: CodexHistoryIndexEntry | undefined, prompt: CodexHistoryPromptEntry | undefined): string {
-  return truncateText(indexEntry?.threadName ?? prompt?.firstPrompt ?? prompt?.latestPrompt ?? "Codex chat", 80);
+function titleForThread(
+  indexEntry: CodexHistoryIndexEntry | undefined,
+  prompt: CodexHistoryPromptEntry | undefined
+): string {
+  return truncateText(
+    indexEntry?.threadName ??
+      prompt?.firstPrompt ??
+      prompt?.latestPrompt ??
+      "Codex chat",
+    80
+  );
 }
 
 function commandFromToolCall(name: string, args: unknown): string {
   const record = asRecord(args);
-  return stringValue(record?.cmd) ?? stringValue(record?.command) ?? stringValue(record?.tool) ?? name;
+  return (
+    stringValue(record?.cmd) ??
+    stringValue(record?.command) ??
+    stringValue(record?.tool) ??
+    name
+  );
 }
 
 function responsePayloadFromCodexRecord(
   record: CodexRecord,
-  payload: Record<string, unknown> | null,
+  payload: Record<string, unknown> | null
 ): Record<string, unknown> | null {
   if (record.type === "response_item") return payload;
   if (!isLegacyResponseItemType(record.type)) return null;
@@ -994,7 +1157,7 @@ function goalObjective(goal: Record<string, unknown>): string | null {
 
 function activeGoalRuntimeFromCodexGoalRecord(
   goal: Record<string, unknown>,
-  timestamp: string,
+  timestamp: string
 ): CodexHistoryGoalRuntimeMetadata | null {
   if (!goalRecordIsActive(goal)) return null;
   return {
@@ -1002,26 +1165,41 @@ function activeGoalRuntimeFromCodexGoalRecord(
     objective: goalObjective(goal) ?? "Active goal",
     status: stringValue(goal.status) ?? "active",
     timeUsedSeconds: nonNegativeInteger(
-      numberValue(goal.timeUsedSeconds) ?? numberValue(goal.time_used_seconds) ?? 0,
+      numberValue(goal.timeUsedSeconds) ??
+        numberValue(goal.time_used_seconds) ??
+        0
     ),
-    tokensUsed: nullableNonNegativeInteger(numberValue(goal.tokensUsed) ?? numberValue(goal.tokens_used)),
-    tokenBudget: nullableNonNegativeInteger(numberValue(goal.tokenBudget) ?? numberValue(goal.token_budget)),
+    tokensUsed: nullableNonNegativeInteger(
+      numberValue(goal.tokensUsed) ?? numberValue(goal.tokens_used)
+    ),
+    tokenBudget: nullableNonNegativeInteger(
+      numberValue(goal.tokenBudget) ?? numberValue(goal.token_budget)
+    ),
     updatedAt: timestamp,
   };
 }
 
 function activeGoalRuntimeFromCodexInternalContext(
   content: string,
-  timestamp: string,
+  timestamp: string
 ): CodexHistoryGoalRuntimeMetadata | null {
-  if (!/<codex_internal_context\b[^>]*\bsource=["']goal["'][^>]*>/i.test(content)) return null;
+  if (
+    !/<codex_internal_context\b[^>]*\bsource=["']goal["'][^>]*>/i.test(content)
+  )
+    return null;
   return {
     provider: "codex",
     objective: xmlBlock(content, "objective") ?? "Active goal",
     status: "active",
-    timeUsedSeconds: nonNegativeInteger(numberFromLine(content, "Time used seconds") ?? 0),
-    tokensUsed: nullableNonNegativeInteger(numberFromLine(content, "Tokens used")),
-    tokenBudget: nullableNonNegativeInteger(numberFromLine(content, "Token budget")),
+    timeUsedSeconds: nonNegativeInteger(
+      numberFromLine(content, "Time used seconds") ?? 0
+    ),
+    tokensUsed: nullableNonNegativeInteger(
+      numberFromLine(content, "Tokens used")
+    ),
+    tokenBudget: nullableNonNegativeInteger(
+      numberFromLine(content, "Token budget")
+    ),
     updatedAt: timestamp,
   };
 }
@@ -1047,7 +1225,7 @@ function goalRecordIsActive(goal: Record<string, unknown>): boolean {
 
 async function latestKnownActiveGoalRuntimeForCodexHistoryFile(
   file: CodexHistoryFile,
-  fallbackUpdatedAt: string,
+  fallbackUpdatedAt: string
 ): Promise<CodexHistoryGoalRuntimeMetadata | null> {
   let latestKnownGoalRuntime: CodexHistoryGoalRuntimeMetadata | null = null;
   await readJsonlRecords(file.filePath, (record) => {
@@ -1057,7 +1235,11 @@ async function latestKnownActiveGoalRuntimeForCodexHistoryFile(
       const type = stringValue(payload.type);
       if (type === "thread_goal_updated") {
         const goal = asRecord(payload.goal);
-        if (goal) latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(goal, timestamp);
+        if (goal)
+          latestKnownGoalRuntime = activeGoalRuntimeFromCodexGoalRecord(
+            goal,
+            timestamp
+          );
         return;
       }
       if (type === "thread_goal_cleared") {
@@ -1066,19 +1248,24 @@ async function latestKnownActiveGoalRuntimeForCodexHistoryFile(
       }
     }
     const responsePayload = responsePayloadFromCodexRecord(record, payload);
-    if (responsePayload?.type !== "message" || stringValue(responsePayload.role) !== "user") return;
+    if (
+      responsePayload?.type !== "message" ||
+      stringValue(responsePayload.role) !== "user"
+    )
+      return;
     const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
       textFromContent(responsePayload.content),
-      timestamp,
+      timestamp
     );
-    if (internalGoalRuntime && !latestKnownGoalRuntime) latestKnownGoalRuntime = internalGoalRuntime;
+    if (internalGoalRuntime && !latestKnownGoalRuntime)
+      latestKnownGoalRuntime = internalGoalRuntime;
   }).catch(() => undefined);
   return latestKnownGoalRuntime;
 }
 
 function sessionMetadataWithCodexGoalRuntime(
   metadata: Session["metadata"] | undefined,
-  goalRuntime: CodexHistoryGoalRuntimeMetadata | null,
+  goalRuntime: CodexHistoryGoalRuntimeMetadata | null
 ): Session["metadata"] | undefined {
   const next = { ...(metadata ?? {}) };
   delete next.codexGoalRuntime;
@@ -1087,7 +1274,7 @@ function sessionMetadataWithCodexGoalRuntime(
 }
 
 function codexGoalRuntimeFromSessionMetadata(
-  metadata: Session["metadata"] | undefined,
+  metadata: Session["metadata"] | undefined
 ): CodexHistoryGoalRuntimeMetadata | null {
   const record = asRecord(metadata?.codexGoalRuntime);
   if (!record || stringValue(record.provider) !== "codex") return null;
@@ -1099,7 +1286,9 @@ function codexGoalRuntimeFromSessionMetadata(
     provider: "codex",
     objective,
     status,
-    timeUsedSeconds: nonNegativeInteger(numberValue(record.timeUsedSeconds) ?? 0),
+    timeUsedSeconds: nonNegativeInteger(
+      numberValue(record.timeUsedSeconds) ?? 0
+    ),
     tokensUsed: nullableNonNegativeInteger(numberValue(record.tokensUsed)),
     tokenBudget: nullableNonNegativeInteger(numberValue(record.tokenBudget)),
     updatedAt,
@@ -1113,13 +1302,18 @@ function turnAbortMessage(payload: Record<string, unknown>): string {
 
 function xmlBlock(value: string, tagName: string): string | null {
   const escapedTag = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`<${escapedTag}[^>]*>([\\s\\S]*?)<\\/${escapedTag}>`, "i").exec(value);
+  const match = new RegExp(
+    `<${escapedTag}[^>]*>([\\s\\S]*?)<\\/${escapedTag}>`,
+    "i"
+  ).exec(value);
   return match?.[1]?.trim() || null;
 }
 
 function lineValue(value: string, label: string): string | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = new RegExp(`^\\s*-?\\s*${escaped}:\\s*(.+?)\\s*$`, "im").exec(value);
+  const match = new RegExp(`^\\s*-?\\s*${escaped}:\\s*(.+?)\\s*$`, "im").exec(
+    value
+  );
   return match?.[1]?.trim() || null;
 }
 
@@ -1176,40 +1370,64 @@ type CodexImageReference = {
   localPath: string | null;
 };
 
-const CODEX_ATTACHMENT_CONTEXT_PATTERN = /(?:^|\n)\s*<attachments>\s*([\s\S]*?)\s*<\/attachments>\s*/g;
+const CODEX_ATTACHMENT_CONTEXT_PATTERN =
+  /(?:^|\n)\s*<attachments>\s*([\s\S]*?)\s*<\/attachments>\s*/g;
 const CODEX_ATTACHMENT_LINE_PATTERN =
   /^\s*\d+\.\s+(.+)\s+\(([^,]+),\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB),\s*(image|text|file)\)\.(?:\s+Saved locally at:\s*(.+))?\s*$/i;
 const CODEX_IMAGE_TAG_PATTERN =
   /<image\s+name=(?:\[([^\]]*)\]|"([^"]*)"|'([^']*)'|([^\s>]+))\s+path="([^"]+)"\s*>/g;
 const DATA_IMAGE_URL_PATTERN = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\s]+)$/;
 
-function visibleCodexUserContent(content: unknown, context: VisibleCodexUserContentContext): VisibleCodexUserContent {
+function visibleCodexUserContent(
+  content: unknown,
+  context: VisibleCodexUserContentContext
+): VisibleCodexUserContent {
   const parts = codexUserContentParts(content);
   const attachments: ChatAttachmentSummary[] = [];
   let blockIndex = 0;
   const imageReferences = codexImageReferences(parts.text);
   const prompt = parts.text
     .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
-      attachments.push(...parseCodexAttachmentContext(body, context, blockIndex));
+      attachments.push(
+        ...parseCodexAttachmentContext(body, context, blockIndex)
+      );
       blockIndex += 1;
       return "\n";
     })
     .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
     .trim();
 
-  attachments.push(...codexInputImageAttachments(parts.inputImages, imageReferences, context, attachments.length));
+  attachments.push(
+    ...codexInputImageAttachments(
+      parts.inputImages,
+      imageReferences,
+      context,
+      attachments.length
+    )
+  );
   if (parts.inputImages.length === 0) {
-    attachments.push(...codexImageReferenceAttachments(imageReferences, context, attachments.length));
+    attachments.push(
+      ...codexImageReferenceAttachments(
+        imageReferences,
+        context,
+        attachments.length
+      )
+    );
   }
 
   return {
-    prompt: prompt || (attachments.length > 0 ? "Please review the attached files." : parts.text.trim()),
+    prompt:
+      prompt ||
+      (attachments.length > 0
+        ? "Please review the attached files."
+        : parts.text.trim()),
     attachments,
   };
 }
 
 function codexUserContentParts(content: unknown): CodexUserContentParts {
-  if (typeof content === "string") return { text: content.trim(), inputImages: [] };
+  if (typeof content === "string")
+    return { text: content.trim(), inputImages: [] };
   if (!Array.isArray(content)) return { text: "", inputImages: [] };
   const text: string[] = [];
   const inputImages: string[] = [];
@@ -1222,7 +1440,8 @@ function codexUserContentParts(content: unknown): CodexUserContentParts {
     const itemText = stringValue(record?.text);
     if (itemText) text.push(itemText);
     const imageUrl = stringValue(record?.image_url);
-    if (imageUrl && stringValue(record?.type) === "input_image") inputImages.push(imageUrl);
+    if (imageUrl && stringValue(record?.type) === "input_image")
+      inputImages.push(imageUrl);
   }
   return {
     text: text.filter(Boolean).join("\n").trim(),
@@ -1244,7 +1463,7 @@ function codexImageReferences(text: string): CodexImageReference[] {
 function parseCodexAttachmentContext(
   body: string,
   context: VisibleCodexUserContentContext,
-  blockIndex: number,
+  blockIndex: number
 ): ChatAttachmentSummary[] {
   const attachments: ChatAttachmentSummary[] = [];
   for (const line of body.split(/\r?\n/)) {
@@ -1256,7 +1475,9 @@ function parseCodexAttachmentContext(
     const kind = attachmentKind(match[5]);
     if (!name || !mediaType || sizeBytes === null || !kind) continue;
 
-    const id = `${context.turnId}_attachment_${blockIndex + 1}_${attachments.length + 1}`;
+    const id = `${context.turnId}_attachment_${blockIndex + 1}_${
+      attachments.length + 1
+    }`;
     const localPath = match[6]?.trim() || localImagePathByName(name);
     const imagePreview = codexHistoryImagePreview({
       attachmentId: id,
@@ -1281,7 +1502,7 @@ function codexInputImageAttachments(
   inputImages: string[],
   references: CodexImageReference[],
   context: VisibleCodexUserContentContext,
-  offset: number,
+  offset: number
 ): ChatAttachmentSummary[] {
   const attachments: ChatAttachmentSummary[] = [];
   for (const [index, dataUrl] of inputImages.entries()) {
@@ -1312,7 +1533,7 @@ function codexInputImageAttachments(
 function codexImageReferenceAttachments(
   references: CodexImageReference[],
   context: VisibleCodexUserContentContext,
-  offset: number,
+  offset: number
 ): ChatAttachmentSummary[] {
   const attachments: ChatAttachmentSummary[] = [];
   for (const [index, reference] of references.entries()) {
@@ -1349,18 +1570,29 @@ function codexHistoryImagePreview(input: {
   localPath?: string;
   mediaType: string;
 }): ChatAttachmentSummary["imagePreview"] | undefined {
-  if (input.kind !== "image" || !input.localPath || !input.context.attachmentRootDir) return undefined;
+  if (
+    input.kind !== "image" ||
+    !input.localPath ||
+    !input.context.attachmentRootDir
+  )
+    return undefined;
   const storageName = path.basename(input.localPath);
-  const contentType = chatAttachmentImageContentType(input.mediaType, storageName);
+  const contentType = chatAttachmentImageContentType(
+    input.mediaType,
+    storageName
+  );
   if (!contentType) return undefined;
 
   const target = path.resolve(input.localPath);
   const expectedDir = path.resolve(
     input.context.attachmentRootDir,
     safeChatAttachmentPathSegment(input.context.sessionId),
-    safeChatAttachmentPathSegment(input.context.turnId),
+    safeChatAttachmentPathSegment(input.context.turnId)
   );
-  if (target === expectedDir || !target.startsWith(`${expectedDir}${path.sep}`)) {
+  if (
+    target === expectedDir ||
+    !target.startsWith(`${expectedDir}${path.sep}`)
+  ) {
     const bytes = readCodexHistoryImageBytes(input.localPath);
     return bytes
       ? materializedCodexHistoryImagePreview({
@@ -1389,17 +1621,26 @@ function materializedCodexHistoryImagePreview(input: {
   context: VisibleCodexUserContentContext;
   name: string;
 }): ChatAttachmentSummary["imagePreview"] | undefined {
-  if (!input.context.attachmentRootDir || input.bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES) return undefined;
-  const storageName = uniqueCodexHistoryImageStorageName(input.attachmentId, input.name, input.contentType);
+  if (
+    !input.context.attachmentRootDir ||
+    input.bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES
+  )
+    return undefined;
+  const storageName = uniqueCodexHistoryImageStorageName(
+    input.attachmentId,
+    input.name,
+    input.contentType
+  );
   const turnDir = path.join(
     input.context.attachmentRootDir,
     safeChatAttachmentPathSegment(input.context.sessionId),
-    safeChatAttachmentPathSegment(input.context.turnId),
+    safeChatAttachmentPathSegment(input.context.turnId)
   );
   const target = path.join(turnDir, storageName);
   try {
     mkdirSync(turnDir, { recursive: true });
-    if (!existsSync(target)) writeFileSync(target, input.bytes, { mode: 0o600 });
+    if (!existsSync(target))
+      writeFileSync(target, input.bytes, { mode: 0o600 });
   } catch {
     return undefined;
   }
@@ -1412,20 +1653,31 @@ function materializedCodexHistoryImagePreview(input: {
   };
 }
 
-function parseDataImageUrl(value: string): { bytes: Buffer; contentType: string } | null {
+function parseDataImageUrl(
+  value: string
+): { bytes: Buffer; contentType: string } | null {
   const match = DATA_IMAGE_URL_PATTERN.exec(value.trim());
   if (!match) return null;
   const contentType = chatAttachmentImageContentType(match[1]!, "");
   if (!contentType) return null;
   const bytes = Buffer.from(match[2]!.replace(/\s+/g, ""), "base64");
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES) return null;
+  if (
+    bytes.byteLength === 0 ||
+    bytes.byteLength > MAX_CODEX_HISTORY_IMAGE_BYTES
+  )
+    return null;
   return { bytes, contentType };
 }
 
 function readCodexHistoryImageBytes(localPath: string): Buffer | null {
   try {
     const stat = statSync(localPath);
-    if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_CODEX_HISTORY_IMAGE_BYTES) return null;
+    if (
+      !stat.isFile() ||
+      stat.size <= 0 ||
+      stat.size > MAX_CODEX_HISTORY_IMAGE_BYTES
+    )
+      return null;
     return readFileSync(localPath);
   } catch {
     return null;
@@ -1444,7 +1696,11 @@ function localImagePathByName(name: string): string | undefined {
     if (!contentType) return false;
     try {
       const stat = statSync(candidate);
-      return stat.isFile() && stat.size > 0 && stat.size <= MAX_CODEX_HISTORY_IMAGE_BYTES;
+      return (
+        stat.isFile() &&
+        stat.size > 0 &&
+        stat.size <= MAX_CODEX_HISTORY_IMAGE_BYTES
+      );
     } catch {
       return false;
     }
@@ -1454,18 +1710,28 @@ function localImagePathByName(name: string): string | undefined {
 function imageAttachmentName(
   reference: CodexImageReference | undefined,
   contentType: string,
-  index: number,
+  index: number
 ): string {
-  const localPathName = reference?.localPath ? path.basename(reference.localPath) : "";
+  const localPathName = reference?.localPath
+    ? path.basename(reference.localPath)
+    : "";
   if (localPathName) return localPathName;
   const label = reference?.label?.trim();
   if (label) return `${label}${imageExtension(contentType)}`;
   return `image-${index + 1}${imageExtension(contentType)}`;
 }
 
-function uniqueCodexHistoryImageStorageName(attachmentId: string, name: string, contentType: string): string {
+function uniqueCodexHistoryImageStorageName(
+  attachmentId: string,
+  name: string,
+  contentType: string
+): string {
   const extension = path.extname(name) || imageExtension(contentType);
-  const base = path.basename(name, path.extname(name)).replace(/[^a-zA-Z0-9._ -]+/g, "-").trim() || "image";
+  const base =
+    path
+      .basename(name, path.extname(name))
+      .replace(/[^a-zA-Z0-9._ -]+/g, "-")
+      .trim() || "image";
   return `${safeId(attachmentId)}-${base}${extension}`;
 }
 
@@ -1476,7 +1742,10 @@ function imageExtension(contentType: string): string {
   return ".png";
 }
 
-function parseAttachmentByteSize(amountText: string | undefined, unitText: string | undefined): number | null {
+function parseAttachmentByteSize(
+  amountText: string | undefined,
+  unitText: string | undefined
+): number | null {
   if (!amountText || !unitText) return null;
   const amount = Number.parseFloat(amountText);
   if (!Number.isFinite(amount) || amount < 0) return null;
@@ -1492,7 +1761,9 @@ function parseAttachmentByteSize(amountText: string | undefined, unitText: strin
   return multiplier ? Math.round(amount * multiplier) : null;
 }
 
-function attachmentKind(value: string | undefined): ChatAttachmentSummary["kind"] | null {
+function attachmentKind(
+  value: string | undefined
+): ChatAttachmentSummary["kind"] | null {
   if (value === "image" || value === "text" || value === "file") return value;
   return null;
 }
@@ -1509,7 +1780,9 @@ function isCodexInjectedUserMessage(content: string): boolean {
 
 function codexControlMessage(content: string): CodexControlMessage | null {
   const trimmed = content.trim();
-  const match = /^<(goal_context|turn_aborted)>\s*([\s\S]*?)\s*<\/\1>$/.exec(trimmed);
+  const match = /^<(goal_context|turn_aborted)>\s*([\s\S]*?)\s*<\/\1>$/.exec(
+    trimmed
+  );
   if (match) {
     const kind = match[1] as CodexControlMessage["kind"];
     return {
@@ -1517,22 +1790,37 @@ function codexControlMessage(content: string): CodexControlMessage | null {
       text: match[2]?.trim() || defaultCodexControlText(kind),
     };
   }
-  if (trimmed === "<turn_aborted>") return { kind: "turn_aborted", text: defaultCodexControlText("turn_aborted") };
-  if (trimmed === "<goal_context>") return { kind: "goal_context", text: defaultCodexControlText("goal_context") };
+  if (trimmed === "<turn_aborted>")
+    return {
+      kind: "turn_aborted",
+      text: defaultCodexControlText("turn_aborted"),
+    };
+  if (trimmed === "<goal_context>")
+    return {
+      kind: "goal_context",
+      text: defaultCodexControlText("goal_context"),
+    };
   return null;
 }
 
 function defaultCodexControlText(kind: CodexControlMessage["kind"]): string {
-  return kind === "turn_aborted" ? "The previous turn was interrupted." : "Goal context updated.";
+  return kind === "turn_aborted"
+    ? "The previous turn was interrupted."
+    : "Goal context updated.";
 }
 
 function truncateText(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}\n\n[truncated ${value.length - maxLength} characters from Codex history]`;
+  return `${value.slice(0, maxLength)}\n\n[truncated ${
+    value.length - maxLength
+  } characters from Codex history]`;
 }
 
 function normalizeTitleText(value: string): string {
-  return value.replace(/[^\S\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseMaybeJson(value: string): unknown | null {
@@ -1554,7 +1842,9 @@ function parseJson(value: string): CodexRecord | null {
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
 }
 
 function stringValue(value: unknown): string | null {
@@ -1565,7 +1855,9 @@ function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function stringMap(record: Record<string, unknown> | null): Map<string, string> {
+function stringMap(
+  record: Record<string, unknown> | null
+): Map<string, string> {
   const map = new Map<string, string>();
   if (!record) return map;
   for (const [key, value] of Object.entries(record)) {
@@ -1573,7 +1865,6 @@ function stringMap(record: Record<string, unknown> | null): Map<string, string> 
   }
   return map;
 }
-
 
 function safeId(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 96) || "item";
@@ -1613,7 +1904,9 @@ function isoFromEpochSeconds(value: number | null): string | null {
 }
 
 function isoFromFileName(filePath: string): string | null {
-  const match = /rollout-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-/.exec(path.basename(filePath));
+  const match = /rollout-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-/.exec(
+    path.basename(filePath)
+  );
   if (!match) return null;
   return isoTimestamp(`${match[1]}T${match[2]}:${match[3]}:${match[4]}.000Z`);
 }
@@ -1623,15 +1916,24 @@ function codexHomePath(): string {
 }
 
 function metadataLimit(): number {
-  return positiveIntegerEnv("OPENPOND_CODEX_HISTORY_LIMIT", DEFAULT_METADATA_LIMIT);
+  return positiveIntegerEnv(
+    "OPENPOND_CODEX_HISTORY_LIMIT",
+    DEFAULT_METADATA_LIMIT
+  );
 }
 
 function eventLimit(): number {
-  return positiveIntegerEnv("OPENPOND_CODEX_HISTORY_EVENT_LIMIT", DEFAULT_EVENT_LIMIT);
+  return positiveIntegerEnv(
+    "OPENPOND_CODEX_HISTORY_EVENT_LIMIT",
+    DEFAULT_EVENT_LIMIT
+  );
 }
 
 function threadTailBytes(): number {
-  return positiveIntegerEnv("OPENPOND_CODEX_HISTORY_THREAD_TAIL_BYTES", THREAD_TAIL_BYTES);
+  return positiveIntegerEnv(
+    "OPENPOND_CODEX_HISTORY_THREAD_TAIL_BYTES",
+    THREAD_TAIL_BYTES
+  );
 }
 
 function positiveIntegerEnv(name: string, fallback: number): number {

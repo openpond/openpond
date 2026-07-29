@@ -49,15 +49,13 @@ import {
 } from "../apps/web/src/lib/openpond-action-run";
 import { latestReadyLocalCreateImproveProfileRefreshKey } from "../apps/web/src/lib/create-pipeline-profile-refresh";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
-import type {
-  SandboxActionCatalogEntry,
-} from "../apps/web/src/lib/sandbox-types";
+import type { SandboxActionCatalogEntry } from "../apps/web/src/lib/sandbox-types";
 import type { BootstrapPayload } from "@openpond/contracts";
 
 const timestamp = "2026-06-20T00:00:00.000Z";
 
 function action(
-  input: Partial<SandboxActionCatalogEntry> & { id: string },
+  input: Partial<SandboxActionCatalogEntry> & { id: string }
 ): SandboxActionCatalogEntry {
   return {
     id: input.id,
@@ -108,19 +106,23 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
 describe("OpenPond App action channel", () => {
   test("labels a profile's default chat action with its configured agent name", () => {
     const [profileAction] = buildOpenPondProfileActionCatalog({
-      agents: [{
-        id: "release-reviewer",
-        name: "Release Reviewer",
-        path: "agents/release-reviewer",
-        enabled: true,
-      }],
-      actionCatalog: [{
-        id: "chat",
-        agentId: "release-reviewer",
-        sourceActionId: "chat",
-        label: "Chat",
-        description: "Reviews releases before they ship.",
-      }],
+      agents: [
+        {
+          id: "release-reviewer",
+          name: "Release Reviewer",
+          path: "agents/release-reviewer",
+          enabled: true,
+        },
+      ],
+      actionCatalog: [
+        {
+          id: "chat",
+          agentId: "release-reviewer",
+          sourceActionId: "chat",
+          label: "Chat",
+          description: "Reviews releases before they ship.",
+        },
+      ],
     });
 
     expect(profileAction?.implementation).toMatchObject({
@@ -149,7 +151,9 @@ describe("OpenPond App action channel", () => {
   });
 
   test("discovers built-in app commands from composer slash input", () => {
-    expect(composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)).toEqual([
+    expect(
+      composerSlashCommandMatches({ prompt: "/" }).map((item) => item.id)
+    ).toEqual([
       "agent",
       "skill",
       "goal",
@@ -157,41 +161,69 @@ describe("OpenPond App action channel", () => {
       "train",
       "sync-cloud",
     ]);
-    expect(composerSlashCommandMatches({ prompt: "/agent" }).map((item) => item.id)).toEqual(["agent"]);
-    expect(composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)).toEqual([
-      "agent",
-      "skill",
-      "train",
-    ]);
-    expect(parseComposerSlashCommandPrompt("/create summarize files")).toBeNull();
-    expect(composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)).toEqual([
-      "goal",
-    ]);
+    expect(
+      composerSlashCommandMatches({ prompt: "/agent" }).map((item) => item.id)
+    ).toEqual(["agent"]);
+    expect(
+      composerSlashCommandMatches({ prompt: "/create" }).map((item) => item.id)
+    ).toEqual(["agent", "skill", "train"]);
+    expect(
+      parseComposerSlashCommandPrompt("/create summarize files")
+    ).toBeNull();
+    expect(
+      composerSlashCommandMatches({ prompt: "/goal" }).map((item) => item.id)
+    ).toEqual(["goal"]);
     expect(composerSlashCommandMatches({ prompt: "/goal-r" })).toEqual([]);
-    expect(composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)).toEqual(["skill"]);
-    expect(composerSlashCommandMatches({ prompt: "/skill help" }).map((item) => item.id)).toEqual(["skill"]);
-    expect(composerSlashCommandMatches({ prompt: "/submit issue" }).map((item) => item.id)).toEqual(["submit-issue"]);
-    expect(parseComposerSlashCommandPrompt("/agent create summarize files")).toEqual({
+    expect(
+      composerSlashCommandMatches({ prompt: "/list" }).map((item) => item.id)
+    ).toEqual(["skill"]);
+    expect(
+      composerSlashCommandMatches({ prompt: "/skill help" }).map(
+        (item) => item.id
+      )
+    ).toEqual(["skill"]);
+    expect(
+      composerSlashCommandMatches({ prompt: "/submit issue" }).map(
+        (item) => item.id
+      )
+    ).toEqual(["submit-issue"]);
+    expect(
+      parseComposerSlashCommandPrompt("/agent create summarize files")
+    ).toEqual({
       command: "agent",
       args: "create summarize files",
     });
-    expect(parseComposerSlashCommandPrompt("/skill create release-notes")).toEqual({
+    expect(
+      parseComposerSlashCommandPrompt("/skill create release-notes")
+    ).toEqual({
       command: "skill",
       args: "create release-notes",
     });
-    expect(parseComposerSlashCommandPrompt("/goal-remote summarize files")).toBeNull();
-    expect(parseComposerSlashCommandPrompt("/goal-local summarize files")).toBeNull();
-    expect(composerSlashCommandsForProvider("openpond").map((item) => item.id)).not.toContain("goal");
-    expect(composerSlashCommandsForProvider("codex").map((item) => item.id)).toContain("goal");
+    expect(
+      parseComposerSlashCommandPrompt("/goal-remote summarize files")
+    ).toBeNull();
+    expect(
+      parseComposerSlashCommandPrompt("/goal-local summarize files")
+    ).toBeNull();
+    expect(
+      composerSlashCommandsForProvider("openpond").map((item) => item.id)
+    ).not.toContain("goal");
+    expect(
+      composerSlashCommandsForProvider("codex").map((item) => item.id)
+    ).toContain("goal");
     expect(parseComposerSlashCommandPrompt("/sync-cloud")).toEqual({
       command: "sync-cloud",
       args: "",
     });
-    expect(parseComposerSlashCommandPrompt("/submit-issue add a crash report")).toEqual({
+    expect(
+      parseComposerSlashCommandPrompt("/submit-issue add a crash report")
+    ).toEqual({
       command: "submit-issue",
       args: "add a crash report",
     });
-    expect(parseComposerSlashCommandPrompt("/unknown summarize files")).toBeNull();
+    expect(
+      parseComposerSlashCommandPrompt("/unknown summarize files")
+    ).toBeNull();
   });
 
   test("routes goal slash commands through chat", () => {
@@ -203,15 +235,19 @@ describe("OpenPond App action channel", () => {
   });
 
   test("builds GitHub-connected submit issue prompts for openpond", () => {
-    const prompt = buildSubmitIssueSlashPrompt("Add export progress to long-running workspace sync.");
+    const prompt = buildSubmitIssueSlashPrompt(
+      "Add export progress to long-running workspace sync."
+    );
 
     expect(prompt).toContain("@github");
     expect(prompt).toContain("openpond/openpond");
     expect(prompt).toContain("github.issue.create");
-    expect(prompt).toContain("Add export progress to long-running workspace sync.");
+    expect(prompt).toContain(
+      "Add export progress to long-running workspace sync."
+    );
   });
 
-  test.skip("legacy composer Agent Create/Improve envelopes are retired", () => {
+  test.skip("legacy /create composer envelopes remain retired", () => {
     const parsed = parseComposerSlashCommandPrompt("/create summarize files");
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
@@ -313,7 +349,9 @@ describe("OpenPond App action channel", () => {
     expect(request?.adapter.sourceAuthority).toBe("local_profile");
     expect(request?.scope.conversationId).toBe("session_create");
     expect(request?.context.messageIds).toEqual(["message_1", "message_2"]);
-    expect(request?.context.conversationExcerpts.map((excerpt) => excerpt.excerpt)).toEqual([
+    expect(
+      request?.context.conversationExcerpts.map((excerpt) => excerpt.excerpt)
+    ).toEqual([
       "We used the GitHub app to inspect release notes.",
       "The useful repeatable workflow is to summarize merged PRs.",
     ]);
@@ -343,8 +381,13 @@ describe("OpenPond App action channel", () => {
       },
     ]);
     const snapshot = buildInitialCreateImproveRun(request!);
-    expect(snapshot.workflowCapture?.profileActions).toEqual(["github.search_pull_requests"]);
-    expect(snapshot.workflowCapture?.externalProviders).toEqual(["GitHub", "github"]);
+    expect(snapshot.workflowCapture?.profileActions).toEqual([
+      "github.search_pull_requests",
+    ]);
+    expect(snapshot.workflowCapture?.externalProviders).toEqual([
+      "GitHub",
+      "github",
+    ]);
     expect(snapshot.workflowCapture?.sideEffects).toEqual(["action completed"]);
     expect(snapshot.workflowCapture?.files).toEqual([
       "release-notes.txt (chat-attachment:attachment_1)",
@@ -353,12 +396,14 @@ describe("OpenPond App action channel", () => {
       "artifact://pr-list",
       "trace://github/run_1",
     ]);
-    expect(snapshot.workflowCapture?.traceRefs).toEqual(["trace://github/run_1"]);
+    expect(snapshot.workflowCapture?.traceRefs).toEqual([
+      "trace://github/run_1",
+    ]);
     expect(snapshot.plan?.requirements).toContainEqual(
       expect.objectContaining({
         kind: "target_project",
         name: "Cloud Project",
-      }),
+      })
     );
     expect(snapshot.plan?.requirements).toContainEqual(
       expect.objectContaining({
@@ -366,31 +411,39 @@ describe("OpenPond App action channel", () => {
         name: "GitHub",
         status: "required",
         metadata: expect.objectContaining({ appId: "github" }),
-      }),
+      })
     );
-    expect(snapshot.plan?.requirements.some((requirement) => requirement.name === "github")).toBe(false);
+    expect(
+      snapshot.plan?.requirements.some(
+        (requirement) => requirement.name === "github"
+      )
+    ).toBe(false);
 
-    const parsedEdit = parseComposerSlashCommandPrompt("/edit tighten responses");
+    const parsedEdit = parseComposerSlashCommandPrompt(
+      "/edit tighten responses"
+    );
     expect(parsedEdit).not.toBeNull();
-    expect(buildComposerCreateImproveRun({
-      parsed: parsedEdit!,
-      prompt: "/edit tighten responses",
-      payload: {
-        account: {
-          activeProfile: { handle: "sam" },
-          label: "Sam",
-        },
-        preferences: { defaultTeamId: "team_1" },
-        profile: {
-          mode: "local",
-          activeProfile: "default",
-          repoPath: "/profiles/default-repo",
-          sourcePath: "/profiles/default-repo/profiles/default",
-          git: { head: "abc123" },
-        },
-      } as BootstrapPayload,
-      session: session({ appId: null, appName: null }),
-    })).toBeNull();
+    expect(
+      buildComposerCreateImproveRun({
+        parsed: parsedEdit!,
+        prompt: "/edit tighten responses",
+        payload: {
+          account: {
+            activeProfile: { handle: "sam" },
+            label: "Sam",
+          },
+          preferences: { defaultTeamId: "team_1" },
+          profile: {
+            mode: "local",
+            activeProfile: "default",
+            repoPath: "/profiles/default-repo",
+            sourcePath: "/profiles/default-repo/profiles/default",
+            git: { head: "abc123" },
+          },
+        } as BootstrapPayload,
+        session: session({ appId: null, appName: null }),
+      })
+    ).toBeNull();
 
     const editRequest = buildComposerCreateImproveRun({
       parsed: parsedEdit!,
@@ -420,9 +473,10 @@ describe("OpenPond App action channel", () => {
 
     const evalBackedEdit = buildComposerCreateImproveRun({
       parsed: parseComposerSlashCommandPrompt(
-        '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses',
+        '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses'
       )!,
-      prompt: '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses',
+      prompt:
+        '/edit --agent agent_1 --eval "agent/evals/reply.eval.ts" tighten responses',
       payload: {
         account: {
           activeProfile: { handle: "sam" },
@@ -440,10 +494,12 @@ describe("OpenPond App action channel", () => {
       session: session({ appId: "agent_1", appName: "Agent One" }),
     });
     expect(evalBackedEdit?.objective).toBe("tighten responses");
-    expect(evalBackedEdit?.context.evalRefs).toEqual(["agent/evals/reply.eval.ts"]);
+    expect(evalBackedEdit?.context.evalRefs).toEqual([
+      "agent/evals/reply.eval.ts",
+    ]);
   });
 
-  test.skip("legacy hidden Lab Agent Create/Improve runs are retired", () => {
+  test("builds a Lab Agent run on a hidden Lab execution session", () => {
     const labSession = session({
       id: "session_lab_agent",
       workspaceKind: "local_project",
@@ -491,7 +547,7 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test.skip("legacy Lab Agent improvement runs are retired", () => {
+  test("builds a Lab Agent improvement run from a plain outcome statement", () => {
     const labSession = session({
       id: "session_lab_agent_improve",
       systemKind: "openpond.lab",
@@ -535,8 +591,10 @@ describe("OpenPond App action channel", () => {
     });
   });
 
-  test.skip("legacy Create/Improve question synthesis is retired", () => {
-    const parsed = parseComposerSlashCommandPrompt("/create Help me keep track of open customer support items.");
+  test.skip("legacy /create question synthesis remains retired", () => {
+    const parsed = parseComposerSlashCommandPrompt(
+      "/create Help me keep track of open customer support items."
+    );
     expect(parsed).not.toBeNull();
     const request = buildComposerCreateImproveRun({
       parsed: parsed!,
@@ -576,13 +634,15 @@ describe("OpenPond App action channel", () => {
           onCancel: async () => undefined,
           onRevise: async () => undefined,
         },
-      }),
+      })
     );
     expect(planHtml).toContain(">Plan<");
     expect(planHtml).toContain("Chat only");
     expect(planHtml).toContain("Confirm plan");
     expect(planHtml).not.toContain("Details");
-    expect(planHtml).not.toContain("agents/help-me-keep-track-of-open-customer-support-item");
+    expect(planHtml).not.toContain(
+      "agents/help-me-keep-track-of-open-customer-support-item"
+    );
 
     const ready = {
       ...snapshot,
@@ -601,12 +661,14 @@ describe("OpenPond App action channel", () => {
         runtime: {
           run: ready,
         },
-      }),
+      })
     );
     expect(readyHtml).toContain(">Ready<");
     expect(readyHtml).toContain("Chat only");
     expect(readyHtml).toContain("2 Evals");
-    expect(readyHtml).not.toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
+    expect(readyHtml).not.toContain(
+      "profiles/default/agents/help-me-keep-track-of-open-customer-support-item"
+    );
     expect(readyHtml).not.toContain(".openpond/agent-inspect.json");
     expect(readyHtml).not.toContain(".openpond/eval-results.json");
 
@@ -631,11 +693,13 @@ describe("OpenPond App action channel", () => {
           run: detailsSnapshot,
         },
         goalRuntime: null,
-      }),
+      })
     );
     expect(detailsHtml).toContain("Create/Improve Details");
     expect(detailsHtml).toContain("Current Work");
-    expect(detailsHtml).toContain("Help me keep track of open customer support items.");
+    expect(detailsHtml).toContain(
+      "Help me keep track of open customer support items."
+    );
     expect(detailsHtml).toContain("Action Shape");
     expect(detailsHtml).toContain("Chat only");
     expect(detailsHtml).toContain("Setup Requirements");
@@ -643,7 +707,9 @@ describe("OpenPond App action channel", () => {
     expect(detailsHtml).toContain("Source Plan");
     expect(detailsHtml).toContain("Checks");
     expect(detailsHtml).toContain("Run Refs");
-    expect(detailsHtml).toContain("profiles/default/agents/help-me-keep-track-of-open-customer-support-item");
+    expect(detailsHtml).toContain(
+      "profiles/default/agents/help-me-keep-track-of-open-customer-support-item"
+    );
     expect(detailsHtml).toContain("Show structured payload");
   });
 
@@ -671,7 +737,7 @@ describe("OpenPond App action channel", () => {
         onSelectGoal: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
-      }),
+      })
     );
 
     expect(html).toContain("Right sidebar views");
@@ -679,7 +745,9 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain(">Files</span>");
     expect(html).not.toContain(">Summary</span>");
     expect(html).not.toContain(">Changes</span>");
-    expect(html.indexOf(">Goal</span>")).toBeLessThan(html.indexOf(">Files</span>"));
+    expect(html.indexOf(">Goal</span>")).toBeLessThan(
+      html.indexOf(">Files</span>")
+    );
   });
 
   test("renders New chat in the right sidebar add menu when side chats are available", () => {
@@ -707,7 +775,7 @@ describe("OpenPond App action channel", () => {
         onSelectGoal: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
-      }),
+      })
     );
 
     expect(html).toContain(">New task</span>");
@@ -719,7 +787,9 @@ describe("OpenPond App action channel", () => {
     const menuFilesIndex = html.lastIndexOf(">Files</span>");
     expect(html.indexOf(">New task</span>")).toBeLessThan(menuFilesIndex);
     expect(menuFilesIndex).toBeLessThan(html.indexOf(">Open file</span>"));
-    expect(html.indexOf(">Open file</span>")).toBeLessThan(html.indexOf(">Browser</span>"));
+    expect(html.indexOf(">Open file</span>")).toBeLessThan(
+      html.indexOf(">Browser</span>")
+    );
   });
 
   test("renders open side-chat titles in the right sidebar tab row", () => {
@@ -750,19 +820,25 @@ describe("OpenPond App action channel", () => {
         onSelectSideChat: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
-      }),
+      })
     );
 
     expect(html).toContain("right-chat-tab");
     expect(html).toContain(">New chat</span>");
-    expect(html).toContain("aria-label=\"Close New chat\"");
-    expect(html.indexOf(">Files</span>")).toBeLessThan(html.indexOf(">New chat</span>"));
+    expect(html).toContain('aria-label="Close New chat"');
+    expect(html.indexOf(">Files</span>")).toBeLessThan(
+      html.indexOf(">New chat</span>")
+    );
     expect(html).not.toContain(">Review</span>");
   });
 
   test("keeps direct sandbox chats on the standard right sidebar with a summary tab", () => {
-    expect(sandboxIdFromWorkspaceName("nas6d9khcmppt1sxvve1i7iu")).toBe("nas6d9khcmppt1sxvve1i7iu");
-    expect(sandboxIdFromWorkspaceName("H-16 X metadata-only sandbox proof")).toBeNull();
+    expect(sandboxIdFromWorkspaceName("nas6d9khcmppt1sxvve1i7iu")).toBe(
+      "nas6d9khcmppt1sxvve1i7iu"
+    );
+    expect(
+      sandboxIdFromWorkspaceName("H-16 X metadata-only sandbox proof")
+    ).toBeNull();
 
     const html = renderToStaticMarkup(
       createElement(WorkspaceDiffTabs, {
@@ -789,12 +865,14 @@ describe("OpenPond App action channel", () => {
         onSelectSummary: () => undefined,
         onToggleAddMenu: () => undefined,
         onToggleExpanded: () => undefined,
-      }),
+      })
     );
 
     expect(html).toContain(">Summary</span>");
     expect(html).toContain(">Files</span>");
-    expect(html.indexOf(">Summary</span>")).toBeLessThan(html.indexOf(">Files</span>"));
+    expect(html.indexOf(">Summary</span>")).toBeLessThan(
+      html.indexOf(">Files</span>")
+    );
   });
 
   test("discovers flat project actions from composer slash input", () => {
@@ -821,20 +899,22 @@ describe("OpenPond App action channel", () => {
     expect(composerActionSlashQuery("/ Water")).toBe("water");
     expect(
       composerActionCatalogMatches({ actions, prompt: "/estimate" }).map(
-        (item) => item.id,
-      ),
+        (item) => item.id
+      )
     ).toEqual(["water.estimate"]);
     expect(
       composerActionCatalogMatches({ actions, prompt: "/workflow" }).map(
-        (item) => item.id,
-      ),
+        (item) => item.id
+      )
     ).toEqual(["build.report"]);
     expect(
-      composerActionCatalogMatches({ actions, prompt: "/" }).map((item) => item.id),
+      composerActionCatalogMatches({ actions, prompt: "/" }).map(
+        (item) => item.id
+      )
     ).toEqual(["chat", "water.estimate", "build.report"]);
   });
 
-  test.skip("legacy Agent Create/Improve profile refresh projection is retired", () => {
+  test("detects ready local Agent Create/Improve runs for profile catalog refresh", () => {
     const ignoredBlocked = runtimeEvent({
       id: "event_blocked",
       sessionId: "session_1",
@@ -868,7 +948,6 @@ describe("OpenPond App action channel", () => {
             activeProfile: "default",
             sourceRef: "main",
             baseSha: null,
-            workItemId: null,
             confirmationPolicy: "always_require_plan_approval",
           },
         }),
@@ -890,14 +969,17 @@ describe("OpenPond App action channel", () => {
     });
 
     expect(
-      latestReadyLocalCreateImproveProfileRefreshKey([ignoredBlocked, ignoredHosted]),
+      latestReadyLocalCreateImproveProfileRefreshKey([
+        ignoredBlocked,
+        ignoredHosted,
+      ])
     ).toBeNull();
     expect(
       latestReadyLocalCreateImproveProfileRefreshKey([
         ignoredBlocked,
         readyLocal,
         ignoredHosted,
-      ]),
+      ])
     ).toBe("session_2:turn_2:create_improve_ready");
   });
 
@@ -921,7 +1003,7 @@ describe("OpenPond App action channel", () => {
         attachments: [attachment],
         prompt: "Estimate this plan",
         teamId: "team_1",
-      }),
+      })
     ).toEqual({
       teamId: "team_1",
       triggerType: "manual",
@@ -956,7 +1038,7 @@ describe("OpenPond App action channel", () => {
         },
         displayPrompt: "@sales-demo Summarize top salesmen",
         prompt: "Summarize top salesmen",
-      }),
+      })
     ).toEqual({
       teamId: "team_1",
       triggerType: "manual",
@@ -989,7 +1071,7 @@ describe("OpenPond App action channel", () => {
         prompt: "Which support items need attention?",
         displayPrompt: "@business Which support items need attention?",
         sessionId: "session_1",
-      }),
+      })
     ).toEqual({
       action: "business-ops-router.chat",
       input: {
@@ -1115,7 +1197,7 @@ describe("OpenPond App action channel", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
-      }),
+      })
     );
     expect(html).toContain("Run Water Estimate");
     expect(html).toContain("Estimated 42 fixture units.");
@@ -1124,8 +1206,10 @@ describe("OpenPond App action channel", () => {
     expect(html).toContain("Parse fixtures");
   });
 
-  test.skip("legacy Agent Create/Improve receipts remain historical only", () => {
-    const parsed = parseComposerSlashCommandPrompt("/create release notes agent");
+  test.skip("legacy /create receipt rendering remains historical only", () => {
+    const parsed = parseComposerSlashCommandPrompt(
+      "/create release notes agent"
+    );
     const request = buildComposerCreateImproveRun({
       parsed: parsed!,
       prompt: "/create release notes agent",
@@ -1204,12 +1288,16 @@ describe("OpenPond App action channel", () => {
         actionShape: {
           mode: "chat_and_direct_actions",
           label: "Chat plus direct action",
-          detail: "Expose a default chat route and a repeatable direct action when the generated source has a tool-like run.",
-          defaultActionKey: request!.target.kind === "agent"
-            ? request!.target.defaultActionKey ?? "chat"
-            : "chat",
-          directActionHint: "Create a direct action only for the repeatable tool-like behavior.",
-          artifactPolicy: "Persist trace and run summary; declare output artifacts when the direct action produces files.",
+          detail:
+            "Expose a default chat route and a repeatable direct action when the generated source has a tool-like run.",
+          defaultActionKey:
+            request!.target.kind === "agent"
+              ? request!.target.defaultActionKey ?? "chat"
+              : "chat",
+          directActionHint:
+            "Create a direct action only for the repeatable tool-like behavior.",
+          artifactPolicy:
+            "Persist trace and run summary; declare output artifacts when the direct action produces files.",
         } as const,
       },
     };
@@ -1225,7 +1313,7 @@ describe("OpenPond App action channel", () => {
           turnId: "turn_1",
           createImproveRun: snapshot,
         },
-      }),
+      })
     );
 
     expect(html).toContain("Create or improve status");
@@ -1258,7 +1346,7 @@ describe("OpenPond App action channel", () => {
       createElement(ApprovalRequestCard, {
         approval,
         onResolve: async () => undefined,
-      }),
+      })
     );
     expect(html).toBe("");
   });
@@ -1271,7 +1359,9 @@ describe("OpenPond App action channel", () => {
       providerRequestId: "run_1",
       kind: "subagent_patch_apply",
       title: "Apply coding subagent patch",
-      detail: JSON.stringify({ patchPath: "/tmp/openpond-subagents/run/handoff.patch" }),
+      detail: JSON.stringify({
+        patchPath: "/tmp/openpond-subagents/run/handoff.patch",
+      }),
       status: "pending",
       createdAt: timestamp,
     };
@@ -1279,7 +1369,7 @@ describe("OpenPond App action channel", () => {
       createElement(ApprovalRequestCard, {
         approval,
         onResolve: async () => undefined,
-      }),
+      })
     );
     expect(html).toContain("Subagent patch");
     expect(html).toContain("Apply coding subagent patch");

@@ -3,6 +3,7 @@ import type {
   ChatProvider,
   CodexPermissionMode,
   CodexReasoningEffort,
+  Experience,
   OpenPondCommandAccessMode,
 } from "@openpond/contracts";
 import {
@@ -13,7 +14,11 @@ import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
-import { SIDEBAR_SECTION_LIMIT, type AppView, type SettingsSection } from "../lib/app-models";
+import {
+  SIDEBAR_SECTION_LIMIT,
+  type AppView,
+  type SettingsSection,
+} from "../lib/app-models";
 
 export type AppToast = {
   id: number;
@@ -40,13 +45,23 @@ export type ShowAppToast = (
     | "dismissible"
     | "durationMs"
     | "placement"
-  >,
+  >
 ) => number;
 
-export type SidebarSectionMenuId = "cloud" | "projects" | "projects-options" | "chats";
+export type SidebarSectionMenuId =
+  | "cloud"
+  | "projects"
+  | "projects-options"
+  | "chats";
 
 export type NewProjectMode = "local" | "cloud" | "existing-local";
-export type RightPanelMode = "home" | "changes" | "browser" | "goal" | "chat" | "training";
+export type RightPanelMode =
+  | "home"
+  | "changes"
+  | "browser"
+  | "goal"
+  | "chat"
+  | "training";
 export type RightChatPanel = {
   id: string;
   activationVersion: number;
@@ -75,6 +90,7 @@ export type AppState = {
   promptDrafts: Record<string, string>;
   draftProvider: ChatProvider;
   draftModel: string;
+  draftExperience: Experience;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
   openPondCommandAccessMode: OpenPondCommandAccessMode;
@@ -119,6 +135,7 @@ export const initialAppState: AppState = {
   promptDrafts: {},
   draftProvider: DEFAULT_CHAT_PROVIDER,
   draftModel: DEFAULT_CHAT_MODEL,
+  draftExperience: "chat",
   codexPermissionMode: DEFAULT_CODEX_PERMISSION_MODE,
   codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT,
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
@@ -159,26 +176,39 @@ export type AppAction =
   | { type: "patch"; patch: Partial<AppState> }
   | { type: "selectApp"; appId: string | null }
   | { type: "selectProject"; projectId: string | null }
-  | { type: "selectSession"; sessionId: string | null; appId?: string | null; projectId?: string | null }
+  | {
+      type: "selectSession";
+      sessionId: string | null;
+      appId?: string | null;
+      projectId?: string | null;
+    }
   | { type: "beginNewChat"; appId: string | null }
   | { type: "openCommitDialog"; nextStep: CommitNextStep }
   | { type: "openBranchDialog"; branchName: string }
   | { type: "showToast"; toast: AppToast }
   | { type: "clearToast"; toastId: number };
 
-type PromptSelectionState = Pick<AppState, "selectedAppId" | "selectedProjectId" | "selectedSessionId">;
+type PromptSelectionState = Pick<
+  AppState,
+  | "draftExperience"
+  | "selectedAppId"
+  | "selectedProjectId"
+  | "selectedSessionId"
+>;
 
 function promptDraftKey(selection: PromptSelectionState): string {
-  if (selection.selectedSessionId) return `session:${selection.selectedSessionId}`;
-  if (selection.selectedProjectId) return `project:${selection.selectedProjectId}`;
+  if (selection.selectedSessionId)
+    return `session:${selection.selectedSessionId}`;
+  if (selection.selectedProjectId)
+    return `project:${selection.selectedProjectId}`;
   if (selection.selectedAppId) return `app:${selection.selectedAppId}`;
-  return "new-chat";
+  return `new-${selection.draftExperience}`;
 }
 
 function setPromptDraft(
   drafts: Record<string, string>,
   key: string,
-  prompt: string,
+  prompt: string
 ): Record<string, string> {
   if (!prompt) {
     if (!(key in drafts)) return drafts;
@@ -189,13 +219,17 @@ function setPromptDraft(
 }
 
 function saveCurrentPromptDraft(state: AppState): Record<string, string> {
-  return setPromptDraft(state.promptDrafts, promptDraftKey(state), state.prompt);
+  return setPromptDraft(
+    state.promptDrafts,
+    promptDraftKey(state),
+    state.prompt
+  );
 }
 
 function selectPromptDraft(
   state: AppState,
   patch: Partial<AppState>,
-  options: { clearSelectedDraft?: boolean } = {},
+  options: { clearSelectedDraft?: boolean } = {}
 ): AppState {
   const selected = { ...state, ...patch };
   const selectedKey = promptDraftKey(selected);
@@ -207,40 +241,56 @@ function selectPromptDraft(
     ...state,
     ...patch,
     promptDrafts,
-    prompt: options.clearSelectedDraft ? "" : (promptDrafts[selectedKey] ?? ""),
+    prompt: options.clearSelectedDraft ? "" : promptDrafts[selectedKey] ?? "",
   };
 }
 
-function isPromptSelectionKey(key: keyof AppState): key is "selectedAppId" | "selectedProjectId" | "selectedSessionId" {
-  return key === "selectedAppId" || key === "selectedProjectId" || key === "selectedSessionId";
+function isPromptSelectionKey(
+  key: keyof AppState
+): key is
+  | "draftExperience"
+  | "selectedAppId"
+  | "selectedProjectId"
+  | "selectedSessionId" {
+  return (
+    key === "draftExperience" ||
+    key === "selectedAppId" ||
+    key === "selectedProjectId" ||
+    key === "selectedSessionId"
+  );
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
-    case "field":
-      {
-        const current = state[action.key] as never;
-        const nextValue =
-          typeof action.value === "function"
-            ? (action.value as (current: never) => unknown)(current)
-            : action.value;
-        if (Object.is(current, nextValue)) return state;
-        if (action.key === "prompt") {
-          const prompt = String(nextValue);
-          return {
-            ...state,
-            prompt,
-            promptDrafts: setPromptDraft(state.promptDrafts, promptDraftKey(state), prompt),
-          };
-        }
-        if (isPromptSelectionKey(action.key)) {
-          return selectPromptDraft(state, { [action.key]: nextValue } as Partial<AppState>);
-        }
+    case "field": {
+      const current = state[action.key] as never;
+      const nextValue =
+        typeof action.value === "function"
+          ? (action.value as (current: never) => unknown)(current)
+          : action.value;
+      if (Object.is(current, nextValue)) return state;
+      if (action.key === "prompt") {
+        const prompt = String(nextValue);
         return {
           ...state,
-          [action.key]: nextValue,
+          prompt,
+          promptDrafts: setPromptDraft(
+            state.promptDrafts,
+            promptDraftKey(state),
+            prompt
+          ),
         };
       }
+      if (isPromptSelectionKey(action.key)) {
+        return selectPromptDraft(state, {
+          [action.key]: nextValue,
+        } as Partial<AppState>);
+      }
+      return {
+        ...state,
+        [action.key]: nextValue,
+      };
+    }
     case "patch":
       return { ...state, ...action.patch };
     case "selectApp":
@@ -257,24 +307,27 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         selectedSessionId: null,
         view: "chat",
       });
-    case "selectSession":
-      {
-        const projectId = action.projectId ?? null;
-        return selectPromptDraft(state, {
-          selectedSessionId: action.sessionId,
-          selectedAppId: projectId ? null : (action.appId ?? null),
-          selectedProjectId: projectId,
-          view: "chat",
-        });
-      }
-    case "beginNewChat":
+    case "selectSession": {
+      const projectId = action.projectId ?? null;
       return selectPromptDraft(state, {
-        selectedSessionId: null,
-        selectedAppId: action.appId,
-        selectedProjectId: null,
-        error: null,
+        selectedSessionId: action.sessionId,
+        selectedAppId: projectId ? null : action.appId ?? null,
+        selectedProjectId: projectId,
         view: "chat",
-      }, { clearSelectedDraft: true });
+      });
+    }
+    case "beginNewChat":
+      return selectPromptDraft(
+        state,
+        {
+          selectedSessionId: null,
+          selectedAppId: action.appId,
+          selectedProjectId: null,
+          error: null,
+          view: "chat",
+        },
+        { clearSelectedDraft: true }
+      );
     case "openCommitDialog":
       return {
         ...state,
@@ -297,15 +350,22 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "showToast":
       return { ...state, toast: action.toast };
     case "clearToast":
-      return state.toast?.id === action.toastId ? { ...state, toast: null } : state;
+      return state.toast?.id === action.toastId
+        ? { ...state, toast: null }
+        : state;
     default:
       return state;
   }
 }
 
-type FieldSetter<Key extends keyof AppState> = Dispatch<SetStateAction<AppState[Key]>>;
+type FieldSetter<Key extends keyof AppState> = Dispatch<
+  SetStateAction<AppState[Key]>
+>;
 
-function fieldSetter<Key extends keyof AppState>(dispatch: Dispatch<AppAction>, key: Key): FieldSetter<Key> {
+function fieldSetter<Key extends keyof AppState>(
+  dispatch: Dispatch<AppAction>,
+  key: Key
+): FieldSetter<Key> {
   return (value) => dispatch({ type: "field", key, value } as AppAction);
 }
 
@@ -326,9 +386,13 @@ export function createAppSetters(dispatch: Dispatch<AppAction>) {
     setPrompt: fieldSetter(dispatch, "prompt"),
     setDraftProvider: fieldSetter(dispatch, "draftProvider"),
     setDraftModel: fieldSetter(dispatch, "draftModel"),
+    setDraftExperience: fieldSetter(dispatch, "draftExperience"),
     setCodexPermissionMode: fieldSetter(dispatch, "codexPermissionMode"),
     setCodexReasoningEffort: fieldSetter(dispatch, "codexReasoningEffort"),
-    setOpenPondCommandAccessMode: fieldSetter(dispatch, "openPondCommandAccessMode"),
+    setOpenPondCommandAccessMode: fieldSetter(
+      dispatch,
+      "openPondCommandAccessMode"
+    ),
     setBusy: fieldSetter(dispatch, "busy"),
     setDiffPanelOpen: fieldSetter(dispatch, "diffPanelOpen"),
     setDiffPanelExpanded: fieldSetter(dispatch, "diffPanelExpanded"),

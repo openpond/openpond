@@ -6,7 +6,9 @@ import { discoverCommandArtifacts } from "../apps/server/src/openpond/command-ar
 
 describe("command artifact discovery", () => {
   test("persists existing media paths reported by a successful command", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-command-artifacts-"));
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-command-artifacts-")
+    );
     try {
       const videoPath = path.join(root, "demo branded.mp4");
       const imagePath = path.join(root, "contact-sheet.png");
@@ -19,10 +21,20 @@ describe("command artifact discovery", () => {
         stderr: "",
       });
 
-      expect(artifacts).toEqual(expect.arrayContaining([
-        expect.objectContaining({ path: videoPath, contentType: "video/mp4", sizeBytes: 5 }),
-        expect.objectContaining({ path: imagePath, contentType: "image/png", sizeBytes: 5 }),
-      ]));
+      expect(artifacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            path: videoPath,
+            contentType: "video/mp4",
+            sizeBytes: 5,
+          }),
+          expect.objectContaining({
+            path: imagePath,
+            contentType: "image/png",
+            sizeBytes: 5,
+          }),
+        ])
+      );
       expect(artifacts).toHaveLength(2);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -30,27 +42,58 @@ describe("command artifact discovery", () => {
   });
 
   test("ignores output paths that do not exist", async () => {
-    await expect(discoverCommandArtifacts({
-      cwd: "/tmp",
-      stdout: "Updated file: /tmp/openpond-missing-output.mp4",
-      stderr: "",
-    })).resolves.toEqual([]);
+    await expect(
+      discoverCommandArtifacts({
+        cwd: "/tmp",
+        stdout: "Updated file: /tmp/openpond-missing-output.mp4",
+        stderr: "",
+      })
+    ).resolves.toEqual([]);
   });
 
-  test("keeps diagnostic file mentions in stderr out of deliverable artifacts", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "openpond-command-artifacts-"));
+  test("discovers Markdown deliverables", async () => {
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-command-artifacts-")
+    );
     try {
-      const sourcePath = path.join(root, "source.mp4");
-      await writeFile(sourcePath, Buffer.from("source"));
+      const reportPath = path.join(root, "report.md");
+      await writeFile(reportPath, "# Finished report\n");
 
-      await expect(discoverCommandArtifacts({
-        cwd: root,
-        stdout: "",
-        stderr: `Input #0, mov,mp4, from '${sourcePath}':`,
-      })).resolves.toEqual([]);
+      await expect(
+        discoverCommandArtifacts({
+          cwd: root,
+          stdout: '{"outputPath":"report.md"}',
+          stderr: "",
+        })
+      ).resolves.toEqual([
+        expect.objectContaining({
+          path: reportPath,
+          title: "report.md",
+          contentType: "text/markdown",
+        }),
+      ]);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
 
+  test("keeps diagnostic file mentions in stderr out of deliverable artifacts", async () => {
+    const root = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-command-artifacts-")
+    );
+    try {
+      const sourcePath = path.join(root, "source.mp4");
+      await writeFile(sourcePath, Buffer.from("source"));
+
+      await expect(
+        discoverCommandArtifacts({
+          cwd: root,
+          stdout: "",
+          stderr: `Input #0, mov,mp4, from '${sourcePath}':`,
+        })
+      ).resolves.toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

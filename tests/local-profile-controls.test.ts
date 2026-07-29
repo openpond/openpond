@@ -255,7 +255,6 @@ describe("local profile control invariants", () => {
       hostedSourceCheck: {
         status: "requested",
         agentId: "agent_123",
-        workItemId: "work_item_123",
         deployPlanStatus: "ready",
         canRun: true,
         canDeploy: true,
@@ -376,7 +375,6 @@ describe("local profile control invariants", () => {
       agentId: "agent_123",
       status: "requested",
       checkResult: {
-        workItem: { id: "work_item_123" },
         deployPlan: {
           status: "ready",
           canRun: true,
@@ -449,7 +447,6 @@ describe("local profile control invariants", () => {
 
     expect(sourceCheck).toMatchObject({
       status: "requested",
-      workItemId: "work_item_123",
       manifestHash: "manifest_hash_123",
       setupCommands: ["pnpm install"],
       runtimeId: "runtime_123",

@@ -3,11 +3,8 @@ import {
   Suspense,
   useEffect,
   useCallback,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
-  type CSSProperties,
 } from "react";
 import type {
   ChatAttachment,
@@ -29,10 +26,7 @@ import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-typ
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
 import { absoluteLocalVideoPath } from "../../lib/local-video";
-import {
-  buildChatTimelineRows,
-  shouldShowThinkingIndicator,
-} from "../../lib/chat-timeline-rows";
+import { shouldShowThinkingIndicator } from "../../lib/chat-timeline-rows";
 import {
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
@@ -51,9 +45,7 @@ import {
   hasGitHubIssueSubmitConnection,
 } from "../../lib/submit-issue-command";
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
-import {
-  skillPromptForComposer,
-} from "../../lib/profile-skill-composer";
+import { skillPromptForComposer } from "../../lib/profile-skill-composer";
 import {
   composerProfileTargetForLibrary,
   composerSkillsForProfile,
@@ -63,31 +55,21 @@ import {
 import { selectComposerProfileTransaction } from "../../lib/profile-selection-transaction";
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
+import { WorkSidebarPanel } from "./WorkSidebarPanel";
+import { WorkStarterPrompts } from "./WorkStarterPrompts";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
-import type {
-  WorkspaceFileSourceSwitcher,
-} from "../workspace-diff/workspace-diff-panel-model";
+import type { WorkspaceFileSourceSwitcher } from "../workspace-diff/workspace-diff-panel-model";
 import { useLabCandidateReview } from "../../hooks/useLabCandidateReview";
 import { useLabAgentAuthoring } from "../../hooks/useLabAgentAuthoring";
 import {
-  CHAT_HISTORY_TOP_THRESHOLD_PX,
-  CHAT_USER_MESSAGE_SCROLL_OFFSET_PX,
-  EMPTY_USER_MESSAGE_NAVIGATION,
   billingTargetForContext,
-  easeInOutCubic,
-  easedChatScrollDuration,
-  isNearChatBottom,
   latestCreatePipelineRuntime,
-  messageScrollTop,
-  nextUserMessageTarget,
   promptForAppSlashCommand,
   sandboxIdFromWorkspaceName,
   shouldSubmitComposerSlashCommandToChat,
   usageAttributionForComposerSlashCommand,
-  userMessageNavigationState,
-  type UserMessageNavigationState,
 } from "./main-pane-helpers";
 import {
   ActiveTrainingChatHandoffBar,
@@ -99,6 +81,8 @@ import {
 import type { MainPaneProps } from "./main-pane-types";
 import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
+import { outputHandoffPrompt } from "../../lib/experience-handoff";
+import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
 
 import {
   AppsView,
@@ -110,22 +94,28 @@ import {
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
-  TeamChatView, CommunityView,
+  TeamChatView,
+  CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
 
 const TrainingDraftPanel = lazy(() =>
   import("../training/TrainingDraftPanel").then((module) => ({
     default: module.TrainingDraftPanel,
-  })),
+  }))
 );
-const MainChatThread = lazy(() => import("./MainChatThread").then((module) => ({ default: module.MainChatThread })));
+const MainChatThread = lazy(() =>
+  import("./MainChatThread").then((module) => ({
+    default: module.MainChatThread,
+  }))
+);
 const TrainingCreationPanel = lazy(() =>
   import("../training/TrainingCreationPanel").then((module) => ({
     default: module.TrainingCreationPanel,
-  })),
+  }))
 );
 export function MainPane({
+  experience,
   view,
   teamChat,
   community,
@@ -138,6 +128,7 @@ export function MainPane({
   selectedSessionId,
   composerDraftStore,
   mainComposerFocusRequestId,
+  onRequestComposerFocus,
   labCloseDetailRequestId,
   labCloseDetailKind,
   sideChatTrainingLaunchRequest,
@@ -196,6 +187,7 @@ export function MainPane({
   onTrainingChatTaskSelect,
   onTrainingChatHandoffDismiss,
   onOpenSession,
+  onExperienceHandoff,
   cloudProjects,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
@@ -257,163 +249,210 @@ export function MainPane({
   onCloseTerminal,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
-  const [composerAttachmentRequest, setComposerAttachmentRequest] = useState<ComposerAttachmentRequest | null>(null);
-  const chatThreadRef = useRef<HTMLElement | null>(null);
-  const composerStackRef = useRef<HTMLDivElement | null>(null);
-  const stickyChatScrollRef = useRef(true);
-  const previousConversationKeyRef = useRef<string | null>(null);
-  const pendingChatScrollRestoreRef = useRef<{ scrollHeight: number; scrollTop: number } | null>(null);
-  const remoteHistoryLoadPendingRef = useRef(false);
-  const initialChatScrollPendingRef = useRef(false);
-  const autoChatScrollPendingRef = useRef(false);
-  const autoChatScrollFrameRef = useRef<number | null>(null);
-  const smoothChatScrollFrameRef = useRef<number | null>(null);
-  const [initialChatScrollVersion, setInitialChatScrollVersion] = useState(0);
-  const [initialChatScrollReadyKey, setInitialChatScrollReadyKey] = useState<string | null>(null);
-  const [showScrollToBottomButton, setShowScrollToBottomButton] = useState(false);
-  const [chatComposerReservePx, setChatComposerReservePx] = useState(132);
-  const [userMessageNavigation, setUserMessageNavigation] = useState<UserMessageNavigationState>(
-    EMPTY_USER_MESSAGE_NAVIGATION,
-  );
-  const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{ id: number; path: string } | null>(null);
-  const [rightSidebarSourceOverride, setRightSidebarSourceOverride] = useState<RightSidebarFileSource | null>(null);
-  const [labSkillSource, setLabSkillSource] = useState<LabSkillSourceSelection | null>(null);
-  const [trainingLaunchRequest, setTrainingLaunchRequest] = useState<TrainingLaunchRequest | null>(null);
-  const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<string | null>(null);
-  const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<string | null>(null);
+  const [composerAttachmentRequest, setComposerAttachmentRequest] =
+    useState<ComposerAttachmentRequest | null>(null);
+  const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{
+    id: number;
+    path: string;
+  } | null>(null);
+  const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
+    useState<RightSidebarFileSource | null>(null);
+  const [labSkillSource, setLabSkillSource] =
+    useState<LabSkillSourceSelection | null>(null);
+  const [trainingLaunchRequest, setTrainingLaunchRequest] =
+    useState<TrainingLaunchRequest | null>(null);
+  const [selectedTrainingTasksetId, setSelectedTrainingTasksetId] = useState<
+    string | null
+  >(null);
+  const [selectedTrainingJobId, setSelectedTrainingJobId] = useState<
+    string | null
+  >(null);
   const [requestedComposerAction, setRequestedComposerAction] = useState<{
     actionId: string;
     requestId: number;
   } | null>(null);
-  const [profileActionCatalogOverride, setProfileActionCatalogOverride] = useState<
-    SandboxActionCatalogEntry[]
-  >([]);
+  const [profileActionCatalogOverride, setProfileActionCatalogOverride] =
+    useState<SandboxActionCatalogEntry[]>([]);
   const selectedProfileSession = useMemo(
-    () => bootstrap?.sessions.find((session) => session.id === selectedSessionId) ?? null,
-    [bootstrap?.sessions, selectedSessionId],
+    () =>
+      bootstrap?.sessions.find((session) => session.id === selectedSessionId) ??
+      null,
+    [bootstrap?.sessions, selectedSessionId]
   );
-  const selectedProfileRef = selectedProfileSession?.currentProfile ?? bootstrap?.profileLibrary?.lastUsed ?? null;
-  const selectedProfileState = profileStateForRef(
-    bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
-    selectedProfileRef,
-  ) ?? bootstrap?.profile ?? null;
+  const selectedProfileRef =
+    selectedProfileSession?.currentProfile ??
+    bootstrap?.profileLibrary?.lastUsed ??
+    null;
+  const selectedProfileState =
+    profileStateForRef(
+      bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] },
+      selectedProfileRef
+    ) ??
+    bootstrap?.profile ??
+    null;
   const selectedProfileSkills = useMemo(
-    () => composerSkillsForProfile(selectedProfileState, bootstrap?.extensionCatalog),
-    [bootstrap?.extensionCatalog, selectedProfileState],
+    () =>
+      composerSkillsForProfile(
+        selectedProfileState,
+        bootstrap?.extensionCatalog
+      ),
+    [bootstrap?.extensionCatalog, selectedProfileState]
   );
   const selectedProfileActionCatalog = useMemo(
     () => buildOpenPondProfileActionCatalog(selectedProfileState),
-    [selectedProfileState],
+    [selectedProfileState]
   );
   const composerProfileTarget = useMemo(() => {
-    return composerProfileTargetForLibrary(bootstrap?.profileLibrary, selectedProfileRef);
-  }, [bootstrap?.profileLibrary, selectedProfileRef]);
-  const changeComposerProfile = useCallback(async (
-    value: string,
-    targetSessionId: string | null = selectedSessionId,
-  ) => {
-    if (!connection || !bootstrap) return;
-    const ref = openPondProfileRefFromKey(
-      bootstrap.profileLibrary ?? { lastUsed: null, profiles: [] },
-      value,
+    return composerProfileTargetForLibrary(
+      bootstrap?.profileLibrary,
+      selectedProfileRef
     );
-    if (!ref) return;
-    try {
-      const targetSession = targetSessionId && !isCodexHistorySessionId(targetSessionId)
-        ? bootstrap.sessions.find((session) => session.id === targetSessionId) ?? null
-        : null;
-      const result = await selectComposerProfileTransaction({
-        ref,
-        session: targetSession,
-        selectProfile: (nextRef) => api.profileSelect(connection, nextRef),
-        patchSession: (sessionId, currentProfile) =>
-          api.patchSession(connection, sessionId, { currentProfile }),
-      });
-      let sessions = bootstrap.sessions;
-      if (result.session) {
-        sessions = sessions.map((session) =>
-          session.id === result.session!.id ? result.session! : session,
-        );
+  }, [bootstrap?.profileLibrary, selectedProfileRef]);
+  const changeComposerProfile = useCallback(
+    async (
+      value: string,
+      targetSessionId: string | null = selectedSessionId
+    ) => {
+      if (!connection || !bootstrap) return;
+      const ref = openPondProfileRefFromKey(
+        bootstrap.profileLibrary ?? { lastUsed: null, profiles: [] },
+        value
+      );
+      if (!ref) return;
+      try {
+        const targetSession =
+          targetSessionId && !isCodexHistorySessionId(targetSessionId)
+            ? bootstrap.sessions.find(
+                (session) => session.id === targetSessionId
+              ) ?? null
+            : null;
+        const result = await selectComposerProfileTransaction({
+          ref,
+          session: targetSession,
+          selectProfile: (nextRef) => api.profileSelect(connection, nextRef),
+          patchSession: (sessionId, currentProfile) =>
+            api.patchSession(connection, sessionId, { currentProfile }),
+        });
+        let sessions = bootstrap.sessions;
+        if (result.session) {
+          sessions = sessions.map((session) =>
+            session.id === result.session!.id ? result.session! : session
+          );
+        }
+        onPayload({
+          ...bootstrap,
+          profile: result.selected.profile,
+          profileLibrary: result.selected.library,
+          sessions,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        onError(message);
+        showToast(message, "error");
       }
-      onPayload({
-        ...bootstrap,
-        profile: result.selected.profile,
-        profileLibrary: result.selected.library,
-        sessions,
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      onError(message);
-      showToast(message, "error");
-    }
-  }, [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]);
+    },
+    [bootstrap, connection, onError, onPayload, selectedSessionId, showToast]
+  );
   useEffect(() => {
     if (!sidebarFileOpenRequest) return;
     const { file, id } = sidebarFileOpenRequest;
     setOpenDiffFileRequest({ id, path: file.path });
     if (!connection) return;
     let cancelled = false;
-    const loadFile = file.workspaceKind === "local"
-      ? api.workspaceFile(connection, file.workspaceId, file.path).then((response) => response.content ?? "")
-      : api.sandboxDownloadFile(connection, file.workspaceId, file.path).then((response) => {
-          if (response.file.isBinary) throw new Error("Binary files cannot be attached to chat.");
-          return response.contents;
+    const loadFile =
+      file.workspaceKind === "local"
+        ? api
+            .workspaceFile(connection, file.workspaceId, file.path)
+            .then((response) => response.content ?? "")
+        : api
+            .sandboxDownloadFile(connection, file.workspaceId, file.path)
+            .then((response) => {
+              if (response.file.isBinary)
+                throw new Error("Binary files cannot be attached to chat.");
+              return response.contents;
+            });
+    void loadFile
+      .then((contents) => {
+        if (cancelled) return;
+        const filename = file.path.split("/").at(-1) ?? file.path;
+        setComposerAttachmentRequest({
+          id,
+          file: new File([contents], filename, {
+            type: sidebarFileMediaType(file),
+          }),
         });
-    void loadFile.then((contents) => {
-      if (cancelled) return;
-      const filename = file.path.split("/").at(-1) ?? file.path;
-      setComposerAttachmentRequest({
-        id,
-        file: new File([contents], filename, { type: sidebarFileMediaType(file) }),
+      })
+      .catch((fileError) => {
+        if (!cancelled) {
+          showToast(
+            fileError instanceof Error ? fileError.message : String(fileError),
+            "error"
+          );
+        }
       });
-    }).catch((fileError) => {
-      if (!cancelled) {
-        showToast(fileError instanceof Error ? fileError.message : String(fileError), "error");
-      }
-    });
     return () => {
       cancelled = true;
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
+    if (experience !== "development") return [];
     const byId = new Map(
       actionCatalog
         .filter((action) => !isOpenPondProfileAction(action))
-        .map((action) => [action.id, action]),
+        .map((action) => [action.id, action])
     );
-    for (const action of selectedProfileActionCatalog) byId.set(action.id, action);
-    for (const action of profileActionCatalogOverride) byId.set(action.id, action);
+    for (const action of selectedProfileActionCatalog)
+      byId.set(action.id, action);
+    for (const action of profileActionCatalogOverride)
+      byId.set(action.id, action);
     return [...byId.values()];
-  }, [actionCatalog, profileActionCatalogOverride, selectedProfileActionCatalog]);
+  }, [
+    actionCatalog,
+    experience,
+    profileActionCatalogOverride,
+    selectedProfileActionCatalog,
+  ]);
   const labCandidateReview = useLabCandidateReview(connection);
-  const handleLabCandidateReviewChange = useCallback((input: {
-    run: CreateImproveReviewActionInput["run"];
-    candidate: CreateImproveReviewActionInput["run"]["candidates"][number];
-    fileRootPath: string | null;
-    initialPath: string | null;
-  } | null) => {
-    if (!input) {
-      labCandidateReview.activate(null);
-      return;
-    }
-    labCandidateReview.activate({
-      runId: input.run.id,
-      candidateId: input.candidate.id,
-      title: input.run.objective,
-      fileRootPath: input.fileRootPath,
-      initialPath: input.initialPath,
-    });
-  }, [labCandidateReview.activate]);
+  const handleLabCandidateReviewChange = useCallback(
+    (
+      input: {
+        run: CreateImproveReviewActionInput["run"];
+        candidate: CreateImproveReviewActionInput["run"]["candidates"][number];
+        fileRootPath: string | null;
+        initialPath: string | null;
+      } | null
+    ) => {
+      if (!input) {
+        labCandidateReview.activate(null);
+        return;
+      }
+      labCandidateReview.activate({
+        runId: input.run.id,
+        candidateId: input.candidate.id,
+        title: input.run.objective,
+        fileRootPath: input.fileRootPath,
+        initialPath: input.initialPath,
+      });
+    },
+    [labCandidateReview.activate]
+  );
   const handleOpenLabCandidateFiles = useCallback(() => {
     if (labCandidateReview.selection?.initialPath) {
       labCandidateReview.openFile(labCandidateReview.selection.initialPath);
     }
     onShowDiffPanel();
-  }, [labCandidateReview.openFile, labCandidateReview.selection?.initialPath, onShowDiffPanel]);
-  const handleLabSkillSelectionChange = useCallback((selection: LabSkillSourceSelection | null) => {
-    setLabSkillSource(selection);
-    if (selection) onShowDiffPanel();
-  }, [onShowDiffPanel]);
+  }, [
+    labCandidateReview.openFile,
+    labCandidateReview.selection?.initialPath,
+    onShowDiffPanel,
+  ]);
+  const handleLabSkillSelectionChange = useCallback(
+    (selection: LabSkillSourceSelection | null) => {
+      setLabSkillSource(selection);
+      if (selection) onShowDiffPanel();
+    },
+    [onShowDiffPanel]
+  );
   const handleCloseLabSkillSource = useCallback(() => {
     setLabSkillSource(null);
     if (diffPanelExpanded) onToggleDiffPanelExpanded();
@@ -421,58 +460,82 @@ export function MainPane({
   useEffect(() => {
     if (view !== "labs") setLabSkillSource(null);
   }, [view]);
-  const handleUseAgent = useCallback((actionId: string, agentName: string) => {
-    const requestId = Date.now();
-    const existingAction = actionCatalog.find((action) => action.id === actionId) ?? null;
-    composerDraftStore.set("");
-    setMentionedAppId(null);
-    setView("chat");
+  const handleUseAgent = useCallback(
+    (actionId: string, agentName: string) => {
+      const requestId = Date.now();
+      const existingAction =
+        actionCatalog.find((action) => action.id === actionId) ?? null;
+      composerDraftStore.set("");
+      setMentionedAppId(null);
+      setView("chat");
 
-    const selectActionAfterCatalogCommit = (actions: SandboxActionCatalogEntry[]) => {
-      const selected = actions.find((action) => action.id === actionId) ?? null;
-      if (!selected) return false;
-      const labeledActions = actions.map((action) =>
-        action.id === actionId ? { ...action, label: agentName } : action,
-      );
-      setProfileActionCatalogOverride(labeledActions);
-      window.requestAnimationFrame(() => {
-        setRequestedComposerAction({
-          actionId,
-          requestId: Math.max(Date.now(), requestId + 1),
-        });
-      });
-      return true;
-    };
-
-    if (!connection) {
-      if (existingAction) {
-        selectActionAfterCatalogCommit([existingAction]);
-      } else {
-        showToast("The Agent action catalog is still loading. Try Use again.", "error");
-      }
-      return;
-    }
-
-    void api.profileCurrent(connection)
-      .then((profile) => {
-        const freshActions = profile.actionCatalog.map((action) =>
-          buildOpenPondProfileActionCommand(action)
+      const selectActionAfterCatalogCommit = (
+        actions: SandboxActionCatalogEntry[]
+      ) => {
+        const selected =
+          actions.find((action) => action.id === actionId) ?? null;
+        if (!selected) return false;
+        const labeledActions = actions.map((action) =>
+          action.id === actionId ? { ...action, label: agentName } : action
         );
-        if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
+        setProfileActionCatalogOverride(labeledActions);
+        window.requestAnimationFrame(() => {
+          setRequestedComposerAction({
+            actionId,
+            requestId: Math.max(Date.now(), requestId + 1),
+          });
+        });
+        return true;
+      };
+
+      if (!connection) {
+        if (existingAction) {
           selectActionAfterCatalogCommit([existingAction]);
-        } else if (!freshActions.some((action) => action.id === actionId)) {
-          showToast("This Agent is ready, but its default chat action is unavailable.", "error");
+        } else {
+          showToast(
+            "The Agent action catalog is still loading. Try Use again.",
+            "error"
+          );
         }
-      })
-      .catch((error) => {
-        if (!existingAction) {
-          showToast(error instanceof Error ? error.message : String(error), "error");
-        }
-      });
-  }, [actionCatalog, composerDraftStore, connection, setMentionedAppId, setView, showToast]);
+        return;
+      }
+
+      void api
+        .profileCurrent(connection)
+        .then((profile) => {
+          const freshActions = profile.actionCatalog.map((action) =>
+            buildOpenPondProfileActionCommand(action)
+          );
+          if (!selectActionAfterCatalogCommit(freshActions) && existingAction) {
+            selectActionAfterCatalogCommit([existingAction]);
+          } else if (!freshActions.some((action) => action.id === actionId)) {
+            showToast(
+              "This Agent is ready, but its default chat action is unavailable.",
+              "error"
+            );
+          }
+        })
+        .catch((error) => {
+          if (!existingAction) {
+            showToast(
+              error instanceof Error ? error.message : String(error),
+              "error"
+            );
+          }
+        });
+    },
+    [
+      actionCatalog,
+      composerDraftStore,
+      connection,
+      setMentionedAppId,
+      setView,
+      showToast,
+    ]
+  );
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
-    [bootstrap?.preferences],
+    [bootstrap?.preferences]
   );
   const trainingPreferences = appPreferences.training;
   const { createAgentFromLab, improveAgentFromLab } = useLabAgentAuthoring({
@@ -491,37 +554,67 @@ export function MainPane({
       ? selectedTrainingTasksetId
       : tasksets[0]?.id ?? null;
   }, [selectedTrainingTasksetId, training.payload?.tasksets]);
-  const trainingTasksetRootPath = view === "labs" && activeTrainingTasksetId
-    ? `profiles/${bootstrap?.profile.activeProfile ?? "default"}/tasksets/${activeTrainingTasksetId}`
-    : null;
+  const trainingTasksetRootPath =
+    view === "labs" && activeTrainingTasksetId
+      ? `profiles/${
+          bootstrap?.profile.activeProfile ?? "default"
+        }/tasksets/${activeTrainingTasksetId}`
+      : null;
   const trainingSidebarSummary = useMemo<TrainingSidebarSummary | null>(() => {
-    if (view !== "labs" || !activeTrainingTasksetId || !training.payload) return null;
-    const taskset = training.payload.tasksets.find((item) => item.id === activeTrainingTasksetId);
+    if (view !== "labs" || !activeTrainingTasksetId || !training.payload)
+      return null;
+    const taskset = training.payload.tasksets.find(
+      (item) => item.id === activeTrainingTasksetId
+    );
     if (!taskset) return null;
-    const plans = training.payload.plans.filter((plan) => plan.tasksetId === taskset.id);
+    const plans = training.payload.plans.filter(
+      (plan) => plan.tasksetId === taskset.id
+    );
     const planIds = new Set(plans.map((plan) => plan.id));
-    const jobs = training.payload.jobs.filter((item) => planIds.has(item.planId)).sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    const job = jobs.find((item) => item.id === selectedTrainingJobId) ?? jobs[0] ?? null;
-    const plan = job ? plans.find((item) => item.id === job.planId) ?? null : plans.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null;
-    const lineage = job ? training.payload.models.find((item) => item.jobId === job.id) ?? null : null;
-    const artifacts = job ? training.payload.artifacts.filter((item) => item.jobId === job.id) : [];
+    const jobs = training.payload.jobs
+      .filter((item) => planIds.has(item.planId))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    const job =
+      jobs.find((item) => item.id === selectedTrainingJobId) ?? jobs[0] ?? null;
+    const plan = job
+      ? plans.find((item) => item.id === job.planId) ?? null
+      : plans.sort((left, right) =>
+          right.createdAt.localeCompare(left.createdAt)
+        )[0] ?? null;
+    const lineage = job
+      ? training.payload.models.find((item) => item.jobId === job.id) ?? null
+      : null;
+    const artifacts = job
+      ? training.payload.artifacts.filter((item) => item.jobId === job.id)
+      : [];
     return { taskset, plan, job, lineage, artifacts };
   }, [activeTrainingTasksetId, selectedTrainingJobId, training.payload, view]);
   const selectedTrainingCreation = useMemo(
     () => trainingCreationForSession(training.payload, selectedSessionId),
-    [selectedSessionId, training.payload],
+    [selectedSessionId, training.payload]
   );
-  const latestCreateRuntime = useMemo(() => latestCreatePipelineRuntime(chatMessages), [chatMessages]);
-  const hasGoalDetails = Boolean(goalRuntime) || Boolean(latestCreateRuntime) || Boolean(subagentRuntime);
-  const showLabCandidateDiffPanel = view === "labs" && Boolean(labCandidateReview.selection);
+  const latestCreateRuntime = useMemo(
+    () => latestCreatePipelineRuntime(chatMessages),
+    [chatMessages]
+  );
+  const hasGoalDetails =
+    Boolean(goalRuntime) ||
+    Boolean(latestCreateRuntime) ||
+    Boolean(subagentRuntime);
+  const showLabCandidateDiffPanel =
+    view === "labs" && Boolean(labCandidateReview.selection);
   const showLabSkillPanel =
-    view === "labs"
-    && diffPanelOpen
-    && rightPanelMode === "changes"
-    && Boolean(labSkillSource);
-  const showLocalDiffPanel = (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
+    view === "labs" &&
+    diffPanelOpen &&
+    rightPanelMode === "changes" &&
+    Boolean(labSkillSource);
+  const showLocalDiffPanel =
+    (view === "chat" || view === "labs") && Boolean(activeWorkspaceAppId);
   const showEmptyRightChatFallbackPanel =
-    view === "chat" && diffPanelOpen && rightPanelMode === "chat" && rightChatPanels.length === 0;
+    view === "chat" &&
+    diffPanelOpen &&
+    rightPanelMode === "chat" &&
+    rightChatPanels.length === 0;
   const chatSandboxId = isCloudWorkspaceKind(activeWorkspaceKind)
     ? activeWorkspaceId ?? sandboxIdFromWorkspaceName(workspaceName)
     : null;
@@ -546,47 +639,70 @@ export function MainPane({
       rightSidebarSandboxId,
       rightSidebarSourceOverride,
       workspaceTarget.value,
-    ],
+    ]
   );
   const rightSidebarSource = rightSidebarSourceState.source;
   const rightSidebarUsesSandbox = rightSidebarSource === "sandbox";
-  const rightSidebarSourceSwitcher = useMemo<WorkspaceFileSourceSwitcher | null>(
-    () =>
-      rightSidebarSource && rightSidebarSourceState.options.length > 1
-        ? {
-          value: rightSidebarSource,
-          options: rightSidebarSourceState.options,
-          onChange: setRightSidebarSourceOverride,
-        }
-        : null,
-    [rightSidebarSource, rightSidebarSourceState.options],
-  );
+  const rightSidebarSourceSwitcher =
+    useMemo<WorkspaceFileSourceSwitcher | null>(
+      () =>
+        rightSidebarSource && rightSidebarSourceState.options.length > 1
+          ? {
+              value: rightSidebarSource,
+              options: rightSidebarSourceState.options,
+              onChange: setRightSidebarSourceOverride,
+            }
+          : null,
+      [rightSidebarSource, rightSidebarSourceState.options]
+    );
   useEffect(() => {
     setRightSidebarSourceOverride(null);
-  }, [activeWorkspaceAppId, browserConversationId, rightSidebarSandboxId, workspaceTarget.value]);
+  }, [
+    activeWorkspaceAppId,
+    browserConversationId,
+    rightSidebarSandboxId,
+    workspaceTarget.value,
+  ]);
   const showDiffPanel =
     !showLabSkillPanel &&
-    (showLabCandidateDiffPanel || showLocalDiffPanel || showChatSandboxDiffPanel) &&
+    (showLabCandidateDiffPanel ||
+      showLocalDiffPanel ||
+      showChatSandboxDiffPanel) &&
     diffPanelOpen &&
-    (rightPanelMode === "changes" || (rightPanelMode === "goal" && hasGoalDetails) || showEmptyRightChatFallbackPanel);
-  const showBrowserPanel = view === "chat" && diffPanelOpen && rightPanelMode === "browser";
+    (rightPanelMode === "changes" ||
+      (rightPanelMode === "goal" && hasGoalDetails) ||
+      showEmptyRightChatFallbackPanel);
+  const showBrowserPanel =
+    view === "chat" && diffPanelOpen && rightPanelMode === "browser";
   const showRightChatPanel =
     (view === "chat" || view === "labs") &&
     diffPanelOpen &&
     rightPanelMode === "chat" &&
     rightChatPanels.length > 0;
-  const showTrainingDraftPanel = view === "chat" && diffPanelOpen && rightPanelMode === "training";
-  const showNativeSkillPanel = view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
-  const showExtensionSkillPanel = view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
+  const showTrainingDraftPanel =
+    view === "chat" && diffPanelOpen && rightPanelMode === "training";
+  const showNativeSkillPanel =
+    view === "chat" && diffPanelOpen && Boolean(nativeSkillSidebar);
+  const showExtensionSkillPanel =
+    view === "chat" && diffPanelOpen && Boolean(extensionSkillSidebar);
   const showTeamAiThreadPanel =
-    view === "team" && diffPanelOpen && rightPanelMode === "chat" && Boolean(teamChat.aiThread);
+    view === "team" &&
+    diffPanelOpen &&
+    rightPanelMode === "chat" &&
+    Boolean(teamChat.aiThread);
   const showTeamAgentConversationPanel =
     view === "team" &&
     diffPanelOpen &&
     rightPanelMode === "chat" &&
     Boolean(teamChat.agentConversation);
+  const showWorkPanel =
+    experience === "work" &&
+    view === "chat" &&
+    diffPanelOpen &&
+    rightPanelMode === "home";
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
-    supportedView: view === "chat" || view === "labs",
+    supportedView:
+      (view === "chat" && experience === "development") || view === "labs",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
@@ -596,7 +712,8 @@ export function MainPane({
       showTrainingDraftPanel ||
       showNativeSkillPanel ||
       showTeamAiThreadPanel ||
-      showTeamAgentConversationPanel,
+      showTeamAgentConversationPanel ||
+      showWorkPanel,
   });
   const showRightPanel =
     showDiffPanel ||
@@ -607,21 +724,30 @@ export function MainPane({
     showNativeSkillPanel ||
     showTeamAiThreadPanel ||
     showTeamAgentConversationPanel ||
+    showWorkPanel ||
     showRightHomePanel;
-  const rightPanelExpanded = showRightPanel
-    && rightPanelMode !== "chat"
-    && diffPanelExpanded;
-  const accountBaseUrl = bootstrap?.account.baseUrl ?? bootstrap?.account.activeProfile?.baseUrl ?? null;
+  const rightPanelExpanded =
+    showRightPanel && rightPanelMode !== "chat" && diffPanelExpanded;
+  const accountBaseUrl =
+    bootstrap?.account.baseUrl ??
+    bootstrap?.account.activeProfile?.baseUrl ??
+    null;
   const billingTarget = billingTargetForContext({
     activeWorkspaceId,
     cloudProjects,
   });
   const showThinkingIndicator =
-    view === "chat" && turnRunning && !pendingApproval && shouldShowThinkingIndicator(chatMessages);
-  const showChatThread = forceChatThread || chatMessages.length > 0 || showThinkingIndicator;
+    view === "chat" &&
+    turnRunning &&
+    !pendingApproval &&
+    shouldShowThinkingIndicator(chatMessages);
+  const showChatThread =
+    forceChatThread || chatMessages.length > 0 || showThinkingIndicator;
   const composerSubmissionScopeKey =
     selectedSessionId ??
-    `draft:${view}:${activeWorkspaceKind ?? "none"}:${activeWorkspaceId ?? activeWorkspaceAppId ?? "none"}`;
+    `draft:${view}:${activeWorkspaceKind ?? "none"}:${
+      activeWorkspaceId ?? activeWorkspaceAppId ?? "none"
+    }`;
   const trainingChatHandoffBar = (
     <ActiveTrainingChatHandoffBar
       activeModel={activeModel}
@@ -630,50 +756,57 @@ export function MainPane({
       handoff={trainingChatHandoff}
       onDismiss={onTrainingChatHandoffDismiss}
       onSelectTask={onTrainingChatTaskSelect}
-      onStopServing={(sessionId) => void training.actions.stopModelServing(sessionId)}
+      onStopServing={(sessionId) =>
+        void training.actions.stopModelServing(sessionId)
+      }
       servingSessions={training.payload?.servingSessions ?? []}
     />
   );
-  const createImproveActions = useMemo<ComposerCreateImproveActions>(() => ({
-    onAnswerQuestion: answerCreateImproveQuestion,
-    onApprove: approveCreateImproveRun,
-    onApplyCandidate: applyCreateImproveCandidate,
-    onCancel: cancelCreateImproveRun,
-    onOpenPullRequest: openCreateImprovePullRequest,
-    onPause: pauseCreateImproveRun,
-    onReconcilePullRequest: reconcileCreateImprovePullRequest,
-    onRejectCandidate: rejectCreateImproveCandidate,
-    onResume: resumeCreateImproveRun,
-    onRevise: reviseCreateImproveRun,
-  }), [
-    answerCreateImproveQuestion,
-    approveCreateImproveRun,
-    applyCreateImproveCandidate,
-    cancelCreateImproveRun,
-    openCreateImprovePullRequest,
-    pauseCreateImproveRun,
-    reconcileCreateImprovePullRequest,
-    rejectCreateImproveCandidate,
-    resumeCreateImproveRun,
-    reviseCreateImproveRun,
-  ]);
-  const createImproveRuntime = useMemo<ComposerCreateImproveRuntime | null>(() => {
-    return latestCreateRuntime
-      ? {
-          ...latestCreateRuntime,
-          ...createImproveActions,
-        }
-      : null;
-  }, [createImproveActions, latestCreateRuntime]);
+  const createImproveActions = useMemo<ComposerCreateImproveActions>(
+    () => ({
+      onAnswerQuestion: answerCreateImproveQuestion,
+      onApprove: approveCreateImproveRun,
+      onApplyCandidate: applyCreateImproveCandidate,
+      onCancel: cancelCreateImproveRun,
+      onOpenPullRequest: openCreateImprovePullRequest,
+      onPause: pauseCreateImproveRun,
+      onReconcilePullRequest: reconcileCreateImprovePullRequest,
+      onRejectCandidate: rejectCreateImproveCandidate,
+      onResume: resumeCreateImproveRun,
+      onRevise: reviseCreateImproveRun,
+    }),
+    [
+      answerCreateImproveQuestion,
+      approveCreateImproveRun,
+      applyCreateImproveCandidate,
+      cancelCreateImproveRun,
+      openCreateImprovePullRequest,
+      pauseCreateImproveRun,
+      reconcileCreateImprovePullRequest,
+      rejectCreateImproveCandidate,
+      resumeCreateImproveRun,
+      reviseCreateImproveRun,
+    ]
+  );
+  const createImproveRuntime =
+    useMemo<ComposerCreateImproveRuntime | null>(() => {
+      return latestCreateRuntime
+        ? {
+            ...latestCreateRuntime,
+            ...createImproveActions,
+          }
+        : null;
+    }, [createImproveActions, latestCreateRuntime]);
   const viewClass = mainPaneViewClass(view, showChatThread);
   const submitComposerPrompt = useCallback(
     async (
       attachments: ChatAttachment[] = [],
       action: SandboxActionCatalogEntry | null = null,
       selectedCommand: ComposerSlashCommand | null = null,
-      options: ComposerSubmitOptions = {},
+      options: ComposerSubmitOptions = {}
     ) => {
-      const promptForSubmit = options.promptOverride ?? composerDraftStore.getSnapshot();
+      const promptForSubmit =
+        options.promptOverride ?? composerDraftStore.getSnapshot();
       const clearMainPrompt = () => {
         if (options.preservePrompt) return;
         composerDraftStore.set("");
@@ -684,56 +817,95 @@ export function MainPane({
           ? { command: selectedCommand.id, args: promptForSubmit.trim() }
           : parseComposerSlashCommandPrompt(promptForSubmit);
         if (command) {
+          const commandAllowed =
+            experience === "development" ||
+            (experience === "work" && command.command === "submit-issue");
+          if (!commandAllowed) {
+            showToast(
+              `/${command.command} is only available in Development.`,
+              "info"
+            );
+            return false;
+          }
           if (command.command === "train") {
             if (attachments.length > 0) {
-              showToast("/train uses the selected chat; add other chats from Lab.", "error");
+              showToast(
+                "/train uses the selected chat; add other chats from Lab.",
+                "error"
+              );
               return false;
             }
             if (!selectedSessionId) {
               clearMainPrompt();
-              setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [] });
+              setTrainingLaunchRequest({
+                id: Date.now(),
+                objective: command.args.trim() || null,
+                initialSessionIds: [],
+              });
               setView("labs");
               return true;
             }
             clearMainPrompt();
-            setTrainingLaunchRequest({ id: Date.now(), objective: command.args.trim() || null, initialSessionIds: [selectedSessionId] });
+            setTrainingLaunchRequest({
+              id: Date.now(),
+              objective: command.args.trim() || null,
+              initialSessionIds: [selectedSessionId],
+            });
             setView("labs");
             return true;
           }
-          if (!command.args && command.command !== "skill" && command.command !== "sync-cloud") {
+          if (
+            !command.args &&
+            command.command !== "skill" &&
+            command.command !== "sync-cloud"
+          ) {
             showToast(`Add instructions after /${command.command}.`, "info");
             return false;
           }
           if (attachments.length > 0) {
-            showToast(`/${command.command} tasks do not accept attachments yet. Add file context in the task thread.`, "error");
+            showToast(
+              `/${command.command} tasks do not accept attachments yet. Add file context in the task thread.`,
+              "error"
+            );
             return false;
           }
           if (command.command === "submit-issue") {
             if (!hasGitHubIssueSubmitConnection(connectedAppMentions)) {
-              showToast("Connect the GitHub app before using /submit-issue.", "error");
+              showToast(
+                "Connect the GitHub app before using /submit-issue.",
+                "error"
+              );
               return false;
             }
-            return sendPrompt([], null, buildSubmitIssueSlashPrompt(command.args), {
-              clearPrompt: options.preservePrompt ? () => undefined : undefined,
-              usageAttribution: usageAttributionForComposerSlashCommand(
-                command,
-                selectedCommand ? "composer_selection" : "prompt_parse",
-              ),
-            });
+            return sendPrompt(
+              [],
+              null,
+              buildSubmitIssueSlashPrompt(command.args),
+              {
+                clearPrompt: options.preservePrompt
+                  ? () => undefined
+                  : undefined,
+                usageAttribution: usageAttributionForComposerSlashCommand(
+                  command,
+                  selectedCommand ? "composer_selection" : "prompt_parse"
+                ),
+              }
+            );
           }
           if (shouldSubmitComposerSlashCommandToChat(command)) {
-            const skillPrompt = command.command === "skill"
-              ? skillPromptForComposer(
-                  command.args,
-                  activeProvider,
-                  bootstrap?.profile.sourcePath ?? null,
-                )
-              : promptForAppSlashCommand(command);
+            const skillPrompt =
+              command.command === "skill"
+                ? skillPromptForComposer(
+                    command.args,
+                    activeProvider,
+                    bootstrap?.profile.sourcePath ?? null
+                  )
+                : promptForAppSlashCommand(command);
             return sendPrompt([], null, skillPrompt, {
               clearPrompt: options.preservePrompt ? () => undefined : undefined,
               usageAttribution: usageAttributionForComposerSlashCommand(
                 command,
-                selectedCommand ? "composer_selection" : "prompt_parse",
+                selectedCommand ? "composer_selection" : "prompt_parse"
               ),
             });
           }
@@ -741,7 +913,7 @@ export function MainPane({
             clearPrompt: options.preservePrompt ? () => undefined : undefined,
             usageAttribution: usageAttributionForComposerSlashCommand(
               command,
-              selectedCommand ? "composer_selection" : "prompt_parse",
+              selectedCommand ? "composer_selection" : "prompt_parse"
             ),
           });
         }
@@ -759,6 +931,7 @@ export function MainPane({
       bootstrap?.profile,
       connectedAppMentions,
       composerDraftStore,
+      experience,
       sendPrompt,
       selectedSessionId,
       setMentionedAppId,
@@ -766,7 +939,7 @@ export function MainPane({
       showToast,
       training,
       view,
-    ],
+    ]
   );
   const changeMainComposerModel = useCallback(
     (model: string) => {
@@ -782,265 +955,42 @@ export function MainPane({
       setDraftModel,
       setDraftProvider,
       trainingChatHandoff,
-    ],
+    ]
   );
   const changeMainComposerProvider = useCallback(
     (provider: ChatProvider) => {
-      if (trainingChatHandoff && provider !== trainingChatHandoff.model.providerId) {
+      if (
+        trainingChatHandoff &&
+        provider !== trainingChatHandoff.model.providerId
+      ) {
         onTrainingChatHandoffDismiss();
       }
       changeDraftProvider(provider);
-    }, [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]);
-  const chatTimelineRows = useMemo(
-    () => buildChatTimelineRows(chatMessages, { showThinkingIndicator }),
-    [chatMessages, showThinkingIndicator],
-  );
-  const chatColumnStyle = useMemo(
-    () => ({ "--chat-composer-reserve": `${chatComposerReservePx}px` }) as CSSProperties,
-    [chatComposerReservePx],
-  );
-  const latestChatMessage = chatMessages.at(-1);
-  const chatScrollContentKey = [
-    chatTimelineRows.length,
-    latestChatMessage?.id ?? "",
-    latestChatMessage?.content?.length ?? 0,
-    latestChatMessage?.timestamp ?? "",
-    showThinkingIndicator ? "thinking" : "",
-  ].join(":");
-  const canLoadOlderChatMessages = chatHistoryHasMore;
-  const conversationKey = browserConversationId;
-  const chatThreadPreparingInitialScroll =
-    view === "chat" &&
-    showChatThread &&
-    Boolean(conversationKey) &&
-    initialChatScrollReadyKey !== conversationKey;
-  const setChatAwayFromBottom = useCallback((awayFromBottom: boolean) => {
-    setShowScrollToBottomButton((current) => (current === awayFromBottom ? current : awayFromBottom));
-  }, []);
-  const setUserMessageNavigationState = useCallback((state: UserMessageNavigationState) => {
-    setUserMessageNavigation((current) =>
-      current.canGoPrevious === state.canGoPrevious && current.canGoNext === state.canGoNext
-        ? current
-        : state,
-    );
-  }, []);
-  const updateChatScrollControls = useCallback(
-    (element: HTMLElement, options: { nearBottom?: boolean } = {}) => {
-      const nearBottom = options.nearBottom ?? isNearChatBottom(element);
-      setChatAwayFromBottom(!nearBottom);
-      setUserMessageNavigationState(userMessageNavigationState(element));
     },
-    [setChatAwayFromBottom, setUserMessageNavigationState],
+    [changeDraftProvider, onTrainingChatHandoffDismiss, trainingChatHandoff]
   );
-  const finishInitialChatScroll = useCallback((key: string | null) => {
-    const wasPending = initialChatScrollPendingRef.current;
-    initialChatScrollPendingRef.current = false;
-    setInitialChatScrollReadyKey(key);
-    setChatAwayFromBottom(false);
-    setUserMessageNavigationState(EMPTY_USER_MESSAGE_NAVIGATION);
-    if (wasPending) setInitialChatScrollVersion((version) => version + 1);
-  }, [setChatAwayFromBottom, setUserMessageNavigationState]);
-  const cancelSmoothChatScroll = useCallback(() => {
-    if (smoothChatScrollFrameRef.current === null || typeof window === "undefined") return;
-    window.cancelAnimationFrame(smoothChatScrollFrameRef.current);
-    smoothChatScrollFrameRef.current = null;
-  }, []);
-  const smoothScrollChatTo = useCallback(
-    (element: HTMLElement, targetScrollTop: number | (() => number), onSettled?: () => void) => {
-      cancelSmoothChatScroll();
-      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-      const readTarget = () => {
-        const nextTarget = typeof targetScrollTop === "function" ? targetScrollTop() : targetScrollTop;
-        return Math.max(0, Math.min(nextTarget, Math.max(0, element.scrollHeight - element.clientHeight)));
-      };
-      const target = Math.max(0, Math.min(readTarget(), maxScrollTop));
-      const start = element.scrollTop;
-      const distance = target - start;
-      const reduceMotion =
-        typeof window === "undefined" ||
-        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
-
-      if (reduceMotion || Math.abs(distance) < 1) {
-        element.scrollTop = target;
-        onSettled?.();
-        return;
-      }
-
-      const duration = easedChatScrollDuration(distance);
-      const startTime = window.performance.now();
-      const step = (now: number) => {
-        if (chatThreadRef.current !== element) {
-          smoothChatScrollFrameRef.current = null;
-          return;
-        }
-
-        const progress = Math.min(1, (now - startTime) / duration);
-        const currentTarget = readTarget();
-        element.scrollTop = start + (currentTarget - start) * easeInOutCubic(progress);
-        if (progress < 1) {
-          smoothChatScrollFrameRef.current = window.requestAnimationFrame(step);
-          return;
-        }
-
-        element.scrollTop = readTarget();
-        smoothChatScrollFrameRef.current = null;
-        onSettled?.();
-      };
-
-      smoothChatScrollFrameRef.current = window.requestAnimationFrame(step);
-    },
-    [cancelSmoothChatScroll],
-  );
-  const cancelScheduledChatBottomScroll = useCallback(() => {
-    autoChatScrollPendingRef.current = false;
-    if (autoChatScrollFrameRef.current === null || typeof window === "undefined") return;
-    window.cancelAnimationFrame(autoChatScrollFrameRef.current);
-    autoChatScrollFrameRef.current = null;
-  }, []);
-  const scrollChatToBottom = useCallback(
-    (
-      element: HTMLElement,
-      options: { conversationKey?: string | null; finishInitial?: boolean; settle?: boolean } = {},
-    ) => {
-      const scrollOnce = () => {
-        element.scrollTop = element.scrollHeight;
-      };
-
-      scrollOnce();
-
-      if (typeof window === "undefined") {
-        if (options.finishInitial) finishInitialChatScroll(options.conversationKey ?? null);
-        return;
-      }
-
-      cancelScheduledChatBottomScroll();
-      autoChatScrollPendingRef.current = true;
-      let frameCount = 0;
-      let stableBottomFrames = 0;
-      let lastScrollHeight = element.scrollHeight;
-      const maxFrameCount = options.settle ? 12 : 2;
-      const settle = () => {
-        const currentElement = chatThreadRef.current;
-        if (!currentElement) {
-          autoChatScrollFrameRef.current = null;
-          autoChatScrollPendingRef.current = false;
-          if (options.finishInitial) finishInitialChatScroll(options.conversationKey ?? null);
-          return;
-        }
-        currentElement.scrollTop = currentElement.scrollHeight;
-
-        const distanceFromBottom =
-          currentElement.scrollHeight - currentElement.scrollTop - currentElement.clientHeight;
-        const scrollHeightStable = Math.abs(currentElement.scrollHeight - lastScrollHeight) <= 1;
-        lastScrollHeight = currentElement.scrollHeight;
-        stableBottomFrames =
-          distanceFromBottom <= 1 && scrollHeightStable ? stableBottomFrames + 1 : 0;
-        frameCount += 1;
-        if (frameCount < maxFrameCount && stableBottomFrames < 2) {
-          autoChatScrollFrameRef.current = window.requestAnimationFrame(settle);
-          return;
-        }
-
-        autoChatScrollFrameRef.current = null;
-        autoChatScrollPendingRef.current = false;
-        stickyChatScrollRef.current = true;
-        setChatAwayFromBottom(false);
-        setUserMessageNavigationState(userMessageNavigationState(currentElement));
-        if (options.finishInitial) finishInitialChatScroll(options.conversationKey ?? null);
-      };
-      autoChatScrollFrameRef.current = window.requestAnimationFrame(settle);
-    },
-    [cancelScheduledChatBottomScroll, finishInitialChatScroll, setChatAwayFromBottom, setUserMessageNavigationState],
-  );
-  const jumpToLatestChatMessage = useCallback(() => {
-    const element = chatThreadRef.current;
-    if (!element) return;
-    cancelScheduledChatBottomScroll();
-    stickyChatScrollRef.current = true;
-    setChatAwayFromBottom(false);
-    smoothScrollChatTo(element, () => element.scrollHeight - element.clientHeight, () => {
-      if (chatThreadRef.current !== element) return;
-      element.scrollTop = element.scrollHeight;
-      stickyChatScrollRef.current = true;
-      setChatAwayFromBottom(false);
-      setUserMessageNavigationState(userMessageNavigationState(element));
-    });
-  }, [cancelScheduledChatBottomScroll, setChatAwayFromBottom, setUserMessageNavigationState, smoothScrollChatTo]);
-  const goToUserMessage = useCallback(
-    (direction: "previous" | "next") => {
-      const element = chatThreadRef.current;
-      if (!element) return;
-      const target = nextUserMessageTarget(element, direction);
-      if (!target) return;
-
-      cancelScheduledChatBottomScroll();
-      const nextScrollTop = () =>
-        target.isConnected
-          ? Math.max(0, messageScrollTop(element, target) - CHAT_USER_MESSAGE_SCROLL_OFFSET_PX)
-          : element.scrollTop;
-      smoothScrollChatTo(element, nextScrollTop, () => {
-        if (chatThreadRef.current !== element) return;
-        const nearBottom = isNearChatBottom(element);
-        stickyChatScrollRef.current = nearBottom;
-        updateChatScrollControls(element, { nearBottom });
-      });
-    },
-    [cancelScheduledChatBottomScroll, smoothScrollChatTo, updateChatScrollControls],
-  );
-  const rememberChatScrollPosition = useCallback(() => {
-    const element = chatThreadRef.current;
-    if (!element) return;
-    pendingChatScrollRestoreRef.current = {
-      scrollHeight: element.scrollHeight,
-      scrollTop: element.scrollTop,
-    };
-    stickyChatScrollRef.current = false;
-  }, []);
-  const loadOlderChatMessages = useCallback(async () => {
-    if (!canLoadOlderChatMessages) return;
-    if (!onLoadMoreChatHistory || chatHistoryLoading || remoteHistoryLoadPendingRef.current) return;
-    rememberChatScrollPosition();
-    remoteHistoryLoadPendingRef.current = true;
-    try {
-      await onLoadMoreChatHistory();
-    } finally {
-      remoteHistoryLoadPendingRef.current = false;
-    }
-  }, [
-    canLoadOlderChatMessages,
+  const {
+    chatColumnStyle,
+    chatThreadPreparingInitialScroll,
+    chatThreadRef,
+    chatTimelineRows,
+    composerStackRef,
+    goToUserMessage,
+    handleChatScroll,
+    jumpToLatestChatMessage,
+    showScrollToBottomButton,
+    userMessageNavigation,
+  } = useMainPaneChatScroll({
+    browserConversationId,
+    chatHistoryHasMore,
     chatHistoryLoading,
+    chatMessages,
     onLoadMoreChatHistory,
-    rememberChatScrollPosition,
-  ]);
-  const handleChatScroll = useCallback(
-    (element: HTMLElement) => {
-      if (autoChatScrollPendingRef.current) {
-        stickyChatScrollRef.current = true;
-        setChatAwayFromBottom(false);
-        setUserMessageNavigationState(EMPTY_USER_MESSAGE_NAVIGATION);
-        return;
-      }
-      const nearBottom = isNearChatBottom(element);
-      stickyChatScrollRef.current = nearBottom;
-      updateChatScrollControls(element, { nearBottom });
-      if (
-        !initialChatScrollPendingRef.current &&
-        element.scrollTop <= CHAT_HISTORY_TOP_THRESHOLD_PX &&
-        canLoadOlderChatMessages &&
-        !chatHistoryLoading
-      ) {
-        void loadOlderChatMessages();
-      }
-    },
-    [
-      canLoadOlderChatMessages,
-      chatHistoryLoading,
-      loadOlderChatMessages,
-      setChatAwayFromBottom,
-      setUserMessageNavigationState,
-      updateChatScrollControls,
-    ],
-  );
+    pendingApproval,
+    showChatThread,
+    showThinkingIndicator,
+    view,
+  });
   const handleOpenBrowserLink = useCallback(
     (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => {
       void openBrowserLink({
@@ -1052,190 +1002,144 @@ export function MainPane({
         if (opened) onShowBrowserPanel();
       });
     },
-    [browserConversationId, onShowBrowserPanel],
+    [browserConversationId, onShowBrowserPanel]
   );
-  const workspaceRootPath = workspaceTarget.value === "local"
-    ? workspaceState?.repoPath ?? workspaceTarget.detail
-    : workspaceState?.repoPath ?? null;
+  const workspaceRootPath =
+    workspaceTarget.value === "local"
+      ? workspaceState?.repoPath ?? workspaceTarget.detail
+      : workspaceState?.repoPath ?? null;
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
       const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
       if (videoPath && connection) {
-        void api.signLocalVideoUrl(connection, { path: videoPath })
+        void api
+          .signLocalVideoUrl(connection, { path: videoPath })
           .then(({ url }) => handleOpenBrowserLink(url))
           .catch((error) => {
-            showToast(error instanceof Error ? error.message : "Could not open this video.", "error");
+            showToast(
+              error instanceof Error
+                ? error.message
+                : "Could not open this video.",
+              "error"
+            );
           });
         return;
       }
       const normalizedFile = normalizeChatFilePath(path, { workspaceRootPath });
       onShowDiffPanel();
-      setOpenDiffFileRequest({ id: Date.now(), path: normalizedFile?.path ?? path });
+      setOpenDiffFileRequest({
+        id: Date.now(),
+        path: normalizedFile?.path ?? path,
+      });
     },
-    [connection, handleOpenBrowserLink, onShowDiffPanel, showToast, workspaceRootPath],
+    [
+      connection,
+      handleOpenBrowserLink,
+      onShowDiffPanel,
+      showToast,
+      workspaceRootPath,
+    ]
   );
-  useLayoutEffect(() => {
-    if (view !== "chat" || !showChatThread || typeof window === "undefined") return undefined;
-    const element = composerStackRef.current;
-    if (!element) return undefined;
-
-    let animationFrame: number | null = null;
-    const updateReserve = () => {
-      animationFrame = null;
-      const nextReserve = Math.max(96, Math.ceil(element.getBoundingClientRect().height + 20));
-      setChatComposerReservePx((current) => (current === nextReserve ? current : nextReserve));
-    };
-    const scheduleUpdate = () => {
-      if (animationFrame !== null) return;
-      animationFrame = window.requestAnimationFrame(updateReserve);
-    };
-
-    scheduleUpdate();
-    const resizeObserver =
-      typeof window.ResizeObserver === "undefined" ? null : new window.ResizeObserver(scheduleUpdate);
-    resizeObserver?.observe(element);
-    window.addEventListener("resize", scheduleUpdate);
-    return () => {
-      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
-      resizeObserver?.disconnect();
-      window.removeEventListener("resize", scheduleUpdate);
-    };
-  }, [showChatThread, view]);
-  useLayoutEffect(() => {
-    const element = chatThreadRef.current;
-    if (view !== "chat" || !showChatThread || !element || initialChatScrollPendingRef.current) return;
-    if (!stickyChatScrollRef.current && !isNearChatBottom(element)) return;
-    stickyChatScrollRef.current = true;
-    scrollChatToBottom(element, { settle: true });
-  }, [chatComposerReservePx, scrollChatToBottom, showChatThread, view]);
-
-  useLayoutEffect(() => {
-    pendingChatScrollRestoreRef.current = null;
-    remoteHistoryLoadPendingRef.current = false;
-    initialChatScrollPendingRef.current = true;
-    stickyChatScrollRef.current = true;
-    cancelSmoothChatScroll();
-    cancelScheduledChatBottomScroll();
-    setInitialChatScrollReadyKey(null);
-    setChatAwayFromBottom(false);
-    setUserMessageNavigationState(EMPTY_USER_MESSAGE_NAVIGATION);
-  }, [
-    cancelScheduledChatBottomScroll,
-    cancelSmoothChatScroll,
-    conversationKey,
-    setChatAwayFromBottom,
-    setUserMessageNavigationState,
-  ]);
-  useEffect(() => {
-    const element = chatThreadRef.current;
-    if (
-      view !== "chat" ||
-      !element ||
-      initialChatScrollPendingRef.current ||
-      !canLoadOlderChatMessages ||
-      chatHistoryLoading
-    ) {
-      return;
-    }
-    if (element.scrollTop <= CHAT_HISTORY_TOP_THRESHOLD_PX && element.scrollHeight <= element.clientHeight + CHAT_HISTORY_TOP_THRESHOLD_PX) {
-      void loadOlderChatMessages();
-    }
-  }, [
-    canLoadOlderChatMessages,
-    chatHistoryLoading,
-    initialChatScrollVersion,
-    chatTimelineRows.length,
-    loadOlderChatMessages,
-    view,
-  ]);
-  useLayoutEffect(() => {
-    const restore = pendingChatScrollRestoreRef.current;
-    const element = chatThreadRef.current;
-    if (!restore || !element || initialChatScrollPendingRef.current) return;
-    pendingChatScrollRestoreRef.current = null;
-    element.scrollTop = restore.scrollTop + Math.max(0, element.scrollHeight - restore.scrollHeight);
-    updateChatScrollControls(element);
-  }, [chatTimelineRows.length, updateChatScrollControls]);
-  useLayoutEffect(() => {
-    const element = chatThreadRef.current;
-    if (view !== "chat" || !conversationKey || !element) {
-      previousConversationKeyRef.current = conversationKey;
-      stickyChatScrollRef.current = true;
-      finishInitialChatScroll(conversationKey);
-      return;
-    }
-
-    const conversationChanged = previousConversationKeyRef.current !== conversationKey;
-    previousConversationKeyRef.current = conversationKey;
-
-    if (conversationChanged || initialChatScrollPendingRef.current) {
-      stickyChatScrollRef.current = true;
-      scrollChatToBottom(element, { conversationKey, finishInitial: true, settle: true });
-      return;
-    }
-
-    const nearBottom = isNearChatBottom(element);
-    if (stickyChatScrollRef.current || nearBottom) {
-      stickyChatScrollRef.current = true;
-      setChatAwayFromBottom(false);
-      setUserMessageNavigationState(userMessageNavigationState(element));
-      scrollChatToBottom(element, { settle: true });
-      return;
-    }
-    updateChatScrollControls(element, { nearBottom });
-  }, [
-    chatScrollContentKey,
-    conversationKey,
-    finishInitialChatScroll,
-    pendingApproval?.id,
-    scrollChatToBottom,
-    setChatAwayFromBottom,
-    setUserMessageNavigationState,
-    updateChatScrollControls,
-    view,
-  ]);
-  useEffect(
-    () => () => {
-      cancelScheduledChatBottomScroll();
-      cancelSmoothChatScroll();
-    },
-    [cancelScheduledChatBottomScroll, cancelSmoothChatScroll],
-  );
-  const workspaceStatusLoading = workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
+  const workspaceStatusLoading =
+    workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
   const candidateSidebarId = labCandidateReview.selection
     ? `candidate:${labCandidateReview.selection.runId}:${labCandidateReview.selection.candidateId}`
     : null;
   const diffPanel = showDiffPanel ? (
     <WorkspaceDiffPanel
-      appId={showLabCandidateDiffPanel ? candidateSidebarId : rightSidebarUsesSandbox ? null : activeWorkspaceAppId}
-      workspaceId={showLabCandidateDiffPanel ? candidateSidebarId : rightSidebarUsesSandbox ? rightSidebarSandboxId : activeWorkspaceAppId}
-      workspaceKind={showLabCandidateDiffPanel ? "local_project" : rightSidebarUsesSandbox ? null : "local_project"}
+      appId={
+        showLabCandidateDiffPanel
+          ? candidateSidebarId
+          : rightSidebarUsesSandbox
+          ? null
+          : activeWorkspaceAppId
+      }
+      workspaceId={
+        showLabCandidateDiffPanel
+          ? candidateSidebarId
+          : rightSidebarUsesSandbox
+          ? rightSidebarSandboxId
+          : activeWorkspaceAppId
+      }
+      workspaceKind={
+        showLabCandidateDiffPanel
+          ? "local_project"
+          : rightSidebarUsesSandbox
+          ? null
+          : "local_project"
+      }
       connection={connection}
       runtimeEvents={runtimeEvents}
-      diff={showLabCandidateDiffPanel ? labCandidateReview.diff : rightSidebarUsesSandbox ? null : workspaceDiff}
-      fileRootPath={showLabCandidateDiffPanel
-        ? labCandidateReview.selection?.fileRootPath ?? null
-        : rightSidebarUsesSandbox
+      diff={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.diff
+          : rightSidebarUsesSandbox
           ? null
-          : trainingTasksetRootPath}
+          : workspaceDiff
+      }
+      fileRootPath={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.selection?.fileRootPath ?? null
+          : rightSidebarUsesSandbox
+          ? null
+          : trainingTasksetRootPath
+      }
       filesWithPreview={showLabCandidateDiffPanel}
       editorPreferences={bootstrap?.preferences.editor ?? null}
-      loading={showLabCandidateDiffPanel ? labCandidateReview.loading : rightSidebarUsesSandbox ? workspaceBusy : diffBusy || workspaceStatusLoading}
-      openFileRequest={showLabCandidateDiffPanel ? labCandidateReview.openFileRequest : openDiffFileRequest}
+      loading={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.loading
+          : rightSidebarUsesSandbox
+          ? workspaceBusy
+          : diffBusy || workspaceStatusLoading
+      }
+      openFileRequest={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.openFileRequest
+          : openDiffFileRequest
+      }
       sidebarFileBookmarks={sidebarFileBookmarks}
       sidebarFileSourceSessionId={selectedSessionId}
       onSetSidebarFileStatus={onSetSidebarFileStatus}
       readOnly={showLabCandidateDiffPanel}
-      sideChatTabs={rightChatPanels.map((panel) => ({ id: panel.id, title: panel.title, running: panel.running }))}
-      sourceSwitcher={showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher}
+      sideChatTabs={rightChatPanels.map((panel) => ({
+        id: panel.id,
+        title: panel.title,
+        running: panel.running,
+      }))}
+      sourceSwitcher={
+        showLabCandidateDiffPanel ? null : rightSidebarSourceSwitcher
+      }
       tabRequest={rightPanelTabRequest}
       viewState={workspaceDiffPanelViewState}
-      workspaceName={showLabCandidateDiffPanel ? labCandidateReview.selection?.title ?? "Change" : rightSidebarUsesSandbox ? workspaceName ?? "Sandbox" : workspaceName}
-      workspaceInitialized={showLabCandidateDiffPanel ? true : rightSidebarUsesSandbox ? Boolean(rightSidebarSandboxId) : Boolean(workspaceState?.initialized)}
-      workspaceError={showLabCandidateDiffPanel ? labCandidateReview.error : rightSidebarUsesSandbox ? null : workspaceState?.error ?? workspaceDiff?.error ?? null}
+      workspaceName={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.selection?.title ?? "Change"
+          : rightSidebarUsesSandbox
+          ? workspaceName ?? "Sandbox"
+          : workspaceName
+      }
+      workspaceInitialized={
+        showLabCandidateDiffPanel
+          ? true
+          : rightSidebarUsesSandbox
+          ? Boolean(rightSidebarSandboxId)
+          : Boolean(workspaceState?.initialized)
+      }
+      workspaceError={
+        showLabCandidateDiffPanel
+          ? labCandidateReview.error
+          : rightSidebarUsesSandbox
+          ? null
+          : workspaceState?.error ?? workspaceDiff?.error ?? null
+      }
       expanded={diffPanelExpanded}
       onResizeStart={onDiffPanelResizeStart}
-      onRefresh={(options) => void (showLabCandidateDiffPanel ? labCandidateReview.refresh(options) : refreshWorkspaceDiff(options))}
+      onRefresh={(options) =>
+        void (showLabCandidateDiffPanel
+          ? labCandidateReview.refresh(options)
+          : refreshWorkspaceDiff(options))
+      }
       onToggleExpanded={onToggleDiffPanelExpanded}
       onOpenBrowser={onShowBrowserPanel}
       onOpenBrowserUrl={handleOpenBrowserLink}
@@ -1255,9 +1159,9 @@ export function MainPane({
       sandboxFileSource={
         rightSidebarUsesSandbox
           ? {
-            sandboxId: rightSidebarSandboxId,
-            emptyMessage: "No sandbox filesystem yet.",
-          }
+              sandboxId: rightSidebarSandboxId,
+              emptyMessage: "No sandbox filesystem yet.",
+            }
           : null
       }
       trainingSummary={trainingSidebarSummary}
@@ -1298,7 +1202,9 @@ export function MainPane({
       mentionApps={mentionApps}
       codexPersonalSkills={bootstrap?.codexPersonalSkills ?? []}
       profileSkills={profileSkills}
-      profileLibrary={bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+      profileLibrary={
+        bootstrap?.profileLibrary ?? { lastUsed: null, profiles: [] }
+      }
       extensionCatalog={bootstrap?.extensionCatalog ?? null}
       projectTarget={projectTarget}
       providerSettings={bootstrap?.providers ?? null}
@@ -1320,7 +1226,9 @@ export function MainPane({
       onProviderChange={onRightChatProviderChange}
       onProviderSetupOpen={onOpenProviderSettings}
       onPromptChange={onRightChatPromptChange}
-      onProfileTargetChange={(sessionId, value) => void changeComposerProfile(value, sessionId)}
+      onProfileTargetChange={(sessionId, value) =>
+        void changeComposerProfile(value, sessionId)
+      }
       onScrollStateChange={onRightChatScrollStateChange}
       onProjectTargetChange={changeProjectTarget}
       onResolveApproval={resolveApproval}
@@ -1348,6 +1256,47 @@ export function MainPane({
       onToggleTerminal={onToggleTerminal}
     />
   ) : null;
+  const workPanel = showWorkPanel ? (
+    <WorkSidebarPanel
+      chatMessages={chatMessages}
+      connection={connection}
+      contextWindowStatus={contextWindowStatus}
+      expanded={diffPanelExpanded}
+      runtimeEvents={runtimeEvents}
+      sessionId={selectedSessionId}
+      showToast={showToast}
+      onResizeStart={onDiffPanelResizeStart}
+      onToggleExpanded={onToggleDiffPanelExpanded}
+      onUseOutput={(file) =>
+        setComposerAttachmentRequest({ id: Date.now(), file })
+      }
+      onHandoffOutput={async (target, output, file) => {
+        await onExperienceHandoff({
+          target,
+          sourceSessionId: selectedSessionId!,
+          output,
+          prompt: outputHandoffPrompt(output, target),
+        });
+        if (file) {
+          setComposerAttachmentRequest({ id: Date.now(), file });
+        }
+      }}
+      onReviseOutput={(output, file, annotation) => {
+        setComposerAttachmentRequest({ id: Date.now(), file });
+        composerDraftStore.set(
+          `Create revision ${output.revision + 1} of "${
+            output.title
+          }" from the attached revision ${
+            output.revision
+          }. Apply only this requested change:\n\n${annotation}`
+        );
+      }}
+      onAgentPackageInstalled={async () => {
+        if (!connection) return;
+        onPayload(await api.bootstrap(connection));
+      }}
+    />
+  ) : null;
   const trainingDraftPanel = showTrainingDraftPanel ? (
     <Suspense fallback={null}>
       <TrainingDraftPanel
@@ -1360,35 +1309,38 @@ export function MainPane({
       />
     </Suspense>
   ) : null;
-  const nativeSkillPanel = showNativeSkillPanel && nativeSkillSidebar ? (
-    <NativeSkillSidebar
-      expanded={diffPanelExpanded}
-      skill={nativeSkillSidebar}
-      onClose={onCloseNativeSkillSidebar}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-    />
-  ) : null;
-  const extensionSkillPanel = showExtensionSkillPanel && extensionSkillSidebar ? (
-    <LabSkillSidebar
-      connection={connection}
-      expanded={diffPanelExpanded}
-      selection={extensionSkillSidebar}
-      onClose={onCloseNativeSkillSidebar}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-    />
-  ) : null;
-  const labSkillPanel = showLabSkillPanel && labSkillSource ? (
-    <LabSkillSidebar
-      connection={connection}
-      expanded={diffPanelExpanded}
-      selection={labSkillSource}
-      onClose={handleCloseLabSkillSource}
-      onResizeStart={onDiffPanelResizeStart}
-      onToggleExpanded={onToggleDiffPanelExpanded}
-    />
-  ) : null;
+  const nativeSkillPanel =
+    showNativeSkillPanel && nativeSkillSidebar ? (
+      <NativeSkillSidebar
+        expanded={diffPanelExpanded}
+        skill={nativeSkillSidebar}
+        onClose={onCloseNativeSkillSidebar}
+        onResizeStart={onDiffPanelResizeStart}
+        onToggleExpanded={onToggleDiffPanelExpanded}
+      />
+    ) : null;
+  const extensionSkillPanel =
+    showExtensionSkillPanel && extensionSkillSidebar ? (
+      <LabSkillSidebar
+        connection={connection}
+        expanded={diffPanelExpanded}
+        selection={extensionSkillSidebar}
+        onClose={onCloseNativeSkillSidebar}
+        onResizeStart={onDiffPanelResizeStart}
+        onToggleExpanded={onToggleDiffPanelExpanded}
+      />
+    ) : null;
+  const labSkillPanel =
+    showLabSkillPanel && labSkillSource ? (
+      <LabSkillSidebar
+        connection={connection}
+        expanded={diffPanelExpanded}
+        selection={labSkillSource}
+        onClose={handleCloseLabSkillSource}
+        onResizeStart={onDiffPanelResizeStart}
+        onToggleExpanded={onToggleDiffPanelExpanded}
+      />
+    ) : null;
   const rightPanel =
     teamAgentConversationPanel ??
     teamAiThreadPanel ??
@@ -1399,6 +1351,7 @@ export function MainPane({
     diffPanel ??
     browserPanel ??
     trainingDraftPanel ??
+    workPanel ??
     homePanel;
   const terminalPanel = (
     <AppTerminalPanel
@@ -1416,7 +1369,9 @@ export function MainPane({
   );
   return (
     <main
-      className={`main-pane ${viewClass} ${terminalOpen ? "terminal-open" : ""} ${showRightPanel ? "diff-open" : ""} ${
+      className={`main-pane ${viewClass} ${
+        terminalOpen ? "terminal-open" : ""
+      } ${showRightPanel ? "diff-open" : ""} ${
         rightPanelExpanded ? "diff-expanded" : ""
       }`}
     >
@@ -1502,11 +1457,18 @@ export function MainPane({
                   sessions: trainingSessions,
                   localProjects: bootstrap?.localProjects ?? [],
                   connection,
-                  defaultModel: { providerId: activeProvider, modelId: activeModel },
+                  defaultModel: {
+                    providerId: activeProvider,
+                    modelId: activeModel,
+                  },
                   onError,
                   onToast: showToast,
                   onSettingsPreferences: (payload) => {
-                    if (bootstrap) onPayload({ ...bootstrap, preferences: payload.preferences });
+                    if (bootstrap)
+                      onPayload({
+                        ...bootstrap,
+                        preferences: payload.preferences,
+                      });
                   },
                   onOpenComputeSettings,
                   onOpenProviderSettings,
@@ -1514,13 +1476,16 @@ export function MainPane({
                   onOpenChat: onOpenSession,
                   onChatWithModel: onBeginNewChatWithModel,
                   onOpenTasksetFiles: onShowFilesPanel,
-                  launchRequest: sideChatTrainingLaunchRequest ?? trainingLaunchRequest,
+                  launchRequest:
+                    sideChatTrainingLaunchRequest ?? trainingLaunchRequest,
                   onLaunchHandled: (id) => {
                     if (sideChatTrainingLaunchRequest?.id === id) {
                       onSideChatTrainingLaunchHandled(id);
                       return;
                     }
-                    setTrainingLaunchRequest((current) => current?.id === id ? null : current);
+                    setTrainingLaunchRequest((current) =>
+                      current?.id === id ? null : current
+                    );
                   },
                   preferences: trainingPreferences,
                   settingsPreferences: appPreferences,
@@ -1535,42 +1500,56 @@ export function MainPane({
               />
             </Suspense>
             {terminalPanel}
-            {showRightPanel ? <Suspense fallback={null}>{rightPanel}</Suspense> : null}
+            {showRightPanel ? (
+              <Suspense fallback={null}>{rightPanel}</Suspense>
+            ) : null}
           </>
         )
       ) : rightPanelExpanded ? (
         <Suspense fallback={null}>{rightPanel}</Suspense>
       ) : showChatThread ? (
         <>
-          <div className={`chat-column ${pendingApproval ? "has-approval" : ""}`} style={chatColumnStyle}>
-            <Suspense fallback={null}><MainChatThread
-              accountBaseUrl={accountBaseUrl}
-              activeWorkspaceAppId={activeWorkspaceAppId}
-              billingOrganizationSlug={billingTarget.organizationSlug}
-              billingTeamId={billingTarget.teamId}
-              connection={connection}
-              creation={selectedTrainingCreation}
-              onOpenBrowserLink={handleOpenBrowserLink}
-              onOpenFileInSidebar={handleOpenFileInSidebar}
-              onOpenProfileSettings={onOpenProfileSettings}
-              onResolveUserQuestion={async (_question, resolution) => {
-                const displayPrompt = resolution.action === "answer"
-                  ? resolution.text
-                  : "Dismiss this question";
-                const sent = await sendPrompt([], null, displayPrompt, {
-                  displayPrompt,
-                  turnMetadata: { userQuestionResolution: resolution },
-                });
-                if (!sent) throw new Error("The question response could not be sent.");
-              }}
-              onOpenSession={onOpenSession}
-              onScroll={(event) => handleChatScroll(event.currentTarget)}
-              preparingInitialScroll={chatThreadPreparingInitialScroll}
-              rows={chatTimelineRows}
-              threadRef={chatThreadRef}
-              workspaceRootPath={workspaceRootPath}
-            /></Suspense>
-            <div className={`composer-stack dock ${pendingApproval ? "has-approval" : ""}`} ref={composerStackRef}>
+          <div
+            className={`chat-column ${pendingApproval ? "has-approval" : ""}`}
+            style={chatColumnStyle}
+          >
+            <Suspense fallback={null}>
+              <MainChatThread
+                accountBaseUrl={accountBaseUrl}
+                activeWorkspaceAppId={activeWorkspaceAppId}
+                billingOrganizationSlug={billingTarget.organizationSlug}
+                billingTeamId={billingTarget.teamId}
+                connection={connection}
+                creation={selectedTrainingCreation}
+                onOpenBrowserLink={handleOpenBrowserLink}
+                onOpenFileInSidebar={handleOpenFileInSidebar}
+                onOpenProfileSettings={onOpenProfileSettings}
+                onResolveUserQuestion={async (_question, resolution) => {
+                  const displayPrompt =
+                    resolution.action === "answer"
+                      ? resolution.text
+                      : "Dismiss this question";
+                  const sent = await sendPrompt([], null, displayPrompt, {
+                    displayPrompt,
+                    turnMetadata: { userQuestionResolution: resolution },
+                  });
+                  if (!sent)
+                    throw new Error("The question response could not be sent.");
+                }}
+                onOpenSession={onOpenSession}
+                onScroll={(event) => handleChatScroll(event.currentTarget)}
+                preparingInitialScroll={chatThreadPreparingInitialScroll}
+                rows={chatTimelineRows}
+                threadRef={chatThreadRef}
+                workspaceRootPath={workspaceRootPath}
+              />
+            </Suspense>
+            <div
+              className={`composer-stack dock ${
+                pendingApproval ? "has-approval" : ""
+              }`}
+              ref={composerStackRef}
+            >
               {selectedTrainingCreation ? (
                 <Suspense fallback={null}>
                   <TrainingCreationPanel
@@ -1582,45 +1561,71 @@ export function MainPane({
                 </Suspense>
               ) : null}
               {trainingChatHandoffBar}
-              <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
+              <ApprovalRequestCard
+                approval={pendingApproval}
+                onResolve={resolveApproval}
+              />
               {showScrollToBottomButton && !chatThreadPreparingInitialScroll ? (
                 <MessageNavigationControls
                   canGoNext={userMessageNavigation.canGoNext}
                   canGoPrevious={userMessageNavigation.canGoPrevious}
                   onJumpToLatest={jumpToLatestChatMessage}
                   onNext={() => {
-                    if (userMessageNavigation.canGoNext) goToUserMessage("next");
+                    if (userMessageNavigation.canGoNext)
+                      goToUserMessage("next");
                   }}
                   onPrevious={() => {
-                    if (userMessageNavigation.canGoPrevious) goToUserMessage("previous");
+                    if (userMessageNavigation.canGoPrevious)
+                      goToUserMessage("previous");
                   }}
                 />
               ) : null}
               <DraftBoundComposer
+                experience={experience}
                 draftStore={composerDraftStore}
                 attachmentRequest={composerAttachmentRequest}
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
-                mentionApps={mentionApps}
-                connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
+                mentionApps={experience === "development" ? mentionApps : []}
+                connectedAppMentions={
+                  experience === "work" ? connectedAppMentions : []
+                }
+                profileSkills={
+                  experience === "chat"
+                    ? []
+                    : activeProvider === "codex"
+                    ? bootstrap?.codexPersonalSkills ?? []
+                    : selectedProfileSkills
+                }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={goalRuntime}
-                subagentRuntime={subagentRuntime}
-                createImproveRuntime={createImproveRuntime}
+                goalRuntime={experience === "development" ? goalRuntime : null}
+                subagentRuntime={
+                  experience === "development" ? subagentRuntime : null
+                }
+                createImproveRuntime={
+                  experience === "development" ? createImproveRuntime : null
+                }
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
-                steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
-                steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
+                steerAutoDispatchBlocked={
+                  steerAutoDispatchBlocked || Boolean(pendingApproval)
+                }
+                steerAutoDispatchReady={
+                  steerAutoDispatchReady && !pendingApproval
+                }
                 showProjectFooter={false}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
-                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
+                profileTarget={
+                  experience === "development" && activeProvider !== "codex"
+                    ? composerProfileTarget
+                    : null
+                }
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1630,12 +1635,18 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
-                onProfileTargetChange={(value) => void changeComposerProfile(value)}
-                onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
+                onProfileTargetChange={(value) =>
+                  void changeComposerProfile(value)
+                }
+                onWorkspaceTargetChange={(target) =>
+                  void changeWorkspaceTarget(target)
+                }
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
-                onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
+                onOpenPondCommandAccessModeChange={
+                  changeOpenPondCommandAccessMode
+                }
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
@@ -1651,6 +1662,14 @@ export function MainPane({
           <section className="start-panel">
             <div className="start-welcome">
               <h1>{startMessage}</h1>
+              {experience === "work" ? (
+                <WorkStarterPrompts
+                  onSelect={(prompt) => {
+                    composerDraftStore.set(prompt);
+                    onRequestComposerFocus();
+                  }}
+                />
+              ) : null}
               {canSyncWorkspace && (
                 <WorkspaceSyncButton
                   busy={workspaceBusy}
@@ -1660,32 +1679,57 @@ export function MainPane({
             </div>
             <div className="composer-stack start">
               {trainingChatHandoffBar}
-              <ApprovalRequestCard approval={pendingApproval} onResolve={resolveApproval} />
+              <ApprovalRequestCard
+                approval={pendingApproval}
+                onResolve={resolveApproval}
+              />
               <DraftBoundComposer
+                experience={experience}
                 draftStore={composerDraftStore}
                 attachmentRequest={composerAttachmentRequest}
                 mode="start"
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
-                mentionApps={mentionApps}
-                connectedAppMentions={connectedAppMentions}
-                profileSkills={activeProvider === "codex" ? bootstrap?.codexPersonalSkills ?? [] : selectedProfileSkills}
+                mentionApps={experience === "development" ? mentionApps : []}
+                connectedAppMentions={
+                  experience === "work" ? connectedAppMentions : []
+                }
+                profileSkills={
+                  experience === "chat"
+                    ? []
+                    : activeProvider === "codex"
+                    ? bootstrap?.codexPersonalSkills ?? []
+                    : selectedProfileSkills
+                }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={goalRuntime}
-                subagentRuntime={subagentRuntime}
-                createImproveRuntime={createImproveRuntime}
+                goalRuntime={experience === "development" ? goalRuntime : null}
+                subagentRuntime={
+                  experience === "development" ? subagentRuntime : null
+                }
+                createImproveRuntime={
+                  experience === "development" ? createImproveRuntime : null
+                }
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
-                steerAutoDispatchBlocked={steerAutoDispatchBlocked || Boolean(pendingApproval)}
-                steerAutoDispatchReady={steerAutoDispatchReady && !pendingApproval}
+                steerAutoDispatchBlocked={
+                  steerAutoDispatchBlocked || Boolean(pendingApproval)
+                }
+                steerAutoDispatchReady={
+                  steerAutoDispatchReady && !pendingApproval
+                }
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
                 model={activeModel}
+                showProjectFooter={experience === "development"}
                 projectTarget={projectTarget}
-                profileTarget={activeProvider === "codex" ? null : composerProfileTarget}
+                profileTarget={
+                  experience === "development" && activeProvider !== "codex"
+                    ? composerProfileTarget
+                    : null
+                }
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1695,12 +1739,18 @@ export function MainPane({
                 onProviderChange={changeMainComposerProvider}
                 onProviderSetupOpen={onOpenProviderSettings}
                 onProjectTargetChange={changeProjectTarget}
-                onProfileTargetChange={(value) => void changeComposerProfile(value)}
-                onWorkspaceTargetChange={(target) => void changeWorkspaceTarget(target)}
+                onProfileTargetChange={(value) =>
+                  void changeComposerProfile(value)
+                }
+                onWorkspaceTargetChange={(target) =>
+                  void changeWorkspaceTarget(target)
+                }
                 onModelChange={changeMainComposerModel}
                 onCodexPermissionModeChange={changeCodexPermissionMode}
                 onCodexReasoningEffortChange={changeCodexReasoningEffort}
-                onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
+                onOpenPondCommandAccessModeChange={
+                  changeOpenPondCommandAccessMode
+                }
                 onMentionAppSelect={setMentionedAppId}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
@@ -1720,8 +1770,10 @@ export { shouldShowRightSidebarHomePanel };
 
 function sidebarFileMediaType(file: SidebarFileBookmark): string {
   const lowerPath = file.path.toLowerCase();
-  if (lowerPath.endsWith(".md") || lowerPath.endsWith(".mdx")) return "text/markdown";
+  if (lowerPath.endsWith(".md") || lowerPath.endsWith(".mdx"))
+    return "text/markdown";
   if (lowerPath.endsWith(".json")) return "application/json";
-  if (lowerPath.endsWith(".yaml") || lowerPath.endsWith(".yml")) return "application/yaml";
+  if (lowerPath.endsWith(".yaml") || lowerPath.endsWith(".yml"))
+    return "application/yaml";
   return "text/plain";
 }

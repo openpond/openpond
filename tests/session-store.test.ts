@@ -8,8 +8,41 @@ import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("session store patches", () => {
+  test("persists explicit experiences and defaults legacy sessions to Development", async () => {
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-experience-")
+    );
+    const store = new SqliteStore(storeDir);
+
+    try {
+      const { createSession, patchSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+      const defaultSession = await createSession({ provider: "openpond" });
+      const workSession = await createSession({
+        experience: "work",
+        provider: "openpond",
+        cwd: null,
+      });
+
+      expect(defaultSession.experience).toBe("development");
+      expect(workSession.experience).toBe("work");
+      expect((await store.getSession(workSession.id))?.experience).toBe("work");
+      expect(
+        (await patchSession(workSession.id, { experience: "chat" })).experience
+      ).toBe("chat");
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("defaults new chats to the last-used Profile and allows chat-local switching", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-profile-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-profile-")
+    );
     const store = new SqliteStore(storeDir);
     const defaultProfile = {
       source: "local" as const,
@@ -29,10 +62,16 @@ describe("session store patches", () => {
         appendRuntimeEvent: async () => undefined,
       });
       const inherited = await createSession({ provider: "openpond" });
-      const explicit = await createSession({ provider: "openpond", currentProfile: reviewProfile });
+      const explicit = await createSession({
+        provider: "openpond",
+        currentProfile: reviewProfile,
+      });
       expect(inherited.currentProfile).toEqual(defaultProfile);
       expect(explicit.currentProfile).toEqual(reviewProfile);
-      expect((await patchSession(inherited.id, { currentProfile: reviewProfile })).currentProfile).toEqual(reviewProfile);
+      expect(
+        (await patchSession(inherited.id, { currentProfile: reviewProfile }))
+          .currentProfile
+      ).toEqual(reviewProfile);
       expect(explicit.currentProfile).toEqual(reviewProfile);
     } finally {
       await store.close();
@@ -41,7 +80,9 @@ describe("session store patches", () => {
   });
 
   test("creates normal local chat sessions visible in the default sidebar", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
     const events: RuntimeEvent[] = [];
 
@@ -84,7 +125,9 @@ describe("session store patches", () => {
   });
 
   test("preserves an explicit null cwd for a workspace-free chat", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
 
     try {
@@ -114,7 +157,9 @@ describe("session store patches", () => {
   });
 
   test("persists session metadata through create and patch", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
 
     try {
@@ -134,18 +179,30 @@ describe("session store patches", () => {
       });
       const stored = await store.getSession(created.id);
 
-      expect(created.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
+      expect(created.metadata).toEqual({
+        workspaceTarget: "hybrid",
+        source: "test",
+      });
       expect(created.subagentDelegationMode).toBe("proactive");
-      expect(stored?.metadata).toEqual({ workspaceTarget: "hybrid", source: "test" });
+      expect(stored?.metadata).toEqual({
+        workspaceTarget: "hybrid",
+        source: "test",
+      });
 
       const patched = await patchSession(created.id, {
         metadata: { workspaceTarget: "hybrid", source: "patched" },
         subagentDelegationMode: "manual",
       });
 
-      expect(patched.metadata).toEqual({ workspaceTarget: "hybrid", source: "patched" });
+      expect(patched.metadata).toEqual({
+        workspaceTarget: "hybrid",
+        source: "patched",
+      });
       expect(patched.subagentDelegationMode).toBe("manual");
-      expect((await patchSession(created.id, { subagentDelegationMode: null })).subagentDelegationMode).toBeNull();
+      expect(
+        (await patchSession(created.id, { subagentDelegationMode: null }))
+          .subagentDelegationMode
+      ).toBeNull();
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });
@@ -153,7 +210,9 @@ describe("session store patches", () => {
   });
 
   test("persists OpenPond command access defaults and patches", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
 
     try {
@@ -161,7 +220,9 @@ describe("session store patches", () => {
         store,
         defaultSessionCwd: () => "/tmp/openpond",
         loadAppPreferences: async () =>
-          AppPreferencesSchema.parse({ openPondCommandAccessMode: "full-access" }),
+          AppPreferencesSchema.parse({
+            openPondCommandAccessMode: "full-access",
+          }),
         appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
       });
 
@@ -170,7 +231,9 @@ describe("session store patches", () => {
         title: "Inherited command access",
       });
       expect(inherited.openPondCommandAccessMode).toBe("full-access");
-      expect((await store.getSession(inherited.id))?.openPondCommandAccessMode).toBe("full-access");
+      expect(
+        (await store.getSession(inherited.id))?.openPondCommandAccessMode
+      ).toBe("full-access");
 
       const explicit = await createSession({
         provider: "openai",
@@ -179,9 +242,13 @@ describe("session store patches", () => {
       });
       expect(explicit.openPondCommandAccessMode).toBe("ask");
 
-      const patched = await patchSession(inherited.id, { openPondCommandAccessMode: "ask" });
+      const patched = await patchSession(inherited.id, {
+        openPondCommandAccessMode: "ask",
+      });
       expect(patched.openPondCommandAccessMode).toBe("ask");
-      expect((await store.getSession(inherited.id))?.openPondCommandAccessMode).toBe("ask");
+      expect(
+        (await store.getSession(inherited.id))?.openPondCommandAccessMode
+      ).toBe("ask");
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });
@@ -189,9 +256,14 @@ describe("session store patches", () => {
   });
 
   test("normalizes legacy sessions without command access mode", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
-    const legacySession = { ...session("session-legacy") } as Omit<Session, "openPondCommandAccessMode"> & {
+    const legacySession = { ...session("session-legacy") } as Omit<
+      Session,
+      "openPondCommandAccessMode"
+    > & {
       openPondCommandAccessMode?: Session["openPondCommandAccessMode"];
     };
     delete legacySession.openPondCommandAccessMode;
@@ -208,7 +280,9 @@ describe("session store patches", () => {
   });
 
   test("keeps updatedAt stable for sidebar-only patches", async () => {
-    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-session-store-"));
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-store-")
+    );
     const store = new SqliteStore(storeDir);
     const baseSession = session("session-sidebar");
 
@@ -220,7 +294,10 @@ describe("session store patches", () => {
         appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
       });
 
-      const pinned = await patchSession(baseSession.id, { pinned: true, archived: false });
+      const pinned = await patchSession(baseSession.id, {
+        pinned: true,
+        archived: false,
+      });
 
       expect(pinned.pinned).toBe(true);
       expect(pinned.archived).toBe(false);
@@ -264,6 +341,7 @@ describe("session store patches", () => {
 function session(id: string): Session {
   return {
     id,
+    experience: "development",
     provider: "openpond",
     modelRef: null,
     openPondCommandAccessMode: "ask",

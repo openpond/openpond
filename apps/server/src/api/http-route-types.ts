@@ -48,12 +48,13 @@ export type HttpRouteDeps = {
   refreshCodexStatus: (force?: boolean) => Promise<unknown>;
   bootstrapPayload: (options?: {
     forceOpenPond?: boolean;
+    refreshCloudProjects?: boolean;
     ensureProfile?: boolean;
   }) => Promise<BootstrapPayload>;
   skillSourceFilePayload: (
     scope: "codex" | "profile" | "extension",
     skillName: string,
-    filePath: string,
+    filePath: string
   ) => Promise<unknown>;
   extensionCatalogPayload: () => Promise<unknown>;
   extensionPreviewPayload: (payload: unknown) => Promise<unknown>;
@@ -102,6 +103,7 @@ export type HttpRouteDeps = {
   interruptCodexHistoryTurnPayload: (sessionId: string) => Promise<unknown>;
   switchOpenPondPayload: (payload: unknown) => Promise<unknown>;
   saveOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
+  removeOpenPondAccountPayload: (payload: unknown) => Promise<unknown>;
   updateOpenPondAccountConfigPayload: (payload: unknown) => Promise<unknown>;
   profileCurrentPayload: () => Promise<unknown>;
   profileCatalogPayload: () => Promise<unknown>;

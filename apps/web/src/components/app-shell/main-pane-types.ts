@@ -6,9 +6,11 @@ import type {
   CloudProject,
   CodexPermissionMode,
   CodexReasoningEffort,
+  Experience,
   OpenPondApp,
   OpenPondCommandAccessMode,
   OpenPondProfileSkill,
+  OutputRef,
   ResolveApprovalRequest,
   RuntimeEvent,
   Session,
@@ -48,7 +50,10 @@ import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-typ
 import type { CommunityViewProps } from "../community/CommunityView";
 import type { LabDetailLocation } from "../labs/lab-detail-navigation";
 import type { TeamChatViewProps } from "../team-chat/TeamChatView";
-import type { TerminalQueuedCommand, TerminalTab } from "../terminal/terminal-overlay-types";
+import type {
+  TerminalQueuedCommand,
+  TerminalTab,
+} from "../terminal/terminal-overlay-types";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type {
   WorkspaceDiffPanelViewState,
@@ -60,6 +65,7 @@ import type { SkillSourceDocument } from "./skill-source-document";
 import type { SkillPackageSourceSelection } from "./skill-package-source";
 
 export type MainPaneProps = {
+  experience: Experience;
   view: AppView;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;
@@ -72,6 +78,7 @@ export type MainPaneProps = {
   selectedSessionId: string | null;
   composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
+  onRequestComposerFocus: () => void;
   labCloseDetailRequestId: number;
   labCloseDetailKind: LabDetailLocation["kind"] | null;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
@@ -115,7 +122,7 @@ export type MainPaneProps = {
   sidebarFileBookmarks: SidebarFileBookmark[];
   onSetSidebarFileStatus: (
     file: SidebarFileBookmark,
-    status: "pinned" | "saved_for_later" | "none",
+    status: "pinned" | "saved_for_later" | "none"
   ) => void;
   browserConversationId: string;
   terminalScope: TerminalScope;
@@ -124,7 +131,9 @@ export type MainPaneProps = {
   pendingTerminalCommand: TerminalQueuedCommand | null;
   terminalOpen: boolean;
   onToggleTerminal: () => void;
-  onWorkspaceDiffPanelViewStateChange: (state: WorkspaceDiffPanelViewState) => void;
+  onWorkspaceDiffPanelViewStateChange: (
+    state: WorkspaceDiffPanelViewState
+  ) => void;
   training: ReturnType<typeof useTraining>;
   trainingSessions: Session[];
   trainingChatHandoff: TrainingModelChatHandoff | null;
@@ -133,6 +142,14 @@ export type MainPaneProps = {
   onTrainingChatTaskSelect: (index: number) => void;
   onTrainingChatHandoffDismiss: () => void;
   onOpenSession: (sessionId: string) => void;
+  onExperienceHandoff: (input: {
+    target: Experience;
+    sourceSessionId: string;
+    sourceMessageIds?: string[];
+    sourceContext?: string;
+    output?: OutputRef;
+    prompt: string;
+  }) => Promise<Session>;
   cloudProjects: CloudProject[];
   chatHistoryHasMore?: boolean;
   chatHistoryLoading?: boolean;
@@ -154,39 +171,50 @@ export type MainPaneProps = {
   onBeginNewChatWithModel: (handoff: TrainingModelChatHandoff) => void;
   changeCodexPermissionMode: (mode: CodexPermissionMode) => void;
   changeCodexReasoningEffort: (effort: CodexReasoningEffort) => void;
-  changeOpenPondCommandAccessMode: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
+  changeOpenPondCommandAccessMode: (
+    mode: OpenPondCommandAccessMode,
+    session?: Session | null
+  ) => void;
   resolveApproval: (
     approvalId: string,
-    decision: ResolveApprovalRequest["decision"],
+    decision: ResolveApprovalRequest["decision"]
   ) => Promise<void>;
   answerCreateImproveQuestion: (
     input: CreateImproveReviewActionInput,
     questionId: string,
-    answerValue: string,
+    answerValue: string
   ) => Promise<void>;
-  approveCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  approveCreateImproveRun: (
+    input: CreateImproveReviewActionInput
+  ) => Promise<void>;
   applyCreateImproveCandidate: (
     input: CreateImproveReviewActionInput,
-    candidateId: string,
+    candidateId: string
   ) => Promise<void>;
-  cancelCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  cancelCreateImproveRun: (
+    input: CreateImproveReviewActionInput
+  ) => Promise<void>;
   openCreateImprovePullRequest: (
     input: CreateImproveReviewActionInput,
-    candidateId: string,
+    candidateId: string
   ) => Promise<void>;
-  pauseCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  pauseCreateImproveRun: (
+    input: CreateImproveReviewActionInput
+  ) => Promise<void>;
   reconcileCreateImprovePullRequest: (
     input: CreateImproveReviewActionInput,
-    candidateId: string,
+    candidateId: string
   ) => Promise<void>;
   rejectCreateImproveCandidate: (
     input: CreateImproveReviewActionInput,
-    candidateId: string,
+    candidateId: string
   ) => Promise<void>;
-  resumeCreateImproveRun: (input: CreateImproveReviewActionInput) => Promise<void>;
+  resumeCreateImproveRun: (
+    input: CreateImproveReviewActionInput
+  ) => Promise<void>;
   reviseCreateImproveRun: (
     input: CreateImproveReviewActionInput,
-    revision: string,
+    revision: string
   ) => Promise<void>;
   setMentionedAppId: (appId: string | null) => void;
   showToast: ShowAppToast;
@@ -199,7 +227,7 @@ export type MainPaneProps = {
       displayPrompt?: string;
       usageAttribution?: UsageRequestAttribution;
       turnMetadata?: Record<string, unknown>;
-    },
+    }
   ) => Promise<boolean>;
   stopTurn: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
@@ -222,7 +250,7 @@ export type MainPaneProps = {
   onRightChatPromptChange: (panelId: string, prompt: string) => void;
   onRightChatScrollStateChange: (
     panelId: string,
-    state: { scrollTop: number; stickyToBottom: boolean },
+    state: { scrollTop: number; stickyToBottom: boolean }
   ) => void;
   onRightChatProviderChange: (panelId: string, provider: ChatProvider) => void;
   onSubmitRightChat: (
@@ -230,7 +258,7 @@ export type MainPaneProps = {
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
     command?: ComposerSlashCommand | null,
-    options?: ComposerSubmitOptions,
+    options?: ComposerSubmitOptions
   ) => Promise<boolean>;
   onStopRightChat: (sessionId: string | null) => Promise<boolean>;
   onCloseTerminal: () => void;

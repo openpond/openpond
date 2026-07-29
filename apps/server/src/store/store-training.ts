@@ -81,6 +81,8 @@ type TrainingChatSearchEvidenceRow = {
   payload: string;
 };
 
+const ACTIVE_TRAINING_DESTINATIONS_SQL =
+  "('local_cpu_fixture', 'fireworks', 'openpond_managed')";
 
 export class SqliteTrainingStore extends SqliteDatasetStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
@@ -355,11 +357,53 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   }
 
   async listTaskCreationSnapshots(profileId: string): Promise<TaskCreationSnapshot[]> {
-    return this.listParsedPayloads("SELECT payload FROM task_creation_snapshots WHERE profile_id = ? ORDER BY updated_at DESC", [profileId], TaskCreationSnapshotSchema.parse);
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<PayloadRow>(
+      "SELECT payload FROM task_creation_snapshots WHERE profile_id = ? ORDER BY updated_at DESC",
+      [profileId],
+    );
+    const snapshots: TaskCreationSnapshot[] = [];
+    for (const row of rows) {
+      const value = JSON.parse(row.payload);
+      const parsed = TaskCreationSnapshotSchema.safeParse(value);
+      if (parsed.success) {
+        snapshots.push(parsed.data);
+        continue;
+      }
+      const specificationKind = retiredTaskCreationSpecificationKind(value);
+      if (specificationKind) {
+        this.logger?.warn("retired task creation snapshot ignored", {
+          snapshotId: storedPayloadId(value),
+          specificationKind,
+        });
+        continue;
+      }
+      throw parsed.error;
+    }
+    return snapshots;
   }
 
   async getTaskCreationSnapshot(id: string): Promise<TaskCreationSnapshot | null> {
-    return this.getParsedPayload("SELECT payload FROM task_creation_snapshots WHERE id = ?", [id], TaskCreationSnapshotSchema.parse);
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<PayloadRow>(
+      "SELECT payload FROM task_creation_snapshots WHERE id = ?",
+      [id],
+    );
+    if (!row) return null;
+    const value = JSON.parse(row.payload);
+    const parsed = TaskCreationSnapshotSchema.safeParse(value);
+    if (parsed.success) return parsed.data;
+    const specificationKind = retiredTaskCreationSpecificationKind(value);
+    if (specificationKind) {
+      this.logger?.warn("retired task creation snapshot ignored", {
+        snapshotId: storedPayloadId(value),
+        specificationKind,
+      });
+      return null;
+    }
+    throw parsed.error;
   }
 
   async upsertTaskCreationSnapshot(snapshotInput: TaskCreationSnapshot): Promise<TaskCreationSnapshot> {
@@ -395,19 +439,19 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
         ? "SELECT payload FROM tasksets WHERE profile_id = ? ORDER BY updated_at DESC"
         : "SELECT payload FROM tasksets ORDER BY updated_at DESC",
       profileId ? [profileId] : [],
-      TasksetSchema.parse,
+      parseStoredTaskset,
     );
   }
 
   async getTaskset(id: string): Promise<Taskset | null> {
-    return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], TasksetSchema.parse);
+    return this.getParsedPayload("SELECT payload FROM tasksets WHERE id = ?", [id], parseStoredTaskset);
   }
 
   async getTasksetRevision(id: string, revision: number, contentHash?: string | null): Promise<Taskset | null> {
     const taskset = await this.getParsedPayload(
       "SELECT payload FROM taskset_revisions WHERE taskset_id = ? AND revision = ?",
       [id, revision],
-      TasksetSchema.parse,
+      parseStoredTaskset,
     );
     if (taskset && contentHash && taskset.contentHash !== contentHash) {
       throw new Error(`Taskset ${id}@${revision} does not match the requested immutable content hash.`);
@@ -566,7 +610,7 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   }
 
   async getReadinessReport(tasksetId: string): Promise<TasksetReadinessReport | null> {
-    return this.getParsedPayload("SELECT payload FROM readiness_reports WHERE taskset_id = ?", [tasksetId], TasksetReadinessReportSchema.parse);
+    return this.getParsedPayload("SELECT payload FROM readiness_reports WHERE taskset_id = ?", [tasksetId], parseStoredReadinessReport);
   }
 
   async saveTaskMinerConfig(profileId: string, configInput: TaskMinerConfig): Promise<TaskMinerConfig> {
@@ -617,7 +661,7 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
     return this.getParsedPayload(
       "SELECT payload FROM model_projects WHERE id = ?",
       [id],
-      ModelProjectSchema.parse,
+      parseStoredModelProject,
     );
   }
 
@@ -627,7 +671,7 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
         ? "SELECT payload FROM model_projects WHERE profile_id = ? ORDER BY updated_at DESC"
         : "SELECT payload FROM model_projects ORDER BY updated_at DESC",
       profileId ? [profileId] : [],
-      ModelProjectSchema.parse,
+      parseStoredModelProject,
     );
   }
 
@@ -643,7 +687,12 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
 
   async getModelRunDraft(id: string): Promise<ModelRunDraft | null> {
     return this.getParsedPayload(
-      "SELECT payload FROM model_run_drafts WHERE id = ?",
+      `SELECT payload FROM model_run_drafts
+       WHERE id = ?
+         AND (
+           json_extract(payload, '$.destinationId') IS NULL
+           OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
+         )`,
       [id],
       ModelRunDraftSchema.parse,
     );
@@ -652,8 +701,17 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   async listModelRunDrafts(profileId?: string): Promise<ModelRunDraft[]> {
     return this.listParsedPayloads(
       profileId
-        ? "SELECT payload FROM model_run_drafts WHERE profile_id = ? ORDER BY updated_at DESC"
-        : "SELECT payload FROM model_run_drafts ORDER BY updated_at DESC",
+        ? `SELECT payload FROM model_run_drafts
+           WHERE profile_id = ?
+             AND (
+               json_extract(payload, '$.destinationId') IS NULL
+               OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
+             )
+           ORDER BY updated_at DESC`
+        : `SELECT payload FROM model_run_drafts
+           WHERE json_extract(payload, '$.destinationId') IS NULL
+              OR json_extract(payload, '$.destinationId') IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}
+           ORDER BY updated_at DESC`,
       profileId ? [profileId] : [],
       ModelRunDraftSchema.parse,
     );
@@ -678,11 +736,21 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   }
 
   async listTrainingPlans(tasksetId?: string): Promise<TrainingPlan[]> {
-    return this.listParsedPayloads(tasksetId ? "SELECT payload FROM training_plans WHERE taskset_id = ? ORDER BY created_at DESC" : "SELECT payload FROM training_plans ORDER BY created_at DESC", tasksetId ? [tasksetId] : [], TrainingPlanSchema.parse);
+    return this.listParsedPayloads(
+      tasksetId
+        ? `SELECT payload FROM training_plans WHERE taskset_id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY created_at DESC`
+        : `SELECT payload FROM training_plans WHERE destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY created_at DESC`,
+      tasksetId ? [tasksetId] : [],
+      TrainingPlanSchema.parse,
+    );
   }
 
   async getTrainingPlan(id: string): Promise<TrainingPlan | null> {
-    return this.getParsedPayload("SELECT payload FROM training_plans WHERE id = ?", [id], TrainingPlanSchema.parse);
+    return this.getParsedPayload(
+      `SELECT payload FROM training_plans WHERE id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}`,
+      [id],
+      TrainingPlanSchema.parse,
+    );
   }
 
   async saveTrainingBundle(bundleInput: TrainingBundleManifest): Promise<TrainingBundleManifest> {
@@ -732,11 +800,19 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   }
 
   async getTrainingJob(id: string): Promise<TrainingJob | null> {
-    return this.getParsedPayload("SELECT payload FROM training_jobs WHERE id = ?", [id], TrainingJobSchema.parse);
+    return this.getParsedPayload(
+      `SELECT payload FROM training_jobs WHERE id = ? AND destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL}`,
+      [id],
+      TrainingJobSchema.parse,
+    );
   }
 
   async listTrainingJobs(): Promise<TrainingJob[]> {
-    return this.listParsedPayloads("SELECT payload FROM training_jobs ORDER BY updated_at DESC", [], TrainingJobSchema.parse);
+    return this.listParsedPayloads(
+      `SELECT payload FROM training_jobs WHERE destination_id IN ${ACTIVE_TRAINING_DESTINATIONS_SQL} ORDER BY updated_at DESC`,
+      [],
+      TrainingJobSchema.parse,
+    );
   }
 
   async saveTrainingJobEvent(eventInput: TrainingJobEvent): Promise<TrainingJobEvent> {
@@ -782,11 +858,137 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
   }
 
   async listModelArtifactLineage(tasksetId?: string): Promise<ModelArtifactLineage[]> {
-    return this.listParsedPayloads(tasksetId ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC" : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC", tasksetId ? [tasksetId] : [], ModelArtifactLineageSchema.parse);
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<PayloadRow>(
+      tasksetId ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC" : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
+      tasksetId ? [tasksetId] : [],
+    );
+    const lineages: ModelArtifactLineage[] = [];
+    for (const row of rows) {
+      const value = JSON.parse(row.payload);
+      const parsed = ModelArtifactLineageSchema.safeParse(value);
+      if (parsed.success) {
+        lineages.push(parsed.data);
+        continue;
+      }
+      const managedServingSource = retiredManagedServingSource(value);
+      if (managedServingSource) {
+        this.logger?.warn("retired Model artifact lineage ignored", {
+          lineageId: storedPayloadId(value),
+          managedServingSource,
+        });
+        continue;
+      }
+      throw parsed.error;
+    }
+    return lineages;
   }
 
   async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
-    return this.getParsedPayload("SELECT payload FROM model_artifact_lineage WHERE id = ?", [id], ModelArtifactLineageSchema.parse);
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<PayloadRow>(
+      "SELECT payload FROM model_artifact_lineage WHERE id = ?",
+      [id],
+    );
+    if (!row) return null;
+    const value = JSON.parse(row.payload);
+    const parsed = ModelArtifactLineageSchema.safeParse(value);
+    if (parsed.success) return parsed.data;
+    const managedServingSource = retiredManagedServingSource(value);
+    if (managedServingSource) {
+      this.logger?.warn("retired Model artifact lineage ignored", {
+        lineageId: storedPayloadId(value),
+        managedServingSource,
+      });
+      return null;
+    }
+    throw parsed.error;
   }
 
+}
+
+function retiredTaskCreationSpecificationKind(value: unknown): "agent_benchmark" | null {
+  if (!isRecord(value) || !isRecord(value.request) || !isRecord(value.request.buildSpecification)) return null;
+  return value.request.buildSpecification.kind === "agent_benchmark" ? "agent_benchmark" : null;
+}
+
+function parseStoredTaskset(value: unknown): Taskset {
+  return TasksetSchema.parse(
+    normalizeStoredTasksetAuthoringProvenance(
+      normalizeStoredReadinessDestinationClasses(value),
+    ),
+  );
+}
+
+function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
+  return TasksetReadinessReportSchema.parse(normalizeStoredReadinessDestinationClasses(value));
+}
+
+function parseStoredModelProject(value: unknown): ModelProject {
+  return ModelProjectSchema.parse(normalizeStoredModelProjectDestination(value));
+}
+
+function normalizeStoredModelProjectDestination(value: unknown): unknown {
+  if (
+    !isRecord(value)
+    || !isRetiredTrainingDestination(value.defaultDestinationId)
+  ) {
+    return value;
+  }
+  return { ...value, defaultDestinationId: null };
+}
+
+function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const readiness = isRecord(value.readiness) ? value.readiness : value;
+  if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
+  const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
+    (destinationClass) => destinationClass !== "openpond_managed",
+  );
+  if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
+  const normalizedReadiness = { ...readiness, compatibleDestinationClasses };
+  return readiness === value ? normalizedReadiness : { ...value, readiness: normalizedReadiness };
+}
+
+function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.authoringProvenance)) return value;
+  const buildSpecification = value.authoringProvenance.buildSpecification;
+  if (!isRecord(buildSpecification) || buildSpecification.kind !== "agent_benchmark") {
+    return value;
+  }
+  return {
+    ...value,
+    authoringProvenance: {
+      ...value.authoringProvenance,
+      buildSpecification: null,
+    },
+  };
+}
+
+function retiredManagedServingSource(value: unknown): "openpond_training" | null {
+  if (!isRecord(value) || !isRecord(value.managedServing)) return null;
+  return value.managedServing.source === "openpond_training" ? "openpond_training" : null;
+}
+
+function isRetiredTrainingDestination(value: unknown): boolean {
+  return typeof value === "string"
+    && [
+      "export",
+      "prime_hosted",
+      "ssh_gpu",
+      "custom",
+      "local_cuda",
+      "local_mlx",
+      "runpod_byoc",
+    ].includes(value);
+}
+
+function storedPayloadId(value: unknown): string | null {
+  return isRecord(value) && typeof value.id === "string" ? value.id : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }

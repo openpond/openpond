@@ -1,9 +1,8 @@
 import { Buffer } from "node:buffer";
 import { randomUUID } from "node:crypto";
 import {
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MAX,
-  SANDBOX_TEMPLATE_PREVIEW_PORT_MIN,
   type LocalProject,
+  type OutputValidationEvidence,
   type Session,
   type WorkspaceState,
   type WorkspaceToolRequest,
@@ -11,7 +10,10 @@ import {
 } from "@openpond/contracts";
 import type { SandboxRuntime } from "@openpond/cloud";
 import { sandboxRequestPayload } from "../openpond/sandboxes.js";
-import { localProjectStateWorkspace, localProjectWorkspacePaths } from "../workspace/local-projects.js";
+import {
+  localProjectStateWorkspace,
+  localProjectWorkspacePaths,
+} from "../workspace/local-projects.js";
 import { runWorkspaceCommand } from "../workspace/workspace-command.js";
 import { loadWorkspaceStateAtPath } from "../workspace/workspace-state.js";
 import {
@@ -26,6 +28,11 @@ import {
   stringValue,
 } from "./workspace-tool-arguments.js";
 import { editSandboxFile } from "./workspace-tool-sandbox-file-edit.js";
+import {
+  previewPortArg,
+  sandboxCatalogPayload,
+  sandboxName,
+} from "./workspace-tool-sandbox-display.js";
 
 type SandboxToolAction = Extract<
   WorkspaceToolRequest["action"],
@@ -33,6 +40,7 @@ type SandboxToolAction = Extract<
   | "sandbox_templates"
   | "sandbox_template_launch"
   | "sandbox_status"
+  | "sandbox_start"
   | "sandbox_list_files"
   | "sandbox_read_file"
   | "sandbox_search_files"
@@ -68,6 +76,9 @@ type SandboxToolAction = Extract<
   | "sandbox_replay_cancel"
   | "sandbox_logs"
   | "sandbox_receipts"
+  | "sandbox_prepare_agent"
+  | "sandbox_save_agent_package"
+  | "sandbox_save_output"
   | "sandbox_schedule_create"
   | "sandbox_stop"
 >;
@@ -77,6 +88,7 @@ const SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_templates",
   "sandbox_template_launch",
   "sandbox_status",
+  "sandbox_start",
   "sandbox_list_files",
   "sandbox_read_file",
   "sandbox_search_files",
@@ -112,11 +124,16 @@ const SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_replay_cancel",
   "sandbox_logs",
   "sandbox_receipts",
+  "sandbox_prepare_agent",
+  "sandbox_save_agent_package",
+  "sandbox_save_output",
   "sandbox_schedule_create",
   "sandbox_stop",
 ]);
 
-const SANDBOX_ACTIONS_WITHOUT_ACTIVE_SANDBOX = new Set<WorkspaceToolRequest["action"]>([
+const SANDBOX_ACTIONS_WITHOUT_ACTIVE_SANDBOX = new Set<
+  WorkspaceToolRequest["action"]
+>([
   "sandbox_create",
   "sandbox_templates",
   "sandbox_template_launch",
@@ -149,7 +166,8 @@ const SANDBOX_CHAT_DEFAULT_RUNTIME_METADATA_KEY = "openpondAppDefaultRuntime";
 const SANDBOX_CREATE_REQUEST_TIMEOUT_MS = 30_000;
 const SANDBOX_CREATE_RECOVERY_TIMEOUT_MS = 180_000;
 const SANDBOX_CREATE_RECOVERY_POLL_MS = 3_000;
-const SANDBOX_SOURCE_READBACK_SCHEMA_VERSION = "openpond.sandboxSourceReadback.v1";
+const SANDBOX_SOURCE_READBACK_SCHEMA_VERSION =
+  "openpond.sandboxSourceReadback.v1";
 const SANDBOX_SOURCE_READBACK_MAX_FILES = 12;
 const SANDBOX_SOURCE_READBACK_MAX_FILE_BYTES = 64 * 1024;
 const SANDBOX_SOURCE_READBACK_MAX_TOTAL_BYTES = 96 * 1024;
@@ -166,8 +184,34 @@ const TERMINAL_RUNTIME_STATUSES = new Set(["archived", "failed", "expired"]);
 export async function handleSandboxWorkspaceToolAction(input: {
   session: Session;
   request: WorkspaceToolRequest;
-  updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
+  updateSession: (
+    sessionId: string,
+    patch: Partial<Session>
+  ) => Promise<Session>;
   findLocalWorkspace: (projectId: string) => Promise<LocalProject | null>;
+  sourceTurnId?: string;
+  saveWorkOutput: (input: {
+    session: Session;
+    sourceTurnId: string;
+    sandboxPath: string;
+    suggestedName?: string | null;
+    validation?: OutputValidationEvidence[];
+  }) => Promise<unknown>;
+  prepareWorkAgent?: (input: {
+    session: Session;
+    directory: string;
+    template:
+      | "blank-agent"
+      | "customer-reply-agent"
+      | "integration-heavy-agent";
+  }) => Promise<unknown>;
+  saveWorkAgentPackage?: (input: {
+    session: Session;
+    sourceTurnId: string;
+    directory: string;
+    agentId?: string | null;
+    title?: string | null;
+  }) => Promise<unknown>;
 }): Promise<WorkspaceToolResult | null> {
   if (!SANDBOX_ACTIONS.has(input.request.action)) {
     return null;
@@ -179,7 +223,8 @@ export async function handleSandboxWorkspaceToolAction(input: {
   const explicitAgentId = stringArg(args, "agentId", "");
   const attachToSession = booleanArg(args, "attachToSession") !== false;
   const canCreateActionSandbox =
-    action === "sandbox_run_action" && Boolean(explicitProjectId || explicitAgentId);
+    action === "sandbox_run_action" &&
+    Boolean(explicitProjectId || explicitAgentId);
   if (
     !SANDBOX_ACTIONS_WITHOUT_ACTIVE_SANDBOX.has(input.request.action) &&
     !explicitSandboxId &&
@@ -312,6 +357,8 @@ export async function handleSandboxWorkspaceToolAction(input: {
     });
   } else if (action === "sandbox_status") {
     result = await sandboxRequestPayload({ type: "get", sandboxId });
+  } else if (action === "sandbox_start") {
+    result = await sandboxRequestPayload({ type: "start", sandboxId });
   } else if (action === "sandbox_list_files") {
     result = await sandboxRequestPayload({
       type: "list_files",
@@ -446,7 +493,9 @@ export async function handleSandboxWorkspaceToolAction(input: {
       sandboxId,
       payload: {
         message: requiredStringArg(args, "message"),
-        all: booleanArg(args, "all") ?? !(gitCommitPaths && gitCommitPaths.length > 0),
+        all:
+          booleanArg(args, "all") ??
+          !(gitCommitPaths && gitCommitPaths.length > 0),
         paths: gitCommitPaths,
       },
     });
@@ -546,6 +595,50 @@ export async function handleSandboxWorkspaceToolAction(input: {
     result = await sandboxRequestPayload({ type: "logs", sandboxId });
   } else if (action === "sandbox_receipts") {
     result = await sandboxRequestPayload({ type: "receipts", sandboxId });
+  } else if (action === "sandbox_prepare_agent") {
+    if (!input.prepareWorkAgent) {
+      throw new Error("Work Agent preparation is not configured.");
+    }
+    const template = stringArg(args, "template", "blank-agent");
+    if (
+      template !== "blank-agent" &&
+      template !== "customer-reply-agent" &&
+      template !== "integration-heavy-agent"
+    ) {
+      throw new Error("Unsupported Agent template.");
+    }
+    result = await input.prepareWorkAgent({
+      session: input.session,
+      directory: requiredStringArg(args, "directory"),
+      template,
+    });
+  } else if (action === "sandbox_save_agent_package") {
+    if (!input.saveWorkAgentPackage) {
+      throw new Error("Work Agent package storage is not configured.");
+    }
+    if (!input.sourceTurnId) {
+      throw new Error("An Agent package must be saved from an active turn.");
+    }
+    result = await input.saveWorkAgentPackage({
+      session: input.session,
+      sourceTurnId: input.sourceTurnId,
+      directory: requiredStringArg(args, "directory"),
+      agentId: stringArg(args, "agentId", "") || null,
+      title: stringArg(args, "title", "") || null,
+    });
+  } else if (action === "sandbox_save_output") {
+    if (!input.sourceTurnId) {
+      throw new Error("A Work output must be saved from an active turn.");
+    }
+    result = await input.saveWorkOutput({
+      session: input.session,
+      sourceTurnId: input.sourceTurnId,
+      sandboxPath: requiredStringArg(args, "path"),
+      suggestedName: stringArg(args, "suggestedName", "") || null,
+      validation: Array.isArray(args.validation)
+        ? (args.validation as OutputValidationEvidence[])
+        : [],
+    });
   } else if (action === "sandbox_schedule_create") {
     result = await sandboxRequestPayload({
       type: "schedule_create",
@@ -576,8 +669,10 @@ export async function handleSandboxWorkspaceToolAction(input: {
       result = mergeSandboxPreviewResult(result, previewResult);
     }
   }
-
-  if (attachToSession && (action === "sandbox_create" || action === "sandbox_template_launch")) {
+  if (
+    attachToSession &&
+    (action === "sandbox_create" || action === "sandbox_template_launch")
+  ) {
     const nextSandboxId = sandboxIdFromPayload(result);
     if (nextSandboxId) {
       const sandbox = asRecord(asRecord(result).sandbox);
@@ -609,8 +704,13 @@ export async function handleSandboxWorkspaceToolAction(input: {
   return {
     ok: true,
     action,
-    appId: action === "sandbox_git_apply_patch_local" ? stringValue(asRecord(result).localProjectId) : null,
-    output: summarizeSandboxToolResult(action, result, { attached: attachToSession }),
+    appId:
+      action === "sandbox_git_apply_patch_local"
+        ? stringValue(asRecord(result).localProjectId)
+        : null,
+    output: summarizeSandboxToolResult(action, result, {
+      attached: attachToSession,
+    }),
     data: result,
   };
 }
@@ -621,7 +721,10 @@ async function applySandboxPatchToLocal(input: {
   session: Session;
   findLocalWorkspace: (projectId: string) => Promise<LocalProject | null>;
 }): Promise<Record<string, unknown>> {
-  const localProjectId = stringArg(input.args, "localProjectId", "") || input.session.localProjectId || "";
+  const localProjectId =
+    stringArg(input.args, "localProjectId", "") ||
+    input.session.localProjectId ||
+    "";
   if (!localProjectId) {
     throw new Error("This sandbox is not linked to a local checkout.");
   }
@@ -632,12 +735,13 @@ async function applySandboxPatchToLocal(input: {
   const workspaceOptions = {
     clone: false,
     allowPlainFolder: true,
-    linkedSourceHeadCommit: localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
+    linkedSourceHeadCommit:
+      localProject.linkedSandboxProject?.lastUploadedCommit ?? null,
   };
   const workspaceState = await loadWorkspaceStateAtPath(
     localProjectWorkspacePaths(localProject),
     localProjectStateWorkspace(localProject),
-    workspaceOptions,
+    workspaceOptions
   );
   await assertApplyableLocalWorkspace(workspaceState, "sandbox");
 
@@ -648,16 +752,22 @@ async function applySandboxPatchToLocal(input: {
       payload: {
         baseRef: stringArg(input.args, "baseRef", ""),
       },
-    }),
+    })
   );
   const patchRecord = asRecord(patchResponse.patch);
-  const effectivePatchRecord = Object.keys(patchRecord).length > 0 ? patchRecord : patchResponse;
+  const effectivePatchRecord =
+    Object.keys(patchRecord).length > 0 ? patchRecord : patchResponse;
   if (effectivePatchRecord.isRepo === false) {
     throw new Error("Sandbox is not a Git repository.");
   }
-  const patchText = typeof effectivePatchRecord.patch === "string" ? effectivePatchRecord.patch : "";
+  const patchText =
+    typeof effectivePatchRecord.patch === "string"
+      ? effectivePatchRecord.patch
+      : "";
   if (!patchText.trim() || effectivePatchRecord.empty === true) {
-    throw new Error("Sandbox patch is empty. There are no changes to apply locally.");
+    throw new Error(
+      "Sandbox patch is empty. There are no changes to apply locally."
+    );
   }
 
   const check = await runWorkspaceCommand(
@@ -665,13 +775,13 @@ async function applySandboxPatchToLocal(input: {
     ["apply", "--check", "--whitespace=nowarn", "-"],
     workspaceState.repoPath,
     {},
-    patchText,
+    patchText
   );
   if (check.code !== 0) {
     throw new Error(
       check.stderr.trim() ||
         check.stdout.trim() ||
-        "Sandbox patch does not apply cleanly to the local checkout.",
+        "Sandbox patch does not apply cleanly to the local checkout."
     );
   }
   const apply = await runWorkspaceCommand(
@@ -679,20 +789,20 @@ async function applySandboxPatchToLocal(input: {
     ["apply", "--whitespace=nowarn", "-"],
     workspaceState.repoPath,
     {},
-    patchText,
+    patchText
   );
   if (apply.code !== 0) {
     throw new Error(
       apply.stderr.trim() ||
         apply.stdout.trim() ||
-        "Unable to apply sandbox patch to the local checkout.",
+        "Unable to apply sandbox patch to the local checkout."
     );
   }
 
   const nextWorkspaceState = await loadWorkspaceStateAtPath(
     localProjectWorkspacePaths(localProject),
     localProjectStateWorkspace(localProject),
-    workspaceOptions,
+    workspaceOptions
   );
   return {
     localProjectId: localProject.id,
@@ -711,20 +821,29 @@ async function applySandboxPatchToLocal(input: {
   };
 }
 
-async function assertApplyableLocalWorkspace(workspaceState: WorkspaceState, patchSourceLabel: string): Promise<void> {
+async function assertApplyableLocalWorkspace(
+  workspaceState: WorkspaceState,
+  patchSourceLabel: string
+): Promise<void> {
   if (!workspaceState.initialized) {
-    throw new Error(workspaceState.error || "Local checkout is not initialized.");
+    throw new Error(
+      workspaceState.error || "Local checkout is not initialized."
+    );
   }
   const repoCheck = await runWorkspaceCommand(
     "git",
     ["rev-parse", "--is-inside-work-tree"],
-    workspaceState.repoPath,
+    workspaceState.repoPath
   );
   if (repoCheck.code !== 0 || repoCheck.stdout.trim() !== "true") {
-    throw new Error(`Local checkout must be a Git repository before applying a ${patchSourceLabel} patch.`);
+    throw new Error(
+      `Local checkout must be a Git repository before applying a ${patchSourceLabel} patch.`
+    );
   }
   if (workspaceState.dirty) {
-    throw new Error(`Commit or discard local changes before applying a ${patchSourceLabel} patch.`);
+    throw new Error(
+      `Commit or discard local changes before applying a ${patchSourceLabel} patch.`
+    );
   }
 }
 
@@ -732,7 +851,9 @@ function countPatchFiles(patchText: string): number {
   return sandboxSourceReadbackPatchFilePaths(patchText).length;
 }
 
-export function sandboxSourceReadbackPatchFilePaths(patchText: string): string[] {
+export function sandboxSourceReadbackPatchFilePaths(
+  patchText: string
+): string[] {
   const paths = new Set<string>();
   for (const line of patchText.split("\n")) {
     const match = /^diff --git a\/(.+?) b\/(.+)$/.exec(line.trim());
@@ -822,9 +943,10 @@ async function maybePreserveSandboxSourceAfterMutation(input: {
             result: input.result,
           }),
         },
-      }),
+      })
     );
-    const preservedSha = typeof payload.preservedSha === "string" ? payload.preservedSha : null;
+    const preservedSha =
+      typeof payload.preservedSha === "string" ? payload.preservedSha : null;
     let sourceReadbackArtifact: SandboxSourceReadbackArtifact | undefined;
     let sourceReadbackError: string | undefined;
     if (payload.preserved === true && runtimeId) {
@@ -837,7 +959,8 @@ async function maybePreserveSandboxSourceAfterMutation(input: {
           patch: payload.patch,
         });
       } catch (error) {
-        sourceReadbackError = error instanceof Error ? error.message : String(error);
+        sourceReadbackError =
+          error instanceof Error ? error.message : String(error);
       }
     }
     const completedAtMs = Date.now();
@@ -880,34 +1003,44 @@ async function captureSandboxSourceReadbackArtifact(input: {
   patch: unknown;
 }): Promise<SandboxSourceReadbackArtifact> {
   const patchRecord = asRecord(input.patch);
-  const rawPatchText = typeof patchRecord.patch === "string" ? patchRecord.patch : "";
-  const patchText = rawPatchText.length > SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS
-    ? rawPatchText.slice(0, SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS)
-    : rawPatchText;
+  const rawPatchText =
+    typeof patchRecord.patch === "string" ? patchRecord.patch : "";
+  const patchText =
+    rawPatchText.length > SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS
+      ? rawPatchText.slice(0, SANDBOX_SOURCE_READBACK_MAX_PATCH_CHARS)
+      : rawPatchText;
   const patchPaths = sandboxSourceReadbackPatchFilePaths(rawPatchText);
   const files: SandboxSourceReadbackFile[] = [];
   let totalReturnedBytes = 0;
-  let skippedFiles = Math.max(0, patchPaths.length - SANDBOX_SOURCE_READBACK_MAX_FILES);
+  let skippedFiles = Math.max(
+    0,
+    patchPaths.length - SANDBOX_SOURCE_READBACK_MAX_FILES
+  );
 
   for (const path of patchPaths.slice(0, SANDBOX_SOURCE_READBACK_MAX_FILES)) {
-    const remainingBytes = SANDBOX_SOURCE_READBACK_MAX_TOTAL_BYTES - totalReturnedBytes;
+    const remainingBytes =
+      SANDBOX_SOURCE_READBACK_MAX_TOTAL_BYTES - totalReturnedBytes;
     if (remainingBytes <= 0) {
       skippedFiles += 1;
       continue;
     }
-    const maxBytes = Math.min(SANDBOX_SOURCE_READBACK_MAX_FILE_BYTES, remainingBytes);
+    const maxBytes = Math.min(
+      SANDBOX_SOURCE_READBACK_MAX_FILE_BYTES,
+      remainingBytes
+    );
     try {
       const downloadPayload = asRecord(
         await sandboxRequestPayload({
           type: "download_file",
           sandboxId: input.sandboxId,
           payload: { path, maxBytes },
-        }),
+        })
       );
       const file = asRecord(downloadPayload.file);
       const isBinary = file.isBinary === true;
       const returnedBytes = numberValue(file.returnedBytes);
-      const sizeBytes = numberValue(file.totalSizeBytes) ?? numberValue(file.sizeBytes);
+      const sizeBytes =
+        numberValue(file.totalSizeBytes) ?? numberValue(file.sizeBytes);
       const entry: SandboxSourceReadbackFile = {
         path,
         sizeBytes,
@@ -918,7 +1051,9 @@ async function captureSandboxSourceReadbackArtifact(input: {
       if (isBinary) {
         entry.unavailableReason = "binary file";
       } else if (typeof file.contentsBase64 === "string") {
-        entry.content = Buffer.from(file.contentsBase64, "base64").toString("utf8");
+        entry.content = Buffer.from(file.contentsBase64, "base64").toString(
+          "utf8"
+        );
         totalReturnedBytes += Buffer.byteLength(entry.content, "utf8");
       } else {
         entry.unavailableReason = "missing text content";
@@ -931,7 +1066,8 @@ async function captureSandboxSourceReadbackArtifact(input: {
         returnedBytes: null,
         isBinary: false,
         truncated: false,
-        unavailableReason: error instanceof Error ? error.message : String(error),
+        unavailableReason:
+          error instanceof Error ? error.message : String(error),
       });
     }
   }
@@ -961,16 +1097,23 @@ async function captureSandboxSourceReadbackArtifact(input: {
   };
 }
 
-export function isSandboxSourceMutationAction(action: WorkspaceToolRequest["action"]): boolean {
+export function isSandboxSourceMutationAction(
+  action: WorkspaceToolRequest["action"]
+): boolean {
   return SANDBOX_SOURCE_MUTATION_ACTIONS.has(action as SandboxToolAction);
 }
 
 function autoPreserveMessage(action: SandboxToolAction): string {
-  if (action === "sandbox_exec") return "Auto-preserve source after sandbox command";
-  if (action === "sandbox_git_branch") return "Auto-preserve source after sandbox git branch change";
-  if (action === "sandbox_git_commit") return "Auto-preserve source after sandbox git commit";
-  if (action === "sandbox_git_pull") return "Auto-preserve source after sandbox git pull";
-  if (action === "sandbox_run_action") return "Auto-preserve source after sandbox action";
+  if (action === "sandbox_exec")
+    return "Auto-preserve source after sandbox command";
+  if (action === "sandbox_git_branch")
+    return "Auto-preserve source after sandbox git branch change";
+  if (action === "sandbox_git_commit")
+    return "Auto-preserve source after sandbox git commit";
+  if (action === "sandbox_git_pull")
+    return "Auto-preserve source after sandbox git pull";
+  if (action === "sandbox_run_action")
+    return "Auto-preserve source after sandbox action";
   return "Auto-preserve source after sandbox file mutation";
 }
 
@@ -979,8 +1122,15 @@ export function resolveSandboxSourcePreserveTeamId(input: {
   session: Pick<Session, "cloudTeamId">;
   result: unknown;
 }): string {
-  const sessionTeamId = typeof input.session.cloudTeamId === "string" ? input.session.cloudTeamId : "";
-  return stringArg(input.args, "teamId", "") || sessionTeamId || sandboxTeamIdFromResult(input.result);
+  const sessionTeamId =
+    typeof input.session.cloudTeamId === "string"
+      ? input.session.cloudTeamId
+      : "";
+  return (
+    stringArg(input.args, "teamId", "") ||
+    sessionTeamId ||
+    sandboxTeamIdFromResult(input.result)
+  );
 }
 
 function sandboxTeamIdFromResult(result: unknown): string {
@@ -1011,8 +1161,8 @@ async function createSandboxFromToolArgs(params: {
     (typeof requestedRuntime.workflowMode === "string"
       ? requestedRuntime.workflowMode
       : projectId || agentId
-        ? "feature"
-        : "attempt");
+      ? "feature"
+      : "attempt");
   const runtimeBaseBranch =
     stringArg(args, "runtimeBaseBranch", "") ||
     (typeof requestedRuntime.baseBranch === "string"
@@ -1023,13 +1173,17 @@ async function createSandboxFromToolArgs(params: {
     (typeof requestedRuntime.promotionPolicy === "string"
       ? requestedRuntime.promotionPolicy
       : projectId || agentId
-        ? "manual"
-        : "none");
+      ? "manual"
+      : "none");
   const createRequestId = randomUUID();
   const reuseDefaultRuntime =
-    params.reuseDefaultRuntime ?? booleanArg(args, "reuseDefaultRuntime") ?? true;
+    params.reuseDefaultRuntime ??
+    booleanArg(args, "reuseDefaultRuntime") ??
+    true;
   const markDefaultRuntime =
-    params.markDefaultRuntime ?? booleanArg(args, "markDefaultRuntime") ?? Boolean(projectId || agentId);
+    params.markDefaultRuntime ??
+    booleanArg(args, "markDefaultRuntime") ??
+    Boolean(projectId || agentId);
   const metadata = {
     source: params.source,
     ...recordArg(args, "metadata"),
@@ -1041,7 +1195,8 @@ async function createSandboxFromToolArgs(params: {
     requestId: createRequestId,
     defaultRuntime: markDefaultRuntime,
     source:
-      typeof requestedRuntimeMetadata.source === "string" && requestedRuntimeMetadata.source.trim()
+      typeof requestedRuntimeMetadata.source === "string" &&
+      requestedRuntimeMetadata.source.trim()
         ? requestedRuntimeMetadata.source.trim()
         : params.source,
     ...(projectId ? { projectId } : {}),
@@ -1092,7 +1247,7 @@ async function createSandboxFromToolArgs(params: {
 
 function mergeSandboxActionResultWithCreate(
   actionResult: unknown,
-  createResult: unknown,
+  createResult: unknown
 ): Record<string, unknown> {
   const createdPayload = asRecord(createResult);
   return {
@@ -1105,16 +1260,18 @@ function mergeSandboxActionResultWithCreate(
 export function summarizeSandboxToolResult(
   action: SandboxToolAction,
   result: unknown,
-  options: { attached?: boolean } = {},
+  options: { attached?: boolean } = {}
 ): string {
   const payload = asRecord(result);
-  const appendPreservation = (message: string) => appendSandboxPreservationSummary(message, payload);
+  const appendPreservation = (message: string) =>
+    appendSandboxPreservationSummary(message, payload);
   if (action === "sandbox_create" || action === "sandbox_template_launch") {
     const sandbox = asRecord(payload.sandbox);
     const id = typeof sandbox.id === "string" ? sandbox.id : "sandbox";
     const recovery = asRecord(payload.recovery);
     const recoveredFromTimeout =
-      recovery.reason === "gateway_timeout" || recovery.reason === "request_timeout";
+      recovery.reason === "gateway_timeout" ||
+      recovery.reason === "request_timeout";
     const state = typeof sandbox.state === "string" ? sandbox.state : "";
     const preview = asRecord(payload.preview);
     const label =
@@ -1123,22 +1280,50 @@ export function summarizeSandboxToolResult(
           ? "Sandbox started"
           : "Sandbox start requested"
         : state === "running"
-          ? "Active sandbox workspace"
-          : "Sandbox workspace attached";
+        ? "Active sandbox workspace"
+        : "Sandbox workspace attached";
     const stateSuffix = state && state !== "running" ? ` (${state})` : "";
-    const message = typeof preview.url === "string"
-      ? `${label}: ${id}${stateSuffix}\nPreview: ${preview.url}`
-      : `${label}: ${id}${stateSuffix}`;
+    const message =
+      typeof preview.url === "string"
+        ? `${label}: ${id}${stateSuffix}\nPreview: ${preview.url}`
+        : `${label}: ${id}${stateSuffix}`;
     return recoveredFromTimeout
-      ? `Sandbox create/resume timed out, then recovered ${id}${state ? ` in ${state} state` : ""}.\n${message}`
+      ? `Sandbox create/resume timed out, then recovered ${id}${
+          state ? ` in ${state} state` : ""
+        }.\n${message}`
       : message;
   }
   if (action === "sandbox_templates") {
-    const templates = Array.isArray(payload.templates) ? payload.templates.length : 0;
+    const templates = Array.isArray(payload.templates)
+      ? payload.templates.length
+      : 0;
     return `Listed ${templates} sandbox templates.`;
   }
+  if (action === "sandbox_save_output") {
+    const outputRef = asRecord(payload.outputRef);
+    const title =
+      typeof outputRef.title === "string" ? outputRef.title : "Work output";
+    return `Saved ${title} outside the sandbox.`;
+  }
+  if (action === "sandbox_prepare_agent") {
+    const directory =
+      typeof payload.directory === "string" ? payload.directory : "Agent";
+    return `Prepared an OpenPond Agent SDK project in ${directory}.`;
+  }
+  if (action === "sandbox_save_agent_package") {
+    const outputRef = asRecord(payload.outputRef);
+    const title =
+      typeof outputRef.title === "string" ? outputRef.title : "Agent package";
+    const versionId =
+      typeof outputRef.versionId === "string" ? outputRef.versionId : "";
+    return `Saved ${title}${
+      versionId ? ` (${versionId})` : ""
+    } as an immutable Agent package.`;
+  }
   if (action === "sandbox_snapshot_catalog") {
-    const snapshots = Array.isArray(payload.snapshots) ? payload.snapshots.length : 0;
+    const snapshots = Array.isArray(payload.snapshots)
+      ? payload.snapshots.length
+      : 0;
     return `Listed ${snapshots} sandbox snapshots.`;
   }
   if (
@@ -1152,14 +1337,19 @@ export function summarizeSandboxToolResult(
   }
   if (action === "sandbox_snapshot_validate") {
     const validation = asRecord(payload.validation);
-    const status = typeof validation.status === "string" ? validation.status : "completed";
+    const status =
+      typeof validation.status === "string" ? validation.status : "completed";
     return `Snapshot validation ${status}.`;
   }
   if (action === "sandbox_replays") {
     const replays = Array.isArray(payload.replays) ? payload.replays.length : 0;
     return `Listed ${replays} sandbox replay runs.`;
   }
-  if (action === "sandbox_replay_start" || action === "sandbox_replay_get" || action === "sandbox_replay_cancel") {
+  if (
+    action === "sandbox_replay_start" ||
+    action === "sandbox_replay_get" ||
+    action === "sandbox_replay_cancel"
+  ) {
     const replay = asRecord(payload.replay);
     const id = typeof replay.id === "string" ? replay.id : "replay";
     const state = typeof replay.state === "string" ? replay.state : "updated";
@@ -1175,32 +1365,46 @@ export function summarizeSandboxToolResult(
     return `Created sandbox schedule ${name}.`;
   }
   if (action === "sandbox_replay_artifacts") {
-    const artifacts = Array.isArray(payload.artifacts) ? payload.artifacts.length : 0;
+    const artifacts = Array.isArray(payload.artifacts)
+      ? payload.artifacts.length
+      : 0;
     return `Read ${artifacts} replay artifacts.`;
   }
   if (action === "sandbox_read_file") {
     const file = asRecord(payload.file);
-    const contentsBase64 = typeof file.contentsBase64 === "string" ? file.contentsBase64 : "";
-    const text = contentsBase64 ? Buffer.from(contentsBase64, "base64").toString("utf8") : "";
+    const contentsBase64 =
+      typeof file.contentsBase64 === "string" ? file.contentsBase64 : "";
+    const text = contentsBase64
+      ? Buffer.from(contentsBase64, "base64").toString("utf8")
+      : "";
     const path = typeof file.path === "string" ? file.path : "file";
     return text ? `${path}\n\n${text}` : `Read ${path}`;
   }
   if (action === "sandbox_exec") {
     const command = asRecord(payload.command);
-    const status = typeof command.status === "string" ? command.status : "completed";
-    const output = typeof command.output === "string" ? command.output.trim() : "";
-    return appendPreservation(output ? `Command ${status}\n\n${output}` : `Command ${status}`);
+    const status =
+      typeof command.status === "string" ? command.status : "completed";
+    const output =
+      typeof command.output === "string" ? command.output.trim() : "";
+    return appendPreservation(
+      output ? `Command ${status}\n\n${output}` : `Command ${status}`
+    );
   }
   if (action === "sandbox_run_action") {
     const createdSandbox = asRecord(payload.createdSandbox);
     const createdSandboxId =
       typeof createdSandbox.id === "string" ? createdSandbox.id : "";
     const actionPayload = asRecord(payload.action);
-    const actionName = typeof actionPayload.name === "string" ? actionPayload.name : "action";
+    const actionName =
+      typeof actionPayload.name === "string" ? actionPayload.name : "action";
     const command = asRecord(payload.command);
-    const status = typeof command.status === "string" ? command.status : "completed";
-    const output = typeof command.output === "string" ? command.output.trim() : "";
-    const prefix = createdSandboxId ? `Sandbox started: ${createdSandboxId}\n` : "";
+    const status =
+      typeof command.status === "string" ? command.status : "completed";
+    const output =
+      typeof command.output === "string" ? command.output.trim() : "";
+    const prefix = createdSandboxId
+      ? `Sandbox started: ${createdSandboxId}\n`
+      : "";
     const actionSummary = output
       ? `Action ${actionName} ${status}\n\n${output}`
       : `Action ${actionName} ${status}`;
@@ -1229,7 +1433,11 @@ export function summarizeSandboxToolResult(
     const path = typeof edit.path === "string" ? edit.path : "file";
     const replacements =
       typeof edit.replacements === "number" ? edit.replacements : 0;
-    return appendPreservation(`Edited ${path} with ${replacements} replacement${replacements === 1 ? "" : "s"}.`);
+    return appendPreservation(
+      `Edited ${path} with ${replacements} replacement${
+        replacements === 1 ? "" : "s"
+      }.`
+    );
   }
   if (action === "sandbox_delete_file") {
     const deleted = asRecord(payload.deleted);
@@ -1238,22 +1446,28 @@ export function summarizeSandboxToolResult(
   }
   if (action === "sandbox_mkdir") {
     const directory = asRecord(payload.directory);
-    const path = typeof directory.path === "string" ? directory.path : "directory";
+    const path =
+      typeof directory.path === "string" ? directory.path : "directory";
     return appendPreservation(`Created directory ${path}.`);
   }
   if (action === "sandbox_move_file") {
     const moved = asRecord(payload.moved);
     const fromPath = typeof moved.fromPath === "string" ? moved.fromPath : "";
     const toPath = typeof moved.toPath === "string" ? moved.toPath : "";
-    return appendPreservation(fromPath && toPath
-      ? `Moved ${fromPath} to ${toPath}.`
-      : "Moved sandbox file.");
+    return appendPreservation(
+      fromPath && toPath
+        ? `Moved ${fromPath} to ${toPath}.`
+        : "Moved sandbox file."
+    );
   }
   if (action === "sandbox_git_status") {
     const status = asRecord(payload.status);
-    const porcelain = typeof status.porcelain === "string" ? status.porcelain : "";
+    const porcelain =
+      typeof status.porcelain === "string" ? status.porcelain : "";
     const files = porcelain.split("\n").filter((line) => line.trim()).length;
-    return `Sandbox git status has ${files} changed file${files === 1 ? "" : "s"}.`;
+    return `Sandbox git status has ${files} changed file${
+      files === 1 ? "" : "s"
+    }.`;
   }
   if (action === "sandbox_git_diff") {
     const diff = asRecord(payload.diff);
@@ -1263,7 +1477,8 @@ export function summarizeSandboxToolResult(
   if (action === "sandbox_git_export_patch") {
     const patch = asRecord(payload.patch);
     const bytes = typeof patch.bytes === "number" ? patch.bytes : 0;
-    const filename = typeof patch.filename === "string" ? patch.filename : "sandbox.patch";
+    const filename =
+      typeof patch.filename === "string" ? patch.filename : "sandbox.patch";
     const text = typeof patch.patch === "string" ? patch.patch.trim() : "";
     return text
       ? `Exported sandbox patch ${filename} (${bytes} bytes)\n\n${text}`
@@ -1273,8 +1488,13 @@ export function summarizeSandboxToolResult(
     const patch = asRecord(payload.patch);
     const fileCount = typeof patch.fileCount === "number" ? patch.fileCount : 0;
     const bytes = typeof patch.bytes === "number" ? patch.bytes : 0;
-    const localProjectName = typeof payload.localProjectName === "string" ? payload.localProjectName : "local checkout";
-    return `Applied sandbox patch to ${localProjectName}: ${fileCount} changed file${fileCount === 1 ? "" : "s"} (${bytes} bytes).`;
+    const localProjectName =
+      typeof payload.localProjectName === "string"
+        ? payload.localProjectName
+        : "local checkout";
+    return `Applied sandbox patch to ${localProjectName}: ${fileCount} changed file${
+      fileCount === 1 ? "" : "s"
+    } (${bytes} bytes).`;
   }
   if (action === "sandbox_git_branch") {
     const branch = asRecord(payload.branch);
@@ -1283,28 +1503,39 @@ export function summarizeSandboxToolResult(
   }
   if (action === "sandbox_git_commit") {
     const commit = asRecord(payload.commit);
-    const sha = typeof commit.commitHash === "string" ? commit.commitHash : "commit";
+    const sha =
+      typeof commit.commitHash === "string" ? commit.commitHash : "commit";
     return appendPreservation(`Committed sandbox changes at ${sha}.`);
   }
   if (action === "sandbox_git_pull") {
     const operation = asRecord(payload.pull);
-    const output = typeof operation.output === "string" ? operation.output.trim() : "";
-    return appendPreservation(output ? `Sandbox git pull completed\n\n${output}` : "Sandbox git pull completed.");
+    const output =
+      typeof operation.output === "string" ? operation.output.trim() : "";
+    return appendPreservation(
+      output
+        ? `Sandbox git pull completed\n\n${output}`
+        : "Sandbox git pull completed."
+    );
   }
   if (action === "sandbox_git_push") {
     const operation = asRecord(payload.push);
-    const output = typeof operation.output === "string" ? operation.output.trim() : "";
-    return output ? `Sandbox git push completed\n\n${output}` : "Sandbox git push completed.";
+    const output =
+      typeof operation.output === "string" ? operation.output.trim() : "";
+    return output
+      ? `Sandbox git push completed\n\n${output}`
+      : "Sandbox git push completed.";
   }
   if (action === "sandbox_preserve_source") {
-    const preservedSha = typeof payload.preservedSha === "string" ? payload.preservedSha : "";
+    const preservedSha =
+      typeof payload.preservedSha === "string" ? payload.preservedSha : "";
     const preserved = payload.preserved === true;
     return preserved
       ? `Preserved sandbox changes to runtime source ref at ${preservedSha}.`
       : "No sandbox source changes needed preservation.";
   }
   if (action === "sandbox_promote_source") {
-    const promotedSha = typeof payload.promotedSha === "string" ? payload.promotedSha : "";
+    const promotedSha =
+      typeof payload.promotedSha === "string" ? payload.promotedSha : "";
     return promotedSha
       ? `Promoted runtime source ref to the Project branch at ${promotedSha}.`
       : "Promoted runtime source ref.";
@@ -1314,32 +1545,50 @@ export function summarizeSandboxToolResult(
     return logs.length ? logs.slice(-24).join("\n") : "No sandbox logs.";
   }
   if (action === "sandbox_receipts") {
-    const receipts = Array.isArray(payload.receipts) ? payload.receipts.length : 0;
+    const receipts = Array.isArray(payload.receipts)
+      ? payload.receipts.length
+      : 0;
     return `Read ${receipts} sandbox receipts.`;
   }
   if (action === "sandbox_open_port") {
     const preview = asRecord(payload.preview);
-    return typeof preview.url === "string" ? `Opened preview ${preview.url}` : "Opened preview port.";
+    return typeof preview.url === "string"
+      ? `Opened preview ${preview.url}`
+      : "Opened preview port.";
+  }
+  if (action === "sandbox_start") {
+    return "Started sandbox.";
   }
   if (action === "sandbox_stop") {
     const changes = asRecord(payload.unpreservedChanges);
     const state = typeof changes.state === "string" ? changes.state : "";
-    return state ? `Stopped sandbox. Source change state: ${state}.` : "Stopped sandbox.";
+    return state
+      ? `Stopped sandbox. Source change state: ${state}.`
+      : "Stopped sandbox.";
   }
   return appendSandboxPreservationSummary("Read sandbox status.", payload);
 }
 
-function appendSandboxPreservationSummary(message: string, payload: Record<string, unknown>): string {
+function appendSandboxPreservationSummary(
+  message: string,
+  payload: Record<string, unknown>
+): string {
   const sourcePreservation = asRecord(payload.sourcePreservation);
   if (sourcePreservation.attempted !== true) return message;
   if (sourcePreservation.ok !== true) {
-    const error = typeof sourcePreservation.error === "string" ? sourcePreservation.error : "unknown error";
+    const error =
+      typeof sourcePreservation.error === "string"
+        ? sourcePreservation.error
+        : "unknown error";
     return `${message}\nCheckpoint not saved: ${error}`;
   }
   if (sourcePreservation.preserved !== true) {
     return `${message}\nCheckpoint checked: no source changes needed preservation.`;
   }
-  const sha = typeof sourcePreservation.preservedSha === "string" ? sourcePreservation.preservedSha : "";
+  const sha =
+    typeof sourcePreservation.preservedSha === "string"
+      ? sourcePreservation.preservedSha
+      : "";
   return sha
     ? `${message}\nCheckpoint saved: ${sha}.`
     : `${message}\nCheckpoint saved.`;
@@ -1382,11 +1631,17 @@ export function pickSandboxChatDefaultRuntime(input: {
     input.runtimes.find((runtime) => {
       if (projectId && runtime.projectId !== projectId) return false;
       if (agentId && runtime.agentId !== agentId) return false;
-      const runtimeMode = runtime.workflowMode ?? (runtime as { mode?: string }).mode;
+      const runtimeMode =
+        runtime.workflowMode ?? (runtime as { mode?: string }).mode;
       if (mode && runtimeMode !== mode) return false;
       if (TERMINAL_RUNTIME_STATUSES.has(runtime.status)) return false;
-      if (runtime.status === "checkpointed" && !runtime.rootfsSnapshotId) return false;
-      return asRecord(runtime.metadata)[SANDBOX_CHAT_DEFAULT_RUNTIME_METADATA_KEY] === true;
+      if (runtime.status === "checkpointed" && !runtime.rootfsSnapshotId)
+        return false;
+      return (
+        asRecord(runtime.metadata)[
+          SANDBOX_CHAT_DEFAULT_RUNTIME_METADATA_KEY
+        ] === true
+      );
     }) ?? null
   );
 }
@@ -1408,12 +1663,14 @@ async function findReusableSandboxChatRuntimeId(input: {
   const runtimes = Array.isArray(asRecord(payload).runtimes)
     ? (asRecord(payload).runtimes as SandboxRuntime[])
     : [];
-  return pickSandboxChatDefaultRuntime({
-    runtimes,
-    projectId: input.projectId,
-    agentId: input.agentId,
-    mode: input.mode,
-  })?.id ?? "";
+  return (
+    pickSandboxChatDefaultRuntime({
+      runtimes,
+      projectId: input.projectId,
+      agentId: input.agentId,
+      mode: input.mode,
+    })?.id ?? ""
+  );
 }
 
 async function createSandboxWithTimeoutRecovery(input: {
@@ -1435,11 +1692,13 @@ async function createSandboxWithTimeoutRecovery(input: {
             type: "sandbox_runtime_create",
             payload: input.runtimePayload,
           }),
-          "runtime create",
+          "runtime create"
         );
     resolvedRuntimeId = input.runtimeId || runtimeIdFromPayload(runtimePayload);
     if (!resolvedRuntimeId) {
-      throw new Error("Sandbox runtime create response did not include a runtime id.");
+      throw new Error(
+        "Sandbox runtime create response did not include a runtime id."
+      );
     }
     const sandboxPayload = await sandboxCreateRequestWithTimeout(
       sandboxRequestPayload(
@@ -1453,9 +1712,9 @@ async function createSandboxWithTimeoutRecovery(input: {
               type: "sandbox_runtime_sandbox_create",
               runtimeId: resolvedRuntimeId,
               payload: input.sandboxPayload,
-            },
+            }
       ),
-      input.runtimeId ? "runtime resume" : "runtime sandbox create",
+      input.runtimeId ? "runtime resume" : "runtime sandbox create"
     );
     return mergeSandboxRuntimeSandboxResult(runtimePayload, sandboxPayload);
   } catch (error) {
@@ -1471,7 +1730,9 @@ async function createSandboxWithTimeoutRecovery(input: {
       timeoutMs: SANDBOX_CREATE_RECOVERY_TIMEOUT_MS,
     });
     if (!recovered) {
-      throw new Error("Sandbox create request timed out, and no matching sandbox appeared.");
+      throw new Error(
+        "Sandbox create request timed out, and no matching sandbox appeared."
+      );
     }
 
     const state = sandboxState(recovered.sandbox);
@@ -1491,7 +1752,7 @@ async function createSandboxWithTimeoutRecovery(input: {
 
 async function sandboxCreateRequestWithTimeout<T>(
   promise: Promise<T>,
-  label: string,
+  label: string
 ): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
@@ -1501,8 +1762,8 @@ async function sandboxCreateRequestWithTimeout<T>(
         timeout = setTimeout(() => {
           reject(
             new SandboxCreateRequestTimeoutError(
-              `Sandbox ${label} request did not complete within ${SANDBOX_CREATE_REQUEST_TIMEOUT_MS}ms.`,
-            ),
+              `Sandbox ${label} request did not complete within ${SANDBOX_CREATE_REQUEST_TIMEOUT_MS}ms.`
+            )
           );
         }, SANDBOX_CREATE_REQUEST_TIMEOUT_MS);
       }),
@@ -1522,7 +1783,10 @@ async function waitForRecoveredSandboxCreate(input: {
   timeoutMs: number;
 }): Promise<{ sandbox: Record<string, unknown>; account: unknown } | null> {
   const deadline = Date.now() + input.timeoutMs;
-  let latestMatch: { sandbox: Record<string, unknown>; account: unknown } | null = null;
+  let latestMatch: {
+    sandbox: Record<string, unknown>;
+    account: unknown;
+  } | null = null;
 
   while (Date.now() <= deadline) {
     const payload = await sandboxRequestPayload({
@@ -1542,7 +1806,13 @@ async function waitForRecoveredSandboxCreate(input: {
     if (match) {
       latestMatch = { sandbox: match, account };
       const state = sandboxState(match);
-      if (state === "running" || state === "error" || state === "failed" || state === "stopped" || state === "deleted") {
+      if (
+        state === "running" ||
+        state === "error" ||
+        state === "failed" ||
+        state === "stopped" ||
+        state === "deleted"
+      ) {
         return latestMatch;
       }
     }
@@ -1558,14 +1828,16 @@ function sandboxMatchesCreateRequest(
     metadata: Record<string, unknown>;
     requestedAtMs: number;
     runtimeId: string;
-  },
+  }
 ): boolean {
-  const expectedRequestId = input.metadata[SANDBOX_CREATE_REQUEST_ID_METADATA_KEY];
+  const expectedRequestId =
+    input.metadata[SANDBOX_CREATE_REQUEST_ID_METADATA_KEY];
   const sandboxMetadata = asRecord(sandbox.metadata);
   if (
     typeof expectedRequestId === "string" &&
     expectedRequestId &&
-    sandboxMetadata[SANDBOX_CREATE_REQUEST_ID_METADATA_KEY] === expectedRequestId
+    sandboxMetadata[SANDBOX_CREATE_REQUEST_ID_METADATA_KEY] ===
+      expectedRequestId
   ) {
     return true;
   }
@@ -1573,7 +1845,8 @@ function sandboxMatchesCreateRequest(
   if (!input.runtimeId || sandbox.runtimeId !== input.runtimeId) return false;
   const state = sandboxState(sandbox);
   if (state === "running" || state === "creating") return true;
-  const startedAt = typeof sandbox.startedAt === "string" ? Date.parse(sandbox.startedAt) : NaN;
+  const startedAt =
+    typeof sandbox.startedAt === "string" ? Date.parse(sandbox.startedAt) : NaN;
   return Number.isFinite(startedAt) && startedAt >= input.requestedAtMs;
 }
 
@@ -1591,24 +1864,30 @@ async function readSandboxRecoveryLogs(sandboxId: string): Promise<string[]> {
 function formatSandboxLogLine(value: unknown): string {
   if (typeof value === "string") return value.trim();
   const record = asRecord(value);
-  const timestamp = typeof record.timestamp === "string" ? record.timestamp : "";
+  const timestamp =
+    typeof record.timestamp === "string" ? record.timestamp : "";
   const level = typeof record.level === "string" ? record.level : "";
   const message =
     typeof record.message === "string"
       ? record.message
       : typeof record.output === "string"
-        ? record.output
-        : typeof record.line === "string"
-          ? record.line
-          : "";
+      ? record.output
+      : typeof record.line === "string"
+      ? record.line
+      : "";
   return [timestamp, level, message].filter(Boolean).join(" ").trim();
 }
 
-function sandboxCreateRecoveryMessage(sandbox: Record<string, unknown>, logs: string[]): string {
+function sandboxCreateRecoveryMessage(
+  sandbox: Record<string, unknown>,
+  logs: string[]
+): string {
   const id = sandboxId(sandbox) ?? "sandbox";
   const state = sandboxState(sandbox) || "unknown";
   const summary = `Sandbox create request timed out. Found ${id} in ${state} state.`;
-  return logs.length > 0 ? `${summary}\n\nRecent sandbox logs:\n${logs.join("\n")}` : summary;
+  return logs.length > 0
+    ? `${summary}\n\nRecent sandbox logs:\n${logs.join("\n")}`
+    : summary;
 }
 
 function sandboxId(sandbox: Record<string, unknown>): string | null {
@@ -1624,8 +1903,11 @@ function isSandboxCreateGatewayTimeout(error: unknown): boolean {
   return message.includes("504") || /endpoint request timed out/i.test(message);
 }
 
-function sandboxCreateRecoveryReason(error: unknown): "gateway_timeout" | "request_timeout" | null {
-  if (error instanceof SandboxCreateRequestTimeoutError) return "request_timeout";
+function sandboxCreateRecoveryReason(
+  error: unknown
+): "gateway_timeout" | "request_timeout" | null {
+  if (error instanceof SandboxCreateRequestTimeoutError)
+    return "request_timeout";
   return isSandboxCreateGatewayTimeout(error) ? "gateway_timeout" : null;
 }
 
@@ -1667,7 +1949,8 @@ async function resolveSandboxRuntimeId(input: {
     sandboxId: input.sandboxId,
   });
   const sandbox = asRecord(asRecord(payload).sandbox);
-  const runtimeId = typeof sandbox.runtimeId === "string" ? sandbox.runtimeId.trim() : "";
+  const runtimeId =
+    typeof sandbox.runtimeId === "string" ? sandbox.runtimeId.trim() : "";
   if (runtimeId) return runtimeId;
   throw new Error("Active sandbox is not attached to a sandbox runtime.");
 }
@@ -1678,7 +1961,8 @@ async function resolveRuntimeBaseSha(runtimeId: string): Promise<string> {
     runtimeId,
   });
   const runtime = asRecord(asRecord(payload).runtime);
-  const baseSha = typeof runtime.baseSha === "string" ? runtime.baseSha.trim() : "";
+  const baseSha =
+    typeof runtime.baseSha === "string" ? runtime.baseSha.trim() : "";
   if (!baseSha) {
     throw new Error("Sandbox runtime does not have a base SHA for promotion.");
   }
@@ -1687,7 +1971,7 @@ async function resolveRuntimeBaseSha(runtimeId: string): Promise<string> {
 
 function mergeSandboxRuntimeSandboxResult(
   runtimeResult: unknown,
-  sandboxResult: unknown,
+  sandboxResult: unknown
 ): Record<string, unknown> {
   const runtimePayload = asRecord(runtimeResult);
   const sandboxPayload = asRecord(sandboxResult);
@@ -1699,7 +1983,10 @@ function mergeSandboxRuntimeSandboxResult(
   };
 }
 
-function mergeSandboxPreviewResult(sandboxResult: unknown, previewResult: unknown): Record<string, unknown> {
+function mergeSandboxPreviewResult(
+  sandboxResult: unknown,
+  previewResult: unknown
+): Record<string, unknown> {
   const sandboxPayload = asRecord(sandboxResult);
   const previewPayload = asRecord(previewResult);
   return {
@@ -1708,37 +1995,4 @@ function mergeSandboxPreviewResult(sandboxResult: unknown, previewResult: unknow
     sandbox: previewPayload.sandbox ?? sandboxPayload.sandbox,
     account: previewPayload.account ?? sandboxPayload.account,
   };
-}
-
-function sandboxCatalogPayload(args: Record<string, unknown>): Record<string, unknown> {
-  return {
-    teamId: stringArg(args, "teamId", ""),
-    projectId: stringArg(args, "projectId", ""),
-    agentId: stringArg(args, "agentId", ""),
-    q: stringArg(args, "q", ""),
-    name: stringArg(args, "name", ""),
-    version: stringArg(args, "version", ""),
-    tag: stringArg(args, "tag", ""),
-    useCase: stringArg(args, "useCase", ""),
-  };
-}
-
-function previewPortArg(args: Record<string, unknown>): number | undefined {
-  const value = Number(args.previewPort);
-  if (
-    !Number.isInteger(value) ||
-    value < SANDBOX_TEMPLATE_PREVIEW_PORT_MIN ||
-    value > SANDBOX_TEMPLATE_PREVIEW_PORT_MAX
-  ) {
-    return undefined;
-  }
-  return value;
-}
-
-function sandboxName(sandbox: Record<string, unknown>): string {
-  const repo = typeof sandbox.repo === "string" ? sandbox.repo : "";
-  if (!repo) return typeof sandbox.id === "string" ? sandbox.id : "Sandbox";
-  const trimmed = repo.replace(/\.git$/, "").replace(/\/$/, "");
-  const parts = trimmed.split("/");
-  return parts.slice(-2).join("/");
 }

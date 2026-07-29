@@ -152,6 +152,7 @@ describe("terminal argument parser", () => {
         provider: "openpond",
         model: null,
         cwd: "/repo",
+        agent: null,
         project: null,
         resume: null,
         noServerStart: false,
@@ -198,6 +199,7 @@ describe("terminal argument parser", () => {
         model: "anthropic/claude-sonnet",
         cwd: "/repo/project",
         cwdExplicit: true,
+        agent: null,
         project: "local_project_1",
         resume: "session_1",
         noServerStart: true,
@@ -221,6 +223,8 @@ describe("terminal argument parser", () => {
         "chat",
         "--message",
         "fix the failing test",
+        "--agent",
+        "marketing-portfolio-manager",
         "--stdin",
         "--non-interactive",
         "--json",
@@ -239,6 +243,7 @@ describe("terminal argument parser", () => {
 
     expect(parsed.options).toMatchObject({
       message: "fix the failing test",
+      agent: "marketing-portfolio-manager",
       stdin: true,
       nonInteractive: true,
       json: true,
@@ -522,6 +527,8 @@ describe("terminal one-shot chat runner", () => {
             fake.url,
             "--message",
             "Run the benchmark task",
+            "--agent",
+            "support-items",
             "--non-interactive",
             "--json",
             "--yes",
@@ -552,6 +559,15 @@ describe("terminal one-shot chat runner", () => {
       expect(fake.turnRequests[0]).toMatchObject({
         prompt: "Run the benchmark task",
         cwd: "/bench/task",
+        openPondActionCatalog: terminalProfileFixture().actionCatalog.map(
+          (action) => ({
+            ...action,
+            implementation: {
+              type: "openpond-profile-action",
+              actionId: action.id,
+            },
+          }),
+        ),
         approvalPolicy: "never",
         sandbox: "workspace-write",
         metadata: {
@@ -560,6 +576,7 @@ describe("terminal one-shot chat runner", () => {
             mode: "one-shot",
             nonInteractive: true,
             sandbox: "workspace-write",
+            agentId: "support-items",
           },
         },
       });
@@ -1044,12 +1061,14 @@ function terminalProfileFixture(): BootstrapPayload["profile"] {
     actionCatalog: [
       {
         id: "support-items.chat",
+        agentId: "support-items",
         name: "chat",
         label: "Support chat",
         description: "Answers committed support fixture questions",
       },
       {
         id: "support-items.open-items",
+        agentId: "support-items",
         name: "open-items",
         label: "Open items",
         description: "Lists blocked support customers",

@@ -17,7 +17,9 @@ export const WorkspaceTemplateConfigViewSchema = z
   })
   .passthrough();
 
-export type WorkspaceTemplateConfigView = z.infer<typeof WorkspaceTemplateConfigViewSchema>;
+export type WorkspaceTemplateConfigView = z.infer<
+  typeof WorkspaceTemplateConfigViewSchema
+>;
 
 export const WorkspaceToolNameSchema = z.enum([
   "create_sandbox_template_scaffold",
@@ -49,6 +51,7 @@ export const WorkspaceToolNameSchema = z.enum([
   "sandbox_templates",
   "sandbox_template_launch",
   "sandbox_status",
+  "sandbox_start",
   "sandbox_list_files",
   "sandbox_read_file",
   "sandbox_search_files",
@@ -84,6 +87,12 @@ export const WorkspaceToolNameSchema = z.enum([
   "sandbox_replay_cancel",
   "sandbox_logs",
   "sandbox_receipts",
+  "sandbox_prepare_agent",
+  "sandbox_save_agent_package",
+  "sandbox_save_output",
+  "work_agent_package_install",
+  "work_output_delete",
+  "work_output_read",
   "sandbox_schedule_create",
   "sandbox_stop",
 ]);
@@ -93,7 +102,9 @@ export type WorkspaceToolName = z.infer<typeof WorkspaceToolNameSchema>;
 export const WorkspaceToolRequestSchema = z.object({
   action: WorkspaceToolNameSchema,
   args: z.record(z.string(), z.unknown()).optional().default({}),
-  source: z.enum(["ui_button", "chat_action", "terminal_command", "hook"]).default("chat_action"),
+  source: z
+    .enum(["ui_button", "chat_action", "terminal_command", "hook"])
+    .default("chat_action"),
 });
 
 export type WorkspaceToolRequest = z.infer<typeof WorkspaceToolRequestSchema>;
