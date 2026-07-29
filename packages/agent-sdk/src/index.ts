@@ -467,8 +467,6 @@ export type EditableResultMode =
 export type EditablePolicyDefinition = {
   kind: "editable";
   enabled: boolean;
-  backend: "openpond-coding-work-item";
-  runtimeEnvironmentId: "openpond-coding-core-v1";
   sourceOfTruth: "agent-source";
   policyDiscovery: {
     command: string;

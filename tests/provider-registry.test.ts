@@ -11,6 +11,7 @@ import {
   buildProviderSettings,
   listProviderModels,
 } from "../apps/server/src/openpond/provider-registry";
+import { withLocalAdapterProviderModels } from "../apps/server/src/training/local-adapter-models";
 import {
   providerCatalogContentHash,
   resetProviderCatalogResolverCache,
@@ -81,6 +82,10 @@ describe("local BYOK provider registry", () => {
       "glm-5",
       "glm-4.7",
     ]);
+    expect(settings.statuses["local-adapter"]?.displayName).toBe("My Models");
+    expect(
+      withLocalAdapterProviderModels(settings, []).statuses["local-adapter"]?.displayName,
+    ).toBe("My Models");
   });
 
   test("uses the Z.ai Coding Plan endpoint for old default base URLs", () => {

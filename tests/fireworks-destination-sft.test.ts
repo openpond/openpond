@@ -241,8 +241,20 @@ describe.sequential("Fireworks SFT destination", () => {
           store,
           `binding:${taskset.profileId}:agent:agent_fixture`,
         )).toBe(lineage!.id);
+        await store.saveModelProject({
+          schemaVersion: "openpond.modelProject.v1",
+          id: lineage!.modelId,
+          profileId: taskset.profileId,
+          name: "Renewal risk specialist · Qwen3 0.6B",
+          objective: taskset.objective,
+          defaultBaseModel: null,
+          defaultDestinationId: null,
+          createdAt: evidence.createdAt,
+          updatedAt: evidence.createdAt,
+        });
         expect((await listLocalAdapterProviderModels(store))[0]).toMatchObject({
           id: lineage!.id,
+          displayName: "Renewal risk specialist · Qwen3 0.6B",
           raw: {
             activeBindingRoles: expect.arrayContaining([
               "chat_manual:default",

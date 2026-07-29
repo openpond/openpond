@@ -281,6 +281,56 @@ describe("managed adapter sync service", () => {
     });
   });
 
+  test("refreshes a retained OpenPond training projection without republishing bytes", async () => {
+    const { service, listRegistry, publishFireworksSource, saved } = harness({
+      artifacts: [],
+      managedServing: {
+        schemaVersion: "openpond.managedAdapterServingProjection.v1",
+        teamId: "team_qa",
+        source: "openpond_training",
+        sourceRef: "lineage-qa",
+        canonicalArtifactId: "canonical-artifact",
+        canonicalArtifactState: "promotable",
+        canonicalDeploymentId: "deployment-retired",
+        canonicalDeploymentState: "failed",
+        state: "imported",
+        customerBindingAllowed: true,
+        artifactContentHash: "1".repeat(64),
+        baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+        publishedAt: timestamp,
+        lastSyncedAt: timestamp,
+        lastError: null,
+      },
+      registryArtifact: {
+        id: "canonical-artifact",
+        source: "openpond_training",
+        sourceRef: "lineage-qa",
+        state: "promotable",
+        promotable: true,
+        customerBindingAllowed: true,
+      },
+      deployment: {
+        id: "deployment-runpod",
+        artifactId: "canonical-artifact",
+        state: "ready",
+      },
+    });
+
+    await service.reconcile();
+
+    expect(listRegistry).toHaveBeenCalledWith("team_qa");
+    expect(publishFireworksSource).not.toHaveBeenCalled();
+    expect(saved()?.managedServing).toMatchObject({
+      source: "openpond_training",
+      canonicalArtifactId: "canonical-artifact",
+      canonicalDeploymentId: "deployment-runpod",
+      canonicalDeploymentState: "ready",
+      state: "ready",
+      baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+      lastError: null,
+    });
+  });
+
   test("follows the selected team after a pre-publication failure", async () => {
     const { service, listRegistry, publishFireworksSource, saved } = harness({
       selectedTeamId: "team_current",

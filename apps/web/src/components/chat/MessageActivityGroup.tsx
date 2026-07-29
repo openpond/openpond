@@ -28,13 +28,11 @@ import {
 } from "../../lib/chat-activity-summary";
 import {
   formatWorkTraceDuration,
-  isInlineWorkTraceActivity,
   workTracePresentation,
 } from "../../lib/chat-work-trace";
 import { workspaceFileName } from "../../lib/workspace-images";
 import { revealLocalFile } from "../../lib/desktop-files";
 import { ImageLightbox } from "../common/ImageLightbox";
-import { MarkdownText } from "./MarkdownText";
 
 const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
@@ -46,21 +44,14 @@ export function ActivityGroup({
   activeWorkspaceAppId,
   connection,
   message,
-  onOpenBrowserLink,
   onOpenFileInSidebar,
   onOpenSession,
-  workspaceRootPath,
 }: {
   activeWorkspaceAppId: string | null;
   connection: ClientConnection | null;
   message: ChatMessage;
-  onOpenBrowserLink?: (
-    href: string,
-    options?: { explicitFile?: boolean; newTab?: boolean }
-  ) => void;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
-  workspaceRootPath?: string | null;
 }) {
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [openImage, setOpenImage] = useState<
@@ -172,28 +163,16 @@ export function ActivityGroup({
       ) : null}
       {presentation.visibleActivities.length > 0 ? (
         <div className="work-trace-flow" id={toolListId}>
-          {presentation.visibleActivities.map((activity) =>
-            isInlineWorkTraceActivity(activity) ? (
-              <InlineReasoningActivity
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                activity={activity}
-                connection={connection}
-                key={activity.id}
-                onOpenBrowserLink={onOpenBrowserLink}
-                onOpenFileInSidebar={onOpenFileInSidebar}
-                workspaceRootPath={workspaceRootPath}
-              />
-            ) : (
-              <ActivityToolRow
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                activity={activity}
-                connection={connection}
-                key={activity.id}
-                onOpenImage={setOpenImage}
-                onOpenSession={onOpenSession}
-              />
-            )
-          )}
+          {presentation.visibleActivities.map((activity) => (
+            <ActivityToolRow
+              activeWorkspaceAppId={activeWorkspaceAppId}
+              activity={activity}
+              connection={connection}
+              key={activity.id}
+              onOpenImage={setOpenImage}
+              onOpenSession={onOpenSession}
+            />
+          ))}
         </div>
       ) : null}
       <ImageLightbox
@@ -203,39 +182,6 @@ export function ActivityGroup({
         onClose={() => setOpenImage(null)}
       />
     </article>
-  );
-}
-
-function InlineReasoningActivity({
-  activeWorkspaceAppId,
-  activity,
-  connection,
-  onOpenBrowserLink,
-  onOpenFileInSidebar,
-  workspaceRootPath,
-}: {
-  activeWorkspaceAppId: string | null;
-  activity: ActivityItem;
-  connection: ClientConnection | null;
-  onOpenBrowserLink?: (
-    href: string,
-    options?: { explicitFile?: boolean; newTab?: boolean }
-  ) => void;
-  onOpenFileInSidebar?: (path: string) => void;
-  workspaceRootPath?: string | null;
-}) {
-  if (!activity.content) return null;
-  return (
-    <div className="work-trace-inline-reasoning">
-      <MarkdownText
-        activeWorkspaceAppId={activeWorkspaceAppId}
-        connection={connection}
-        content={activity.content}
-        onOpenBrowserLink={onOpenBrowserLink}
-        onOpenFileInSidebar={onOpenFileInSidebar}
-        workspaceRootPath={workspaceRootPath}
-      />
-    </div>
   );
 }
 

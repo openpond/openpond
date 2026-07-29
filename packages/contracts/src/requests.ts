@@ -410,6 +410,15 @@ export type SwitchOpenPondAccountRequest = z.infer<
   typeof SwitchOpenPondAccountRequestSchema
 >;
 
+export const RemoveOpenPondAccountRequestSchema = z.object({
+  handle: z.string().min(1),
+  baseUrl: z.string().nullable().optional(),
+});
+
+export type RemoveOpenPondAccountRequest = z.infer<
+  typeof RemoveOpenPondAccountRequestSchema
+>;
+
 export const SaveOpenPondAccountRequestSchema = z.object({
   handle: z.string().min(1).optional(),
   apiKey: z.string().min(1),

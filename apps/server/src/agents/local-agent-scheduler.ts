@@ -16,6 +16,7 @@ import type {
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import type { SqliteStore } from "../store/store.js";
 import { event, now } from "../utils.js";
+import { readAgentPackageOrigin } from "./agent-package-origin.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -34,16 +35,21 @@ export type LocalAgentScheduleLoop = {
   start: () => void;
   stop: () => void;
   syncNow: () => Promise<LocalAgentSchedulesResponse>;
-  list: (input?: { localProjectId?: string | null }) => Promise<LocalAgentSchedulesResponse>;
+  list: (input?: {
+    localProjectId?: string | null;
+  }) => Promise<LocalAgentSchedulesResponse>;
   patchSchedule: (
     scheduleId: string,
-    payload: PatchLocalAgentScheduleRequest,
+    payload: PatchLocalAgentScheduleRequest
   ) => Promise<LocalAgentSchedule | null>;
   runNow: (
     scheduleId: string,
-    input?: Record<string, unknown>,
+    input?: Record<string, unknown>
   ) => Promise<{ schedule: LocalAgentSchedule; run: LocalAgentScheduleRun }>;
-  listRuns: (scheduleId: string, limit?: number) => Promise<LocalAgentScheduleRun[]>;
+  listRuns: (
+    scheduleId: string,
+    limit?: number
+  ) => Promise<LocalAgentScheduleRun[]>;
   status: () => LocalAgentSchedulesResponse["scheduler"];
 };
 
@@ -61,6 +67,8 @@ type AgentScheduleDefinition = {
 type AgentManifestPayload = {
   projectName: string;
   manifestHash: string | null;
+  agentVersionId: string;
+  agentPackageDigest: string | null;
   schedules: AgentScheduleDefinition[];
 };
 
@@ -98,13 +106,16 @@ export function createLocalAgentScheduleLoop(options: {
   function schedulerStatus(): LocalAgentSchedulesResponse["scheduler"] {
     return {
       running: Boolean(interval),
-      nextTickAt: nextTickAtMs === null ? null : new Date(nextTickAtMs).toISOString(),
+      nextTickAt:
+        nextTickAtMs === null ? null : new Date(nextTickAtMs).toISOString(),
       lastSyncAt,
       scanRunning: tickRunning,
     };
   }
 
-  async function list(input: { localProjectId?: string | null } = {}): Promise<LocalAgentSchedulesResponse> {
+  async function list(
+    input: { localProjectId?: string | null } = {}
+  ): Promise<LocalAgentSchedulesResponse> {
     return {
       schedules: await options.store.listLocalAgentSchedules({
         localProjectId: input.localProjectId ?? null,
@@ -117,7 +128,7 @@ export function createLocalAgentScheduleLoop(options: {
     const sourceCatalog = await listProfileScheduleSources(
       options.loadProfileState,
       options.loadProfileLibrary,
-      options.logger,
+      options.logger
     );
     if (!sourceCatalog) return;
     for (const source of sourceCatalog.sourcesToInspect) {
@@ -126,7 +137,9 @@ export function createLocalAgentScheduleLoop(options: {
         const existingSchedules = await options.store.listLocalAgentSchedules({
           localProjectId: source.id,
         });
-        const existingById = new Map(existingSchedules.map((schedule) => [schedule.id, schedule]));
+        const existingById = new Map(
+          existingSchedules.map((schedule) => [schedule.id, schedule])
+        );
         const seenIds: string[] = [];
         for (const definition of manifest.schedules) {
           const id = localScheduleId(source.id, definition.name);
@@ -135,7 +148,11 @@ export function createLocalAgentScheduleLoop(options: {
           const timestamp = now();
           const enabled = existing?.enabled ?? false;
           const previousSourceHash = existing?.sourceHash ?? null;
-          const hasSourceChanged = previousSourceHash !== definition.sourceHash;
+          const sourceHash = stableHash({
+            schedule: definition.sourceHash,
+            agentVersionId: manifest.agentVersionId,
+          });
+          const hasSourceChanged = previousSourceHash !== sourceHash;
           const nextRunAt = nextRunForReconciledSchedule({
             definition,
             enabled,
@@ -156,8 +173,10 @@ export function createLocalAgentScheduleLoop(options: {
             input: definition.input,
             enabledByDefault: definition.enabledByDefault,
             enabled,
-            sourceHash: definition.sourceHash,
+            sourceHash,
             manifestHash: manifest.manifestHash,
+            agentVersionId: manifest.agentVersionId,
+            agentPackageDigest: manifest.agentPackageDigest,
             nextRunAt: enabled ? nextRunAt.value : null,
             lastRunAt: existing?.lastRunAt ?? null,
             lastRunStatus: existing?.lastRunStatus ?? null,
@@ -178,7 +197,10 @@ export function createLocalAgentScheduleLoop(options: {
         });
       }
     }
-    await pauseSchedulesForMissingSources(options.store, sourceCatalog.installedSourceIds);
+    await pauseSchedulesForMissingSources(
+      options.store,
+      sourceCatalog.installedSourceIds
+    );
     lastSyncAt = now();
     lastReconcileAtMs = Date.now();
   }
@@ -190,7 +212,9 @@ export function createLocalAgentScheduleLoop(options: {
       if (forceReconcile || Date.now() - lastReconcileAtMs >= reconcileMs) {
         await reconcile();
       }
-      const dueSchedules = await options.store.listDueLocalAgentSchedules(now());
+      const dueSchedules = await options.store.listDueLocalAgentSchedules(
+        now()
+      );
       for (const schedule of dueSchedules) {
         if (runningScheduleIds.has(schedule.id)) continue;
         const scheduledFor = schedule.nextRunAt ?? now();
@@ -205,7 +229,7 @@ export function createLocalAgentScheduleLoop(options: {
     schedule: LocalAgentSchedule,
     scheduledFor: string,
     trigger: LocalAgentScheduleRun["trigger"],
-    inputOverride?: Record<string, unknown>,
+    inputOverride?: Record<string, unknown>
   ): Promise<LocalAgentScheduleRun> {
     const timestamp = now();
     const run: LocalAgentScheduleRun = {
@@ -217,6 +241,8 @@ export function createLocalAgentScheduleLoop(options: {
       trigger,
       status: "queued",
       targetAction: schedule.targetAction,
+      agentVersionId: schedule.agentVersionId ?? null,
+      agentPackageDigest: schedule.agentPackageDigest ?? null,
       startedAt: null,
       completedAt: null,
       exitCode: null,
@@ -247,7 +273,7 @@ export function createLocalAgentScheduleLoop(options: {
         } finally {
           runningScheduleIds.delete(schedule.id);
         }
-      },
+      }
     );
     return inserted;
   }
@@ -255,7 +281,7 @@ export function createLocalAgentScheduleLoop(options: {
   async function executeScheduleRun(
     schedule: LocalAgentSchedule,
     run: LocalAgentScheduleRun,
-    inputOverride?: Record<string, unknown>,
+    inputOverride?: Record<string, unknown>
   ): Promise<void> {
     await options.store.patchLocalAgentScheduleRun(run.id, (current) => ({
       ...current,
@@ -263,20 +289,29 @@ export function createLocalAgentScheduleLoop(options: {
       startedAt: now(),
       updatedAt: now(),
     }));
-    await appendDiagnostic("started", `Running local schedule ${schedule.scheduleName}.`, {
-      scheduleId: schedule.id,
-      runId: run.id,
-      localProjectId: schedule.localProjectId,
-      scheduledFor: run.scheduledFor,
-      trigger: run.trigger,
-    });
+    await appendDiagnostic(
+      "started",
+      `Running local schedule ${schedule.scheduleName}.`,
+      {
+        scheduleId: schedule.id,
+        runId: run.id,
+        localProjectId: schedule.localProjectId,
+        agentVersionId: schedule.agentVersionId ?? null,
+        agentPackageDigest: schedule.agentPackageDigest ?? null,
+        scheduledFor: run.scheduledFor,
+        trigger: run.trigger,
+      }
+    );
 
     let finalStatus: LocalAgentScheduleRun["status"] = "failed";
     let finalError: string | null = null;
     try {
       const result = await runAgentAction(schedule, run, inputOverride);
       finalStatus = result.exitCode === 0 ? "succeeded" : "failed";
-      finalError = result.exitCode === 0 ? null : result.stderr || `Action exited with code ${result.exitCode}`;
+      finalError =
+        result.exitCode === 0
+          ? null
+          : result.stderr || `Action exited with code ${result.exitCode}`;
       await options.store.patchLocalAgentScheduleRun(run.id, (current) => ({
         ...current,
         status: finalStatus,
@@ -322,31 +357,33 @@ export function createLocalAgentScheduleLoop(options: {
         scheduledFor: run.scheduledFor,
         trigger: run.trigger,
         error: finalError,
-      },
+      }
     );
   }
 
   async function appendDiagnostic(
     status: "started" | "completed" | "failed",
     output: string,
-    data: Record<string, unknown>,
+    data: Record<string, unknown>
   ) {
-    await options.appendRuntimeEvent?.(
-      event({
-        name: "diagnostic",
-        source: "server",
-        status,
-        output,
-        data: {
-          kind: "local_agent_schedule",
-          ...data,
-        },
-      }),
-    ).catch((error) => {
-      options.logger?.warn("local agent schedule diagnostic failed", {
-        error: errorText(error),
+    await options
+      .appendRuntimeEvent?.(
+        event({
+          name: "diagnostic",
+          source: "server",
+          status,
+          output,
+          data: {
+            kind: "local_agent_schedule",
+            ...data,
+          },
+        })
+      )
+      .catch((error) => {
+        options.logger?.warn("local agent schedule diagnostic failed", {
+          error: errorText(error),
+        });
       });
-    });
   }
 
   return {
@@ -412,7 +449,7 @@ export function createLocalAgentScheduleLoop(options: {
 async function listProfileScheduleSources(
   loadProfileState: (() => Promise<OpenPondProfileState>) | undefined,
   loadProfileLibrary: (() => Promise<OpenPondProfileLibrary>) | undefined,
-  logger: LocalAgentSchedulerLogger | undefined,
+  logger: LocalAgentSchedulerLogger | undefined
 ): Promise<AgentScheduleSourceCatalog | null> {
   if (!loadProfileState && !loadProfileLibrary) {
     return { sourcesToInspect: [], installedSourceIds: new Set() };
@@ -423,38 +460,48 @@ async function listProfileScheduleSources(
     const profiles = loadProfileState ? [await loadProfileState()] : [];
     return profileScheduleSourceCatalogForStates(profiles, profiles, logger);
   } catch (error) {
-    logger?.warn("local agent schedule profile source scan failed", { error: errorText(error) });
+    logger?.warn("local agent schedule profile source scan failed", {
+      error: errorText(error),
+    });
     return null;
   }
 }
 
 export function profileScheduleSourceCatalogForLibrary(
   library: OpenPondProfileLibrary,
-  logger?: LocalAgentSchedulerLogger,
+  logger?: LocalAgentSchedulerLogger
 ): AgentScheduleSourceCatalog {
   const profiles = library.profiles.map((entry) => entry.state);
   const selectedRef = library.lastUsed;
   const selectedProfiles = selectedRef
     ? library.profiles
-        .filter((entry) =>
-          entry.ref.source === selectedRef.source
-          && entry.ref.repositoryId === selectedRef.repositoryId
-          && entry.ref.profileId === selectedRef.profileId,
+        .filter(
+          (entry) =>
+            entry.ref.source === selectedRef.source &&
+            entry.ref.repositoryId === selectedRef.repositoryId &&
+            entry.ref.profileId === selectedRef.profileId
         )
         .map((entry) => entry.state)
     : [];
-  return profileScheduleSourceCatalogForStates(profiles, selectedProfiles, logger);
+  return profileScheduleSourceCatalogForStates(
+    profiles,
+    selectedProfiles,
+    logger
+  );
 }
 
 function profileScheduleSourceCatalogForStates(
   installedProfiles: OpenPondProfileState[],
   profilesToInspect: OpenPondProfileState[],
-  logger?: LocalAgentSchedulerLogger,
+  logger?: LocalAgentSchedulerLogger
 ): AgentScheduleSourceCatalog {
   const installedSourceIds = new Set<string>();
   for (const profile of installedProfiles) {
-    if (profile.mode !== "local" || !profile.repoPath || !profile.sourcePath) continue;
-    for (const agent of profile.agents.filter((candidate) => candidate.enabled)) {
+    if (profile.mode !== "local" || !profile.repoPath || !profile.sourcePath)
+      continue;
+    for (const agent of profile.agents.filter(
+      (candidate) => candidate.enabled
+    )) {
       installedSourceIds.add(profileScheduleSourceId(profile, agent.id));
     }
   }
@@ -462,22 +509,29 @@ function profileScheduleSourceCatalogForStates(
   for (const profile of profilesToInspect) {
     if (profile.mode !== "local") continue;
     if (profile.error) {
-      logger?.warn("local agent schedule profile source scan skipped", { error: profile.error });
+      logger?.warn("local agent schedule profile source scan skipped", {
+        error: profile.error,
+      });
       continue;
     }
     if (!profile.repoPath || !profile.sourcePath) continue;
-    sourcesToInspect.push(...profile.agents
-      .filter((agent) => agent.enabled)
-      .map((agent) => ({
-        id: profileScheduleSourceId(profile, agent.id),
-        name: agent.id,
-        agentRootPath: profileAgentRootPath(profile.sourcePath!, agent),
-      })));
+    sourcesToInspect.push(
+      ...profile.agents
+        .filter((agent) => agent.enabled)
+        .map((agent) => ({
+          id: profileScheduleSourceId(profile, agent.id),
+          name: agent.id,
+          agentRootPath: profileAgentRootPath(profile.sourcePath!, agent),
+        }))
+    );
   }
   return { sourcesToInspect, installedSourceIds };
 }
 
-function profileScheduleSourceId(profile: OpenPondProfileState, agentId: string): string {
+function profileScheduleSourceId(
+  profile: OpenPondProfileState,
+  agentId: string
+): string {
   return `profile_${stableHash({
     repoPath: profile.repoPath,
     profile: profile.activeProfile,
@@ -487,7 +541,7 @@ function profileScheduleSourceId(profile: OpenPondProfileState, agentId: string)
 
 function profileAgentRootPath(
   profileSourcePath: string,
-  agent: OpenPondProfileState["agents"][number],
+  agent: OpenPondProfileState["agents"][number]
 ): string {
   return agent.id === "default"
     ? profileSourcePath
@@ -496,32 +550,42 @@ function profileAgentRootPath(
 
 async function pauseSchedulesForMissingSources(
   store: SqliteStore,
-  installedSourceIds: Set<string>,
+  installedSourceIds: Set<string>
 ): Promise<void> {
   const schedules = await store.listLocalAgentSchedules();
   for (const schedule of schedules) {
-    if (installedSourceIds.has(schedule.localProjectId) || !schedule.enabled) continue;
+    if (installedSourceIds.has(schedule.localProjectId) || !schedule.enabled)
+      continue;
     await store.patchLocalAgentSchedule(schedule.id, (current) => ({
       ...current,
       enabled: false,
       nextRunAt: null,
-      lastError: "Profile source is no longer installed; enable again after restoring it.",
+      lastError:
+        "Profile source is no longer installed; enable again after restoring it.",
       updatedAt: now(),
     }));
   }
 }
 
-async function inspectAgentProject(agentRootPath: string): Promise<AgentManifestPayload> {
+async function inspectAgentProject(
+  agentRootPath: string
+): Promise<AgentManifestPayload> {
   const cli = await resolveOpenPondAgentCli(agentRootPath);
   const { stdout } = await runAgentCli(
     cli,
     ["build", "--json", "--cwd", agentRootPath],
     agentRootPath,
-    INSPECT_TIMEOUT_MS,
+    INSPECT_TIMEOUT_MS
   );
   const buildPayload = parseJsonObject(stdout);
   const manifest = asRecord(buildPayload.manifest);
-  const manifestHash = stringValue(readPath(buildPayload, ["inspect", "agent", "manifestHash"]));
+  const manifestHash = stringValue(
+    readPath(buildPayload, ["inspect", "agent", "manifestHash"])
+  );
+  const packageOrigin = await readAgentPackageOrigin(
+    agentRootPath,
+    manifestHash ?? stableHash(manifest)
+  );
   const projectName =
     stringValue(readPath(manifest, ["project", "name"])) ??
     path.basename(agentRootPath) ??
@@ -529,22 +593,25 @@ async function inspectAgentProject(agentRootPath: string): Promise<AgentManifest
   return {
     projectName,
     manifestHash,
+    agentVersionId: packageOrigin.versionId,
+    agentPackageDigest: packageOrigin.digest,
     schedules: readScheduleDefinitions(manifest),
   };
 }
 
 function readScheduleDefinitions(manifest: unknown): AgentScheduleDefinition[] {
   const schedules = Array.isArray(readPath(manifest, ["schedules"]))
-    ? readPath(manifest, ["schedules"]) as unknown[]
+    ? (readPath(manifest, ["schedules"]) as unknown[])
     : [];
   return schedules.flatMap((entry) => {
     const record = asRecord(entry);
     const name = stringValue(record.name);
     if (!name) return [];
     const scheduleType = record.scheduleType === "rate" ? "rate" : "cron";
-    const expression = scheduleType === "rate"
-      ? stringValue(record.rate) ?? stringValue(record.scheduleExpression)
-      : stringValue(record.cron) ?? stringValue(record.scheduleExpression);
+    const expression =
+      scheduleType === "rate"
+        ? stringValue(record.rate) ?? stringValue(record.scheduleExpression)
+        : stringValue(record.cron) ?? stringValue(record.scheduleExpression);
     if (!expression) return [];
     const target = asRecord(record.target);
     const targetAction =
@@ -562,17 +629,19 @@ function readScheduleDefinitions(manifest: unknown): AgentScheduleDefinition[] {
       enabledByDefault: record.enabledByDefault === true,
       input,
     };
-    return [{
-      ...definition,
-      sourceHash: stableHash(definition),
-    }];
+    return [
+      {
+        ...definition,
+        sourceHash: stableHash(definition),
+      },
+    ];
   });
 }
 
 async function runAgentAction(
   schedule: LocalAgentSchedule,
   run: LocalAgentScheduleRun,
-  inputOverride?: Record<string, unknown>,
+  inputOverride?: Record<string, unknown>
 ): Promise<{
   exitCode: number;
   stdout: string;
@@ -580,8 +649,14 @@ async function runAgentAction(
   result: Record<string, unknown> | null;
   traceArtifactRef: string | null;
 }> {
+  const current = await inspectAgentProject(schedule.agentRootPath);
+  assertLocalAgentScheduleVersion(schedule, current);
   const cli = await resolveOpenPondAgentCli(schedule.agentRootPath);
-  const runDir = path.join(schedule.agentRootPath, ".openpond", "local-scheduler");
+  const runDir = path.join(
+    schedule.agentRootPath,
+    ".openpond",
+    "local-scheduler"
+  );
   await fs.mkdir(runDir, { recursive: true });
   const inputPath = path.join(runDir, `${run.id}.input.json`);
   const input = {
@@ -613,7 +688,7 @@ async function runAgentAction(
       relativeInputPath,
     ],
     schedule.agentRootPath,
-    RUN_TIMEOUT_MS,
+    RUN_TIMEOUT_MS
   );
   const outputPayload = parseJsonObjectSafe(executed.stdout);
   return {
@@ -625,11 +700,41 @@ async function runAgentAction(
   };
 }
 
+export function assertLocalAgentScheduleVersion(
+  schedule: Pick<
+    LocalAgentSchedule,
+    "agentVersionId" | "agentPackageDigest" | "manifestHash"
+  >,
+  current: {
+    agentVersionId: string;
+    agentPackageDigest: string | null;
+  }
+): void {
+  const expectedVersion =
+    schedule.agentVersionId ??
+    (schedule.manifestHash
+      ? `manifest-${schedule.manifestHash.slice(0, 20)}`
+      : null);
+  if (expectedVersion && current.agentVersionId !== expectedVersion) {
+    throw new Error(
+      `Agent version changed before execution. Expected ${expectedVersion}, found ${current.agentVersionId}. Sync schedules before retrying.`
+    );
+  }
+  if (
+    schedule.agentPackageDigest &&
+    current.agentPackageDigest !== schedule.agentPackageDigest
+  ) {
+    throw new Error(
+      "Agent package digest changed before execution. Sync schedules before retrying."
+    );
+  }
+}
+
 async function runAgentCli(
   cliPath: string,
   args: string[],
   cwd: string,
-  timeoutMs: number,
+  timeoutMs: number
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   const env = {
     ...process.env,
@@ -655,7 +760,10 @@ async function runAgentCli(
     };
     return {
       stdout: typeof execError.stdout === "string" ? execError.stdout : "",
-      stderr: typeof execError.stderr === "string" ? execError.stderr : errorText(error),
+      stderr:
+        typeof execError.stderr === "string"
+          ? execError.stderr
+          : errorText(error),
       exitCode: typeof execError.code === "number" ? execError.code : 1,
     };
   }
@@ -666,10 +774,14 @@ async function resolveOpenPondAgentCli(agentRootPath: string): Promise<string> {
   if (override) return path.resolve(override);
   const candidates: string[] = [];
   for (const basePath of ancestorPaths(agentRootPath)) {
-    candidates.push(path.join(basePath, "node_modules", ".bin", "openpond-agent"));
+    candidates.push(
+      path.join(basePath, "node_modules", ".bin", "openpond-agent")
+    );
   }
   for (const basePath of ancestorPaths(process.cwd())) {
-    candidates.push(path.join(basePath, "node_modules", ".bin", "openpond-agent"));
+    candidates.push(
+      path.join(basePath, "node_modules", ".bin", "openpond-agent")
+    );
   }
   const seen = new Set<string>();
   for (const candidate of candidates) {
@@ -701,8 +813,11 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 function safeNextRunAt(
-  schedule: Pick<AgentScheduleDefinition, "scheduleType" | "scheduleExpression" | "timezone">,
-  currentDate: Date | string | null,
+  schedule: Pick<
+    AgentScheduleDefinition,
+    "scheduleType" | "scheduleExpression" | "timezone"
+  >,
+  currentDate: Date | string | null
 ): { value: string | null; error: string | null } {
   try {
     return { value: nextRunAt(schedule, currentDate), error: null };
@@ -712,12 +827,17 @@ function safeNextRunAt(
 }
 
 function nextRunAt(
-  schedule: Pick<AgentScheduleDefinition, "scheduleType" | "scheduleExpression" | "timezone">,
-  currentDate: Date | string | null,
+  schedule: Pick<
+    AgentScheduleDefinition,
+    "scheduleType" | "scheduleExpression" | "timezone"
+  >,
+  currentDate: Date | string | null
 ): string {
   const baseDate = dateAfter(currentDate);
   if (schedule.scheduleType === "rate") {
-    return new Date(baseDate.getTime() + parseRateIntervalMs(schedule.scheduleExpression)).toISOString();
+    return new Date(
+      baseDate.getTime() + parseRateIntervalMs(schedule.scheduleExpression)
+    ).toISOString();
   }
   const expression = normalizeCronExpression(schedule.scheduleExpression);
   const interval = CronExpressionParser.parse(expression, {
@@ -752,11 +872,15 @@ function parseRateIntervalMs(expression: string): number {
   }
   const unit = compact[2]!.toLowerCase().replace(/s$/, "");
   const unitMs =
-    unit === "second" || unit === "sec" || unit === "s" ? 1_000 :
-    unit === "minute" || unit === "min" || unit === "m" ? 60_000 :
-    unit === "hour" || unit === "hr" || unit === "h" ? 60 * 60_000 :
-    unit === "day" || unit === "d" ? 24 * 60 * 60_000 :
-    null;
+    unit === "second" || unit === "sec" || unit === "s"
+      ? 1_000
+      : unit === "minute" || unit === "min" || unit === "m"
+      ? 60_000
+      : unit === "hour" || unit === "hr" || unit === "h"
+      ? 60 * 60_000
+      : unit === "day" || unit === "d"
+      ? 24 * 60 * 60_000
+      : null;
   if (!unitMs) throw new Error(`Unsupported rate unit: ${expression}`);
   return count * unitMs;
 }
@@ -776,13 +900,18 @@ function normalizeCronExpression(expression: string): string {
   return normalized;
 }
 
-function unwrapScheduleExpression(expression: string, type: "cron" | "rate"): string {
+function unwrapScheduleExpression(
+  expression: string,
+  type: "cron" | "rate"
+): string {
   const trimmed = expression.trim();
   const wrapped = new RegExp(`^${type}\\((.*)\\)$`, "i").exec(trimmed);
   return wrapped ? wrapped[1]!.trim() : trimmed;
 }
 
-function scheduleDefinitionFromRecord(schedule: LocalAgentSchedule): AgentScheduleDefinition {
+function scheduleDefinitionFromRecord(
+  schedule: LocalAgentSchedule
+): AgentScheduleDefinition {
   return {
     name: schedule.scheduleName,
     scheduleType: schedule.scheduleType,
@@ -802,7 +931,11 @@ function nextRunForReconciledSchedule(input: {
   hasSourceChanged: boolean;
 }): { value: string | null; error: string | null } {
   if (!input.enabled) return { value: null, error: null };
-  if (!input.hasSourceChanged && input.existing?.nextRunAt && !input.existing.lastError) {
+  if (
+    !input.hasSourceChanged &&
+    input.existing?.nextRunAt &&
+    !input.existing.lastError
+  ) {
     return { value: input.existing.nextRunAt, error: null };
   }
   return safeNextRunAt(input.definition, new Date());
@@ -810,23 +943,28 @@ function nextRunForReconciledSchedule(input: {
 
 function nextRunAfterCompletedRun(
   schedule: LocalAgentSchedule,
-  run: LocalAgentScheduleRun,
+  run: LocalAgentScheduleRun
 ): string | null {
   if (!schedule.enabled) return null;
   if (run.trigger === "manual") return schedule.nextRunAt;
-  return safeNextRunAt(scheduleDefinitionFromRecord(schedule), new Date()).value;
+  return safeNextRunAt(scheduleDefinitionFromRecord(schedule), new Date())
+    .value;
 }
 
 function nextRunErrorAfterCompletedRun(
   schedule: LocalAgentSchedule,
-  run: LocalAgentScheduleRun,
+  run: LocalAgentScheduleRun
 ): string | null {
   if (!schedule.enabled || run.trigger === "manual") return null;
-  return safeNextRunAt(scheduleDefinitionFromRecord(schedule), new Date()).error;
+  return safeNextRunAt(scheduleDefinitionFromRecord(schedule), new Date())
+    .error;
 }
 
 function localScheduleId(localProjectId: string, scheduleName: string): string {
-  return `local_schedule_${stableHash({ localProjectId, scheduleName }).slice(0, 24)}`;
+  return `local_schedule_${stableHash({ localProjectId, scheduleName }).slice(
+    0,
+    24
+  )}`;
 }
 
 function stableHash(value: unknown): string {
@@ -837,7 +975,10 @@ function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -869,7 +1010,7 @@ function readPath(value: unknown, pathParts: string[]): unknown {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }
 

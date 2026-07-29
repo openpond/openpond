@@ -7,6 +7,8 @@ import { useErrorToast } from "../../app/AppToastContext";
 
 type AccountRow = AccountState["accounts"][number];
 type AccountEndpointDialogMode = "update" | "connect";
+const DEFAULT_OPENPOND_WEB_BASE_URL = "https://openpond.ai";
+const DEFAULT_OPENPOND_API_BASE_URL = "https://api.openpond.ai";
 
 export type AccountEndpointUpdate = {
   handle?: string;
@@ -67,16 +69,22 @@ export function AccountEndpointDialog({
   const titleId = useId();
   const connectMode = mode === "connect";
   const [apiKey, setApiKey] = useState(initialApiKey);
-  const [baseUrl, setBaseUrl] = useState(account?.baseUrl ?? "");
-  const [apiBaseUrl, setApiBaseUrl] = useState(account?.apiBaseUrl ?? "");
+  const [advanced, setAdvanced] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(
+    account?.baseUrl ?? DEFAULT_OPENPOND_WEB_BASE_URL
+  );
+  const [apiBaseUrl, setApiBaseUrl] = useState(
+    account?.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL
+  );
   const [validationError, setValidationError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   useErrorToast(requestError);
 
   useEffect(() => {
     setApiKey(initialApiKey);
-    setBaseUrl(account?.baseUrl ?? "");
-    setApiBaseUrl(account?.apiBaseUrl ?? "");
+    setAdvanced(false);
+    setBaseUrl(account?.baseUrl ?? DEFAULT_OPENPOND_WEB_BASE_URL);
+    setApiBaseUrl(account?.apiBaseUrl ?? DEFAULT_OPENPOND_API_BASE_URL);
     setValidationError(null);
     setRequestError(null);
   }, [account?.apiBaseUrl, account?.baseUrl, account?.handle, initialApiKey]);
@@ -107,7 +115,12 @@ export function AccountEndpointDialog({
         baseUrl: normalizedBaseUrl,
         apiBaseUrl: normalizedApiBaseUrl,
         apiKey: connectMode ? trimmedApiKey : undefined,
-        environment: account?.environment ?? null,
+        environment: connectMode
+          ? accountEnvironmentForEndpoints(
+              normalizedBaseUrl,
+              normalizedApiBaseUrl
+            )
+          : account?.environment ?? null,
       });
     } catch (caught) {
       setRequestError(caught instanceof Error ? caught.message : String(caught));
@@ -142,7 +155,10 @@ export function AccountEndpointDialog({
         <div className="git-dialog-icon">
           {connectMode ? <KeyRound size={18} /> : <SlidersHorizontal size={18} />}
         </div>
-        <h2 id={titleId}>{connectMode ? "Environment account" : "Environment endpoints"}</h2>
+        <h2 id={titleId}>{connectMode ? "Add account" : "Account endpoints"}</h2>
+        {connectMode ? (
+          <p>Enter your OpenPond API key to connect another account.</p>
+        ) : null}
         {connectMode ? (
           <label className="git-dialog-field">
             <span>API key</span>
@@ -156,25 +172,41 @@ export function AccountEndpointDialog({
             />
           </label>
         ) : null}
-        <label className="git-dialog-field">
-          <span>Base URL</span>
-          <input
-            autoFocus={!connectMode}
-            disabled={busy}
-            inputMode="url"
-            value={baseUrl}
-            onChange={(event) => setBaseUrl(event.target.value)}
-          />
-        </label>
-        <label className="git-dialog-field">
-          <span>API base URL</span>
-          <input
-            disabled={busy}
-            inputMode="url"
-            value={apiBaseUrl}
-            onChange={(event) => setApiBaseUrl(event.target.value)}
-          />
-        </label>
+        {connectMode ? (
+          <label className="git-dialog-toggle account-dialog-advanced-toggle">
+            <input
+              checked={advanced}
+              disabled={busy}
+              type="checkbox"
+              onChange={(event) => setAdvanced(event.target.checked)}
+            />
+            <span />
+            Advanced
+          </label>
+        ) : null}
+        {!connectMode || advanced ? (
+          <div className="account-dialog-advanced-fields">
+            <label className="git-dialog-field">
+              <span>Base URL</span>
+              <input
+                autoFocus={!connectMode}
+                disabled={busy}
+                inputMode="url"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+              />
+            </label>
+            <label className="git-dialog-field">
+              <span>API base URL</span>
+              <input
+                disabled={busy}
+                inputMode="url"
+                value={apiBaseUrl}
+                onChange={(event) => setApiBaseUrl(event.target.value)}
+              />
+            </label>
+          </div>
+        ) : null}
         {validationError ? <div className="profile-dialog-warning">{validationError}</div> : null}
         <div className="git-dialog-footer">
           <button className="git-dialog-secondary" disabled={busy} type="button" onClick={onClose}>
@@ -188,4 +220,14 @@ export function AccountEndpointDialog({
       </form>
     </div>
   );
+}
+
+function accountEnvironmentForEndpoints(
+  baseUrl: string,
+  apiBaseUrl: string
+): "production" | "custom" {
+  return baseUrl === DEFAULT_OPENPOND_WEB_BASE_URL &&
+    apiBaseUrl === DEFAULT_OPENPOND_API_BASE_URL
+    ? "production"
+    : "custom";
 }

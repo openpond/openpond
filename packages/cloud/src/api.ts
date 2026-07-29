@@ -754,7 +754,7 @@ export async function getOpenPondAccount(
   baseUrl: string,
   token: string
 ): Promise<OpenPondAccountResponse> {
-  const response = await apiFetch(baseUrl, token, "/account", {
+  const response = await apiFetch(baseUrl, token, "/v1/account", {
     method: "GET",
   });
   if (!response.ok) {
@@ -772,7 +772,7 @@ export async function checkOpenPondApiHealth(
   const started = Date.now();
   const normalizedBase = baseUrl.replace(/\/$/, "");
   try {
-    const response = await fetch(`${normalizedBase}/health`, {
+    const response = await apiFetch(normalizedBase, null, "/health", {
       method: "GET",
       headers: { Accept: "application/json" },
     });

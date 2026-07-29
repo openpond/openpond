@@ -35,8 +35,6 @@
     { "path": "runtimeManifest", "type": "string" },
     { "path": "editable.schema", "type": "string", "equals": "openpond.agent.editable-policy.v1" },
     { "path": "editable.enabled", "type": "boolean" },
-    { "path": "editable.backend", "type": "string", "equals": "openpond-coding-work-item" },
-    { "path": "editable.runtimeEnvironmentId", "type": "string", "equals": "openpond-coding-core-v1" },
     { "path": "editable.sourceOfTruth", "type": "string", "equals": "agent-source" },
     { "path": "editable.policyDiscovery.command", "type": "string", "equals": "openpond agent inspect --json" },
     { "path": "editable.policyDiscovery.runAfter", "type": "string", "equals": "source-materialized" },

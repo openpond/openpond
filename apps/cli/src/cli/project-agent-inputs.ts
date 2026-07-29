@@ -1,5 +1,4 @@
 import type {
-  SandboxAgentEditWorkItemOpenInput,
   SandboxAgentEntrypointScope,
   SandboxAgentSourceCheckDispatchMode,
   SandboxAgentSourceCheckKind,
@@ -10,9 +9,6 @@ import type {
   SandboxAgentTriggerType,
   SandboxAgentUpdateInput,
   SandboxAgentUpsertInput,
-  SandboxCodingWorkItemBackgroundInput,
-  SandboxCodingWorkItemChatInput,
-  SandboxCodingWorkItemPromotionInput,
   SandboxProjectSourceType,
   SandboxProjectUpdateInput,
   SandboxProjectUpsertInput,
@@ -260,9 +256,6 @@ export function buildAgentSourcePublishInput(
     ...(optionString(options, "evalStatus")
       ? { evalStatus: optionString(options, "evalStatus") }
       : {}),
-    ...(optionString(options, "workItemId")
-      ? { workItemId: optionString(options, "workItemId") }
-      : {}),
     ...(optionString(options, "taskRunId")
       ? { taskRunId: optionString(options, "taskRunId") }
       : {}),
@@ -272,126 +265,6 @@ export function buildAgentSourcePublishInput(
     ...(optionString(options, "evalResultArtifactRef")
       ? { evalResultArtifactRef: optionString(options, "evalResultArtifactRef") }
       : {}),
-  };
-}
-
-export function buildAgentEditOpenInput(
-  _agentId: string,
-  teamId: string,
-  options: Record<string, string | boolean>
-): SandboxAgentEditWorkItemOpenInput {
-  const projectId = optionString(options, "projectId");
-  if (!projectId) {
-    throw new Error(
-      "agent edit open requires --project-id <id> so the edit work item is project scoped"
-    );
-  }
-  const initialMessage =
-    optionString(options, "initialMessage") ||
-    optionString(options, "message") ||
-    optionString(options, "prompt");
-  const sourceRef = optionString(options, "sourceRef") ?? null;
-  const baseSha = optionString(options, "baseSha") ?? null;
-  return {
-    teamId,
-    projectId,
-    ...(initialMessage ? { initialMessage } : {}),
-    ...(sourceRef ? { sourceRef } : {}),
-    ...(baseSha ? { baseSha } : {}),
-  };
-}
-
-export function buildCodingWorkItemChatInput(
-  teamId: string,
-  options: Record<string, string | boolean>
-): SandboxCodingWorkItemChatInput {
-  const message =
-    optionString(options, "message") || optionString(options, "prompt");
-  if (!message) {
-    throw new Error("agent edit chat requires --message <text>");
-  }
-  const mode = optionString(options, "chatMode") || "queue_cloud";
-  if (mode !== "sync_cloud" && mode !== "queue_cloud") {
-    throw new Error(
-      "agent edit chat --chat-mode must be sync_cloud or queue_cloud"
-    );
-  }
-  const payload = optionalJsonObject(options, "payload", "payload");
-  return {
-    teamId,
-    message,
-    mode,
-    ...(optionString(options, "sourceRef")
-      ? { sourceRef: optionString(options, "sourceRef") }
-      : {}),
-    ...(optionString(options, "baseSha")
-      ? { baseSha: optionString(options, "baseSha") }
-      : {}),
-    ...(payload ? { payload } : {}),
-  };
-}
-
-export function buildCodingWorkItemBackgroundInput(
-  teamId: string,
-  options: Record<string, string | boolean>
-): SandboxCodingWorkItemBackgroundInput {
-  const payload = optionalJsonObject(options, "payload", "payload");
-  const agentEdit = optionalJsonObject(options, "agentEdit", "agent-edit");
-  const setup = optionalCommandList(options, "setup", "setup");
-  const validation = optionalCommandList(options, "validation", "validation");
-  const branchPolicy = optionalJsonObject(options, "branchPolicy", "branch-policy");
-  return {
-    teamId,
-    ...(optionString(options, "prompt")
-      ? { prompt: optionString(options, "prompt") }
-      : {}),
-    ...(optionString(options, "sourceRef")
-      ? { sourceRef: optionString(options, "sourceRef") }
-      : {}),
-    ...(optionString(options, "baseSha")
-      ? { baseSha: optionString(options, "baseSha") }
-      : {}),
-    ...(optionString(options, "sourceRuntimeId")
-      ? { sourceRuntimeId: optionString(options, "sourceRuntimeId") }
-      : {}),
-    ...(optionString(options, "sourceSandboxId")
-      ? { sourceSandboxId: optionString(options, "sourceSandboxId") }
-      : {}),
-    ...(optionString(options, "agentId")
-      ? { agentId: optionString(options, "agentId") }
-      : {}),
-    ...(agentEdit ? { agentEdit } : {}),
-    ...(setup ? { setup } : {}),
-    ...(validation ? { validation } : {}),
-    ...(branchPolicy ? { branchPolicy } : {}),
-    ...(payload ? { payload } : {}),
-  };
-}
-
-function optionalCommandList(
-  options: Record<string, string | boolean>,
-  key: string,
-  displayName: string,
-): { commands: string[] } | null {
-  const value = optionalJsonObject(options, key, displayName);
-  if (!value) return null;
-  if (!Array.isArray(value.commands) || value.commands.some((command) => typeof command !== "string")) {
-    throw new Error(`${displayName} must be a JSON object with a string commands array`);
-  }
-  return { commands: value.commands };
-}
-
-export function buildCodingWorkItemPromotionInput(
-  teamId: string,
-  options: Record<string, string | boolean>
-): SandboxCodingWorkItemPromotionInput {
-  const ref = optionString(options, "ref") || optionString(options, "artifactRef");
-  if (!ref) throw new Error("result promotion requires --ref <artifact-ref>");
-  const metadata = optionalJsonObject(options, "metadata", "metadata");
-  return {
-    teamId,
-    ref,
-    ...(metadata ? { metadata } : {}),
   };
 }
 

@@ -159,7 +159,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
   },
   {
     id: "local-adapter",
-    displayName: "Local trained models",
+    displayName: "My Models",
     credentialModes: [],
     routing: { localRuntime: true },
     capabilities: {

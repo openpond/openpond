@@ -1059,7 +1059,7 @@ export function createOpenPondActionModelToolDefinitions(deps: {
         }),
       }))
     : [];
-  const directAgentTools = deps.actionCatalog
+  const directAgentActions = deps.actionCatalog
     .filter((action) => {
       const implementation = asRecord(action.implementation);
       const actionName = action.sourceActionId ?? action.name ?? action.id;
@@ -1067,10 +1067,14 @@ export function createOpenPondActionModelToolDefinitions(deps: {
         !(CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(actionName) &&
         (Boolean(action.agentId) || implementation?.type === "openpond-profile-action")
       );
-    })
-    .map<ModelToolDefinition>((action) => {
-      const name = directOpenPondActionToolName(action);
-      return {
+    });
+  const actionNameCounts = new Map<string, number>();
+  for (const action of directAgentActions) {
+    const name = directOpenPondActionAliasName(action);
+    if (name) actionNameCounts.set(name, (actionNameCounts.get(name) ?? 0) + 1);
+  }
+  const directAgentTools = directAgentActions.flatMap<ModelToolDefinition>((action) => {
+      const definition = (name: string): ModelToolDefinition => ({
         name,
         description: [
           action.description ?? `Run the ${action.label ?? action.name ?? action.id} Profile Agent action.`,
@@ -1083,9 +1087,20 @@ export function createOpenPondActionModelToolDefinitions(deps: {
           context,
           deps,
           resultToolName: name,
+          compactProfileResultForModel: true,
           input: context.args,
         }),
-      };
+      });
+      const scopedName = directOpenPondActionToolName(action);
+      const aliasName = directOpenPondActionAliasName(action);
+      if (
+        aliasName &&
+        aliasName !== scopedName &&
+        actionNameCounts.get(aliasName) === 1
+      ) {
+        return [definition(aliasName)];
+      }
+      return [definition(scopedName)];
     });
   return [
     ...directCrossSystemTools,
@@ -1162,6 +1177,7 @@ export function createOpenPondActionModelToolDefinitions(deps: {
           context,
           deps,
           resultToolName: "openpond_action_run",
+          compactProfileResultForModel: true,
           input: asRecord(context.args.input) ?? {},
           requestedProjectId: stringValue(context.args.projectId) ?? undefined,
           requestedAgentId: stringValue(context.args.agentId) ?? undefined,
@@ -1180,6 +1196,17 @@ export function directOpenPondActionToolName(action: OpenPondActionCatalogEntry)
     .slice(0, 44) || "action";
   const suffix = createHash("sha256").update(action.id).digest("hex").slice(0, 8);
   return `agent_${slug}_${suffix}`;
+}
+
+function directOpenPondActionAliasName(
+  action: OpenPondActionCatalogEntry,
+): string | null {
+  const name =
+    stringValue(asRecord(action.implementation)?.actionId) ??
+    action.sourceActionId ??
+    action.name ??
+    action.id;
+  return /^[A-Za-z0-9_-]{1,64}$/.test(name) ? name : null;
 }
 
 function actionInputSchema(action: OpenPondActionCatalogEntry): Record<string, unknown> {

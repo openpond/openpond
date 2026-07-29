@@ -161,8 +161,6 @@ export default defineAgentProject({
   ],
   editable: editable({
     enabled: true,
-    backend: "openpond-coding-work-item",
-    runtimeEnvironmentId: "openpond-coding-core-v1",
     sourceOfTruth: "agent-source",
     policyDiscovery: { command: "openpond agent inspect --json", runAfter: "source-materialized" },
     allowedPaths: ["agent/**"],

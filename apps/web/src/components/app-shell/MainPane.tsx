@@ -62,6 +62,7 @@ import { selectComposerProfileTransaction } from "../../lib/profile-selection-tr
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { WorkSidebarPanel } from "./WorkSidebarPanel";
+import { WorkStarterPrompts } from "./WorkStarterPrompts";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
@@ -96,11 +97,7 @@ import {
 import type { MainPaneProps } from "./main-pane-types";
 import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
-import {
-  exactExchangeHandoffContext,
-  exactExchangeHandoffPrompt,
-  outputHandoffPrompt,
-} from "../../lib/experience-handoff";
+import { outputHandoffPrompt } from "../../lib/experience-handoff";
 
 import {
   AppsView,
@@ -146,6 +143,7 @@ export function MainPane({
   selectedSessionId,
   composerDraftStore,
   mainComposerFocusRequestId,
+  onRequestComposerFocus,
   labCloseDetailRequestId,
   labCloseDetailKind,
   sideChatTrainingLaunchRequest,
@@ -1789,51 +1787,12 @@ export function MainPane({
           }. Apply only this requested change:\n\n${annotation}`
         );
       }}
+      onAgentPackageInstalled={async () => {
+        if (!connection) return;
+        onPayload(await api.bootstrap(connection));
+      }}
     />
   ) : null;
-  const latestHandoffMessages = useMemo(
-    () =>
-      chatMessages
-        .filter(
-          (
-            message
-          ): message is typeof message & {
-            role: "user" | "assistant";
-            content: string;
-          } =>
-            (message.role === "user" || message.role === "assistant") &&
-            Boolean(message.content?.trim())
-        )
-        .slice(-2),
-    [chatMessages]
-  );
-  const continueLastExchangeInWork =
-    experience !== "work" &&
-    selectedSessionId &&
-    latestHandoffMessages.length > 0 ? (
-      <div className="experience-handoff-bar">
-        <span>
-          Continue the last exchange in a projectless Work task with optional
-          sandbox compute.
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            void onExperienceHandoff({
-              target: "work",
-              sourceSessionId: selectedSessionId,
-              sourceMessageIds: latestHandoffMessages.map(
-                (message) => message.id
-              ),
-              sourceContext: exactExchangeHandoffContext(latestHandoffMessages),
-              prompt: exactExchangeHandoffPrompt(latestHandoffMessages),
-            });
-          }}
-        >
-          Continue in Work
-        </button>
-      </div>
-    ) : null;
   const trainingDraftPanel = showTrainingDraftPanel ? (
     <Suspense fallback={null}>
       <TrainingDraftPanel
@@ -2098,7 +2057,6 @@ export function MainPane({
                 </Suspense>
               ) : null}
               {trainingChatHandoffBar}
-              {continueLastExchangeInWork}
               <ApprovalRequestCard
                 approval={pendingApproval}
                 onResolve={resolveApproval}
@@ -2200,6 +2158,14 @@ export function MainPane({
           <section className="start-panel">
             <div className="start-welcome">
               <h1>{startMessage}</h1>
+              {experience === "work" ? (
+                <WorkStarterPrompts
+                  onSelect={(prompt) => {
+                    composerDraftStore.set(prompt);
+                    onRequestComposerFocus();
+                  }}
+                />
+              ) : null}
               {canSyncWorkspace && (
                 <WorkspaceSyncButton
                   busy={workspaceBusy}

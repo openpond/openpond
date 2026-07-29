@@ -46,7 +46,10 @@ const WORK_WORKSPACE_TOOLS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_snapshot_create",
   "sandbox_snapshot_update",
   "sandbox_snapshot_validate",
+  "sandbox_prepare_agent",
+  "sandbox_save_agent_package",
   "sandbox_save_output",
+  "work_agent_package_install",
   "work_output_delete",
   "work_output_read",
   "sandbox_stop",
@@ -137,7 +140,11 @@ function workWorkspaceRequestBlocker(
       : "Work commands must execute from /workspace/work.";
   }
 
-  if (action === "work_output_delete" || action === "work_output_read") {
+  if (
+    action === "work_agent_package_install" ||
+    action === "work_output_delete" ||
+    action === "work_output_read"
+  ) {
     return typeof args.outputId === "string" && args.outputId.trim()
       ? null
       : "A Work output id is required.";

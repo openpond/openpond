@@ -104,7 +104,6 @@ function profilePayload(): BootstrapPayload {
         hostedSourceCheck: {
           status: "requested",
           agentId: "agent_release_notes",
-          workItemId: "work_item_release",
           sandboxId: "sandbox_release",
         },
         hostedPublish: {

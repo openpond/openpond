@@ -149,6 +149,23 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
 
     await deadline.run("event stream readiness", eventStream.ready);
 
+    const profileActionCatalog = (payload.profile.actionCatalog ?? [])
+      .filter(
+        (action) =>
+          profileActionMatchesAgent(action, options.agent) &&
+          (!action.agentId ||
+            payload.profile.agents.some(
+              (agent) => agent.enabled && agent.id === action.agentId,
+            )),
+      )
+      .map((action) => ({
+        ...action,
+        implementation: {
+          ...(action.implementation ?? {}),
+          type: "openpond-profile-action",
+          actionId: action.id,
+        },
+      }));
     await deadline.run("turn submission", apiFetch(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
       method: "POST",
       body: JSON.stringify({
@@ -156,6 +173,9 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
         ...(options.cwdExplicit || (!options.project && !options.resume) ? { cwd: options.cwd } : {}),
         model: modelId,
         modelRef: activeModelRef(options, payload.providers),
+        ...(profileActionCatalog.length > 0
+          ? { openPondActionCatalog: profileActionCatalog }
+          : {}),
         approvalPolicy: options.yes ? "never" : options.approvalPolicy,
         sandbox: options.sandbox,
         metadata: {
@@ -164,6 +184,7 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
             mode: "one-shot",
             nonInteractive: true,
             sandbox: options.sandbox,
+            ...(options.agent ? { agentId: options.agent } : {}),
           },
         },
       }),
@@ -227,6 +248,18 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
     if (!io.connection) await stopManagedServer();
     if (timedOut && !options.json) output.write("\n[turn timeout]\n");
   }
+}
+
+function profileActionMatchesAgent(
+  action: BootstrapPayload["profile"]["actionCatalog"][number],
+  agentId: string | null | undefined,
+): boolean {
+  if (!agentId) return true;
+  return (
+    action.agentId === agentId ||
+    action.id === agentId ||
+    action.id.startsWith(`${agentId}.`)
+  );
 }
 
 function createOneShotDeadline(timeoutSec: number | null): {

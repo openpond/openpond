@@ -7,12 +7,80 @@ import {
   type RuntimeEvent,
 } from "@openpond/contracts";
 import {
+  loadOpenPondAccountState,
   loadOpenPondAccountContext,
-  loadOpenPondApps,
 } from "@openpond/runtime";
 import type { SqliteStore } from "../store/store.js";
 import type { CacheEntry, OpenPondCachedData } from "../types.js";
 import { event } from "../utils.js";
+
+type AccountRow = AccountState["accounts"][number];
+
+function accountIdentityKey(
+  account: Pick<AccountRow, "handle" | "baseUrl">
+): string {
+  return `${account.handle.trim().toLowerCase()}|${
+    account.baseUrl?.trim().replace(/\/+$/, "").toLowerCase() ?? "default"
+  }`;
+}
+
+function hasResolvedDisplayLabel(account: AccountRow): boolean {
+  const label = account.displayLabel?.trim();
+  return Boolean(
+    label && label.toLowerCase() !== account.handle.trim().toLowerCase()
+  );
+}
+
+export function preserveCachedAccountIdentities(
+  account: AccountState,
+  cachedAccounts: AccountState[]
+): AccountState {
+  const fallbackRows = new Map<string, AccountRow>();
+  for (const cached of cachedAccounts) {
+    for (const candidate of cached.accounts) {
+      const key = accountIdentityKey(candidate);
+      const existing = fallbackRows.get(key);
+      if (
+        !existing ||
+        (!existing.email && candidate.email) ||
+        (!hasResolvedDisplayLabel(existing) &&
+          hasResolvedDisplayLabel(candidate))
+      ) {
+        fallbackRows.set(key, candidate);
+      }
+    }
+  }
+
+  const accounts = account.accounts.map((candidate) => {
+    const fallback = fallbackRows.get(accountIdentityKey(candidate));
+    if (!fallback) return candidate;
+    return {
+      ...candidate,
+      displayLabel: hasResolvedDisplayLabel(candidate)
+        ? candidate.displayLabel
+        : fallback.displayLabel,
+      email: candidate.email ?? fallback.email,
+      avatarUrl: candidate.avatarUrl ?? fallback.avatarUrl,
+    };
+  });
+  const activeAccount =
+    accounts.find((candidate) => candidate.isActive) ?? null;
+  const unresolvedActiveLabel =
+    !account.label.trim() ||
+    account.label.trim().toLowerCase() ===
+      account.activeProfile?.handle.trim().toLowerCase();
+
+  return {
+    ...account,
+    accounts,
+    label:
+      unresolvedActiveLabel && activeAccount?.displayLabel
+        ? activeAccount.displayLabel
+        : account.label,
+    email: account.email ?? activeAccount?.email ?? null,
+    avatarUrl: account.avatarUrl ?? activeAccount?.avatarUrl ?? null,
+  };
+}
 
 export function createOpenPondCache(deps: {
   store: SqliteStore;
@@ -27,11 +95,18 @@ export function createOpenPondCache(deps: {
 
   function openPondCacheScope(account: AccountState): string {
     const activeProfile = account.activeProfile;
-    return `${activeProfile?.handle ?? "signed_out"}|${activeProfile?.baseUrl ?? "default"}|${account.apiBaseUrl ?? "default"}|${account.chatApiBaseUrl ?? "default"}`;
+    return `${activeProfile?.handle ?? "signed_out"}|${
+      activeProfile?.baseUrl ?? "default"
+    }|${account.apiBaseUrl ?? "default"}|${
+      account.chatApiBaseUrl ?? "default"
+    }`;
   }
 
   async function loadScaffoldApps(scope: string): Promise<OpenPondApp[]> {
-    const entry = await store.getCacheEntry<unknown>("openpond.scaffoldApps", scope);
+    const entry = await store.getCacheEntry<unknown>(
+      "openpond.scaffoldApps",
+      scope
+    );
     const rawApps = Array.isArray(entry?.payload) ? entry.payload : [];
     return rawApps
       .map((app) => OpenPondAppSchema.safeParse(app))
@@ -39,13 +114,22 @@ export function createOpenPondCache(deps: {
       .map((result) => result.data);
   }
 
-  async function upsertScaffoldApp(scope: string, app: OpenPondApp): Promise<void> {
+  async function upsertScaffoldApp(
+    scope: string,
+    app: OpenPondApp
+  ): Promise<void> {
     const existing = await loadScaffoldApps(scope);
-    const next = [app, ...existing.filter((candidate) => candidate.id !== app.id)];
+    const next = [
+      app,
+      ...existing.filter((candidate) => candidate.id !== app.id),
+    ];
     await store.setCacheEntry("openpond.scaffoldApps", scope, next);
   }
 
-  async function mergeScaffoldApps(scope: string, apps: OpenPondApp[]): Promise<OpenPondApp[]> {
+  async function mergeScaffoldApps(
+    scope: string,
+    apps: OpenPondApp[]
+  ): Promise<OpenPondApp[]> {
     const scaffoldApps = await loadScaffoldApps(scope);
     const byId = new Map<string, OpenPondApp>();
     for (const app of scaffoldApps) byId.set(app.id, app);
@@ -53,7 +137,10 @@ export function createOpenPondCache(deps: {
     return Array.from(byId.values());
   }
 
-  function appendAppPage(existing: OpenPondApp[], page: OpenPondApp[]): { apps: OpenPondApp[]; addedCount: number } {
+  function appendAppPage(
+    existing: OpenPondApp[],
+    page: OpenPondApp[]
+  ): { apps: OpenPondApp[]; addedCount: number } {
     const existingIds = new Set(existing.map((app) => app.id));
     const appended = page.filter((app) => !existingIds.has(app.id));
     return { apps: [...existing, ...appended], addedCount: appended.length };
@@ -73,35 +160,50 @@ export function createOpenPondCache(deps: {
     };
   }
 
-  async function refreshOpenPondCache(expectedScope?: string | null): Promise<OpenPondCachedData> {
+  async function refreshOpenPondCache(
+    expectedScope?: string | null
+  ): Promise<OpenPondCachedData> {
     const normalizedExpectedScope = expectedScope?.trim() || null;
-    if (refreshPromise && (!normalizedExpectedScope || refreshPromise.scope === normalizedExpectedScope)) {
+    if (
+      refreshPromise &&
+      (!normalizedExpectedScope ||
+        refreshPromise.scope === normalizedExpectedScope)
+    ) {
       return refreshPromise.promise;
     }
 
     const promise = (async () => {
-      const result = await loadOpenPondApps();
-      const account = AccountStateSchema.parse(result.account);
-      const apps = result.apps.map((app) => OpenPondAppSchema.parse(app));
+      const result = await loadOpenPondAccountState();
+      const cachedAccounts = Object.values(
+        await store.getCacheEntriesByType<AccountState>("openpond.account")
+      )
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+        .map((entry) => entry.payload);
+      const account = preserveCachedAccountIdentities(
+        AccountStateSchema.parse(result.account),
+        cachedAccounts
+      );
       const scope = openPondCacheScope(account);
-      const accountEntry = await store.setCacheEntry("openpond.account", scope, account, account.error);
-
-      let appsEntry: CacheEntry<OpenPondApp[]>;
-      if (result.error) {
-        await store.setCacheError("openpond.apps", scope, apps, result.error);
-        appsEntry =
-          (await store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope)) ??
-          (await store.setCacheEntry("openpond.apps", scope, apps, result.error));
-      } else {
-        appsEntry = await store.setCacheEntry("openpond.apps", scope, apps, null);
-      }
+      const [accountEntry, appsEntry] = await Promise.all([
+        store.setCacheEntry(
+          "openpond.account",
+          scope,
+          account,
+          account.error
+        ),
+        store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope),
+      ]);
 
       return {
         account: accountEntry.payload,
-        apps: await mergeScaffoldApps(scope, appsEntry.payload),
-        appsError: result.error,
+        apps: await mergeScaffoldApps(scope, appsEntry?.payload ?? []),
+        appsError: appsEntry?.error ?? null,
         accountMeta: metaFromCache(accountEntry, "fresh", false),
-        appsMeta: metaFromCache(appsEntry, "fresh", false, result.error),
+        appsMeta: metaFromCache(
+          appsEntry,
+          appsEntry ? "cache" : "empty",
+          false
+        ),
       };
     })().finally(() => {
       if (refreshPromise?.promise === promise) refreshPromise = null;
@@ -126,14 +228,16 @@ export function createOpenPondCache(deps: {
     });
   }
 
-  async function loadOpenPondData(options: { force?: boolean } = {}): Promise<OpenPondCachedData> {
+  async function loadOpenPondData(
+    options: { force?: boolean } = {}
+  ): Promise<OpenPondCachedData> {
     const context = await loadOpenPondAccountContext();
     const scope = openPondCacheScope(context.accountState);
     const [cachedAccount, cachedApps] = await Promise.all([
       store.getCacheEntry<AccountState>("openpond.account", scope),
       store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope),
     ]);
-    const hasCache = Boolean(cachedAccount || cachedApps);
+    const hasAccountCache = Boolean(cachedAccount);
     const needsFreshAccountProfile = Boolean(
       context.token &&
         (!cachedAccount ||
@@ -146,17 +250,27 @@ export function createOpenPondCache(deps: {
       return refreshOpenPondCache(scope);
     }
 
-    if (context.token && (needsFreshAccountProfile || !hasCache)) {
+    if (context.token && (needsFreshAccountProfile || !hasAccountCache)) {
       refreshOpenPondCacheInBackground(scope);
     }
 
-    const refreshingThisScope = Boolean(refreshPromise && refreshPromise.scope === scope);
+    const refreshingThisScope = Boolean(
+      refreshPromise && refreshPromise.scope === scope
+    );
     return {
       account: cachedAccount?.payload ?? context.accountState,
       apps: await mergeScaffoldApps(scope, cachedApps?.payload ?? []),
       appsError: cachedApps?.error ?? null,
-      accountMeta: metaFromCache(cachedAccount, cachedAccount ? "cache" : "empty", refreshingThisScope),
-      appsMeta: metaFromCache(cachedApps, cachedApps ? "cache" : "empty", refreshingThisScope),
+      accountMeta: metaFromCache(
+        cachedAccount,
+        cachedAccount ? "cache" : "empty",
+        refreshingThisScope
+      ),
+      appsMeta: metaFromCache(
+        cachedApps,
+        cachedApps ? "cache" : "empty",
+        refreshingThisScope
+      ),
     };
   }
 

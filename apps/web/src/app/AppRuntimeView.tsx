@@ -61,6 +61,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     rightPanelTabRequest,
     workspaceDiffPanelViewState,
     mainComposerFocusRequestId,
+    requestMainComposerFocus,
     projectConfirmDialog,
     resolveProjectConfirmDialog,
     query,
@@ -635,6 +636,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         style={appShellStyle}
         sidebar={{
           experience: activeExperience,
+          onExperienceChange: changeExperience,
           view,
           selectedAppId,
           selectedProjectId,
@@ -796,8 +798,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "community" &&
             view !== "labs" &&
             activeExperience === "development",
-          experience: view === "chat" ? activeExperience : null,
-          onExperienceChange: changeExperience,
         }}
         mainPane={{
           experience: activeExperience,
@@ -870,6 +870,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           selectedSessionId,
           composerDraftStore,
           mainComposerFocusRequestId,
+          onRequestComposerFocus: requestMainComposerFocus,
           labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
           labCloseDetailKind: labDetailNavigation.closeDetailKind,
           sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,

@@ -84,6 +84,21 @@ export type WorkspaceToolExecutorDeps = {
     suggestedName?: string | null;
     validation?: OutputValidationEvidence[];
   }) => Promise<unknown>;
+  prepareWorkAgent?: (input: {
+    session: Session;
+    directory: string;
+    template:
+      | "blank-agent"
+      | "customer-reply-agent"
+      | "integration-heavy-agent";
+  }) => Promise<unknown>;
+  saveWorkAgentPackage?: (input: {
+    session: Session;
+    sourceTurnId: string;
+    directory: string;
+    agentId?: string | null;
+    title?: string | null;
+  }) => Promise<unknown>;
   deleteWorkOutput?: (input: {
     session: Session;
     outputId: string;
@@ -93,5 +108,11 @@ export type WorkspaceToolExecutorDeps = {
     session: Session;
     outputId: string;
     revision?: number | null;
+  }) => Promise<unknown>;
+  promoteWorkAgentPackage?: (input: {
+    session: Session;
+    outputId: string;
+    revision?: number | null;
+    overwrite?: boolean;
   }) => Promise<unknown>;
 };

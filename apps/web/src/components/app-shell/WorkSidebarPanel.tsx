@@ -44,6 +44,7 @@ export function WorkSidebarPanel({
   onUseOutput,
   onHandoffOutput,
   onReviseOutput,
+  onAgentPackageInstalled,
 }: {
   chatMessages: ChatMessage[];
   connection: ClientConnection | null;
@@ -61,6 +62,7 @@ export function WorkSidebarPanel({
     file: File | null
   ) => Promise<void>;
   onReviseOutput: (output: OutputRef, file: File, annotation: string) => void;
+  onAgentPackageInstalled?: () => Promise<void>;
 }) {
   const [tab, setTab] = useState<WorkSidebarTab>("outputs");
   const [busyOutputId, setBusyOutputId] = useState<string | null>(null);
@@ -80,11 +82,7 @@ export function WorkSidebarPanel({
   );
   const outputSeries = useMemo(() => groupOutputRevisions(outputs), [outputs]);
   const activities = useMemo(
-    () =>
-      chatMessages
-        .flatMap((message) => message.activities ?? [])
-        .slice()
-        .reverse(),
+    () => visibleWorkActivities(chatMessages),
     [chatMessages]
   );
   const contextItems = useMemo(
@@ -182,6 +180,63 @@ export function WorkSidebarPanel({
     } catch (error) {
       showToast(
         error instanceof Error ? error.message : "Could not delete the output.",
+        "error"
+      );
+    } finally {
+      setBusyOutputId(null);
+    }
+  }
+
+  async function installAgentPackage(
+    output: Extract<OutputRef, { kind: "agent_package" }>
+  ) {
+    if (!connection || !sessionId) return;
+    if (
+      !window.confirm(
+        `Add ${output.title} version ${output.versionId} to your active Agents profile?`
+      )
+    ) {
+      return;
+    }
+    const install = async (overwrite: boolean) =>
+      api.workspaceTool(connection, sessionId, {
+        action: "work_agent_package_install",
+        source: "ui_button",
+        args: {
+          outputId: output.id,
+          revision: output.revision,
+          overwrite,
+        },
+      });
+    setBusyOutputId(outputRevisionKey(output));
+    try {
+      let result;
+      try {
+        result = await install(false);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Agent installation failed.";
+        if (
+          !message.includes("already exists") ||
+          !window.confirm(
+            `${output.agentId} already exists. Replace its active checkout with this immutable version?`
+          )
+        ) {
+          throw error;
+        }
+        result = await install(true);
+      }
+      if (!result.ok) throw new Error(result.output);
+      await onAgentPackageInstalled?.();
+      showToast(
+        `${output.title} was added to Agents. Its package remains available in this Work task.`,
+        "success"
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error
+          ? error.message
+          : "Could not add the Agent package.",
         "error"
       );
     } finally {
@@ -429,7 +484,15 @@ export function WorkSidebarPanel({
                             Use as input
                           </button>
                         </>
-                      ) : output.url ? (
+                      ) : output.kind === "agent_package" ? (
+                        <button
+                          type="button"
+                          disabled={busyOutputId === outputRevisionKey(output)}
+                          onClick={() => void installAgentPackage(output)}
+                        >
+                          Add to Agents
+                        </button>
+                      ) : "url" in output && output.url ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -542,6 +605,15 @@ export function WorkSidebarPanel({
       </div>
     </aside>
   );
+}
+
+export function visibleWorkActivities(
+  messages: ChatMessage[]
+): NonNullable<ChatMessage["activities"]> {
+  return messages
+    .flatMap((message) => message.activities ?? [])
+    .filter((activity) => activity.kind !== "reasoning")
+    .reverse();
 }
 
 export function workOutputsFromEvents(events: RuntimeEvent[]): OutputRef[] {
@@ -673,6 +745,11 @@ function formatOutputDestination(output: OutputRef): string {
   if (output.kind === "deployment") return "Deployment";
   if (output.kind === "source_change") return "Source change";
   if (output.kind === "external_resource") return output.provider;
+  if (output.kind === "agent_package") {
+    return `${output.actions.length} action${
+      output.actions.length === 1 ? "" : "s"
+    }`;
+  }
   if (output.location.kind === "local") return formatBytes(output.sizeBytes);
   if (output.location.kind === "managed") return "Managed file";
   return output.location.provider;

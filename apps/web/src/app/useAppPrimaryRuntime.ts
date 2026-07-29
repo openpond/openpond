@@ -20,6 +20,7 @@ import {
   providerOptionsFromSettings,
 } from "../lib/app-models";
 import { openPondOrganizationCacheKey } from "../lib/openpond-organization-memory";
+import { sidebarSessionsForExperience } from "../lib/experience-sessions";
 import {
   migrateDraftTerminalTabs,
   terminalScopeForSelection,
@@ -378,10 +379,7 @@ export function useAppPrimaryRuntime() {
   });
   const activeExperience = selectedSession?.experience ?? draftExperience;
   const experienceSidebarSessions = useMemo(
-    () =>
-      sidebarSessions.filter(
-        (session) => session.experience === activeExperience
-      ),
+    () => sidebarSessionsForExperience(sidebarSessions, activeExperience),
     [activeExperience, sidebarSessions]
   );
   const runtimeIndexes = useRuntimeIndexes(events, approvals);
@@ -996,6 +994,7 @@ export function useAppPrimaryRuntime() {
     locallyActiveCodexHistorySessionIds,
     setCodexHistoryTurnLocallyActive,
     mainComposerFocusRequestId,
+    requestMainComposerFocus,
     draftSubagentDelegationMode,
     setDraftSubagentDelegationMode,
     confirmProjectAction,

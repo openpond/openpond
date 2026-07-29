@@ -4,18 +4,14 @@ import path from "node:path";
 
 import { describe, expect, test } from "vitest";
 
-import {
-  createOpenPondActionModelToolDefinitions,
-} from "../apps/server/src/openpond/model-tool-registry";
-import {
-  buildOpenPondProfileActionCatalog,
-} from "../apps/web/src/lib/openpond-action-run";
+import { createOpenPondActionModelToolDefinitions } from "../apps/server/src/openpond/model-tool-registry";
+import { buildOpenPondProfileActionCatalog } from "../apps/web/src/lib/openpond-action-run";
 import { loadProfileActionCatalogForSources } from "../packages/cloud/src/profile/profile-catalog";
 
 describe("Profile Agent action catalog", () => {
   test("resolves named SDK input schemas for native model tools", async () => {
     const sourcePath = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-profile-action-catalog-"),
+      path.join(os.tmpdir(), "openpond-profile-action-catalog-")
     );
     try {
       await mkdir(path.join(sourcePath, ".openpond"), { recursive: true });
@@ -40,7 +36,7 @@ describe("Profile Agent action catalog", () => {
               visibility: "end_user",
             },
           ],
-        }),
+        })
       );
       await writeFile(
         path.join(sourcePath, ".openpond/action-registry.json"),
@@ -53,7 +49,7 @@ describe("Profile Agent action catalog", () => {
               visibility: "end_user",
             },
           ],
-        }),
+        })
       );
 
       const loaded = await loadProfileActionCatalogForSources([
@@ -102,9 +98,7 @@ describe("Profile Agent action catalog", () => {
         executeProfileAction: async () => ({ ok: true }),
       });
       expect(
-        tools.find((tool) =>
-          tool.name.startsWith("agent_submit_budget_decision_"),
-        ),
+        tools.find((tool) => tool.name === "submit-budget-decision")
       ).toMatchObject({
         parameters: {
           type: "object",

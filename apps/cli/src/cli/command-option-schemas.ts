@@ -5,9 +5,9 @@ const number = "number" as const;
 const string = "string" as const;
 
 export const CHAT_OPTION_SCHEMA = {
-  approvalPolicy: string, cwd: string, json: boolean, maxOutputBytes: integer,
+  agent: string, approvalPolicy: string, cwd: string, json: boolean, maxOutputBytes: integer,
   message: string, messageFile: string, model: string, noServerStart: boolean,
-  nonInteractive: boolean, project: string, provider: string, sandbox: string,
+  nonInteractive: boolean, project: string, provider: string, resume: string, sandbox: string,
   server: string, stdin: boolean, timeoutSec: integer, yes: boolean,
 } as const;
 
@@ -87,5 +87,5 @@ export const AGENT_OPTION_SCHEMA = {
   requiredEnv: string, requiredIntegrations: string, runtimePromotionPolicy: string,
   runtimeSourceMode: string, sourceCheckDispatch: string, sourceMode: string,
   sourceRef: string, status: string, targetProjectId: string, teamId: string,
-  triggerType: string, workItemId: string, workflowMode: string,
+  triggerType: string, workflowMode: string,
 } as const;

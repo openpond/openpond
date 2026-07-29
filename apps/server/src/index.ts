@@ -13,6 +13,7 @@ import {
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import {
+  installAgentPackageIntoActiveProfile,
   loadOpenPondProfileLibrary,
   loadOpenPondProfileState,
   loadOpenPondProfileStateForRef,
@@ -96,6 +97,8 @@ import { createTurnRunner } from "./runtime/turn-runner.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
+import { createWorkAgentPackageService } from "./work/work-agent-package-service.js";
+import { createWorkAgentSdkArchiveLoader } from "./work/work-agent-sdk-archive.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
 import { organizationRequestPayload } from "./openpond/organizations.js";
 import {
@@ -205,6 +208,14 @@ export async function createOpenPondServer(
     runtimeEventsForSession: (sessionId) =>
       store.runtimeEventsForSession(sessionId),
   });
+  const workAgentPackageService = createWorkAgentPackageService({
+    deviceId: serverId,
+    storeDir,
+    runtimeEventsForSession: (sessionId) =>
+      store.runtimeEventsForSession(sessionId),
+    loadAgentSdkArchive: createWorkAgentSdkArchiveLoader({ storeDir }),
+    installAgentPackage: installAgentPackageIntoActiveProfile,
+  });
   const {
     appendRuntimeEvent,
     closeEventSubscribers,
@@ -306,6 +317,7 @@ export async function createOpenPondServer(
     loadMoreOpenPondAppsPayload,
     switchOpenPondPayload,
     saveOpenPondAccountPayload,
+    removeOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
     profileCurrentPayload,
     profileCatalogPayload,
@@ -404,6 +416,9 @@ export async function createOpenPondServer(
     sandboxRequest: sandboxRequestPayload,
     deleteWorkOutput: workOutputService.deleteWorkOutput,
     readWorkOutput: workOutputService.readWorkOutput,
+    prepareWorkAgent: workAgentPackageService.prepareWorkAgent,
+    promoteWorkAgentPackage: workAgentPackageService.promoteWorkAgentPackage,
+    saveWorkAgentPackage: workAgentPackageService.saveWorkAgentPackage,
     saveWorkOutput: workOutputService.saveWorkOutput,
   });
   const openPondCommandAccess = createOpenPondCommandAccessService({
@@ -1542,6 +1557,7 @@ export async function createOpenPondServer(
       refreshOpenPondPayload,
       switchOpenPondPayload,
       saveOpenPondAccountPayload,
+      removeOpenPondAccountPayload,
       updateOpenPondAccountConfigPayload,
       profileCurrentPayload,
       profileCatalogPayload,
@@ -1736,7 +1752,7 @@ export async function createOpenPondServer(
 if (isCliEntrypoint(import.meta.url)) {
   void runOpenPondServerCli(createOpenPondServer).catch((error) => {
     console.error(
-      error instanceof Error ? (error.stack ?? error.message) : String(error)
+      error instanceof Error ? error.stack ?? error.message : String(error)
     );
     process.exit(1);
   });

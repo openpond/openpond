@@ -173,8 +173,11 @@ describe("managed adapter registry client", () => {
     );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
+      env: {
+        VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
+      },
       resolveRegistryAccess: async (teamId) => ({
-        apiBaseUrl: "https://api.test",
+        apiBaseUrl: "https://api-new.staging-api.openpond.ai",
         token: "opk_user",
         teamId,
       }),
@@ -218,6 +221,9 @@ describe("managed adapter registry client", () => {
       const headers = new Headers(request.init.headers);
       expect(headers.get("openpond-api-key")).toBe("opk_user");
       expect(headers.get("x-openpond-team-id")).toBe("team_customer");
+      expect(headers.get("x-vercel-protection-bypass")).toBe(
+        "staging-bypass"
+      );
     }
   });
 
@@ -308,11 +314,14 @@ describe("managed adapter registry client", () => {
     );
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
+      env: {
+        VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
+      },
       resolveRegistryAccess: vi.fn(async () => {
         throw new Error("service identity must not run customer inference");
       }),
       resolveInferenceAccess: async (teamId) => ({
-        apiBaseUrl: "https://api.test",
+        apiBaseUrl: "https://api-new.staging-api.openpond.ai",
         token: "opk_user",
         teamId,
       }),
@@ -338,6 +347,9 @@ describe("managed adapter registry client", () => {
     expect(headers.get("idempotency-key")).toBe("request-1");
     expect(headers.get("openpond-api-key")).toBe("opk_user");
     expect(headers.get("x-openpond-team-id")).toBe("team_customer");
+    expect(headers.get("x-vercel-protection-bypass")).toBe(
+      "staging-bypass"
+    );
   });
 });
 

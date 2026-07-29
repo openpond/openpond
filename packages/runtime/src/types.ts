@@ -56,6 +56,10 @@ export type AppsLoadResult = {
   error: string | null;
 };
 
+export type AccountLoadResult = {
+  account: AccountState;
+};
+
 export type OpenPondActionResult = {
   ok: boolean;
   action: string;

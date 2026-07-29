@@ -155,10 +155,18 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
   margin: 0 0 24px;
 }
 
 .account-settings-title h1 {
   margin: 0;
+}
+
+.account-settings-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }

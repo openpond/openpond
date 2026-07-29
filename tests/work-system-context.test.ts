@@ -7,16 +7,17 @@ describe("Work system context", () => {
     const helpers = createHostedTurnHelpers({
       appendRuntimeEvent: async () => undefined,
     });
-    const prompt = await helpers.hostedSystemPrompt(
-      "Base",
-      "",
-      workSession(),
-      { browserControlAvailable: true }
-    );
+    const prompt = await helpers.hostedSystemPrompt("Base", "", workSession(), {
+      browserControlAvailable: true,
+    });
 
     expect(prompt).toContain("Work compute is lazy");
     expect(prompt).toContain("Use work_capabilities");
     expect(prompt).toContain("authoritative references");
+    expect(prompt).toContain("work_save_agent_package");
+    expect(prompt).toContain(
+      "Do not substitute a generic file output or claim that an Agent package was completed."
+    );
     expect(prompt).toContain("explicit user intent and provider readback");
     expect(prompt).toContain("read-only inspection");
     expect(prompt).toContain(

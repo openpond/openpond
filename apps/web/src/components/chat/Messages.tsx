@@ -1,5 +1,14 @@
 import { memo, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, CreditCard, ExternalLink, FileText, Globe2, ImageIcon } from "../icons";
+import {
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  CreditCard,
+  ExternalLink,
+  FileText,
+  Globe2,
+  ImageIcon,
+} from "../icons";
 import type {
   ChatAttachmentSummary,
   SessionUserQuestion,
@@ -8,7 +17,10 @@ import type {
 import type { ClientConnection } from "../../api";
 import { useChatAttachmentImageUrl } from "../../hooks/useChatAttachmentImageUrl";
 import type { ChatMessage, ChatSource } from "../../lib/app-models";
-import { formatMessageTimestamp, formatMessageTimestampTitle } from "../../lib/chat-messages";
+import {
+  formatMessageTimestamp,
+  formatMessageTimestampTitle,
+} from "../../lib/chat-messages";
 import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
@@ -29,12 +41,15 @@ type MessageRowProps = {
   billingTeamId?: string | null;
   connection?: ClientConnection | null;
   message: ChatMessage;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenBrowserLink?: (
+    href: string,
+    options?: { explicitFile?: boolean; newTab?: boolean }
+  ) => void;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenProfileSettings?: () => void;
   onResolveUserQuestion?: (
     question: SessionUserQuestion,
-    resolution: SessionUserQuestionResolution,
+    resolution: SessionUserQuestionResolution
   ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
@@ -66,10 +81,8 @@ export const MessageRow = memo(function MessageRow({
         activeWorkspaceAppId={activeWorkspaceAppId}
         connection={connection}
         message={message}
-        onOpenBrowserLink={onOpenBrowserLink}
         onOpenFileInSidebar={onOpenFileInSidebar}
         onOpenSession={onOpenSession}
-        workspaceRootPath={workspaceRootPath}
       />
     );
   }
@@ -89,19 +102,34 @@ export const MessageRow = memo(function MessageRow({
     }
     return (
       <article className="message-row assistant">
-        <div className="assistant-message error-message">{message.content ?? ""}</div>
+        <div className="assistant-message error-message">
+          {message.content ?? ""}
+        </div>
       </article>
     );
   }
 
   if (message.role === "user") {
     const hasAttachments = Boolean(message.attachments?.length);
-    const hasImageAttachments = Boolean(message.attachments?.some((attachment) => attachment.kind === "image"));
+    const hasImageAttachments = Boolean(
+      message.attachments?.some((attachment) => attachment.kind === "image")
+    );
     return (
       <article className="message-row user">
-        <div className={`user-message ${hasAttachments ? "has-attachments" : ""} ${hasImageAttachments ? "has-image-attachments" : ""}`}>
-          {message.attachments?.length ? <MessageAttachments attachments={message.attachments} connection={connection} /> : null}
-          {message.content ? <UserMessageContent content={message.content} /> : null}
+        <div
+          className={`user-message ${hasAttachments ? "has-attachments" : ""} ${
+            hasImageAttachments ? "has-image-attachments" : ""
+          }`}
+        >
+          {message.attachments?.length ? (
+            <MessageAttachments
+              attachments={message.attachments}
+              connection={connection}
+            />
+          ) : null}
+          {message.content ? (
+            <UserMessageContent content={message.content} />
+          ) : null}
         </div>
       </article>
     );
@@ -109,9 +137,10 @@ export const MessageRow = memo(function MessageRow({
 
   const timestampLabel = formatMessageTimestamp(message.timestamp);
   const timestampTitle = formatMessageTimestampTitle(message.timestamp);
-  const profileActionAgentName = message.actionRun && isProfileActionRun(message.actionRun)
-    ? profileActionAgentLabel(message.actionRun)
-    : null;
+  const profileActionAgentName =
+    message.actionRun && isProfileActionRun(message.actionRun)
+      ? profileActionAgentLabel(message.actionRun)
+      : null;
 
   return (
     <article className="message-row assistant">
@@ -128,14 +157,22 @@ export const MessageRow = memo(function MessageRow({
         </div>
       ) : null}
       {message.sources?.length ? (
-        <MessageSources sources={message.sources} onOpenBrowserLink={onOpenBrowserLink} />
+        <MessageSources
+          sources={message.sources}
+          onOpenBrowserLink={onOpenBrowserLink}
+        />
       ) : null}
       {message.actionRun && isProfileActionRun(message.actionRun) ? (
-        <div className={`assistant-message action-run-profile-message ${message.actionRun.status}`}>
+        <div
+          className={`assistant-message action-run-profile-message ${message.actionRun.status}`}
+        >
           <MarkdownText
             activeWorkspaceAppId={activeWorkspaceAppId}
             connection={connection}
-            content={message.actionRun.responseText ?? profileActionFallbackText(message.actionRun)}
+            content={
+              message.actionRun.responseText ??
+              profileActionFallbackText(message.actionRun)
+            }
             onOpenBrowserLink={onOpenBrowserLink}
             onOpenFileInSidebar={onOpenFileInSidebar}
             workspaceRootPath={workspaceRootPath}
@@ -143,7 +180,11 @@ export const MessageRow = memo(function MessageRow({
           {profileActionAgentName ? (
             <div className="action-run-agent-label">
               {onOpenProfileSettings ? (
-                <button type="button" className="action-run-agent-link" onClick={onOpenProfileSettings}>
+                <button
+                  type="button"
+                  className="action-run-agent-link"
+                  onClick={onOpenProfileSettings}
+                >
                   {profileActionAgentName}
                 </button>
               ) : (
@@ -166,7 +207,9 @@ export const MessageRow = memo(function MessageRow({
           onOpenFileInSidebar={onOpenFileInSidebar}
         />
       )}
-      {message.createImproveRun ? <CreateImproveStatusReceipt run={message.createImproveRun} /> : null}
+      {message.createImproveRun ? (
+        <CreateImproveStatusReceipt run={message.createImproveRun} />
+      ) : null}
       {message.userQuestion ? (
         <UserQuestionCard
           question={message.userQuestion}
@@ -176,7 +219,11 @@ export const MessageRow = memo(function MessageRow({
       {showFooter && (
         <div className="assistant-message-footer">
           {timestampLabel && (
-            <time className="message-timestamp" dateTime={message.timestamp} title={timestampTitle}>
+            <time
+              className="message-timestamp"
+              dateTime={message.timestamp}
+              title={timestampTitle}
+            >
               {timestampLabel}
             </time>
           )}
@@ -196,7 +243,8 @@ export const MessageRow = memo(function MessageRow({
       )}
     </article>
   );
-}, areMessageRowPropsEqual);
+},
+areMessageRowPropsEqual);
 
 const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 10;
 
@@ -204,12 +252,17 @@ function UserMessageContent({ content }: { content: string }) {
   const lines = useMemo(() => content.split(/\r?\n/), [content]);
   const [expanded, setExpanded] = useState(false);
   const shouldCollapse = lines.length > USER_MESSAGE_COLLAPSE_LINE_LIMIT;
-  const visibleContent = shouldCollapse && !expanded
-    ? lines.slice(0, USER_MESSAGE_COLLAPSE_LINE_LIMIT).join("\n")
-    : content;
+  const visibleContent =
+    shouldCollapse && !expanded
+      ? lines.slice(0, USER_MESSAGE_COLLAPSE_LINE_LIMIT).join("\n")
+      : content;
 
   return (
-    <div className={`user-message-content-wrap ${shouldCollapse ? "collapsible" : ""}`}>
+    <div
+      className={`user-message-content-wrap ${
+        shouldCollapse ? "collapsible" : ""
+      }`}
+    >
       <div className="user-message-content">{visibleContent}</div>
       {shouldCollapse ? (
         <button
@@ -226,7 +279,10 @@ function UserMessageContent({ content }: { content: string }) {
   );
 }
 
-function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProps): boolean {
+function areMessageRowPropsEqual(
+  previous: MessageRowProps,
+  next: MessageRowProps
+): boolean {
   return (
     previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
     previous.accountBaseUrl === next.accountBaseUrl &&
@@ -244,7 +300,10 @@ function areMessageRowPropsEqual(previous: MessageRowProps, next: MessageRowProp
   );
 }
 
-function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): boolean {
+function chatMessageShallowEqual(
+  previous: ChatMessage,
+  next: ChatMessage
+): boolean {
   if (previous === next) return true;
   return (
     previous.id === next.id &&
@@ -261,8 +320,8 @@ function chatMessageShallowEqual(previous: ChatMessage, next: ChatMessage): bool
     previous.sources === next.sources &&
     previous.actionRun === next.actionRun &&
     previous.changeSummary === next.changeSummary &&
-    previous.createImproveRun === next.createImproveRun
-    && previous.userQuestion === next.userQuestion
+    previous.createImproveRun === next.createImproveRun &&
+    previous.userQuestion === next.userQuestion
   );
 }
 
@@ -273,7 +332,7 @@ function UserQuestionCard({
   question: SessionUserQuestion;
   onResolve?: (
     question: SessionUserQuestion,
-    resolution: SessionUserQuestionResolution,
+    resolution: SessionUserQuestionResolution
   ) => Promise<void>;
 }) {
   const [freeform, setFreeform] = useState("");
@@ -288,7 +347,10 @@ function UserQuestionCard({
     }
   };
   return (
-    <section className={`user-question-card ${question.status}`} aria-label="Question from OpenPond">
+    <section
+      className={`user-question-card ${question.status}`}
+      aria-label="Question from OpenPond"
+    >
       <strong>{question.question}</strong>
       {question.reason ? <p>{question.reason}</p> : null}
       {question.status === "pending" ? (
@@ -300,15 +362,19 @@ function UserQuestionCard({
                   disabled={submitting || !onResolve}
                   key={option.id}
                   type="button"
-                  onClick={() => void resolve({
-                    questionId: question.id,
-                    action: "answer",
-                    optionId: option.id,
-                    text: option.label,
-                  })}
+                  onClick={() =>
+                    void resolve({
+                      questionId: question.id,
+                      action: "answer",
+                      optionId: option.id,
+                      text: option.label,
+                    })
+                  }
                 >
                   <span>{option.label}</span>
-                  {option.description ? <small>{option.description}</small> : null}
+                  {option.description ? (
+                    <small>{option.description}</small>
+                  ) : null}
                 </button>
               ))}
             </div>
@@ -319,12 +385,13 @@ function UserQuestionCard({
               onSubmit={(event) => {
                 event.preventDefault();
                 const text = freeform.trim();
-                if (text) void resolve({
-                  questionId: question.id,
-                  action: "answer",
-                  optionId: null,
-                  text,
-                });
+                if (text)
+                  void resolve({
+                    questionId: question.id,
+                    action: "answer",
+                    optionId: null,
+                    text,
+                  });
               }}
             >
               <input
@@ -334,7 +401,10 @@ function UserQuestionCard({
                 placeholder="Type an answer"
                 value={freeform}
               />
-              <button disabled={submitting || !onResolve || !freeform.trim()} type="submit">
+              <button
+                disabled={submitting || !onResolve || !freeform.trim()}
+                type="submit"
+              >
                 Answer
               </button>
             </form>
@@ -343,12 +413,14 @@ function UserQuestionCard({
             className="user-question-dismiss"
             disabled={submitting || !onResolve}
             type="button"
-            onClick={() => void resolve({
-              questionId: question.id,
-              action: "dismiss",
-              optionId: null,
-              text: "",
-            })}
+            onClick={() =>
+              void resolve({
+                questionId: question.id,
+                action: "dismiss",
+                optionId: null,
+                text: "",
+              })
+            }
           >
             Dismiss question
           </button>
@@ -356,7 +428,9 @@ function UserQuestionCard({
       ) : (
         <small>
           {question.status === "answered"
-            ? `Answered${question.answer?.text ? `: ${question.answer.text}` : ""}`
+            ? `Answered${
+                question.answer?.text ? `: ${question.answer.text}` : ""
+              }`
             : "Dismissed"}
         </small>
       )}
@@ -369,7 +443,10 @@ function MessageSources({
   onOpenBrowserLink,
 }: {
   sources: ChatSource[];
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenBrowserLink?: (
+    href: string,
+    options?: { explicitFile?: boolean; newTab?: boolean }
+  ) => void;
 }) {
   return (
     <div className="assistant-sources" aria-label="Sources">
@@ -378,7 +455,11 @@ function MessageSources({
         <span>Sources</span>
       </span>
       {sources.map((source) => (
-        <SourcePill key={`${source.id}:${source.url}`} source={source} onOpenBrowserLink={onOpenBrowserLink} />
+        <SourcePill
+          key={`${source.id}:${source.url}`}
+          source={source}
+          onOpenBrowserLink={onOpenBrowserLink}
+        />
       ))}
     </div>
   );
@@ -389,10 +470,15 @@ function SourcePill({
   onOpenBrowserLink,
 }: {
   source: ChatSource;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenBrowserLink?: (
+    href: string,
+    options?: { explicitFile?: boolean; newTab?: boolean }
+  ) => void;
 }) {
   const label = sourceLabel(source);
-  const title = [source.title, hostnameFromUrl(source.url)].filter(Boolean).join(" - ");
+  const title = [source.title, hostnameFromUrl(source.url)]
+    .filter(Boolean)
+    .join(" - ");
   const content = (
     <>
       <SourceFavicon source={source} />
@@ -447,7 +533,9 @@ function SourceFavicon({ source }: { source: ChatSource }) {
 }
 
 function sourceLabel(source: ChatSource): string {
-  return source.sourceName?.trim() || hostnameFromUrl(source.url) || source.title;
+  return (
+    source.sourceName?.trim() || hostnameFromUrl(source.url) || source.title
+  );
 }
 
 function hostnameFromUrl(value: string): string | null {
@@ -467,7 +555,10 @@ function OpChatQuotaErrorCard({
   accountBaseUrl?: string | null;
   billingOrganizationSlug?: string | null;
   billingTeamId?: string | null;
-  onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+  onOpenBrowserLink?: (
+    href: string,
+    options?: { explicitFile?: boolean; newTab?: boolean }
+  ) => void;
 }) {
   const billingUrl = buildOpenPondBillingUrl({
     accountBaseUrl,
@@ -489,7 +580,10 @@ function OpChatQuotaErrorCard({
       </div>
       <div className="quota-error-card-body">
         <strong>OpenPond Chat allowance reached</strong>
-        <p>You have reached your OpChat token allowance for this period. Add credits or wait for the allowance to reset.</p>
+        <p>
+          You have reached your OpChat token allowance for this period. Add
+          credits or wait for the allowance to reset.
+        </p>
         {onOpenBrowserLink ? (
           <button
             type="button"
@@ -499,7 +593,12 @@ function OpChatQuotaErrorCard({
             {actionContent}
           </button>
         ) : (
-          <a className="quota-error-card-action" href={billingUrl} target="_blank" rel="noreferrer">
+          <a
+            className="quota-error-card-action"
+            href={billingUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
             {actionContent}
           </a>
         )}
@@ -510,7 +609,7 @@ function OpChatQuotaErrorCard({
 
 function messageAttachmentsEqual(
   previous: ChatAttachmentSummary[] | undefined,
-  next: ChatAttachmentSummary[] | undefined,
+  next: ChatAttachmentSummary[] | undefined
 ): boolean {
   if (previous === next) return true;
   if (!previous || !next || previous.length !== next.length) return false;
@@ -545,7 +644,11 @@ function MessageAttachments({
   return (
     <div className="user-message-attachments" aria-label="Attached files">
       {attachments.map((attachment) => (
-        <MessageAttachment attachment={attachment} connection={connection} key={attachment.id} />
+        <MessageAttachment
+          attachment={attachment}
+          connection={connection}
+          key={attachment.id}
+        />
       ))}
     </div>
   );
@@ -559,7 +662,9 @@ function MessageAttachment({
   connection: ClientConnection | null;
 }) {
   if (attachment.kind === "image" && attachment.imagePreview) {
-    return <MessageImageAttachment attachment={attachment} connection={connection} />;
+    return (
+      <MessageImageAttachment attachment={attachment} connection={connection} />
+    );
   }
 
   const Icon = attachment.kind === "image" ? ImageIcon : FileText;
@@ -579,13 +684,26 @@ function MessageImageAttachment({
   attachment: ChatAttachmentSummary;
   connection: ClientConnection | null;
 }) {
-  const imageUrl = useChatAttachmentImageUrl(connection, attachment.imagePreview);
+  const imageUrl = useChatAttachmentImageUrl(
+    connection,
+    attachment.imagePreview
+  );
 
   return (
-    <figure className={`user-message-image-attachment ${imageUrl ? "ready" : "loading"}`} title={attachment.name}>
+    <figure
+      className={`user-message-image-attachment ${
+        imageUrl ? "ready" : "loading"
+      }`}
+      title={attachment.name}
+    >
       <div className="user-message-image-frame">
         {imageUrl ? (
-          <img alt={attachment.name} decoding="async" loading="lazy" src={imageUrl} />
+          <img
+            alt={attachment.name}
+            decoding="async"
+            loading="lazy"
+            src={imageUrl}
+          />
         ) : (
           <ImageIcon size={24} />
         )}
@@ -623,7 +741,10 @@ function StatusDivider({ message }: { message: ChatMessage }) {
   const tone = message.statusTone ?? "info";
   const state = message.statusState ?? "idle";
   return (
-    <article className={`status-divider ${tone} ${state}`} aria-live={tone === "danger" ? "assertive" : "polite"}>
+    <article
+      className={`status-divider ${tone} ${state}`}
+      aria-live={tone === "danger" ? "assertive" : "polite"}
+    >
       <span>{message.content ?? ""}</span>
     </article>
   );

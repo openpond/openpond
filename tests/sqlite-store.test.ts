@@ -13,6 +13,7 @@ import {
 } from "@openpond/contracts";
 import { CURRENT_SQLITE_SCHEMA_VERSION, SqliteStore } from "../apps/server/src/store/store";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
+import { tasksetFixture } from "./helpers/training-fixtures";
 import {
   allTestSql as all,
   closeTestDatabase as close,
@@ -70,6 +71,209 @@ describe("SqliteStore hardening", () => {
       await store.close();
 
       expect(await userVersion(path.join(storeDir, "state.sqlite"))).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+    });
+  });
+
+  test("preserves but ignores retired task creation snapshots", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const store = new SqliteStore(storeDir);
+      await store.snapshot();
+      await store.close();
+
+      const timestamp = "2026-07-28T12:00:00.000Z";
+      const retiredSnapshot = {
+        schemaVersion: "openpond.taskCreationSnapshot.v1",
+        id: "retired_agent_benchmark_creation",
+        request: {
+          schemaVersion: "openpond.taskCreationRequest.v1",
+          id: "retired_agent_benchmark_request",
+          profileId: "default",
+          surface: "training_page",
+          mode: "customize",
+          entryMode: "manual",
+          resourceIntent: "dataset",
+          buildIntent: "verifiable_reward",
+          buildSpecification: { kind: "agent_benchmark", benchmarkId: "marketing-portfolio-v1" },
+          objective: "Retired benchmark",
+          methodHint: "grpo",
+          preferredBaseModelId: null,
+          preferredBaseModel: null,
+          sourceIds: [],
+          candidateId: null,
+          analysisModel: null,
+          analysisReasoningEffort: null,
+          createImproveRunId: null,
+          targetIntent: { kind: "model", id: null, displayName: null, operation: "create" },
+          disclosure: {
+            status: "not_required",
+            content: "raw_excerpts",
+            sourceIds: [],
+            providerModel: null,
+            approvalId: null,
+            approvedAt: null,
+          },
+          createdAt: timestamp,
+        },
+        state: "ready",
+        proposal: null,
+        materializedTasksetId: null,
+        disclosureApprovalId: null,
+        materializationApprovalId: null,
+        blockingQuestions: [],
+        transcript: [],
+        repairHistory: [],
+        blockedReason: null,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      const db = openTestDatabase(storePath);
+      await run(
+        db,
+        `INSERT INTO task_creation_snapshots
+          (id, profile_id, state, payload, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [retiredSnapshot.id, "default", retiredSnapshot.state, JSON.stringify(retiredSnapshot), timestamp, timestamp],
+      );
+      await close(db);
+
+      const reopened = new SqliteStore(storeDir);
+      expect(await reopened.listTaskCreationSnapshots("default")).toEqual([]);
+      expect(await reopened.getTaskCreationSnapshot(retiredSnapshot.id)).toBeNull();
+      await reopened.close();
+
+      const preservedDb = openTestDatabase(storePath);
+      try {
+        const row = await get<{ count: number }>(
+          preservedDb,
+          "SELECT count(*) AS count FROM task_creation_snapshots WHERE id = ?",
+          [retiredSnapshot.id],
+        );
+        expect(row.count).toBe(1);
+      } finally {
+        await close(preservedDb);
+      }
+    });
+  });
+
+  test("preserves but ignores training records for retired destinations", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const store = new SqliteStore(storeDir);
+      await store.snapshot();
+      await store.close();
+
+      const timestamp = "2026-07-28T12:00:00.000Z";
+      const db = openTestDatabase(storePath);
+      await run(
+        db,
+        `INSERT INTO training_plans
+          (id, taskset_id, destination_id, payload, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        ["retired_prime_plan", "retired_taskset", "prime_hosted", JSON.stringify({ id: "retired_prime_plan", destinationId: "prime_hosted" }), timestamp],
+      );
+      await run(
+        db,
+        `INSERT INTO training_jobs
+          (id, plan_id, destination_id, status, payload, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ["retired_prime_job", "retired_prime_plan", "prime_hosted", "queued", JSON.stringify({ id: "retired_prime_job", destinationId: "prime_hosted" }), timestamp, timestamp],
+      );
+      await close(db);
+
+      const reopened = new SqliteStore(storeDir);
+      expect(await reopened.listTrainingPlans()).toEqual([]);
+      expect(await reopened.getTrainingPlan("retired_prime_plan")).toBeNull();
+      expect(await reopened.listTrainingJobs()).toEqual([]);
+      expect(await reopened.getTrainingJob("retired_prime_job")).toBeNull();
+      await reopened.close();
+
+      const preservedDb = openTestDatabase(storePath);
+      try {
+        const plans = await get<{ count: number }>(preservedDb, "SELECT count(*) AS count FROM training_plans WHERE id = ?", ["retired_prime_plan"]);
+        const jobs = await get<{ count: number }>(preservedDb, "SELECT count(*) AS count FROM training_jobs WHERE id = ?", ["retired_prime_job"]);
+        expect(plans.count).toBe(1);
+        expect(jobs.count).toBe(1);
+      } finally {
+        await close(preservedDb);
+      }
+    });
+  });
+
+  test("normalizes retired training projections without rewriting stored payloads", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const store = new SqliteStore(storeDir);
+      await store.snapshot();
+      await store.close();
+
+      const taskset = tasksetFixture({ ready: true });
+      const readiness = {
+        ...taskset.readiness!,
+        compatibleDestinationClasses: [...taskset.readiness!.compatibleDestinationClasses, "openpond_managed"],
+      };
+      const retiredTaskset = {
+        ...taskset,
+        readiness,
+        authoringProvenance: {
+          ...taskset.authoringProvenance,
+          buildIntent: "verifiable_reward",
+          buildSpecification: {
+            kind: "agent_benchmark",
+            benchmarkId: "marketing-portfolio-v1",
+          },
+        },
+      };
+      const timestamp = "2026-07-28T12:00:00.000Z";
+      const retiredLineage = {
+        id: "retired_openpond_training_lineage",
+        artifactId: "retired_artifact",
+        tasksetId: taskset.id,
+        managedServing: { source: "openpond_training" },
+      };
+      const db = openTestDatabase(storePath);
+      await run(
+        db,
+        `INSERT INTO tasksets
+          (id, profile_id, status, payload, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [retiredTaskset.id, retiredTaskset.profileId, retiredTaskset.status, JSON.stringify(retiredTaskset), retiredTaskset.createdAt, retiredTaskset.updatedAt],
+      );
+      await run(
+        db,
+        "INSERT INTO readiness_reports (taskset_id, payload, updated_at) VALUES (?, ?, ?)",
+        [retiredTaskset.id, JSON.stringify(readiness), timestamp],
+      );
+      await run(
+        db,
+        `INSERT INTO model_artifact_lineage
+          (id, artifact_id, taskset_id, payload, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [retiredLineage.id, retiredLineage.artifactId, retiredLineage.tasksetId, JSON.stringify(retiredLineage), timestamp],
+      );
+      await close(db);
+
+      const reopened = new SqliteStore(storeDir);
+      const listedTaskset = (await reopened.listTasksets()).find((candidate) => candidate.id === retiredTaskset.id);
+      expect(listedTaskset?.readiness?.compatibleDestinationClasses).toEqual(taskset.readiness?.compatibleDestinationClasses);
+      expect(listedTaskset?.authoringProvenance.buildSpecification).toBeNull();
+      expect((await reopened.getTaskset(retiredTaskset.id))?.readiness?.compatibleDestinationClasses).toEqual(taskset.readiness?.compatibleDestinationClasses);
+      expect((await reopened.getTaskset(retiredTaskset.id))?.authoringProvenance.buildSpecification).toBeNull();
+      expect((await reopened.getReadinessReport(retiredTaskset.id))?.compatibleDestinationClasses).toEqual(taskset.readiness?.compatibleDestinationClasses);
+      expect(await reopened.listModelArtifactLineage()).toEqual([]);
+      expect(await reopened.getModelArtifactLineage(retiredLineage.id)).toBeNull();
+      await reopened.close();
+
+      const preservedDb = openTestDatabase(storePath);
+      try {
+        const row = await get<{ payload: string }>(preservedDb, "SELECT payload FROM tasksets WHERE id = ?", [retiredTaskset.id]);
+        expect(JSON.parse(row.payload).readiness.compatibleDestinationClasses).toContain("openpond_managed");
+        expect(JSON.parse(row.payload).authoringProvenance.buildSpecification.kind).toBe("agent_benchmark");
+        const lineageRow = await get<{ count: number }>(preservedDb, "SELECT count(*) AS count FROM model_artifact_lineage WHERE id = ?", [retiredLineage.id]);
+        expect(lineageRow.count).toBe(1);
+      } finally {
+        await close(preservedDb);
+      }
     });
   });
 
@@ -968,7 +1172,6 @@ describe("SqliteStore hardening", () => {
           profileId: "default",
           conversationId: "session-create-improve",
           originTurnId: "turn-create-improve",
-          workItemId: null,
           projectId: null,
           targetProject: null,
         },

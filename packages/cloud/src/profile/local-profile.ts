@@ -1,4 +1,5 @@
 import { createRequire } from "node:module";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import {
@@ -6,6 +7,8 @@ import {
   mkdir,
   readFile,
   readdir,
+  rename,
+  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -146,12 +149,13 @@ export function mergeActiveLocalProfileConfig(
     const previousIndex = previousEntries.findIndex(
       (entry) =>
         path.resolve(entry.repoPath) === path.resolve(existing.repoPath) &&
-        entry.profile === existing.profile,
+        entry.profile === existing.profile
     );
     const previousEntry: LocalOpenPondProfileCatalogEntry = {
       source: previousEntries[previousIndex]?.source ?? "local",
       repositoryId:
-        previousEntries[previousIndex]?.repositoryId ?? path.resolve(existing.repoPath),
+        previousEntries[previousIndex]?.repositoryId ??
+        path.resolve(existing.repoPath),
       repoPath: path.resolve(existing.repoPath),
       profile: existing.profile,
       ...(existing.lastCheck ? { lastCheck: existing.lastCheck } : {}),
@@ -161,14 +165,19 @@ export function mergeActiveLocalProfileConfig(
     else previousEntries.push(previousEntry);
   }
   const targetIndex = previousEntries.findIndex(
-    (entry) => path.resolve(entry.repoPath) === path.resolve(repoPath) && entry.profile === profile,
+    (entry) =>
+      path.resolve(entry.repoPath) === path.resolve(repoPath) &&
+      entry.profile === profile
   );
-  const target = targetIndex >= 0 ? previousEntries[targetIndex]! : {
-    source: "local" as const,
-    repositoryId: path.resolve(repoPath),
-    repoPath: path.resolve(repoPath),
-    profile,
-  };
+  const target =
+    targetIndex >= 0
+      ? previousEntries[targetIndex]!
+      : {
+          source: "local" as const,
+          repositoryId: path.resolve(repoPath),
+          repoPath: path.resolve(repoPath),
+          profile,
+        };
   if (targetIndex < 0) previousEntries.push(target);
   const next: LocalOpenPondProfileConfig = {
     repoPath: path.resolve(repoPath),
@@ -182,7 +191,7 @@ export function mergeActiveLocalProfileConfig(
 }
 
 function profileConfigEntries(
-  config: LocalOpenPondProfileConfig | undefined,
+  config: LocalOpenPondProfileConfig | undefined
 ): LocalOpenPondProfileCatalogEntry[] {
   if (!config) return [];
   const configured = config.profiles?.map((entry) => ({ ...entry })) ?? [];
@@ -190,7 +199,7 @@ function profileConfigEntries(
     !configured.some(
       (entry) =>
         path.resolve(entry.repoPath) === path.resolve(config.repoPath) &&
-        entry.profile === config.profile,
+        entry.profile === config.profile
     )
   ) {
     configured.push({
@@ -261,7 +270,9 @@ export async function initLocalProfileRepo(
   const blankProfile = template === "blank-profile";
 
   await mkdir(repoPath, { recursive: true });
-  const manifestAlreadyExists = existsSync(path.join(repoPath, PROFILE_REPO_MANIFEST));
+  const manifestAlreadyExists = existsSync(
+    path.join(repoPath, PROFILE_REPO_MANIFEST)
+  );
   const manifest = await readProfileManifest(repoPath).catch(() =>
     defaultProfileManifest(profile, profilePath)
   );
@@ -303,18 +314,14 @@ export async function initLocalProfileRepo(
 export async function loadLocalProfileRepo(
   repoPathInput: string,
   profileInput?: string,
-  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string }
 ): Promise<OpenPondProfileState> {
   const repoPath = path.resolve(repoPathInput);
   const manifest = await readProfileManifest(repoPath);
   const profile = normalizeProfileName(profileInput ?? manifest.defaultProfile);
   profileSourcePath(manifest, repoPath, profile);
   const currentConfig = (await loadGlobalConfig()).openpondProfile;
-  const next = mergeActiveLocalProfileConfig(
-    currentConfig,
-    repoPath,
-    profile
-  );
+  const next = mergeActiveLocalProfileConfig(currentConfig, repoPath, profile);
   applyProfileIdentity(next, repoPath, profile, identity);
   await saveGlobalConfig({ openpondProfile: next });
   return loadOpenPondProfileState();
@@ -323,7 +330,7 @@ export async function loadLocalProfileRepo(
 export async function registerLocalProfileRepo(
   repoPathInput: string,
   profileInput?: string,
-  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string }
 ): Promise<OpenPondProfileState> {
   const repoPath = path.resolve(repoPathInput);
   const manifest = await readProfileManifest(repoPath);
@@ -339,25 +346,31 @@ export async function registerLocalProfileRepo(
     next.lastPush = currentConfig.lastPush;
   }
   await saveGlobalConfig({ openpondProfile: next });
-  return loadOpenPondProfileStateForRef(openPondProfileRef({
-    repoPath,
-    profile,
-    source: identity?.source,
-    repositoryId: identity?.repositoryId,
-  }));
+  return loadOpenPondProfileStateForRef(
+    openPondProfileRef({
+      repoPath,
+      profile,
+      source: identity?.source,
+      repositoryId: identity?.repositoryId,
+    })
+  );
 }
 
 function applyProfileIdentity(
   config: LocalOpenPondProfileConfig,
   repoPath: string,
   profile: string,
-  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string },
+  identity?: { source: OpenPondProfileRef["source"]; repositoryId: string }
 ): void {
   if (!identity) return;
   config.profiles = profileConfigEntries(config).map((entry) =>
     path.resolve(entry.repoPath) === repoPath && entry.profile === profile
-      ? { ...entry, source: identity.source, repositoryId: identity.repositoryId }
-      : entry,
+      ? {
+          ...entry,
+          source: identity.source,
+          repositoryId: identity.repositoryId,
+        }
+      : entry
   );
 }
 
@@ -394,6 +407,113 @@ export async function renameActiveProfileAgent(
   await writeProfileManifest(active.repoPath, manifest);
   return loadOpenPondProfileState();
 }
+
+export async function installAgentPackageIntoActiveProfile(input: {
+  agentPackage: InstallableAgentPackage;
+  overwrite?: boolean;
+}): Promise<{
+  state: OpenPondProfileState;
+  agentId: string;
+  versionId: string;
+  digest: string;
+}> {
+  const agentPackage = input.agentPackage;
+  verifyAgentPackageIntegrity(agentPackage);
+  if (!/^[a-z0-9][a-z0-9._-]{0,190}$/.test(agentPackage.agentId)) {
+    throw new Error("Agent package ID is not safe for a local Profile.");
+  }
+
+  const active = await requireActiveLocalProfile();
+  const profileSourcePath = active.state.sourcePath!;
+  await ensureProfileDependencies(profileSourcePath);
+  const agentsRoot = path.join(profileSourcePath, "agents");
+  await mkdir(agentsRoot, { recursive: true });
+  const target = path.join(agentsRoot, agentPackage.agentId);
+  const targetExists = existsSync(target);
+  if (targetExists && input.overwrite !== true) {
+    throw new Error(
+      `Agent "${agentPackage.agentId}" already exists. Confirm replacement to install this version.`
+    );
+  }
+
+  const temporary = path.join(
+    agentsRoot,
+    `.${agentPackage.agentId}.${randomUUID()}.installing`
+  );
+  const backup = path.join(
+    agentsRoot,
+    `.${agentPackage.agentId}.${randomUUID()}.backup`
+  );
+  const manifest = await readProfileManifest(active.config.repoPath);
+  const originalManifest = JSON.stringify(manifest);
+  let movedExisting = false;
+  let installed = false;
+  try {
+    await materializeAgentPackage(temporary, agentPackage);
+    if (targetExists) {
+      await rename(target, backup);
+      movedExisting = true;
+    }
+    await rename(temporary, target);
+    installed = true;
+
+    const profileConfig = manifest.profiles[active.config.profile];
+    if (!profileConfig) {
+      throw new Error(`Profile "${active.config.profile}" was not found.`);
+    }
+    const enabledAgents = new Set(profileConfig.enabledAgents ?? []);
+    enabledAgents.add(agentPackage.agentId);
+    profileConfig.enabledAgents = [...enabledAgents];
+    if (!profileConfig.defaultAgent) {
+      profileConfig.defaultAgent = agentPackage.agentId;
+    }
+    profileConfig.agentNames = {
+      ...(profileConfig.agentNames ?? {}),
+      [agentPackage.agentId]: agentPackage.title,
+    };
+    await writeProfileManifest(active.config.repoPath, manifest);
+    if (movedExisting) await rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true });
+    if (installed) await rm(target, { recursive: true, force: true });
+    if (movedExisting && existsSync(backup)) await rename(backup, target);
+    if (JSON.stringify(manifest) !== originalManifest) {
+      await writeProfileManifest(
+        active.config.repoPath,
+        JSON.parse(originalManifest) as ProfileRepoManifest
+      ).catch(() => undefined);
+    }
+    throw error;
+  }
+
+  return {
+    state: await loadOpenPondProfileState(),
+    agentId: agentPackage.agentId,
+    versionId: agentPackage.versionId,
+    digest: agentPackage.digest,
+  };
+}
+
+export type InstallableAgentPackage = {
+  schema: "openpond.agent-package.v1";
+  agentId: string;
+  versionId: string;
+  digest: string;
+  title: string;
+  source: {
+    files: Array<{
+      path: string;
+      sizeBytes: number;
+      sha256: string;
+      contentsBase64: string;
+    }>;
+    totalSizeBytes: number;
+  };
+  receipts: Array<{
+    id: string;
+    kind: "sdk_validation" | "sdk_eval";
+  }>;
+};
 
 export async function loadOpenPondProfileState(): Promise<OpenPondProfileState> {
   const config = await loadGlobalConfig();
@@ -435,7 +555,7 @@ export async function loadOpenPondProfileLibrary(): Promise<OpenPondProfileLibra
         sourcePath: state.sourcePath,
         state,
       };
-    }),
+    })
   );
   return {
     lastUsed: openPondProfileRef({
@@ -444,12 +564,12 @@ export async function loadOpenPondProfileLibrary(): Promise<OpenPondProfileLibra
       source: profileConfigEntries(active).find(
         (entry) =>
           path.resolve(entry.repoPath) === path.resolve(active.repoPath) &&
-          entry.profile === active.profile,
+          entry.profile === active.profile
       )?.source,
       repositoryId: profileConfigEntries(active).find(
         (entry) =>
           path.resolve(entry.repoPath) === path.resolve(active.repoPath) &&
-          entry.profile === active.profile,
+          entry.profile === active.profile
       )?.repositoryId,
     }),
     profiles,
@@ -457,7 +577,7 @@ export async function loadOpenPondProfileLibrary(): Promise<OpenPondProfileLibra
 }
 
 export async function loadOpenPondProfileStateForRef(
-  ref: OpenPondProfileRef | null | undefined,
+  ref: OpenPondProfileRef | null | undefined
 ): Promise<OpenPondProfileState> {
   if (!ref) return loadOpenPondProfileState();
   const active = (await loadGlobalConfig()).openpondProfile;
@@ -465,10 +585,12 @@ export async function loadOpenPondProfileStateForRef(
     (candidate) =>
       candidate.source === ref.source &&
       candidate.repositoryId === ref.repositoryId &&
-      candidate.profile === ref.profileId,
+      candidate.profile === ref.profileId
   );
   if (!entry) {
-    return emptyProfileState(`Profile "${ref.profileId}" is not installed on this device.`);
+    return emptyProfileState(
+      `Profile "${ref.profileId}" is not installed on this device.`
+    );
   }
   return loadOpenPondProfileStateForConfig({
     repoPath: entry.repoPath,
@@ -480,24 +602,31 @@ export async function loadOpenPondProfileStateForRef(
 }
 
 export async function selectOpenPondProfile(
-  ref: OpenPondProfileRef,
+  ref: OpenPondProfileRef
 ): Promise<OpenPondProfileState> {
   const config = (await loadGlobalConfig()).openpondProfile;
   const entry = profileConfigEntries(config).find(
     (candidate) =>
       candidate.source === ref.source &&
       candidate.repositoryId === ref.repositoryId &&
-      candidate.profile === ref.profileId,
+      candidate.profile === ref.profileId
   );
-  if (!entry) throw new Error(`Profile "${ref.profileId}" is not installed on this device.`);
+  if (!entry)
+    throw new Error(
+      `Profile "${ref.profileId}" is not installed on this device.`
+    );
   await saveGlobalConfig({
-    openpondProfile: mergeActiveLocalProfileConfig(config, entry.repoPath, entry.profile),
+    openpondProfile: mergeActiveLocalProfileConfig(
+      config,
+      entry.repoPath,
+      entry.profile
+    ),
   });
   return loadOpenPondProfileState();
 }
 
 export async function removeOpenPondProfile(
-  ref: OpenPondProfileRef,
+  ref: OpenPondProfileRef
 ): Promise<OpenPondProfileLibrary> {
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) return { lastUsed: null, profiles: [] };
@@ -505,24 +634,31 @@ export async function removeOpenPondProfile(
     (candidate) =>
       candidate.source !== ref.source ||
       candidate.repositoryId !== ref.repositoryId ||
-      candidate.profile !== ref.profileId,
+      candidate.profile !== ref.profileId
   );
   if (remaining.length === 0) {
-    await saveGlobalConfig({ openpondProfile: null } as unknown as Partial<Awaited<ReturnType<typeof loadGlobalConfig>>>);
+    await saveGlobalConfig({ openpondProfile: null } as unknown as Partial<
+      Awaited<ReturnType<typeof loadGlobalConfig>>
+    >);
     return { lastUsed: null, profiles: [] };
   }
   const currentRemoved =
-    path.resolve(config.repoPath) === path.resolve(
-      profileConfigEntries(config).find(
-        (candidate) =>
-          candidate.source === ref.source &&
-          candidate.repositoryId === ref.repositoryId &&
-          candidate.profile === ref.profileId,
-      )?.repoPath ?? "",
-    ) && config.profile === ref.profileId;
-  const next = currentRemoved ? remaining[0]! : remaining.find(
-    (entry) => path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile,
-  ) ?? remaining[0]!;
+    path.resolve(config.repoPath) ===
+      path.resolve(
+        profileConfigEntries(config).find(
+          (candidate) =>
+            candidate.source === ref.source &&
+            candidate.repositoryId === ref.repositoryId &&
+            candidate.profile === ref.profileId
+        )?.repoPath ?? ""
+      ) && config.profile === ref.profileId;
+  const next = currentRemoved
+    ? remaining[0]!
+    : remaining.find(
+        (entry) =>
+          path.resolve(entry.repoPath) === path.resolve(config.repoPath) &&
+          entry.profile === config.profile
+      ) ?? remaining[0]!;
   await saveGlobalConfig({
     openpondProfile: {
       repoPath: next.repoPath,
@@ -537,7 +673,7 @@ export async function removeOpenPondProfile(
 }
 
 async function loadOpenPondProfileStateForConfig(
-  active: LocalOpenPondProfileConfig,
+  active: LocalOpenPondProfileConfig
 ): Promise<OpenPondProfileState> {
   try {
     const manifest = await readProfileManifest(active.repoPath);
@@ -866,9 +1002,10 @@ export async function saveProfilePushStatus(
   const config = (await loadGlobalConfig()).openpondProfile;
   if (!config) return;
   const profiles = profileConfigEntries(config).map((entry) =>
-    path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile
+    path.resolve(entry.repoPath) === path.resolve(config.repoPath) &&
+    entry.profile === config.profile
       ? { ...entry, lastPush: status }
-      : entry,
+      : entry
   );
   await saveGlobalConfig({
     openpondProfile: {
@@ -894,9 +1031,10 @@ async function saveProfileCheckStatus(
     sourceHead,
   };
   const profiles = profileConfigEntries(config).map((entry) =>
-    path.resolve(entry.repoPath) === path.resolve(config.repoPath) && entry.profile === config.profile
+    path.resolve(entry.repoPath) === path.resolve(config.repoPath) &&
+    entry.profile === config.profile
       ? { ...entry, lastCheck }
-      : entry,
+      : entry
   );
   await saveGlobalConfig({
     openpondProfile: {
@@ -932,7 +1070,7 @@ async function ensureProfileScaffoldFiles(
   repoPath: string,
   profileSourcePath: string,
   profile: string,
-  options: { includeDefaultAgent?: boolean } = {},
+  options: { includeDefaultAgent?: boolean } = {}
 ): Promise<void> {
   await mkdir(path.join(repoPath, "profiles"), { recursive: true });
   for (const dir of [
@@ -950,14 +1088,15 @@ async function ensureProfileScaffoldFiles(
   }
   const profileManifestPath = path.join(profileSourcePath, PROFILE_MANIFEST);
   if (!existsSync(profileManifestPath)) {
-    const agentLines = options.includeDefaultAgent === false
-      ? ["agents: []"]
-      : [
-          "agents:",
-          `  - id: ${DEFAULT_PROFILE_AGENT}`,
-          "    path: agent/agent.ts",
-          "    enabled: true",
-        ];
+    const agentLines =
+      options.includeDefaultAgent === false
+        ? ["agents: []"]
+        : [
+            "agents:",
+            `  - id: ${DEFAULT_PROFILE_AGENT}`,
+            "    path: agent/agent.ts",
+            "    enabled: true",
+          ];
     await writeFile(
       profileManifestPath,
       [
@@ -1479,6 +1618,126 @@ function profileSourcePath(
     throw new Error(`Profile source path does not exist: ${sourcePath}`);
   }
   return sourcePath;
+}
+
+function verifyAgentPackageIntegrity(
+  agentPackage: InstallableAgentPackage
+): void {
+  let totalSizeBytes = 0;
+  const seen = new Set<string>();
+  for (const file of agentPackage.source.files) {
+    const filePath = normalizeAgentPackagePath(file.path);
+    if (seen.has(filePath)) {
+      throw new Error(
+        `Agent package contains duplicate source path ${filePath}.`
+      );
+    }
+    seen.add(filePath);
+    const bytes = Buffer.from(file.contentsBase64, "base64");
+    if (
+      bytes.byteLength !== file.sizeBytes ||
+      createHash("sha256").update(bytes).digest("hex") !== file.sha256
+    ) {
+      throw new Error(`Agent package source checksum failed for ${filePath}.`);
+    }
+    totalSizeBytes += bytes.byteLength;
+  }
+  if (totalSizeBytes !== agentPackage.source.totalSizeBytes) {
+    throw new Error("Agent package source size does not match its manifest.");
+  }
+  const { digest: _digest, versionId: _versionId, ...canonical } = agentPackage;
+  const digest = createHash("sha256")
+    .update(stableAgentPackageJson(canonical))
+    .digest("hex");
+  if (
+    digest !== agentPackage.digest ||
+    agentPackage.versionId !== `agent-${digest.slice(0, 20)}`
+  ) {
+    throw new Error("Agent package content digest does not match its version.");
+  }
+}
+
+async function materializeAgentPackage(
+  target: string,
+  agentPackage: InstallableAgentPackage
+): Promise<void> {
+  await mkdir(target, { recursive: true, mode: 0o700 });
+  for (const file of agentPackage.source.files) {
+    const relativePath = normalizeAgentPackagePath(file.path);
+    const destination = path.resolve(target, relativePath);
+    if (!destination.startsWith(`${path.resolve(target)}${path.sep}`)) {
+      throw new Error("Agent package source path escapes its install root.");
+    }
+    await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+    let bytes = Buffer.from(file.contentsBase64, "base64");
+    if (relativePath === "package.json") {
+      const packageJson = JSON.parse(bytes.toString("utf8")) as {
+        dependencies?: Record<string, string>;
+      };
+      packageJson.dependencies = {
+        ...(packageJson.dependencies ?? {}),
+        "openpond-agent-sdk": `file:${resolveAgentSdkRoot()}`,
+      };
+      bytes = Buffer.from(`${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
+    }
+    await writeFile(destination, bytes, { mode: 0o600, flag: "wx" });
+  }
+  const provenancePath = path.join(
+    target,
+    ".openpond",
+    "agent-package-origin.json"
+  );
+  await mkdir(path.dirname(provenancePath), { recursive: true, mode: 0o700 });
+  await writeFile(
+    provenancePath,
+    `${JSON.stringify(
+      {
+        schema: "openpond.agent-package-origin.v1",
+        agentId: agentPackage.agentId,
+        versionId: agentPackage.versionId,
+        digest: agentPackage.digest,
+        validationReceiptIds: agentPackage.receipts
+          .filter((receipt) => receipt.kind === "sdk_validation")
+          .map((receipt) => receipt.id),
+        evalReceiptIds: agentPackage.receipts
+          .filter((receipt) => receipt.kind === "sdk_eval")
+          .map((receipt) => receipt.id),
+      },
+      null,
+      2
+    )}\n`,
+    { mode: 0o600, flag: "wx" }
+  );
+}
+
+function normalizeAgentPackagePath(value: string): string {
+  const normalized = value.trim().replaceAll("\\", "/");
+  const clean = path.posix.normalize(normalized);
+  if (
+    !clean ||
+    clean === "." ||
+    clean === ".." ||
+    clean.startsWith("/") ||
+    clean.startsWith("../") ||
+    clean.split("/").some((part) => part === "..")
+  ) {
+    throw new Error(`Agent package contains an invalid source path: ${value}.`);
+  }
+  return clean;
+}
+
+function stableAgentPackageJson(value: unknown): string {
+  return JSON.stringify(sortAgentPackageJson(value));
+}
+
+function sortAgentPackageJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortAgentPackageJson);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => [key, sortAgentPackageJson(child)])
+  );
 }
 
 function resolveAgentSdkRoot(): string {

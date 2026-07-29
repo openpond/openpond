@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const LocalAgentScheduleTypeSchema = z.enum(["cron", "rate"]);
-export type LocalAgentScheduleType = z.infer<typeof LocalAgentScheduleTypeSchema>;
+export type LocalAgentScheduleType = z.infer<
+  typeof LocalAgentScheduleTypeSchema
+>;
 
 export const LocalAgentScheduleRunStatusSchema = z.enum([
   "queued",
@@ -30,6 +32,8 @@ export const LocalAgentScheduleSchema = z.object({
   enabled: z.boolean(),
   sourceHash: z.string(),
   manifestHash: z.string().nullable(),
+  agentVersionId: z.string().nullable().optional(),
+  agentPackageDigest: z.string().nullable().optional(),
   nextRunAt: z.string().nullable(),
   lastRunAt: z.string().nullable(),
   lastRunStatus: LocalAgentScheduleRunStatusSchema.nullable(),
@@ -49,6 +53,8 @@ export const LocalAgentScheduleRunSchema = z.object({
   trigger: z.enum(["schedule", "manual"]),
   status: LocalAgentScheduleRunStatusSchema,
   targetAction: z.string(),
+  agentVersionId: z.string().nullable().optional(),
+  agentPackageDigest: z.string().nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),
   exitCode: z.number().int().nullable(),

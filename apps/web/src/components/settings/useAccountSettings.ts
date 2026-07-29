@@ -1,9 +1,8 @@
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useState } from "react";
 import type { BootstrapPayload } from "@openpond/contracts";
 import { api, type ClientConnection } from "../../api";
 
-export type SaveEnvironmentAccountInput = {
+export type SaveOpenPondAccountInput = {
   apiKey: string;
   handle?: string | null;
   baseUrl: string;
@@ -20,15 +19,13 @@ export function useAccountSettings({
   onError: (message: string | null) => void;
   onPayload: (payload: BootstrapPayload) => void;
 }) {
-  const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
   const [refreshingAccounts, setRefreshingAccounts] = useState(false);
 
-  useEffect(() => {
-    if (!connection) setApiKey("");
-  }, [connection]);
-
-  async function switchAccount(handleValue: string, baseUrlValue?: string | null) {
+  async function switchAccount(
+    handleValue: string,
+    baseUrlValue?: string | null
+  ) {
     if (!connection) return;
     setSaving(true);
     onError(null);
@@ -37,36 +34,48 @@ export function useAccountSettings({
         handle: handleValue,
         baseUrl: baseUrlValue ?? null,
       });
-      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
-      onPayload({ ...switchedPayload, preferences: preferencesPayload.preferences });
+      const preferencesPayload = await api.savePreferences(connection, {
+        defaultTeamId: null,
+      });
+      onPayload({
+        ...switchedPayload,
+        preferences: preferencesPayload.preferences,
+      });
     } catch (switchError) {
-      onError(switchError instanceof Error ? switchError.message : String(switchError));
+      onError(
+        switchError instanceof Error ? switchError.message : String(switchError)
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  async function saveAccount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!connection || !apiKey.trim()) return;
+  async function removeAccount(
+    handleValue: string,
+    baseUrlValue?: string | null
+  ): Promise<boolean> {
+    if (!connection) return false;
     setSaving(true);
     onError(null);
     try {
-      const savedPayload = await api.saveOpenPondAccount(connection, {
-        apiKey: apiKey.trim(),
-        setActive: true,
-      });
-      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
-      onPayload({ ...savedPayload, preferences: preferencesPayload.preferences });
-      setApiKey("");
-    } catch (saveError) {
-      onError(saveError instanceof Error ? saveError.message : String(saveError));
+      onPayload(
+        await api.removeOpenPondAccount(connection, {
+          handle: handleValue,
+          baseUrl: baseUrlValue ?? null,
+        })
+      );
+      return true;
+    } catch (removeError) {
+      onError(
+        removeError instanceof Error ? removeError.message : String(removeError)
+      );
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
-  async function saveEnvironmentAccount(input: SaveEnvironmentAccountInput) {
+  async function saveAccount(input: SaveOpenPondAccountInput) {
     if (!connection || !input.apiKey.trim()) return;
     setSaving(true);
     onError(null);
@@ -81,11 +90,17 @@ export function useAccountSettings({
         environment: environment || "custom",
         setActive: true,
       });
-      const preferencesPayload = await api.savePreferences(connection, { defaultTeamId: null });
-      onPayload({ ...savedPayload, preferences: preferencesPayload.preferences });
-      setApiKey("");
+      const preferencesPayload = await api.savePreferences(connection, {
+        defaultTeamId: null,
+      });
+      onPayload({
+        ...savedPayload,
+        preferences: preferencesPayload.preferences,
+      });
     } catch (saveError) {
-      onError(saveError instanceof Error ? saveError.message : String(saveError));
+      onError(
+        saveError instanceof Error ? saveError.message : String(saveError)
+      );
       throw saveError;
     } finally {
       setSaving(false);
@@ -99,20 +114,22 @@ export function useAccountSettings({
     try {
       onPayload(await api.refreshOpenPondAccounts(connection));
     } catch (refreshError) {
-      onError(refreshError instanceof Error ? refreshError.message : String(refreshError));
+      onError(
+        refreshError instanceof Error
+          ? refreshError.message
+          : String(refreshError)
+      );
     } finally {
       setRefreshingAccounts(false);
     }
   }
 
   return {
-    apiKey,
     refreshingAccounts,
     saving,
     refreshAccounts,
+    removeAccount,
     saveAccount,
-    saveEnvironmentAccount,
-    setApiKey,
     switchAccount,
   };
 }

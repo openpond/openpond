@@ -2,38 +2,46 @@ import { describe, expect, test } from "vitest";
 import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { SidebarBrandButton } from "../apps/web/src/components/sidebar/SidebarBrandButton";
+import {
+  EXPERIENCE_MENU_OPTIONS,
+  SidebarExperienceMenu,
+} from "../apps/web/src/components/sidebar/SidebarExperienceMenu";
 
-describe("Sidebar brand button", () => {
-  test("renders the wordmark as an accessible home button", () => {
-    const markup = renderToStaticMarkup(<SidebarBrandButton onOpenHome={() => undefined} />);
+describe("Sidebar experience wordmark", () => {
+  test("renders the selected experience in the accessible wordmark trigger", () => {
+    const markup = renderToStaticMarkup(
+      <SidebarExperienceMenu value="work" onChange={() => undefined} />
+    );
 
-    expect(markup).toContain('<button type="button" class="sidebar-wordmark-button" aria-label="OpenPond home">');
+    expect(markup).toContain(
+      'class="sidebar-wordmark-button sidebar-experience-trigger"'
+    );
+    expect(markup).toContain('aria-label="OpenPond experience: Work"');
+    expect(markup).toContain('aria-haspopup="menu"');
+    expect(markup).toContain('aria-expanded="false"');
     expect(markup).toContain('src="./openpond-wordlogo-white.png" alt=""');
+    expect(markup).toContain(
+      '<span class="sidebar-experience-label">Work</span>'
+    );
+    expect(EXPERIENCE_MENU_OPTIONS.map((option) => option.value)).toEqual([
+      "chat",
+      "work",
+      "development",
+    ]);
   });
 
-  test("opens home when activated", () => {
-    let activationCount = 0;
-    const button = SidebarBrandButton({
-      onOpenHome: () => {
-        activationCount += 1;
-      },
-    });
-
-    button.props.onClick();
-
-    expect(activationCount).toBe(1);
-  });
-
-  test("places the wordmark in the sidebar toggle toolbar", async () => {
-    const source = await readFile("apps/web/src/components/sidebar/Sidebar.tsx", "utf8");
+  test("places the experience wordmark in the sidebar toggle toolbar", async () => {
+    const source = await readFile(
+      "apps/web/src/components/sidebar/Sidebar.tsx",
+      "utf8"
+    );
     const toolbarStart = source.indexOf('<div className="sidebar-toolbar">');
     const navigationStart = source.indexOf("<SidebarNavigation");
-    const brand = source.indexOf("<SidebarBrandButton", toolbarStart);
+    const brand = source.indexOf("<SidebarExperienceMenu", toolbarStart);
 
     expect(toolbarStart).toBeGreaterThan(-1);
     expect(brand).toBeGreaterThan(toolbarStart);
     expect(brand).toBeLessThan(navigationStart);
-    expect(source).not.toContain("sidebar-wordmark-row");
+    expect(source).not.toContain("<SidebarBrandButton");
   });
 });

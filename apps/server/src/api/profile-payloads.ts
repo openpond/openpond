@@ -508,7 +508,6 @@ export function createProfilePayloads(deps: {
                 pushStatus.hostedSourceMaterialization?.sourceCommitSha ??
                   pushedSourceUpload?.sourceCommitSha
               ),
-              workItemId: stringValue(input.workItemId),
             },
           })
         );

@@ -1087,17 +1087,38 @@ describe("model tool registry", () => {
       },
       executeProfileAction: async (payload) => {
         profilePayloads.push(payload);
-        return { recommendation: "Pause the weakest creative." };
+        return {
+          action: "review-campaign",
+          stdout: JSON.stringify({
+            result: {
+              text: JSON.stringify({
+                recommendation: "Pause the weakest creative.",
+              }),
+              metadata: {
+                decision: {
+                  recommendation: "Pause the weakest creative.",
+                },
+              },
+            },
+            traceArtifactRef: ".openpond/traces/review-campaign.jsonl",
+          }),
+          stderr: "",
+          code: 0,
+        };
       },
     });
     const toolName = directOpenPondActionToolName(action);
     const direct = definitions.find((definition) => definition.name === toolName);
-    if (!direct) throw new Error("direct Profile Agent tool missing");
+    const stableAlias = definitions.find(
+      (definition) => definition.name === "review-campaign",
+    );
+    if (!stableAlias) throw new Error("stable Profile Agent tool alias missing");
 
     expect(toolName).toMatch(/^agent_review_campaign_[a-f0-9]{8}$/);
     expect(toolName.length).toBeLessThanOrEqual(64);
-    expect(direct.parameters).toEqual(action.inputSchema);
-    const result = await direct.execute({
+    expect(direct).toBeUndefined();
+    expect(stableAlias.parameters).toEqual(action.inputSchema);
+    const result = await stableAlias.execute({
       ...actionContext({
         campaignId: "campaign_1",
         prompt: "What should I do next?",
@@ -1109,7 +1130,19 @@ describe("model tool registry", () => {
     });
 
     expect(result.ok).toBe(true);
-    expect(result.name).toBe(toolName);
+    expect(result.name).toBe("review-campaign");
+    expect(JSON.parse(result.contentText)).toEqual({
+      ok: true,
+      action: "review-campaign",
+      output: "Ran profile action review-campaign.",
+      data: {
+        result: {
+          recommendation: "Pause the weakest creative.",
+        },
+      },
+    });
+    expect(result.contentText).not.toContain("traceArtifactRef");
+    expect(result.contentText).not.toContain("stdout");
     expect(profilePayloads).toEqual([
       {
         action: "review-campaign",

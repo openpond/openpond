@@ -1,6 +1,5 @@
 import type {
   BootstrapPayload,
-  Experience,
   LocalProject,
   OpenPondApp,
   WorkspaceDiffSummary,
@@ -26,7 +25,6 @@ import {
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
-import { ExperienceSelector } from "./ExperienceSelector";
 
 const WorkspaceEnvironmentMenu = lazy(() =>
   import("../chat/WorkspaceEnvironmentMenu").then((module) => ({
@@ -76,8 +74,6 @@ export function AppTopBar({
   onShowSidebar,
   platform,
   showWorkspaceControls = true,
-  experience,
-  onExperienceChange,
 }: {
   sidebarOpen: boolean;
   title: string;
@@ -121,8 +117,6 @@ export function AppTopBar({
   onShowSidebar: () => void;
   platform?: string | null;
   showWorkspaceControls?: boolean;
-  experience?: Experience | null;
-  onExperienceChange?: (experience: Experience) => void;
 }) {
   const filesChanged = workspaceDiff?.filesChanged ?? 0;
   const showWindowControls = isDesktopShell() && !isMacPlatform(platform);
@@ -162,7 +156,7 @@ export function AppTopBar({
   };
 
   return (
-    <header className={`app-titlebar ${experience ? "has-experience" : ""}`}>
+    <header className="app-titlebar">
       <div className="titlebar-left">
         {!sidebarOpen && (
           <button
@@ -218,9 +212,6 @@ export function AppTopBar({
           </div>
         )}
       </div>
-      {experience && onExperienceChange ? (
-        <ExperienceSelector value={experience} onChange={onExperienceChange} />
-      ) : null}
       {showRightControls && (
         <div className="titlebar-right">
           {showWorkspaceControls && (

@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import {
   runtimeInventoryVerification,
   type RuntimeInventoryEntry,
@@ -14,14 +16,28 @@ type DesktopRuntimeStageOptions = {
   arch?: string;
 };
 
-const FORBIDDEN_RUNTIME_SUFFIXES = [".a", ".cc", ".gyp", ".h", ".map", ".pdb", ".ts"];
+const execFileAsync = promisify(execFile);
+const FORBIDDEN_RUNTIME_SUFFIXES = [
+  ".a",
+  ".cc",
+  ".gyp",
+  ".h",
+  ".map",
+  ".pdb",
+  ".ts",
+];
 
 export async function stageDesktopRuntime(
-  options: DesktopRuntimeStageOptions,
-): Promise<{ stageRoot: string; files: RuntimeInventoryEntry[]; totalBytes: number }> {
+  options: DesktopRuntimeStageOptions
+): Promise<{
+  stageRoot: string;
+  files: RuntimeInventoryEntry[];
+  totalBytes: number;
+}> {
   const platform = options.platform ?? process.platform;
   const arch = options.arch ?? process.arch;
-  const stageRoot = options.stageRoot ?? path.join(options.root, "apps", "desktop", "stage");
+  const stageRoot =
+    options.stageRoot ?? path.join(options.root, "apps", "desktop", "stage");
   const appRoot = path.join(stageRoot, "app");
   const runtimeRoot = path.join(stageRoot, "runtime");
   await fs.rm(stageRoot, { recursive: true, force: true });
@@ -30,27 +46,46 @@ export async function stageDesktopRuntime(
   await stageDesktopApp(options.root, appRoot);
   await copyRequired(
     path.join(options.root, "apps", "server", "dist", "index.js"),
-    path.join(runtimeRoot, "server", "index.js"),
+    path.join(runtimeRoot, "server", "index.js")
   );
   await copyTree(
-    path.join(options.root, "apps", "cli", "skills", "openpond-taskset-authoring"),
-    path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring"),
+    path.join(
+      options.root,
+      "apps",
+      "cli",
+      "skills",
+      "openpond-taskset-authoring"
+    ),
+    path.join(runtimeRoot, "server", "skills", "openpond-taskset-authoring")
   );
-  for (const skillName of ["openpond-skill-authoring", "openpond-agent-authoring"]) {
+  for (const skillName of [
+    "openpond-skill-authoring",
+    "openpond-agent-authoring",
+  ]) {
     await copyTree(
       path.join(options.root, "apps", "cli", "skills", skillName),
-      path.join(runtimeRoot, "server", "skills", skillName),
+      path.join(runtimeRoot, "server", "skills", skillName)
     );
   }
-  await copyTree(path.join(options.root, "apps", "web", "dist"), path.join(runtimeRoot, "web"));
+  await copyTree(
+    path.join(options.root, "apps", "web", "dist"),
+    path.join(runtimeRoot, "web")
+  );
+  await stageAgentSdkArchive(options.root, runtimeRoot);
   await stageNodePtyRuntime(options.root, runtimeRoot, platform, arch);
 
   const files = await inventoryFiles(runtimeRoot, runtimeRoot, platform);
   const forbidden = files.filter((entry) =>
-    FORBIDDEN_RUNTIME_SUFFIXES.some((suffix) => entry.path.toLowerCase().endsWith(suffix)),
+    FORBIDDEN_RUNTIME_SUFFIXES.some((suffix) =>
+      entry.path.toLowerCase().endsWith(suffix)
+    )
   );
   if (forbidden.length > 0) {
-    throw new Error(`Desktop runtime stage contains development artifacts: ${forbidden.map((entry) => entry.path).join(", ")}`);
+    throw new Error(
+      `Desktop runtime stage contains development artifacts: ${forbidden
+        .map((entry) => entry.path)
+        .join(", ")}`
+    );
   }
   const totalBytes = files.reduce((sum, entry) => sum + entry.bytes, 0);
   const inventory = {
@@ -65,13 +100,52 @@ export async function stageDesktopRuntime(
   await fs.writeFile(
     path.join(runtimeRoot, "runtime-inventory.json"),
     `${JSON.stringify(inventory, null, 2)}\n`,
-    { mode: 0o644 },
+    { mode: 0o644 }
   );
   return { stageRoot, files, totalBytes };
 }
 
+async function stageAgentSdkArchive(
+  root: string,
+  runtimeRoot: string
+): Promise<void> {
+  const sourceRoot = path.join(root, "packages", "agent-sdk");
+  await copyRequired(
+    path.join(sourceRoot, "dist", "cli.js"),
+    path.join(runtimeRoot, "server", "work-assets", ".agent-sdk-build-check")
+  );
+  await fs.rm(
+    path.join(runtimeRoot, "server", "work-assets", ".agent-sdk-build-check"),
+    { force: true }
+  );
+  const packRoot = await fs.mkdtemp(
+    path.join(path.dirname(runtimeRoot), "agent-sdk-pack-")
+  );
+  try {
+    const { stdout } = await execFileAsync(packageManagerCommand("npm"), [
+      "pack",
+      sourceRoot,
+      "--json",
+      "--pack-destination",
+      packRoot,
+    ]);
+    const result = JSON.parse(stdout) as Array<{ filename?: string }>;
+    const filename = result[0]?.filename;
+    if (!filename)
+      throw new Error("npm pack did not return an Agent SDK archive.");
+    await copyRequired(
+      path.join(packRoot, filename),
+      path.join(runtimeRoot, "server", "work-assets", "openpond-agent-sdk.tgz")
+    );
+  } finally {
+    await fs.rm(packRoot, { recursive: true, force: true });
+  }
+}
+
 async function stageDesktopApp(root: string, appRoot: string): Promise<void> {
-  const rootPackage = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")) as {
+  const rootPackage = JSON.parse(
+    await fs.readFile(path.join(root, "package.json"), "utf8")
+  ) as {
     version?: string;
   };
   const packageJson = {
@@ -84,28 +158,33 @@ async function stageDesktopApp(root: string, appRoot: string): Promise<void> {
     author: "OpenPond",
   };
   await fs.mkdir(appRoot, { recursive: true, mode: 0o755 });
-  await fs.writeFile(path.join(appRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`);
+  await fs.writeFile(
+    path.join(appRoot, "package.json"),
+    `${JSON.stringify(packageJson, null, 2)}\n`
+  );
   for (const entry of ["main.js", "preload.js"]) {
     const source = path.join(root, "apps", "desktop", "dist", entry);
     await assertStandaloneDesktopBundle(source);
-    await copyRequired(
-      source,
-      path.join(appRoot, "dist", entry),
-    );
+    await copyRequired(source, path.join(appRoot, "dist", entry));
   }
 }
 
-export async function assertStandaloneDesktopBundle(filePath: string): Promise<void> {
+export async function assertStandaloneDesktopBundle(
+  filePath: string
+): Promise<void> {
   const source = await fs.readFile(filePath, "utf8").catch(() => null);
   if (source === null) {
-    throw new Error(`Required desktop bundle is missing: ${filePath}. Run pnpm run build:desktop.`);
+    throw new Error(
+      `Required desktop bundle is missing: ${filePath}. Run pnpm run build:desktop.`
+    );
   }
-  const localImport = source.match(/\bfrom\s*["'](\.{1,2}\/[^"']+)/)
-    ?? source.match(/\bimport\s*["'](\.{1,2}\/[^"']+)/)
-    ?? source.match(/\b(?:import|require)\s*\(\s*["'](\.{1,2}\/[^"']+)/);
+  const localImport =
+    source.match(/\bfrom\s*["'](\.{1,2}\/[^"']+)/) ??
+    source.match(/\bimport\s*["'](\.{1,2}\/[^"']+)/) ??
+    source.match(/\b(?:import|require)\s*\(\s*["'](\.{1,2}\/[^"']+)/);
   if (localImport) {
     throw new Error(
-      `Desktop entrypoint is not a standalone bundle (${localImport[1]}): ${filePath}. Run pnpm run build:desktop.`,
+      `Desktop entrypoint is not a standalone bundle (${localImport[1]}): ${filePath}. Run pnpm run build:desktop.`
     );
   }
 }
@@ -114,13 +193,15 @@ async function stageNodePtyRuntime(
   root: string,
   stageRoot: string,
   platform: NodeJS.Platform,
-  arch: string,
+  arch: string
 ): Promise<void> {
   const source = path.join(root, "apps", "server", "node_modules", "node-pty");
   const target = packageTarget(stageRoot, "node-pty");
   await copyPackageMetadata(source, target);
-  await copyTree(path.join(source, "lib"), path.join(target, "lib"), (file) =>
-    file.endsWith(".js") && !file.endsWith(".test.js"),
+  await copyTree(
+    path.join(source, "lib"),
+    path.join(target, "lib"),
+    (file) => file.endsWith(".js") && !file.endsWith(".test.js")
   );
 
   const prebuildName = `${platform}-${arch}`;
@@ -151,7 +232,13 @@ async function stageNodePtyRuntime(
 
 export function nodePtyPrebuildFiles(platform: NodeJS.Platform): string[] {
   if (platform === "win32") {
-    return ["pty.node", "conpty.node", "conpty_console_list.node", "winpty-agent.exe", "winpty.dll"];
+    return [
+      "pty.node",
+      "conpty.node",
+      "conpty_console_list.node",
+      "winpty-agent.exe",
+      "winpty.dll",
+    ];
   }
   return platform === "darwin" ? ["pty.node", "spawn-helper"] : ["pty.node"];
 }
@@ -160,8 +247,14 @@ function nodePtyBuildFiles(platform: NodeJS.Platform): string[] {
   return nodePtyPrebuildFiles(platform);
 }
 
-async function copyPackageMetadata(source: string, target: string): Promise<void> {
-  await copyRequired(path.join(source, "package.json"), path.join(target, "package.json"));
+async function copyPackageMetadata(
+  source: string,
+  target: string
+): Promise<void> {
+  await copyRequired(
+    path.join(source, "package.json"),
+    path.join(target, "package.json")
+  );
   for (const name of await fs.readdir(source)) {
     if (!/^licen[cs]e(?:\..+)?$/i.test(name)) continue;
     await copyRequired(path.join(source, name), path.join(target, name));
@@ -171,10 +264,11 @@ async function copyPackageMetadata(source: string, target: string): Promise<void
 async function copyTree(
   source: string,
   target: string,
-  include: (filePath: string) => boolean = () => true,
+  include: (filePath: string) => boolean = () => true
 ): Promise<void> {
   const stat = await fs.stat(source).catch(() => null);
-  if (!stat?.isDirectory()) throw new Error(`Required desktop runtime directory is missing: ${source}`);
+  if (!stat?.isDirectory())
+    throw new Error(`Required desktop runtime directory is missing: ${source}`);
   for (const entry of await fs.readdir(source, { withFileTypes: true })) {
     const sourcePath = path.join(source, entry.name);
     const targetPath = path.join(target, entry.name);
@@ -188,7 +282,8 @@ async function copyTree(
 
 async function copyRequired(source: string, target: string): Promise<void> {
   const stat = await fs.stat(source).catch(() => null);
-  if (!stat?.isFile()) throw new Error(`Required desktop runtime file is missing: ${source}`);
+  if (!stat?.isFile())
+    throw new Error(`Required desktop runtime file is missing: ${source}`);
   await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o755 });
   await fs.copyFile(source, target);
   await fs.chmod(target, stat.mode & 0o777);
@@ -197,23 +292,32 @@ async function copyRequired(source: string, target: string): Promise<void> {
 async function inventoryFiles(
   root: string,
   baseRoot: string,
-  platform: NodeJS.Platform,
+  platform: NodeJS.Platform
 ): Promise<RuntimeInventoryEntry[]> {
   const entries = await fs.readdir(root, { withFileTypes: true });
-  const nested = await Promise.all(entries.map(async (entry): Promise<RuntimeInventoryEntry[]> => {
-    const fullPath = path.join(root, entry.name);
-    if (entry.isDirectory()) return inventoryFiles(fullPath, baseRoot, platform);
-    if (!entry.isFile()) return [];
-    const content = await fs.readFile(fullPath);
-    const relativePath = path.relative(baseRoot, fullPath).replaceAll(path.sep, "/");
-    return [{
-      path: relativePath,
-      bytes: content.byteLength,
-      sha256: createHash("sha256").update(content).digest("hex"),
-      verification: runtimeInventoryVerification(platform, relativePath),
-    }];
-  }));
-  return nested.flat().sort((left, right) => left.path.localeCompare(right.path));
+  const nested = await Promise.all(
+    entries.map(async (entry): Promise<RuntimeInventoryEntry[]> => {
+      const fullPath = path.join(root, entry.name);
+      if (entry.isDirectory())
+        return inventoryFiles(fullPath, baseRoot, platform);
+      if (!entry.isFile()) return [];
+      const content = await fs.readFile(fullPath);
+      const relativePath = path
+        .relative(baseRoot, fullPath)
+        .replaceAll(path.sep, "/");
+      return [
+        {
+          path: relativePath,
+          bytes: content.byteLength,
+          sha256: createHash("sha256").update(content).digest("hex"),
+          verification: runtimeInventoryVerification(platform, relativePath),
+        },
+      ];
+    })
+  );
+  return nested
+    .flat()
+    .sort((left, right) => left.path.localeCompare(right.path));
 }
 
 async function assertAnyNativeFile(directory: string): Promise<void> {
@@ -227,16 +331,32 @@ function packageTarget(stageRoot: string, packageName: string): string {
   return path.join(stageRoot, "server", "node_modules", packageName);
 }
 
+function packageManagerCommand(name: "npm"): string {
+  return process.platform === "win32" ? `${name}.cmd` : name;
+}
+
 async function exists(filePath: string): Promise<boolean> {
-  return fs.access(filePath).then(() => true, () => false);
+  return fs.access(filePath).then(
+    () => true,
+    () => false
+  );
 }
 
 async function main(): Promise<void> {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const result = await stageDesktopRuntime({ root });
-  console.log(`Staged desktop runtime: ${result.files.length} files, ${(result.totalBytes / 1024 / 1024).toFixed(2)} MiB`);
+  console.log(
+    `Staged desktop runtime: ${result.files.length} files, ${(
+      result.totalBytes /
+      1024 /
+      1024
+    ).toFixed(2)} MiB`
+  );
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href
+) {
   await main();
 }

@@ -1,6 +1,13 @@
-import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import type {
+  Approval,
+  Experience,
+  RuntimeEvent,
+  Session,
+  Turn,
+} from "@openpond/contracts";
 import {
   DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+  ExperienceSchema,
   OpenPondCommandAccessModeSchema,
 } from "@openpond/contracts";
 import type { PayloadRow, StoreData } from "../types.js";
@@ -22,42 +29,77 @@ export async function readStorePayloads<T>(
   reader: StoreDbReader,
   table: StorePayloadTable
 ): Promise<T[]> {
-  const rows = await reader.allPayloadRows(`SELECT payload FROM ${table} ORDER BY sort_index ASC`);
+  const rows = await reader.allPayloadRows(
+    `SELECT payload FROM ${table} ORDER BY sort_index ASC`
+  );
   return rows.map((row) => JSON.parse(row.payload) as T);
 }
 
 export function normalizeSessionPayload(value: unknown): Session {
   const session = value as Session & { openPondCommandAccessMode?: unknown };
-  const parsed = OpenPondCommandAccessModeSchema.safeParse(session.openPondCommandAccessMode);
+  const parsed = OpenPondCommandAccessModeSchema.safeParse(
+    session.openPondCommandAccessMode
+  );
   return {
     ...session,
-    openPondCommandAccessMode: parsed.success ? parsed.data : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
+    experience: storedSessionExperience(session),
+    openPondCommandAccessMode: parsed.success
+      ? parsed.data
+      : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
     currentProfile: session.currentProfile ?? null,
   };
 }
 
+export function storedSessionExperience(
+  value: Partial<Session> & { experience?: unknown }
+): Experience {
+  const explicit = ExperienceSchema.safeParse(value.experience);
+  if (explicit.success) return explicit.data;
+
+  const hasDevelopmentContext = Boolean(
+    value.provider === "codex" ||
+      value.codexThreadId ||
+      value.systemKind ||
+      value.parentSessionId ||
+      value.subagentRunId ||
+      value.appId ||
+      value.workspaceKind ||
+      value.workspaceId ||
+      value.localProjectId ||
+      value.cloudProjectId
+  );
+  return hasDevelopmentContext ? "development" : "chat";
+}
+
 export async function readStoreData(reader: StoreDbReader): Promise<StoreData> {
   return {
-    sessions: (await readStorePayloads<Session>(reader, "sessions")).map(normalizeSessionPayload),
+    sessions: (await readStorePayloads<Session>(reader, "sessions")).map(
+      normalizeSessionPayload
+    ),
     turns: await readStorePayloads<Turn>(reader, "turns"),
-    events: (await readStorePayloads<RuntimeEvent>(reader, "events")).map(sanitizeRuntimeEvent),
+    events: (await readStorePayloads<RuntimeEvent>(reader, "events")).map(
+      sanitizeRuntimeEvent
+    ),
     approvals: await readStorePayloads<Approval>(reader, "approvals"),
   };
 }
 
-export async function persistStoreData(data: StoreData, writer: StoreDbWriter): Promise<void> {
+export async function persistStoreData(
+  data: StoreData,
+  writer: StoreDbWriter
+): Promise<void> {
   const updatedAt = now();
   await writer.exec("BEGIN IMMEDIATE");
   try {
-    await writer.exec("DELETE FROM approvals; DELETE FROM events; DELETE FROM turns; DELETE FROM sessions;");
+    await writer.exec(
+      "DELETE FROM approvals; DELETE FROM events; DELETE FROM turns; DELETE FROM sessions;"
+    );
 
     for (const [index, session] of data.sessions.entries()) {
-      await writer.run("INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)", [
-        session.id,
-        index,
-        JSON.stringify(session),
-        session.updatedAt,
-      ]);
+      await writer.run(
+        "INSERT INTO sessions (id, sort_index, payload, updated_at) VALUES (?, ?, ?, ?)",
+        [session.id, index, JSON.stringify(session), session.updatedAt]
+      );
     }
 
     for (const [index, turn] of data.turns.entries()) {
@@ -95,7 +137,14 @@ export async function persistStoreData(data: StoreData, writer: StoreDbWriter): 
     for (const [index, approval] of data.approvals.entries()) {
       await writer.run(
         "INSERT INTO approvals (id, session_id, status, sort_index, payload, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-        [approval.id, approval.sessionId, approval.status, index, JSON.stringify(approval), updatedAt]
+        [
+          approval.id,
+          approval.sessionId,
+          approval.status,
+          index,
+          JSON.stringify(approval),
+          updatedAt,
+        ]
       );
     }
 

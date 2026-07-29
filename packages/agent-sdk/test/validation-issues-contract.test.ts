@@ -191,8 +191,6 @@ describe("validation issue contract", () => {
       editable: {
         kind: "editable",
         enabled: true,
-        backend: "other-backend" as never,
-        runtimeEnvironmentId: "openpond-coding-core-v1",
         sourceOfTruth: "agent-source",
         policyDiscovery: { command: "openpond agent inspect --json", runAfter: "source-materialized" },
         allowedPaths: [],
@@ -226,7 +224,6 @@ describe("validation issue contract", () => {
       "env_name_required",
       "env_duplicate",
       "env_secret_value_inline",
-      "editable_backend_invalid",
       "editable_allowed_paths_missing",
       "editable_required_checks_missing",
       "source_file_missing",

@@ -33,12 +33,12 @@ export function useCreateImproveRuns(input: {
     if (!connection) return Promise.resolve(null);
     if (inFlightRef.current) return inFlightRef.current;
     setLoading(true);
-    const request = api.listCreateImproveRuns(connection, { profileId, limit: 500 })
+    const request = api
+      .listCreateImproveRuns(connection, { profileId, limit: 500 })
       .then((response) => {
-        const activeRuns = response.runs.filter((run) => run.target.kind !== "agent");
-        setRuns(activeRuns);
+        setRuns(response.runs);
         setError(null);
-        return activeRuns;
+        return response.runs;
       })
       .catch((caught) => {
         setError(caught instanceof Error ? caught.message : String(caught));
@@ -63,7 +63,7 @@ export function useCreateImproveRuns(input: {
 
   const hasActiveRun = useMemo(
     () => runs.some((run) => ACTIVE_RUN_STATES.has(run.state)),
-    [runs],
+    [runs]
   );
 
   useEffect(() => {
@@ -73,7 +73,10 @@ export function useCreateImproveRuns(input: {
     const poll = async () => {
       await refresh();
       if (active) {
-        timer = window.setTimeout(() => void poll(), hasActiveRun ? 1_000 : 15_000);
+        timer = window.setTimeout(
+          () => void poll(),
+          hasActiveRun ? 1_000 : 15_000
+        );
       }
     };
     timer = window.setTimeout(() => void poll(), hasActiveRun ? 1_000 : 15_000);

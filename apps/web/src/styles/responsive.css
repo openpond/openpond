@@ -153,18 +153,19 @@
     max-width: 100%;
   }
 
-  .account-signin-panel {
-    grid-template-columns: 22px minmax(0, 1fr);
-  }
-
-  .account-api-key-link {
-    justify-self: start;
-    grid-column: 2;
-  }
-
-  .account-form-grid,
   .provider-settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .account-error-footnote {
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .account-error-footnote strong {
+    flex-basis: auto;
+    max-width: 100%;
+    text-align: left;
   }
 
   .lsp-language-row {

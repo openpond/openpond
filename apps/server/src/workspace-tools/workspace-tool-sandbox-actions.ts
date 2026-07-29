@@ -73,6 +73,8 @@ type SandboxToolAction = Extract<
   | "sandbox_replay_cancel"
   | "sandbox_logs"
   | "sandbox_receipts"
+  | "sandbox_prepare_agent"
+  | "sandbox_save_agent_package"
   | "sandbox_save_output"
   | "sandbox_schedule_create"
   | "sandbox_stop"
@@ -119,6 +121,8 @@ const SANDBOX_ACTIONS = new Set<WorkspaceToolRequest["action"]>([
   "sandbox_replay_cancel",
   "sandbox_logs",
   "sandbox_receipts",
+  "sandbox_prepare_agent",
+  "sandbox_save_agent_package",
   "sandbox_save_output",
   "sandbox_schedule_create",
   "sandbox_stop",
@@ -189,6 +193,21 @@ export async function handleSandboxWorkspaceToolAction(input: {
     sandboxPath: string;
     suggestedName?: string | null;
     validation?: OutputValidationEvidence[];
+  }) => Promise<unknown>;
+  prepareWorkAgent?: (input: {
+    session: Session;
+    directory: string;
+    template:
+      | "blank-agent"
+      | "customer-reply-agent"
+      | "integration-heavy-agent";
+  }) => Promise<unknown>;
+  saveWorkAgentPackage?: (input: {
+    session: Session;
+    sourceTurnId: string;
+    directory: string;
+    agentId?: string | null;
+    title?: string | null;
   }) => Promise<unknown>;
 }): Promise<WorkspaceToolResult | null> {
   if (!SANDBOX_ACTIONS.has(input.request.action)) {
@@ -573,6 +592,37 @@ export async function handleSandboxWorkspaceToolAction(input: {
     result = await sandboxRequestPayload({ type: "logs", sandboxId });
   } else if (action === "sandbox_receipts") {
     result = await sandboxRequestPayload({ type: "receipts", sandboxId });
+  } else if (action === "sandbox_prepare_agent") {
+    if (!input.prepareWorkAgent) {
+      throw new Error("Work Agent preparation is not configured.");
+    }
+    const template = stringArg(args, "template", "blank-agent");
+    if (
+      template !== "blank-agent" &&
+      template !== "customer-reply-agent" &&
+      template !== "integration-heavy-agent"
+    ) {
+      throw new Error("Unsupported Agent template.");
+    }
+    result = await input.prepareWorkAgent({
+      session: input.session,
+      directory: requiredStringArg(args, "directory"),
+      template,
+    });
+  } else if (action === "sandbox_save_agent_package") {
+    if (!input.saveWorkAgentPackage) {
+      throw new Error("Work Agent package storage is not configured.");
+    }
+    if (!input.sourceTurnId) {
+      throw new Error("An Agent package must be saved from an active turn.");
+    }
+    result = await input.saveWorkAgentPackage({
+      session: input.session,
+      sourceTurnId: input.sourceTurnId,
+      directory: requiredStringArg(args, "directory"),
+      agentId: stringArg(args, "agentId", "") || null,
+      title: stringArg(args, "title", "") || null,
+    });
   } else if (action === "sandbox_save_output") {
     if (!input.sourceTurnId) {
       throw new Error("A Work output must be saved from an active turn.");
@@ -1251,6 +1301,21 @@ export function summarizeSandboxToolResult(
     const title =
       typeof outputRef.title === "string" ? outputRef.title : "Work output";
     return `Saved ${title} outside the sandbox.`;
+  }
+  if (action === "sandbox_prepare_agent") {
+    const directory =
+      typeof payload.directory === "string" ? payload.directory : "Agent";
+    return `Prepared an OpenPond Agent SDK project in ${directory}.`;
+  }
+  if (action === "sandbox_save_agent_package") {
+    const outputRef = asRecord(payload.outputRef);
+    const title =
+      typeof outputRef.title === "string" ? outputRef.title : "Agent package";
+    const versionId =
+      typeof outputRef.versionId === "string" ? outputRef.versionId : "";
+    return `Saved ${title}${
+      versionId ? ` (${versionId})` : ""
+    } as an immutable Agent package.`;
   }
   if (action === "sandbox_snapshot_catalog") {
     const snapshots = Array.isArray(payload.snapshots)

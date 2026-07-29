@@ -29,7 +29,11 @@ export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION =
 export const ManagedAdapterServingProjectionSchema = z.object({
   schemaVersion: z.literal("openpond.managedAdapterServingProjection.v1"),
   teamId: IdSchema.nullable().default(null),
-  source: z.enum(["openpond_fireworks", "sandbox_managed_rft"]),
+  source: z.enum([
+    "openpond_fireworks",
+    "openpond_training",
+    "sandbox_managed_rft",
+  ]),
   sourceRef: IdSchema,
   canonicalArtifactId: IdSchema.nullable(),
   canonicalArtifactState: z

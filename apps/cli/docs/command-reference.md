@@ -83,7 +83,6 @@ Options:
   --path <string>
   --publish-hosted-source
   --team-id <string>
-  --work-item-id <string>
 ```
 ## agents
 
@@ -248,9 +247,10 @@ Options:
 
 ```text
 Usage:
-  openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive [--provider <id>] [--model <id>] [--project <id>] [--yes] [--approval-policy <policy>] [--json] [--timeout-sec <n>] [--max-output-bytes <n>] [--sandbox <mode>]
+  openpond chat (--message-file <path>|--message <text>|--stdin) --non-interactive [--provider <id>] [--model <id>] [--agent <id>] [--project <id>] [--resume <session-id>] [--yes] [--approval-policy <policy>] [--json] [--timeout-sec <n>] [--max-output-bytes <n>] [--sandbox <mode>]
 
 Options:
+  --agent <string>
   --approval-policy <string>
   --cwd <string>
   --json
@@ -262,6 +262,7 @@ Options:
   --no-server-start
   --project <string>
   --provider <string>
+  --resume <string>
   --sandbox <string>
   --server <string>
   --stdin
@@ -399,10 +400,33 @@ Aliases:
   organization
 
 Options:
+  --access-token <string>
+  --arguments <json>
   --callback-port <integer>
+  --client-id <string>
+  --custom-domain <string>
+  --display-name <string>
+  --email <string>
+  --env <string>
+  --environment <string>
   --json
+  --name <string>
   --open
+  --origin <string>
+  --primary-contact-email <string>
+  --print-token
+  --resource-url <string>
+  --role <string>
+  --scope <string>
+  --scopes <string>
+  --slug <string>
+  --status <string>
+  --timeout <integer>
   --timeout-seconds <integer>
+  --tool <string>
+  --tool-name <string>
+  --toolset <string>
+  --url <string>
 ```
 ## project
 
@@ -432,12 +456,11 @@ Options:
 
 ```text
 Usage:
-  openpond agent <inspect|build|validate|eval|traces|list|create|upsert|get|update|run|run-test|bind-source|source|edit|archive> [args]
+  openpond agent <inspect|build|validate|eval|traces|list|create|upsert|get|update|run|run-test|bind-source|source|archive> [args]
   openpond agent run <action> [--cwd <project>] [--input <json>]
   openpond agent run <agentId> --team-id <id> [--conversation-id <id>] [--target-project-id <projectId>] [--input <json>]
-  openpond agent source check-status <workItemId> --team-id <id> [--limit <n>]
-  openpond agent edit open <agentId> --team-id <id> --project-id <id> [--message <text>]
-  openpond agent edit checkpoint-result|commit-result|pr-result <workItemId> --team-id <id> --ref <artifact-ref>
+  openpond agent source checks <agentId> --team-id <id> [--check-kind <kind>]
+  openpond agent source publish <agentId> --team-id <id> [--expected-manifest-hash <hash>]
 
 Options:
   --agent-edit <json>
@@ -482,7 +505,6 @@ Options:
   --team-id <string>
   --trigger-type <string>
   --workflow-mode <string>
-  --work-item-id <string>
 ```
 ## harness
 

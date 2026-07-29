@@ -78,7 +78,7 @@ export function assistantMessageForNativeToolCalls(
       type: toolCall.hostedToolCall.type || "function",
       function: {
         name: toolCall.name,
-        arguments: toolCall.argumentsJson,
+        arguments: replayableNativeToolArguments(toolCall.argumentsJson),
       },
     })),
   };
@@ -170,4 +170,17 @@ function completedToolCall(call: AccumulatedToolCall, sequence: number): NativeM
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function replayableNativeToolArguments(argumentsJson: string): string {
+  const raw = argumentsJson.trim();
+  if (!raw) return "{}";
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? argumentsJson
+      : "{}";
+  } catch {
+    return "{}";
+  }
 }

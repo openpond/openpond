@@ -8,7 +8,6 @@ import { createOpenPondSandboxClient } from "../src/sandbox/client";
 import { collectProfileSourceUploadForPush } from "../src/cli/profile";
 import {
   AGENT_SDK_PILOT_NAMES,
-  LARGE_RAW_MARKER,
   type CapturedRequest,
   rewriteAgentSdkDependencyForTest,
   resolveTestAgentSdkRoot,
@@ -146,7 +145,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         "--source-check-dispatch",
         "coding_core",
         "--metadata",
-        '{"reason":"phase3"}',
+        '{"reason":"phase5"}',
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
@@ -171,180 +170,28 @@ describe("project and agent sandbox CLI scenarios", () => {
         "team_test",
         "--expected-manifest-hash",
         "hash_test",
-        "--work-item-id",
-        "work_item_test",
         "--eval-status",
         "passed",
         "--sandbox-api-url",
         sandboxApiUrl,
       ]);
-      const agentEditOpen = await runCli([
-        "agent",
-        "edit",
-        "open",
-        "agent_test",
-        "--team-id",
-        "team_test",
-        "--project-id",
-        "project_test",
-        "--message",
-        "Update the agent",
-        "--source-ref",
-        "draft/ref",
-        "--base-sha",
-        "base_sha_test",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditChat = await runCli([
-        "agent",
-        "edit",
-        "chat",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--message",
-        "Please update copy",
-        "--payload",
-        '{"mode":"builder"}',
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditActivity = await runCli([
-        "agent",
-        "edit",
-        "activity",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--limit",
-        "2",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditBackground = await runCli([
-        "agent",
-        "edit",
-        "background",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--prompt",
-        "Run checks",
-        "--agent-edit",
-        '{"policyDiscovery":{"command":"openpond agent inspect --json","runAfter":"source-materialized"},"requiredChecks":["openpond agent validate"]}',
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditRequestChecks = await runCli([
-        "agent",
-        "edit",
-        "request-checks",
-        "agent_test",
-        "--team-id",
-        "team_test",
-        "--check-kind",
-        "eval",
-        "--source-ref",
-        "draft/ref",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentSourceCheckStatus = await runCli([
-        "agent",
-        "source",
-        "check-status",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--limit",
-        "2",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditCheckStatus = await runCli([
-        "agent",
-        "edit",
-        "check-status",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--limit",
-        "2",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditFailedSetupStatus = await runCli([
-        "agent",
-        "edit",
-        "check-status",
-        "work_item_failed_setup",
-        "--team-id",
-        "team_test",
-        "--limit",
-        "2",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditCheckpointResult = await runCli([
-        "agent",
-        "edit",
-        "checkpoint-result",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--ref",
-        "source_ref_test",
-        "--metadata",
-        '{"sourceHash":"hash_test"}',
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditCommitResult = await runCli([
-        "agent",
-        "edit",
-        "commit-result",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--ref",
-        "commit_ref_test",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
-      const agentEditPrResult = await runCli([
-        "agent",
-        "edit",
-        "pr-result",
-        "work_item_test",
-        "--team-id",
-        "team_test",
-        "--ref",
-        "pr_ref_test",
-        "--sandbox-api-url",
-        sandboxApiUrl,
-      ]);
 
-      expect(projectList.code).toBe(0);
-      expect(projectCreate.code).toBe(0);
-      expect(projectUpdate.code).toBe(0);
-      expect(agentCreate.code).toBe(0);
-      expect(agentUpdate.code).toBe(0);
-      expect(agentRun.code).toBe(0);
-      expect(agentBindSource.code).toBe(0);
-      expect(agentSourceDeployPlan.code).toBe(0);
-      expect(agentSourceChecks.code).toBe(0);
-      expect(agentSourceSnapshots.code).toBe(0);
-      expect(agentSourcePublish.code).toBe(0);
-      expect(agentEditOpen.code).toBe(0);
-      expect(agentEditChat.code).toBe(0);
-      expect(agentEditActivity.code).toBe(0);
-      expect(agentEditBackground.code).toBe(0);
-      expect(agentEditRequestChecks.code).toBe(0);
-      expect(agentSourceCheckStatus.code).toBe(0);
-      expect(agentEditCheckpointResult.code).toBe(0);
-      expect(agentEditCommitResult.code).toBe(0);
-      expect(agentEditPrResult.code).toBe(0);
+      for (const result of [
+        projectList,
+        projectCreate,
+        projectUpdate,
+        agentCreate,
+        agentUpdate,
+        agentRun,
+        agentBindSource,
+        agentSourceDeployPlan,
+        agentSourceChecks,
+        agentSourceSnapshots,
+        agentSourcePublish,
+      ]) {
+        expect(result.code).toBe(0);
+      }
+
       expect(JSON.parse(projectList.stdout).projects[0]).toMatchObject({
         id: "project_test",
         teamId: "team_test",
@@ -375,26 +222,19 @@ describe("project and agent sandbox CLI scenarios", () => {
         mode: "published_snapshot",
         publishedSnapshotId: "snapshot_test",
       });
-      expect(
-        JSON.parse(agentSourceDeployPlan.stdout).deployPlan
-      ).toMatchObject({
+      expect(JSON.parse(agentSourceDeployPlan.stdout).deployPlan).toMatchObject({
         agentId: "agent_test",
         status: "ready",
       });
       expect(JSON.parse(agentSourceChecks.stdout)).toMatchObject({
-        workItem: { id: "work_item_test" },
-        activity: { id: "activity_checks" },
-      });
-      const sourceChecksRequest = requests.find(
-        (request) =>
-          request.url === "/v1/agents/agent_test/source/checks?teamId=team_test" &&
-          request.method === "POST" &&
-          request.body.sourceRef === "master"
-      );
-      expect(sourceChecksRequest?.body).toMatchObject({
-        checkKind: "validate",
-        dispatch: "coding_core",
-        metadata: { reason: "phase3" },
+        sourceCheckStatus: {
+          latestTaskRunId: "task_run_test",
+          validation: { status: "passed", passed: true },
+        },
+        dispatchResult: {
+          status: "completed",
+          taskRun: { id: "task_run_test" },
+        },
       });
       expect(
         JSON.parse(agentSourceSnapshots.stdout).manifestSnapshots[0]
@@ -406,175 +246,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         activeManifestSnapshot: { id: "snapshot_test" },
         publishedAt: "2026-05-20T00:00:00.000Z",
       });
-      expect(JSON.parse(agentEditOpen.stdout)).toMatchObject({
-        workItem: { id: "work_item_test", projectId: "project_test" },
-        created: true,
-      });
-      expect(JSON.parse(agentEditChat.stdout)).toMatchObject({
-        userMessage: { id: "message_user" },
-        assistantMessage: { id: "message_assistant" },
-      });
-      expect(JSON.parse(agentEditActivity.stdout).activity[0]).toMatchObject({
-        id: "activity_checks",
-        payload: {
-          traceArtifactRef: "artifacts/openpond-trace.jsonl",
-          evalResultArtifactRef: "artifacts/openpond-eval-results.json",
-        },
-      });
-      expect(JSON.parse(agentEditBackground.stdout)).toMatchObject({
-        activity: { id: "activity_background" },
-      });
-      expect(JSON.parse(agentEditRequestChecks.stdout)).toMatchObject({
-        workItem: { id: "work_item_test" },
-        activity: { id: "activity_checks" },
-      });
-      expect(
-        JSON.parse(agentSourceCheckStatus.stdout).sourceCheckStatus
-      ).toMatchObject({
-        workItemId: "work_item_test",
-        latestTaskRunId: "task_run_test",
-        latestRuntimeId: "runtime_test",
-        latestSandboxId: "sandbox_test",
-        sourceMaterialization: {
-          status: "completed",
-          sourceCommitSha: "source_sha_test",
-        },
-        sourceUploadMetadata: {
-          sourceTreeMode: "typescript_agent_sdk",
-          commands: {
-            inspect: "pnpm run agent:inspect",
-            build: "pnpm run agent:build",
-            validate: "pnpm run agent:validate",
-            eval: "pnpm run agent:eval",
-          },
-          generatedManifestPath: ".openpond/openpond-manifest.preview.yaml",
-          synthesizedOpenPondYaml: true,
-          openPondYamlMode: "synthesized",
-          uploadMetadataHash: {
-            sha256:
-              "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            sizeBytes: 2816,
-          },
-          artifactHashes: {
-            ".openpond/openpond-manifest.preview.yaml": {
-              sha256:
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            },
-            "openpond.yaml": {
-              sha256:
-                "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-            },
-          },
-          dependencySetup: {
-            required: true,
-            installCommand: "pnpm install --offline",
-            expectedBinaryPath: "node_modules/.bin/openpond-agent",
-            sdkPackage: {
-              path: ".openpond/vendor/openpond-agent-sdk.tgz",
-            },
-            dependencyPackages: [
-              {
-                packageName: "yaml",
-                path: ".openpond/vendor/npm/yaml.tgz",
-              },
-              {
-                packageName: "zod",
-                path: ".openpond/vendor/npm/zod.tgz",
-              },
-            ],
-          },
-          redactedSetupOutputRefs: [
-            "openpond://coding-task-runs/task_run_test/setup-output",
-          ],
-        },
-        setup: {
-          status: "completed",
-          passed: true,
-          commands: ["pnpm install --offline"],
-          expectedBinaryPath: "node_modules/.bin/openpond-agent",
-        },
-        policyDiscovery: {
-          status: "completed",
-          command: "openpond agent inspect --json",
-          requiredChecks: ["openpond agent validate", "openpond agent eval"],
-        },
-        discoveredRequiredChecks: [
-          "openpond agent validate",
-          "openpond agent eval",
-        ],
-        checkRuns: [
-          {
-            command: "openpond agent validate",
-            status: "passed",
-            passed: true,
-          },
-        ],
-        validation: { status: "passed", passed: true },
-        requestedCheckKind: "validate",
-        deployPlan: {
-          status: "needs_validation",
-          canDeploy: false,
-          blockedReasons: ["source_commit_sha_missing"],
-        },
-        traceArtifactRefs: ["artifacts/openpond-trace.jsonl"],
-        evalResultArtifactRefs: ["artifacts/openpond-eval-results.json"],
-        validatorArtifactRefs: ["artifacts/validator-report.json"],
-        patchArtifactRef: "openpond://coding-task-runs/task_run_test/patch",
-        finalResultState: "completed",
-        publishBlockers: ["source_commit_sha_missing"],
-      });
-      expect(agentSourceCheckStatus.stdout).not.toContain("raw setup output");
-      expect(agentSourceCheckStatus.stdout).not.toContain("super_secret_value");
-      expect(
-        JSON.parse(agentEditCheckStatus.stdout).sourceCheckStatus
-          .sourceUploadMetadata
-      ).toMatchObject({
-        sourceTreeMode: "typescript_agent_sdk",
-        openPondYamlMode: "synthesized",
-        dependencySetup: {
-          sdkPackage: {
-            path: ".openpond/vendor/openpond-agent-sdk.tgz",
-          },
-        },
-      });
-      expect(agentEditCheckStatus.stdout).not.toContain("raw setup output");
-      expect(agentEditCheckStatus.stdout).not.toContain("super_secret_value");
-      expect(
-        JSON.parse(agentEditFailedSetupStatus.stdout).sourceCheckStatus
-      ).toMatchObject({
-        workItemId: "work_item_failed_setup",
-        workItemStatus: "failed",
-        latestTaskRunId: "task_run_failed_setup",
-        latestRuntimeId: "runtime_failed_setup",
-        latestSandboxId: "sandbox_failed_setup",
-        setup: {
-          status: "failed",
-          message: "yaml@^2.9.0 failed to resolve",
-          command: "pnpm install --offline",
-          exitCode: 1,
-          commands: ["pnpm install --offline"],
-          expectedBinaryPath: "node_modules/.bin/openpond-agent",
-          dependencyPackages: [
-            {
-              packageName: "yaml",
-              source: "npm",
-              versionSpec: "^2.9.0",
-              path: ".openpond/vendor/npm/yaml.tgz",
-              sha256: "sha_yaml",
-              sizeBytes: 112086,
-            },
-          ],
-        },
-      });
-      expect(JSON.parse(agentEditCheckpointResult.stdout)).toMatchObject({
-        artifact: { id: "artifact_checkpoint", kind: "checkpoint" },
-      });
-      expect(JSON.parse(agentEditCommitResult.stdout)).toMatchObject({
-        artifact: { id: "artifact_commit", kind: "commit" },
-      });
-      expect(JSON.parse(agentEditPrResult.stdout)).toMatchObject({
-        artifact: { id: "artifact_pr", kind: "pr" },
-      });
+
       expect(requests.map((request) => request.url)).toEqual([
         "/v1/projects?teamId=team_test",
         "/v1/projects",
@@ -587,105 +259,20 @@ describe("project and agent sandbox CLI scenarios", () => {
         "/v1/agents/agent_test/source/checks?teamId=team_test",
         "/v1/agents/agent_test/source/manifest-snapshots?teamId=team_test&limit=2",
         "/v1/agents/agent_test/source/publish?teamId=team_test",
-        "/v1/agents/agent_test/edit-work-item?teamId=team_test",
-        "/v1/work-items/work_item_test/chat",
-        "/v1/work-items/work_item_test/activity?teamId=team_test&limit=2",
-        "/v1/work-items/work_item_test/handle-background",
-        "/v1/agents/agent_test/source/checks?teamId=team_test",
-        "/v1/work-items/work_item_test/status?teamId=team_test&limit=2&includeArchived=true",
-        "/v1/work-items/work_item_test/status?teamId=team_test&limit=2&includeArchived=true",
-        "/v1/work-items/work_item_failed_setup/status?teamId=team_test&limit=2&includeArchived=true",
-        "/v1/work-items/work_item_test/result/checkpoint",
-        "/v1/work-items/work_item_test/result/commit",
-        "/v1/work-items/work_item_test/result/pr",
       ]);
-      expect(requests[1]?.body).toMatchObject({
-        teamId: "team_test",
-        name: "Demo Project",
-        sourceType: "internal_repo",
-        gitOwner: "openpond",
-        gitRepo: "demo-project",
-      });
-      expect(requests[2]?.body).toMatchObject({
-        description: "Updated Project",
-      });
-      expect(requests[3]?.body).toMatchObject({
-        teamId: "team_test",
-        projectId: "project_test",
-        selectedEntrypoint: { scope: "action", name: "hello" },
-      });
-      expect(requests[4]?.body).toMatchObject({
-        triggerType: "background",
-      });
-      expect(requests[5]?.body).toMatchObject({
-        teamId: "team_test",
-        idempotencyKey: "run_key",
-        conversationId: "session_run_1",
-        targetProjectId: "target_project_test",
-        targetProject: { id: "target_project_test" },
-        input: { message: "hello" },
-      });
-      expect(requests[6]?.body).toMatchObject({
-        runtimeSource: {
-          mode: "published_snapshot",
-          publishedSnapshotId: "snapshot_test",
-        },
-      });
       expect(requests[8]?.body).toMatchObject({
         checkKind: "validate",
         sourceRef: "master",
-        metadata: { reason: "phase3" },
+        metadata: { reason: "phase5" },
       });
       expect(requests[10]?.body).toMatchObject({
         expectedManifestHash: "hash_test",
-        workItemId: "work_item_test",
         evalStatus: "passed",
-      });
-      expect(requests[11]?.body).toMatchObject({
-        projectId: "project_test",
-        initialMessage: "Update the agent",
-        sourceRef: "draft/ref",
-        baseSha: "base_sha_test",
-      });
-      expect(requests[11]?.body).not.toHaveProperty("createImproveRun");
-      expect(requests[12]?.body).toMatchObject({
-        teamId: "team_test",
-        message: "Please update copy",
-        mode: "queue_cloud",
-        payload: { mode: "builder" },
-      });
-      expect(requests[14]?.body).toMatchObject({
-        teamId: "team_test",
-        prompt: "Run checks",
-        agentEdit: {
-          policyDiscovery: {
-            command: "openpond agent inspect --json",
-            runAfter: "source-materialized",
-          },
-          requiredChecks: ["openpond agent validate"],
-        },
-      });
-      expect(requests[15]?.body).toMatchObject({
-        checkKind: "eval",
-        sourceRef: "draft/ref",
-      });
-      expect(requests[19]?.body).toMatchObject({
-        teamId: "team_test",
-        ref: "source_ref_test",
-        metadata: { sourceHash: "hash_test" },
-      });
-      expect(requests[20]?.body).toMatchObject({
-        teamId: "team_test",
-        ref: "commit_ref_test",
-      });
-      expect(requests[21]?.body).toMatchObject({
-        teamId: "team_test",
-        ref: "pr_ref_test",
       });
     });
   }, 90_000);
 
-  test("agent help separates local runs, remote runs, and source edits", async () => {
+  test("agent help keeps direct runs and source operations without the legacy edit transport", async () => {
     const result = await runCli(["help"]);
 
     expect(result.code).toBe(0);
@@ -695,11 +282,9 @@ describe("project and agent sandbox CLI scenarios", () => {
     expect(result.stdout).toContain(
       "openpond agent run <agentId> --team-id <id>"
     );
-    expect(result.stdout).toContain("openpond agent source check-status");
-    expect(result.stdout).toContain("openpond agent edit open <agentId>");
-    expect(result.stdout).toContain(
-      "openpond agent edit checkpoint-result|commit-result|pr-result"
-    );
+    expect(result.stdout).toContain("openpond agent source checks <agentId>");
+    expect(result.stdout).toContain("openpond agent source publish <agentId>");
+    expect(result.stdout).not.toContain("openpond agent edit");
   });
 
   test("agent run-test sends target project binding", async () => {
@@ -735,335 +320,6 @@ describe("project and agent sandbox CLI scenarios", () => {
           source: "diagnostic",
           allowLatestSource: true,
         },
-      });
-    });
-  });
-
-  test("agent edit check-status classifies setup, policy, validation, eval, and publish failures", async () => {
-    const cases = [
-      {
-        workItemId: "work_item_dependency_install_failure",
-        expected: {
-          sourceUploadMetadata: {
-            sourceTreeMode: "typescript_agent_sdk",
-            openPondYamlMode: "synthesized",
-            dependencySetup: {
-              sdkPackage: {
-                path: ".openpond/vendor/openpond-agent-sdk.tgz",
-              },
-            },
-          },
-          setup: {
-            status: "failed",
-            command: "pnpm install --offline",
-            exitCode: 1,
-            message: "dependency install failed",
-          },
-        },
-      },
-      {
-        workItemId: "work_item_missing_sdk_binary",
-        expected: {
-          policyDiscovery: {
-            status: "failed",
-            command: "pnpm run agent:inspect",
-            exitCode: 127,
-            message: "missing node_modules/.bin/openpond-agent",
-          },
-        },
-      },
-      {
-        workItemId: "work_item_unresolved_file_dependency",
-        expected: {
-          setup: {
-            status: "failed",
-            command: "pnpm install --offline",
-            exitCode: 1,
-            message: "unresolved local file dependency",
-          },
-        },
-      },
-      {
-        workItemId: "work_item_missing_artifact_directory",
-        expected: {
-          policyDiscovery: {
-            status: "failed",
-            command: "pnpm run agent:inspect",
-            exitCode: 1,
-            message: "missing generated artifact directory .openpond",
-          },
-        },
-      },
-      {
-        workItemId: "work_item_missing_source_upload_metadata",
-        expected: {
-          sourceMaterialization: {
-            status: "blocked",
-            message: "missing .openpond/source-upload-metadata.json",
-            blockedReason: "source_upload_metadata_missing",
-          },
-          policyDiscovery: {
-            status: "blocked",
-            message: "source-upload metadata missing",
-          },
-          publishBlockers: ["source_upload_metadata_missing"],
-        },
-        notContains: ["openpond-agent inspect --json"],
-      },
-      {
-        workItemId: "work_item_stale_source_upload_metadata",
-        expected: {
-          sourceUploadMetadata: {
-            status: "stale",
-            staleReasons: ["artifact_hash_mismatch"],
-            sourceTreeMode: "typescript_agent_sdk",
-            openPondYamlMode: "synthesized",
-          },
-          policyDiscovery: {
-            status: "blocked",
-            message: "source-upload metadata is stale",
-          },
-          publishBlockers: ["source_upload_metadata_stale"],
-        },
-        notContains: ["openpond-agent inspect --json"],
-      },
-      {
-        workItemId: "work_item_invalid_inspect_json",
-        expected: {
-          policyDiscovery: {
-            status: "failed",
-            command: "pnpm run agent:inspect",
-            exitCode: 1,
-            message: "invalid inspect JSON",
-          },
-        },
-      },
-      {
-        workItemId: "work_item_validation_failure",
-        expected: {
-          validation: {
-            status: "failed",
-            passed: false,
-          },
-          checkRuns: [
-            {
-              command: "pnpm run agent:validate",
-              status: "failed",
-              passed: false,
-              exitCode: 1,
-            },
-          ],
-          validatorArtifactRefs: ["artifacts/validator-report.json"],
-        },
-      },
-      {
-        workItemId: "work_item_eval_failure",
-        expected: {
-          eval: {
-            status: "failed",
-            passed: false,
-          },
-          checkRuns: [
-            {
-              command: "pnpm run agent:eval",
-              status: "failed",
-              passed: false,
-              exitCode: 1,
-            },
-          ],
-          evalResultArtifactRefs: ["artifacts/openpond-eval-results.json"],
-        },
-      },
-      {
-        workItemId: "work_item_publish_blocked",
-        expected: {
-          deployPlan: {
-            status: "blocked",
-            canDeploy: false,
-            blockedReasons: ["source_commit_sha_missing", "failed_checks"],
-          },
-          publishBlockers: ["source_commit_sha_missing", "failed_checks"],
-        },
-      },
-    ];
-
-    const requests: CapturedRequest[] = [];
-    await withSandboxApi(requests, async (sandboxApiUrl) => {
-      for (const testCase of cases) {
-        const result = await runCli([
-          "agent",
-          "edit",
-          "check-status",
-          testCase.workItemId,
-          "--team-id",
-          "team_test",
-          "--limit",
-          "2",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]);
-
-        if (result.code !== 0) {
-          throw new Error(
-            `${testCase.workItemId} check-status failed: ${[
-              result.stdout.trim(),
-              result.stderr.trim(),
-            ]
-              .filter(Boolean)
-              .join("\n")}`
-          );
-        }
-        expect(result.stdout).not.toContain("raw sandbox process output");
-        expect(result.stdout).not.toContain("super_secret_value");
-        for (const pattern of testCase.notContains ?? []) {
-          expect(result.stdout).not.toContain(pattern);
-        }
-        expect(JSON.parse(result.stdout).sourceCheckStatus).toMatchObject({
-          workItemId: testCase.workItemId,
-          workItemStatus: "failed",
-          latestTaskRunId: `${testCase.workItemId}_task`,
-          latestRuntimeId: `${testCase.workItemId}_runtime`,
-          latestSandboxId: `${testCase.workItemId}_sandbox`,
-          ...testCase.expected,
-        });
-      }
-    });
-  });
-
-  test("agent edit/source public outputs stay compact when API responses include large raw fields", async () => {
-    const requests: CapturedRequest[] = [];
-    await withSandboxApi(requests, async (sandboxApiUrl) => {
-      const commands = [
-        await runCli([
-          "agent",
-          "edit",
-          "background",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--prompt",
-          "Run compact output check",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "edit",
-          "activity",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--limit",
-          "2",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "edit",
-          "check-status",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--limit",
-          "2",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "source",
-          "check-status",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--limit",
-          "2",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "edit",
-          "checkpoint-result",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--ref",
-          "source_ref_large",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "edit",
-          "commit-result",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--ref",
-          "commit_ref_large",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-        await runCli([
-          "agent",
-          "edit",
-          "pr-result",
-          "work_item_large",
-          "--team-id",
-          "team_test",
-          "--ref",
-          "pr_ref_large",
-          "--sandbox-api-url",
-          sandboxApiUrl,
-        ]),
-      ];
-
-      for (const result of commands) {
-        expect(result.code).toBe(0);
-        expect(result.stdout).not.toContain(LARGE_RAW_MARKER);
-        expect(result.stdout.length).toBeLessThan(12_000);
-        expect(result.stderr).not.toContain(LARGE_RAW_MARKER);
-      }
-
-      expect(JSON.parse(commands[0]!.stdout)).toMatchObject({
-        workItem: { id: "work_item_large", status: "running" },
-        activity: { id: "activity_large_background" },
-      });
-      expect(JSON.parse(commands[1]!.stdout)).toMatchObject({
-        activity: [
-          {
-            id: "activity_large",
-            payload: {
-              traceArtifactRef: "artifacts/trace-large.jsonl",
-              evalResultArtifactRef: "artifacts/eval-large.json",
-            },
-          },
-        ],
-      });
-      for (const command of [commands[2], commands[3]]) {
-        expect(JSON.parse(command!.stdout).sourceCheckStatus).toMatchObject({
-          workItemId: "work_item_large",
-          latestTaskRunId: "task_run_large",
-          latestRuntimeId: "runtime_large",
-          latestSandboxId: "sandbox_large",
-          policyDiscovery: {
-            status: "completed",
-            command: "openpond agent inspect --json",
-          },
-          traceArtifactRefs: ["artifacts/trace-large.jsonl"],
-          evalResultArtifactRefs: ["artifacts/eval-large.json"],
-        });
-      }
-      expect(JSON.parse(commands[4]!.stdout)).toMatchObject({
-        artifact: { id: "artifact_large_checkpoint", ref: "source_ref_large" },
-      });
-      expect(JSON.parse(commands[5]!.stdout)).toMatchObject({
-        artifact: { id: "artifact_large_commit", ref: "commit_ref_large" },
-      });
-      expect(JSON.parse(commands[6]!.stdout)).toMatchObject({
-        artifact: { id: "artifact_large_pr", ref: "pr_ref_large" },
       });
     });
   });

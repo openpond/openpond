@@ -265,7 +265,7 @@ function buildOpenPondCapabilityIndexContext(
             "- browser_control: Work may open, snapshot, move over, and scroll the desktop in-app browser for read-only inspection. Browser clicks, typing, key presses, account changes, and publication are not available through this boundary.",
           ]
         : [
-          "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",
+            "- browser_control: use openpond_browser_* native tools to open, snapshot, move the cursor, click, type, press keys, and scroll in the desktop in-app browser when visible browser interaction is needed.",
           ]
       : []),
     "- web_fetch: fetch and read a known HTTP(S) URL when the user provides a link or exact page; use web_search for discovery by query.",
@@ -444,6 +444,8 @@ function buildWorkExperienceContext(session: Session): string {
     "- Use work_capabilities before promising an unfamiliar file type or destination; it does not start compute.",
     "- Treat supplied files and folders as authoritative references: inspect them before drafting, preserve requested structure and style, and create a new output revision instead of overwriting a saved result.",
     "- Place completed file candidates in /workspace/outputs and call work_save_output so the result survives sandbox cleanup.",
+    "- When the requested result is a reusable OpenPond Agent, use work_prepare_agent for the SDK project and finish with work_save_agent_package; that tool runs the SDK validation and eval gate and returns an immutable reviewed package.",
+    "- If Agent preparation, validation, evals, or package saving fails, report that blocker plainly. Do not substitute a generic file output or claim that an Agent package was completed.",
     "- When an approved connected write or deployment already created the durable result elsewhere, call work_register_external_output with its stable provider id or URL instead of copying it through the sandbox.",
     "- Connected writes, sharing, and publication require explicit user intent and provider readback. Otherwise create a reviewable local draft.",
     "- Repository, git, interactive terminal, source-promotion, and deployment capabilities belong to Development and are not available here.",

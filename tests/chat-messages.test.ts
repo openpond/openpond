@@ -3,10 +3,14 @@ import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
-import { activityGroupSummary, buildChatMessages } from "../apps/web/src/lib/chat-messages";
+import {
+  activityGroupSummary,
+  buildChatMessages,
+} from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 import { subagentChildSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
 import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
+import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
@@ -16,7 +20,11 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
   };
 }
 
-function commandStarted(id: string, turnId: string, command: string): RuntimeEvent {
+function commandStarted(
+  id: string,
+  turnId: string,
+  command: string
+): RuntimeEvent {
   return runtimeEvent({
     id,
     name: "tool.started",
@@ -74,24 +82,38 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group"]);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+    ]);
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
       "Started subagent",
       "Subagent completed",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
-      "Started coding subagent.",
-      "coding subagent completed.",
-    ]);
-    expect(messages[1]?.activities?.map((activity) => activity.openSession)).toEqual([
-      { sessionId: "session_child", label: "Open conversation", roleId: "coding", status: "queued" },
-      { sessionId: "session_child", label: "Open conversation", roleId: "coding", status: "completed" },
+    expect(
+      messages[1]?.activities?.map((activity) => activity.content)
+    ).toEqual(["Started coding subagent.", "coding subagent completed."]);
+    expect(
+      messages[1]?.activities?.map((activity) => activity.openSession)
+    ).toEqual([
+      {
+        sessionId: "session_child",
+        label: "Open conversation",
+        roleId: "coding",
+        status: "queued",
+      },
+      {
+        sessionId: "session_child",
+        label: "Open conversation",
+        roleId: "coding",
+        status: "completed",
+      },
     ]);
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
         onOpenSession: () => undefined,
-      }),
+      })
     );
     expect(html).toContain("activity-subagent-avatar-group");
     expect(html).toContain("Open Coding subagent (completed) conversation");
@@ -143,7 +165,9 @@ describe("chat message projection", () => {
       "activity_group",
     ]);
     expect(messages[1]?.activities).toHaveLength(2);
-    expect(messages[1]?.activities?.every((activity) => !activity.subagentMessage)).toBe(true);
+    expect(
+      messages[1]?.activities?.every((activity) => !activity.subagentMessage)
+    ).toBe(true);
     expect(messages[2]?.activities?.[0]?.subagentMessage).toMatchObject({
       direction: "received",
       roleId: "review",
@@ -154,7 +178,7 @@ describe("chat message projection", () => {
       createElement(MessageRow, {
         message: messages[2]!,
         onOpenSession: () => undefined,
-      }),
+      })
     );
     expect(html).toContain("activity-child-message-group received");
     expect(html).toContain("Review subagent update · gpt-5.6-sol");
@@ -164,7 +188,10 @@ describe("chat message projection", () => {
   });
 
   test("collapses long subagent updates behind a five-line show-more control", () => {
-    const body = Array.from({ length: 7 }, (_, index) => `Evidence line ${index + 1}`).join("\n");
+    const body = Array.from(
+      { length: 7 },
+      (_, index) => `Evidence line ${index + 1}`
+    ).join("\n");
     const messages = buildChatMessages([
       runtimeEvent({
         id: "child_message_long",
@@ -196,7 +223,7 @@ describe("chat message projection", () => {
       createElement(MessageRow, {
         message: messages[0]!,
         onOpenSession: () => undefined,
-      }),
+      })
     );
     expect(html).toContain('class="collapsed"');
     expect(html).toContain('aria-expanded="false"');
@@ -265,8 +292,16 @@ describe("chat message projection", () => {
           },
         },
       }),
-      commandStarted("read_1", "turn_1", "sed -n '1,160p' apps/server/src/runtime/turn-runner.ts"),
-      commandStarted("search_1", "turn_1", "rg \"openpond_subagent_start\" apps/server/src tests"),
+      commandStarted(
+        "read_1",
+        "turn_1",
+        "sed -n '1,160p' apps/server/src/runtime/turn-runner.ts"
+      ),
+      commandStarted(
+        "search_1",
+        "turn_1",
+        'rg "openpond_subagent_start" apps/server/src tests'
+      ),
       runtimeEvent({
         id: "subagent_completed",
         name: "subagent.completed",
@@ -286,16 +321,20 @@ describe("chat message projection", () => {
     ]);
 
     const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe("Subagent completed, read a file, and searched code");
+    expect(activityGroupSummary(activities)).toBe(
+      "Subagent completed, read a file, and searched code"
+    );
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
         onOpenSession: () => undefined,
-      }),
+      })
     );
     expect(html).toContain("Working…");
-    expect(html).not.toContain("Subagent completed, read a file, and searched code");
+    expect(html).not.toContain(
+      "Subagent completed, read a file, and searched code"
+    );
     expect(html).toContain("activity-subagent-avatar-group");
     expect(html).toContain("Open Research subagent (completed) conversation");
   });
@@ -339,7 +378,7 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Subagent running");
   });
 
-  test("shows live reasoning inside the work trace and keeps answer content separate", () => {
+  test("keeps model reasoning out of the visible work trace and answer", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -371,7 +410,11 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "assistant",
+    ]);
     expect(messages[1]).toMatchObject({
       role: "activity_group",
       traceState: "settled",
@@ -387,14 +430,19 @@ describe("chat message projection", () => {
       content: "Hello z.ai",
     });
 
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
     expect(html).toContain("Thought through the request");
     expect(html).not.toContain("Working…");
-    expect(html).toContain("The user is greeting Z.ai.");
+    expect(html).not.toContain("The user is greeting Z.ai.");
+    expect(html).not.toContain("It should answer briefly.");
     expect(html).not.toContain(">Reasoning<");
     expect(html).not.toContain("Hello z.ai");
 
-    const assistantHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[2]! }));
+    const assistantHtml = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[2]! })
+    );
     expect(assistantHtml).toContain("Hello z.ai");
     expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
   });
@@ -467,27 +515,45 @@ describe("chat message projection", () => {
       "Searched resources",
       "Reasoning",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
+    expect(
+      messages[1]?.activities?.map((activity) => activity.content)
+    ).toEqual([
       "I need to find the relevant files.",
       "Found 2 resources.",
       "Now I can inspect the candidate.",
     ]);
-    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe("Searched code");
+    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe(
+      "Searched code"
+    );
     expect(messages[2]?.content).toBe("I found the chat files.");
 
-    const html = renderToStaticMarkup(createElement(MessageRow, {
-      message: {
-        ...messages[1]!,
-        traceStartedAt: "2026-07-22T15:00:00.000Z",
-        traceCompletedAt: "2026-07-22T15:01:24.000Z",
-      },
-    }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: {
+          ...messages[1]!,
+          traceStartedAt: "2026-07-22T15:00:00.000Z",
+          traceCompletedAt: "2026-07-22T15:01:24.000Z",
+        },
+      })
+    );
     expect(html).toContain("Worked for 1m 24s · Searched code");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("I need to find the relevant files.");
-    expect(html).toContain("Now I can inspect the candidate.");
+    expect(html).not.toContain("I need to find the relevant files.");
+    expect(html).not.toContain("Now I can inspect the candidate.");
     expect(html).not.toContain("Found 2 resources.");
     expect(html).not.toContain("Searched resources");
+    const expandedActivities = workTracePresentation(
+      messages[1]?.activities ?? [],
+      true
+    ).visibleActivities;
+    expect(expandedActivities).toMatchObject([
+      {
+        content: "Found 2 resources.",
+      },
+    ]);
+    expect(
+      expandedActivities.some((activity) => activity.kind === "reasoning")
+    ).toBe(false);
   });
 
   test("keeps legacy Codex commentary and later tool activity in transcript order", () => {
@@ -507,7 +573,11 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         output: "I found the live trace threshold.",
       }),
-      commandStarted("read_1", "turn_1", "sed -n '1,120p' apps/web/src/lib/chat-work-trace.ts"),
+      commandStarted(
+        "read_1",
+        "turn_1",
+        "sed -n '1,120p' apps/web/src/lib/chat-work-trace.ts"
+      ),
       runtimeEvent({
         id: "turn_completed",
         name: "turn.completed",
@@ -523,9 +593,13 @@ describe("chat message projection", () => {
       "assistant",
       "activity_group",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.id)).toEqual(["search_1"]);
+    expect(messages[1]?.activities?.map((activity) => activity.id)).toEqual([
+      "search_1",
+    ]);
     expect(messages[2]?.content).toBe("I found the live trace threshold.");
-    expect(messages[3]?.activities?.map((activity) => activity.id)).toEqual(["read_1"]);
+    expect(messages[3]?.activities?.map((activity) => activity.id)).toEqual([
+      "read_1",
+    ]);
     expect(messages[1]?.traceState).toBe("settled");
     expect(messages[3]?.traceState).toBe("completed");
   });
@@ -559,16 +633,22 @@ describe("chat message projection", () => {
     expect(messages[1]?.traceState).toBe("settled");
     expect(messages[3]?.traceState).toBe("running");
 
-    const settledHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
-    const runningHtml = renderToStaticMarkup(createElement(MessageRow, { message: messages[3]! }));
-    expect(settledHtml).toContain('Searched for &quot;activity-summary&quot; in apps/web/src');
+    const settledHtml = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
+    const runningHtml = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[3]! })
+    );
+    expect(settledHtml).toContain(
+      "Searched for &quot;activity-summary&quot; in apps/web/src"
+    );
     expect(settledHtml).not.toContain("Working…");
     expect(settledHtml).not.toContain(" working");
     expect(runningHtml).toContain("Working…");
     expect(runningHtml).toContain(" working");
   });
 
-  test("keeps completed reasoning inline beneath a factual work summary", () => {
+  test("keeps completed reasoning hidden beneath a factual work summary", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -583,8 +663,10 @@ describe("chat message projection", () => {
         sessionId: "session_1",
         turnId: "turn_1",
         output:
-          'I found the branch in `app-state.ts`.\n```ts\nconst prompt = String(nextValue);\n```\n' +
-          `${"This is progress context. ".repeat(45)}\nNow I need to find \`setPrompt(\"\")\`.`,
+          "I found the branch in `app-state.ts`.\n```ts\nconst prompt = String(nextValue);\n```\n" +
+          `${"This is progress context. ".repeat(
+            45
+          )}\nNow I need to find \`setPrompt(\"\")\`.`,
       }),
       runtimeEvent({
         id: "turn_completed",
@@ -595,13 +677,15 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
     expect(html).toContain("Worked · Thought through the request");
     expect(html).not.toContain("aria-expanded");
-    expect(html).toContain("I found the branch");
-    expect(html).toContain("app-state.ts");
-    expect(html).toContain("const prompt");
-    expect(html).toContain("setPrompt");
+    expect(html).not.toContain("I found the branch");
+    expect(html).not.toContain("app-state.ts");
+    expect(html).not.toContain("const prompt");
+    expect(html).not.toContain("setPrompt");
     expect(messages[1]?.activities?.[0]?.content).toContain("const prompt");
     expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
   });
@@ -625,11 +709,13 @@ describe("chat message projection", () => {
         message: messages[0]!,
         accountBaseUrl: "https://qa.openpond.example/dashboard",
         billingOrganizationSlug: "example-org",
-      }),
+      })
     );
 
     expect(html).toContain("OpenPond Chat allowance reached");
-    expect(html).toContain("https://qa.openpond.example/sandboxes/example-org/billing");
+    expect(html).toContain(
+      "https://qa.openpond.example/sandboxes/example-org/billing"
+    );
     expect(html).not.toContain("OpenPond OpChat stream failed");
   });
 
@@ -680,8 +766,12 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[0]!,
-        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
-      }),
+        connection: {
+          serverUrl: "http://127.0.0.1:17876",
+          token: "token",
+          platform: "test",
+        },
+      })
     );
     expect(html).toContain("has-image-attachments");
     expect(html).toContain("user-message-image-attachment");
@@ -717,8 +807,12 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
-        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
-      }),
+        connection: {
+          serverUrl: "http://127.0.0.1:17876",
+          token: "token",
+          platform: "test",
+        },
+      })
     );
     expect(html).toContain("OpenPond Chat failure after sending");
     expect(html).toContain("markdown-inline-image ready");
@@ -754,8 +848,12 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
-        connection: { serverUrl: "http://127.0.0.1:17876", token: "token", platform: "test" },
-      }),
+        connection: {
+          serverUrl: "http://127.0.0.1:17876",
+          token: "token",
+          platform: "test",
+        },
+      })
     );
     expect(html).toContain("OpenPond Chat failure after sending");
     expect(html).toContain("markdown-inline-image ready");
@@ -820,18 +918,26 @@ describe("chat message projection", () => {
         name: "assistant.delta",
         sessionId: "session_1",
         turnId: "turn_1",
-        output: "Goals were by Folarin Balogun and Malik Tillman. Sources: U.S. Soccer, ESPN.",
+        output:
+          "Goals were by Folarin Balogun and Malik Tillman. Sources: U.S. Soccer, ESPN.",
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "activity_group", "assistant"]);
-    expect(messages[2]?.sources?.map((source) => source.sourceName)).toEqual(["U.S. Soccer", "ESPN"]);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "activity_group",
+      "assistant",
+    ]);
+    expect(messages[2]?.sources?.map((source) => source.sourceName)).toEqual([
+      "U.S. Soccer",
+      "ESPN",
+    ]);
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[2]!,
         onOpenBrowserLink: () => undefined,
-      }),
+      })
     );
     expect(html).toContain("assistant-sources");
     expect(html).toContain("assistant-source-pill");
@@ -875,7 +981,7 @@ describe("chat message projection", () => {
         message: messages[1]!,
         onOpenFileInSidebar: () => {},
         workspaceRootPath: "/home/glu/Projects/all/openpond",
-      }),
+      })
     );
     expect(html).toContain("There are 13 image files");
     expect(html).toContain("markdown-file-image-reference");
@@ -898,14 +1004,12 @@ describe("chat message projection", () => {
         activeProfile: "default",
         sourceRef: "main",
         baseSha: null,
-        workItemId: null,
         confirmationPolicy: "always_require_plan_approval",
       },
       scope: {
         profileId: "default",
         conversationId: "session_1",
         originTurnId: "turn_1",
-        workItemId: null,
         projectId: "profile_project_1",
         targetProject: null,
       },
@@ -989,12 +1093,21 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "assistant", "activity_group"]);
-    expect(messages[1]?.createImproveRun?.objective).toBe("Create a release notes agent");
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "assistant",
+      "activity_group",
+    ]);
+    expect(messages[1]?.createImproveRun?.objective).toBe(
+      "Create a release notes agent"
+    );
     expect(messages[1]?.createImproveRun?.state).toBe("applying_source");
     expect(messages[1]?.content).toBeUndefined();
     expect(messages[1]?.actionRun).toBeUndefined();
-    expect(messages[2]?.content).toBe("I will inspect the existing profile and create files now.");
+    expect(messages[2]?.content).toBe(
+      "I will inspect the existing profile and create files now."
+    );
     expect(messages[3]?.activities).toHaveLength(1);
     expect(messages[3]?.activities?.[0]).toMatchObject({
       label: "Started",
@@ -1015,7 +1128,9 @@ describe("chat message projection", () => {
         sessionId: "session_1",
         turnId: "openpond_profile_action_1",
         source: "chat_action",
-        args: { prompt: "Which open customer support items need attention first?" },
+        args: {
+          prompt: "Which open customer support items need attention first?",
+        },
       }),
       runtimeEvent({
         id: "profile_action_result",
@@ -1048,14 +1163,19 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
     expect(messages[1]?.actionRun?.actionName).toBe(
-      "help-me-keep-track-of-open-customer-support-item.chat",
+      "help-me-keep-track-of-open-customer-support-item.chat"
     );
     expect(messages[1]?.actionRun?.title).toBe("Chat");
     expect(messages[1]?.actionRun?.status).toBe("completed");
     expect(messages[1]?.actionRun?.responseText).toBe(supportSummary);
-    expect(messages[1]?.actionRun?.implementationType).toBe("openpond-profile-action");
+    expect(messages[1]?.actionRun?.implementationType).toBe(
+      "openpond-profile-action"
+    );
     expect(messages[1]?.actionRun?.refs.map((ref) => ref.target)).toEqual([
       "open-support-items-summary.json",
       ".openpond/traces/run-chat-123.jsonl",
@@ -1065,13 +1185,15 @@ describe("chat message projection", () => {
       createElement(MessageRow, {
         message: messages[1]!,
         onOpenProfileSettings: () => undefined,
-      }),
+      })
     );
     expect(html).toContain("Open customer support tracker: 4 open items.");
     expect(html).not.toContain("Agent:");
     expect(html).toContain("action-run-agent-link");
     expect(html).toContain("Open Items Assistant");
-    expect(html).not.toContain("help-me-keep-track-of-open-customer-support-item");
+    expect(html).not.toContain(
+      "help-me-keep-track-of-open-customer-support-item"
+    );
     expect(html).not.toContain("action-run-card");
     expect(html).not.toContain("openpond-profile-action");
     expect(html).not.toContain(".openpond/traces/run-chat-123.jsonl");
@@ -1087,7 +1209,8 @@ describe("chat message projection", () => {
         source: "chat_action",
         action: "sandbox_edit_file",
         status: "completed",
-        output: "Edited README.md with 1 replacement.\nCheckpoint saved: abcdef1234567890.",
+        output:
+          "Edited README.md with 1 replacement.\nCheckpoint saved: abcdef1234567890.",
         data: {
           workspaceToolCallId: "workspace_call_1",
           workspaceToolTiming: {
@@ -1155,12 +1278,14 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages[1]?.actionRun?.implementationType).toBe("openpond-profile-action");
+    expect(messages[1]?.actionRun?.implementationType).toBe(
+      "openpond-profile-action"
+    );
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
-      }),
+      })
     );
     expect(html).toContain("Triage Invoices is running...");
     expect(html).not.toContain("Agent:");
@@ -1198,7 +1323,11 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    expect(messages.map((message) => message.role)).toEqual(["user", "status_divider", "assistant"]);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "status_divider",
+      "assistant",
+    ]);
     expect(messages[1]?.content).toBe("Auto compacted context");
     expect(messages[1]?.statusTone).toBe("success");
   });
@@ -1256,7 +1385,9 @@ describe("chat message projection", () => {
 
     expect(messages[1]?.role).toBe("activity_group");
     expect(messages[1]?.activities?.[0]?.label).toBe("Loaded skill");
-    expect(messages[1]?.activities?.[0]?.content).toBe("Loaded profile skill release-notes.");
+    expect(messages[1]?.activities?.[0]?.content).toBe(
+      "Loaded profile skill release-notes."
+    );
   });
 
   test("projects OpenPond capability tools as compact activity rows", () => {
@@ -1281,7 +1412,10 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         action: "openpond_create_improve",
         status: "completed",
-        output: JSON.stringify({ ok: true, output: "Create Pipeline plan is ready for review." }),
+        output: JSON.stringify({
+          ok: true,
+          output: "Create Pipeline plan is ready for review.",
+        }),
         data: {
           result: {
             nextStep: "Create Pipeline plan is ready for review.",
@@ -1294,12 +1428,12 @@ describe("chat message projection", () => {
     expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
       "Started Create Pipeline",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
-      "Create a support triage agent.",
-    ]);
-    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual([
-      "Create Pipeline plan is ready for review.",
-    ]);
+    expect(
+      messages[1]?.activities?.map((activity) => activity.content)
+    ).toEqual(["Create a support triage agent."]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(
+      ["Create Pipeline plan is ready for review."]
+    );
   });
 
   test("projects browser tools as compact redacted activity rows", () => {
@@ -1333,7 +1467,11 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         action: "openpond_browser_type",
         status: "started",
-        args: { text: "[redacted 18 chars]", snapshotId: "snap_1", targetRef: "input_1" },
+        args: {
+          text: "[redacted 18 chars]",
+          snapshotId: "snap_1",
+          targetRef: "input_1",
+        },
       }),
       runtimeEvent({
         id: "browser_type_completed",
@@ -1351,14 +1489,12 @@ describe("chat message projection", () => {
       "Opened browser",
       "Typed in browser",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
-      "https://example.com/login?[redacted]",
-      "Text redacted",
-    ]);
-    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual([
-      "Opened browser.",
-      "Typed in browser.",
-    ]);
+    expect(
+      messages[1]?.activities?.map((activity) => activity.content)
+    ).toEqual(["https://example.com/login?[redacted]", "Text redacted"]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(
+      ["Opened browser.", "Typed in browser."]
+    );
   });
 
   test("projects connected app provider tools as redacted provider activity rows", () => {
@@ -1408,13 +1544,19 @@ describe("chat message projection", () => {
     const messages = buildChatMessages(events);
 
     expect(messages[1]?.role).toBe("activity_group");
-    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual(["X search"]);
-    expect(messages[1]?.activities?.map((activity) => activity.content)).toEqual([
-      "x.search.posts / 1 capability",
+    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
+      "X search",
     ]);
-    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(["search / 1 capability"]);
+    expect(
+      messages[1]?.activities?.map((activity) => activity.content)
+    ).toEqual(["x.search.posts / 1 capability"]);
+    expect(messages[1]?.activities?.map((activity) => activity.detail)).toEqual(
+      ["search / 1 capability"]
+    );
 
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
     expect(html).toContain("Working…");
     expect(html).not.toContain("X search");
     expect(html).not.toContain("conn_should_not_render");
@@ -1437,8 +1579,12 @@ describe("chat message projection", () => {
         state: "completed",
       },
     ]);
-    expect(JSON.stringify(providerRows)).not.toContain("conn_should_not_render");
-    expect(JSON.stringify(providerRows)).not.toContain("token_should_not_render");
+    expect(JSON.stringify(providerRows)).not.toContain(
+      "conn_should_not_render"
+    );
+    expect(JSON.stringify(providerRows)).not.toContain(
+      "token_should_not_render"
+    );
   });
 
   test("projects Codex absolute image reads as local activity image previews", () => {
@@ -1525,7 +1671,7 @@ describe("chat message projection", () => {
     expect(activities[0]?.label).toBe("Ran");
     expect(activities[0]?.content).toBe("git push origin develop");
     expect(activities[0]?.detail).toBe(
-      "To github.com:openpond/sandbox.git\n   0b0d5ad..38dc899  develop -> develop",
+      "To github.com:openpond/sandbox.git\n   0b0d5ad..38dc899  develop -> develop"
     );
     expect(activityGroupSummary(activities)).toBe("Pushed changes");
   });
@@ -1538,18 +1684,22 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         args: { prompt: "Search the app" },
       }),
-      commandStarted("search_1", "turn_1", "rg \"activityGroupSummary\" apps/web/src"),
+      commandStarted(
+        "search_1",
+        "turn_1",
+        'rg "activityGroupSummary" apps/web/src'
+      ),
     ]);
 
     const activities = messages[1]?.activities ?? [];
     expect(activityGroupSummary(activities)).toBe(
-      'Searched for "activityGroupSummary" in apps/web/src',
+      'Searched for "activityGroupSummary" in apps/web/src'
     );
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[1]!,
-      }),
+      })
     );
     expect(html).toContain("Working…");
     expect(html).not.toContain("Searched code");
@@ -1578,10 +1728,14 @@ describe("chat message projection", () => {
     const activities = messages[0]?.activities ?? [];
     expect(activities).toHaveLength(1);
     expect(activities[0]?.label).toBe("Started sandbox");
-    expect(activities[0]?.content).toBe("Sandbox workspace attached: sandbox_123 (creating)");
+    expect(activities[0]?.content).toBe(
+      "Sandbox workspace attached: sandbox_123 (creating)"
+    );
     expect(activities[0]?.state).toBe("completed");
 
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[0]! }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[0]! })
+    );
     expect(html).toContain("Working…");
     expect(html).not.toContain("Started sandbox");
     expect(html).not.toContain("Starting sandbox");
@@ -1649,7 +1803,9 @@ describe("chat message projection", () => {
 
     const activities = messages[0]?.activities ?? [];
     expect(activities).toHaveLength(2);
-    expect(activityGroupSummary(activities)).toBe("Preserve failed and stopped sandbox");
+    expect(activityGroupSummary(activities)).toBe(
+      "Preserve failed and stopped sandbox"
+    );
   });
 
   test("surfaces apply and stop outcomes when mixed with read actions", () => {
@@ -1737,7 +1893,7 @@ describe("chat message projection", () => {
 
     const activities = messages[0]?.activities ?? [];
     expect(activityGroupSummary(activities)).toBe(
-      "Read a file, applied locally, preserved sandbox source, stopped sandbox, and captured receipt receip...7890 $0.011696",
+      "Read a file, applied locally, preserved sandbox source, stopped sandbox, and captured receipt receip...7890 $0.011696"
     );
     expect(activities.at(-1)).toMatchObject({
       label: "Checked sandbox",
@@ -1758,14 +1914,32 @@ describe("chat message projection", () => {
         turnId: "turn_1",
         args: { prompt: "Inspect chat activity UI" },
       }),
-      commandStarted("read_1", "turn_1", "sed -n '1,160p' apps/web/src/components/chat/MessageActivityGroup.tsx"),
-      commandStarted("read_2", "turn_1", "cat apps/web/src/lib/chat-activities.ts"),
-      commandStarted("search_1", "turn_1", "rg \"activity-summary\" apps/web/src"),
-      commandStarted("list_1", "turn_1", "rg --files apps/web/src/components/chat"),
+      commandStarted(
+        "read_1",
+        "turn_1",
+        "sed -n '1,160p' apps/web/src/components/chat/MessageActivityGroup.tsx"
+      ),
+      commandStarted(
+        "read_2",
+        "turn_1",
+        "cat apps/web/src/lib/chat-activities.ts"
+      ),
+      commandStarted(
+        "search_1",
+        "turn_1",
+        'rg "activity-summary" apps/web/src'
+      ),
+      commandStarted(
+        "list_1",
+        "turn_1",
+        "rg --files apps/web/src/components/chat"
+      ),
     ]);
 
     const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe("Read 2 files, searched code, and listed files");
+    expect(activityGroupSummary(activities)).toBe(
+      "Read 2 files, searched code, and listed files"
+    );
   });
 
   test("summarizes edits and verification commands", () => {
@@ -1777,7 +1951,11 @@ describe("chat message projection", () => {
         args: { prompt: "Patch and test" },
       }),
       commandStarted("edit_1", "turn_1", "apply_patch"),
-      commandStarted("check_1", "turn_1", "pnpm test tests/chat-messages.test.ts"),
+      commandStarted(
+        "check_1",
+        "turn_1",
+        "pnpm test tests/chat-messages.test.ts"
+      ),
     ]);
 
     const activities = messages[1]?.activities ?? [];
@@ -1802,14 +1980,16 @@ describe("chat message projection", () => {
         data: {
           toolCallId: "render_1",
           result: {
-            artifacts: [{
-              artifactRef: "/tmp/output.mp4",
-              path: "/tmp/output.mp4",
-              title: "output.mp4",
-              contentType: "video/mp4",
-              sizeBytes: 1024,
-              binary: true,
-            }],
+            artifacts: [
+              {
+                artifactRef: "/tmp/output.mp4",
+                path: "/tmp/output.mp4",
+                title: "output.mp4",
+                contentType: "video/mp4",
+                sizeBytes: 1024,
+                binary: true,
+              },
+            ],
           },
         },
       }),
@@ -1827,19 +2007,28 @@ describe("chat message projection", () => {
       "status_divider",
     ]);
     expect(messages[1]?.activities?.[0]?.artifacts).toEqual([
-      expect.objectContaining({ path: "/tmp/output.mp4", contentType: "video/mp4", sizeBytes: 1024 }),
+      expect.objectContaining({
+        path: "/tmp/output.mp4",
+        contentType: "video/mp4",
+        sizeBytes: 1024,
+      }),
     ]);
     expect(messages[1]?.deliverables).toEqual([
-      expect.objectContaining({ path: "/tmp/output.mp4", contentType: "video/mp4", sizeBytes: 1024 }),
+      expect.objectContaining({
+        path: "/tmp/output.mp4",
+        contentType: "video/mp4",
+        sizeBytes: 1024,
+      }),
     ]);
     expect(messages[2]).toMatchObject({
       content: "Interrupted by app restart",
       statusKind: "interruption",
     });
-    const html = renderToStaticMarkup(createElement(MessageRow, { message: messages[1]! }));
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
     expect(html).toContain("activity-artifact");
     expect(html).toContain("output.mp4");
     expect(html).toContain("1.0 KB");
   });
-
 });

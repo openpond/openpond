@@ -85,7 +85,6 @@ export function createImproveRunFixture(
       profileId: "default",
       conversationId: "session_1",
       originTurnId: "turn_1",
-      workItemId: null,
       projectId: null,
       targetProject: null,
     },

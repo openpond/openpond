@@ -2,6 +2,7 @@ import {
   createOpenPondSandboxClient,
   normalizeSandboxApiUrl,
 } from "@openpond/cloud";
+import { apiFetch } from "@openpond/cloud/api";
 import type {
   OpenPondSandboxClient,
   OpenPondOrganization,
@@ -1312,14 +1313,12 @@ async function requestSandboxApiRoot(params: {
   method?: "GET" | "POST" | "DELETE";
   body?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    `${sandboxApiRootUrl(params.sandboxApiUrl)}${params.path}`,
+  const response = await apiFetch(
+    sandboxApiRootUrl(params.sandboxApiUrl),
+    params.apiKey,
+    params.path,
     {
       method: params.method ?? "GET",
-      headers: {
-        "openpond-api-key": params.apiKey,
-        ...(params.body ? { "content-type": "application/json" } : {}),
-      },
       ...(params.body ? { body: JSON.stringify(params.body) } : {}),
     }
   );
@@ -1344,14 +1343,12 @@ async function requestSandboxPublicApiRoot(params: {
   method?: "GET" | "POST" | "DELETE";
   body?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
-  const response = await fetch(
-    `${sandboxPublicApiRootUrl(params.sandboxApiUrl)}${params.path}`,
+  const response = await apiFetch(
+    sandboxPublicApiRootUrl(params.sandboxApiUrl),
+    params.apiKey,
+    params.path,
     {
       method: params.method ?? "GET",
-      headers: {
-        "openpond-api-key": params.apiKey,
-        ...(params.body ? { "content-type": "application/json" } : {}),
-      },
       ...(params.body ? { body: JSON.stringify(params.body) } : {}),
     }
   );

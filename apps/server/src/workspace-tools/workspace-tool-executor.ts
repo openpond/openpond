@@ -244,6 +244,7 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
       });
       if (experienceBlockedMessage) throw new Error(experienceBlockedMessage);
       if (
+        input.action === "work_agent_package_install" ||
         input.action === "work_output_delete" ||
         input.action === "work_output_read"
       ) {
@@ -257,25 +258,41 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
           input.args.revision > 0
             ? input.args.revision
             : null;
-        const outputAction =
-          input.action === "work_output_delete"
-            ? deps.deleteWorkOutput
-            : deps.readWorkOutput;
-        if (!outputAction) {
-          throw new Error(
+        let outputData: unknown;
+        if (input.action === "work_agent_package_install") {
+          if (!deps.promoteWorkAgentPackage) {
+            throw new Error("Agent package installation is not configured.");
+          }
+          outputData = await deps.promoteWorkAgentPackage({
+            session,
+            outputId,
+            revision,
+            overwrite: input.args.overwrite === true,
+          });
+        } else {
+          const outputAction =
             input.action === "work_output_delete"
-              ? "Work output deletion is not configured."
-              : "Work output reading is not configured."
-          );
+              ? deps.deleteWorkOutput
+              : deps.readWorkOutput;
+          if (!outputAction) {
+            throw new Error(
+              input.action === "work_output_delete"
+                ? "Work output deletion is not configured."
+                : "Work output reading is not configured."
+            );
+          }
+          outputData = await outputAction({ session, outputId, revision });
         }
         result = WorkspaceToolResultSchema.parse({
           ok: true,
           action: input.action,
           output:
-            input.action === "work_output_delete"
+            input.action === "work_agent_package_install"
+              ? "Agent package installed."
+              : input.action === "work_output_delete"
               ? "Work output deleted."
               : "Work output loaded.",
-          data: await outputAction({ session, outputId, revision }),
+          data: outputData,
         });
       } else {
         const capabilities = resolveWorkspaceCapabilities({
@@ -310,6 +327,8 @@ export function createWorkspaceToolExecutor(deps: WorkspaceToolExecutorDeps): {
             updateSession,
             findLocalWorkspace,
             sourceTurnId: options.turnId,
+            prepareWorkAgent: deps.prepareWorkAgent,
+            saveWorkAgentPackage: deps.saveWorkAgentPackage,
             saveWorkOutput: deps.saveWorkOutput,
           });
           if (sandboxAction) {

@@ -14,6 +14,9 @@ import type {
 
 const WORK_RUNTIME_PROFILE_ID = "openpond-work-v1";
 const WORK_LAYOUT_COMMAND = "mkdir -p inputs work outputs";
+const WORK_SANDBOX_STARTUP_TIMEOUT_MS = 180_000;
+const WORK_SANDBOX_STARTUP_POLL_MS = 1_000;
+const TERMINAL_WORK_SANDBOX_STATES = new Set(["archived", "deleted", "error"]);
 const WORK_ENVIRONMENT_PROBE = [
   "cd work &&",
   'printf "architecture="; uname -m;',
@@ -57,7 +60,13 @@ export function createWorkModelToolDefinitions(deps: {
         workspaceDiffBaseline: context.workspaceDiffBaseline,
       }
     );
-    return workspaceToolResult(context.callId, toolName, result);
+    return workspaceToolResult(
+      context.callId,
+      toolName,
+      action === "sandbox_exec" && simulatedSandboxCommandResult(result)
+        ? simulatedSandboxFailure(action)
+        : result
+    );
   }
 
   async function ensureSandbox(
@@ -133,6 +142,20 @@ export function createWorkModelToolDefinitions(deps: {
           if (!started.ok) throw new Error(started.output);
         }
       }
+      await waitForWorkSandboxReady(() =>
+        deps.executeWorkspaceTool(
+          context.session.id,
+          {
+            action: "sandbox_status",
+            source: "chat_action",
+            args: {},
+          },
+          {
+            turnId: context.turnId,
+            workspaceDiffBaseline: context.workspaceDiffBaseline,
+          }
+        )
+      );
       for (const input of deps.inputs ?? []) {
         if (!input.localPath || !input.storageName) continue;
         const bytes = await fs.readFile(input.localPath);
@@ -172,8 +195,9 @@ export function createWorkModelToolDefinitions(deps: {
       args: (context: ModelToolExecutionContext) => Record<string, unknown>
     ) =>
     async (context: ModelToolExecutionContext) => {
+      const resolvedArgs = args(context);
       await ensureSandbox(context);
-      const result = await execute(context, action, args(context), toolName);
+      const result = await execute(context, action, resolvedArgs, toolName);
       if (action === "sandbox_stop" && result.ok) {
         sandboxReadySessionIds.delete(context.session.id);
       }
@@ -271,17 +295,21 @@ export function createWorkModelToolDefinitions(deps: {
             workspaceDiffBaseline: context.workspaceDiffBaseline,
           }
         );
+        const simulated = simulatedSandboxCommandResult(probe);
+        const probeResult = simulated
+          ? simulatedSandboxFailure("sandbox_exec")
+          : probe;
         return {
           toolCallId: context.callId,
           name: "work_environment",
-          ok: status.ok && probe.ok,
+          ok: status.ok && probeResult.ok,
           contentText: JSON.stringify(
             {
-              ok: status.ok && probe.ok,
+              ok: status.ok && probeResult.ok,
               action: "work_environment",
-              output: probe.ok
+              output: probeResult.ok
                 ? "Work compute is ready. Environment facts were measured live."
-                : probe.output,
+                : probeResult.output,
               data: {
                 runtimeProfileId: WORK_RUNTIME_PROFILE_ID,
                 workspaceRoot: "/workspace",
@@ -292,7 +320,8 @@ export function createWorkModelToolDefinitions(deps: {
                   outputs: "/workspace/outputs",
                 },
                 status: status.data ?? null,
-                probe: probe.data ?? { output: probe.output },
+                probe: probeResult.data ?? { output: probeResult.output },
+                executionBacked: !simulated,
               },
             },
             null,
@@ -303,7 +332,8 @@ export function createWorkModelToolDefinitions(deps: {
             workspaceRoot: "/workspace",
             cwd: "/workspace/work",
             status: status.data ?? null,
-            probe: probe.data ?? null,
+            probe: probeResult.data ?? null,
+            executionBacked: !simulated,
           },
         };
       },
@@ -538,6 +568,79 @@ export function createWorkModelToolDefinitions(deps: {
       ),
     },
     {
+      name: "work_prepare_agent",
+      description:
+        "Create a validated OpenPond Agent SDK project in Work scratch space. Use this when the requested deliverable is a new reusable Agent, not for ordinary documents, code snippets, or one-off scripts.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          directory: {
+            type: "string",
+            minLength: 1,
+            maxLength: 180,
+            description:
+              "Relative directory inside Work scratch space for the Agent source.",
+          },
+          template: {
+            type: "string",
+            enum: [
+              "blank-agent",
+              "customer-reply-agent",
+              "integration-heavy-agent",
+            ],
+          },
+        },
+        required: ["directory", "template"],
+      },
+      execute: withSandbox(
+        "work_prepare_agent",
+        "sandbox_prepare_agent",
+        (context) => ({
+          directory: requiredString(context.args.directory),
+          template: requiredString(context.args.template),
+        })
+      ),
+    },
+    {
+      name: "work_save_agent_package",
+      description:
+        "Run the OpenPond Agent SDK build, validation, and eval publish gate in the Work sandbox, then save the complete source as an immutable content-addressed Agent-package output. Use this only after finishing and reviewing the Agent source.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          directory: {
+            type: "string",
+            minLength: 1,
+            maxLength: 180,
+            description:
+              "Relative Agent project directory inside Work scratch space.",
+          },
+          agentId: {
+            type: "string",
+            minLength: 1,
+            maxLength: 191,
+          },
+          title: {
+            type: "string",
+            minLength: 1,
+            maxLength: 240,
+          },
+        },
+        required: ["directory"],
+      },
+      execute: withSandbox(
+        "work_save_agent_package",
+        "sandbox_save_agent_package",
+        (context) => ({
+          directory: requiredString(context.args.directory),
+          agentId: optionalString(context.args.agentId) || undefined,
+          title: optionalString(context.args.title) || undefined,
+        })
+      ),
+    },
+    {
       name: "work_save_output",
       description:
         "Copy one completed file from /workspace/outputs to durable OpenPond output storage and return its OutputRef. Use only after inspecting or validating the file.",
@@ -714,6 +817,29 @@ export function createWorkModelToolDefinitions(deps: {
   ];
 }
 
+function simulatedSandboxCommandResult(result: WorkspaceToolResult): boolean {
+  const serialized = JSON.stringify(result);
+  return (
+    serialized.includes("no host command was executed") ||
+    serialized.includes("command accepted by simulated-firecracker driver")
+  );
+}
+
+function simulatedSandboxFailure(
+  action: WorkspaceToolRequest["action"]
+): WorkspaceToolResult {
+  return {
+    ok: false,
+    action,
+    output:
+      "This Work sandbox can store files but does not currently execute commands. Use an execution-backed runtime for command, build, validation, or eval work.",
+    data: {
+      code: "sandbox_execution_unavailable",
+      executionBacked: false,
+    },
+  };
+}
+
 function workspaceToolResult(
   callId: string,
   toolName: string,
@@ -787,6 +913,43 @@ function sandboxState(value: unknown): string {
   }
   const state = (sandbox as Record<string, unknown>).state;
   return typeof state === "string" ? state : "";
+}
+
+export async function waitForWorkSandboxReady(
+  readStatus: () => Promise<WorkspaceToolResult>,
+  options: {
+    timeoutMs?: number;
+    pollMs?: number;
+    now?: () => number;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {}
+): Promise<WorkspaceToolResult> {
+  const timeoutMs = options.timeoutMs ?? WORK_SANDBOX_STARTUP_TIMEOUT_MS;
+  const pollMs = options.pollMs ?? WORK_SANDBOX_STARTUP_POLL_MS;
+  const now = options.now ?? Date.now;
+  const sleep =
+    options.sleep ??
+    ((milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const startedAt = now();
+  let lastState = "";
+
+  while (now() - startedAt <= timeoutMs) {
+    const status = await readStatus();
+    if (!status.ok) throw new Error(status.output);
+    lastState = sandboxState(status.data);
+    if (lastState === "running") return status;
+    if (TERMINAL_WORK_SANDBOX_STATES.has(lastState)) {
+      throw new Error(`Work sandbox entered ${lastState} during startup.`);
+    }
+    await sleep(pollMs);
+  }
+
+  throw new Error(
+    `Work sandbox did not become ready within ${timeoutMs}ms${
+      lastState ? ` (last state: ${lastState})` : ""
+    }.`
+  );
 }
 
 function validHttpUrl(value: unknown): string {

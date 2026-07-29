@@ -35,11 +35,17 @@ import type {
 import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 import type { BrowserHarnessToolExecutor } from "../../openpond/browser-tool-registry.js";
 import type { OpenPondDatasetBuilderAction } from "../../openpond/capability-tool-registry.js";
-import type { OpenPondCommandExecutionInput, OpenPondCommandRunResult } from "../../openpond/command-access.js";
+import type {
+  OpenPondCommandExecutionInput,
+  OpenPondCommandRunResult,
+} from "../../openpond/command-access.js";
 import type { ConnectedAppToolExecutor } from "../../openpond/connected-app-tool-registry.js";
 import type { ResolvedConnectedAppContext } from "../../openpond/connected-app-context.js";
 import type { HostedToolInstructionMode } from "../../openpond/hosted-tool-protocol.js";
-import type { HostedProfileSkillBody, ProfileSkillInstructionMode } from "../../openpond/hosted-turn-helpers.js";
+import type {
+  HostedProfileSkillBody,
+  ProfileSkillInstructionMode,
+} from "../../openpond/hosted-turn-helpers.js";
 import type { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import type { ProfileSkillReadResult } from "../../openpond/model-tool-registry.js";
 import type { NativeModelToolResult } from "../../openpond/native-tool-calls.js";
@@ -47,6 +53,10 @@ import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
 import type { CreateImprovePlanner } from "../create-pipeline-planner.js";
+import type {
+  LocalCreatePipelineCheckInput,
+  LocalCreatePipelineCheckResult,
+} from "../local-create-pipeline.js";
 import type { HostedToolRolloutFlags } from "../hosted-turn/rollout.js";
 
 export type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
@@ -63,7 +73,11 @@ export type HostedToolLoopDelta = {
 
 export type CodexTurnInput = Pick<
   SendTurnRequest,
-  "approvalPolicy" | "sandbox" | "model" | "codexPermissionMode" | "codexReasoningEffort"
+  | "approvalPolicy"
+  | "sandbox"
+  | "model"
+  | "codexPermissionMode"
+  | "codexReasoningEffort"
 >;
 
 export type SubagentSandboxForkRequest = {
@@ -80,14 +94,16 @@ export type SubagentSandboxCleanupRequest = {
 };
 
 export type TurnRepository = {
-  getTaskset?(id: string): Promise<import("@openpond/contracts").Taskset | null>;
+  getTaskset?(
+    id: string
+  ): Promise<import("@openpond/contracts").Taskset | null>;
   runtimeEventsForSession(
     sessionId: string,
     query?: {
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
-    },
+    }
   ): Promise<RuntimeEvent[]>;
   persistedRuntimeEventsForSession?(
     sessionId: string,
@@ -95,30 +111,48 @@ export type TurnRepository = {
       afterSequence?: number | null;
       names?: readonly RuntimeEvent["name"][];
       limit?: number | null;
-    },
+    }
   ): Promise<RuntimeEvent[]>;
   latestAssistantTextForSession(sessionId: string): Promise<string | null>;
-  latestTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
-  latestPersistedTurnForSession(sessionId: string, status?: Turn["status"]): Promise<Turn | null>;
+  latestTurnForSession(
+    sessionId: string,
+    status?: Turn["status"]
+  ): Promise<Turn | null>;
+  latestPersistedTurnForSession(
+    sessionId: string,
+    status?: Turn["status"]
+  ): Promise<Turn | null>;
   countTurnsForSession(sessionId: string): Promise<number>;
-  hasSubagentParentWakeTurn(sessionId: string, messageId: string): Promise<boolean>;
-  countSubagentParentWakeTurns(sessionId: string, fromRunId: string): Promise<number>;
+  hasSubagentParentWakeTurn(
+    sessionId: string,
+    messageId: string
+  ): Promise<boolean>;
+  countSubagentParentWakeTurns(
+    sessionId: string,
+    fromRunId: string
+  ): Promise<number>;
   getTurn(turnId: string): Promise<Turn | null>;
   insertTurn(turn: Turn): Promise<void>;
-  updateTurn(turnId: string, updater: (turn: Turn) => Turn): Promise<Turn | null>;
+  updateTurn(
+    turnId: string,
+    updater: (turn: Turn) => Turn
+  ): Promise<Turn | null>;
   getCreateImproveRun(runId: string): Promise<CreateImproveRun | null>;
   listCreateImproveRuns(query?: {
     profileId?: string | null;
     conversationId?: string | null;
     targetKind?: CreateImproveRun["target"]["kind"] | null;
     targetId?: string | null;
-    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    state?:
+      | CreateImproveRun["state"]
+      | readonly CreateImproveRun["state"][]
+      | null;
     limit?: number;
   }): Promise<CreateImproveRun[]>;
   upsertCreateImproveRun(run: CreateImproveRun): Promise<CreateImproveRun>;
   mutateCreateImproveRun(
     action: CreateImproveRunAction,
-    updater: (run: CreateImproveRun) => CreateImproveRun,
+    updater: (run: CreateImproveRun) => CreateImproveRun
   ): Promise<{ run: CreateImproveRun; replayed: boolean }>;
   getApproval(approvalId: string): Promise<Approval | null>;
   upsertModelUsageRecord?(record: ModelUsageRecord): Promise<ModelUsageRecord>;
@@ -139,10 +173,12 @@ export type TurnRepository = {
   getPersistedSubagentRun?(runId: string): Promise<SubagentRun | null>;
   listSubagentRuns?(query?: SubagentRunQuery): Promise<SubagentRun[]>;
   listActiveSubagentRuns?(query?: SubagentRunQuery): Promise<SubagentRun[]>;
-  listStaleSubagentRuns?(query: SubagentRunQuery & {
-    olderThanMs: number;
-    nowIso?: string | null;
-  }): Promise<SubagentRun[]>;
+  listStaleSubagentRuns?(
+    query: SubagentRunQuery & {
+      olderThanMs: number;
+      nowIso?: string | null;
+    }
+  ): Promise<SubagentRun[]>;
   appendSubagentMessage?(message: SubagentMessage): Promise<SubagentMessage>;
   listSubagentMessages?(query?: {
     fromRunId?: string | null;
@@ -161,7 +197,11 @@ export type SubagentRunQuery = {
 
 export type TurnEventSink = {
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
-  appendAssistantText(session: Session, turnId: string, text: string): Promise<void>;
+  appendAssistantText(
+    session: Session,
+    turnId: string,
+    text: string
+  ): Promise<void>;
   appendHostedContextUsage(input: {
     session: Session;
     turnId: string;
@@ -178,20 +218,35 @@ export type SessionWorkspaceResolver = {
   defaultSessionCwd(appId?: string | null): string;
   findOpenPondApp(appId: string): Promise<OpenPondApp>;
   resolveSessionWorkspaceCwd(
-    session: Pick<Session, "appId" | "cwd" | "metadata" | "subagentRunId" | "workspaceId" | "workspaceKind">,
-    options?: { ensureOpenPond?: boolean },
+    session: Pick<
+      Session,
+      | "appId"
+      | "cwd"
+      | "metadata"
+      | "subagentRunId"
+      | "workspaceId"
+      | "workspaceKind"
+    >,
+    options?: { ensureOpenPond?: boolean }
   ): Promise<string | null>;
-  maybeCreateScaffoldForTurn(session: Session, turnId: string, prompt: string): Promise<Session>;
+  maybeCreateScaffoldForTurn(
+    session: Session,
+    turnId: string,
+    prompt: string
+  ): Promise<Session>;
   workspaceDiffBaseline(session: Session): Promise<WorkspaceDiffSummary | null>;
   appendWorkspaceDiffEvent(
     session: Session,
     turnId: string,
-    options?: { baseline?: WorkspaceDiffSummary | null },
+    options?: { baseline?: WorkspaceDiffSummary | null }
   ): Promise<void>;
 };
 
 export type ProviderRuntime = {
-  ensureCodexRuntime(session: Session, turnInput: CodexTurnInput): Promise<RuntimeCodexSession>;
+  ensureCodexRuntime(
+    session: Session,
+    turnInput: CodexTurnInput
+  ): Promise<RuntimeCodexSession>;
   streamLocalByokChatTurn?: (input: {
     providerId: ChatProvider;
     modelId?: string | null;
@@ -209,7 +264,10 @@ export type WorkspaceToolExecutorPort = {
   executeWorkspaceTool(
     sessionId: string,
     payload: unknown,
-    options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
+    options?: {
+      turnId?: string;
+      workspaceDiffBaseline?: WorkspaceDiffSummary | null;
+    }
   ): Promise<WorkspaceToolResult>;
 };
 
@@ -226,7 +284,9 @@ export type SubagentRepository = Pick<
 
 export type SubagentWorkspacePort = {
   forkSandboxForSubagent?(input: SubagentSandboxForkRequest): Promise<unknown>;
-  cleanupSandboxForSubagent?(input: SubagentSandboxCleanupRequest): Promise<unknown>;
+  cleanupSandboxForSubagent?(
+    input: SubagentSandboxCleanupRequest
+  ): Promise<unknown>;
 };
 
 export type CreatePipelineRepository = Pick<
@@ -243,15 +303,38 @@ export type TurnDispatcherPort = {
 export type TurnRunnerDependencies = {
   attachmentRootDir: string;
   store: TurnRepository;
-  resolveCreateImproveTaskset?: (tasksetId: string, revision: number, contentHash: string) => Promise<import("@openpond/contracts").Taskset | null>;
-  gradeCreateImproveTaskAttempt?: (input: { tasksetId: string; taskId: string; attempt: import("@openpond/contracts").TaskAttemptResult }) => Promise<import("@openpond/contracts").GradeResult>;
+  resolveCreateImproveTaskset?: (
+    tasksetId: string,
+    revision: number,
+    contentHash: string
+  ) => Promise<import("@openpond/contracts").Taskset | null>;
+  gradeCreateImproveTaskAttempt?: (input: {
+    tasksetId: string;
+    taskId: string;
+    attempt: import("@openpond/contracts").TaskAttemptResult;
+  }) => Promise<import("@openpond/contracts").GradeResult>;
   upsertApproval: (approval: Approval) => Promise<void>;
   createSession?: (payload: unknown) => Promise<Session>;
   getSession: (sessionId: string) => Promise<Session>;
-  updateSession: (sessionId: string, patch: Partial<Session>) => Promise<Session>;
-  completeTurn: (sessionId: string, turnId: string, providerTurnId?: string | null) => Promise<Turn>;
-  failTurn: (session: Session, turnId: string, message: string) => Promise<Turn>;
-  interruptTurn: (session: Session, turnId: string, message?: string) => Promise<Turn>;
+  updateSession: (
+    sessionId: string,
+    patch: Partial<Session>
+  ) => Promise<Session>;
+  completeTurn: (
+    sessionId: string,
+    turnId: string,
+    providerTurnId?: string | null
+  ) => Promise<Turn>;
+  failTurn: (
+    session: Session,
+    turnId: string,
+    message: string
+  ) => Promise<Turn>;
+  interruptTurn: (
+    session: Session,
+    turnId: string,
+    message?: string
+  ) => Promise<Turn>;
   defaultSessionCwd: SessionWorkspaceResolver["defaultSessionCwd"];
   findOpenPondApp: SessionWorkspaceResolver["findOpenPondApp"];
   resolveSessionWorkspaceCwd: SessionWorkspaceResolver["resolveSessionWorkspaceCwd"];
@@ -262,7 +345,9 @@ export type TurnRunnerDependencies = {
   executeWorkspaceTool: WorkspaceToolExecutorPort["executeWorkspaceTool"];
   forkSandboxForSubagent?: SubagentWorkspacePort["forkSandboxForSubagent"];
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
-  executeOpenPondCommand?: (input: OpenPondCommandExecutionInput) => Promise<OpenPondCommandRunResult>;
+  executeOpenPondCommand?: (
+    input: OpenPondCommandExecutionInput
+  ) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
   executeDatasetBuilderAction?: (input: {
     session: Session;
@@ -295,15 +380,26 @@ export type TurnRunnerDependencies = {
       message: string;
       failureClass: "policy_failure" | "infrastructure_failure";
     } | null;
-  }) => Promise<{ attemptId: string; gradeId: string; generatedTaskId: string } | null>;
+  }) => Promise<{
+    attemptId: string;
+    gradeId: string;
+    generatedTaskId: string;
+  } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
-  loadOpenPondProfileStateForRef?: (ref: OpenPondProfileRef | null | undefined) => Promise<OpenPondProfileState>;
+  loadOpenPondProfileStateForRef?: (
+    ref: OpenPondProfileRef | null | undefined
+  ) => Promise<OpenPondProfileState>;
   loadOpenPondProfileLibrary?: () => Promise<OpenPondProfileLibrary>;
-  readOpenPondProfileSkill?: (input: { profileSourcePath: string; name: string }) => Promise<ProfileSkillReadResult>;
+  readOpenPondProfileSkill?: (input: {
+    profileSourcePath: string;
+    name: string;
+  }) => Promise<ProfileSkillReadResult>;
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
-  readOpenPondExtensionSkill?: (name: string) => Promise<ProfileSkillReadResult>;
+  readOpenPondExtensionSkill?: (
+    name: string
+  ) => Promise<ProfileSkillReadResult>;
   executeProfileSkillCommand?: (input: {
     prompt: string;
     profileRef: OpenPondProfileRef | null;
@@ -323,7 +419,10 @@ export type TurnRunnerDependencies = {
   listIntegrationConnections?: (input: {
     teamId?: string;
     status?: "active" | "revoked" | "error" | "all";
-  }) => Promise<{ teamId: string | null; connections: ConnectedAppConnectionLike[] }>;
+  }) => Promise<{
+    teamId: string | null;
+    connections: ConnectedAppConnectionLike[];
+  }>;
   loadPersonalizationSoul: () => Promise<string>;
   loadAppPreferences?: () => Promise<AppPreferences>;
   loadProviderSettings?: () => Promise<ProviderSettings>;
@@ -343,12 +442,15 @@ export type TurnRunnerDependencies = {
       profileSkillInstructionMode?: ProfileSkillInstructionMode;
       browserControlAvailable?: boolean;
       extraSystemContext?: string | null;
-    },
+    }
   ) => Promise<string>;
   appendAssistantText: TurnEventSink["appendAssistantText"];
   appendHostedContextUsage: TurnEventSink["appendHostedContextUsage"];
   streamLocalByokChatTurn?: ProviderRuntime["streamLocalByokChatTurn"];
   streamOpenPondHostedChatTurn?: ProviderRuntime["streamOpenPondHostedChatTurn"];
+  runLocalCreatePipelineChecks?: (
+    input: LocalCreatePipelineCheckInput
+  ) => Promise<LocalCreatePipelineCheckResult>;
   planCreateImprove?: CreateImprovePlanner;
   turnFollowUpQueue: BackgroundWorkerQueue;
   subagentQueue?: BackgroundWorkerQueue;
@@ -363,23 +465,38 @@ export type TurnRunner = TurnDispatcherPort & {
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;
-  applyCreateImproveAction(runId: string, payload: unknown): Promise<CreateImproveRun>;
+  applyCreateImproveAction(
+    runId: string,
+    payload: unknown
+  ): Promise<CreateImproveRun>;
   getCreateImproveRun(runId: string): Promise<CreateImproveRun | null>;
   listCreateImproveRuns(query?: {
     profileId?: string | null;
     conversationId?: string | null;
     targetKind?: CreateImproveRun["target"]["kind"] | null;
     targetId?: string | null;
-    state?: CreateImproveRun["state"] | readonly CreateImproveRun["state"][] | null;
+    state?:
+      | CreateImproveRun["state"]
+      | readonly CreateImproveRun["state"][]
+      | null;
     limit?: number;
   }): Promise<CreateImproveRun[]>;
-  resolveCreateImproveApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
-  resolveSubagentPatchApplyApproval(approvalId: string, payload: unknown): Promise<Approval | null>;
-  runSubagentLifecycleAction(runId: string, payload: unknown): Promise<SubagentLifecycleActionResponse>;
+  resolveCreateImproveApproval(
+    approvalId: string,
+    payload: unknown
+  ): Promise<Approval | null>;
+  resolveSubagentPatchApplyApproval(
+    approvalId: string,
+    payload: unknown
+  ): Promise<Approval | null>;
+  runSubagentLifecycleAction(
+    runId: string,
+    payload: unknown
+  ): Promise<SubagentLifecycleActionResponse>;
   recoverPendingSubagentCompletions(): Promise<number>;
   cleanupExpiredRetainedSubagentWorkspace(
     runId: string,
-    payload?: unknown,
+    payload?: unknown
   ): Promise<SubagentLifecycleActionResponse>;
 };
 

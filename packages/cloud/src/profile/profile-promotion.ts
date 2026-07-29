@@ -16,12 +16,10 @@ export function hostedSourceCheckStatusFromPayload(input: {
   const deployPlan = record(checkResult?.deployPlan) ?? record(input.deployPlan);
   const source = record(deployPlan?.source);
   const checks = record(deployPlan?.checks);
-  const workItem = record(checkResult?.workItem);
   const sourceCheckStatus = record(checkResult?.sourceCheckStatus);
   return {
     status: input.status,
     agentId: input.agentId,
-    workItemId: text(workItem?.id),
     deployPlanStatus: text(deployPlan?.status),
     canRun: booleanValue(deployPlan?.canRun),
     canDeploy: booleanValue(deployPlan?.canDeploy),

@@ -9,6 +9,7 @@ import type {
   HostedModel,
   HostedProvider,
 } from "@openpond/cloud";
+import { withVercelProtectionBypass } from "@openpond/cloud";
 import type {
   HostedChatModel,
   HostedChatModelsResult,
@@ -198,9 +199,10 @@ export async function listOpChatModels(options: {
   token: string;
   signal?: AbortSignal;
 }): Promise<OpChatModelsResponse> {
-  const response = await fetch(opChatEndpointUrl(options.apiBaseUrl, "models"), {
+  const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "models");
+  const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(options.token, "application/json"),
+    headers: opChatHeaders(requestUrl, options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -214,9 +216,10 @@ export async function listOpChatProviders(options: {
   token: string;
   signal?: AbortSignal;
 }): Promise<OpChatProvidersResponse> {
-  const response = await fetch(opChatEndpointUrl(options.apiBaseUrl, "providers"), {
+  const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "providers");
+  const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(options.token, "application/json"),
+    headers: opChatHeaders(requestUrl, options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -230,9 +233,10 @@ export async function listOpChatProviderCatalog(options: {
   token: string;
   signal?: AbortSignal;
 }): Promise<OpChatProviderCatalogResponse> {
-  const response = await fetch(opChatEndpointUrl(options.apiBaseUrl, "provider-catalog"), {
+  const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "provider-catalog");
+  const response = await fetch(requestUrl, {
     method: "GET",
-    headers: opChatHeaders(options.token, "application/json"),
+    headers: opChatHeaders(requestUrl, options.token, "application/json"),
     signal: options.signal,
   });
   if (!response.ok) {
@@ -250,9 +254,15 @@ export async function* streamOpChatChatCompletion(
     model: string;
   }
 ): AsyncGenerator<HostedChatStreamDelta, void, unknown> {
-  const response = await fetch(opChatEndpointUrl(options.apiBaseUrl, "chat/completions"), {
+  const requestUrl = opChatEndpointUrl(options.apiBaseUrl, "chat/completions");
+  const response = await fetch(requestUrl, {
     method: "POST",
-    headers: opChatHeaders(options.token, "text/event-stream", options.requestId),
+    headers: opChatHeaders(
+      requestUrl,
+      options.token,
+      "text/event-stream",
+      options.requestId
+    ),
     body: JSON.stringify(buildOpChatBody(options)),
     signal: options.signal,
   });
@@ -337,7 +347,12 @@ function opChatEndpointUrl(
   return `${normalized}/${path}`;
 }
 
-function opChatHeaders(token: string, accept: string, requestId?: string): Headers {
+function opChatHeaders(
+  requestUrl: string,
+  token: string,
+  accept: string,
+  requestId?: string
+): Headers {
   const trimmed = token.trim();
   if (!trimmed) throw new Error("OpenPond API key is required for OpChat.");
   const headers = new Headers();
@@ -346,7 +361,7 @@ function opChatHeaders(token: string, accept: string, requestId?: string): Heade
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-app");
   headers.set("x-openpond-request-id", requestId || randomUUID());
-  return headers;
+  return withVercelProtectionBypass(requestUrl, headers);
 }
 
 async function readOpChatError(response: Response): Promise<string> {

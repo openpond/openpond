@@ -6,6 +6,7 @@ import {
   buildDevRunnerPlan,
   isReusableOpenPondHealth,
   parseDevRunnerArgs,
+  vercelProtectionBypassSecret,
   type DevRunnerPlan,
 } from "../scripts/dev-runner";
 
@@ -47,6 +48,42 @@ describe("dev runner", () => {
       OPENPOND_WEB_PORT: "17876",
       OPENPOND_WEB_URL: "http://127.0.0.1:17876",
     });
+  });
+
+  test("injects an explicit Vercel bypass only into the local server", () => {
+    const options = parseDevRunnerArgs(["desktop"]);
+    const plan = buildDevRunnerPlan(
+      options,
+      { VERCEL_AUTOMATION_BYPASS_SECRET: "local-bypass" },
+      root
+    );
+
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "server")?.env
+        .VERCEL_AUTOMATION_BYPASS_SECRET
+    ).toBe("local-bypass");
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "renderer")?.env
+        .VERCEL_AUTOMATION_BYPASS_SECRET
+    ).toBeUndefined();
+    expect(
+      plan.processes.find((processPlan) => processPlan.id === "desktop")?.env
+        .VERCEL_AUTOMATION_BYPASS_SECRET
+    ).toBeUndefined();
+  });
+
+  test("selects the Vercel environment bypass without exposing metadata", () => {
+    expect(
+      vercelProtectionBypassSecret(
+        JSON.stringify({
+          protectionBypass: {
+            fallback: { isEnvVar: false },
+            preferred: { isEnvVar: true },
+          },
+        })
+      )
+    ).toBe("preferred");
+    expect(vercelProtectionBypassSecret("not-json")).toBeNull();
   });
 
   test("plans web dev with only server and renderer processes using explicit ports", () => {

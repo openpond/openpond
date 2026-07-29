@@ -2,8 +2,6 @@ import { editable } from "openpond-agent-sdk";
 
 export const blankEditable = editable({
   enabled: true,
-  backend: "openpond-coding-work-item",
-  runtimeEnvironmentId: "openpond-coding-core-v1",
   sourceOfTruth: "agent-source",
   policyDiscovery: {
     command: "openpond agent inspect --json",

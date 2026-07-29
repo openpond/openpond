@@ -6,6 +6,7 @@ import {
   ApiTimeoutError,
   readApiJson,
 } from "../packages/cloud/src/api/core";
+import { withVercelProtectionBypass } from "../packages/cloud/src/api/vercel-protection";
 
 let server: Server;
 let baseUrl = "";
@@ -64,5 +65,36 @@ describe("cloud API request budgets", () => {
   test("caps chunked bodies while they stream", async () => {
     const response = await apiFetch(baseUrl, null, "/chunked-large", { maxResponseBytes: 32 });
     expect(readApiJson(response, "chunked test")).rejects.toBeInstanceOf(ApiResponseTooLargeError);
+  });
+});
+
+describe("Vercel deployment protection", () => {
+  const env = { VERCEL_AUTOMATION_BYPASS_SECRET: "test-bypass" };
+
+  test("adds the bypass only to OpenPond staging hosts", () => {
+    expect(
+      withVercelProtectionBypass(
+        "https://api-new.staging-api.openpond.ai/account",
+        undefined,
+        env
+      ).get("x-vercel-protection-bypass")
+    ).toBe("test-bypass");
+    expect(
+      withVercelProtectionBypass(
+        "https://staging.openpond.ai/api/sandboxes",
+        undefined,
+        env
+      ).get("x-vercel-protection-bypass")
+    ).toBe("test-bypass");
+  });
+
+  test("does not leak the bypass to custom account hosts", () => {
+    expect(
+      withVercelProtectionBypass(
+        "https://example.com/account",
+        undefined,
+        env
+      ).has("x-vercel-protection-bypass")
+    ).toBe(false);
   });
 });

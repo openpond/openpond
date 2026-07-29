@@ -4,7 +4,6 @@ import {
   createSandboxProfileNamespace,
   createSandboxProjectNamespace,
   createSandboxRuntimeNamespace,
-  createSandboxWorkItemNamespace,
 } from "./client-handles.js";
 import { createSandboxRuntimeHandle } from "./runtime-handle.js";
 import { runSandboxSmoke } from "./smoke.js";
@@ -55,19 +54,6 @@ import type {
   SandboxAgentSourceDeployPlanResponse,
   SandboxAgentSourcePublishInput,
   SandboxAgentSourcePublishResult,
-  SandboxAgentEditWorkItemOpenInput,
-  SandboxAgentEditWorkItemOpenResult,
-  SandboxCodingWorkItem,
-  SandboxCodingWorkItemActivity,
-  SandboxCodingWorkItemActivityListInput,
-  SandboxCodingWorkItemArtifact,
-  SandboxCodingWorkItemBackgroundInput,
-  SandboxCodingWorkItemBackgroundResult,
-  SandboxCodingWorkItemChatInput,
-  SandboxCodingWorkItemChatResult,
-  SandboxCodingWorkItemGetInput,
-  SandboxCodingWorkItemPromotionInput,
-  SandboxCodingWorkItemStatusResult,
   SandboxAgentManifestSnapshot,
   SandboxAgentManifestSnapshotsResponse,
   SandboxProjectListResponse,
@@ -136,7 +122,6 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
   readonly profile = createSandboxProfileNamespace(this);
   readonly projects = createSandboxProjectNamespace(this);
   readonly agents = createSandboxAgentNamespace(this);
-  readonly workItems = createSandboxWorkItemNamespace(this);
 
   list(
     input: {
@@ -548,99 +533,6 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
         body: JSON.stringify(body),
       }
     );
-  }
-
-  openAgentEditWorkItem(
-    agentId: string,
-    input: SandboxAgentEditWorkItemOpenInput
-  ): Promise<SandboxAgentEditWorkItemOpenResult> {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    const { teamId: _teamId, ...body } = input;
-    return this.requestApiRoot<SandboxAgentEditWorkItemOpenResult>(
-      `/agents/${encodeURIComponent(
-        agentId
-      )}/edit-work-item?${query.toString()}`,
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      }
-    );
-  }
-
-  getCodingWorkItem(
-    workItemId: string,
-    input: SandboxCodingWorkItemGetInput
-  ): Promise<SandboxCodingWorkItem> {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    if (input.includeArchived) query.set("includeArchived", "true");
-    return this.requestApiRoot<{ workItem: SandboxCodingWorkItem }>(
-      `/work-items/${encodeURIComponent(workItemId)}?${query.toString()}`
-    ).then((payload) => payload.workItem);
-  }
-
-  sendCodingWorkItemChat(
-    workItemId: string,
-    input: SandboxCodingWorkItemChatInput
-  ): Promise<SandboxCodingWorkItemChatResult> {
-    return this.requestApiRoot<SandboxCodingWorkItemChatResult>(
-      `/work-items/${encodeURIComponent(workItemId)}/chat`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    );
-  }
-
-  listCodingWorkItemActivity(
-    workItemId: string,
-    input: SandboxCodingWorkItemActivityListInput
-  ): Promise<SandboxCodingWorkItemActivity[]> {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    if (input.limit !== undefined) query.set("limit", String(input.limit));
-    return this.requestApiRoot<{ activity: SandboxCodingWorkItemActivity[] }>(
-      `/work-items/${encodeURIComponent(
-        workItemId
-      )}/activity?${query.toString()}`
-    ).then((payload) => payload.activity);
-  }
-
-  getCodingWorkItemStatus(
-    workItemId: string,
-    input: SandboxCodingWorkItemActivityListInput & { includeArchived?: boolean }
-  ): Promise<SandboxCodingWorkItemStatusResult> {
-    const query = new URLSearchParams({ teamId: input.teamId });
-    if (input.limit !== undefined) query.set("limit", String(input.limit));
-    if (input.includeArchived) query.set("includeArchived", "true");
-    return this.requestApiRoot<SandboxCodingWorkItemStatusResult>(
-      `/work-items/${encodeURIComponent(workItemId)}/status?${query.toString()}`
-    );
-  }
-
-  handleCodingWorkItemInBackground(
-    workItemId: string,
-    input: SandboxCodingWorkItemBackgroundInput
-  ): Promise<SandboxCodingWorkItemBackgroundResult> {
-    return this.requestApiRoot<SandboxCodingWorkItemBackgroundResult>(
-      `/work-items/${encodeURIComponent(workItemId)}/handle-background`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    );
-  }
-
-  promoteCodingWorkItemResult(
-    workItemId: string,
-    action: "checkpoint" | "commit" | "pr",
-    input: SandboxCodingWorkItemPromotionInput
-  ): Promise<SandboxCodingWorkItemArtifact> {
-    return this.requestApiRoot<{ artifact: SandboxCodingWorkItemArtifact }>(
-      `/work-items/${encodeURIComponent(workItemId)}/result/${action}`,
-      {
-        method: "POST",
-        body: JSON.stringify(input),
-      }
-    ).then((payload) => payload.artifact);
   }
 
   getMicrosoftTeamsBotOverview(input: {

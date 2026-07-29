@@ -82,7 +82,14 @@ describe.each(PROVIDER_PATHS)(
             action: request.action,
             output: "ok",
             data:
-              request.action === "sandbox_save_output"
+              request.action === "sandbox_status"
+                ? {
+                    sandbox: {
+                      id: "sandbox_qualified",
+                      state: "running",
+                    },
+                  }
+                : request.action === "sandbox_save_output"
                 ? {
                     outputRef: {
                       kind: "file",
@@ -117,6 +124,7 @@ describe.each(PROVIDER_PATHS)(
       expect(harness.streamInputs).toHaveLength(3);
       expect(calls.map((call) => call.action)).toEqual([
         "sandbox_create",
+        "sandbox_status",
         "sandbox_write_file",
         "sandbox_save_output",
       ]);
@@ -158,7 +166,7 @@ describe.each(PROVIDER_PATHS)(
 
       expect(turn.status).toBe("completed");
       expect(harness.streamInputs).toHaveLength(2);
-      expect(calls.map((call) => call.action)).toEqual(["sandbox_create"]);
+      expect(calls).toEqual([]);
       expect(
         harness.events.some(
           (event) =>

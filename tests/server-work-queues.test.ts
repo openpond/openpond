@@ -24,7 +24,9 @@ import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 const tempDirs: string[] = [];
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }))
+  );
 });
 
 describe("server work queues", () => {
@@ -37,11 +39,11 @@ describe("server work queues", () => {
 
     const childReceipt = queues.subagent.enqueue(
       { label: "Long-running child" },
-      () => childWork,
+      () => childWork
     );
     const lifecycleReceipt = queues.subagentLifecycle.enqueue(
       { label: "Lifecycle watcher tick" },
-      async () => undefined,
+      async () => undefined
     );
 
     await queues.drain("subagent-lifecycle");
@@ -54,11 +56,16 @@ describe("server work queues", () => {
   });
 
   test("queues provider runtime notification ingestion through the Codex bridge", async () => {
-    const queue = createBackgroundWorkerQueue({ queueId: "provider-runtime-ingestion" });
+    const queue = createBackgroundWorkerQueue({
+      queueId: "provider-runtime-ingestion",
+    });
     const events: RuntimeEvent[] = [];
     const bridge = createCodexBridge({
       store: {
-        async runtimeEventContext(sessionId: string, providerTurnId?: string | null) {
+        async runtimeEventContext(
+          sessionId: string,
+          providerTurnId?: string | null
+        ) {
           expect(sessionId).toBe("session-1");
           expect(providerTurnId).toBe("provider-turn-1");
           return { turnId: "turn-1", appId: "app-1" };
@@ -141,27 +148,33 @@ describe("server work queues", () => {
       appId: "app-1",
       status: "completed",
     });
-    expect((events[0]?.data as WorkspaceDiffSummary).files.map((file) => file.path)).toEqual([
-      "src/changed.ts",
-    ]);
+    expect(
+      (events[0]?.data as WorkspaceDiffSummary).files.map((file) => file.path)
+    ).toEqual(["src/changed.ts"]);
   });
 
   test("resolves a cwd-only session as an active local folder workspace", async () => {
     const repoPath = await createTempDir("openpond-cwd-session-workspace-");
     const workflows = createWorkspaceSessionWorkflows({
       appendRuntimeEvent: async () => undefined,
-      checkpointDiffQueue: createBackgroundWorkerQueue({ queueId: "unused-checkpoint-diff" }),
+      checkpointDiffQueue: createBackgroundWorkerQueue({
+        queueId: "unused-checkpoint-diff",
+      }),
       findLocalWorkspace: async () => null,
       findOpenPondApp: async () => {
         throw new Error("app lookup is not needed for cwd-only sessions");
       },
       storeDir: "/tmp/openpond-store",
       workspaceDiffPayload: async () => {
-        throw new Error("workspace diff is not needed for cwd-only active workspace resolution");
+        throw new Error(
+          "workspace diff is not needed for cwd-only active workspace resolution"
+        );
       },
     });
 
-    const { app, state } = await workflows.activeWorkspace(baseSession({ cwd: repoPath }));
+    const { app, state } = await workflows.activeWorkspace(
+      baseSession({ cwd: repoPath })
+    );
 
     expect(app.id).toBe(`local_path:${repoPath}`);
     expect(app.name).toBe(path.basename(repoPath));
@@ -174,7 +187,7 @@ describe("server work queues", () => {
     });
   });
 
-  test.skip("legacy local Agent Create/Improve follow-up queue is retired", async () => {
+  test("queues approved local Agent Create follow-up work and drains persisted failure state", async () => {
     const repoPath = await createTempDir("openpond-local-create-repo-");
     const sourcePath = path.join(repoPath, "profiles", "default");
     await mkdir(sourcePath, { recursive: true });
@@ -204,7 +217,6 @@ describe("server work queues", () => {
         profileId: "default",
         conversationId: "session-1",
         originTurnId: "turn-1",
-        workItemId: null,
         projectId: null,
         targetProject: null,
       },
@@ -238,11 +250,15 @@ describe("server work queues", () => {
           return turns[index]!;
         },
         async getApproval(approvalId) {
-          return approvals.find((approval) => approval.id === approvalId) ?? null;
+          return (
+            approvals.find((approval) => approval.id === approvalId) ?? null
+          );
         },
       }),
       upsertApproval: async (approval) => {
-        const index = approvals.findIndex((candidate) => candidate.id === approval.id);
+        const index = approvals.findIndex(
+          (candidate) => candidate.id === approval.id
+        );
         if (index === -1) approvals.push(approval);
         else approvals[index] = approval;
       },
@@ -252,13 +268,17 @@ describe("server work queues", () => {
         return session;
       },
       completeTurn: async () => {
-        throw new Error("turn completion is not expected in this follow-up test");
+        throw new Error(
+          "turn completion is not expected in this follow-up test"
+        );
       },
       failTurn: async () => {
         throw new Error("turn failure is not expected in this follow-up test");
       },
       interruptTurn: async () => {
-        throw new Error("turn interruption is not expected in this follow-up test");
+        throw new Error(
+          "turn interruption is not expected in this follow-up test"
+        );
       },
       defaultSessionCwd: () => repoPath,
       findOpenPondApp: async () => {
@@ -274,7 +294,9 @@ describe("server work queues", () => {
         events.push(event);
       },
       executeWorkspaceTool: async () => {
-        throw new Error("workspace tools are not expected in this follow-up test");
+        throw new Error(
+          "workspace tools are not expected in this follow-up test"
+        );
       },
       loadPersonalizationSoul: async () => "",
       maybeCreateScaffoldForTurn: async (nextSession) => nextSession,
@@ -304,8 +326,15 @@ describe("server work queues", () => {
       status: "completed",
     });
     expect(turns[0]?.createImproveRun?.state).toBe("blocked");
-    expect(turns[0]?.createImproveRun?.blockedReason).toBe("intentional queued local create failure");
-    expect(events.some((event) => event.name === "create_improve.updated" && event.source === "server")).toBe(true);
+    expect(turns[0]?.createImproveRun?.blockedReason).toBe(
+      "intentional queued local create failure"
+    );
+    expect(
+      events.some(
+        (event) =>
+          event.name === "create_improve.updated" && event.source === "server"
+      )
+    ).toBe(true);
   });
 });
 

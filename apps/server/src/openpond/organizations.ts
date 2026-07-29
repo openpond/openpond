@@ -1,3 +1,4 @@
+import { apiFetch } from "@openpond/cloud/api";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
 
@@ -106,18 +107,7 @@ async function openPondApiRequest(
   path: string,
   init: RequestInit = {}
 ): Promise<unknown> {
-  const headers = new Headers(init.headers);
-  headers.set("Content-Type", "application/json");
-  if (token.startsWith("opk_")) {
-    headers.set("Authorization", `ApiKey ${token}`);
-    headers.set("openpond-api-key", token);
-  } else {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    ...init,
-    headers,
-  });
+  const response = await apiFetch(apiBaseUrl, token, path, init);
   const payload = (await response.json().catch(() => ({}))) as {
     error?: unknown;
     message?: unknown;

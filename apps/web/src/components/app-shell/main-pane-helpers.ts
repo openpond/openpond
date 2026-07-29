@@ -14,7 +14,10 @@ const CHAT_NAVIGATION_SCROLL_MIN_DURATION_MS = 280;
 const CHAT_NAVIGATION_SCROLL_MAX_DURATION_MS = 460;
 
 export function isNearChatBottom(element: HTMLElement): boolean {
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= CHAT_AUTOSCROLL_THRESHOLD_PX;
+  return (
+    element.scrollHeight - element.scrollTop - element.clientHeight <=
+    CHAT_AUTOSCROLL_THRESHOLD_PX
+  );
 }
 
 export type UserMessageNavigationState = {
@@ -28,9 +31,9 @@ export const EMPTY_USER_MESSAGE_NAVIGATION: UserMessageNavigationState = {
 };
 
 function userMessageRows(element: HTMLElement): HTMLElement[] {
-  return Array.from(element.querySelectorAll<HTMLElement>(".message-row.user")).filter(
-    (row) => row.parentElement === element,
-  );
+  return Array.from(
+    element.querySelectorAll<HTMLElement>(".message-row.user")
+  ).filter((row) => row.parentElement === element);
 }
 
 export function billingTargetForContext({
@@ -40,8 +43,12 @@ export function billingTargetForContext({
   activeWorkspaceId: string | null;
   cloudProjects: CloudProject[];
 }): { organizationSlug: string | null; teamId: string | null } {
-  const selectedProject = cloudProjects.find((project) => project.id === activeWorkspaceId);
-  const fallbackProject = cloudProjects.find((project) => project.organizationSlug || project.teamId);
+  const selectedProject = cloudProjects.find(
+    (project) => project.id === activeWorkspaceId
+  );
+  const fallbackProject = cloudProjects.find(
+    (project) => project.organizationSlug || project.teamId
+  );
   const project = selectedProject ?? fallbackProject ?? null;
   return {
     organizationSlug: project?.organizationSlug ?? null,
@@ -49,12 +56,24 @@ export function billingTargetForContext({
   };
 }
 
-export function messageScrollTop(element: HTMLElement, message: HTMLElement): number {
-  return message.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+export function messageScrollTop(
+  element: HTMLElement,
+  message: HTMLElement
+): number {
+  return (
+    message.getBoundingClientRect().top -
+    element.getBoundingClientRect().top +
+    element.scrollTop
+  );
 }
 
-function messageScrollBottom(element: HTMLElement, message: HTMLElement): number {
-  return messageScrollTop(element, message) + message.getBoundingClientRect().height;
+function messageScrollBottom(
+  element: HTMLElement,
+  message: HTMLElement
+): number {
+  return (
+    messageScrollTop(element, message) + message.getBoundingClientRect().height
+  );
 }
 
 function userMessageNavigationAnchor(element: HTMLElement): number {
@@ -65,14 +84,17 @@ function previousUserMessageThreshold(element: HTMLElement): number {
   return element.scrollTop + 8;
 }
 
-export function userMessageNavigationState(element: HTMLElement): UserMessageNavigationState {
+export function userMessageNavigationState(
+  element: HTMLElement
+): UserMessageNavigationState {
   const anchor = userMessageNavigationAnchor(element);
   const previousThreshold = previousUserMessageThreshold(element);
   let canGoPrevious = false;
   let canGoNext = false;
   for (const row of userMessageRows(element)) {
     const top = messageScrollTop(element, row);
-    if (messageScrollBottom(element, row) < previousThreshold) canGoPrevious = true;
+    if (messageScrollBottom(element, row) < previousThreshold)
+      canGoPrevious = true;
     if (top > anchor + 8) canGoNext = true;
     if (canGoPrevious && canGoNext) break;
   }
@@ -81,7 +103,7 @@ export function userMessageNavigationState(element: HTMLElement): UserMessageNav
 
 export function nextUserMessageTarget(
   element: HTMLElement,
-  direction: "previous" | "next",
+  direction: "previous" | "next"
 ): HTMLElement | null {
   const rows = userMessageRows(element);
   const anchor = userMessageNavigationAnchor(element);
@@ -103,30 +125,38 @@ export function nextUserMessageTarget(
 export function easedChatScrollDuration(distance: number): number {
   return Math.min(
     CHAT_NAVIGATION_SCROLL_MAX_DURATION_MS,
-    Math.max(CHAT_NAVIGATION_SCROLL_MIN_DURATION_MS, Math.abs(distance) / 5),
+    Math.max(CHAT_NAVIGATION_SCROLL_MIN_DURATION_MS, Math.abs(distance) / 5)
   );
 }
 
 export function easeInOutCubic(progress: number): number {
-  return progress < 0.5 ? 4 * progress * progress * progress : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
 }
 
 export function latestCreatePipelineRuntime(
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): ComposerCreateImproveRuntime | null {
   const run = latestCreateImproveRunProjection({ messages });
-  return run && run.target.kind !== "agent" ? { run } : null;
+  return run ? { run } : null;
 }
 
-export function promptForAppSlashCommand(command: ParsedComposerSlashCommand): string {
-  if (command.command === "agent") return command.args ? `/agent ${command.args}` : "/agent";
-  if (command.command === "skill") return command.args ? `/skill ${command.args}` : "/skill";
-  return command.args ? `/${command.command} ${command.args}` : `/${command.command}`;
+export function promptForAppSlashCommand(
+  command: ParsedComposerSlashCommand
+): string {
+  if (command.command === "agent")
+    return command.args ? `/agent ${command.args}` : "/agent";
+  if (command.command === "skill")
+    return command.args ? `/skill ${command.args}` : "/skill";
+  return command.args
+    ? `/${command.command} ${command.args}`
+    : `/${command.command}`;
 }
 
 export function usageAttributionForComposerSlashCommand(
   command: ParsedComposerSlashCommand,
-  commandSource: UsageRequestAttribution["commandSource"],
+  commandSource: UsageRequestAttribution["commandSource"]
 ): UsageRequestAttribution {
   return {
     surface: "chat",
@@ -136,7 +166,9 @@ export function usageAttributionForComposerSlashCommand(
   };
 }
 
-export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSlashCommand): boolean {
+export function shouldSubmitComposerSlashCommandToChat(
+  command: ParsedComposerSlashCommand
+): boolean {
   return (
     command.command === "goal" ||
     command.command === "agent" ||
@@ -145,7 +177,9 @@ export function shouldSubmitComposerSlashCommandToChat(command: ParsedComposerSl
   );
 }
 
-export function sandboxIdFromWorkspaceName(workspaceName: string | null): string | null {
+export function sandboxIdFromWorkspaceName(
+  workspaceName: string | null
+): string | null {
   const trimmed = workspaceName?.trim() ?? "";
   return /^[a-z0-9]{24}$/.test(trimmed) ? trimmed : null;
 }

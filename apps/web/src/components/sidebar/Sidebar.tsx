@@ -2,7 +2,7 @@ import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import { SidebarNavigation } from "./SidebarNavigation";
 import { SidebarSectionList } from "./SidebarSectionList";
-import { SidebarBrandButton } from "./SidebarBrandButton";
+import { SidebarExperienceMenu } from "./SidebarExperienceMenu";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
@@ -13,6 +13,7 @@ export function Sidebar(props: SidebarProps) {
     arch,
     currentVersion,
     experience,
+    onExperienceChange,
     onSidebarResizeStart,
     platform,
     setSectionMenuOpen,
@@ -44,7 +45,10 @@ export function Sidebar(props: SidebarProps) {
         >
           <PanelLeft size={16} />
         </button>
-        <SidebarBrandButton onOpenHome={() => beginNewChat(null)} />
+        <SidebarExperienceMenu
+          value={experience}
+          onChange={onExperienceChange}
+        />
         {availableUpdate && (
           <button
             type="button"

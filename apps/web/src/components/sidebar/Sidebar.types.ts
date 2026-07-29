@@ -28,6 +28,7 @@ import type { OpenPondOrganization } from "../../lib/organization-types";
 
 export type SidebarProps = {
   experience: Experience;
+  onExperienceChange: (experience: Experience) => void;
   view: AppView;
   selectedAppId: string | null;
   selectedProjectId: string | null;

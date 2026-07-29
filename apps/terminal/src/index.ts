@@ -664,7 +664,7 @@ export async function runOpenPondTerminalCli(argv = process.argv.slice(2)): Prom
   const { command, options } = parseTerminalArgs(argv);
   if (command !== "chat") {
     output.write(
-      "Usage: openpond-app chat [--server URL] [--provider PROVIDER] [--model MODEL] [--cwd DIR] [--project APP_ID] [--resume SESSION_ID] (--message TEXT|--message-file PATH|--stdin) --non-interactive [--yes] [--approval-policy POLICY] [--json] [--timeout-sec SEC] [--max-output-bytes BYTES] [--sandbox MODE]\n"
+      "Usage: openpond-app chat [--server URL] [--provider PROVIDER] [--model MODEL] [--agent AGENT_ID] [--cwd DIR] [--project APP_ID] [--resume SESSION_ID] (--message TEXT|--message-file PATH|--stdin) --non-interactive [--yes] [--approval-policy POLICY] [--json] [--timeout-sec SEC] [--max-output-bytes BYTES] [--sandbox MODE]\n"
     );
     return;
   }

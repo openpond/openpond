@@ -20,7 +20,10 @@ describe("Work model tools", () => {
           ok: true,
           action: request.action,
           output: "ok",
-          data: {},
+          data:
+            request.action === "sandbox_status"
+              ? { sandbox: { id: "sandbox_1", state: "running" } }
+              : {},
         } satisfies WorkspaceToolResult;
       },
     });
@@ -118,6 +121,72 @@ describe("Work model tools", () => {
     ).rejects.toThrow("escaped");
   });
 
+  test("does not report simulated command acknowledgements as executed work", async () => {
+    const definitions = createWorkModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        const request = payload as WorkspaceToolRequest;
+        if (request.action === "sandbox_status") {
+          return {
+            ok: true,
+            action: request.action,
+            output: "running",
+            data: { sandbox: { id: "sandbox_1", state: "running" } },
+          } satisfies WorkspaceToolResult;
+        }
+        if (request.action === "sandbox_exec") {
+          return {
+            ok: true,
+            action: request.action,
+            output:
+              "Command succeeded\n[poc-runner] command accepted by simulated-firecracker driver\n[poc-runner] no host command was executed",
+            data: { command: { status: "succeeded", exitCode: 0 } },
+          } satisfies WorkspaceToolResult;
+        }
+        return {
+          ok: true,
+          action: request.action,
+          output: "ok",
+        } satisfies WorkspaceToolResult;
+      },
+    });
+    const session = workSession({
+      workspaceKind: "sandbox",
+      workspaceId: "sandbox_1",
+    });
+    const environment = definitions.find(
+      (definition) => definition.name === "work_environment"
+    );
+    const exec = definitions.find(
+      (definition) => definition.name === "work_exec"
+    );
+    if (!environment || !exec) throw new Error("Work tools missing");
+
+    const environmentResult = await environment.execute(
+      toolContext(session, "call_environment", {})
+    );
+    const execResult = await exec.execute(
+      toolContext(session, "call_exec", {
+        command: "node -v",
+        timeoutSeconds: 30,
+      })
+    );
+
+    expect(environmentResult).toMatchObject({
+      ok: false,
+      data: { executionBacked: false },
+    });
+    expect(environmentResult.contentText).toContain(
+      "does not currently execute commands"
+    );
+    expect(execResult).toMatchObject({
+      ok: false,
+      data: {
+        code: "sandbox_execution_unavailable",
+        executionBacked: false,
+      },
+    });
+  });
+
   test("materializes bounded file and folder inputs exactly once before Work commands", async () => {
     const tempDir = await mkdtemp(
       path.join(os.tmpdir(), "openpond-work-inputs-")
@@ -140,7 +209,10 @@ describe("Work model tools", () => {
             ok: true,
             action: request.action,
             output: "ok",
-            data: {},
+            data:
+              request.action === "sandbox_status"
+                ? { sandbox: { id: "sandbox_1", state: "running" } }
+                : {},
           } satisfies WorkspaceToolResult;
         },
       });
@@ -188,17 +260,24 @@ describe("Work model tools", () => {
 
   test("resumes a stopped attached Work sandbox before revising it", async () => {
     const calls: WorkspaceToolRequest[] = [];
+    let statusCallCount = 0;
     const definitions = createWorkModelToolDefinitions({
       executeWorkspaceTool: async (_sessionId, payload) => {
         const request = payload as WorkspaceToolRequest;
         calls.push(request);
+        if (request.action === "sandbox_status") statusCallCount += 1;
         return {
           ok: true,
           action: request.action,
           output: "ok",
           data:
             request.action === "sandbox_status"
-              ? { sandbox: { id: "sandbox_1", state: "stopped" } }
+              ? {
+                  sandbox: {
+                    id: "sandbox_1",
+                    state: statusCallCount === 1 ? "stopped" : "running",
+                  },
+                }
               : {},
         } satisfies WorkspaceToolResult;
       },
@@ -222,6 +301,7 @@ describe("Work model tools", () => {
     expect(calls.map((call) => call.action)).toEqual([
       "sandbox_status",
       "sandbox_start",
+      "sandbox_status",
       "sandbox_read_file",
     ]);
   });

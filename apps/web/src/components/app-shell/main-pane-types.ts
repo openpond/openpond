@@ -78,6 +78,7 @@ export type MainPaneProps = {
   selectedSessionId: string | null;
   composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
+  onRequestComposerFocus: () => void;
   labCloseDetailRequestId: number;
   labCloseDetailKind: LabDetailLocation["kind"] | null;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
