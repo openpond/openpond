@@ -114,11 +114,15 @@ describe("Taskset Work attempt runner", () => {
         },
       };
       let modelRound = 0;
+      let firstModelSystemMessage = "";
       const evaluation = createTaskEvaluationService({
         store,
         storeDir: directory,
         modelText: async () => "",
-        modelStream: async function* () {
+        modelStream: async function* (input) {
+          if (!firstModelSystemMessage) {
+            firstModelSystemMessage = input.messages[0]?.content ?? "";
+          }
           if (modelRound++ === 0) {
             yield {
               toolCalls: [{
@@ -165,6 +169,11 @@ describe("Taskset Work attempt runner", () => {
         JSON.stringify({ attempt, workspaceActions }, null, 2),
       ).toBeNull();
       expect(sandboxFiles.get("inputs/inventory.csv")).toEqual(bytes);
+      expect(firstModelSystemMessage).toContain(
+        createHash("sha256").update(bytes).digest("hex"),
+      );
+      expect(firstModelSystemMessage).not.toContain("\"bytes\"");
+      expect(firstModelSystemMessage).not.toContain("\"type\":\"Buffer\"");
       expect(workspaceActions).toContain("sandbox_create");
       expect(workspaceActions.at(-1)).toBe("sandbox_stop");
       expect(attempt).toMatchObject({

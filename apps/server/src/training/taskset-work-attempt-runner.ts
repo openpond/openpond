@@ -850,6 +850,12 @@ function workMessages(
   }>,
 ): HostedChatMessage[] {
   const requiredOutputs = task.requiredOutputs ?? [];
+  const stagedAssets = assets.map((asset) => ({
+    storageName: asset.storageName,
+    mediaType: asset.mediaType,
+    sha256: asset.sha256,
+    sizeBytes: asset.sizeBytes,
+  }));
   return [
     {
       role: "system",
@@ -860,7 +866,7 @@ function workMessages(
         "Keep scratch work under /workspace/work.",
         "Write every required deliverable under /workspace/outputs at the exact declared relative path.",
         "Inspect outputs before finishing. The evaluator will validate and persist declared outputs.",
-        `Staged assets: ${JSON.stringify(assets)}`,
+        `Staged assets: ${JSON.stringify(stagedAssets)}`,
         `Required outputs: ${JSON.stringify(requiredOutputs)}`,
       ].join("\n"),
     },
