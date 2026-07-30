@@ -75,6 +75,8 @@ export function createSessionStore(deps: {
       createdAt,
       updatedAt: createdAt,
       status: "idle",
+      runtimeSeconds: 0,
+      runtimeRunningSince: null,
       pinned: false,
       savedForLater: false,
       archived: false,

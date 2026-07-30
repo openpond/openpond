@@ -23,39 +23,20 @@ export const LocalModelChatConfigurationSchema = z.object({
   updatedAt: TimestampSchema.nullable().default(null),
 });
 
-export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION =
-  LocalModelChatConfigurationSchema.parse({});
+export const DEFAULT_LOCAL_MODEL_CHAT_CONFIGURATION = LocalModelChatConfigurationSchema.parse({});
 
 export const ManagedAdapterServingProjectionSchema = z.object({
   schemaVersion: z.literal("openpond.managedAdapterServingProjection.v1"),
   teamId: IdSchema.nullable().default(null),
-  source: z.enum([
-    "openpond_fireworks",
-    "openpond_training",
-    "sandbox_managed_rft",
-  ]),
+  source: z.enum(["openpond_fireworks", "openpond_training", "sandbox_managed_rl"]),
   sourceRef: IdSchema,
   canonicalArtifactId: IdSchema.nullable(),
   canonicalArtifactState: z
-    .enum([
-      "imported_unvalidated",
-      "evaluating",
-      "promotable",
-      "rejected",
-      "deleted",
-    ])
+    .enum(["imported_unvalidated", "evaluating", "promotable", "rejected", "deleted"])
     .nullable(),
   canonicalDeploymentId: IdSchema.nullable(),
   canonicalDeploymentState: z
-    .enum([
-      "requested",
-      "deploying",
-      "ready",
-      "degraded",
-      "deleting",
-      "deleted",
-      "failed",
-    ])
+    .enum(["requested", "deploying", "ready", "degraded", "deleting", "deleted", "failed"])
     .nullable(),
   state: z.enum(["pending", "imported", "ready", "failed"]),
   customerBindingAllowed: z.boolean().default(false),
@@ -66,12 +47,8 @@ export const ManagedAdapterServingProjectionSchema = z.object({
   lastError: z.string().trim().min(1).max(5_000).nullable(),
 });
 
-export type LocalModelChatConfiguration = z.infer<
-  typeof LocalModelChatConfigurationSchema
->;
-export type ManagedAdapterServingProjection = z.infer<
-  typeof ManagedAdapterServingProjectionSchema
->;
+export type LocalModelChatConfiguration = z.infer<typeof LocalModelChatConfigurationSchema>;
+export type ManagedAdapterServingProjection = z.infer<typeof ManagedAdapterServingProjectionSchema>;
 
 type ManagedAdapterPromotionLineage = {
   promotable: boolean;
@@ -94,18 +71,18 @@ export type ModelBindingPromotionGate =
     };
 
 export function managedAdapterCustomerBindingAllowed(
-  lineage: ManagedAdapterPromotionLineage
+  lineage: ManagedAdapterPromotionLineage,
 ): boolean {
   const projection = lineage.managedServing;
   return Boolean(
-    projection?.source === "sandbox_managed_rft" &&
-      projection.canonicalArtifactState === "promotable" &&
-      projection.customerBindingAllowed
+    projection?.source === "sandbox_managed_rl" &&
+    projection.canonicalArtifactState === "promotable" &&
+    projection.customerBindingAllowed,
   );
 }
 
 export function managedAdapterProjectionReady(
-  projection: ManagedAdapterServingProjection
+  projection: ManagedAdapterServingProjection,
 ): boolean {
   return (
     projection.state === "ready" &&
@@ -119,7 +96,7 @@ export function managedAdapterProjectionReady(
 }
 
 export function resolveModelBindingPromotionGate(
-  lineage: ManagedAdapterPromotionLineage
+  lineage: ManagedAdapterPromotionLineage,
 ): ModelBindingPromotionGate | null {
   if (lineage.promotable && lineage.frozenEvaluationArtifactId) {
     return {
@@ -131,7 +108,7 @@ export function resolveModelBindingPromotionGate(
   }
   const projection = lineage.managedServing;
   if (
-    projection?.source === "sandbox_managed_rft" &&
+    projection?.source === "sandbox_managed_rl" &&
     managedAdapterProjectionReady(projection) &&
     projection.canonicalArtifactId &&
     projection.canonicalDeploymentId

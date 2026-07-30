@@ -13,6 +13,7 @@ import {
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
+import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 import {
   FireworksApiClient,
   resourceId,
@@ -616,6 +617,27 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
             spec.servingMode === "direct" ? deploymentName : undefined;
           for (const task of frozen) {
             const providerUsage: unknown[] = [];
+            const modelToolStream: TasksetWorkModelStream =
+              async function* (request) {
+                const completion = await retryFireworksInference(
+                  () => input.client.chatCompletionWithTools({
+                    model: inferenceModel,
+                    deployment: inferenceDeployment,
+                    messages: request.messages,
+                    tools: request.tools,
+                    toolChoice: request.toolChoice,
+                    maxTokens,
+                    reasoningEffort: "none",
+                  }),
+                  deadlineMs,
+                );
+                providerUsage.push(completion.usage);
+                yield {
+                  text: completion.text,
+                  toolCalls: completion.toolCalls,
+                  usage: completion.usage,
+                };
+              };
             const attempt = await runPostTrainingEvaluationAttempt({
               store: this.deps.store,
               storeDir: this.deps.storeDir,
@@ -639,25 +661,13 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
                 providerUsage.push(completion.usage);
                 return completion.text;
               },
-              crossSystemStream: async function* (request) {
-                const completion = await retryFireworksInference(
-                  () => input.client.chatCompletionWithTools({
-                    model: inferenceModel,
-                    deployment: inferenceDeployment,
-                    messages: request.messages,
-                    tools: request.tools,
-                    toolChoice: request.toolChoice,
-                    maxTokens,
-                    reasoningEffort: "none",
-                  }),
-                  deadlineMs,
-                );
-                providerUsage.push(completion.usage);
-                yield {
-                  text: completion.text,
-                  toolCalls: completion.toolCalls,
-                };
-              },
+              crossSystemStream: modelToolStream,
+              work: this.deps.tasksetWorkRuntime
+                ? {
+                    stream: modelToolStream,
+                    runtime: this.deps.tasksetWorkRuntime,
+                  }
+                : undefined,
               attemptInput: {
                 tasksetId: input.taskset.id,
                 task,

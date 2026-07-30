@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type ComputeInventory,
   type GradeResult,
+  type OpenPondProfileState,
   type TaskAttemptResult,
 } from "@openpond/contracts";
 import {
@@ -38,6 +39,7 @@ import {
   createTrainingModelConfigurationService,
   stopActiveFireworksServingSessions,
 } from "./training-model-controls.js";
+import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingService(deps: {
   store: SqliteStore;
@@ -65,6 +67,7 @@ export function createTrainingService(deps: {
   fireworksRequest?: typeof fetch;
   provisionFireworksRftEvaluator?: FireworksRftEvaluatorProvisioner;
   fireworksRftPublicBaseUrl?: () => string | null;
+  tasksetWorkRuntime?: TasksetWorkAttemptRuntime;
   prepareModel?: (input: {
     modelId: string;
     revision: string | null;
@@ -76,6 +79,7 @@ export function createTrainingService(deps: {
     teamId: string;
   }>;
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
+  loadProfileState?: () => Promise<OpenPondProfileState>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
   const {
@@ -97,7 +101,7 @@ export function createTrainingService(deps: {
       resolveTaskset,
       estimatedCostUsd: null,
       methods: ["grpo"],
-      environmentPlacements: ["remote"],
+      environmentPlacements: ["local", "remote"],
       assumptions: [
         "OpenPond Managed selects qualified compute capacity after approval.",
         "The approved maximum spend is enforced before provider resources start.",
@@ -116,6 +120,7 @@ export function createTrainingService(deps: {
     request: deps.fireworksRequest,
     provisionRftEvaluator: deps.provisionFireworksRftEvaluator,
     rftPublicBaseUrl: deps.fireworksRftPublicBaseUrl,
+    tasksetWorkRuntime: deps.tasksetWorkRuntime,
   });
   const fireworksRftEnvironment = createFireworksRftEnvironment({
     store: deps.store,
@@ -158,6 +163,7 @@ export function createTrainingService(deps: {
     store: deps.store,
     storeDir: deps.storeDir,
     resolveManagedAccess: deps.resolveManagedTrainingAccess,
+    loadProfileState: deps.loadProfileState,
     catalog: () => portableCatalog(),
   });
   deps.registerPortableAdapters?.(portableAdapters);
@@ -329,7 +335,11 @@ export function createTrainingService(deps: {
   }
 
   async function close(): Promise<void> {
-    await Promise.all([localCpu.close(), fireworksServing.close()]);
+    await Promise.all([
+      localCpu.close(),
+      fireworksServing.close(),
+      portableAdapters.close(),
+    ]);
   }
 
   return {

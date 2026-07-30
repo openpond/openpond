@@ -33,11 +33,11 @@ export function buildLabDetailBreadcrumbs(
   detailLocation: LabDetailLocation | null,
   requestClose: (kind: LabDetailKind | null) => void,
 ) {
-  if (!detailLocation) return [{ label: "Lab" }];
+  if (!detailLocation) return [{ label: "Models" }];
   if (detailLocation.kind === "dataset") {
     return [
-      { label: "Lab", onSelect: () => requestClose(null) },
-      { label: "Datasets", onSelect: () => requestClose("dataset") },
+      { label: "Models", onSelect: () => requestClose(null) },
+      { label: "Tasksets", onSelect: () => requestClose("dataset") },
       ...(detailLocation.workproductLabel
         ? [{
             label: detailLocation.workproductLabel,
@@ -49,7 +49,7 @@ export function buildLabDetailBreadcrumbs(
   }
   return [
     {
-      label: "Lab",
+      label: "Models",
       onSelect: () => requestClose(null),
     },
     {

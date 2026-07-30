@@ -556,54 +556,6 @@ describe("chat message projection", () => {
     ).toBe(false);
   });
 
-  test("keeps legacy Codex commentary and later tool activity in transcript order", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_started",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: { prompt: "inspect the renderer" },
-      }),
-      commandStarted("search_1", "turn_1", "rg workTracePresentation apps/web"),
-      runtimeEvent({
-        id: "commentary_1",
-        name: "assistant.delta",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        output: "I found the live trace threshold.",
-      }),
-      commandStarted(
-        "read_1",
-        "turn_1",
-        "sed -n '1,120p' apps/web/src/lib/chat-work-trace.ts"
-      ),
-      runtimeEvent({
-        id: "turn_completed",
-        name: "turn.completed",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        status: "completed",
-      }),
-    ]);
-
-    expect(messages.map((message) => message.role)).toEqual([
-      "user",
-      "activity_group",
-      "assistant",
-      "activity_group",
-    ]);
-    expect(messages[1]?.activities?.map((activity) => activity.id)).toEqual([
-      "search_1",
-    ]);
-    expect(messages[2]?.content).toBe("I found the live trace threshold.");
-    expect(messages[3]?.activities?.map((activity) => activity.id)).toEqual([
-      "read_1",
-    ]);
-    expect(messages[1]?.traceState).toBe("settled");
-    expect(messages[3]?.traceState).toBe("completed");
-  });
-
   test("settles earlier work summaries while only the active tail keeps working", () => {
     const messages = buildChatMessages([
       runtimeEvent({

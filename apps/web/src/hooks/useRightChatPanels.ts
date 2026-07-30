@@ -301,7 +301,7 @@ export function useRightChatPanels(input: {
         : null;
       if (commandPolicy?.kind === "open_training") {
         if (attachments.length > 0) {
-          showToast("/train uses this chat; add other chats from Lab.", "error");
+          showToast("/train uses this chat; add other chats from Models.", "error");
           return false;
         }
         openLabTraining({

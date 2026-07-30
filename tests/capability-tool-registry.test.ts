@@ -2,11 +2,11 @@ import { describe, expect, test } from "vitest";
 import { createOpenPondCapabilityModelToolDefinitions } from "../apps/server/src/openpond/capability-tool-registry";
 import { createCapabilityCatalogRuntime } from "../apps/server/src/runtime/hosted-turn/capability-catalog";
 import { resolveHostedToolRolloutFlags } from "../apps/server/src/runtime/hosted-turn/rollout";
-import type {
-  ModelToolExecutionContext,
-  ModelToolDefinition,
-} from "../apps/server/src/openpond/model-tool-registry";
-import { defaultSubagentPreferences, type Session } from "../packages/contracts/src";
+import { defaultSubagentPreferences } from "../packages/contracts/src";
+import {
+  modelToolContext as context,
+  requireModelTool as requireTool,
+} from "./helpers/model-tool-contract";
 
 describe("OpenPond capability tool registry", () => {
   test("adds subagent tools only when subagent handlers are supplied", () => {
@@ -364,52 +364,5 @@ function subagentMessageToolResult() {
       reason: null,
     },
     nextStep: "Message persisted.",
-  };
-}
-
-function requireTool(definitions: ModelToolDefinition[], name: string): ModelToolDefinition {
-  const definition = definitions.find((candidate) => candidate.name === name);
-  if (!definition) throw new Error(`${name} missing`);
-  return definition;
-}
-
-function context(args: Record<string, unknown>): ModelToolExecutionContext {
-  return {
-    session: baseSession(),
-    turnId: "turn_1",
-    provider: "openrouter",
-    model: "test/model",
-    callId: "call_1",
-    args,
-    signal: new AbortController().signal,
-    workspaceDiffBaseline: null,
-    mentionedApps: [],
-    userPrompt: "Use subagents.",
-  };
-}
-
-function baseSession(): Session {
-  return {
-    id: "session_1",
-    provider: "openrouter",
-    modelRef: { providerId: "openrouter", modelId: "test/model" },
-    openPondCommandAccessMode: "ask",
-    title: "BYOK chat",
-    appId: null,
-    appName: null,
-    workspaceKind: undefined,
-    workspaceId: null,
-    workspaceName: null,
-    localProjectId: null,
-    cloudProjectId: null,
-    cloudTeamId: null,
-    cwd: null,
-    codexThreadId: null,
-    createdAt: "2026-07-07T10:00:00.000Z",
-    updatedAt: "2026-07-07T10:00:00.000Z",
-    status: "idle",
-    pinned: false,
-    archived: false,
-    order: 0,
   };
 }

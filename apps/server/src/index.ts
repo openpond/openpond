@@ -453,7 +453,11 @@ export async function createOpenPondServer(
       ),
     };
   }
-  const { resolveFireworksCredential, trainingModelText } =
+  const {
+    resolveFireworksCredential,
+    trainingModelText,
+    trainingModelStream,
+  } =
     createTrainingModelRuntime({
       providerSecretPaths,
       loadLocalByokRuntimeState: localByokRuntimeState,
@@ -501,9 +505,19 @@ export async function createOpenPondServer(
       "openpond-training"
     ),
   });
+  const tasksetWorkRuntime = {
+    createSession,
+    getSession,
+    executeWorkspaceTool,
+    runtimeEventsForSession: (sessionId: string) =>
+      store.runtimeEventsForSession(sessionId),
+  };
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
+    modelText: trainingModelText,
+    modelStream: trainingModelStream,
+    workRuntime: tasksetWorkRuntime,
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: async ({ grader, task, attempt }) => {
@@ -603,6 +617,7 @@ export async function createOpenPondServer(
       const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
       return resolveManagedAdapterUserAccess({ teamId });
     },
+    loadProfileState: loadOpenPondProfileState,
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -621,6 +636,7 @@ export async function createOpenPondServer(
     projectDatasetArtifact: datasetArtifactService.project,
     resolveDatasetTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
+    tasksetWorkRuntime,
     deactivateManagedBinding: managedAdapterSyncService.deactivateBinding,
     reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
     activateManagedBinding: managedAdapterSyncService.activateBinding,

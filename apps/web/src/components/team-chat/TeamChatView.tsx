@@ -158,6 +158,24 @@ export type TeamChatViewProps = {
   onRetryLoad: () => Promise<void>;
 };
 
+export function TeamChatProView() {
+  return (
+    <section className="team-chat-view team-chat-pro-view" aria-label="Team Chat">
+      <div className="team-chat-pro-content">
+        <span className="team-chat-pro-icon" aria-hidden="true">
+          <MessageSquare size={22} />
+        </span>
+        <h1>Team Chat</h1>
+        <p>Team Chat is available with Pro mode.</p>
+        <small>
+          Create or join a Pro team to chat with teammates, coordinate work,
+          and share agents.
+        </small>
+      </div>
+    </section>
+  );
+}
+
 export function TeamChatView(props: TeamChatViewProps) {
   useErrorToast(props.error);
   const [prompt, setPrompt] = useState("");

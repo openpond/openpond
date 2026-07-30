@@ -46,9 +46,11 @@ describe("notification settings", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarTeamSection, {
         currentUserId: "user_1",
+        defaultCollapsed: false,
         enabled: true,
         loading: false,
         members: [],
+        onOpen: () => undefined,
         openTeamDm: () => undefined,
         organization: null,
         selectedTeamThreadId: "general",
@@ -59,13 +61,56 @@ describe("notification settings", () => {
     );
 
     expect(markup).toContain("general");
-    expect(markup).toContain("Your Team");
-    expect(markup).toContain('aria-label="Collapse Your Team"');
+    expect(markup).toContain("Team Chat");
+    expect(markup).toContain('aria-label="Collapse Team Chat"');
     expect(markup).toContain('aria-controls="team-sidebar-conversations"');
     expect(markup).toContain('aria-label="Collapse Team"');
     expect(markup).toContain('aria-expanded="true"');
     expect(markup).not.toContain("Team notification settings");
     expect(markup).not.toContain("team-notification-menu");
+  });
+
+  test("defaults an available Team Chat section to collapsed", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarTeamSection, {
+        currentUserId: "user_1",
+        enabled: true,
+        loading: false,
+        members: [],
+        onOpen: () => undefined,
+        openTeamDm: () => undefined,
+        organization: null,
+        selectedTeamThreadId: null,
+        selectTeamThread: () => undefined,
+        threads: [thread({ id: "general", kind: "general", title: "general" })],
+        view: "chat",
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Expand Team Chat"');
+    expect(markup).not.toContain(">general<");
+  });
+
+  test("keeps Team Chat available as a destination without a team", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarTeamSection, {
+        currentUserId: null,
+        enabled: false,
+        loading: false,
+        members: [],
+        onOpen: () => undefined,
+        openTeamDm: () => undefined,
+        organization: null,
+        selectedTeamThreadId: null,
+        selectTeamThread: () => undefined,
+        threads: [],
+        view: "team",
+      }),
+    );
+
+    expect(markup).toContain("Team Chat");
+    expect(markup).toContain("section-title-link active");
+    expect(markup).not.toContain("Team unavailable");
   });
 
   test("uses readable labels for direct messages and groups", () => {

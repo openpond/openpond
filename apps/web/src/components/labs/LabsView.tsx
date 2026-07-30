@@ -1,85 +1,36 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import {
-  BookOpenText,
-  Bot,
-  Boxes,
-  ChartColumnStacked,
-  Plug,
-  Plus,
-} from "../icons";
+import { Boxes } from "../icons";
 import "../../styles/training/training.css";
 import "../../styles/labs/labs.css";
+import "../../styles/labs/labs-inventory.css";
 import "../../styles/labs/labs-detail.css";
 import "../../styles/labs/labs-model-detail.css";
 
 export type LabPrimaryTab =
-  | "workproducts"
-  | "tasksets"
   | "models"
-  | "suggestions";
+  | "tasksets";
 
 export function LabsView({
   activeTab,
   children,
-  suggestionCount,
   showHeader = true,
   onTabChange,
-  onCreateAgent,
   onCreateDataset,
   onCreateModel,
 }: {
   activeTab: LabPrimaryTab;
   children: ReactNode;
-  suggestionCount: number;
   showHeader?: boolean;
   onTabChange: (tab: LabPrimaryTab) => void;
-  onCreateAgent: () => void;
   onCreateDataset: () => void;
   onCreateModel: () => void;
 }) {
-  const [createOpen, setCreateOpen] = useState(false);
-  const createRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!createOpen) return undefined;
-    function close(event: PointerEvent) {
-      if (!createRef.current?.contains(event.target as Node)) setCreateOpen(false);
-    }
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") setCreateOpen(false);
-    }
-    document.addEventListener("pointerdown", close);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", close);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [createOpen]);
-
   return (
-    <section className="labs-route" aria-label="Lab">
+    <section className="labs-route" aria-label="Models">
       {showHeader ? <header className="labs-header">
         <div className="labs-header-navigation">
-          <nav className="labs-primary-tabs" role="tablist" aria-label="Lab sections">
-            <button
-              aria-selected={activeTab === "workproducts"}
-              className={activeTab === "workproducts" ? "active" : undefined}
-              role="tab"
-              type="button"
-              onClick={() => onTabChange("workproducts")}
-            >
-              Home
-            </button>
-            <button
-              aria-selected={activeTab === "tasksets"}
-              className={activeTab === "tasksets" ? "active" : undefined}
-              role="tab"
-              type="button"
-              onClick={() => onTabChange("tasksets")}
-            >
-              Tasksets
-            </button>
+          <nav className="labs-primary-tabs" role="tablist" aria-label="Model sections">
             <button
               aria-selected={activeTab === "models"}
               className={activeTab === "models" ? "active" : undefined}
@@ -90,91 +41,35 @@ export function LabsView({
               Models
             </button>
             <button
-              aria-selected={activeTab === "suggestions"}
-              className={activeTab === "suggestions" ? "active" : undefined}
+              aria-selected={activeTab === "tasksets"}
+              className={activeTab === "tasksets" ? "active" : undefined}
               role="tab"
               type="button"
-              onClick={() => onTabChange("suggestions")}
+              onClick={() => onTabChange("tasksets")}
             >
-              Suggestions
-              {suggestionCount > 0 ? <span>{suggestionCount}</span> : null}
+              Tasksets
             </button>
           </nav>
         </div>
         <div className="labs-header-actions">
-          <div className="labs-create-anchor" ref={createRef}>
+          {activeTab === "models" ? (
             <button
               className="labs-create-button"
               type="button"
-              aria-expanded={createOpen}
-              aria-haspopup="menu"
-              aria-label="Create"
-              title="Create"
-              onClick={() => setCreateOpen((open) => !open)}
+              onClick={onCreateModel}
             >
-              <Plus size={13} />
-              <span>Create</span>
+              <span>New model</span>
             </button>
-            {createOpen ? (
-              <div className="labs-create-menu" role="menu">
-                {activeTab === "workproducts" ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setCreateOpen(false);
-                        onCreateAgent();
-                      }}
-                    >
-                      <Bot size={13} />
-                      <span><strong>Agent</strong><small>Describe the agent in the shared Create flow.</small></span>
-                    </button>
-                ) : null}
-                {activeTab === "workproducts" || activeTab === "models" ? (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setCreateOpen(false);
-                        onCreateModel();
-                      }}
-                    >
-                      <ChartColumnStacked size={13} />
-                      <span><strong>Model</strong><small>Create a Model and set up its first training run.</small></span>
-                    </button>
-                ) : null}
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setCreateOpen(false);
-                    onCreateDataset();
-                  }}
-                >
-                  <Boxes size={13} />
-                  <span><strong>Taskset</strong><small>Create reusable tasks, data, graders, and evaluations.</small></span>
-                </button>
-                {activeTab === "workproducts" ? (
-                  <>
-                    <button disabled type="button" role="menuitem">
-                      <BookOpenText size={13} />
-                      <span>
-                        <strong>Skill</strong>
-                        <small>Coming soon</small>
-                      </span>
-                    </button>
-                    <button disabled type="button" role="menuitem">
-                      <Plug size={13} />
-                      <span>
-                        <strong>Extension</strong>
-                        <small>Coming soon</small>
-                      </span>
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+          ) : activeTab === "tasksets" ? (
+            <button
+              className="labs-create-button"
+              type="button"
+              onClick={onCreateDataset}
+            >
+              <Boxes size={13} />
+              <span>New Taskset</span>
+            </button>
+          ) : null}
         </div>
       </header> : null}
       <div className="labs-panel">{children}</div>

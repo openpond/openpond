@@ -1,0 +1,5 @@
+Normalize every inventory row into normalized.json.
+Calculate line_total_usd as quantity multiplied by unit_price_usd.
+Write summary.csv with the columns sku,quantity,line_total_usd.
+Sort both outputs by sku in ascending order.
+Use two decimal places for every currency value.

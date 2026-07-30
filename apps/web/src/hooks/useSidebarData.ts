@@ -9,6 +9,7 @@ import type {
 import { buildCachedChatMessages } from "../lib/chat-messages";
 import {
   SIDEBAR_SECTION_LIMIT,
+  SIDEBAR_TASK_INITIAL_LIMIT,
   sidebarDragKey,
   projectSelectionKey,
   type PinnedSidebarItem,
@@ -59,38 +60,61 @@ export function useSidebarData({
 }: UseSidebarDataInput) {
   const visibleLocalProjects = useMemo(
     () => localProjects.filter((project) => !project.hiddenFromDefaultSidebar),
-    [localProjects],
+    [localProjects]
   );
   const activeSessions = useMemo(
     () =>
       sessions.filter(
-        (session) => !session.archived && isVisibleActiveSidebarSession(session),
+        (session) => !session.archived && isVisibleSidebarParentSession(session)
       ),
-    [sessions],
+    [sessions]
   );
-  const pinnedSessions = useMemo(() => activeSessions.filter((session) => session.pinned), [activeSessions]);
+  const pinnedSessions = useMemo(
+    () => activeSessions.filter((session) => session.pinned),
+    [activeSessions]
+  );
   const savedForLaterSessions = useMemo(
     () => activeSessions.filter((session) => Boolean(session.savedForLater)),
-    [activeSessions],
+    [activeSessions]
   );
   const archivedSessions = useMemo(
-    () => sessions.filter((session) => session.archived && !session.hiddenFromDefaultSidebar),
-    [sessions],
+    () =>
+      sessions.filter(
+        (session) => session.archived && isVisibleSidebarParentSession(session)
+      ),
+    [sessions]
   );
-  const localProjectIds = useMemo(() => new Set(localProjects.map((project) => project.id)), [localProjects]);
+  const localProjectIds = useMemo(
+    () => new Set(localProjects.map((project) => project.id)),
+    [localProjects]
+  );
   const cloudProjectIds = useMemo(
     () => new Set(cloudProjects.map((project) => project.id)),
-    [cloudProjects],
+    [cloudProjects]
   );
-  const projectPathIndex = useMemo(() => buildSidebarProjectPathIndex(localProjects), [localProjects]);
+  const projectPathIndex = useMemo(
+    () => buildSidebarProjectPathIndex(localProjects),
+    [localProjects]
+  );
   const sidebarProjectIdBySessionId = useMemo(() => {
     const rows: Record<string, string> = {};
-    for (const session of activeSessions) {
-      const projectKey = sidebarProjectKeyForSession(session, localProjectIds, projectPathIndex, cloudProjectIds);
+    for (const session of [...activeSessions, ...archivedSessions]) {
+      const projectKey = sidebarProjectKeyForSession(
+        session,
+        localProjectIds,
+        projectPathIndex,
+        cloudProjectIds
+      );
       if (projectKey) rows[session.id] = projectKey;
     }
     return rows;
-  }, [activeSessions, cloudProjectIds, localProjectIds, projectPathIndex]);
+  }, [
+    activeSessions,
+    archivedSessions,
+    cloudProjectIds,
+    localProjectIds,
+    projectPathIndex,
+  ]);
   const chatSessions = useMemo(
     () =>
       activeSessions.filter(
@@ -107,7 +131,12 @@ export function useSidebarData({
       archivedSessions.filter(
         (session) =>
           !session.appId &&
-          !sidebarProjectKeyForSession(session, localProjectIds, projectPathIndex, cloudProjectIds)
+          !sidebarProjectKeyForSession(
+            session,
+            localProjectIds,
+            projectPathIndex,
+            cloudProjectIds
+          )
       ),
     [archivedSessions, cloudProjectIds, localProjectIds, projectPathIndex]
   );
@@ -138,7 +167,10 @@ export function useSidebarData({
       }
     }
     for (const parentRows of Object.values(rows)) {
-      parentRows.sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+      parentRows.sort(
+        (left, right) =>
+          Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+      );
     }
     return rows;
   }, [sessions]);
@@ -147,7 +179,10 @@ export function useSidebarData({
       visibleLocalProjects
         .map((project, index) => {
           const id = projectSelectionKey("local", project.id);
-          const cloudLinkWarning = localProjectCloudLinkWarning(project, cloudProjects);
+          const cloudLinkWarning = localProjectCloudLinkWarning(
+            project,
+            cloudProjects
+          );
           return {
             id,
             kind: "local" as const,
@@ -159,7 +194,7 @@ export function useSidebarData({
           };
         })
         .sort(sortSidebarProjectRows),
-    [appPreferences, cloudProjects, visibleLocalProjects],
+    [appPreferences, cloudProjects, visibleLocalProjects]
   );
   const cloudProjectRows = useMemo<SidebarProjectItem[]>(
     () =>
@@ -183,31 +218,49 @@ export function useSidebarData({
     () =>
       new Set(
         visibleLocalProjects
-          .map((project) => confirmedLinkedCloudProject(project, cloudProjects)?.id ?? null)
-          .filter((projectId): projectId is string => Boolean(projectId)),
+          .map(
+            (project) =>
+              confirmedLinkedCloudProject(project, cloudProjects)?.id ?? null
+          )
+          .filter((projectId): projectId is string => Boolean(projectId))
       ),
-    [cloudProjects, visibleLocalProjects],
+    [cloudProjects, visibleLocalProjects]
   );
   const cloudOnlyProjectRows = useMemo(
-    () => cloudProjectRows.filter((item) => !linkedCloudProjectIds.has(item.project.id)),
-    [cloudProjectRows, linkedCloudProjectIds],
+    () =>
+      cloudProjectRows.filter(
+        (item) => !linkedCloudProjectIds.has(item.project.id)
+      ),
+    [cloudProjectRows, linkedCloudProjectIds]
   );
   const allProjectRows = useMemo<SidebarProjectItem[]>(
-    () => [...localProjectRows, ...cloudOnlyProjectRows].sort(sortSidebarProjectRows),
-    [cloudOnlyProjectRows, localProjectRows],
+    () =>
+      [...localProjectRows, ...cloudOnlyProjectRows].sort(
+        sortSidebarProjectRows
+      ),
+    [cloudOnlyProjectRows, localProjectRows]
   );
-  const pinnedProjects = useMemo(() => allProjectRows.filter((item) => item.pinned), [allProjectRows]);
+  const pinnedProjects = useMemo(
+    () => allProjectRows.filter((item) => item.pinned),
+    [allProjectRows]
+  );
   const pinnedFiles = useMemo(
     () => sidebarFileBookmarks.filter((item) => item.status === "pinned"),
-    [sidebarFileBookmarks],
+    [sidebarFileBookmarks]
   );
   const savedForLaterFiles = useMemo(
-    () => sidebarFileBookmarks.filter((item) => item.status === "saved_for_later"),
-    [sidebarFileBookmarks],
+    () =>
+      sidebarFileBookmarks.filter((item) => item.status === "saved_for_later"),
+    [sidebarFileBookmarks]
   );
-  const projectRows = useMemo(() => allProjectRows.filter((item) => !item.pinned), [allProjectRows]);
+  const projectRows = allProjectRows;
   const visibleProjectRows = useMemo(
-    () => visibleSidebarProjectRows(projectRows, projectsExpanded, selectedProjectId),
+    () =>
+      visibleSidebarProjectRows(
+        projectRows,
+        projectsExpanded,
+        selectedProjectId
+      ),
     [projectRows, projectsExpanded, selectedProjectId]
   );
   const pinnedItems = useMemo<PinnedSidebarItem[]>(
@@ -232,7 +285,8 @@ export function useSidebarData({
           key: sidebarDragKey({ type: "file", id: file.id }),
           id: file.id,
           file,
-          order: file.order ?? pinnedProjects.length + pinnedSessions.length + index,
+          order:
+            file.order ?? pinnedProjects.length + pinnedSessions.length + index,
         })),
       ].sort((left, right) => {
         if (left.order !== right.order) return left.order - right.order;
@@ -240,14 +294,16 @@ export function useSidebarData({
           const priority = { project: 0, session: 1, file: 2 };
           return priority[left.type] - priority[right.type];
         }
-        const leftLabel = left.type === "project"
-          ? left.item.project.name
-          : left.type === "session"
+        const leftLabel =
+          left.type === "project"
+            ? left.item.project.name
+            : left.type === "session"
             ? left.session.title
             : left.file.path;
-        const rightLabel = right.type === "project"
-          ? right.item.project.name
-          : right.type === "session"
+        const rightLabel =
+          right.type === "project"
+            ? right.item.project.name
+            : right.type === "session"
             ? right.session.title
             : right.file.path;
         return leftLabel.localeCompare(rightLabel);
@@ -255,21 +311,40 @@ export function useSidebarData({
     [pinnedFiles, pinnedProjects, pinnedSessions]
   );
   const chatRows = useMemo(
-    () => (archivedChatsOpen ? [...chatSessions, ...archivedChatSessions] : chatSessions),
+    () =>
+      archivedChatsOpen
+        ? [...chatSessions, ...archivedChatSessions]
+        : chatSessions,
     [archivedChatsOpen, archivedChatSessions, chatSessions]
   );
   const visibleChatRows = useMemo(
-    () => chatRows.slice(0, Math.max(SIDEBAR_SECTION_LIMIT, chatRowsVisibleCount)),
+    () =>
+      chatRows.slice(
+        0,
+        Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)
+      ),
     [chatRows, chatRowsVisibleCount]
   );
   const sessionEvents = useMemo(
     () => runtimeEventsForSession(runtimeIndexes, selectedSessionId),
     [runtimeIndexes, selectedSessionId]
   );
-  const chatMessages = useMemo(() => buildCachedChatMessages(sessionEvents), [sessionEvents]);
-  const contextUsage = latestContextUsageForSession(runtimeIndexes, selectedSessionId);
-  const goalRuntime = latestGoalRuntimeForSession(runtimeIndexes, selectedSessionId);
-  const subagentRuntime = latestSubagentRuntimeForSession(runtimeIndexes, selectedSessionId);
+  const chatMessages = useMemo(
+    () => buildCachedChatMessages(sessionEvents),
+    [sessionEvents]
+  );
+  const contextUsage = latestContextUsageForSession(
+    runtimeIndexes,
+    selectedSessionId
+  );
+  const goalRuntime = latestGoalRuntimeForSession(
+    runtimeIndexes,
+    selectedSessionId
+  );
+  const subagentRuntime = latestSubagentRuntimeForSession(
+    runtimeIndexes,
+    selectedSessionId
+  );
 
   return {
     activeSessions,
@@ -298,16 +373,22 @@ export function useSidebarData({
   };
 }
 
-function isVisibleActiveSidebarSession(session: Session): boolean {
+function isVisibleSidebarParentSession(session: Session): boolean {
   if (isSubagentChildSession(session)) return false;
   return !session.hiddenFromDefaultSidebar;
 }
 
-function isSubagentChildSession(session: Session): session is Session & { parentSessionId: string; subagentRunId: string } {
+function isSubagentChildSession(
+  session: Session
+): session is Session & { parentSessionId: string; subagentRunId: string } {
   return Boolean(session.parentSessionId && session.subagentRunId);
 }
 
-function sortSidebarProjectRows(left: SidebarProjectItem, right: SidebarProjectItem): number {
+function sortSidebarProjectRows(
+  left: SidebarProjectItem,
+  right: SidebarProjectItem
+): number {
+  if (left.pinned !== right.pinned) return left.pinned ? -1 : 1;
   if (left.order !== right.order) return left.order - right.order;
   return left.project.name.localeCompare(right.project.name);
 }
@@ -315,16 +396,22 @@ function sortSidebarProjectRows(left: SidebarProjectItem, right: SidebarProjectI
 export function visibleSidebarProjectRows(
   projectRows: SidebarProjectItem[],
   projectsExpanded: boolean,
-  selectedProjectId: string | null,
+  selectedProjectId: string | null
 ): SidebarProjectItem[] {
-  if (projectsExpanded || projectRows.length <= SIDEBAR_SECTION_LIMIT) return projectRows;
+  if (projectsExpanded || projectRows.length <= SIDEBAR_SECTION_LIMIT)
+    return projectRows;
 
   const visibleRows = projectRows.slice(0, SIDEBAR_SECTION_LIMIT);
-  if (!selectedProjectId || visibleRows.some((item) => item.id === selectedProjectId)) {
+  if (
+    !selectedProjectId ||
+    visibleRows.some((item) => item.id === selectedProjectId)
+  ) {
     return visibleRows;
   }
 
-  const selectedProject = projectRows.find((item) => item.id === selectedProjectId);
+  const selectedProject = projectRows.find(
+    (item) => item.id === selectedProjectId
+  );
   if (!selectedProject) return visibleRows;
 
   return [...visibleRows.slice(0, SIDEBAR_SECTION_LIMIT - 1), selectedProject];

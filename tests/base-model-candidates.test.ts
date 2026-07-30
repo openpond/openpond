@@ -19,10 +19,7 @@ describe("provider-neutral base-model candidates", () => {
           nonProduction: false,
         }),
         destination("local_cpu_fixture", {
-          modelAllowlist: [
-            "openpond/tiny-cpu-gpt2-fixture",
-            "HuggingFaceTB/SmolLM2-135M-Instruct",
-          ],
+          modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture", "HuggingFaceTB/SmolLM2-135M-Instruct"],
         }),
       ],
       inventory: inventory(),
@@ -33,8 +30,7 @@ describe("provider-neutral base-model candidates", () => {
       "HuggingFaceTB/SmolLM2-135M-Instruct",
       "openpond/tiny-cpu-gpt2-fixture",
     ]);
-    expect(candidates.find((candidate) =>
-      candidate.preference.source === "local")).toMatchObject({
+    expect(candidates.find((candidate) => candidate.preference.source === "local")).toMatchObject({
       available: true,
       nonProduction: true,
       preference: {
@@ -42,9 +38,7 @@ describe("provider-neutral base-model candidates", () => {
         revision: "12fd25f77366fa6b3b4b768ec3050bf629380bac",
         tokenizerRevision: "tokenizer-smollm2-v1",
       },
-      executionOptions: [
-        { destinationId: "local_cpu_fixture", available: true },
-      ],
+      executionOptions: [{ destinationId: "local_cpu_fixture", available: true }],
     });
     expect(JSON.stringify(candidates)).not.toContain("ollama/qwen-local");
     expect(JSON.stringify(candidates)).not.toContain("/private/model/path");
@@ -81,16 +75,12 @@ describe("provider-neutral base-model candidates", () => {
       inventory: null,
     });
 
-    expect(
-      candidates.map((candidate) => candidate.preference),
-    ).toEqual([
+    expect(candidates.map((candidate) => candidate.preference)).toEqual([
       expect.objectContaining({
         modelId: "Qwen/Qwen3-0.6B",
         revision: "c1899de289a04d12100db370d81485cdf75e47ca",
-        tokenizerRevision:
-          "c1899de289a04d12100db370d81485cdf75e47ca",
-        chatTemplateHash:
-          "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        tokenizerRevision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
       }),
     ]);
   });
@@ -118,11 +108,7 @@ describe("provider-neutral base-model candidates", () => {
       candidates,
       destinations,
       inventory: null,
-      registeredEngineIds: [
-        "sandbox-managed-rft",
-        "fireworks-native",
-        "local-trl",
-      ],
+      registeredEngineIds: ["sandbox-managed-rl", "fireworks-native", "local-trl"],
       now: checkedAt,
     };
 

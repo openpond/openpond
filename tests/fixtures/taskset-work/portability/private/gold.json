@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "openpond.syntheticInventoryGold.v1",
+  "rows": [
+    {
+      "sku": "HB-100",
+      "description": "Harbor bolt",
+      "quantity": 12,
+      "unit_price_usd": "2.50",
+      "line_total_usd": "30.00"
+    },
+    {
+      "sku": "RF-200",
+      "description": "Rope fastener",
+      "quantity": 4,
+      "unit_price_usd": "8.25",
+      "line_total_usd": "33.00"
+    },
+    {
+      "sku": "WL-300",
+      "description": "Warning label",
+      "quantity": 20,
+      "unit_price_usd": "1.10",
+      "line_total_usd": "22.00"
+    }
+  ],
+  "summaryCsv": "sku,quantity,line_total_usd\nHB-100,12,30.00\nRF-200,4,33.00\nWL-300,20,22.00\n"
+}

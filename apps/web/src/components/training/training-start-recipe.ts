@@ -42,13 +42,16 @@ export function trainingRecipe(input: {
   catalogModel?: TrainingCatalog["models"][number] | null;
 }): TrainingRecipe {
   if (input.method === "grpo" && input.executionMode === "provider_native") {
+    const managed = input.destinationId === "openpond_managed";
+    const maxSteps = input.maxSteps;
+    const rolloutGroupSize = managed ? 4 : input.rolloutGroupSize;
     const crossSystem =
       input.taskset.metadata.toolContractHash ===
         CROSS_SYSTEM_TOOL_CONTRACT_HASH ||
       input.taskset.environment.metadata.toolContractHash ===
         CROSS_SYSTEM_TOOL_CONTRACT_HASH;
     const grader = input.taskset.graders.find(
-      (candidate) => candidate.rewardEligible,
+      (candidate) => candidate.rewardEligible
     );
     return {
       schemaVersion: "openpond.rftRecipe.v1",
@@ -58,29 +61,28 @@ export function trainingRecipe(input: {
       dataset: {
         trainSplit: "train",
         validationSplit: "frozen_eval",
-        maxPromptTokens: input.sequenceLength,
+        maxPromptTokens: managed ? 4_096 : input.sequenceLength,
         maxExamples: input.trainingExamples,
         selectionStrategy: input.taskset.datasetArtifact
           ? "rft_easy_curriculum_v1"
           : "stable_hash_top_n",
       },
-      lora: { rank: input.rank },
+      lora: { rank: managed ? 16 : input.rank },
       rollout: {
-        groupSize: input.rolloutGroupSize,
-        concurrency: input.rolloutConcurrency,
+        groupSize: rolloutGroupSize,
+        concurrency: managed ? 4 : input.rolloutConcurrency,
         maxTurns: crossSystem ? 15 : 1,
-        maxOutputTokens: input.rolloutMaxOutputTokens,
+        maxOutputTokens: managed ? 512 : input.rolloutMaxOutputTokens,
         temperature: 0.8,
         topP: 0.95,
         seed: 17,
       },
       optimizer: {
-        learningRate: input.learningRate,
-        maxSteps: input.maxSteps,
+        learningRate: managed ? 0.00001 : input.learningRate,
+        maxSteps,
       },
       loss: {
-        method:
-          input.rftLossMethod ?? defaultRftLossMethod(input.taskset),
+        method: input.rftLossMethod ?? defaultRftLossMethod(input.taskset),
         klBeta: null,
       },
       reward: crossSystem
@@ -88,33 +90,30 @@ export function trainingRecipe(input: {
             graderId: "cross-system-exact-verifier",
             graderHash: "server-derived-grader-hash",
             environmentId: "cross-system-operations",
-            environmentVersion:
-              CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
+            environmentVersion: CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
             toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
           }
         : {
             graderId: grader?.id ?? "math_final_answer",
             graderHash: "server-derived-grader-hash",
             environmentId: DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
-            environmentVersion:
-              DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
+            environmentVersion: DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
             toolContractHash: DATASET_NO_TOOLS_CONTRACT_HASH,
           },
       resourceLimits: {
-        wallTimeMs: 180_000,
+        wallTimeMs: managed ? 1_800_000 : 180_000,
         maxRollouts: Math.max(
-          input.rolloutGroupSize,
-          input.trainingExamples * input.rolloutGroupSize,
+          rolloutGroupSize,
+          managed
+            ? maxSteps * rolloutGroupSize
+            : input.trainingExamples * rolloutGroupSize
         ),
         maxPayloadBytes: 1_000_000,
       },
       policyOptimization: null,
     };
   }
-  if (
-    input.method === "ppo" &&
-    input.destinationId === "local_cpu_fixture"
-  ) {
+  if (input.method === "ppo" && input.destinationId === "local_cpu_fixture") {
     const policyModel = localPolicyModel(input.model);
     const valueModel = {
       ...policyModel,
@@ -123,7 +122,7 @@ export function trainingRecipe(input: {
     const maxRollouts = Math.max(input.maxSteps, input.trainingExamples);
     const maximumOutputPerRollout = Math.max(
       1,
-      Math.min(64, input.rolloutMaxOutputTokens),
+      Math.min(64, input.rolloutMaxOutputTokens)
     );
     const metadataToolContractHash =
       input.taskset.environment.metadata.toolContractHash;
@@ -170,8 +169,7 @@ export function trainingRecipe(input: {
         budgets: {
           maxRollouts,
           maxEnvironmentExecutions: maxRollouts,
-          maxInputTokens:
-            maxRollouts * Math.max(16, input.sequenceLength),
+          maxInputTokens: maxRollouts * Math.max(16, input.sequenceLength),
           maxOutputTokens: maxRollouts * maximumOutputPerRollout,
           maxOptimizerSteps: input.maxSteps,
           wallTimeMs: input.model ? 900_000 : 120_000,
@@ -209,10 +207,7 @@ export function trainingRecipe(input: {
       resourceLimits: localResourceLimits(input.model),
     };
   }
-  if (
-    input.method === "dpo" &&
-    input.destinationId === "local_cpu_fixture"
-  ) {
+  if (input.method === "dpo" && input.destinationId === "local_cpu_fixture") {
     const policyModel = localPolicyModel(input.model);
     return {
       schemaVersion: "openpond.dpoRecipe.v1",
@@ -224,14 +219,8 @@ export function trainingRecipe(input: {
         trainSplit: "train",
         validationSplit: "frozen_eval",
         maxPairs: input.trainingExamples,
-        maxPromptTokens: Math.max(
-          16,
-          Math.floor(input.sequenceLength / 2),
-        ),
-        maxCompletionTokens: Math.max(
-          16,
-          Math.ceil(input.sequenceLength / 2),
-        ),
+        maxPromptTokens: Math.max(16, Math.floor(input.sequenceLength / 2)),
+        maxCompletionTokens: Math.max(16, Math.ceil(input.sequenceLength / 2)),
         selectionStrategy: "stable_hash_top_n",
         selectionSeed: 17,
       },
@@ -325,15 +314,14 @@ export function preserveBaseModelSelection(
   candidates: BaseModelCandidate[],
   currentSelectionKey: string,
   destinationId: TrainingDestinationId,
-  method: "sft" | "dpo" | "grpo" | "ppo",
+  method: "sft" | "dpo" | "grpo" | "ppo"
 ): string {
   const current = candidates.find(
-    (candidate) => candidate.selectionKey === currentSelectionKey,
+    (candidate) => candidate.selectionKey === currentSelectionKey
   );
   return current?.executionOptions.some(
     (option) =>
-      option.destinationId === destinationId &&
-      option.methods.includes(method),
+      option.destinationId === destinationId && option.methods.includes(method)
   )
     ? currentSelectionKey
     : "";
@@ -348,8 +336,7 @@ function providerNativeModelRef(input: {
     revision:
       input.catalogModel?.revision ?? "provider-managed-model-resource-v1",
     tokenizerRevision:
-      input.catalogModel?.tokenizerRevision ??
-      "provider-managed-tokenizer-v1",
+      input.catalogModel?.tokenizerRevision ?? "provider-managed-tokenizer-v1",
     chatTemplateHash:
       input.catalogModel?.chatTemplateHash ??
       "provider-managed-chat-template-v1",
@@ -395,16 +382,11 @@ function lora(input: { rank: number; model: ModelAsset | null }) {
     rank: input.rank,
     alpha: input.rank * 2,
     dropout: input.model ? 0.05 : 0,
-    targetModules: input.model
-      ? SMOLLM2_LORA_TARGET_MODULES
-      : ["c_attn"],
+    targetModules: input.model ? SMOLLM2_LORA_TARGET_MODULES : ["c_attn"],
   };
 }
 
-function optimizer(input: {
-  learningRate: number;
-  maxSteps: number;
-}) {
+function optimizer(input: { learningRate: number; maxSteps: number }) {
   return {
     learningRate: input.learningRate,
     epochs: 1,

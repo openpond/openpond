@@ -50,6 +50,10 @@ import {
   type ThreadDetailProjection,
 } from "./store-codecs.js";
 import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";
+import {
+  sessionRuntimeSummaries,
+  sessionWithRuntimeSummary,
+} from "./session-runtime-summary.js";
 
 export { CURRENT_SQLITE_SCHEMA_VERSION } from "./store-schema.js";
 export type { ThreadDetailProjection } from "./store-codecs.js";
@@ -183,14 +187,26 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     const rows = await this.all<PayloadRow>(
       "SELECT payload FROM projection_session_shells ORDER BY sort_index ASC",
     );
-    return rows.map((row) => normalizeSessionPayload(JSON.parse(row.payload)));
+    const runtimeBySessionId = sessionRuntimeSummaries(this.data.turns);
+    return rows.map((row) => {
+      const session = normalizeSessionPayload(JSON.parse(row.payload));
+      return sessionWithRuntimeSummary(
+        session,
+        runtimeBySessionId.get(session.id)
+      );
+    });
   }
 
   async getSession(sessionId: string): Promise<Session | null> {
     await this.ready;
     await this.writeQueue;
     const row = await this.get<PayloadRow>("SELECT payload FROM projection_session_shells WHERE id = ?", [sessionId]);
-    return row ? normalizeSessionPayload(JSON.parse(row.payload)) : null;
+    if (!row) return null;
+    const session = normalizeSessionPayload(JSON.parse(row.payload));
+    return sessionWithRuntimeSummary(
+      session,
+      sessionRuntimeSummaries(this.data.turns).get(sessionId)
+    );
   }
 
   async pendingApprovals(): Promise<Approval[]> {
@@ -1280,7 +1296,16 @@ export class SqliteStore extends SqliteSidebarFileBookmarkStore {
     const write = this.writeQueue.then(async () => {
       const index = this.data.sessions.findIndex((session) => session.id === sessionId);
       if (index === -1) return;
-      updated = updater(this.data.sessions[index]!);
+      const runtimeSummary = sessionRuntimeSummaries(this.data.turns).get(sessionId);
+      updated = sessionWithRuntimeSummary(
+        updater(
+          sessionWithRuntimeSummary(
+            this.data.sessions[index]!,
+            runtimeSummary
+          )
+        ),
+        runtimeSummary
+      );
       await this.run(
         "UPDATE sessions SET payload = ?, updated_at = ? WHERE id = ?",
         [JSON.stringify(updated), updated.updatedAt, sessionId],

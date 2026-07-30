@@ -14,6 +14,10 @@ export function useProjectTargetActions({
   createProjectFromScratch,
   expandProject,
   localProjectById,
+  onCreateCloudEnvironment,
+  onNewCloudProject,
+  onNewLocalProject,
+  onUseExistingFolderPath,
   newProjectBusy,
   newProjectMode,
   newProjectName,
@@ -39,6 +43,10 @@ export function useProjectTargetActions({
   createProjectFromScratch: (name: string) => Promise<unknown>;
   expandProject: (projectId: string) => void;
   localProjectById: Map<string, LocalProject>;
+  onCreateCloudEnvironment: () => void;
+  onNewCloudProject: () => void;
+  onNewLocalProject: () => void;
+  onUseExistingFolderPath: () => void;
   newProjectBusy: boolean;
   newProjectMode: NewProjectMode;
   newProjectName: string;
@@ -60,8 +68,24 @@ export function useProjectTargetActions({
       if (target === projectTargetValue || busy || workspaceBusy) return;
       setError(null);
 
+      if (target === "action:new-local-project") {
+        onNewLocalProject();
+        return;
+      }
       if (target === "action:add-local-project") {
         void addProjectFolder();
+        return;
+      }
+      if (target === "action:add-local-project-path") {
+        onUseExistingFolderPath();
+        return;
+      }
+      if (target === "action:new-cloud-project") {
+        onNewCloudProject();
+        return;
+      }
+      if (target === "action:create-cloud-environment") {
+        onCreateCloudEnvironment();
         return;
       }
       if (target === "none") {
@@ -109,6 +133,10 @@ export function useProjectTargetActions({
       cloudProjectById,
       expandProject,
       localProjectById,
+      onCreateCloudEnvironment,
+      onNewCloudProject,
+      onNewLocalProject,
+      onUseExistingFolderPath,
       projectTargetValue,
       setDiffPanelOpen,
       setDraftModel,

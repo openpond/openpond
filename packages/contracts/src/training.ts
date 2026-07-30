@@ -410,6 +410,7 @@ export const ModelRunDraftSchema = z.object({
   baseModel: BaseModelPreferenceSchema.nullable(),
   method: TrainingMethodSchema.nullable(),
   destinationId: TrainingDestinationIdSchema.nullable(),
+  managedRolloutPlacement: z.enum(["local", "remote"]).optional(),
   runPreset: ModelRunPresetSchema.nullable(),
   recipe: TrainingRecipeSchema.nullable(),
   createdAt: TimestampSchema,

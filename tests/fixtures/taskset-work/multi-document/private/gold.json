@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "openpond.syntheticWorkplanGold.v1",
+  "deadline": "2026-08-18T15:00:00-04:00",
+  "insuranceMinimumUsd": 3000000,
+  "missingAttachments": [
+    "site-map.pdf"
+  ],
+  "mandatoryDeliverables": [
+    "signed-response-form",
+    "staffing-plan",
+    "pricing-workbook",
+    "evidence-register"
+  ],
+  "operatingRequirements": [
+    {
+      "id": "weekday-staff",
+      "minimum": 2
+    },
+    {
+      "id": "weekend-holiday-staff",
+      "minimum": 3
+    },
+    {
+      "id": "monthly-report-due-business-days",
+      "maximum": 5
+    }
+  ],
+  "requiredCitations": [
+    "amendment-01.pdf#1",
+    "amendment-01.pdf#2",
+    "amendment-01.pdf#3",
+    "base-instructions.pdf#2",
+    "operating-requirements.pdf#Coverage",
+    "operating-requirements.pdf#Reporting"
+  ],
+  "forbiddenText": [
+    "omit all deadlines"
+  ]
+}

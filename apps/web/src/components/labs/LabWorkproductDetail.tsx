@@ -187,10 +187,7 @@ export function LabWorkproductDetail({
     null
   );
   const [activeTab, setActiveTab] = useState<WorkproductDetailTab>(
-    workproduct.kind === "model" &&
-      ["Draft", "Ready to run"].includes(workproduct.status)
-      ? "runs"
-      : "overview"
+    "overview"
   );
   const [editingRunDraftId, setEditingRunDraftId] = useState<
     string | "new" | null
@@ -202,9 +199,6 @@ export function LabWorkproductDetail({
   const [selectedModelEntryKey, setSelectedModelEntryKey] = useState<
     string | null
   >(null);
-  const [selectedModelRunTab, setSelectedModelRunTab] = useState<
-    "summary" | "metrics" | "evals" | "artifacts" | "logs"
-  >("summary");
   const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
     null
   );
@@ -317,26 +311,26 @@ export function LabWorkproductDetail({
           : selectedModelEntryKey
           ? [
               {
-                label: activeTab === "versions" ? "Versions" : "Runs",
+                label: selectedModelEntryKey.startsWith("version:")
+                  ? "Versions"
+                  : "Runs",
                 onSelect: () => {
                   setSelectedModelEntryKey(null);
                 },
               },
               {
                 label:
-                  activeTab === "versions" && selectedModelVersion
+                  selectedModelEntryKey.startsWith("version:") &&
+                  selectedModelVersion
                     ? `Version ${selectedModelVersion.number}`
                     : selectedModelRunNumber
                     ? `Run ${selectedModelRunNumber}`
-                    : activeTab === "versions"
+                    : selectedModelEntryKey.startsWith("version:")
                     ? "Version details"
                     : "Run details",
               },
-              ...(selectedModelRunTab === "summary"
-                ? []
-                : [{ label: titleCase(selectedModelRunTab) }]),
             ]
-          : [{ label: activeTab === "runs" ? "Runs" : titleCase(activeTab) }]
+          : []
         : detailBreadcrumbs(
             activeTab === "runs" ? "overview" : activeTab,
             selectedChangeRunId,
@@ -351,7 +345,6 @@ export function LabWorkproductDetail({
       selectedChangeRunId,
       selectedModelEntryKey,
       selectedModelRunNumber,
-      selectedModelRunTab,
       selectedModelVersion,
       workproduct.kind,
     ]
@@ -372,6 +365,16 @@ export function LabWorkproductDetail({
     taskset,
     training: training.payload,
   });
+  const currentModelVersion =
+    workproduct.kind === "model"
+      ? modelVersions.find((version) => version.current) ?? null
+      : null;
+  const headerStatus =
+    workproduct.kind === "model"
+      ? currentModelVersion
+        ? { label: "Hosted", value: "ready" }
+        : { label: "Not hosted", value: "not_run" }
+      : { label: progression.statusLabel, value: progression.statusValue };
   const preferredRunId = progression.runId ?? workproductRuns[0]?.id ?? "";
   const selectedRunAvailable = workproductRuns.some(
     (run) => run.id === selectedRunId
@@ -386,24 +389,12 @@ export function LabWorkproductDetail({
     ["versions", "Versions"],
     ["configuration", "Configuration"],
   ] as const;
-  const modelTabs = [
-    ["overview", "Overview"],
-    ["runs", "Runs"],
-    ["versions", "Versions"],
-  ] as const;
-
   useEffect(() => {
     onCandidateReviewChange(null);
     setSelectedRunId(preferredRunId);
     setSelectedChangeRunId(null);
     setSelectedModelEntryKey(null);
-    setSelectedModelRunTab("summary");
-    setActiveTab(
-      workproduct.kind === "model" &&
-        ["Draft", "Ready to run"].includes(workproduct.status)
-        ? "runs"
-        : "overview"
-    );
+    setActiveTab("overview");
     setEditingRunDraftId(null);
     setEditorSection("run");
   }, [workproduct.key]);
@@ -545,8 +536,8 @@ export function LabWorkproductDetail({
           <div className="labs-workproduct-name-row">
             <h1>{workproduct.name}</h1>
             <LabStatusDot
-              label={progression.statusLabel}
-              value={progression.statusValue}
+              label={headerStatus.label}
+              value={headerStatus.value}
             />
           </div>
         </div>
@@ -635,15 +626,13 @@ export function LabWorkproductDetail({
         ) : null}
       </header>
 
-      {selectedModelEntryKey ? null : (
+      {workproduct.kind === "model" || selectedModelEntryKey ? null : (
         <div
           className="training-detail-tabs"
           role="tablist"
-          aria-label={
-            workproduct.kind === "model" ? "Model detail" : "Workproduct detail"
-          }
+          aria-label="Workproduct detail"
         >
-          {(workproduct.kind === "model" ? modelTabs : detailTabs).map(
+          {detailTabs.map(
             ([id, label]) => (
               <button
                 className={activeTab === id ? "active" : undefined}
@@ -653,8 +642,6 @@ export function LabWorkproductDetail({
                 type="button"
                 onClick={() => {
                   setActiveTab(id);
-                  if (workproduct.kind === "model")
-                    setSelectedModelEntryKey(null);
                   if (id === "changes") setSelectedChangeRunId(null);
                 }}
               >
@@ -689,42 +676,36 @@ export function LabWorkproductDetail({
               training={training}
               workproduct={workproduct}
               onOpenDataset={onOpenDataset}
-              onTabChange={setSelectedModelRunTab}
             />
           </Suspense>
-        ) : workproduct.kind === "model" && activeTab === "runs" ? (
-          <LabModelRunsPage
-            runs={runs}
-            training={training}
-            workproduct={workproduct}
-            readOnly={readOnlyModel}
-            onOpenDataset={onOpenDataset}
-            onOpenEntry={setSelectedModelEntryKey}
-            onResumeDraft={setEditingRunDraftId}
-          />
-        ) : workproduct.kind === "model" && activeTab === "versions" ? (
-          <LabModelVersionsPage
-            runs={runs}
-            training={training}
-            workproduct={workproduct}
-            readOnly={readOnlyModel}
-            onOpenDataset={onOpenDataset}
-            onOpenEntry={setSelectedModelEntryKey}
-            onToast={onToast}
-          />
         ) : workproduct.kind === "model" ? (
-          <LabModelOverview
-            connection={connection}
-            runs={runs}
-            training={training}
-            workproduct={workproduct}
-            onOpenEntry={(entryKey) => {
-              setActiveTab("runs");
-              setSelectedModelEntryKey(entryKey);
-            }}
-            onOpenRuns={() => setActiveTab("runs")}
-            onOpenVersions={() => setActiveTab("versions")}
-          />
+          <>
+            <LabModelOverview
+              connection={connection}
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              onOpenEntry={setSelectedModelEntryKey}
+            />
+            <LabModelVersionsPage
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              readOnly={readOnlyModel}
+              onOpenDataset={onOpenDataset}
+              onOpenEntry={setSelectedModelEntryKey}
+              onToast={onToast}
+            />
+            <LabModelRunsPage
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              readOnly={readOnlyModel}
+              onOpenDataset={onOpenDataset}
+              onOpenEntry={setSelectedModelEntryKey}
+              onResumeDraft={setEditingRunDraftId}
+            />
+          </>
         ) : activeTab === "overview" ? (
           <DetailSection title="Overview">
             <dl className="labs-inline-facts">

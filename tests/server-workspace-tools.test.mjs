@@ -6,6 +6,8 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { promisify } from "node:util";
 import { createOpenPondServer } from "../apps/server/dist/index.js";
+import { editWorkspaceFile } from "../apps/server/dist/workspace-tools/workspace-tool-file-system.js";
+import { previewWorkspaceEditFile } from "../apps/server/dist/workspace-tools/workspace-tool-preview.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -25,7 +27,12 @@ async function withServer(fn) {
     await fn(instance);
   } finally {
     await instance.close();
-    await rm(storeDir, { recursive: true, force: true });
+    await rm(storeDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 50,
+    });
   }
 }
 
@@ -34,6 +41,32 @@ async function git(cwd, args) {
 }
 
 describe("server workspace tool harness", () => {
+  test("rejects ambiguous edit text unless replaceAll is explicit", async () => {
+    const repoPath = await mkdtemp(path.join(os.tmpdir(), "openpond-edit-guard-"));
+    const targetPath = path.join(repoPath, "README.md");
+    await writeFile(targetPath, "# One\n\n# Two\n", "utf8");
+
+    try {
+      await assert.rejects(
+        () => previewWorkspaceEditFile(repoPath, "README.md", "# ", "## "),
+        /Text matched 2 times/,
+      );
+      await assert.rejects(
+        () => editWorkspaceFile(repoPath, "README.md", "# ", "## "),
+        /Text matched 2 times/,
+      );
+
+      const edited = await editWorkspaceFile(repoPath, "README.md", "# ", "## ", {
+        replaceAll: true,
+      });
+
+      assert.equal(edited.replacements, 2);
+      assert.equal(await readFile(targetPath, "utf8"), "## One\n\n## Two\n");
+    } finally {
+      await rm(repoPath, { recursive: true, force: true });
+    }
+  });
+
   test("adds a non-git local project and executes generic file tools", async () => {
     await withServer(async (instance) => {
       const projectDir = await mkdtemp(path.join(os.tmpdir(), "openpond-local-project-test-"));

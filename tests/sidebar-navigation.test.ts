@@ -4,7 +4,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { OpenPondApp } from "@openpond/contracts";
 import type { Experience } from "@openpond/contracts";
 
-import { SidebarNavigation } from "../apps/web/src/components/sidebar/SidebarNavigation";
+import {
+  SidebarNavigation,
+  SidebarUtilityNavigation,
+} from "../apps/web/src/components/sidebar/SidebarNavigation";
 import type { SidebarSectionMenuId } from "../apps/web/src/app/app-state";
 import type { AppView } from "../apps/web/src/lib/app-models";
 
@@ -37,48 +40,89 @@ function renderSidebarNavigation(
   );
 }
 
+function renderSidebarUtilityNavigation(
+  view: AppView,
+  experience: Experience = "development"
+): string {
+  const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<
+    SetStateAction<AppView>
+  >;
+  return renderToStaticMarkup(
+    createElement(SidebarUtilityNavigation, {
+      experience,
+      setSectionMenuOpen: noopDispatch as Dispatch<
+        SetStateAction<SidebarSectionMenuId | null>
+      >,
+      setSelectedAppId: noopDispatch as Dispatch<SetStateAction<string | null>>,
+      setSelectedProjectId: noopDispatch as Dispatch<
+        SetStateAction<string | null>
+      >,
+      setSelectedSessionId: noopDispatch as Dispatch<
+        SetStateAction<string | null>
+      >,
+      setView,
+      view,
+    })
+  );
+}
+
 describe("Sidebar navigation", () => {
   test("does not render a Projects primary navigation entry", () => {
     const markup = renderSidebarNavigation("chat");
 
     expect(markup).toContain("New task");
-    expect(markup).toContain("Get started");
-    expect(markup).toContain("Lab");
-    expect(markup).toContain("duck-icon");
+    expect(markup).toContain("Profile");
+    expect(markup).toContain("Models");
+    expect(markup).not.toContain("Docs");
     expect(markup).toContain("Apps");
+    expect(markup.indexOf("New task")).toBeLessThan(markup.indexOf("Profile"));
+    expect(markup.indexOf("Profile")).toBeLessThan(markup.indexOf("Models"));
+    expect(markup.indexOf("Models")).toBeLessThan(markup.indexOf("Apps"));
     expect(markup).not.toContain("Projects");
     expect(markup).not.toContain("Agents");
     expect(markup).not.toContain("Training");
     expect(markup).not.toContain("Insights");
-    expect(markup).not.toContain("Profile");
   });
 
-  test("highlights the Get started primary navigation entry", () => {
-    const markup = renderSidebarNavigation("get-started");
+  test("highlights Docs in the bottom utility navigation", () => {
+    const markup = renderSidebarUtilityNavigation("get-started");
 
-    expect(markup).toContain("Get started");
-    expect(markup).toContain('class="nav-command active"');
+    expect(markup).toContain('aria-label="Docs"');
+    expect(markup).toContain(
+      'class="sidebar-icon sidebar-docs-button active"'
+    );
+    expect(markup).not.toContain("<span>Docs</span>");
   });
 
-  test("keeps profile change state out of the primary Lab destination", () => {
-    const markup = renderSidebarNavigation("labs");
+  test("highlights the standalone Profile and Models destinations independently", () => {
+    const profile = renderSidebarNavigation("profile");
+    const models = renderSidebarNavigation("labs");
 
-    expect(markup).toContain("Lab");
-    expect(markup).toContain("nav-profile-command active");
-    expect(markup).not.toContain("sidebar-profile-change-dot");
-    expect(markup).not.toContain("Local profile changes are not committed");
-    expect(markup).toContain('aria-label="Lab"');
+    expect(profile).toContain('class="nav-command active" aria-label="Profile"');
+    expect(profile).not.toContain('class="nav-command active" aria-label="Models"');
+    expect(models).toContain('class="nav-command active" aria-label="Models"');
+    expect(models).not.toContain('class="nav-command active" aria-label="Profile"');
+    expect(models).not.toContain("sidebar-profile-change-dot");
+    expect(models).not.toContain("Local profile changes are not committed");
   });
 
-  test("keeps Chat minimal and exposes Apps without Lab in Work", () => {
+  test("keeps Chat minimal and places Apps in the Work primary navigation", () => {
     const chat = renderSidebarNavigation("chat", "chat");
     const work = renderSidebarNavigation("chat", "work");
+    const chatUtilities = renderSidebarUtilityNavigation("chat", "chat");
+    const workUtilities = renderSidebarUtilityNavigation("chat", "work");
 
     expect(chat).toContain("New chat");
-    expect(chat).not.toContain("Lab");
+    expect(chat).not.toContain("Profile");
+    expect(chat).not.toContain("Models");
     expect(chat).not.toContain("Apps");
     expect(work).toContain("New task");
-    expect(work).not.toContain("Lab");
+    expect(work).not.toContain("Profile");
+    expect(work).not.toContain("Models");
     expect(work).toContain("Apps");
+    expect(chatUtilities).toContain('aria-label="Docs"');
+    expect(chatUtilities).not.toContain("Apps");
+    expect(workUtilities).toContain('aria-label="Docs"');
+    expect(workUtilities).not.toContain("Apps");
   });
 });

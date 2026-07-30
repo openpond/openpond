@@ -108,7 +108,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setCodexHistorySessions,
     setEvents,
     setSessions,
-    revealProjectsSection,
     cloudProjectById,
     localProjectById,
     selectedApp,
@@ -168,13 +167,15 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     view === "apps"
       ? "Apps"
       : view === "get-started"
-      ? "Get started"
+      ? "Docs"
       : view === "labs"
-      ? "Lab"
+      ? "Models"
+      : view === "profile"
+      ? "Profile"
       : view === "team"
       ? teamChat.detail
         ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
-        : "Team"
+        : "Team Chat"
       : view === "community"
       ? communities.preview?.displayName ?? "Communities"
       : selectedSession?.title ?? "New task";
@@ -217,6 +218,17 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setNewProjectName,
     setNewProjectPath,
   ]);
+  const openNewLocalProjectDialog = useCallback(() => {
+    setNewProjectMode("local");
+    setNewProjectName("");
+    setNewProjectPath("");
+    setNewProjectDialogOpen(true);
+  }, [
+    setNewProjectDialogOpen,
+    setNewProjectMode,
+    setNewProjectName,
+    setNewProjectPath,
+  ]);
   const {
     addProjectFolder,
     addProjectFolderPath,
@@ -232,7 +244,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     openExistingProjectDialog: openExistingProjectPathDialog,
     applyBootstrapPayload,
     expandProject,
-    revealProjectsSection,
     setExpandedProjectIds,
     setSelectedAppId,
     setSelectedProjectId,
@@ -241,33 +252,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setView,
     showToast,
   });
-  const { changeProjectTarget, submitNewProjectDialog } =
-    useProjectTargetActions({
-      addProjectFolder,
-      addProjectFolderPath,
-      appDispatch,
-      busy,
-      cloudProjectById,
-      createCloudProjectFromScratch,
-      createProjectFromScratch,
-      expandProject,
-      localProjectById,
-      newProjectBusy,
-      newProjectMode,
-      newProjectName,
-      newProjectPath,
-      projectTargetValue: projectTarget.value,
-      setDiffPanelOpen,
-      setDraftModel,
-      setDraftProvider,
-      setError,
-      setNewProjectBusy,
-      setNewProjectDialogOpen,
-      setNewProjectName,
-      setNewProjectPath,
-      showToast,
-      workspaceBusy,
-    });
   const {
     changeWorkspaceBranch,
     openCommitDialog,
@@ -700,6 +684,37 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setNewProjectName,
     setRightPanelMode,
   });
+  const { changeProjectTarget, submitNewProjectDialog } =
+    useProjectTargetActions({
+      addProjectFolder,
+      addProjectFolderPath,
+      appDispatch,
+      busy,
+      cloudProjectById,
+      createCloudProjectFromScratch,
+      createProjectFromScratch,
+      expandProject,
+      localProjectById,
+      newProjectBusy,
+      newProjectMode,
+      newProjectName,
+      newProjectPath,
+      onCreateCloudEnvironment: createCloudEnvironmentFromSidebar,
+      onNewCloudProject: openCloudProjectDialog,
+      onNewLocalProject: openNewLocalProjectDialog,
+      onUseExistingFolderPath: openExistingProjectPathDialog,
+      projectTargetValue: projectTarget.value,
+      setDiffPanelOpen,
+      setDraftModel,
+      setDraftProvider,
+      setError,
+      setNewProjectBusy,
+      setNewProjectDialogOpen,
+      setNewProjectName,
+      setNewProjectPath,
+      showToast,
+      workspaceBusy,
+    });
   const browserRevealSessionIds = useMemo(
     () => sessions.map((session) => session.id),
     [sessions]
@@ -770,7 +785,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const openProfileSettings = useCallback(() => {
     setSectionMenuOpen(null);
-    setView("labs");
+    setView("profile");
     setSidebarOpen(true);
   }, [setSectionMenuOpen, setSidebarOpen, setView]);
   const diagnosticEvents = useMemo(

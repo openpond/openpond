@@ -8,9 +8,11 @@ import { SidebarSection } from "./SidebarRows";
 
 type SidebarTeamSectionProps = {
   currentUserId: string | null;
+  defaultCollapsed?: boolean;
   enabled: boolean;
   loading: boolean;
   members: TeamChatMember[];
+  onOpen: () => void;
   openTeamDm: (userId: string) => void;
   organization: OpenPondOrganization | null;
   selectedTeamThreadId: string | null;
@@ -21,9 +23,11 @@ type SidebarTeamSectionProps = {
 
 export function SidebarTeamSection({
   currentUserId,
+  defaultCollapsed = true,
   enabled,
   loading,
   members,
+  onOpen,
   openTeamDm,
   organization,
   selectedTeamThreadId,
@@ -31,9 +35,22 @@ export function SidebarTeamSection({
   threads,
   view,
 }: SidebarTeamSectionProps) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [teamExpanded, setTeamExpanded] = useState(true);
-  if (!enabled) return null;
+  if (!enabled) {
+    return (
+      <div className="team-sidebar-section">
+        <SidebarSection
+          label="Team Chat"
+          collapsed
+          titleActive={view === "team"}
+          onTitleClick={onOpen}
+        >
+          {null}
+        </SidebarSection>
+      </div>
+    );
+  }
 
   const generalThread = threads.find((thread) => thread.kind === "general") ?? null;
   const dmThreadByUserId = new Map<string, TeamChatThread>();
@@ -47,8 +64,10 @@ export function SidebarTeamSection({
   return (
     <div className="team-sidebar-section">
       <SidebarSection
-        label="Your Team"
+        label="Team Chat"
         collapsed={collapsed}
+        titleActive={view === "team"}
+        onTitleClick={onOpen}
         onToggleCollapsed={() => setCollapsed((value) => !value)}
       >
         <div className="team-sidebar-group">

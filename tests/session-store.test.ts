@@ -3,14 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import { AppPreferencesSchema } from "@openpond/contracts";
-import type { RuntimeEvent, Session } from "@openpond/contracts";
+import type { RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { createSessionStore } from "../apps/server/src/store/session-store";
 import { SqliteStore } from "../apps/server/src/store/store";
 
 describe("session store patches", () => {
-  test("persists explicit experiences and defaults legacy sessions to Development", async () => {
+  test("exposes cumulative turn runtime in session shells and patch responses", async () => {
     const storeDir = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-session-experience-")
+      path.join(os.tmpdir(), "openpond-session-runtime-")
     );
     const store = new SqliteStore(storeDir);
 
@@ -18,21 +18,46 @@ describe("session store patches", () => {
       const { createSession, patchSession } = createSessionStore({
         store,
         defaultSessionCwd: () => "/tmp/openpond",
-        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+        appendRuntimeEvent: async () => undefined,
       });
-      const defaultSession = await createSession({ provider: "openpond" });
-      const workSession = await createSession({
-        experience: "work",
+      const created = await createSession({
+        experience: "chat",
         provider: "openpond",
-        cwd: null,
+        title: "Timed chat",
       });
+      const completedTurn: Turn = {
+        id: "completed-turn",
+        sessionId: created.id,
+        providerTurnId: null,
+        prompt: "First prompt",
+        startedAt: "2026-07-29T10:00:00.000Z",
+        completedAt: "2026-07-29T10:02:02.000Z",
+        status: "completed",
+        error: null,
+        metadata: {},
+        createImproveRun: null,
+      };
+      const runningTurn: Turn = {
+        ...completedTurn,
+        id: "running-turn",
+        prompt: "Second prompt",
+        startedAt: "2026-07-29T10:05:00.000Z",
+        completedAt: null,
+        status: "in_progress",
+      };
+      await store.insertTurn(completedTurn);
+      await store.insertTurn(runningTurn);
 
-      expect(defaultSession.experience).toBe("development");
-      expect(workSession.experience).toBe("work");
-      expect((await store.getSession(workSession.id))?.experience).toBe("work");
-      expect(
-        (await patchSession(workSession.id, { experience: "chat" })).experience
-      ).toBe("chat");
+      expect((await store.sessionShells())[0]).toMatchObject({
+        id: created.id,
+        runtimeSeconds: 122,
+        runtimeRunningSince: "2026-07-29T10:05:00.000Z",
+      });
+      expect(await patchSession(created.id, { pinned: true })).toMatchObject({
+        runtimeSeconds: 122,
+        runtimeRunningSince: "2026-07-29T10:05:00.000Z",
+        pinned: true,
+      });
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });
@@ -249,30 +274,6 @@ describe("session store patches", () => {
       expect(
         (await store.getSession(inherited.id))?.openPondCommandAccessMode
       ).toBe("ask");
-    } finally {
-      await store.close();
-      await rm(storeDir, { recursive: true, force: true });
-    }
-  });
-
-  test("normalizes legacy sessions without command access mode", async () => {
-    const storeDir = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-session-store-")
-    );
-    const store = new SqliteStore(storeDir);
-    const legacySession = { ...session("session-legacy") } as Omit<
-      Session,
-      "openPondCommandAccessMode"
-    > & {
-      openPondCommandAccessMode?: Session["openPondCommandAccessMode"];
-    };
-    delete legacySession.openPondCommandAccessMode;
-
-    try {
-      await store.insertSessionAtFront(legacySession as Session);
-      const stored = await store.getSession(legacySession.id);
-
-      expect(stored?.openPondCommandAccessMode).toBe("ask");
     } finally {
       await store.close();
       await rm(storeDir, { recursive: true, force: true });

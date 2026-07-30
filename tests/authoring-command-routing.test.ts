@@ -77,21 +77,4 @@ describe("skill-backed authoring command routing", () => {
       "/agent improve requires an exact lowercase kebab-case Agent ID.",
     );
   });
-
-  test("converts historical Agent authoring inputs into normal skill-backed intent", () => {
-    expect(authoringCommandRouteFromLegacyAgentRun({
-      operation: "improve",
-      objective: "Tighten the response contract.",
-      target: { kind: "agent", id: "release-reviewer" },
-    })).toEqual({
-      skillName: "openpond-agent-authoring",
-      intent: {
-        artifact: "agent",
-        operation: "improve",
-        objective: "Tighten the response contract.",
-        targetAgentId: "release-reviewer",
-        source: "authoring_entry",
-      },
-    });
-  });
 });

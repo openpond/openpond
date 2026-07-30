@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { Approval, RuntimeEvent, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../api";
 import {
@@ -21,6 +28,11 @@ import {
   subscribeCodexHistoryLiveRefresh,
 } from "../lib/codex-history-live-refresh";
 import { useGoalRuntimeClock } from "./useGoalRuntimeClock";
+import { useSidebarRuntimeClock } from "./useSidebarRuntimeClock";
+import {
+  sessionRuntimeFromStoredTurns,
+  sessionRuntimeSeconds,
+} from "../lib/session-runtime";
 
 export function useSidebarRuntimeState(input: {
   codexHistoryEvents: RuntimeEvent[];
@@ -31,8 +43,12 @@ export function useSidebarRuntimeState(input: {
   locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
   pendingApproval: Approval | null;
   pinnedSessions: ReturnType<typeof useSidebarData>["pinnedSessions"];
-  savedForLaterSessions: ReturnType<typeof useSidebarData>["savedForLaterSessions"];
-  projectSessionRowsByProjectId: ReturnType<typeof useSidebarData>["projectSessionRowsByProjectId"];
+  savedForLaterSessions: ReturnType<
+    typeof useSidebarData
+  >["savedForLaterSessions"];
+  projectSessionRowsByProjectId: ReturnType<
+    typeof useSidebarData
+  >["projectSessionRowsByProjectId"];
   rightChatHistoryEvents: Record<string, RuntimeEvent[]>;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
   selectedSession: Session | null;
@@ -94,23 +110,27 @@ export function useSidebarRuntimeState(input: {
     };
 
     for (const session of codexHistorySessions) {
-      if (session.status === "active" || locallyActiveCodexHistorySessionIds.has(session.id)) {
+      if (
+        session.status === "active" ||
+        locallyActiveCodexHistorySessionIds.has(session.id)
+      ) {
         addSession(session);
       }
     }
     const activeCount = ids.length;
 
     for (const item of visibleProjectRows) {
-      for (const session of (projectSessionRowsByProjectId[item.id] ?? []).slice(0, 2)) {
+      for (const session of (
+        projectSessionRowsByProjectId[item.id] ?? []
+      ).slice(0, 2)) {
         addSession(session);
       }
     }
 
     for (const projectId of expandedProjectIds) {
-      for (const session of (projectSessionRowsByProjectId[projectId] ?? []).slice(
-        0,
-        SIDEBAR_SECTION_LIMIT,
-      )) {
+      for (const session of (
+        projectSessionRowsByProjectId[projectId] ?? []
+      ).slice(0, SIDEBAR_SECTION_LIMIT)) {
         addSession(session);
       }
     }
@@ -119,7 +139,10 @@ export function useSidebarRuntimeState(input: {
     for (const session of savedForLaterSessions) addSession(session);
     for (const session of visibleChatRows) addSession(session);
 
-    return [...ids.slice(0, activeCount), ...ids.slice(activeCount, activeCount + 8)].join("\n");
+    return [
+      ...ids.slice(0, activeCount),
+      ...ids.slice(activeCount, activeCount + 8),
+    ].join("\n");
   }, [
     codexHistorySessions,
     expandedProjectIds,
@@ -136,19 +159,27 @@ export function useSidebarRuntimeState(input: {
       setCodexHistorySidebarEvents((current) =>
         current[payload.session.id] === payload.events
           ? current
-          : { ...current, [payload.session.id]: payload.events },
+          : { ...current, [payload.session.id]: payload.events }
       );
       setCodexHistorySessions((current) =>
-        upsertSessionPreservingLocalSidebarStateAndRecency(current, payload.session),
+        upsertSessionPreservingLocalSidebarStateAndRecency(
+          current,
+          payload.session
+        )
       );
     },
-    [setCodexHistorySessions],
+    [setCodexHistorySessions]
   );
   const codexHistoryPrefetchActiveSessionKey = useMemo(() => {
     if (!codexHistoryPrefetchSessionKey) return "";
-    const prefetchedIds = new Set(codexHistoryPrefetchSessionKey.split("\n").filter(Boolean));
+    const prefetchedIds = new Set(
+      codexHistoryPrefetchSessionKey.split("\n").filter(Boolean)
+    );
     return sidebarSessions
-      .filter((session) => prefetchedIds.has(session.id) && session.status === "active")
+      .filter(
+        (session) =>
+          prefetchedIds.has(session.id) && session.status === "active"
+      )
       .map((session) => session.id)
       .join("\n");
   }, [codexHistoryPrefetchSessionKey, sidebarSessions]);
@@ -172,16 +203,23 @@ export function useSidebarRuntimeState(input: {
       session: selectedSession,
       events: codexHistoryEvents,
     });
-  }, [applySidebarCodexHistoryPayload, codexHistoryEvents, selectedSession, selectedSessionId]);
+  }, [
+    applySidebarCodexHistoryPayload,
+    codexHistoryEvents,
+    selectedSession,
+    selectedSessionId,
+  ]);
   useEffect(() => {
     if (!connection || !codexHistoryPrefetchSessionKey) return undefined;
     const prefetchConnection = connection;
-    const sessionIds = codexHistoryPrefetchSessionKey.split("\n").filter(Boolean);
+    const sessionIds = codexHistoryPrefetchSessionKey
+      .split("\n")
+      .filter(Boolean);
     const reportedActiveSessionIds = new Set(
-      codexHistoryPrefetchActiveSessionKey.split("\n").filter(Boolean),
+      codexHistoryPrefetchActiveSessionKey.split("\n").filter(Boolean)
     );
     const locallyActiveSessionIds = new Set(
-      codexHistoryPrefetchLocallyActiveSessionKey.split("\n").filter(Boolean),
+      codexHistoryPrefetchLocallyActiveSessionKey.split("\n").filter(Boolean)
     );
 
     const unsubscribers = sessionIds.map((sessionId) =>
@@ -192,13 +230,13 @@ export function useSidebarRuntimeState(input: {
           applySidebarCodexHistoryPayload(
             codexHistoryPayloadWithLiveStatus(
               payload,
-              locallyActiveSessionIds.has(sessionId),
-            ),
+              locallyActiveSessionIds.has(sessionId)
+            )
           ),
         reportedActive: reportedActiveSessionIds.has(sessionId),
         sessionId,
         surface: "sidebar",
-      }),
+      })
     );
     return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
   }, [
@@ -210,17 +248,24 @@ export function useSidebarRuntimeState(input: {
   ]);
   const sidebarSessionById = useMemo(
     () => new Map(sidebarSessions.map((session) => [session.id, session])),
-    [sidebarSessions],
+    [sidebarSessions]
   );
   const baseSidebarGoalRuntimeBySessionId = useMemo(() => {
     const next = new Map(runtimeIndexes.latestGoalRuntimeBySessionId);
     for (const session of sidebarSessions) {
       const metadataGoalRuntime =
-        session.status === "active" ? activeGoalRuntimeFromSessionMetadata(session.metadata) : null;
+        session.status === "active"
+          ? activeGoalRuntimeFromSessionMetadata(session.metadata)
+          : null;
       if (metadataGoalRuntime) next.set(session.id, metadataGoalRuntime);
     }
-    for (const historyEventsBySessionId of [codexHistorySidebarEvents, rightChatHistoryEvents]) {
-      for (const [sessionId, historyEvents] of Object.entries(historyEventsBySessionId)) {
+    for (const historyEventsBySessionId of [
+      codexHistorySidebarEvents,
+      rightChatHistoryEvents,
+    ]) {
+      for (const [sessionId, historyEvents] of Object.entries(
+        historyEventsBySessionId
+      )) {
         const historySession = sidebarSessionById.get(sessionId);
         const metadataGoalRuntime =
           historySession?.status === "active"
@@ -230,7 +275,8 @@ export function useSidebarRuntimeState(input: {
           latestCreateImproveRuntimeFromEvents(historyEvents) ??
           latestGoalRuntimeFromEvents(historyEvents) ??
           (historySession?.status === "active"
-            ? (latestKnownActiveGoalRuntimeFromEvents(historyEvents) ?? metadataGoalRuntime)
+            ? latestKnownActiveGoalRuntimeFromEvents(historyEvents) ??
+              metadataGoalRuntime
             : null);
         if (historyGoalRuntime) {
           next.set(sessionId, historyGoalRuntime);
@@ -242,7 +288,10 @@ export function useSidebarRuntimeState(input: {
     if (selectedSessionId) {
       if (goalRuntime) {
         next.set(selectedSessionId, goalRuntime);
-      } else if (selectedSession?.status === "active" && codexHistoryEvents.length > 0) {
+      } else if (
+        selectedSession?.status === "active" &&
+        codexHistoryEvents.length > 0
+      ) {
         const knownActiveGoalRuntime =
           latestCreateImproveRuntimeFromEvents(codexHistoryEvents) ??
           latestKnownActiveGoalRuntimeFromEvents(codexHistoryEvents) ??
@@ -252,7 +301,10 @@ export function useSidebarRuntimeState(input: {
         } else {
           next.delete(selectedSessionId);
         }
-      } else if (!isCodexHistorySessionId(selectedSessionId) || codexHistoryEvents.length > 0) {
+      } else if (
+        !isCodexHistorySessionId(selectedSessionId) ||
+        codexHistoryEvents.length > 0
+      ) {
         next.delete(selectedSessionId);
       }
     }
@@ -270,10 +322,11 @@ export function useSidebarRuntimeState(input: {
     sidebarSessions,
   ]);
   const hasLiveGoalRuntime = useMemo(
-    () => [...baseSidebarGoalRuntimeBySessionId.values()].some(
-      (runtime) => runtime.tone === "active" && Boolean(runtime.observedAt),
-    ),
-    [baseSidebarGoalRuntimeBySessionId],
+    () =>
+      [...baseSidebarGoalRuntimeBySessionId.values()].some(
+        (runtime) => runtime.tone === "active" && Boolean(runtime.observedAt)
+      ),
+    [baseSidebarGoalRuntimeBySessionId]
   );
   const goalRuntimeObservedAt = useGoalRuntimeClock(hasLiveGoalRuntime);
   const sidebarGoalRuntimeBySessionId = useMemo(() => {
@@ -282,11 +335,15 @@ export function useSidebarRuntimeState(input: {
       [...baseSidebarGoalRuntimeBySessionId].map(([sessionId, runtime]) => [
         sessionId,
         projectGoalRuntimeTo(runtime, goalRuntimeObservedAt) ?? runtime,
-      ]),
+      ])
     );
-  }, [baseSidebarGoalRuntimeBySessionId, goalRuntimeObservedAt, hasLiveGoalRuntime]);
+  }, [
+    baseSidebarGoalRuntimeBySessionId,
+    goalRuntimeObservedAt,
+    hasLiveGoalRuntime,
+  ]);
   const liveGoalRuntime = selectedSessionId
-    ? (sidebarGoalRuntimeBySessionId.get(selectedSessionId) ?? goalRuntime)
+    ? sidebarGoalRuntimeBySessionId.get(selectedSessionId) ?? goalRuntime
     : goalRuntime;
   const sidebarSubagentRuntimeBySessionId = useMemo(() => {
     const next = new Map(runtimeIndexes.latestSubagentRuntimeBySessionId);
@@ -298,7 +355,11 @@ export function useSidebarRuntimeState(input: {
       }
     }
     return next;
-  }, [runtimeIndexes.latestSubagentRuntimeBySessionId, selectedSessionId, subagentRuntime]);
+  }, [
+    runtimeIndexes.latestSubagentRuntimeBySessionId,
+    selectedSessionId,
+    subagentRuntime,
+  ]);
   const { runningSessionIds, selectedSessionRunning } = useRunningSessionState({
     goalRuntime: liveGoalRuntime,
     goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
@@ -308,12 +369,67 @@ export function useSidebarRuntimeState(input: {
     sidebarSessions,
     subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
   });
+  const sidebarRuntimeObservedAt = useSidebarRuntimeClock(
+    runningSessionIds.size > 0
+  );
+  const sessionRuntimeSecondsById = useMemo(() => {
+    const next = new Map<string, number>();
+    for (const session of sidebarSessions) {
+      const eventsById = new Map<string, RuntimeEvent>();
+      for (const event of runtimeIndexes.eventsBySessionId.get(session.id) ??
+        []) {
+        eventsById.set(event.id, event);
+      }
+      for (const source of [
+        codexHistorySidebarEvents[session.id],
+        rightChatHistoryEvents[session.id],
+        session.id === selectedSessionId ? codexHistoryEvents : null,
+      ]) {
+        for (const event of source ?? []) eventsById.set(event.id, event);
+      }
+      const runtimeEvents = [...eventsById.values()].sort(
+        (left, right) =>
+          Date.parse(left.timestamp) - Date.parse(right.timestamp)
+      );
+      const includeRunning = runningSessionIds.has(session.id);
+      const runtimeFromEvents = sessionRuntimeSeconds(
+        runtimeEvents,
+        sidebarRuntimeObservedAt,
+        { includeRunning }
+      );
+      const runtimeFromStoredTurns = sessionRuntimeFromStoredTurns(
+        session,
+        runtimeEvents,
+        sidebarRuntimeObservedAt,
+        { includeRunning }
+      );
+      const goalSeconds =
+        sidebarGoalRuntimeBySessionId.get(session.id)?.timeUsedSeconds ?? 0;
+      next.set(
+        session.id,
+        Math.max(runtimeFromStoredTurns ?? runtimeFromEvents, goalSeconds)
+      );
+    }
+    return next;
+  }, [
+    codexHistoryEvents,
+    codexHistorySidebarEvents,
+    rightChatHistoryEvents,
+    runningSessionIds,
+    runtimeIndexes.eventsBySessionId,
+    selectedSessionId,
+    sidebarGoalRuntimeBySessionId,
+    sidebarRuntimeObservedAt,
+    sidebarSessions,
+  ]);
   const selectedTurnCompletionState = useMemo(
     () => latestTurnCompletionState(sessionEvents),
-    [sessionEvents],
+    [sessionEvents]
   );
   const selectedSteerAutoDispatchReady =
-    selectedTurnCompletionState === "completed" && !pendingApproval && !selectedSessionRunning;
+    selectedTurnCompletionState === "completed" &&
+    !pendingApproval &&
+    !selectedSessionRunning;
   const selectedSteerAutoDispatchBlocked =
     Boolean(pendingApproval) || selectedTurnCompletionState === "blocked";
 
@@ -325,5 +441,6 @@ export function useSidebarRuntimeState(input: {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
+    sessionRuntimeSecondsById,
   };
 }

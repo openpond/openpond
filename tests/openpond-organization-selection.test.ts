@@ -42,20 +42,6 @@ describe("OpenPond default organization selection", () => {
     expect(resolveDefaultOpenPondOrganization([newTeam, defaultTeam])).toBe(defaultTeam);
   });
 
-  test("recognizes the legacy default team name when metadata is absent", () => {
-    const defaultTeam = organization("team_default", {
-      displayName: "My Organization",
-      name: "default",
-    });
-
-    expect(
-      resolveDefaultOpenPondOrganization([
-        organization("team_other", { displayName: "Other" }),
-        defaultTeam,
-      ]),
-    ).toBe(defaultTeam);
-  });
-
   test("preserves default-team metadata while normalizing API responses", () => {
     const normalized = normalizeOpenPondOrganization(
       organization("team_default", {

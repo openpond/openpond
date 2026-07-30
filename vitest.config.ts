@@ -1,4 +1,12 @@
 import { defineConfig } from "vitest/config";
+import {
+  CLI_INTEGRATION_TESTS,
+  CLI_RELEASE_TESTS,
+  ROOT_INTEGRATION_TESTS,
+} from "./scripts/test-suite-config";
+
+const cliIntegrationTests = CLI_INTEGRATION_TESTS.map((entry) => `apps/cli/${entry}`);
+const cliReleaseTests = CLI_RELEASE_TESTS.map((entry) => `apps/cli/${entry}`);
 
 const shared = {
   environment: "node" as const,
@@ -24,20 +32,46 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
-          name: "root-server",
+          name: "root-unit",
           include: [
             "tests/**/*.test.{ts,tsx}",
             "apps/server/src/**/*.test.{ts,tsx}",
             "packages/cloud/src/**/*.test.{ts,tsx}",
           ],
+          exclude: [...ROOT_INTEGRATION_TESTS],
         },
       },
       {
         extends: true,
         test: {
           ...shared,
-          name: "cli",
+          name: "root-integration",
+          include: [...ROOT_INTEGRATION_TESTS],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
+          name: "cli-unit",
           include: ["apps/cli/test/**/*.test.{ts,tsx}"],
+          exclude: [...cliIntegrationTests, ...cliReleaseTests],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
+          name: "cli-integration",
+          include: [...cliIntegrationTests],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
+          name: "cli-release",
+          include: [...cliReleaseTests],
         },
       },
       {
@@ -46,17 +80,6 @@ export default defineConfig({
           ...shared,
           name: "agent-sdk",
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          ...shared,
-          name: "package-sdks",
-          include: [
-            "packages/taskset-sdk/**/*.test.{ts,tsx}",
-            "packages/training-sdk/**/*.test.{ts,tsx}",
-          ],
         },
       },
     ],

@@ -10,10 +10,50 @@ import { VersionedReleaseRefSchema } from "./release-core.js";
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
 const HashSchema = z.string().trim().min(8).max(256);
+const Sha256Schema = z.string().trim().regex(/^[a-f0-9]{64}$/);
 const MetadataSchema = z.record(z.string(), z.unknown()).default({});
 const NullableIdSchema = IdSchema.nullable();
 
+function safeRelativeFilePath(value: string): boolean {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (
+    !normalized
+    || normalized.startsWith("/")
+    || normalized === "."
+    || normalized === ".."
+  ) {
+    return false;
+  }
+  return !normalized.split("/").some((segment) =>
+    !segment || segment === "." || segment === ".."
+  );
+}
+
+function safeFileName(value: string): boolean {
+  const normalized = value.trim();
+  return (
+    normalized.length > 0
+    && normalized !== "."
+    && normalized !== ".."
+    && !normalized.includes("/")
+    && !normalized.includes("\\")
+    && !normalized.includes("\0")
+  );
+}
+
 export const TasksetSplitSchema = DatasetSplitSchema;
+export const TASKSET_WORK_TOOL_NAMES = [
+  "work_capabilities",
+  "work_environment",
+  "work_list_files",
+  "work_read_file",
+  "work_write_file",
+  "work_edit_file",
+  "work_delete_file",
+  "work_exec",
+  "work_save_output",
+  "work_stop",
+] as const;
 export const TasksetStatusSchema = z.enum([
   "draft",
   "awaiting_disclosure_approval",
@@ -169,6 +209,29 @@ export const TaskPolicyBoundarySchema = z.object({
   connectedAppScopes: z.array(IdSchema).max(100).default([]),
 });
 
+export const TaskAssetRefSchema = z.object({
+  id: IdSchema,
+  sourceRefId: IdSchema,
+  artifactRef: z.string().trim().min(1).max(4_000)
+    .refine(safeRelativeFilePath, "Task asset references must be safe relative paths."),
+  fileName: z.string().trim().min(1).max(500)
+    .refine(safeFileName, "Task asset file names must not contain path separators."),
+  mediaType: z.string().trim().min(1).max(200),
+  sha256: Sha256Schema,
+  sizeBytes: z.number().int().nonnegative().max(250_000_000),
+  split: TasksetSplitSchema,
+  metadata: MetadataSchema,
+});
+
+export const TaskRequiredOutputSchema = z.object({
+  path: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Required output paths must stay inside the Work output directory."),
+  mediaType: z.string().trim().min(1).max(200),
+  schemaRef: IdSchema.nullable().optional(),
+  maxBytes: z.number().int().positive().max(10_000_000).optional(),
+  metadata: MetadataSchema,
+});
+
 export const TaskDataRecordSchema = z.object({
   schemaVersion: z.literal("openpond.taskData.v1"),
   id: IdSchema,
@@ -179,6 +242,8 @@ export const TaskDataRecordSchema = z.object({
   policyVisibleContext: z.record(z.string(), z.unknown()).default({}),
   privilegedContextRef: NullableIdSchema,
   sourceRefs: z.array(IdSchema).min(1).max(100),
+  assets: z.array(TaskAssetRefSchema).max(1_000).optional(),
+  requiredOutputs: z.array(TaskRequiredOutputSchema).max(100).optional(),
   tags: z.array(IdSchema).max(100).default([]),
   metadata: MetadataSchema,
 });
@@ -262,7 +327,7 @@ export const LearningSignalInventorySchema = z.object({
 
 export const TasksetEnvironmentContractSchema = z.object({
   protocolVersion: z.literal("openpond.taskEnvironment.v1"),
-  kind: z.enum(["chat", "agent", "program", "stateful_harness"]),
+  kind: z.enum(["chat", "agent", "program", "stateful_harness", "work"]),
   entrypoint: z.string().trim().min(1).max(1_000),
   stateful: z.boolean(),
   deterministicSeeds: z.boolean(),
@@ -403,8 +468,15 @@ export const TaskAttemptArtifactSchema = z.object({
   tasksetId: IdSchema,
   taskId: IdSchema,
   attemptId: IdSchema,
-  kind: z.enum(["raw_model_response", "runtime_trace", "environment_state", "grader_evidence"]),
+  kind: z.enum([
+    "raw_model_response",
+    "runtime_trace",
+    "environment_state",
+    "grader_evidence",
+    "output_artifact",
+  ]),
   path: z.string().trim().min(1).max(4_000),
+  mediaType: z.string().trim().min(1).max(200).nullable().optional(),
   sha256: HashSchema,
   sizeBytes: z.number().int().nonnegative(),
   createdAt: TimestampSchema,
@@ -718,6 +790,8 @@ export type TaskCreationMode = z.infer<typeof TaskCreationModeSchema>;
 export type NewModelMode = z.infer<typeof NewModelModeSchema>;
 export type DatasetBuildIntent = z.infer<typeof DatasetBuildIntentSchema>;
 export type DatasetBuildSpecification = z.infer<typeof DatasetBuildSpecificationSchema>;
+export type TaskAssetRef = z.infer<typeof TaskAssetRefSchema>;
+export type TaskRequiredOutput = z.infer<typeof TaskRequiredOutputSchema>;
 export type TaskDataRecord = z.infer<typeof TaskDataRecordSchema>;
 export type DemonstrationSignal = z.infer<typeof DemonstrationSignalSchema>;
 export type PreferenceSignal = z.infer<typeof PreferenceSignalSchema>;
@@ -728,6 +802,7 @@ export type LabelSignal = z.infer<typeof LabelSignalSchema>;
 export type LearningSignalInventory = z.infer<typeof LearningSignalInventorySchema>;
 export type TasksetEnvironmentContract = z.infer<typeof TasksetEnvironmentContractSchema>;
 export type TasksetCapabilityManifest = z.infer<typeof TasksetCapabilityManifestSchema>;
+export type TaskFailureClass = z.infer<typeof TaskFailureClassSchema>;
 export type GraderSpec = z.infer<typeof GraderSpecSchema>;
 export type GraderFixture = z.infer<typeof GraderFixtureSchema>;
 export type TaskDesignFixtureTemplate = z.infer<typeof TaskDesignFixtureTemplateSchema>;

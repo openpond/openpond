@@ -7,9 +7,6 @@ import { fileURLToPath } from "node:url";
 
 import {
   ALL_TEST_SUITES,
-  CLI_INTEGRATION_TESTS,
-  CLI_RELEASE_TESTS,
-  ROOT_INTEGRATION_TESTS,
   type TestSuite,
 } from "./test-suite-config";
 
@@ -109,21 +106,12 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 
 async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
   await ensureServerWorkspaceBuild(env);
-  const rootFiles = await discoverRootUnitTests();
-  if (rootFiles.length > 0) await runVitest(rootFiles, env);
-  await runCliTests(await discoverCliUnitTests(), env);
+  await runVitestProjects(["root-unit", "cli-unit"], env);
 }
 
 async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {
   await ensureServerWorkspaceBuild(env);
-  await assertFilesExist(ROOT_INTEGRATION_TESTS);
-  await assertFilesExist(CLI_INTEGRATION_TESTS.map((entry) => path.join("apps/cli", entry)));
-  for (const file of ROOT_INTEGRATION_TESTS) {
-    await runVitest([file], env);
-  }
-  for (const file of CLI_INTEGRATION_TESTS) {
-    await runCliTests([file], env);
-  }
+  await runVitestProjects(["root-integration", "cli-integration"], env);
 }
 
 async function runContractTests(env: NodeJS.ProcessEnv): Promise<void> {
@@ -143,7 +131,7 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
     "apps/cli/dist/web/index.html",
     "apps/cli/dist/skills/openpond-taskset-authoring/SKILL.md",
   ]);
-  await runCliTests([...CLI_RELEASE_TESTS], env);
+  await runVitestProjects(["cli-release"], env);
 }
 
 async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {
@@ -154,8 +142,7 @@ async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void>
 
 async function runCliCompatibilitySuite(env: NodeJS.ProcessEnv): Promise<void> {
   await ensureServerWorkspaceBuild(env);
-  await runCliTests(await discoverCliUnitTests(), env);
-  await runCliTests([...CLI_INTEGRATION_TESTS], env);
+  await runVitestProjects(["cli-unit", "cli-integration"], env);
   await runReleaseTests(env);
 }
 
@@ -174,26 +161,6 @@ async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
   await runCommand(nodeBinary, ["--test", ...liveFiles], { env });
 }
 
-async function discoverRootUnitTests(): Promise<string[]> {
-  const entries = await readdir(path.join(root, "tests"));
-  const integration = new Set<string>(ROOT_INTEGRATION_TESTS);
-  const files = entries
-    .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
-    .map((entry) => path.join("tests", entry))
-    .filter((entry) => !integration.has(entry))
-    .sort();
-  for (const testRoot of ["apps/server/src", "packages/cloud/src"]) {
-    const colocated = await readdir(path.join(root, testRoot), { recursive: true });
-    files.push(
-      ...colocated
-        .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
-        .map((entry) => path.join(testRoot, entry)),
-    );
-  }
-  files.sort();
-  return files;
-}
-
 async function discoverNodeContractTests(): Promise<string[]> {
   const entries = await readdir(path.join(root, "tests"));
   return entries
@@ -201,16 +168,6 @@ async function discoverNodeContractTests(): Promise<string[]> {
     .filter((entry) => !entry.startsWith("live-"))
     .sort()
     .map((entry) => path.join("tests", entry));
-}
-
-async function discoverCliUnitTests(): Promise<string[]> {
-  const excluded = new Set<string>([...CLI_INTEGRATION_TESTS, ...CLI_RELEASE_TESTS]);
-  const entries = await readdir(path.join(root, "apps", "cli", "test"));
-  return entries
-    .filter((entry) => entry.endsWith(".test.ts") || entry.endsWith(".test.tsx"))
-    .map((entry) => path.join("test", entry))
-    .filter((entry) => !excluded.has(entry))
-    .sort();
 }
 
 async function discoverLiveTests(): Promise<string[]> {
@@ -238,14 +195,12 @@ async function runCommand(
   throw new Error(`${command} ${args.join(" ")} failed with ${signal ?? `exit code ${code}`}`);
 }
 
-async function runCliTests(files: string[], env: NodeJS.ProcessEnv): Promise<void> {
-  if (files.length === 0) return;
-  await runVitest(files.map((file) => path.join("apps", "cli", file)), env);
-}
-
-async function runVitest(files: string[], env: NodeJS.ProcessEnv): Promise<void> {
-  if (files.length === 0) return;
-  await runCommand(vitestBinary, ["run", ...files], { env });
+async function runVitestProjects(projects: string[], env: NodeJS.ProcessEnv): Promise<void> {
+  await runCommand(
+    vitestBinary,
+    ["run", ...projects.flatMap((project) => ["--project", project])],
+    { env },
+  );
 }
 
 async function assertFilesExist(files: readonly string[]): Promise<void> {

@@ -5,10 +5,12 @@ import path from "node:path";
 import {
   emptyOpenPondProfileState,
   type OpenPondProfileRef,
-  type Session,
 } from "../packages/contracts/src";
 import { createAuthoringModelToolDefinitions } from "../apps/server/src/openpond/authoring-tool-registry";
-import type { ModelToolExecutionContext } from "../apps/server/src/openpond/model-tool-registry";
+import {
+  modelToolContext,
+  requireModelTool as requireTool,
+} from "./helpers/model-tool-contract";
 
 describe("normal-turn authoring tools", () => {
   test("registers narrow question, Profile, and Agent SDK operations without authoring executors", () => {
@@ -157,61 +159,18 @@ describe("normal-turn authoring tools", () => {
   });
 });
 
-function requireTool(
-  definitions: ReturnType<typeof createAuthoringModelToolDefinitions>,
-  name: string,
-) {
-  const definition = definitions.find((candidate) => candidate.name === name);
-  if (!definition) throw new Error(`Missing tool definition: ${name}`);
-  return definition;
-}
-
 function context(
   args: Record<string, unknown>,
   turnMetadata: Record<string, unknown> = {},
-): ModelToolExecutionContext {
-  return {
-    session: baseSession(),
-    turnId: "turn_1",
+){
+  return modelToolContext(args, {
     turnPermissions: {
       approvalPolicy: null,
       sandbox: null,
       codexPermissionMode: null,
       codexReasoningEffort: null,
     },
-    provider: "openrouter",
-    model: "test/model",
-    callId: "call_1",
-    args,
-    signal: new AbortController().signal,
-    workspaceDiffBaseline: null,
-    mentionedApps: [],
     userPrompt: "Create the requested artifact.",
     turnMetadata,
-  };
-}
-
-function baseSession(): Session {
-  return {
-    id: "session_1",
-    provider: "openrouter",
-    modelRef: { providerId: "openrouter", modelId: "test/model" },
-    title: "Authoring chat",
-    appId: null,
-    appName: null,
-    workspaceKind: undefined,
-    workspaceId: null,
-    workspaceName: null,
-    localProjectId: null,
-    cloudProjectId: null,
-    cloudTeamId: null,
-    cwd: null,
-    codexThreadId: null,
-    createdAt: "2026-07-27T10:00:00.000Z",
-    updatedAt: "2026-07-27T10:00:00.000Z",
-    status: "idle",
-    pinned: false,
-    archived: false,
-    order: 0,
-  };
+  });
 }

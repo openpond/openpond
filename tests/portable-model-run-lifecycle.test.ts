@@ -1,12 +1,6 @@
-import {
-  ModelRunDraftSchema,
-  TrainingJobSchema,
-} from "@openpond/contracts";
+import { ModelRunDraftSchema, TrainingJobSchema } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
-import {
-  buildTasksetTrainingBundle,
-  createTrainingPlan,
-} from "@openpond/training-sdk";
+import { buildTasksetTrainingBundle, createTrainingPlan } from "@openpond/training-sdk";
 import { describe, expect, test } from "vitest";
 
 import {
@@ -15,14 +9,8 @@ import {
   preparePortableModelRunLifecycle,
   reconcilePortableModelRunLifecycle,
 } from "../apps/server/src/training/portable-model-run-lifecycle.js";
-import {
-  fireworksRftRecipe,
-  rftTasksetFixture,
-} from "./helpers/fireworks-destination-fixtures.js";
-import {
-  FIXED_TIME,
-  withTrainingStore,
-} from "./helpers/training-fixtures.js";
+import { fireworksRftRecipe, rftTasksetFixture } from "./helpers/fireworks-destination-fixtures.js";
+import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
 
 describe("portable Model Run lifecycle", () => {
   test("imports a Sandbox-owned managed candidate into canonical lineage and Model Version state", async () =>
@@ -89,10 +77,10 @@ describe("portable Model Run lifecycle", () => {
           provider: "openpond",
         },
         engine: {
-          adapterId: "sandbox-managed-rft",
-          workerVersion: "managed-rft-v2",
+          adapterId: "sandbox-managed-rl",
+          workerVersion: "managed-rl-v2",
           workerImageDigest: null,
-          upstreamRevision: sha256("managed-rft-revision"),
+          upstreamRevision: sha256("managed-rl-revision"),
           capabilityReceipt,
         },
         approval: {
@@ -101,15 +89,14 @@ describe("portable Model Run lifecycle", () => {
           maximumSpendUsd: 2,
         },
         openpondRelease: "0.0.38",
-        workerProtocol: "openpond.managedRftWorker.v2",
+        workerProtocol: "openpond.managedRlWorker.v2",
       });
       const profileRelease = graph.profileRelease;
       const releaseGraph = portableReleaseGraphMetadata({
         resolvedBundleHash: graph.resolvedBundleManifest.contentHash,
         profileRelease: profileRelease!,
         harnessRelease: graph.manifest.harnessRelease,
-        agentRelease:
-          taskset.environment.actionBindings?.[0]?.agentRelease ?? null,
+        agentRelease: taskset.environment.actionBindings?.[0]?.agentRelease ?? null,
         grader: {
           id: taskset.graders[0]!.id,
           contentHash: contentHash(taskset.graders[0]),
@@ -124,12 +111,14 @@ describe("portable Model Run lifecycle", () => {
         startedAt: FIXED_TIME,
       });
       expect(prepared.targetVersion.version).toBe(1);
-      expect(await store.getModelVersion(
-        `model_version_${contentHash({
-          modelId: draft.modelId,
-          version: 0,
-        }).slice(0, 24)}`,
-      )).toMatchObject({
+      expect(
+        await store.getModelVersion(
+          `model_version_${contentHash({
+            modelId: draft.modelId,
+            version: 0,
+          }).slice(0, 24)}`,
+        ),
+      ).toMatchObject({
         version: 0,
         kind: "base_reference",
       });
@@ -161,9 +150,7 @@ describe("portable Model Run lifecycle", () => {
           updatedAt: FIXED_TIME,
           metadata: {
             harnessRunManifestHash: graph.manifest.contentHash,
-            portableModelVersion: portableModelVersionMetadata(
-              prepared.targetVersion,
-            ),
+            portableModelVersion: portableModelVersionMetadata(prepared.targetVersion),
             portableReleaseGraph: releaseGraph,
             portableAdapterBindings: {
               compute: graph.manifest.computeTarget,
@@ -175,8 +162,7 @@ describe("portable Model Run lifecycle", () => {
       const artifactEntries = [
         {
           kind: "adapter" as const,
-          objectRef:
-            "sandbox-managed-rft://managed-provider-job-1/model-artifact-1",
+          objectRef: "sandbox-managed-rl://managed-provider-job-1/model-artifact-1",
           sha256: sha256("managed candidate"),
           sizeBytes: 8_000_000,
         },
@@ -188,7 +174,7 @@ describe("portable Model Run lifecycle", () => {
       };
       const executionRef = {
         runId: "managed-provider-job-1",
-        adapterId: "sandbox-managed-rft",
+        adapterId: "sandbox-managed-rl",
         providerJobId: "managed-provider-job-1",
         tenantId: "team_managed",
         leaseId: null,
@@ -227,9 +213,7 @@ describe("portable Model Run lifecycle", () => {
           },
         },
       });
-      expect(await store.getModelVersion(
-        prepared.targetVersion.id,
-      )).toMatchObject({
+      expect(await store.getModelVersion(prepared.targetVersion.id)).toMatchObject({
         version: 1,
         kind: "lora_adapter",
         artifactLineageId: terminal.adapterArtifactLineageId,
@@ -242,11 +226,11 @@ describe("portable Model Run lifecycle", () => {
             kind: "adapter",
             metadata: expect.objectContaining({
               provider: "sandbox",
-              providerFilename: "managed-rft-candidate",
-              managedRftCandidate: true,
-              managedRftJobId: "managed-provider-job-1",
-              managedRftModelArtifactId: "model-artifact-1",
-              managedRftTeamId: "team_managed",
+              providerFilename: "managed-rl-candidate",
+              managedRlCandidate: true,
+              managedRlJobId: "managed-provider-job-1",
+              managedRlModelArtifactId: "model-artifact-1",
+              managedRlTeamId: "team_managed",
             }),
           }),
         ]),

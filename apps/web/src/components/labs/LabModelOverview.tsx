@@ -32,14 +32,10 @@ export function LabModelOverview({
   runs,
   training,
   onOpenEntry,
-  onOpenRuns,
-  onOpenVersions,
 }: Omit<ModelWorkspaceProps, "onOpenDataset"> & {
   connection: ClientConnection | null;
   training: TrainingController;
   onOpenEntry: (entryKey: string) => void;
-  onOpenRuns: () => void;
-  onOpenVersions: () => void;
 }) {
   const state = training.payload;
   const jobs = useMemo(
@@ -73,6 +69,9 @@ export function LabModelOverview({
   const currentVersion = versions.find((version) => version.current) ?? null;
   const latestRun = runEntries[0] ?? null;
   const baseVersion = labBaseModelVersion(workproduct, state);
+  const project =
+    state?.modelProjects.find((candidate) => candidate.id === workproduct.id) ??
+    null;
   const tasksets = labModelTasksets(state);
   const dataset =
     currentVersion?.taskset ??
@@ -100,42 +99,27 @@ export function LabModelOverview({
     <div className="labs-model-overview">
       <section className="labs-model-kpi-grid" aria-label="Model summary">
         <OverviewKpi
-          label="Active Version"
+          label="Active release"
           value={currentVersion ? `Version ${currentVersion.number}` : "None"}
           supporting={
             currentVersion
               ? "Used when you chat with this Model"
-              : "Activate a Version after it passes evaluation"
+              : "No release is active"
           }
-          onClick={onOpenVersions}
         />
         <OverviewKpi
-          label="Latest run"
-          value={
-            latestRun
-              ? statusLabel(
-                  latestRun.lifecycleRun?.status ??
-                    latestRun.job?.status ??
-                    "not_run"
-                )
-              : "No runs"
-          }
+          label="Hosting"
+          value={currentVersion ? "Ready" : "Not hosted"}
           supporting={
-            latestRun
-              ? formatDateTime(
-                  latestRun.lifecycleRun?.updatedAt ??
-                    latestRun.job?.updatedAt ??
-                    ""
-                )
-              : "Start the first training attempt"
+            currentVersion
+              ? "Available through OpenPond"
+              : "Activate a passing release to host it"
           }
-          onClick={onOpenRuns}
         />
         <OverviewKpi
           label="Evaluation"
           value={evaluation.label}
           supporting={evaluation.supporting}
-          onClick={onOpenVersions}
         />
         <OverviewKpi
           label="Runs"
@@ -143,7 +127,6 @@ export function LabModelOverview({
           supporting={`${versions.length} trained ${
             versions.length === 1 ? "Version" : "Versions"
           }`}
-          onClick={onOpenRuns}
         />
       </section>
 
@@ -175,13 +158,6 @@ export function LabModelOverview({
             <span>
               Metrics from the latest successful training run will appear here.
             </span>
-            <button
-              className="settings-secondary compact"
-              type="button"
-              onClick={onOpenRuns}
-            >
-              View runs
-            </button>
           </div>
         )}
       </DetailSection>
@@ -191,7 +167,11 @@ export function LabModelOverview({
           <dl className="training-configuration-list">
             <Fact
               label="Base model"
-              value={baseVersion?.baseModel.modelId ?? "Not selected"}
+              value={
+                baseVersion?.baseModel.modelId ??
+                project?.defaultBaseModel?.modelId ??
+                "Not selected"
+              }
             />
             <Fact label="Dataset" value={dataset?.name ?? "Not selected"} />
             <Fact
@@ -251,19 +231,17 @@ function OverviewKpi({
   label,
   value,
   supporting,
-  onClick,
 }: {
   label: string;
   value: string;
   supporting: string;
-  onClick: () => void;
 }) {
   return (
-    <button className="labs-model-kpi" type="button" onClick={onClick}>
+    <div className="labs-model-kpi">
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{supporting}</small>
-    </button>
+    </div>
   );
 }
 

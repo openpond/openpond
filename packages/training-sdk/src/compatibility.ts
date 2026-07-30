@@ -176,9 +176,43 @@ export function validateTrainingCompatibility(input: {
       recipe.dataset.trainSplit
     ] ?? trainTasks.length;
     if (!trainCount) issues.push({ code: "rft_train_split_empty", severity: "error", path: input.taskset.datasetArtifact ? "taskset.datasetArtifact.splitCounts.train" : "taskset.tasks", message: "RFT requires at least one approved train prompt." });
-    if (!input.capabilities.environmentPlacements.includes("provider_native")) issues.push({ code: "rft_environment_placement", severity: "error", path: "environmentPlacement", message: "RFT requires a provider-native rollout environment placement." });
-    if (input.plan.destinationId !== "fireworks") issues.push({ code: "rft_destination_unproven", severity: "error", path: "destinationId", message: "The executable RFT contract is currently proven only for Fireworks." });
-    if (input.plan.environmentPlacement !== "provider_native") issues.push({ code: "rft_plan_placement", severity: "error", path: "environmentPlacement", message: "The RFT plan must use provider-native placement." });
+    if (!input.capabilities.environmentPlacements.includes(input.plan.environmentPlacement)) {
+      issues.push({
+        code: "grpo_environment_placement_unsupported",
+        severity: "error",
+        path: "environmentPlacement",
+        message: `${input.plan.destinationId} does not support ${input.plan.environmentPlacement} rollout placement.`,
+      });
+    }
+    if (input.plan.destinationId === "fireworks") {
+      if (input.plan.environmentPlacement !== "provider_native") {
+        issues.push({
+          code: "grpo_plan_placement",
+          severity: "error",
+          path: "environmentPlacement",
+          message: "Fireworks GRPO requires provider-native rollout placement.",
+        });
+      }
+    } else if (input.plan.destinationId === "openpond_managed") {
+      if (
+        input.plan.environmentPlacement !== "local"
+        && input.plan.environmentPlacement !== "remote"
+      ) {
+        issues.push({
+          code: "managed_rl_plan_placement",
+          severity: "error",
+          path: "environmentPlacement",
+          message: "OpenPond Managed RL requires local or hosted rollout placement.",
+        });
+      }
+    } else {
+      issues.push({
+        code: "grpo_destination_unproven",
+        severity: "error",
+        path: "destinationId",
+        message: "GRPO is currently supported by Fireworks and OpenPond Managed RL.",
+      });
+    }
   }
   return TrainingCompatibilityReportSchema.parse({ schemaVersion: "openpond.trainingCompatibility.v1", compatible: !issues.some((issue) => issue.severity === "error"), destinationId: input.plan.destinationId, tasksetId: input.taskset.id, recipeMethod: input.plan.recipe.method, issues, checkedAt: new Date().toISOString() });
 }

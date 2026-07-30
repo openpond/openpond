@@ -9,7 +9,7 @@ import {
   type ModelAsset,
   type TrainingDestinationCapabilities,
 } from "@openpond/contracts";
-import { managedRftBaseProfileForModel } from "./managed-rft-base-profile.js";
+import { managedRlBaseProfileForModel } from "./managed-rl-base-profile.js";
 
 const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture"]);
 const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
@@ -31,52 +31,57 @@ export function projectBaseModelCandidates(input: {
   for (const modelId of managedModelIds) {
     const options = executionOptions(input.destinations, modelId, false);
     if (!options.length) continue;
-    const managedProfile = managedRftBaseProfileForModel(modelId);
-    candidates.push(candidate({
-      preference: {
-        schemaVersion: "openpond.baseModelPreference.v1",
-        modelId,
-        revision: managedProfile?.revision ?? null,
-        tokenizerRevision: managedProfile?.tokenizerRevision ?? null,
-        chatTemplateHash: managedProfile?.chatTemplateHash ?? null,
-        modelAssetId: null,
-        source: "managed",
-      },
-      label: modelLabel(modelId),
-      sourceLabel: sourceLabel(options),
-      options,
-      compatibilityReason: null,
-    }));
+    const managedProfile = managedRlBaseProfileForModel(modelId);
+    candidates.push(
+      candidate({
+        preference: {
+          schemaVersion: "openpond.baseModelPreference.v1",
+          modelId,
+          revision: managedProfile?.revision ?? null,
+          tokenizerRevision: managedProfile?.tokenizerRevision ?? null,
+          chatTemplateHash: managedProfile?.chatTemplateHash ?? null,
+          modelAssetId: null,
+          source: "managed",
+        },
+        label: modelLabel(modelId),
+        sourceLabel: sourceLabel(options),
+        options,
+        compatibilityReason: null,
+      }),
+    );
   }
 
   const builtinOptions = executionOptions(input.destinations, TINY_CPU_MODEL, true);
   if (builtinOptions.length) {
-    candidates.push(candidate({
-      preference: {
-        schemaVersion: "openpond.baseModelPreference.v1",
-        modelId: TINY_CPU_MODEL,
-        revision: "architecture-v2-seed-17-context-512",
-        tokenizerRevision: "wordlevel-v1",
-        chatTemplateHash: TINY_CPU_CHAT_TEMPLATE_HASH,
-        modelAssetId: null,
-        source: "builtin",
-      },
-      label: "Tiny CPU correctness fixture",
-      sourceLabel: "This machine",
-      options: builtinOptions,
-      compatibilityReason: null,
-    }));
+    candidates.push(
+      candidate({
+        preference: {
+          schemaVersion: "openpond.baseModelPreference.v1",
+          modelId: TINY_CPU_MODEL,
+          revision: "architecture-v2-seed-17-context-512",
+          tokenizerRevision: "wordlevel-v1",
+          chatTemplateHash: TINY_CPU_CHAT_TEMPLATE_HASH,
+          modelAssetId: null,
+          source: "builtin",
+        },
+        label: "Tiny CPU correctness fixture",
+        sourceLabel: "This machine",
+        options: builtinOptions,
+        compatibilityReason: null,
+      }),
+    );
   }
 
   const localByLineage = new Map<string, ModelAsset>();
   for (const model of input.inventory?.models ?? []) {
     if (
-      !model.trainingCompatible
-      || !model.modelId
-      || !model.revision
-      || !model.tokenizerRevision
-      || !model.chatTemplateHash
-    ) continue;
+      !model.trainingCompatible ||
+      !model.modelId ||
+      !model.revision ||
+      !model.tokenizerRevision ||
+      !model.chatTemplateHash
+    )
+      continue;
     const lineage = [
       model.modelId,
       model.revision,
@@ -89,21 +94,23 @@ export function projectBaseModelCandidates(input: {
   for (const model of localByLineage.values()) {
     const options = executionOptions(input.destinations, model.modelId!, true);
     if (!options.length) continue;
-    candidates.push(candidate({
-      preference: {
-        schemaVersion: "openpond.baseModelPreference.v1",
-        modelId: model.modelId!,
-        revision: model.revision!,
-        tokenizerRevision: model.tokenizerRevision!,
-        chatTemplateHash: model.chatTemplateHash!,
-        modelAssetId: model.id,
-        source: "local",
-      },
-      label: model.name,
-      sourceLabel: localSourceLabel(model),
-      options,
-      compatibilityReason: model.compatibilityReason,
-    }));
+    candidates.push(
+      candidate({
+        preference: {
+          schemaVersion: "openpond.baseModelPreference.v1",
+          modelId: model.modelId!,
+          revision: model.revision!,
+          tokenizerRevision: model.tokenizerRevision!,
+          chatTemplateHash: model.chatTemplateHash!,
+          modelAssetId: model.id,
+          source: "local",
+        },
+        label: model.name,
+        sourceLabel: localSourceLabel(model),
+        options,
+        compatibilityReason: model.compatibilityReason,
+      }),
+    );
   }
 
   return candidates.sort(compareCandidates);
@@ -127,9 +134,11 @@ function executionOptions(
   local: boolean,
 ): BaseModelExecutionOption[] {
   return destinations
-    .filter((destination) =>
-      LOCAL_DESTINATIONS.has(destination.destinationId) === local
-      && destination.modelAllowlist.includes(modelId))
+    .filter(
+      (destination) =>
+        LOCAL_DESTINATIONS.has(destination.destinationId) === local &&
+        destination.modelAllowlist.includes(modelId),
+    )
     .map((destination) => ({
       destinationId: destination.destinationId,
       available: destination.available,
@@ -163,9 +172,12 @@ function candidate(input: {
     sourceLabel: input.sourceLabel,
     preference: input.preference,
     available,
-    nonProduction: (availableOptions.length ? availableOptions : input.options)
-      .every((option) => option.nonProduction),
-    unavailableReason: available ? null : [...new Set(reasons)].join(" ") || "No compatible training destination is available.",
+    nonProduction: (availableOptions.length ? availableOptions : input.options).every(
+      (option) => option.nonProduction,
+    ),
+    unavailableReason: available
+      ? null
+      : [...new Set(reasons)].join(" ") || "No compatible training destination is available.",
     methods: [...new Set(input.options.flatMap((option) => option.methods))],
     executionOptions: input.options,
   });

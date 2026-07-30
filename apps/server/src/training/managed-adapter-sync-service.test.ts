@@ -1,18 +1,13 @@
 import { describe, expect, test, vi } from "vitest";
-import type {
-  ModelArtifactLineage,
-  TrainingArtifact,
-} from "@openpond/contracts";
+import type { ModelArtifactLineage, TrainingArtifact } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import { type ManagedAdapterRegistryClient } from "./managed-adapter-registry-client.js";
 import { createManagedAdapterSyncService } from "./managed-adapter-sync-service.js";
 
 const MANAGED_QWEN3_0_6B_BASE_PROFILE_ID = "qwen3-0-6b-c1899de2";
-const MANAGED_QWEN3_0_6B_BASE_REVISION =
-  "c1899de289a04d12100db370d81485cdf75e47ca";
+const MANAGED_QWEN3_0_6B_BASE_REVISION = "c1899de289a04d12100db370d81485cdf75e47ca";
 const MANAGED_QWEN3_8B_BASE_PROFILE_ID = "qwen3-8b-b968826d";
-const MANAGED_QWEN3_8B_BASE_REVISION =
-  "b968826d9c46dd6066d109eabc6255188de91218";
+const MANAGED_QWEN3_8B_BASE_REVISION = "b968826d9c46dd6066d109eabc6255188de91218";
 const MANAGED_QWEN_CHAT_TEMPLATE_HASH =
   "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8";
 const timestamp = "2026-07-19T16:00:00.000Z";
@@ -86,7 +81,7 @@ function lineage(): ModelArtifactLineage {
 function artifact(
   id: string,
   providerFilename: string,
-  baseRevision = MANAGED_QWEN3_8B_BASE_REVISION
+  baseRevision = MANAGED_QWEN3_8B_BASE_REVISION,
 ): TrainingArtifact {
   return {
     schemaVersion: "openpond.trainingArtifact.v1",
@@ -133,7 +128,7 @@ function harness(input: {
         input.artifacts ?? [
           artifact("config", "adapter_config.json"),
           artifact("weights", "adapter_model.safetensors"),
-        ]
+        ],
     ),
     getTrainingJob: vi.fn(async () => ({
       id: "job-qa",
@@ -142,9 +137,7 @@ function harness(input: {
     })),
     getTrainingPlan: vi.fn(async () => ({ id: "plan-qa" })),
     getTrainingArtifact: vi.fn(async (id: string) =>
-      id === "source-adapter"
-        ? artifact("source-adapter", "adapter_model.safetensors")
-        : null
+      id === "source-adapter" ? artifact("source-adapter", "adapter_model.safetensors") : null,
     ),
     saveModelArtifactLineage: vi.fn(async (value: ModelArtifactLineage) => {
       saved = value;
@@ -202,7 +195,7 @@ describe("managed adapter sync service", () => {
           expect.objectContaining({ path: "adapter_config.json" }),
           expect.objectContaining({ path: "adapter_model.safetensors" }),
         ]),
-      })
+      }),
     );
     expect(saved()?.managedServing).toMatchObject({
       teamId: "team_qa",
@@ -359,7 +352,7 @@ describe("managed adapter sync service", () => {
     expect(publishFireworksSource).toHaveBeenCalledWith(
       expect.objectContaining({
         teamId: "team_current",
-      })
+      }),
     );
     expect(saved()?.managedServing).toMatchObject({
       teamId: "team_current",
@@ -383,9 +376,7 @@ describe("managed adapter sync service", () => {
       state: "failed",
       canonicalArtifactId: null,
     });
-    expect(saved()?.managedServing?.lastError).toContain(
-      "Sandbox-qualified base profile"
-    );
+    expect(saved()?.managedServing?.lastError).toContain("Sandbox-qualified base profile");
   });
 
   test("fails closed without a UI-selected team before registry access or upload", async () => {
@@ -417,7 +408,7 @@ describe("managed adapter sync service", () => {
     expect(managed.publishFireworksSource).not.toHaveBeenCalled();
     expect(managed.saved()?.managedServing).toMatchObject({
       teamId: "team_managed",
-      source: "sandbox_managed_rft",
+      source: "sandbox_managed_rl",
       sourceRef: "managed-job-qa",
       state: "failed",
       lastError: expect.stringContaining("canonical publication"),
@@ -428,9 +419,8 @@ describe("managed adapter sync service", () => {
     const managed = managedHarness({
       registryArtifact: {
         id: "canonical-artifact",
-        source: "sandbox_managed_rft",
-        sourceRef:
-          "r2://managed-rft/tenants/team_managed/jobs/managed-job-qa/candidate.json",
+        source: "sandbox_managed_rl",
+        sourceRef: "r2://managed-rl/tenants/team_managed/jobs/managed-job-qa/candidate.json",
         state: "promotable",
         promotable: true,
         customerBindingAllowed: true,
@@ -449,7 +439,7 @@ describe("managed adapter sync service", () => {
     expect(managed.publishFireworksSource).not.toHaveBeenCalled();
     expect(managed.saved()?.managedServing).toMatchObject({
       teamId: "team_managed",
-      source: "sandbox_managed_rft",
+      source: "sandbox_managed_rl",
       sourceRef: "managed-job-qa",
       canonicalArtifactId: "canonical-artifact",
       canonicalArtifactState: "promotable",
@@ -462,7 +452,6 @@ describe("managed adapter sync service", () => {
       lastError: null,
     });
   });
-
 });
 
 function managedHarness(input: {
@@ -489,23 +478,22 @@ function managedHarness(input: {
     id: "source-adapter",
     jobId: "job-qa",
     kind: "adapter",
-    path: "sandbox-managed-rft://managed-job-qa/model-artifact-qa",
+    path: "sandbox-managed-rl://managed-job-qa/model-artifact-qa",
     sha256: "4".repeat(64),
     sizeBytes: 8_000_000,
     baseModelId: "Qwen/Qwen3-0.6B",
     baseModelRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
     tokenizerRevision: MANAGED_QWEN3_0_6B_BASE_REVISION,
-    chatTemplateHash:
-      "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+    chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
     nonProduction: false,
     createdAt: timestamp,
     metadata: {
       provider: "sandbox",
-      providerFilename: "managed-rft-candidate",
-      managedRftCandidate: true,
-      managedRftJobId: "managed-job-qa",
-      managedRftModelArtifactId: "model-artifact-qa",
-      managedRftTeamId: "team_managed",
+      providerFilename: "managed-rl-candidate",
+      managedRlCandidate: true,
+      managedRlJobId: "managed-job-qa",
+      managedRlModelArtifactId: "model-artifact-qa",
+      managedRlTeamId: "team_managed",
     },
   };
   const store = {

@@ -272,21 +272,6 @@ describe("project and agent sandbox CLI scenarios", () => {
     });
   }, 90_000);
 
-  test("agent help keeps direct runs and source operations without the legacy edit transport", async () => {
-    const result = await runCli(["help"]);
-
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain(
-      "openpond agent run <action> [--cwd <project>]"
-    );
-    expect(result.stdout).toContain(
-      "openpond agent run <agentId> --team-id <id>"
-    );
-    expect(result.stdout).toContain("openpond agent source checks <agentId>");
-    expect(result.stdout).toContain("openpond agent source publish <agentId>");
-    expect(result.stdout).not.toContain("openpond agent edit");
-  });
-
   test("agent run-test sends target project binding", async () => {
     const requests: CapturedRequest[] = [];
     await withSandboxApi(requests, async (sandboxApiUrl) => {

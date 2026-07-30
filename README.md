@@ -66,7 +66,7 @@ Corepack is only needed when running from source. It makes the repository's pinn
 
 ## What is this
 
-An harness optimized to turn your conversations into datasets, run evals and faciliate code updates (agents/skills/extensions) or facilitate model training (local SFT, alpha support for RFT with fireworks BYOK, Openpond Managed RFT coming soon).
+An harness optimized to turn your conversations into datasets, run evals and faciliate code updates (agents/skills/extensions) or facilitate model training (local SFT, alpha support for RFT with fireworks BYOK, Openpond Managed RL coming soon).
 
 ## Profile
 

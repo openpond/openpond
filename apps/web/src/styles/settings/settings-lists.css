@@ -582,6 +582,14 @@
   white-space: nowrap;
 }
 
+.profile-skill-source {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .profile-skill-actions {
   display: inline-flex;
   align-items: center;

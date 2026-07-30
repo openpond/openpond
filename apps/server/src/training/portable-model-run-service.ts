@@ -48,6 +48,8 @@ export function createPortableModelRunService(deps: {
       Awaited<ReturnType<SqliteStore["getModelRunDraft"]>>
     >["destinationId"];
     recipe: unknown;
+    environmentPlacement?: "local" | "remote";
+    exportApproved?: boolean;
     retentionDays?: number | null;
   }): Promise<TrainingPreparedStart>;
   approve(input: {
@@ -55,14 +57,12 @@ export function createPortableModelRunService(deps: {
     bundleId: string;
     maximumCostUsd?: number | null;
   }): Promise<TrainingApproval>;
-  prepareModel?: (input: {
-    modelId: string;
-    revision: string | null;
-  }) => Promise<unknown>;
+  prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
 }) {
   async function start(input: {
     modelRunId: string;
     maximumSpendUsd: number | null;
+    exportApproved: boolean;
     retentionDays?: number | null;
     manifest?: unknown;
   }) {
@@ -83,19 +83,12 @@ export function createPortableModelRunService(deps: {
       maximumSpendUsd: input.maximumSpendUsd,
       retentionDays: input.retentionDays,
     });
-    if (
-      preparation.state === "unsupported" ||
-      preparation.state === "compute_setup_required"
-    ) {
-      throw new Error(
-        preparation.reason ?? "Model Run preparation is incomplete."
-      );
+    if (preparation.state === "unsupported" || preparation.state === "compute_setup_required") {
+      throw new Error(preparation.reason ?? "Model Run preparation is incomplete.");
     }
     if (preparation.state === "model_download_required") {
       if (!deps.prepareModel) {
-        throw new Error(
-          "This Model requires a verified downloader before training can start."
-        );
+        throw new Error("This Model requires a verified downloader before training can start.");
       }
       await deps.prepareModel({
         modelId: modelRun.baseModel.modelId,
@@ -107,6 +100,11 @@ export function createPortableModelRunService(deps: {
       tasksetId: modelRun.tasksetRef.id,
       destinationId: modelRun.destinationId,
       recipe: modelRun.recipe,
+      environmentPlacement:
+        modelRun.destinationId === "openpond_managed"
+          ? (modelRun.managedRolloutPlacement ?? "local")
+          : undefined,
+      exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
     });
     const approval = await deps.approve({
@@ -117,11 +115,10 @@ export function createPortableModelRunService(deps: {
     const bindings = resolvePortableBindings({
       modelRun,
       catalog: await deps.catalog(),
+      environmentPlacement: prepared.plan.environmentPlacement,
     });
     if (!bindings.runtime || !bindings.compute || !bindings.engine) {
-      throw new Error(
-        "The saved Model Run has no complete portable adapter binding."
-      );
+      throw new Error("The saved Model Run has no complete portable adapter binding.");
     }
     const taskset = await deps.store.getTaskset(modelRun.tasksetRef.id);
     if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
@@ -140,8 +137,8 @@ export function createPortableModelRunService(deps: {
       },
       openpondRelease: "0.0.38",
       workerProtocol:
-        bindings.engine.adapterId === "sandbox-managed-rft"
-          ? "openpond.managedRftWorker.v2"
+        bindings.engine.adapterId === "sandbox-managed-rl"
+          ? "openpond.managedRlWorker.v2"
           : bindings.engine.adapterId === "fireworks-native"
             ? "openpond.fireworksNative.v1"
             : "openpond.localTrainingWorker.v1",
@@ -175,22 +172,19 @@ export function createPortableModelRunService(deps: {
       throw new Error(
         `Portable engine validation failed: ${validation.issues
           .map((issue) => issue.message)
-          .join("; ")}`
+          .join("; ")}`,
       );
     }
     const grader = taskset.graders[0];
     const profileRelease = graph.profileRelease;
     if (!grader || !profileRelease) {
-      throw new Error(
-        "Portable training requires released Profile and grader identity.",
-      );
+      throw new Error("Portable training requires released Profile and grader identity.");
     }
     const portableReleaseGraph = portableReleaseGraphMetadata({
       resolvedBundleHash: graph.resolvedBundleManifest.contentHash,
       profileRelease,
       harnessRelease: graph.manifest.harnessRelease,
-      agentRelease:
-        taskset.environment.actionBindings?.[0]?.agentRelease ?? null,
+      agentRelease: taskset.environment.actionBindings?.[0]?.agentRelease ?? null,
       grader: {
         id: grader.id,
         contentHash: contentHash(grader),
@@ -206,9 +200,7 @@ export function createPortableModelRunService(deps: {
     });
     let executionRef;
     try {
-      executionRef = TrainingExecutionRefSchema.parse(
-        await engineAdapter.launch(resolvedPlan)
-      );
+      executionRef = TrainingExecutionRefSchema.parse(await engineAdapter.launch(resolvedPlan));
     } catch (error) {
       await failPreparedPortableModelRun({
         store: deps.store,
@@ -227,8 +219,7 @@ export function createPortableModelRunService(deps: {
         approvalId: approval.id,
         destinationId: modelRun.destinationId,
         status: "queued",
-        nonProduction:
-          modelRun.destinationId === "local_cpu_fixture",
+        nonProduction: modelRun.destinationId === "local_cpu_fixture",
         workerPid: null,
         startedAt: null,
         completedAt: null,
@@ -252,9 +243,7 @@ export function createPortableModelRunService(deps: {
         portableAdapterBindings: bindings,
         portableExecutionRef: executionRef,
         portableValidationReceipt: validation,
-        portableModelVersion: portableModelVersionMetadata(
-          lifecycle.targetVersion,
-        ),
+        portableModelVersion: portableModelVersionMetadata(lifecycle.targetVersion),
         portableReleaseGraph,
       },
     });
@@ -290,9 +279,7 @@ export function createPortableModelRunService(deps: {
 
   async function execution(modelRunId: string) {
     const job = (await deps.store.listTrainingJobs()).find(
-      (candidate) =>
-        candidate.id === modelRunId ||
-        candidate.metadata.modelRunId === modelRunId
+      (candidate) => candidate.id === modelRunId || candidate.metadata.modelRunId === modelRunId,
     );
     if (!job) {
       throw new Error("No training execution exists for this Model Run.");
@@ -301,17 +288,12 @@ export function createPortableModelRunService(deps: {
   }
 
   function executionRef(job: Awaited<ReturnType<typeof execution>>) {
-    return TrainingExecutionRefSchema.safeParse(
-      job.metadata.portableExecutionRef
-    );
+    return TrainingExecutionRefSchema.safeParse(job.metadata.portableExecutionRef);
   }
 
   async function status(modelRunId: string) {
     const canonical = await deps.store.getModelRun(modelRunId);
-    if (
-      canonical
-      && ["succeeded", "failed", "cancelled"].includes(canonical.status)
-    ) {
+    if (canonical && ["succeeded", "failed", "cancelled"].includes(canonical.status)) {
       return portableStatusFromModelRun(canonical);
     }
     const job = await execution(modelRunId);
@@ -346,11 +328,7 @@ export function createPortableModelRunService(deps: {
         });
         return portableStatusFromModelRun(modelRun);
       }
-      if (
-        !["succeeded", "failed", "cancelled"].includes(
-          executionStatus.state,
-        )
-      ) {
+      if (!["succeeded", "failed", "cancelled"].includes(executionStatus.state)) {
         await reconcilePortableModelRunLifecycle({
           store: deps.store,
           storeDir: deps.storeDir,
@@ -372,8 +350,7 @@ export function createPortableModelRunService(deps: {
             executionStatus.state === "succeeded"
               ? "artifact_collection_failed"
               : executionStatus.phase,
-          errorCode:
-            executionStatus.errorCode ?? "artifact_collection_failed",
+          errorCode: executionStatus.errorCode ?? "artifact_collection_failed",
         };
         const modelRun = await reconcilePortableModelRunLifecycle({
           store: deps.store,
@@ -416,20 +393,14 @@ export function createPortableModelRunService(deps: {
   async function artifacts(modelRunId: string) {
     const job = await execution(modelRunId);
     const canonical = await deps.store.getModelRun(modelRunId);
-    if (
-      canonical
-      && ["succeeded", "failed", "cancelled"].includes(canonical.status)
-    ) {
+    if (canonical && ["succeeded", "failed", "cancelled"].includes(canonical.status)) {
       return deps.store.listTrainingArtifacts(job.id);
     }
     const parsed = executionRef(job);
     if (parsed.success && deps.adapters.hasEngine(parsed.data.adapterId)) {
       await status(modelRunId);
       const reconciled = await deps.store.getModelRun(modelRunId);
-      if (
-        reconciled
-        && ["succeeded", "failed", "cancelled"].includes(reconciled.status)
-      ) {
+      if (reconciled && ["succeeded", "failed", "cancelled"].includes(reconciled.status)) {
         return deps.store.listTrainingArtifacts(job.id);
       }
       throw new Error(
@@ -470,17 +441,14 @@ export function createPortableModelRunService(deps: {
 
 function assertSubmittedManifest(
   input: unknown,
-  expected: ReturnType<typeof HarnessRunManifestSchema.parse>
+  expected: ReturnType<typeof HarnessRunManifestSchema.parse>,
 ): void {
   if (input === undefined) return;
   const submitted = HarnessRunManifestSchema.parse(input);
   const { contentHash: submittedHash, ...submittedContent } = submitted;
-  if (
-    contentHash(submittedContent) !== submittedHash ||
-    submittedHash !== expected.contentHash
-  ) {
+  if (contentHash(submittedContent) !== submittedHash || submittedHash !== expected.contentHash) {
     throw new Error(
-      "Submitted Harness Run Manifest does not exactly match the revalidated server plan."
+      "Submitted Harness Run Manifest does not exactly match the revalidated server plan.",
     );
   }
 }
@@ -492,17 +460,9 @@ export async function publishRunGraph(input: {
   manifestPath: string;
   resolvedBundleDirectory: string;
 }> {
-  const manifestDirectory = path.join(
-    input.storeDir,
-    "training",
-    "portable-releases",
-    "manifests"
-  );
+  const manifestDirectory = path.join(input.storeDir, "training", "portable-releases", "manifests");
   await mkdir(manifestDirectory, { recursive: true });
-  const manifestPath = path.join(
-    manifestDirectory,
-    `${input.graph.manifest.contentHash}.json`
-  );
+  const manifestPath = path.join(manifestDirectory, `${input.graph.manifest.contentHash}.json`);
   const serialized = `${JSON.stringify(input.graph.manifest, null, 2)}\n`;
   await writeFile(manifestPath, serialized, {
     flag: "wx",
@@ -516,20 +476,10 @@ export async function publishRunGraph(input: {
   const resolvedBundle = await materializeResolvedTrainingBundle({
     manifest: input.graph.resolvedBundleManifest,
     assets: input.graph.assets,
-    cacheRoot: path.join(
-      input.storeDir,
-      "training",
-      "portable-releases",
-      "resolved-bundles"
-    ),
+    cacheRoot: path.join(input.storeDir, "training", "portable-releases", "resolved-bundles"),
   });
-  if (
-    resolvedBundle.manifest.contentHash !==
-      input.graph.manifest.resolvedBundleHash
-  ) {
-    throw new Error(
-      "Resolved Training Bundle does not match the Harness Run Manifest."
-    );
+  if (resolvedBundle.manifest.contentHash !== input.graph.manifest.resolvedBundleHash) {
+    throw new Error("Resolved Training Bundle does not match the Harness Run Manifest.");
   }
   return {
     manifestPath,

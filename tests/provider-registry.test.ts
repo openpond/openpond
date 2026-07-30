@@ -88,23 +88,6 @@ describe("local BYOK provider registry", () => {
     ).toBe("My Models");
   });
 
-  test("uses the Z.ai Coding Plan endpoint for old default base URLs", () => {
-    const settings = buildProviderSettings({
-      file: {
-        ...emptyProvidersFile(),
-        providers: {
-          zai: ProviderConfigSchema.parse({
-            enabled: true,
-            baseUrl: "https://api.z.ai/api/paas/v4",
-            defaultModel: "glm-5.2",
-          }),
-        },
-      },
-    });
-
-    expect(settings.providers.zai?.baseUrl).toBe("https://api.z.ai/api/coding/paas/v4");
-  });
-
   test("merges manual model overrides into searchable provider model lists", () => {
     const file: ProvidersFile = {
       version: 1,

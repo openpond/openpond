@@ -15,7 +15,7 @@ import {
 } from "@openpond/contracts";
 import type { CommitNextStep } from "../components/workspace/WorkspaceGitDialogs";
 import {
-  SIDEBAR_SECTION_LIMIT,
+  SIDEBAR_TASK_INITIAL_LIMIT,
   type AppView,
   type SettingsSection,
 } from "../lib/app-models";
@@ -50,9 +50,8 @@ export type ShowAppToast = (
 
 export type SidebarSectionMenuId =
   | "cloud"
-  | "projects"
-  | "projects-options"
-  | "chats";
+  | "chats"
+  | "tasks-filter";
 
 export type NewProjectMode = "local" | "cloud" | "existing-local";
 export type RightPanelMode =
@@ -125,7 +124,7 @@ export const initialAppState: AppState = {
   sectionMenuOpen: null,
   projectsExpanded: false,
   cloudProjectsExpanded: false,
-  chatRowsVisibleCount: SIDEBAR_SECTION_LIMIT,
+  chatRowsVisibleCount: SIDEBAR_TASK_INITIAL_LIMIT,
   sidebarOpen: true,
   view: "chat",
   selectedAppId: null,

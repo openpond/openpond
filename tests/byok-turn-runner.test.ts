@@ -206,97 +206,88 @@ describe("BYOK turn runner dispatch", () => {
     expect(harness.streamInputs).toHaveLength(0);
   });
 
-  test("records local BYOK provider usage frames in the model usage ledger", async () => {
-    const harness = createByokTurnRunnerHarness({
-      toolArgs: null,
+  test.each([
+    {
+      label: "local BYOK",
+      providerId: "openrouter",
+      modelId: "test/model",
+      route: "local_byok",
+      usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
       sessionOverrides: {
         appId: "app_usage",
         appName: "Usage App",
-        workspaceKind: "local_project",
+        workspaceKind: "local_project" as const,
         workspaceId: "workspace_usage",
         workspaceName: "Usage Workspace",
         localProjectId: "project_usage",
         cloudProjectId: "cloud_project_usage",
       },
-      finalText: "Done.",
-      usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
-    });
-
-    const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "answer directly",
-      modelRef: { providerId: "openrouter", modelId: "test/model" },
-    });
-
-    expect(turn.status).toBe("completed");
-    expect(harness.usageRecords).toHaveLength(1);
-    const usage = harness.usageRecords[0]!;
-    expect(usage).toMatchObject({
-      sessionId: "session_1",
-      turnId: turn.id,
-      provider: "openrouter",
-      model: "test/model",
-      route: "local_byok",
-      source: "provider_usage",
-      requestKind: "chat_turn",
-      visibility: "user_facing",
-      status: "completed",
-      requestOrdinal: 0,
-      promptTokens: 12,
-      completionTokens: 4,
-      totalTokens: 16,
       attribution: {
-        surface: "chat",
-        workflowKind: "direct_chat",
-        sessionId: "session_1",
-        turnId: turn.id,
         appId: "app_usage",
         workspaceKind: "local_project",
         workspaceId: "workspace_usage",
         localProjectId: "project_usage",
         cloudProjectId: "cloud_project_usage",
       },
-    });
-    expect(usage.firstTokenMs).not.toBeNull();
-    expect("rawUsage" in usage).toBe(false);
-  });
-
-  test("records OpenPond hosted provider usage frames in the model usage ledger", async () => {
-    const harness = createByokTurnRunnerHarness({
+    },
+    {
+      label: "OpenPond hosted",
       providerId: "openpond",
       modelId: "openpond-chat",
-      toolArgs: null,
-      finalText: "Hosted answer.",
+      route: "openpond_hosted",
       usage: { prompt_tokens: 21, completion_tokens: 7, total_tokens: 28 },
+      sessionOverrides: {},
+      attribution: {},
+    },
+  ])("records $label provider usage frames in the model usage ledger", async ({
+    providerId,
+    modelId,
+    route,
+    usage,
+    sessionOverrides,
+    attribution,
+  }) => {
+    const harness = createByokTurnRunnerHarness({
+      providerId,
+      modelId,
+      toolArgs: null,
+      sessionOverrides,
+      finalText: "Done.",
+      usage,
     });
 
     const turn = await harness.runner.sendTurn("session_1", {
-      prompt: "answer through hosted",
-      modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+      prompt: "answer directly",
+      modelRef: { providerId, modelId },
     });
 
     expect(turn.status).toBe("completed");
     expect(harness.usageRecords).toHaveLength(1);
-    expect(harness.usageRecords[0]).toMatchObject({
+    const record = harness.usageRecords[0]!;
+    expect(record).toMatchObject({
       sessionId: "session_1",
       turnId: turn.id,
-      provider: "openpond",
-      model: "openpond-chat",
-      route: "openpond_hosted",
+      provider: providerId,
+      model: modelId,
+      route,
       source: "provider_usage",
       requestKind: "chat_turn",
       visibility: "user_facing",
       status: "completed",
       requestOrdinal: 0,
-      promptTokens: 21,
-      completionTokens: 7,
-      totalTokens: 28,
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      totalTokens: usage.total_tokens,
       attribution: {
         surface: "chat",
         workflowKind: "direct_chat",
         sessionId: "session_1",
         turnId: turn.id,
+        ...attribution,
       },
     });
+    expect(record.firstTokenMs).not.toBeNull();
+    expect("rawUsage" in record).toBe(false);
   });
 
   test("records hosted auto context compaction usage in the model usage ledger", async () => {

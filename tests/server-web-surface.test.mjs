@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { createOpenPondServer } from "../apps/server/dist/index.js";
+import { isCliEntrypoint } from "../apps/server/dist/utils.js";
 
 describe("server web surface", () => {
   let root;
@@ -26,6 +28,17 @@ describe("server web surface", () => {
   after(async () => {
     await instance?.close();
     if (root) await rm(root, { recursive: true, force: true });
+  });
+
+  test("detects CLI entrypoints whose file URL contains encoded spaces", () => {
+    const originalArgv = process.argv;
+    const entryPath = path.resolve("/tmp/openpond nightly.app/Contents/Resources/server/index.js");
+    process.argv = [originalArgv[0] ?? "node", entryPath];
+    try {
+      assert.equal(isCliEntrypoint(pathToFileURL(entryPath).href), true);
+    } finally {
+      process.argv = originalArgv;
+    }
   });
 
   test("serves built web assets without taking over API routes", async () => {

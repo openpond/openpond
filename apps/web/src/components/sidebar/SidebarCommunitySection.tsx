@@ -14,11 +14,14 @@ export function SidebarCommunitySection(props: {
   selectedCommunityId: string | null;
   selectedChannelId: string | null;
   view: AppView;
+  defaultCollapsed?: boolean;
   onDiscover: () => void;
   onSelectCommunity: (communityId: string) => void;
   onSelectChannel: (channelId: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(
+    props.defaultCollapsed ?? true,
+  );
   const [expandedCommunityIds, setExpandedCommunityIds] = useState<Set<string>>(
     () => new Set(props.selectedCommunityId ? [props.selectedCommunityId] : []),
   );

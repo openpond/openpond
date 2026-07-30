@@ -1,5 +1,4 @@
 export type ModelSetupStepId =
-  | "goal"
   | "dataset"
   | "method"
   | "configuration";
@@ -11,10 +10,9 @@ export type ModelSetupStep = {
 };
 
 export const MODEL_SETUP_STEPS: Array<Pick<ModelSetupStep, "id" | "label">> = [
-  { id: "goal", label: "Goal" },
   { id: "dataset", label: "Taskset" },
   { id: "method", label: "Training method" },
-  { id: "configuration", label: "Model" },
+  { id: "configuration", label: "Model and compute" },
 ];
 
 export function ModelSetupSteps({

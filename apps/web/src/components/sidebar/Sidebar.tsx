@@ -1,8 +1,13 @@
 import { Download, PanelLeft } from "../icons";
 import { isDesktopShell } from "../app-shell/WindowControls";
-import { SidebarNavigation } from "./SidebarNavigation";
+import {
+  SidebarNavigation,
+  SidebarUtilityNavigation,
+} from "./SidebarNavigation";
+import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { SidebarExperienceMenu } from "./SidebarExperienceMenu";
+import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
@@ -76,19 +81,63 @@ export function Sidebar(props: SidebarProps) {
 
       <SidebarSectionList {...props} />
 
-      <UserAuthFooter
-        account={props.account}
-        onOpenActivity={() => {
-          setSectionMenuOpen(null);
-          setSettingsSection("usage");
-          setView("settings");
-        }}
-        onOpenSettings={() => {
-          setSectionMenuOpen(null);
-          setSettingsSection("account");
-          setView("settings");
-        }}
-      />
+      <div className="sidebar-collaboration-sections">
+        <SidebarCommunitySection
+          communities={props.communityItems}
+          channels={props.communityChannels}
+          loading={props.communityLoading}
+          error={props.communityError}
+          selectedCommunityId={props.selectedCommunityId}
+          selectedChannelId={props.selectedCommunityChannelId}
+          view={view}
+          onDiscover={props.discoverCommunities}
+          onSelectCommunity={props.selectCommunity}
+          onSelectChannel={props.selectCommunityChannel}
+        />
+        <SidebarTeamSection
+          currentUserId={props.currentUserId}
+          enabled={props.teamChatEnabled}
+          loading={props.teamChatLoading ?? false}
+          members={props.teamMembers}
+          onOpen={() => {
+            setSelectedAppId(null);
+            setSelectedProjectId(null);
+            setSelectedSessionId(null);
+            setSectionMenuOpen(null);
+            setView("team");
+          }}
+          openTeamDm={props.openTeamDm}
+          organization={props.teamChatOrganization}
+          selectedTeamThreadId={props.selectedTeamThreadId}
+          selectTeamThread={props.selectTeamThread}
+          threads={props.teamThreads}
+          view={view}
+        />
+      </div>
+
+      <div className="sidebar-footer-row">
+        <UserAuthFooter
+          account={props.account}
+          onOpenActivity={() => {
+            setSectionMenuOpen(null);
+            setSettingsSection("usage");
+            setView("settings");
+          }}
+          onOpenSettings={() => {
+            setSectionMenuOpen(null);
+            setSettingsSection("account");
+            setView("settings");
+          }}
+        />
+        <SidebarUtilityNavigation
+          setSectionMenuOpen={setSectionMenuOpen}
+          setSelectedAppId={setSelectedAppId}
+          setSelectedProjectId={setSelectedProjectId}
+          setSelectedSessionId={setSelectedSessionId}
+          setView={setView}
+          view={view}
+        />
+      </div>
       <div
         className="sidebar-resize-handle"
         role="separator"

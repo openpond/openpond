@@ -15,14 +15,8 @@ import type {
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
-import type { DatasetEvidenceIntent } from "../training/TrainingGoalCards";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import type { TrainingStartApproval } from "../training/TrainingStartDialog";
-import {
-  ModelSetupConfigurationPreview,
-  ModelSetupOverviewPreview,
-  ModelSetupRunsPreview,
-} from "./ModelRunSetupPreviews";
 import type { ModelSetupStepId } from "./ModelSetupSteps";
 import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
 import { ModelRunSetupContent } from "./ModelRunSetupContent";
@@ -40,14 +34,6 @@ import {
 } from "./model-run-editor-helpers";
 
 export { nextModelName } from "./model-run-editor-helpers";
-
-const SETUP_TABS = [
-  ["setup", "Setup"],
-  ["overview", "Overview"],
-  ["runs", "Runs"],
-  ["configuration", "Configuration"],
-] as const;
-type SetupTab = (typeof SETUP_TABS)[number][0];
 
 export function ModelRunEditorPage({
   connection,
@@ -82,7 +68,6 @@ export function ModelRunEditorPage({
   renderDatasetBuilder: (
     onCreated: (tasksetId: string) => void,
     onUseExistingDataset: () => void,
-    buildIntent: DatasetEvidenceIntent
   ) => ReactNode;
   onOpenProviderSettings?: () => void;
 }) {
@@ -142,7 +127,6 @@ export function ModelRunEditorPage({
       : baseDraft;
   }
   const [draft, setDraft] = useState(initialDraftRef.current);
-  const [activeSetupTab, setActiveSetupTab] = useState<SetupTab>("setup");
   const [activeSetupStep, setActiveSetupStep] = useState<ModelSetupStepId>(() =>
     firstIncompleteSetupStep(initialDraftRef.current!)
   );
@@ -325,6 +309,7 @@ export function ModelRunEditorPage({
     const started = await training.actions.startModelRun(saved.id, {
       maximumSpendUsd: runApproval.maximumCostUsd,
       retentionDays: runApproval.retentionDays,
+      exportApproved: runApproval.exportApproved,
     });
     if (!started) return;
     await onFinished(saved.modelId, selectedTaskset.id);
@@ -333,19 +318,10 @@ export function ModelRunEditorPage({
   function selectTaskset(taskset: Taskset) {
     setDatasetBuilderOpen(false);
     setActiveSetupStep("method");
-    setDraft((current) => ({
-      ...current,
-      datasetMode: "existing",
-      tasksetRef: {
-        id: taskset.id,
-        revision: taskset.revision,
-        contentHash: taskset.contentHash,
-      },
-      updatedAt: new Date().toISOString(),
-    }));
+    setDraft((current) => bindTaskset(current, taskset));
   }
 
-  if (datasetBuilderOpen && draft.buildIntent) {
+  if (datasetBuilderOpen) {
     return (
       <main
         className="model-build-page model-build-dataset-page"
@@ -392,8 +368,7 @@ export function ModelRunEditorPage({
               tasksetRef: null,
               updatedAt: new Date().toISOString(),
             }));
-          },
-          draft.buildIntent
+          }
         )}
       </main>
     );
@@ -416,73 +391,34 @@ export function ModelRunEditorPage({
           onLaunch={() => void launch()}
         />
 
-        <div
-          className="training-detail-tabs model-setup-tabs"
-          role="tablist"
-          aria-label="Model creation"
-        >
-          {SETUP_TABS.map(([id, label]) => (
-            <button
-              aria-selected={activeSetupTab === id}
-              className={activeSetupTab === id ? "active" : undefined}
-              key={id}
-              role="tab"
-              type="button"
-              onClick={() => setActiveSetupTab(id)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {activeSetupTab === "setup" ? (
-          <ModelRunSetupContent
-            activeStep={activeSetupStep}
-            onStepChange={setActiveSetupStep}
-            draft={draft}
-            setDraft={setDraft}
-            selectedTaskset={selectedTaskset}
-            methodCards={methodCards}
-            tasksets={state?.tasksets ?? []}
-            baseModelCandidates={state?.baseModelCandidates ?? []}
-            destinations={state?.destinations ?? []}
-            connection={connection}
-            training={training}
-            canRun={canRun}
-            onSelectTaskset={selectTaskset}
-            onOpenDatasetBuilder={() => {
-              setDraft((current) => ({
-                ...current,
-                datasetMode: "build",
-                tasksetRef: null,
-                updatedAt: new Date().toISOString(),
-              }));
-              setDatasetBuilderOpen(true);
-            }}
-            onLaunchStateChange={updateLaunchState}
-            onConfigurationChange={updateConfiguration}
-            onOpenProviderSettings={onOpenProviderSettings}
-            onFinished={onFinished}
-          />
-        ) : activeSetupTab === "overview" ? (
-          <ModelSetupOverviewPreview
-            project={project}
-            draft={draft}
-            taskset={selectedTaskset}
-          />
-        ) : activeSetupTab === "runs" ? (
-          <ModelSetupRunsPreview
-            project={project}
-            draft={draft}
-            taskset={selectedTaskset}
-          />
-        ) : (
-          <ModelSetupConfigurationPreview
-            project={project}
-            draft={draft}
-            taskset={selectedTaskset}
-          />
-        )}
+        <ModelRunSetupContent
+          activeStep={activeSetupStep}
+          onStepChange={setActiveSetupStep}
+          draft={draft}
+          setDraft={setDraft}
+          selectedTaskset={selectedTaskset}
+          methodCards={methodCards}
+          tasksets={state?.tasksets ?? []}
+          baseModelCandidates={state?.baseModelCandidates ?? []}
+          destinations={state?.destinations ?? []}
+          connection={connection}
+          training={training}
+          canRun={canRun}
+          onSelectTaskset={selectTaskset}
+          onOpenDatasetBuilder={() => {
+            setDraft((current) => ({
+              ...current,
+              datasetMode: "build",
+              tasksetRef: null,
+              updatedAt: new Date().toISOString(),
+            }));
+            setDatasetBuilderOpen(true);
+          }}
+          onLaunchStateChange={updateLaunchState}
+          onConfigurationChange={updateConfiguration}
+          onOpenProviderSettings={onOpenProviderSettings}
+          onFinished={onFinished}
+        />
       </main>
       <ConfirmDialog state={confirmDialog} onResolve={resolveConfirmDialog} />
     </>

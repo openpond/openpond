@@ -9,6 +9,10 @@ import type {
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
 import { ArrowLeft, Search } from "../icons";
+import {
+  statusLabel,
+  trainingMethodLabel,
+} from "../training/training-model-data";
 import { LabExpertBootstrap } from "./LabExpertBootstrap";
 import { LabModelDataset } from "./LabModelDataset";
 import { LabStatusBadge } from "./LabStatusBadge";
@@ -16,12 +20,12 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 
 const PAGE_SIZE = 10;
-type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
+type DatasetDetailTab = "overview" | "cases" | "scoring" | "history";
 const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "data", label: "Data" },
-  { id: "evals", label: "Evals" },
-  { id: "configuration", label: "Configuration" },
+  { id: "cases", label: "Cases" },
+  { id: "scoring", label: "Scoring" },
+  { id: "history", label: "History" },
 ];
 
 export function LabDatasetsPage({
@@ -164,26 +168,38 @@ export function LabDatasetsPage({
             </button>
           ))}
         </div>
-        <LabModelDataset
-          artifact={selectedArtifact}
-          defaultModel={defaultModel}
-          tab={detailTab}
-          taskset={selected}
-          onOpenFiles={() => onOpenFiles(selected.id)}
-          onToast={onToast}
-          training={training}
-        />
-        {detailTab === "evals" && selected.metadata.flagship === "cross-system-operations" ? (
-          <LabExpertBootstrap
-            busyAction={training.busyAction}
-            taskset={selected}
-            onApprove={(previewHash) =>
-              training.actions.approveExpertBootstrap(selected.id, previewHash)
-            }
-            onPreview={() => training.actions.previewExpertBootstrap(selected.id)}
-            onToast={onToast}
-          />
-        ) : null}
+        {detailTab === "history" ? (
+          <TasksetHistory state={state} taskset={selected} />
+        ) : (
+          <>
+            <LabModelDataset
+              artifact={selectedArtifact}
+              defaultModel={defaultModel}
+              tab={detailTab}
+              taskset={selected}
+              onOpenFiles={() => onOpenFiles(selected.id)}
+              onToast={onToast}
+              training={training}
+            />
+            {detailTab === "scoring" &&
+            selected.metadata.flagship === "cross-system-operations" ? (
+              <LabExpertBootstrap
+                busyAction={training.busyAction}
+                taskset={selected}
+                onApprove={(previewHash) =>
+                  training.actions.approveExpertBootstrap(
+                    selected.id,
+                    previewHash,
+                  )
+                }
+                onPreview={() =>
+                  training.actions.previewExpertBootstrap(selected.id)
+                }
+                onToast={onToast}
+              />
+            ) : null}
+          </>
+        )}
       </div>
     );
   }
@@ -251,6 +267,76 @@ export function LabDatasetsPage({
         onChange={setPage}
       />
     </div>
+  );
+}
+
+function TasksetHistory({
+  state,
+  taskset,
+}: {
+  state: TrainingStateResponse | null;
+  taskset: Taskset;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const runs = (state?.modelRuns ?? [])
+    .filter((run) => run.taskset.id === taskset.id)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  const visibleRuns = showAll ? runs : runs.slice(0, 10);
+  const modelNames = new Map(
+    (state?.modelProjects ?? []).map((project) => [project.id, project.name]),
+  );
+
+  if (!runs.length) {
+    return (
+      <div className="labs-table-empty">
+        This Taskset has not been used in a submitted run yet.
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="training-table-wrap">
+        <table className="training-data-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Run</th>
+              <th>Method</th>
+              <th>Status</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRuns.map((run) => (
+              <tr key={run.id}>
+                <td>{modelNames.get(run.modelId) ?? run.modelId}</td>
+                <td>{statusLabel(run.kind)}</td>
+                <td>{trainingMethodLabel(run.method)}</td>
+                <td>
+                  <LabStatusBadge
+                    label={statusLabel(run.status)}
+                    value={run.status}
+                  />
+                </td>
+                <td>{formatCompactDate(run.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {runs.length > 10 ? (
+        <div className="labs-model-run-list-actions">
+          <button
+            className="settings-secondary compact"
+            type="button"
+            onClick={() => setShowAll((visible) => !visible)}
+          >
+            {showAll ? "Show latest 10" : `Show all ${runs.length} runs`}
+          </button>
+        </div>
+      ) : null}
+    </>
   );
 }
 

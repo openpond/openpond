@@ -15,7 +15,7 @@ import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
-type DatasetDetailTab = "overview" | "data" | "evals" | "configuration";
+type DatasetDetailTab = "overview" | "cases" | "scoring";
 type Task = Taskset["tasks"][number];
 
 const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
@@ -26,6 +26,7 @@ const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
 const EXAMPLE_PAGE_SIZE = 10;
 export function LabModelDataset({
   artifact,
+  defaultModel,
   tab = "overview",
   taskset,
   onOpenFiles,
@@ -69,7 +70,7 @@ export function LabModelDataset({
     [taskset.sourceRefs],
   );
   useEffect(() => {
-    if (tab !== "data" || !artifact) return undefined;
+    if (tab !== "cases" || !artifact) return undefined;
     let cancelled = false;
     setRowsLoading(true);
     setRowsError(null);
@@ -131,6 +132,9 @@ export function LabModelDataset({
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
+  const workTask = taskset.environment.kind === "work"
+    ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
+    : null;
 
   async function runCheck(
     label: string,
@@ -190,11 +194,49 @@ export function LabModelDataset({
             </ul>
           ) : null}
         </div>
+        <details className="labs-dataset-advanced-details">
+          <summary>Technical details</summary>
+          <dl className="training-configuration-list">
+            <Fact label="Taskset ID" value={taskset.id} />
+            <Fact label="Revision" value={String(taskset.revision)} />
+            <Fact
+              label="Format"
+              value={artifact?.format.toUpperCase() ?? "Inline Taskset"}
+            />
+            <Fact
+              label="Rows"
+              value={String(artifact?.rowCount ?? taskset.tasks.length)}
+            />
+            <Fact
+              label="Storage"
+              value={artifact ? formatBytes(artifact.sizeBytes) : "Managed inline"}
+            />
+            <Fact
+              label="Availability"
+              value={
+                artifact?.available === false
+                  ? artifact.unavailableReason ?? "Unavailable"
+                  : "Available"
+              }
+            />
+            <Fact
+              label="Content hash"
+              value={artifact?.contentHash ?? taskset.contentHash}
+            />
+          </dl>
+          <button
+            className="training-button secondary"
+            type="button"
+            onClick={onOpenFiles}
+          >
+            Open files
+          </button>
+        </details>
       </DetailSection>
     );
   }
 
-  if (tab === "evals") {
+  if (tab === "scoring") {
     return (
       <>
         <DetailSection title="Taskset checks">
@@ -202,6 +244,23 @@ export function LabModelDataset({
             Audit the reward and graders before creating a Model run.
           </p>
           <div className="labs-dataset-detail-actions">
+            {workTask ? (
+              <button
+                className="training-button secondary"
+                disabled={training.busyAction !== null}
+                type="button"
+                onClick={() => void runCheck(
+                  "Work attempt",
+                  () => training.actions.executeTasksetAttempt(
+                    taskset.id,
+                    workTask.id,
+                    defaultModel,
+                  ),
+                )}
+              >
+                Run Work attempt
+              </button>
+            ) : null}
             <button
               className="training-button secondary"
               disabled={training.busyAction !== null}
@@ -264,31 +323,8 @@ export function LabModelDataset({
     );
   }
 
-  if (tab === "configuration") {
-    return (
-      <DetailSection
-        title="Configuration"
-        actions={(
-          <button className="training-button secondary" type="button" onClick={onOpenFiles}>
-            Open files
-          </button>
-        )}
-      >
-        <dl className="training-configuration-list">
-          <Fact label="Taskset ID" value={taskset.id} />
-          <Fact label="Revision" value={String(taskset.revision)} />
-          <Fact label="Format" value={artifact?.format.toUpperCase() ?? "Inline Taskset"} />
-          <Fact label="Rows" value={String(artifact?.rowCount ?? taskset.tasks.length)} />
-          <Fact label="Storage" value={artifact ? formatBytes(artifact.sizeBytes) : "Managed inline"} />
-          <Fact label="Availability" value={artifact?.available === false ? artifact.unavailableReason ?? "Unavailable" : "Available"} />
-          <Fact label="Content hash" value={artifact?.contentHash ?? taskset.contentHash} />
-        </dl>
-      </DetailSection>
-    );
-  }
-
   return (
-      <DetailSection title="Examples">
+      <DetailSection title="Cases">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Taskset splits">
           {SPLITS.map((item) => (
             <button

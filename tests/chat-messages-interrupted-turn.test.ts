@@ -31,6 +31,61 @@ function commandStarted(
 }
 
 describe("chat message interrupted turn projection", () => {
+  test("settles orphaned work when a newer turn starts", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "inspect the renderer" },
+      }),
+      commandStarted("search_1", "turn_1", "rg activity-summary apps/web/src"),
+      runtimeEvent({
+        id: "turn_2_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_2",
+        args: { prompt: "continue the active goal" },
+      }),
+      commandStarted(
+        "read_1",
+        "turn_2",
+        "sed -n '1,200p' apps/web/src/lib/chat-messages.ts"
+      ),
+      runtimeEvent({
+        id: "turn_3_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_3",
+        args: { prompt: "finish the check" },
+      }),
+      commandStarted("list_1", "turn_3", "ls apps/web/src/components/chat"),
+    ]);
+
+    const activityGroups = messages.filter(
+      (message) => message.role === "activity_group"
+    );
+    expect(activityGroups.map((message) => message.traceState)).toEqual([
+      "settled",
+      "settled",
+      "running",
+    ]);
+
+    const html = activityGroups
+      .map((message) =>
+        renderToStaticMarkup(createElement(MessageRow, { message }))
+      )
+      .join("");
+    expect(html.match(/Working…/g)).toHaveLength(1);
+    expect(html).toContain(
+      "Searched for &quot;activity-summary&quot; in apps/web/src"
+    );
+    expect(html).toContain(
+      "Read lines 1-200 of apps/web/src/lib/chat-messages.ts"
+    );
+  });
+
   test("keeps completed command artifacts visible when a turn is interrupted", () => {
     const messages = buildChatMessages([
       runtimeEvent({

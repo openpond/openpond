@@ -228,6 +228,40 @@ export function createTrainingApi(deps: {
       return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
     if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
+    if (action === "execute_taskset_attempt") {
+      const sampling = record(input.sampling);
+      return deps.evaluation.execute({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        taskId: requiredString(input.taskId, "taskId"),
+        model: ChatModelRefSchema.parse(input.model),
+        seed: boundedInteger(input.seed, "seed", -2_147_483_648, 2_147_483_647, 17),
+        attempt: boundedInteger(input.attempt, "attempt", 0, 1_000_000, 0),
+        sampling: {
+          maxOutputTokens: boundedInteger(
+            sampling.maxOutputTokens,
+            "sampling.maxOutputTokens",
+            1,
+            128_000,
+            4_096,
+          ),
+          temperature: boundedNumber(
+            sampling.temperature,
+            "sampling.temperature",
+            0,
+            2,
+            0,
+          ),
+          topP: boundedNumber(
+            sampling.topP,
+            "sampling.topP",
+            0,
+            1,
+            1,
+          ),
+        },
+        resultId: string(input.resultId) ?? undefined,
+      });
+    }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
@@ -236,7 +270,7 @@ export function createTrainingApi(deps: {
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
-    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
     if (action === "prepare_model_run") return deps.training.prepareModelRun({
       modelRunId: requiredString(input.modelRunId, "modelRunId"),
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
@@ -246,6 +280,7 @@ export function createTrainingApi(deps: {
       modelRunId: requiredString(input.modelRunId, "modelRunId"),
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
       retentionDays: nullableNumber(input.retentionDays),
+      exportApproved: input.exportApproved === true,
       manifest: input.manifest,
     });
     if (action === "model_run_status") return deps.training.modelRunStatus(requiredString(input.modelRunId, "modelRunId"));
@@ -261,6 +296,7 @@ export function createTrainingApi(deps: {
       tasksetId: requiredString(input.tasksetId, "tasksetId"),
       destinationId: TrainingDestinationIdSchema.parse(input.destinationId),
       recipe: input.recipe,
+      environmentPlacement: managedRolloutPlacement(input.environmentPlacement),
       exportApproved: input.exportApproved === true,
       retentionDays: nullableNumber(input.retentionDays),
       region: string(input.region),
@@ -274,7 +310,7 @@ export function createTrainingApi(deps: {
       return linkStartedTraining(result);
     }
     if (action === "start") {
-      const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+      const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
       return linkStartedTraining(result);
     }
     if (action === "import_artifact") return deps.training.importExternal({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), artifactDirectory: requiredString(input.artifactDirectory, "artifactDirectory") });
@@ -688,6 +724,43 @@ function stringArray(value: unknown): string[] { return Array.isArray(value) ? v
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function boundedInteger(
+  value: unknown,
+  name: string,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  if (value === undefined || value === null) return fallback;
+  if (
+    typeof value !== "number"
+    || !Number.isInteger(value)
+    || value < minimum
+    || value > maximum
+  ) {
+    throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
+  }
+  return value;
+}
+function boundedNumber(
+  value: unknown,
+  name: string,
+  minimum: number,
+  maximum: number,
+  fallback: number,
+): number {
+  if (value === undefined || value === null) return fallback;
+  if (
+    typeof value !== "number"
+    || !Number.isFinite(value)
+    || value < minimum
+    || value > maximum
+  ) {
+    throw new Error(`${name} must be from ${minimum} to ${maximum}.`);
+  }
+  return value;
+}
+function managedRolloutPlacement(value: unknown): "local" | "remote" | undefined { return value === "local" || value === "remote" ? value : undefined; }
 
 function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
   return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"

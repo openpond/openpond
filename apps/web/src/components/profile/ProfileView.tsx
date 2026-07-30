@@ -4,12 +4,15 @@ import type { ClientConnection } from "../../api";
 import "../../styles/settings/settings-layout.css";
 import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
+import "../../styles/profile/profile-page.css";
 import { ProfileSettingsSection } from "../settings/ProfileSettingsSection";
 
 export type ProfileViewSection = "profile" | "agents" | "controls" | "all";
 
 export type ProfileViewProps = {
   section?: ProfileViewSection;
+  catalogPresentation?: "list" | "select";
+  className?: string;
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
   onPayload: (payload: BootstrapPayload) => void;
@@ -21,6 +24,8 @@ export type ProfileViewProps = {
 
 export function ProfileView({
   section = "all",
+  catalogPresentation = "list",
+  className,
   payload,
   connection,
   onPayload,
@@ -30,9 +35,13 @@ export function ProfileView({
   overviewContent,
 }: ProfileViewProps) {
   return (
-    <section className="profile-view" aria-label={section === "agents" ? "Agents" : "Profile"}>
+    <section
+      className={`profile-view${className ? ` ${className}` : ""}`}
+      aria-label={section === "agents" ? "Agents" : "Profile"}
+    >
       <ProfileSettingsSection
         section={section}
+        catalogPresentation={catalogPresentation}
         payload={payload}
         connection={connection}
         onPayload={onPayload}

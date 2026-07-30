@@ -219,18 +219,6 @@ describe("sandbox runtime create normalization", () => {
       },
     });
   });
-
-  test("normalizes legacy runtime mode into canonical workflowMode", () => {
-    expect(
-      normalizeSandboxRuntimeCreateInput({
-        teamId: "team_test",
-        mode: "patch_only",
-      }),
-    ).toEqual({
-      teamId: "team_test",
-      workflowMode: "patch_only",
-    });
-  });
 });
 
 describe("sandbox integration lease normalization", () => {
@@ -798,18 +786,6 @@ describe("sandbox integration lease normalization", () => {
         integrationLeases: [{ ...base, capabilities: ["github.repo.read"] }],
       }),
     ).toThrow("Sandbox integration capabilities are not allowed for google: github.repo.read");
-  });
-
-  test("keeps legacy attach payloads without provider valid", () => {
-    expect(
-      normalizeIntegrationAttachInput({
-        connectionId: "connection_legacy",
-        capabilities: ["provider.local.read"],
-      }),
-    ).toEqual({
-      connectionId: "connection_legacy",
-      capabilities: ["provider.local.read"],
-    });
   });
 
   test("normalizes lease removal ids", () => {

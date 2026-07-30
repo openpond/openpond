@@ -1,5 +1,6 @@
 import {
   isTrainingSourceRef,
+  TASKSET_WORK_TOOL_NAMES,
   TasksetSchema,
   type Taskset,
   type TasksetCapabilityManifest,
@@ -46,6 +47,7 @@ export function validateTaskset(input: unknown): TasksetValidationReport {
   validateGraderFixtures(taskset, issues);
   validateLearningSignals(taskset, issues);
   validateCapabilities(taskset.capabilities, issues, taskset);
+  validateWorkExecution(taskset, issues);
 
   const computedHash = tasksetContentHash(taskset);
   if (taskset.contentHash !== computedHash) {
@@ -181,6 +183,172 @@ function validateSplitIsolation(taskset: Taskset, issues: TasksetValidationIssue
     ? taskset.datasetArtifact.splitCounts.frozen_eval ?? 0
     : taskset.tasks.filter((task) => task.split === "frozen_eval").length;
   if (frozenCount === 0) issues.push({ code: "frozen_eval_missing", severity: "warning", message: "Add an independent test example before training.", path: "tasks" });
+}
+
+function validateWorkExecution(
+  taskset: Taskset,
+  issues: TasksetValidationIssue[],
+): void {
+  if (taskset.environment.kind !== "work") return;
+  if (taskset.environment.entrypoint !== "openpond-work-v1") {
+    issues.push({
+      code: "work_entrypoint_invalid",
+      severity: "error",
+      message: "Work Tasksets must use the openpond-work-v1 entrypoint.",
+      path: "environment.entrypoint",
+    });
+  }
+  if (taskset.environment.stateful) {
+    issues.push({
+      code: "work_stateful_invalid",
+      severity: "error",
+      message: "Automated Work attempts must start from clean state.",
+      path: "environment.stateful",
+    });
+  }
+  const allowedTools = new Set<string>(TASKSET_WORK_TOOL_NAMES);
+  const unknownTools = taskset.environment.toolNames.filter(
+    (name) => !allowedTools.has(name),
+  );
+  if (unknownTools.length) {
+    issues.push({
+      code: "work_tool_unknown",
+      severity: "error",
+      message: `Work Taskset declares unknown tools: ${unknownTools.join(", ")}.`,
+      path: "environment.toolNames",
+    });
+  }
+  if (!taskset.environment.toolNames.includes("work_save_output")) {
+    issues.push({
+      code: "work_output_tool_missing",
+      severity: "error",
+      message: "Work Tasksets must declare work_save_output.",
+      path: "environment.toolNames",
+    });
+  }
+  for (const lifecycle of ["create", "reset", "step", "grade", "cleanup"] as const) {
+    if (!taskset.environment.lifecycle.includes(lifecycle)) {
+      issues.push({
+        code: "work_lifecycle_incomplete",
+        severity: "error",
+        message: `Work Tasksets require the ${lifecycle} lifecycle stage.`,
+        path: "environment.lifecycle",
+      });
+    }
+  }
+
+  const sourceById = new Map(
+    taskset.sourceRefs.map((source) => [source.id, source]),
+  );
+  for (const [taskIndex, task] of taskset.tasks.entries()) {
+    const assetIds = new Set<string>();
+    const fileNames = new Set<string>();
+    for (const [assetIndex, asset] of (task.assets ?? []).entries()) {
+      const path = `tasks.${taskIndex}.assets.${assetIndex}`;
+      if (assetIds.has(asset.id)) {
+        issues.push({
+          code: "work_asset_duplicate_id",
+          severity: "error",
+          message: `Task ${task.id} repeats asset id ${asset.id}.`,
+          path: `${path}.id`,
+        });
+      }
+      if (fileNames.has(asset.fileName)) {
+        issues.push({
+          code: "work_asset_duplicate_name",
+          severity: "error",
+          message: `Task ${task.id} repeats staged file name ${asset.fileName}.`,
+          path: `${path}.fileName`,
+        });
+      }
+      assetIds.add(asset.id);
+      fileNames.add(asset.fileName);
+      if (!task.sourceRefs.includes(asset.sourceRefId)) {
+        issues.push({
+          code: "work_asset_task_source_missing",
+          severity: "error",
+          message: `Asset ${asset.id} references source ${asset.sourceRefId} outside task ${task.id}.`,
+          path: `${path}.sourceRefId`,
+        });
+      }
+      const source = sourceById.get(asset.sourceRefId);
+      if (!source) {
+        issues.push({
+          code: "work_asset_source_missing",
+          severity: "error",
+          message: `Asset ${asset.id} references missing source ${asset.sourceRefId}.`,
+          path: `${path}.sourceRefId`,
+        });
+      } else if (
+        "sourceFileHashes" in source
+        && !source.sourceFileHashes.includes(asset.sha256)
+      ) {
+        issues.push({
+          code: "work_asset_hash_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} hash is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.sha256`,
+        });
+      }
+      if (
+        source
+        && "kind" in source
+        && source.kind === "uploaded_file"
+        && !source.originalFileNames.includes(asset.fileName)
+      ) {
+        issues.push({
+          code: "work_asset_name_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} file name is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.fileName`,
+        });
+      }
+      if (
+        source
+        && "kind" in source
+        && source.kind === "uploaded_file"
+        && !source.mediaTypes.includes(asset.mediaType)
+      ) {
+        issues.push({
+          code: "work_asset_media_type_unregistered",
+          severity: "error",
+          message: `Asset ${asset.id} media type is not registered by source ${asset.sourceRefId}.`,
+          path: `${path}.mediaType`,
+        });
+      }
+      if (asset.split !== task.split) {
+        issues.push({
+          code: "work_asset_split_mismatch",
+          severity: "error",
+          message: `Asset ${asset.id} is assigned to ${asset.split}, not task split ${task.split}.`,
+          path: `${path}.split`,
+        });
+      }
+    }
+
+    const outputPaths = new Set<string>();
+    for (const [outputIndex, output] of (task.requiredOutputs ?? []).entries()) {
+      const normalized = output.path.replaceAll("\\", "/");
+      const path = `tasks.${taskIndex}.requiredOutputs.${outputIndex}.path`;
+      if (outputPaths.has(normalized)) {
+        issues.push({
+          code: "work_output_duplicate_path",
+          severity: "error",
+          message: `Task ${task.id} repeats required output path ${normalized}.`,
+          path,
+        });
+      }
+      outputPaths.add(normalized);
+    }
+    if ((task.requiredOutputs ?? []).length === 0) {
+      issues.push({
+        code: "work_output_missing",
+        severity: "error",
+        message: `Work task ${task.id} must declare at least one required output.`,
+        path: `tasks.${taskIndex}.requiredOutputs`,
+      });
+    }
+  }
 }
 
 function validatePolicyBoundary(taskset: Taskset, issues: TasksetValidationIssue[]): void {

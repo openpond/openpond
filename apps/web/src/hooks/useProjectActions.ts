@@ -36,7 +36,6 @@ type UseProjectActionsInput = {
   openExistingProjectDialog: () => void;
   applyBootstrapPayload: (payload: BootstrapPayload) => void;
   expandProject: (projectId: string) => void;
-  revealProjectsSection: () => void;
   setExpandedProjectIds: Dispatch<SetStateAction<Set<string>>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
@@ -55,7 +54,6 @@ export function useProjectActions({
   openExistingProjectDialog,
   applyBootstrapPayload,
   expandProject,
-  revealProjectsSection,
   setExpandedProjectIds,
   setSelectedAppId,
   setSelectedProjectId,
@@ -70,7 +68,6 @@ export function useProjectActions({
     setSelectedProjectId(projectKey);
     setSelectedSessionId(null);
     setView("chat");
-    revealProjectsSection();
     expandProject(projectKey);
   }
 
@@ -183,7 +180,6 @@ export function useProjectActions({
       setSelectedProjectId(projectKey);
       setSelectedSessionId(null);
       setView("chat");
-      revealProjectsSection();
       expandProject(projectKey);
       showToast(`Created Cloud Project: ${project.name}`, "success");
       return true;

@@ -50,6 +50,8 @@ export const SessionSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   status: z.enum(["idle", "active", "failed", "closed"]),
+  runtimeSeconds: z.number().int().nonnegative().optional(),
+  runtimeRunningSince: z.string().nullable().optional(),
   pinned: z.boolean(),
   savedForLater: z.boolean().optional(),
   archived: z.boolean(),

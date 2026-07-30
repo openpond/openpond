@@ -17,6 +17,8 @@ import {
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { ProfileAgentsSection } from "../profile/ProfileAgentsSection";
+import { ProfileSelector } from "../profile/ProfileSelector";
+import { ProfileSettingsMenu } from "../profile/ProfileSettingsMenu";
 import "../../styles/workspace/git-dialogs.css";
 import "../../styles/settings/profile-catalog.css";
 import { openPondProfileRefsEqual } from "../../lib/profile-selection";
@@ -37,6 +39,7 @@ type ProfileStatusCell = {
 
 type ProfileSettingsSectionProps = {
   section?: "all" | "profile" | "agents" | "controls";
+  catalogPresentation?: "list" | "select";
   payload: BootstrapPayload | null;
   connection: ClientConnection | null;
   onPayload: (payload: BootstrapPayload) => void;
@@ -48,6 +51,7 @@ type ProfileSettingsSectionProps = {
 
 export function ProfileSettingsSection({
   section = "all",
+  catalogPresentation = "list",
   payload,
   connection,
   onPayload,
@@ -162,35 +166,67 @@ export function ProfileSettingsSection({
     });
   }
 
+  function refreshProfiles() {
+    void runProfileControl("refresh", async () => {
+      await refreshBootstrapAfterProfileChange("Profiles refreshed");
+    });
+  }
+
   return (
     <section className="account-settings profile-settings">
       {profile?.mode === "local" ? (
         <>
           {showControls ? (
             <>
-              {showCatalog ? <ProfilesCatalog
-                busy={Boolean(profileBusy)}
-                library={payload?.profileLibrary ?? { lastUsed: null, profiles: [] }}
-                onAdd={() => setAddProfileOpen(true)}
-                onRefresh={() => void runProfileControl("refresh", async () => {
-                  await refreshBootstrapAfterProfileChange("Profiles refreshed");
-                })}
-                onRemove={setRemoveProfileTarget}
-                onPublish={setPublicationTarget}
-                onUpdate={updateProfile}
-                onSelect={selectProfile}
-              /> : null}
-              <ProfileControls
-                connection={connection}
-                profile={profile}
-                profileBusy={profileBusy}
-                profileCommitMessage={profileCommitMessage}
-                selectedDefaultTeamId={selectedDefaultTeamId}
-                syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
-                setProfileCommitMessage={setProfileCommitMessage}
-                submitProfileCommit={submitProfileCommit}
-                submitProfilePush={submitProfilePush}
-              />
+              {showCatalog && catalogPresentation === "select" ? (
+                <ProfileSelector
+                  actions={(
+                    <ProfileControls
+                      connection={connection}
+                      onAdd={() => setAddProfileOpen(true)}
+                      onRefresh={refreshProfiles}
+                      presentation="menu"
+                      profile={profile}
+                      profileBusy={profileBusy}
+                      profileCommitMessage={profileCommitMessage}
+                      selectedDefaultTeamId={selectedDefaultTeamId}
+                      syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
+                      setProfileCommitMessage={setProfileCommitMessage}
+                      submitProfileCommit={submitProfileCommit}
+                      submitProfilePush={submitProfilePush}
+                    />
+                  )}
+                  busy={Boolean(profileBusy)}
+                  library={payload?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+                  onSelect={selectProfile}
+                />
+              ) : (
+                <>
+                  {showCatalog ? (
+                    <ProfilesCatalog
+                      busy={Boolean(profileBusy)}
+                      library={payload?.profileLibrary ?? { lastUsed: null, profiles: [] }}
+                      onAdd={() => setAddProfileOpen(true)}
+                      onRefresh={refreshProfiles}
+                      onRemove={setRemoveProfileTarget}
+                      onPublish={setPublicationTarget}
+                      onUpdate={updateProfile}
+                      onSelect={selectProfile}
+                    />
+                  ) : null}
+                  <ProfileControls
+                    connection={connection}
+                    profile={profile}
+                    profileBusy={profileBusy}
+                    profileCommitMessage={profileCommitMessage}
+                    selectedDefaultTeamId={selectedDefaultTeamId}
+                    syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
+                    setProfileCommitMessage={setProfileCommitMessage}
+                    submitProfileCommit={submitProfileCommit}
+                    submitProfilePush={submitProfilePush}
+                  />
+                </>
+              )}
 
               {overviewContent}
             </>
@@ -220,7 +256,7 @@ export function ProfileSettingsSection({
           </div>
           <div className="empty-account-list">
             <strong>No local Profile loaded</strong>
-            <span>Open the Profile tab to create or load a Profile before managing agents.</span>
+            <span>Open Profile to create or load a Profile before managing agents.</span>
           </div>
         </div>
       ) : (
@@ -530,6 +566,9 @@ function RemoveProfileDialog({
 
 type ProfileControlsProps = {
   connection: ClientConnection | null;
+  onAdd?: () => void;
+  onRefresh?: () => void;
+  presentation?: "toolbar" | "menu";
   profile: ProfileState | null;
   profileBusy: string | null;
   profileCommitMessage: string;
@@ -542,6 +581,9 @@ type ProfileControlsProps = {
 
 function ProfileControls({
   connection,
+  onAdd,
+  onRefresh,
+  presentation = "toolbar",
   profile,
   profileBusy,
   profileCommitMessage,
@@ -557,56 +599,76 @@ function ProfileControls({
   const disabled = !connection || Boolean(profileBusy);
 
   return (
-    <div className="profile-control-panel">
-      <div className="profile-control-toolbar">
-        <div className="profile-control-actions">
-          <button
-            className="settings-secondary"
-            disabled={disabled}
-            type="button"
-            onClick={() => setCommitDialogOpen(true)}
-          >
-            <GitCommit size={14} />
-            <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
-          </button>
-          <button
-            className="settings-secondary"
-            disabled={disabled || !profile}
-            type="button"
-            onClick={() => setSyncDialogOpen(true)}
-          >
-            <UploadCloud size={14} />
-            <span>{profileBusy === "push" ? "Syncing" : "Sync"}</span>
-          </button>
-          <button
-            className="settings-secondary"
-            disabled={Boolean(profileBusy) || !profile}
-            type="button"
-            onClick={() => setRepoDialogOpen(true)}
-          >
-            <FolderGit2 size={14} />
-            <span>Repo</span>
-          </button>
-          {profile ? (
-            <span
-              className="profile-hosted-status"
-              title={`Profile sync status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
-            >
-              <CloudUpload size={14} />
-              <span>Profile sync</span>
-              <strong>{profileHostedValue(profile, selectedDefaultTeamId)}</strong>
-            </span>
-          ) : null}
+    <>
+      {presentation === "menu" && onAdd && onRefresh ? (
+        <ProfileSettingsMenu
+          addDisabled={Boolean(profileBusy)}
+          commitDisabled={disabled}
+          commitLabel={profileBusy === "commit" ? "Committing" : "Commit"}
+          refreshDisabled={disabled}
+          repoDisabled={Boolean(profileBusy) || !profile}
+          syncDisabled={disabled || !profile}
+          syncLabel={profileBusy === "push" ? "Syncing" : "Sync"}
+          syncStatus={profile ? profileHostedValue(profile, selectedDefaultTeamId) : null}
+          onAdd={onAdd}
+          onCommit={() => setCommitDialogOpen(true)}
+          onRefresh={onRefresh}
+          onRepo={() => setRepoDialogOpen(true)}
+          onSync={() => setSyncDialogOpen(true)}
+        />
+      ) : (
+        <div className="profile-control-panel">
+          <div className="profile-control-toolbar">
+            <div className="profile-control-actions">
+              <button
+                className="settings-secondary"
+                disabled={disabled}
+                type="button"
+                onClick={() => setCommitDialogOpen(true)}
+              >
+                <GitCommit size={14} />
+                <span>{profileBusy === "commit" ? "Committing" : "Commit"}</span>
+              </button>
+              <button
+                className="settings-secondary"
+                disabled={disabled || !profile}
+                type="button"
+                onClick={() => setSyncDialogOpen(true)}
+              >
+                <UploadCloud size={14} />
+                <span>{profileBusy === "push" ? "Syncing" : "Sync"}</span>
+              </button>
+              <button
+                className="settings-secondary"
+                disabled={Boolean(profileBusy) || !profile}
+                type="button"
+                onClick={() => setRepoDialogOpen(true)}
+              >
+                <FolderGit2 size={14} />
+                <span>Repo</span>
+              </button>
+              {profile ? (
+                <span
+                  className="profile-hosted-status"
+                  title={`Profile sync status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
+                >
+                  <CloudUpload size={14} />
+                  <span>Profile sync</span>
+                  <strong>{profileHostedValue(profile, selectedDefaultTeamId)}</strong>
+                </span>
+              ) : null}
+            </div>
+            {profile ? (
+              <span
+                className={`profile-local-status ${profile.summary.state}`}
+                title={profile.summary.message}
+              >
+                {profile.summary.message}
+              </span>
+            ) : null}
+          </div>
         </div>
-        {profile ? (
-          <span
-            className={`profile-local-status ${profile.summary.state}`}
-            title={profile.summary.message}
-          >
-            {profile.summary.message}
-          </span>
-        ) : null}
-      </div>
+      )}
       {repoDialogOpen && profile ? (
         <ProfileRepoDialog
           profile={profile}
@@ -635,7 +697,7 @@ function ProfileControls({
           onClose={() => setSyncDialogOpen(false)}
         />
       ) : null}
-    </div>
+    </>
   );
 }
 
@@ -858,16 +920,6 @@ function ProfileSkillsSection({
         <span>Skills</span>
         <div className="profile-skill-heading-actions">
           <small>{profile.skillCatalog.skillCount} tracked</small>
-          <button
-            className="settings-secondary"
-            disabled={commandDisabled}
-            type="button"
-            title="Create profile skill"
-            onClick={() => runCommand("/skill create ")}
-          >
-            <Plus size={14} />
-            <span>Create</span>
-          </button>
         </div>
       </div>
       {skills.length ? (
@@ -941,7 +993,9 @@ function ProfileSkillRow({
       <td><ProfileStatusText status={status} /></td>
       <td>
         <div className="profile-agent-action">
-          <span title={skill.sourcePath}>{skill.sourcePath}</span>
+          <span className="profile-skill-source" title={skill.sourcePath}>
+            {skill.sourcePath}
+          </span>
         </div>
       </td>
       <td>

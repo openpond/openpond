@@ -52,7 +52,8 @@ describe("community UI", () => {
         readState: { lastReadSequence: 5, lastReadAt: null, mutedAt: "2026-07-15T12:00:00.000Z", pinnedAt: null },
       }],
       loading: false, error: null, selectedCommunityId: "community_1", selectedChannelId: "channel_1",
-      view: "community", onDiscover: () => undefined, onSelectCommunity: () => undefined, onSelectChannel: () => undefined,
+      view: "community", defaultCollapsed: false, onDiscover: () => undefined,
+      onSelectCommunity: () => undefined, onSelectChannel: () => undefined,
     }));
     expect(html).toContain("Discover communities");
     expect(html).toContain('aria-label="Collapse Communities"');
@@ -65,6 +66,44 @@ describe("community UI", () => {
     expect(html).toContain('aria-controls="community-sidebar-channels-community_1"');
     expect(html).toContain("team-sidebar-row community-sidebar-channel-row selected");
     expect(html).toContain("team-sidebar-unread");
+  });
+
+  test("keeps Communities collapsed by default in the bottom sidebar area", () => {
+    const html = renderToStaticMarkup(createElement(SidebarCommunitySection, {
+      communities: [],
+      channels: [],
+      loading: false,
+      error: null,
+      selectedCommunityId: null,
+      selectedChannelId: null,
+      view: "chat",
+      onDiscover: () => undefined,
+      onSelectCommunity: () => undefined,
+      onSelectChannel: () => undefined,
+    }));
+
+    expect(html).toContain('aria-label="Expand Communities"');
+    expect(html).not.toContain("Join or feature a community to pin it here");
+  });
+
+  test("places Communities and Team Chat above the bottom utility navigation", async () => {
+    const [sidebar, sectionList, sidebarCss] = await Promise.all([
+      readFile("apps/web/src/components/sidebar/Sidebar.tsx", "utf8"),
+      readFile("apps/web/src/components/sidebar/SidebarSectionList.tsx", "utf8"),
+      readFile("apps/web/src/styles/sidebar/sidebar.css", "utf8"),
+    ]);
+    const community = sidebar.indexOf("<SidebarCommunitySection");
+    const teamChat = sidebar.indexOf("<SidebarTeamSection");
+    const utilities = sidebar.indexOf("<SidebarUtilityNavigation");
+
+    expect(community).toBeGreaterThan(-1);
+    expect(teamChat).toBeGreaterThan(community);
+    expect(utilities).toBeGreaterThan(teamChat);
+    expect(sectionList).not.toContain("<SidebarCommunitySection");
+    expect(sectionList).not.toContain("<SidebarTeamSection");
+    expect(sidebarCss).toMatch(
+      /\.sidebar-collaboration-sections\s*\{[^}]*border-top:/s,
+    );
   });
 
   test("uses the same dock composer surface as Team Chat", () => {

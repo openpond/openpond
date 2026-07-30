@@ -39,7 +39,7 @@ describe("Model binding promotion gate", () => {
         ...lineage(),
         promotable: true,
         frozenEvaluationArtifactId: "evaluation-fixture",
-      })
+      }),
     ).toEqual({
       kind: "source_frozen_evaluation",
       evaluationArtifactId: "evaluation-fixture",
@@ -54,7 +54,7 @@ describe("Model binding promotion gate", () => {
       managedServing: {
         schemaVersion: "openpond.managedAdapterServingProjection.v1",
         teamId: "team-fixture",
-        source: "sandbox_managed_rft",
+        source: "sandbox_managed_rl",
         sourceRef: "lineage-fixture",
         canonicalArtifactId: "sandbox-artifact-fixture",
         canonicalArtifactState: "promotable",
@@ -90,7 +90,7 @@ describe("Model binding promotion gate", () => {
         promotedAt: "2026-07-27T00:02:00.000Z",
         rolledBackAt: null,
         metadata: {},
-      }).evaluationArtifactId
+      }).evaluationArtifactId,
     ).toBeNull();
   });
 
@@ -101,7 +101,7 @@ describe("Model binding promotion gate", () => {
         managedServing: {
           schemaVersion: "openpond.managedAdapterServingProjection.v1",
           teamId: "team-fixture",
-          source: "sandbox_managed_rft",
+          source: "sandbox_managed_rl",
           sourceRef: "lineage-fixture",
           canonicalArtifactId: "sandbox-artifact-fixture",
           canonicalArtifactState: "promotable",
@@ -113,7 +113,7 @@ describe("Model binding promotion gate", () => {
           lastSyncedAt: "2026-07-27T00:01:00.000Z",
           lastError: null,
         },
-      })
+      }),
     ).toBeNull();
   });
 
@@ -124,7 +124,7 @@ describe("Model binding promotion gate", () => {
         managedServing: {
           schemaVersion: "openpond.managedAdapterServingProjection.v1",
           teamId: "team-fixture",
-          source: "sandbox_managed_rft",
+          source: "sandbox_managed_rl",
           sourceRef: "lineage-fixture",
           canonicalArtifactId: "sandbox-artifact-fixture",
           canonicalArtifactState: "promotable",
@@ -136,7 +136,7 @@ describe("Model binding promotion gate", () => {
           lastSyncedAt: "2026-07-27T00:01:00.000Z",
           lastError: null,
         },
-      })
+      }),
     ).toBeNull();
   });
 });
