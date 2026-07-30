@@ -222,10 +222,22 @@ describe("sandbox runtime create normalization", () => {
 });
 
 describe("sandbox integration lease normalization", () => {
-  test("classifies creating sandboxes with active reservations as requiring synchronous lifecycle accounting", () => {
+  test("classifies unsettled creating or terminal sandboxes as requiring synchronous lifecycle accounting", () => {
     expect(
       sandboxLifecycleRequiresSynchronousAccounting({
         state: "creating",
+        reservation: { status: "reserved" },
+      } as never),
+    ).toBe(true);
+    expect(
+      sandboxLifecycleRequiresSynchronousAccounting({
+        state: "deleted",
+        reservation: { status: "reserved" },
+      } as never),
+    ).toBe(true);
+    expect(
+      sandboxLifecycleRequiresSynchronousAccounting({
+        state: "stopped",
         reservation: { status: "reserved" },
       } as never),
     ).toBe(true);
@@ -287,6 +299,42 @@ describe("sandbox integration lease normalization", () => {
       { method: "DELETE", pathname: "/v1/sandboxes/sandbox_creating", prefer: null },
       { method: "GET", pathname: "/v1/sandboxes/sandbox_creating", prefer: null },
       { method: "POST", pathname: "/v1/sandboxes/sandbox_creating/stop", prefer: null },
+    ]);
+  });
+
+  test("retries terminal sandbox cleanup synchronously while its reservation is unsettled", async () => {
+    const requests: Array<{ method: string; pathname: string; prefer: string | null }> = [];
+    process.env.OPENPOND_SANDBOX_API_KEY = "opk_test_desktop";
+    process.env.OPENPOND_SANDBOX_API_URL = "https://api.example/v1/sandboxes";
+    globalThis.fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? "GET";
+      requests.push({
+        method,
+        pathname: url.pathname,
+        prefer: new Headers(init?.headers).get("Prefer"),
+      });
+      if (method === "GET") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_deleted", "deleted", "reserved"),
+        });
+      }
+      if (method === "DELETE") {
+        return Response.json({
+          sandbox: sandboxLifecycleRecord("sandbox_deleted", "deleted", "released"),
+        });
+      }
+      throw new Error(`Unexpected request ${method} ${url.pathname}`);
+    };
+
+    await sandboxRequestPayload({
+      type: "delete",
+      sandboxId: "sandbox_deleted",
+    });
+
+    expect(requests).toEqual([
+      { method: "GET", pathname: "/v1/sandboxes/sandbox_deleted", prefer: null },
+      { method: "DELETE", pathname: "/v1/sandboxes/sandbox_deleted", prefer: null },
     ]);
   });
 

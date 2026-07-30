@@ -1027,7 +1027,9 @@ export function sandboxLifecycleRequiresSynchronousAccounting(
   sandbox: Pick<SandboxRecord, "state" | "reservation">
 ): boolean {
   return (
-    sandbox.state === "creating" && sandbox.reservation.status === "reserved"
+    sandbox.reservation.status === "reserved" &&
+    (sandbox.state === "creating" ||
+      terminalSandboxLifecycleStates.has(sandbox.state))
   );
 }
 
