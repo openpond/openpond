@@ -132,6 +132,7 @@ import {
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
+import { waitForWorkReceiptSettlement } from "./openpond/work-runtime-service.js";
 import {
   createImproveLimit,
   createImproveTargetKind,
@@ -511,6 +512,21 @@ export async function createOpenPondServer(
     executeWorkspaceTool,
     runtimeEventsForSession: (sessionId: string) =>
       store.runtimeEventsForSession(sessionId),
+    settleCostEvidence: (
+      sessionId: string,
+      options?: { turnId?: string },
+    ) =>
+      waitForWorkReceiptSettlement(() =>
+        executeWorkspaceTool(
+          sessionId,
+          {
+            action: "sandbox_receipts",
+            args: {},
+            source: "chat_action",
+          },
+          { turnId: options?.turnId },
+        )
+      ),
   };
   const taskEvaluationService = createTaskEvaluationService({
     store,

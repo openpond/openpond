@@ -14,6 +14,8 @@ export const WORK_RESET_COMMAND =
   "find inputs work outputs -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +";
 export const WORK_SANDBOX_STARTUP_TIMEOUT_MS = 180_000;
 export const WORK_SANDBOX_STARTUP_POLL_MS = 1_000;
+export const WORK_RECEIPT_SETTLEMENT_TIMEOUT_MS = 15_000;
+export const WORK_RECEIPT_SETTLEMENT_POLL_MS = 250;
 export const WORK_ENVIRONMENT_PROBE = [
   "cd work &&",
   'printf "architecture="; uname -m;',
@@ -283,6 +285,37 @@ export async function waitForWorkSandboxReady(
   );
 }
 
+export async function waitForWorkReceiptSettlement(
+  readReceipts: () => Promise<WorkspaceToolResult>,
+  options: {
+    timeoutMs?: number;
+    pollMs?: number;
+    now?: () => number;
+    sleep?: (milliseconds: number) => Promise<void>;
+  } = {},
+): Promise<WorkspaceToolResult> {
+  const timeoutMs =
+    options.timeoutMs ?? WORK_RECEIPT_SETTLEMENT_TIMEOUT_MS;
+  const pollMs = options.pollMs ?? WORK_RECEIPT_SETTLEMENT_POLL_MS;
+  const now = options.now ?? Date.now;
+  const sleep =
+    options.sleep
+    ?? ((milliseconds: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
+  const startedAt = now();
+  let lastResult: WorkspaceToolResult | null = null;
+
+  while (now() - startedAt <= timeoutMs) {
+    lastResult = await readReceipts();
+    if (!lastResult.ok || receiptSettlementComplete(lastResult.data)) {
+      return lastResult;
+    }
+    await sleep(pollMs);
+  }
+
+  return lastResult ?? readReceipts();
+}
+
 function requiredString(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new Error("A required string argument is missing.");
@@ -298,4 +331,28 @@ function sandboxState(value: unknown): string {
   }
   const state = (sandbox as Record<string, unknown>).state;
   return typeof state === "string" ? state : "";
+}
+
+function receiptSettlementComplete(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  const sandbox =
+    record.sandbox
+    && typeof record.sandbox === "object"
+    && !Array.isArray(record.sandbox)
+      ? record.sandbox as Record<string, unknown>
+      : {};
+  const receipts = Array.isArray(record.receipts)
+    ? record.receipts
+    : Array.isArray(sandbox.receipts)
+      ? sandbox.receipts
+      : [];
+  return receipts.some((receipt) => (
+    receipt
+    && typeof receipt === "object"
+    && !Array.isArray(receipt)
+    && (receipt as Record<string, unknown>).status === "captured"
+  ));
 }

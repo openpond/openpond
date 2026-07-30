@@ -88,6 +88,10 @@ export type TasksetWorkAttemptRuntime = {
     },
   ): Promise<WorkspaceToolResult>;
   runtimeEventsForSession(sessionId: string): Promise<RuntimeEvent[]>;
+  settleCostEvidence?(
+    sessionId: string,
+    options?: { turnId?: string },
+  ): Promise<WorkspaceToolResult>;
 };
 
 type SavedWorkOutput = {
@@ -524,6 +528,15 @@ export async function runTasksetWorkAttempt(input: {
           });
           if (result.ok) {
             workRuntimeCost = workRuntimeCostEvidence(result.data);
+            if (!workRuntimeCost && input.runtime.settleCostEvidence) {
+              const settled = await input.runtime.settleCostEvidence(
+                session.id,
+                { turnId },
+              );
+              if (settled.ok) {
+                workRuntimeCost = workRuntimeCostEvidence(settled.data);
+              }
+            }
           }
           if (!result.ok) {
             infrastructureError =
@@ -945,10 +958,14 @@ function elapsedMilliseconds(startedAt: string, completedAt: string): number {
 function workRuntimeCostEvidence(
   value: unknown,
 ): WorkRuntimeCostEvidence | null {
-  const sandbox = asRecord(asRecord(value).sandbox);
-  const receipts = Array.isArray(sandbox.receipts)
-    ? sandbox.receipts.map(asRecord)
-    : [];
+  const record = asRecord(value);
+  const sandbox = asRecord(record.sandbox);
+  const receiptValues = Array.isArray(record.receipts)
+    ? record.receipts
+    : Array.isArray(sandbox.receipts)
+      ? sandbox.receipts
+      : [];
+  const receipts = receiptValues.map(asRecord);
   const captured = receipts.flatMap((receipt) => {
     const id = typeof receipt.id === "string" ? receipt.id : null;
     const totalUsd = numericUsd(receipt.totalUsd);

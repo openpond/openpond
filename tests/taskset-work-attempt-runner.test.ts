@@ -682,6 +682,62 @@ describe("Taskset Work attempt runner", () => {
       expect(workspaceActions.at(-1)).toBe("sandbox_stop");
     }));
 
+  test("records cost from the settled receipt read when stop omits receipts", () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const { taskset, task } = await createWorkTaskset(directory);
+      await store.upsertTaskset(taskset);
+      const workspaceActions: string[] = [];
+      const { runtime } = successfulRuntime(workspaceActions, {
+        settledCostData: {
+          receipts: [{
+            id: "receipt_taskset_work_delayed",
+            status: "captured",
+            totalUsd: "0.004125",
+            durationSeconds: 11,
+            mpp: {
+              mode: "simulated_poc",
+            },
+          }],
+        },
+      });
+      const evaluation = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelText: async () => "",
+        modelStream: async function* () {
+          yield {
+            text: "Completed without a valid output.",
+            costUsd: 0,
+          };
+        },
+        workRuntime: runtime,
+      });
+
+      const execution = await evaluation.execute({
+        tasksetId: taskset.id,
+        taskId: task.id,
+        model: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        seed: 17,
+        attempt: 0,
+        resultId: "attempt_taskset_work_delayed_cost",
+      });
+
+      expect(execution.attempt.costUsd).toBe(0);
+      expect(execution.attempt.metadata.costEvidence).toEqual({
+        providerInferenceUsd: 0,
+        workRuntimeUsd: 0.004125,
+        workRuntimeBillableUsd: 0,
+        workRuntimeSimulatedUsd: 0.004125,
+        combinedUsd: 0,
+        workReceiptIds: ["receipt_taskset_work_delayed"],
+        workDurationSeconds: 11,
+        settlementModes: ["simulated_poc"],
+      });
+    }));
+
   test("persists an explicit reward-ineligible grade when a grader throws", () =>
     withTrainingStore(async ({ store, directory }) => {
       const materialized = await createWorkTaskset(directory);
@@ -889,6 +945,7 @@ function successfulRuntime(
   options: {
     stopOk?: boolean;
     stopData?: Record<string, unknown>;
+    settledCostData?: Record<string, unknown>;
   } = {},
 ) {
   let session = workSession();
@@ -926,6 +983,16 @@ function successfulRuntime(
               : {},
         );
       },
+      ...(options.settledCostData
+        ? {
+            settleCostEvidence: async (): Promise<WorkspaceToolResult> => ({
+              ok: true,
+              action: "sandbox_receipts",
+              output: "ok",
+              data: options.settledCostData,
+            }),
+          }
+        : {}),
     },
   };
 }

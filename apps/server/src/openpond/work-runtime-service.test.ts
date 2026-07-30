@@ -5,7 +5,10 @@ import type {
   WorkspaceToolRequest,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import { createWorkRuntimeService } from "./work-runtime-service.js";
+import {
+  createWorkRuntimeService,
+  waitForWorkReceiptSettlement,
+} from "./work-runtime-service.js";
 
 describe("Work runtime service", () => {
   test("shares one lazy sandbox, verifies inputs, and stops stale session snapshots", async () => {
@@ -78,6 +81,49 @@ describe("Work runtime service", () => {
     })).rejects.toThrow("hash does not match");
     expect(calls.some((call) => call.action === "sandbox_upload_file")).toBe(false);
     expect(calls.at(-1)?.action).toBe("sandbox_stop");
+  });
+
+  test("waits until a captured sandbox receipt is available", async () => {
+    let reads = 0;
+    let elapsed = 0;
+    const settled = await waitForWorkReceiptSettlement(
+      async () => {
+        reads += 1;
+        return {
+          ok: true,
+          action: "sandbox_receipts",
+          output: "ok",
+          data: {
+            receipts: reads < 3
+              ? [{ id: "receipt_1", status: "pending" }]
+              : [{
+                  id: "receipt_1",
+                  status: "captured",
+                  totalUsd: "0.002500",
+                  durationSeconds: 8,
+                }],
+          },
+        };
+      },
+      {
+        timeoutMs: 1_000,
+        pollMs: 100,
+        now: () => elapsed,
+        sleep: async (milliseconds) => {
+          elapsed += milliseconds;
+        },
+      },
+    );
+
+    expect(reads).toBe(3);
+    expect(settled.data).toEqual({
+      receipts: [{
+        id: "receipt_1",
+        status: "captured",
+        totalUsd: "0.002500",
+        durationSeconds: 8,
+      }],
+    });
   });
 });
 
