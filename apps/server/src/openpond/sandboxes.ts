@@ -618,7 +618,10 @@ export async function sandboxRequestPayload(
     return { sandbox: await client.get(action.sandboxId), account };
   }
   if (action.type === "start") {
-    return { ...(await client.start(action.sandboxId)), account };
+    return {
+      ...(await client.start(action.sandboxId, { respondAsync: true })),
+      account,
+    };
   }
   if (action.type === "delete") {
     const options = await sandboxLifecycleRequestOptions(
