@@ -89,10 +89,10 @@ export function useRuntimeEvents({
       if (nextEvents.length === 0) return;
 
       setEvents((current) => mergeLiveRuntimeEventLists(current, nextEvents));
-      const childSessions = subagentChildSessionsFromRuntimeEvents(nextEvents);
-      if (childSessions.length > 0) {
+      const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
+      if (liveSessions.length > 0) {
         setSessions((current) =>
-          childSessions.reduce(upsertSessionPreservingLocalSidebarState, current),
+          liveSessions.reduce(upsertSessionPreservingLocalSidebarState, current),
         );
       }
       setApprovals((current) => {
@@ -146,13 +146,22 @@ export function useRuntimeEvents({
   }, [afterSequence, connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
 }
 
-export function subagentChildSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {
+export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {
   const sessions = new Map<string, Session>();
   for (const runtimeEvent of events) {
-    if (runtimeEvent.name !== "subagent.started" && runtimeEvent.name !== "subagent.failed") continue;
     const data = runtimeEvent.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) continue;
-    const parsed = SessionSchema.safeParse((data as Record<string, unknown>).childSession);
+    const sessionKey =
+      runtimeEvent.name === "session.started"
+        ? "session"
+        : runtimeEvent.name === "subagent.started" ||
+          runtimeEvent.name === "subagent.failed"
+        ? "childSession"
+        : null;
+    if (!sessionKey) continue;
+    const parsed = SessionSchema.safeParse(
+      (data as Record<string, unknown>)[sessionKey]
+    );
     if (parsed.success) sessions.set(parsed.data.id, parsed.data);
   }
   return [...sessions.values()];

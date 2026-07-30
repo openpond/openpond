@@ -141,6 +141,7 @@ describe("session store patches", () => {
           provider: "openai",
           appName: null,
           cwd: "/tmp/project",
+          session: created,
         },
       });
     } finally {

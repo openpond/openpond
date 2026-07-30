@@ -90,6 +90,23 @@ describe("server HTTP route table", () => {
       await expect(
         expectJsonRequest(
           origin,
+          "DELETE",
+          "/v1/sandboxes/sandbox-creating",
+          200
+        )
+      ).resolves.toMatchObject({
+        name: "sandboxPayload",
+        args: [
+          {
+            type: "delete",
+            sandboxId: "sandbox-creating",
+            failOnUnpreservedChanges: false,
+          },
+        ],
+      });
+      await expect(
+        expectJsonRequest(
+          origin,
           "GET",
           "/v1/team-chat/agents?teamId=team-1",
           200
@@ -252,6 +269,7 @@ describe("server HTTP route table", () => {
         "extensionRemovePayload",
         "profileRenameAgentPayload",
         "organizationPayload",
+        "sandboxPayload",
         "teamChatPayload",
         "communityPayload",
         "communityPayload",

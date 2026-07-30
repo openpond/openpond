@@ -93,6 +93,7 @@ export function createSessionStore(deps: {
           provider: session.provider,
           appName: session.appName,
           cwd: session.cwd,
+          session,
         },
       })
     );

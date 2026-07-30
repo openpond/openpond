@@ -8,7 +8,7 @@ import {
   buildChatMessages,
 } from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
-import { subagentChildSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
+import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
 import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
 import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
@@ -253,7 +253,7 @@ describe("chat message projection", () => {
       archived: false,
       order: 3,
     });
-    const sessions = subagentChildSessionsFromRuntimeEvents([
+    const sessions = liveSessionsFromRuntimeEvents([
       runtimeEvent({
         id: "subagent_started_live",
         name: "subagent.started",
@@ -265,6 +265,39 @@ describe("chat message projection", () => {
     ]);
 
     expect(sessions).toEqual([childSession]);
+  });
+
+  test("extracts an API-created session shell from live session start receipts", () => {
+    const workSession = SessionSchema.parse({
+      id: "session_work_live",
+      experience: "work",
+      provider: "openpond",
+      modelRef: null,
+      openPondCommandAccessMode: "ask",
+      hiddenFromDefaultSidebar: false,
+      title: "Hosted diagnostic corpus review",
+      appId: null,
+      appName: null,
+      cwd: null,
+      codexThreadId: null,
+      createdAt: "2026-07-30T19:37:55.382Z",
+      updatedAt: "2026-07-30T19:37:55.382Z",
+      status: "idle",
+      pinned: false,
+      archived: false,
+      order: 130,
+    });
+    const sessions = liveSessionsFromRuntimeEvents([
+      runtimeEvent({
+        id: "session_started_work_live",
+        name: "session.started",
+        sessionId: workSession.id,
+        source: "server",
+        data: { session: workSession },
+      }),
+    ]);
+
+    expect(sessions).toEqual([workSession]);
   });
 
   test("keeps subagent state visible in mixed parent activity summaries", () => {
