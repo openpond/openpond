@@ -480,7 +480,6 @@ function sidebarProps(chatCount: number): SidebarProps {
     projectSessionRowsByProjectId: {},
     sidebarProjectIdBySessionId: {},
     runningSessionIds: new Set(["session-3"]),
-    sessionRuntimeSecondsById: new Map(),
     visibleChatRows,
     chatRows: visibleChatRows,
     chatRowsVisibleCount: chatCount,
