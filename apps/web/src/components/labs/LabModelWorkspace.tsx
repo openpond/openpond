@@ -657,7 +657,7 @@ function runResult(entry: RunEntry) {
   ) {
     return "Completed";
   }
-  return "—";
+  return "No output";
 }
 
 function VersionEvalBadge({

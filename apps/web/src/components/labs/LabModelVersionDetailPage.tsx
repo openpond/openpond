@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   type ManagedAdapterServingProjection,
   type TrainingJobEvent,
@@ -31,6 +31,13 @@ import {
   type ModelWorkspaceProps,
 } from "./LabModelWorkspace";
 
+type RunDetailTab =
+  | "artifacts"
+  | "evaluation"
+  | "rollouts"
+  | "serving"
+  | "activity";
+
 export function LabModelVersionDetailPage({
   connection,
   selectedEntryKey,
@@ -42,6 +49,8 @@ export function LabModelVersionDetailPage({
   connection: ClientConnection | null;
   selectedEntryKey: string;
 }) {
+  const [requestedDetailTab, setRequestedDetailTab] =
+    useState<RunDetailTab>("artifacts");
   const state = training.payload;
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
@@ -149,6 +158,29 @@ export function LabModelVersionDetailPage({
       ) ?? []
     : [];
   const managedEvidence = detail.detail?.managedEvidence ?? null;
+  const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
+    { id: "artifacts", label: "Artifacts" },
+    ...(detail.loading ||
+    detail.detail?.evaluation ||
+    selectedEvaluationArtifactId ||
+    managedEvidence?.evaluations.length
+      ? [{ id: "evaluation" as const, label: "Evaluation" }]
+      : []),
+    ...(receipts.length
+      ? [{ id: "rollouts" as const, label: "Rollouts" }]
+      : []),
+    ...(managedServing
+      ? [{ id: "serving" as const, label: "Serving" }]
+      : []),
+    ...(selectedJob
+      ? [{ id: "activity" as const, label: "Activity" }]
+      : []),
+  ];
+  const activeDetailTab = detailTabs.some(
+    (tab) => tab.id === requestedDetailTab,
+  )
+    ? requestedDetailTab
+    : detailTabs[0]!.id;
   if (!selectedEntry && !selectedLifecycleRun) {
     return (
       <div className="labs-model-version-detail">
@@ -189,7 +221,9 @@ export function LabModelVersionDetailPage({
           selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
         )}
         output={
-          selectedVersion ? `Version ${selectedVersion.number}` : "No Version"
+          selectedVersion
+            ? `Version ${selectedVersion.number}`
+            : "No version created"
         }
         reward={
           selectedLifecycleRun?.reward?.raw ??
@@ -222,136 +256,162 @@ export function LabModelVersionDetailPage({
             ? selectedVersion.current
               ? "Active"
               : "Available"
-            : "Not created"
+            : null
         }
         onOpenTaskset={
           selectedTaskset
             ? () => onOpenDataset(selectedTaskset.id)
             : undefined
         }
-      />
-
-      {selectedJob ? (
-        <>
-          <DetailSection
-            title={
-              (selectedLifecycleRun?.method ?? selectedPlan?.recipe.method) ===
-              "grpo"
-                ? "Rollout scores"
-                : "Training metrics"
-            }
-          >
+      >
+        {selectedJob ? (
+          <DetailSection title="Training charts">
             <TrainingRunMetrics
               detail={detail.detail}
               error={detail.error}
               loading={detail.loading}
             />
           </DetailSection>
-          {(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method) ===
-            "grpo" && receipts.length ? (
-            <DetailSection title="Rollout traces">
-              <TrainingRolloutReceipts receipts={receipts} />
-            </DetailSection>
-          ) : null}
-        </>
-      ) : null}
+        ) : null}
+      </LabModelRunSummary>
 
-      {detail.loading ||
-      detail.detail?.evaluation ||
-      selectedEvaluationArtifactId ? (
-        <DetailSection title="Evaluation">
-          <div className="training-run-evaluation">
-            {detail.loading || detail.detail?.evaluation ? (
-              <TrainingRunEvaluation
-                detail={detail.detail}
-                loading={detail.loading}
-              />
-            ) : null}
-            {selectedEvaluationArtifactId ? (
-              <button
-                className="training-button secondary"
-                type="button"
-                onClick={() =>
-                  void training.actions.downloadArtifact(
-                    selectedEvaluationArtifactId
-                  )
-                }
-              >
-                Download evaluation receipt
-              </button>
-            ) : null}
-          </div>
-        </DetailSection>
-      ) : null}
-
-      <DetailSection title="Artifacts">
-        <dl className="training-configuration-list">
-          <Fact
-            label="Training attempt"
-            value={selectedJob?.id ?? "Provider import"}
-          />
-          <Fact
-            label="Taskset"
-            value={selectedTaskset?.name ?? "Unavailable"}
-          />
-          <Fact
-            label="Prepared data"
-            value={selectedJob?.bundleHash ?? "Provider managed"}
-          />
-          <Fact
-            label="Version ID"
-            value={selectedVersion?.lineage.id ?? "No Version created"}
-          />
-          {managedEvidence?.checkpoint ? (
-            <>
-              <Fact
-                label="Checkpoint"
-                value={managedEvidence.checkpoint.id}
-              />
-              <Fact
-                label="Checkpoint size"
-                value={
-                  managedEvidence.checkpoint.sizeBytes == null
-                    ? "Not reported"
-                    : formatBytes(managedEvidence.checkpoint.sizeBytes)
-                }
-              />
-              <Fact
-                label="Checkpoint hash"
-                value={managedEvidence.checkpoint.sha256 ?? "Not reported"}
-              />
-            </>
-          ) : null}
-          {managedEvidence?.evaluations.map((evaluation) => (
-            <Fact
-              key={`${evaluation.kind}:${evaluation.policyVersion}`}
-              label={`${evaluation.kind === "baseline" ? "Baseline" : "Candidate"} evaluation`}
-              value={
-                evaluation.score == null
-                  ? "Not reported"
-                  : evaluation.score.toFixed(6)
-              }
-            />
+      <section className="labs-run-detail-tabs">
+        <div
+          className="training-detail-tabs"
+          role="tablist"
+          aria-label="Run details"
+        >
+          {detailTabs.map((tab) => (
+            <button
+              aria-controls={`run-detail-panel-${tab.id}`}
+              aria-selected={activeDetailTab === tab.id}
+              className={activeDetailTab === tab.id ? "active" : undefined}
+              id={`run-detail-tab-${tab.id}`}
+              key={tab.id}
+              role="tab"
+              type="button"
+              onClick={() => setRequestedDetailTab(tab.id)}
+            >
+              {tab.label}
+            </button>
           ))}
-          {managedEvidence?.canonicalPublication.state ? (
-            <Fact
-              label="Registry publication"
-              value={managedStateLabel(
-                managedEvidence.canonicalPublication.state
-              )}
+        </div>
+        <div
+          aria-labelledby={`run-detail-tab-${activeDetailTab}`}
+          className="labs-run-detail-tab-panel"
+          id={`run-detail-panel-${activeDetailTab}`}
+          role="tabpanel"
+        >
+          {activeDetailTab === "artifacts" ? (
+            <dl className="training-configuration-list">
+              <Fact
+                label="Training attempt"
+                value={selectedJob?.id ?? "Provider import"}
+              />
+              <Fact
+                label="Taskset"
+                value={selectedTaskset?.name ?? "Unavailable"}
+              />
+              <Fact
+                label="Prepared data"
+                value={selectedJob?.bundleHash ?? "Provider managed"}
+              />
+              <Fact
+                label="Version ID"
+                value={
+                  selectedVersion?.lineage.id ?? "No version created"
+                }
+              />
+              {managedEvidence?.checkpoint ? (
+                <>
+                  <Fact
+                    label="Checkpoint"
+                    value={managedEvidence.checkpoint.id}
+                  />
+                  <Fact
+                    label="Checkpoint size"
+                    value={
+                      managedEvidence.checkpoint.sizeBytes == null
+                        ? "Not reported"
+                        : formatBytes(managedEvidence.checkpoint.sizeBytes)
+                    }
+                  />
+                  <Fact
+                    label="Checkpoint hash"
+                    value={
+                      managedEvidence.checkpoint.sha256 ?? "Not reported"
+                    }
+                  />
+                </>
+              ) : null}
+              {managedEvidence?.canonicalPublication.state ? (
+                <Fact
+                  label="Registry publication"
+                  value={managedStateLabel(
+                    managedEvidence.canonicalPublication.state
+                  )}
+                />
+              ) : null}
+            </dl>
+          ) : null}
+          {activeDetailTab === "evaluation" ? (
+            <div className="training-run-evaluation">
+              {detail.loading || detail.detail?.evaluation ? (
+                <TrainingRunEvaluation
+                  detail={detail.detail}
+                  loading={detail.loading}
+                />
+              ) : null}
+              {!detail.detail?.evaluation &&
+              managedEvidence?.evaluations.length ? (
+                <dl className="labs-inline-facts">
+                  {managedEvidence.evaluations.map((evaluation) => (
+                    <Fact
+                      key={`${evaluation.kind}:${evaluation.policyVersion}`}
+                      label={
+                        evaluation.kind === "baseline"
+                          ? "Baseline score"
+                          : "Candidate score"
+                      }
+                      value={
+                        evaluation.score == null
+                          ? "Not reported"
+                          : evaluation.score.toFixed(6)
+                      }
+                    />
+                  ))}
+                </dl>
+              ) : null}
+              {selectedEvaluationArtifactId ? (
+                <button
+                  className="training-button secondary"
+                  type="button"
+                  onClick={() =>
+                    void training.actions.downloadArtifact(
+                      selectedEvaluationArtifactId
+                    )
+                  }
+                >
+                  Download evaluation receipt
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {activeDetailTab === "rollouts" ? (
+            <TrainingRolloutReceipts receipts={receipts} />
+          ) : null}
+          {activeDetailTab === "serving" ? (
+            <ManagedAdapterServingStatus projection={managedServing} />
+          ) : null}
+          {activeDetailTab === "activity" && selectedJob ? (
+            <TrainingEventLog
+              error={selectedJob.error ?? detail.error}
+              events={detail.detail?.events ?? []}
+              loading={detail.loading}
             />
           ) : null}
-        </dl>
-      </DetailSection>
-      <ManagedAdapterServingStatus projection={managedServing} />
-
-      {selectedJob ? (
-        <TrainingEventLog
-          error={selectedJob.error ?? detail.error}
-          events={detail.detail?.events ?? []}
-          loading={detail.loading}
-        />
-      ) : null}
+        </div>
+      </section>
     </div>
   );
 }
@@ -443,33 +503,31 @@ function ManagedAdapterServingStatus({
 }) {
   if (!projection) return null;
   return (
-    <DetailSection title="Serving readiness">
-      <dl className="labs-inline-facts">
-        <Fact
-          label="Admission"
-          value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
-        />
-        <Fact
-          label="Artifact"
-          value={managedStateLabel(projection.canonicalArtifactState)}
-        />
-        <Fact
-          label="Deployment"
-          value={managedStateLabel(projection.canonicalDeploymentState)}
-        />
-        <Fact
-          label="Base profile"
-          value={projection.baseProfileId ?? "Pending"}
-        />
-        <Fact
-          label="Last synchronized"
-          value={formatDateTime(projection.lastSyncedAt)}
-        />
-        {projection.lastError ? (
-          <Fact label="Synchronization" value={projection.lastError} />
-        ) : null}
-      </dl>
-    </DetailSection>
+    <dl className="labs-inline-facts">
+      <Fact
+        label="Admission"
+        value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
+      />
+      <Fact
+        label="Artifact"
+        value={managedStateLabel(projection.canonicalArtifactState)}
+      />
+      <Fact
+        label="Deployment"
+        value={managedStateLabel(projection.canonicalDeploymentState)}
+      />
+      <Fact
+        label="Base profile"
+        value={projection.baseProfileId ?? "Pending"}
+      />
+      <Fact
+        label="Last synchronized"
+        value={formatDateTime(projection.lastSyncedAt)}
+      />
+      {projection.lastError ? (
+        <Fact label="Synchronization" value={projection.lastError} />
+      ) : null}
+    </dl>
   );
 }
 
@@ -520,7 +578,7 @@ function TrainingEventLog({
           ))}
           {error ? (
             <tr>
-              <td>—</td>
+              <td>Not available</td>
               <td>Failure</td>
               <td>{error}</td>
             </tr>

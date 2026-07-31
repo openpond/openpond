@@ -688,15 +688,6 @@ export function LabWorkproductDetail({
               training={training}
               workproduct={workproduct}
             />
-            <LabModelRunsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onResumeDraft={setEditingRunDraftId}
-            />
             <LabModelVersionsPage
               runs={runs}
               training={training}
@@ -710,6 +701,15 @@ export function LabWorkproductDetail({
               runs={runs}
               training={training}
               workproduct={workproduct}
+            />
+            <LabModelRunsPage
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              readOnly={readOnlyModel}
+              onOpenDataset={onOpenDataset}
+              onOpenEntry={setSelectedModelEntryKey}
+              onResumeDraft={setEditingRunDraftId}
             />
           </>
         ) : activeTab === "overview" ? (

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TrainingRunDetailSchema } from "../packages/contracts/src";
+import {
+  ManagedTrainingRunEvidenceSchema,
+  TrainingRunDetailSchema,
+} from "../packages/contracts/src";
+import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunSummary";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
 
@@ -120,6 +124,70 @@ const detail = TrainingRunDetailSchema.parse({
 });
 
 describe("Training run detail UI", () => {
+  test("treats a Version as an optional run output and merges cost and resources into setup", () => {
+    const evidence = ManagedTrainingRunEvidenceSchema.parse({
+      schemaVersion: "openpond.managedTrainingRunEvidence.v1",
+      provider: "openpond",
+      providerRunId: "managed_job_fixture",
+      state: "completed",
+      progress: {
+        targetOptimizerSteps: 1,
+        committedOptimizerSteps: 1,
+      },
+      reward: {
+        finalMean: 0.75,
+        trajectoryCount: 4,
+        eligibleTrajectoryCount: 4,
+      },
+      usage: {
+        inputTokens: 100,
+        outputTokens: 25,
+        environmentExecutions: 4,
+      },
+      resource: {
+        provider: "openpond",
+        gpuType: "NVIDIA A40",
+        gpuCount: 1,
+        hourlyCostUsd: 0.44,
+      },
+      cost: { totalUsd: 0.12 },
+      checkpoint: null,
+      evaluations: [],
+      canonicalPublication: {
+        state: null,
+        artifactId: null,
+      },
+      syncedAt: "2026-07-30T00:00:00.000Z",
+    });
+    const html = renderToStaticMarkup(
+      <LabModelRunSummary
+        baseModel="Qwen3-0.6B"
+        compute="OpenPond Managed"
+        configuration={[]}
+        duration="5m"
+        evidence={evidence}
+        failure={null}
+        method="RFT"
+        output="No version created"
+        reward={0.75}
+        status="Succeeded"
+        statusValue="succeeded"
+        taskset="Fixture Taskset"
+        telemetry={null}
+        title="Run 1"
+        versionStatus={null}
+      >
+        <div>Chart region</div>
+      </LabModelRunSummary>,
+    );
+    expect(html).toContain("Chart region");
+    expect(html).toContain("No version created");
+    expect(html).not.toContain("Version status");
+    expect(html).toContain("<dt>Run cost</dt><dd>$0.1200</dd>");
+    expect(html).toContain("<dt>GPU</dt><dd>1 × NVIDIA A40</dd>");
+    expect(html).not.toContain("labs-run-outcome-grid");
+  });
+
   test("renders selectable per-step telemetry as an accessible chart", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={detail} loading={false} />
@@ -141,7 +209,7 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Grader feedback");
   });
 
-  test("labels live RFT points as observed optimizer updates without implying completion", () => {
+  test("shows the three RFT charts using only observed optimizer updates", () => {
     const rftDetail = TrainingRunDetailSchema.parse({
       ...detail,
       job: {
@@ -171,8 +239,9 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={rftDetail} loading={false} />
     );
-    expect(html).toContain("Optimizer updates");
-    expect(html).toContain(">2<");
+    expect(html).toContain("<h4>Reward</h4><span>2 points</span>");
+    expect(html).toContain("<h4>Rollout reward</h4><span>0 points</span>");
+    expect(html).toContain("<h4>Learning rate</h4><span>2 points</span>");
     expect(html).not.toContain("2 of 2");
     expect(html).toContain("Reward by optimizer step");
     expect(html.match(/Step 1:/g)).toHaveLength(1);
@@ -200,7 +269,8 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={failedRftDetail} loading={false} />
     );
-    expect(html).toContain("<span>Optimizer updates</span><strong>0</strong>");
+    expect(html).toContain("<h4>Reward</h4><span>0 points</span>");
+    expect(html).not.toContain("Reward by optimizer step");
   });
 
   test("renders DPO preference telemetry as first-class metrics", () => {
