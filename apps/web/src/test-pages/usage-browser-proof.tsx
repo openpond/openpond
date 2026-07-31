@@ -24,9 +24,19 @@ function UsageBrowserProof() {
         range="all"
         visibility="all"
         status="all"
+        provider="all"
+        model="all"
+        providerOptions={["openrouter", "openai", "google"]}
+        modelOptions={[
+          "anthropic/claude-sonnet-4",
+          "gpt-4.1",
+          "gemini-2.5-pro",
+        ]}
         onRangeChange={() => undefined}
         onVisibilityChange={() => undefined}
         onStatusChange={() => undefined}
+        onProviderChange={() => undefined}
+        onModelChange={() => undefined}
         onOpenSourceSession={setOpenedSessionId}
       />
       <output data-testid="usage-opened-session">{openedSessionId ?? "none"}</output>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  type AccountState,
   type ChatModelRef,
   type CreateImproveCandidate,
   type CreateImproveRun,
@@ -33,6 +34,8 @@ import {
   type LabModelCreateInput,
 } from "./LabModelCreateDialog";
 import { LabModelsPage } from "./LabModelsPage";
+import { LabServingPage } from "./LabServingPage";
+import { LabUsagePage } from "./LabUsagePage";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { labModelVersions } from "./lab-models";
 import {
@@ -44,8 +47,13 @@ import { useErrorToast } from "../../app/AppToastContext";
 import {
   trainingModelRunSyncKey,
 } from "./LabsRouteSections";
+import {
+  labPrimaryTabFromSearch,
+  searchWithLabPrimaryTab,
+} from "./lab-primary-tab-state";
 
 export type LabsRouteProps = {
+  account: AccountState | null;
   closeDetailKind: LabDetailKind | null;
   closeDetailRequestId: number;
   onNewModel: (initialTasksetId?: string) => void;
@@ -113,6 +121,7 @@ export type LabsRouteProps = {
 };
 
 export function LabsRoute({
+  account,
   closeDetailKind,
   closeDetailRequestId,
   onAnswerQuestion,
@@ -158,7 +167,11 @@ export function LabsRoute({
       .join("|"),
     [createImprove.runs]
   );
-  const [activeTab, setActiveTab] = useState<LabPrimaryTab>("models");
+  const [activeTab, setActiveTab] = useState<LabPrimaryTab>(() =>
+    typeof window === "undefined"
+      ? "models"
+      : labPrimaryTabFromSearch(window.location.search),
+  );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(
     null,
@@ -205,6 +218,23 @@ export function LabsRoute({
       cancelled = true;
     };
   }, [profileView.connection, profileView.onError, profileView.onPayload]);
+  useEffect(() => {
+    const onPopState = () => {
+      setSelectedKey(null);
+      setSelectedDatasetId(null);
+      setActiveTab(labPrimaryTabFromSearch(window.location.search));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  useEffect(() => {
+    const search = searchWithLabPrimaryTab(window.location.search, activeTab);
+    const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
+    const currentUrl =
+      `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl === currentUrl) return;
+    window.history.replaceState(window.history.state, "", nextUrl);
+  }, [activeTab]);
   useEffect(() => {
     if (!modelRunSyncKey) return;
     void createImprove.refresh();
@@ -304,6 +334,12 @@ export function LabsRoute({
     setSelectedKey(null);
     setSelectedDatasetId(null);
     setActiveTab(tab);
+    const search = searchWithLabPrimaryTab(window.location.search, tab);
+    window.history.pushState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
   }
 
   function useModel(modelId: string) {
@@ -416,6 +452,24 @@ export function LabsRoute({
             training.onSelectedTasksetIdChange(tasksetId);
             training.onOpenTasksetFiles();
           }}
+        />
+      ) : activeTab === "serving" ? (
+        <LabServingPage
+          busy={Boolean(training.training.busyAction)}
+          state={training.training.payload}
+          onStart={(lineageId) => {
+            void training.training.actions.startModelServing(lineageId);
+          }}
+          onStop={(sessionId) => {
+            void training.training.actions.stopModelServing(sessionId);
+          }}
+        />
+      ) : activeTab === "usage" ? (
+        <LabUsagePage
+          account={account}
+          connection={profileView.connection}
+          onError={profileView.onError}
+          onOpenSourceSession={onOpenRunConversation}
         />
       ) : training.launchRequest && training.training.payload ? (
         <ModelRunEditorPage
