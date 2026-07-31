@@ -7,6 +7,7 @@
     { "path": "packages/codex-provider" },
     { "path": "packages/logging" },
     { "path": "packages/runtime" },
+    { "path": "packages/sdk/tsconfig.build.json" },
     { "path": "packages/taskset-sdk" },
     { "path": "packages/training-sdk" },
     { "path": "packages/trainer-local" },

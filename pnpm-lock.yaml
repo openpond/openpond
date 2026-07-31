@@ -29,6 +29,9 @@ importers:
       '@openpond/runtime':
         specifier: workspace:*
         version: link:packages/runtime
+      '@openpond/sdk':
+        specifier: workspace:*
+        version: link:packages/sdk
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:packages/taskset-sdk
@@ -108,6 +111,9 @@ importers:
       '@openpond/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@openpond/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@openpond/terminal':
         specifier: workspace:*
         version: link:../terminal
@@ -147,6 +153,9 @@ importers:
       '@openpond/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
+      '@openpond/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../../packages/taskset-sdk
@@ -308,6 +317,24 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../contracts
+
+  packages/sdk:
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      esbuild:
+        specifier: 0.28.1
+        version: 0.28.1
+      tsx:
+        specifier: 4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/taskset-sdk:
     dependencies:

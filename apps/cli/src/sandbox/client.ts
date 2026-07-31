@@ -1,1 +1,6 @@
-export * from "@openpond/cloud/sandbox/client";
+export {
+  OpenPondSandboxClient,
+  createOpenPondSandboxClient,
+  normalizeSandboxApiUrl,
+} from "@openpond/sdk";
+export type { OpenPondSandboxClientOptions } from "@openpond/sdk";

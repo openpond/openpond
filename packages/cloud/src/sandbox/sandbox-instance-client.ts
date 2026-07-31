@@ -75,9 +75,9 @@ import type {
 import { apiRootUrlFromSandboxApiUrl, normalizeSandboxApiUrl } from "./url.js";
 
 export class OpenPondSandboxInstanceClient {
-  protected readonly apiKey: string;
-  private readonly apiRootUrl: string;
-  protected readonly sandboxApiUrl: string;
+  readonly apiKey: string;
+  readonly apiRootUrl: string;
+  readonly sandboxApiUrl: string;
 
   constructor(options: OpenPondSandboxClientOptions) {
     this.apiKey = options.apiKey;
@@ -698,7 +698,7 @@ export class OpenPondSandboxInstanceClient {
     );
   }
 
-  protected async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await apiFetch(
       this.sandboxApiUrl,
       this.apiKey,
@@ -708,7 +708,7 @@ export class OpenPondSandboxInstanceClient {
     return readApiJson<T>(response, "Sandbox request");
   }
 
-  protected async requestApiRoot<T>(
+  async requestApiRoot<T>(
     path: string,
     init: RequestInit = {}
   ): Promise<T> {

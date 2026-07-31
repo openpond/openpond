@@ -1,0 +1,22 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
+    "outDir": "dist/types",
+    "rootDir": "../..",
+    "tsBuildInfoFile": "../../node_modules/.cache/openpond-sdk-build.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "../cloud/src/hosted-chat.ts",
+    "../cloud/src/urls.ts",
+    "../cloud/src/api/core.ts",
+    "../cloud/src/api/vercel-protection.ts",
+    "../cloud/src/sandbox/**/*.ts"
+  ],
+  "exclude": ["test/**/*.ts", "../cloud/src/**/*.test.ts"]
+}

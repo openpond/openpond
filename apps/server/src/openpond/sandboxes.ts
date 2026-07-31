@@ -1,7 +1,7 @@
 import {
   createOpenPondSandboxClient,
   normalizeSandboxApiUrl,
-} from "@openpond/cloud";
+} from "@openpond/sdk";
 import { apiFetch } from "@openpond/cloud/api";
 import type {
   OpenPondSandboxClient,
@@ -10,7 +10,7 @@ import type {
   SandboxIntegrationConnection,
   SandboxIntegrationConnectionStatusFilter,
   SandboxScheduleCreateInput,
-} from "@openpond/cloud";
+} from "@openpond/sdk";
 import { buildConnectedAppStatusRows } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "@openpond/runtime";
 import type { RuntimeAccountContext } from "@openpond/runtime";
