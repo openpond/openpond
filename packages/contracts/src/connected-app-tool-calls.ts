@@ -30,6 +30,7 @@ export const ConnectedAppToolCallRequestSchema = z
     toolName: ConnectedAppProviderToolNameSchema,
     sessionId: z.string().trim().min(1).max(200),
     turnId: z.string().trim().min(1).max(200),
+    toolCallId: z.string().trim().min(1).max(300),
     userPrompt: z.string().max(200_000),
     connectionIds: z.array(z.string().trim().min(1).max(300)).min(1).max(8),
     capabilityIds: z.array(z.string().trim().min(1).max(200)).min(1).max(64),

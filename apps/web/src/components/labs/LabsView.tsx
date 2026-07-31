@@ -9,7 +9,9 @@ import "../../styles/labs/labs-model-detail.css";
 
 export type LabPrimaryTab =
   | "models"
-  | "tasksets";
+  | "tasksets"
+  | "serving"
+  | "usage";
 
 export function LabsView({
   activeTab,
@@ -48,6 +50,24 @@ export function LabsView({
               onClick={() => onTabChange("tasksets")}
             >
               Tasksets
+            </button>
+            <button
+              aria-selected={activeTab === "serving"}
+              className={activeTab === "serving" ? "active" : undefined}
+              role="tab"
+              type="button"
+              onClick={() => onTabChange("serving")}
+            >
+              Serving
+            </button>
+            <button
+              aria-selected={activeTab === "usage"}
+              className={activeTab === "usage" ? "active" : undefined}
+              role="tab"
+              type="button"
+              onClick={() => onTabChange("usage")}
+            >
+              Usage
             </button>
           </nav>
         </div>

@@ -103,7 +103,7 @@ describe("sidebar task list controls", () => {
     expect(markup).not.toContain(">Show less<");
   });
 
-  test("renders project detail and accumulated runtime only for development tasks", () => {
+  test("renders project detail only for development tasks without elapsed runtime", () => {
     const project = localProject();
     const projectItem: SidebarProjectItem = {
       id: `local:${project.id}`,
@@ -127,7 +127,6 @@ describe("sidebar task list controls", () => {
           chatRowsVisibleCount: 5,
           localProjectRows: [projectItem],
           projectRows: [projectItem],
-          sessionRuntimeSecondsById: new Map([[activeSession.id, 7_620]]),
           sidebarProjectIdBySessionId: {
             [activeSession.id]: projectItem.id,
           },
@@ -138,7 +137,8 @@ describe("sidebar task list controls", () => {
 
     expect(developmentMarkup).toContain(">Refine sidebar<");
     expect(developmentMarkup).toContain(">Active workspace<");
-    expect(developmentMarkup).toContain(">2h 7m<");
+    expect(developmentMarkup).not.toContain(">2h 7m<");
+    expect(developmentMarkup).not.toContain("<time");
     expect(developmentMarkup).not.toContain(" · ");
     expect(developmentMarkup).not.toContain(">Projects<");
 
@@ -152,7 +152,6 @@ describe("sidebar task list controls", () => {
           chatRowsVisibleCount: 5,
           localProjectRows: [projectItem],
           projectRows: [projectItem],
-          sessionRuntimeSecondsById: new Map([[activeSession.id, 7_620]]),
           sidebarProjectIdBySessionId: {
             [activeSession.id]: projectItem.id,
           },
@@ -163,7 +162,8 @@ describe("sidebar task list controls", () => {
 
     expect(workMarkup).toContain(">Refine sidebar<");
     expect(workMarkup).not.toContain(">Active workspace<");
-    expect(workMarkup).toContain(">2h 7m<");
+    expect(workMarkup).not.toContain(">2h 7m<");
+    expect(workMarkup).not.toContain("<time");
   });
 });
 
@@ -405,7 +405,6 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     sidebarProjectIdBySessionId: {},
     terminalSummaries: {},
     runningSessionIds: new Set(),
-    sessionRuntimeSecondsById: new Map(),
     visibleChatRows: [],
     chatRows: [],
     chatRowsVisibleCount: 5,

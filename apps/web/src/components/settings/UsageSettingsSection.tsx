@@ -16,6 +16,7 @@ import type {
   UsageCommandBreakdown,
   UsageDailyBucket,
   UsageModelBreakdown,
+  UsageProvider,
   UsageRecordsResponse,
   UsageRouteBreakdown,
   UsageSourceBreakdown,
@@ -36,6 +37,7 @@ type UsageSettingsSectionProps = {
   account?: AccountState | null;
   connection: ClientConnection | null;
   enabled: boolean;
+  modelFocused?: boolean;
   onError: (message: string | null) => void;
   onOpenSourceSession?: (sessionId: string) => void;
 };
@@ -52,6 +54,12 @@ type UsageSettingsContentProps = {
   onRangeChange?: (range: UsageRangeFilter) => void;
   onVisibilityChange?: (visibility: UsageVisibilityFilter) => void;
   onStatusChange?: (status: UsageStatusFilter) => void;
+  provider?: UsageProvider | "all";
+  model?: string;
+  providerOptions?: UsageProvider[];
+  modelOptions?: string[];
+  onProviderChange?: (provider: UsageProvider | "all") => void;
+  onModelChange?: (model: string) => void;
   onOpenSourceSession?: (sessionId: string) => void;
 };
 
@@ -130,11 +138,22 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
-export function UsageSettingsSection({ account = null, connection, enabled, onError, onOpenSourceSession }: UsageSettingsSectionProps) {
+export function UsageSettingsSection({
+  account = null,
+  connection,
+  enabled,
+  modelFocused = false,
+  onError,
+  onOpenSourceSession,
+}: UsageSettingsSectionProps) {
   const [range, setRange] = useState<UsageRangeFilter>("all");
   const [visibility, setVisibility] = useState<UsageVisibilityFilter>("all");
   const [status, setStatus] = useState<UsageStatusFilter>("all");
+  const [provider, setProvider] = useState<UsageProvider | "all">("all");
+  const [model, setModel] = useState("all");
   const [summary, setSummary] = useState<UsageSummaryResponse | null>(null);
+  const [filterSummary, setFilterSummary] =
+    useState<UsageSummaryResponse | null>(null);
   const [recordsResponse, setRecordsResponse] = useState<UsageRecordsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +162,7 @@ export function UsageSettingsSection({ account = null, connection, enabled, onEr
     if (!enabled) return;
     if (!connection) {
       setSummary(null);
+      setFilterSummary(null);
       setRecordsResponse(null);
       setLoading(false);
       setError("Usage data is unavailable");
@@ -160,13 +180,26 @@ export function UsageSettingsSection({ account = null, connection, enabled, onEr
     };
 
     Promise.all([
-      api.usage(connection, filters),
-      api.usageRecords(connection, { ...filters, limit: 100 }),
+      api.usage(connection, {
+        ...filters,
+        provider: modelFocused && provider !== "all" ? provider : null,
+        model: modelFocused && model !== "all" ? model : null,
+      }),
+      api.usageRecords(connection, {
+        ...filters,
+        provider: modelFocused && provider !== "all" ? provider : null,
+        model: modelFocused && model !== "all" ? model : null,
+        limit: 100,
+      }),
+      modelFocused
+        ? api.usage(connection, { range })
+        : Promise.resolve<UsageSummaryResponse | null>(null),
     ])
-      .then(([nextSummary, nextRecords]) => {
+      .then(([nextSummary, nextRecords, nextFilterSummary]) => {
         if (cancelled) return;
         setSummary(nextSummary);
         setRecordsResponse(nextRecords);
+        setFilterSummary(nextFilterSummary);
         setError(null);
         onError(null);
       })
@@ -183,7 +216,35 @@ export function UsageSettingsSection({ account = null, connection, enabled, onEr
     return () => {
       cancelled = true;
     };
-  }, [connection, enabled, onError, range, status, visibility]);
+  }, [
+    connection,
+    enabled,
+    model,
+    modelFocused,
+    onError,
+    provider,
+    range,
+    status,
+    visibility,
+  ]);
+
+  const providerOptions = useMemo(
+    () =>
+      [...new Set((filterSummary?.models ?? []).map((entry) => entry.provider))]
+        .sort(),
+    [filterSummary],
+  );
+  const modelOptions = useMemo(
+    () =>
+      [
+        ...new Set(
+          (filterSummary?.models ?? [])
+            .filter((entry) => provider === "all" || entry.provider === provider)
+            .map((entry) => entry.model),
+        ),
+      ].sort(),
+    [filterSummary, provider],
+  );
 
   return (
     <UsageSettingsContent
@@ -198,6 +259,19 @@ export function UsageSettingsSection({ account = null, connection, enabled, onEr
       onRangeChange={setRange}
       onVisibilityChange={setVisibility}
       onStatusChange={setStatus}
+      provider={modelFocused ? provider : undefined}
+      model={modelFocused ? model : undefined}
+      providerOptions={modelFocused ? providerOptions : undefined}
+      modelOptions={modelFocused ? modelOptions : undefined}
+      onProviderChange={
+        modelFocused
+          ? (nextProvider) => {
+              setProvider(nextProvider);
+              setModel("all");
+            }
+          : undefined
+      }
+      onModelChange={modelFocused ? setModel : undefined}
       onOpenSourceSession={onOpenSourceSession}
     />
   );
@@ -215,6 +289,12 @@ export function UsageSettingsContent({
   onRangeChange,
   onVisibilityChange,
   onStatusChange,
+  provider,
+  model,
+  providerOptions,
+  modelOptions,
+  onProviderChange,
+  onModelChange,
   onOpenSourceSession,
 }: UsageSettingsContentProps) {
   useErrorToast(error);
@@ -280,6 +360,44 @@ export function UsageSettingsContent({
             ))}
           </select>
         </label>
+        {provider !== undefined ? (
+          <label className="usage-filter-control">
+            <span>Provider</span>
+            <select
+              aria-label="Filter usage by provider"
+              value={provider}
+              disabled={!onProviderChange}
+              onChange={(event) =>
+                onProviderChange?.(event.target.value as UsageProvider | "all")
+              }
+            >
+              <option value="all">All providers</option>
+              {(providerOptions ?? []).map((option) => (
+                <option key={option} value={option}>
+                  {providerLabel(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        {model !== undefined ? (
+          <label className="usage-filter-control">
+            <span>Model</span>
+            <select
+              aria-label="Filter usage by model"
+              value={model}
+              disabled={!onModelChange}
+              onChange={(event) => onModelChange?.(event.target.value)}
+            >
+              <option value="all">All models</option>
+              {(modelOptions ?? []).map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
       </div>
 
       <UsagePanel title="Daily tokens">

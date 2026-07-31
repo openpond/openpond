@@ -36,7 +36,6 @@ import {
   SquarePen,
   X,
 } from "../icons";
-import { formatSidebarRuntime } from "../../lib/session-runtime";
 import {
   cloudWorkspaceStateNote,
   localWorkspaceStateNote,
@@ -176,7 +175,6 @@ export function SidebarSessionRow({
   subagentRuntime,
   terminalIndicator,
   projectLabel,
-  runtimeSeconds = 0,
   childSessionCount = 0,
   childSessionsExpanded = false,
   onSelect,
@@ -204,7 +202,6 @@ export function SidebarSessionRow({
   subagentRuntime?: SubagentRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
   projectLabel?: string | null;
-  runtimeSeconds?: number;
   childSessionCount?: number;
   childSessionsExpanded?: boolean;
   onSelect: () => void;
@@ -236,7 +233,6 @@ export function SidebarSessionRow({
       : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
-  const runtimeLabel = formatSidebarRuntime(runtimeSeconds);
   const rowClassName = [
     "sidebar-task-row",
     onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "",
@@ -349,12 +345,6 @@ export function SidebarSessionRow({
               aria-label={runningLabel}
             />
           ) : null}
-          <time
-            dateTime={`PT${Math.max(0, Math.floor(runtimeSeconds))}S`}
-            aria-label={`Runtime ${runtimeLabel}`}
-          >
-            {runtimeLabel}
-          </time>
         </span>
         <div className="sidebar-row-actions">
           {onDockRight ? (

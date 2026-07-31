@@ -76,6 +76,34 @@ describe("UsageSettingsContent", () => {
     expect(html).not.toContain("Only model in this activity");
     expect(html).not.toContain("<option value=\"all\">All models</option>");
   });
+
+  test("adds truthful provider and model filters for the Models Usage tab", () => {
+    const html = renderToStaticMarkup(
+      createElement(UsageSettingsContent, {
+        summary: usageSummary(),
+        recordsResponse: usageRecords(),
+        loading: false,
+        error: null,
+        range: "all",
+        visibility: "all",
+        status: "all",
+        provider: "all",
+        model: "all",
+        providerOptions: ["openrouter", "openai"],
+        modelOptions: ["anthropic/claude-sonnet-4", "gpt-4.1"],
+        onRangeChange: () => undefined,
+        onVisibilityChange: () => undefined,
+        onStatusChange: () => undefined,
+        onProviderChange: () => undefined,
+        onModelChange: () => undefined,
+      }),
+    );
+
+    expect(html).toContain('aria-label="Filter usage by provider"');
+    expect(html).toContain('aria-label="Filter usage by model"');
+    expect(html).toContain(">All providers<");
+    expect(html).toContain(">All models<");
+  });
 });
 
 function renderUsage(input: {

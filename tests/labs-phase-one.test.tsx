@@ -7,6 +7,11 @@ import {
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
+import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
+import {
+  labPrimaryTabFromSearch,
+  searchWithLabPrimaryTab,
+} from "../apps/web/src/components/labs/lab-primary-tab-state";
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
@@ -70,7 +75,7 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
-  test("renders first-class Taskset and Model tabs", () => {
+  test("renders first-class Models, Tasksets, Serving, and Usage tabs", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
         activeTab: "models",
@@ -85,11 +90,71 @@ describe("Lab workspace", () => {
     expect(markup).toContain('aria-label="Model sections"');
     expect(markup).toContain(">Models<");
     expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain(">Serving<");
+    expect(markup).toContain(">Usage<");
     expect(markup).not.toContain(">Profile<");
     expect(markup).not.toContain(">Home<");
     expect(markup).not.toContain(">Suggestions<");
     expect(markup).not.toContain("<svg");
     expect(markup).toContain("Unified inventory");
+  });
+
+  test("keeps the primary Models tab addressable across refresh and history", () => {
+    expect(labPrimaryTabFromSearch("")).toBe("models");
+    expect(labPrimaryTabFromSearch("?modelsTab=serving")).toBe("serving");
+    expect(labPrimaryTabFromSearch("?modelsTab=usage")).toBe("usage");
+    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("models");
+    expect(
+      searchWithLabPrimaryTab("?profile=qa", "tasksets"),
+    ).toBe("?profile=qa&modelsTab=tasksets");
+    expect(
+      searchWithLabPrimaryTab("?profile=qa&modelsTab=usage", "models"),
+    ).toBe("?profile=qa");
+  });
+
+  test("keeps temporary sessions and managed publication separate in Serving", () => {
+    const rows = labServingRows({
+      modelProjects: [
+        {
+          id: "model_1",
+          name: "Support model",
+        },
+      ],
+      modelVersions: [
+        {
+          artifactLineageId: "lineage_1",
+          version: 2,
+        },
+      ],
+      models: [
+        {
+          id: "lineage_1",
+          modelId: "model_1",
+          importedAt: "2026-07-30T10:00:00.000Z",
+          managedServing: {
+            state: "ready",
+            lastSyncedAt: "2026-07-30T11:00:00.000Z",
+          },
+        },
+      ],
+      servingSessions: [
+        {
+          id: "serving_1",
+          modelArtifactLineageId: "lineage_1",
+          state: "ready",
+          updatedAt: "2026-07-30T12:00:00.000Z",
+        },
+      ],
+    } as unknown as TrainingStateResponse);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      lineageId: "lineage_1",
+      modelName: "Support model",
+      versionLabel: "Version 2",
+      session: { id: "serving_1", state: "ready" },
+      managed: { state: "ready" },
+    });
   });
 
   test("creates a standalone Model without requiring a run", () => {

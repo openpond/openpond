@@ -28,11 +28,6 @@ import {
   subscribeCodexHistoryLiveRefresh,
 } from "../lib/codex-history-live-refresh";
 import { useGoalRuntimeClock } from "./useGoalRuntimeClock";
-import { useSidebarRuntimeClock } from "./useSidebarRuntimeClock";
-import {
-  sessionRuntimeFromStoredTurns,
-  sessionRuntimeSeconds,
-} from "../lib/session-runtime";
 
 export function useSidebarRuntimeState(input: {
   codexHistoryEvents: RuntimeEvent[];
@@ -369,59 +364,6 @@ export function useSidebarRuntimeState(input: {
     sidebarSessions,
     subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
   });
-  const sidebarRuntimeObservedAt = useSidebarRuntimeClock(
-    runningSessionIds.size > 0
-  );
-  const sessionRuntimeSecondsById = useMemo(() => {
-    const next = new Map<string, number>();
-    for (const session of sidebarSessions) {
-      const eventsById = new Map<string, RuntimeEvent>();
-      for (const event of runtimeIndexes.eventsBySessionId.get(session.id) ??
-        []) {
-        eventsById.set(event.id, event);
-      }
-      for (const source of [
-        codexHistorySidebarEvents[session.id],
-        rightChatHistoryEvents[session.id],
-        session.id === selectedSessionId ? codexHistoryEvents : null,
-      ]) {
-        for (const event of source ?? []) eventsById.set(event.id, event);
-      }
-      const runtimeEvents = [...eventsById.values()].sort(
-        (left, right) =>
-          Date.parse(left.timestamp) - Date.parse(right.timestamp)
-      );
-      const includeRunning = runningSessionIds.has(session.id);
-      const runtimeFromEvents = sessionRuntimeSeconds(
-        runtimeEvents,
-        sidebarRuntimeObservedAt,
-        { includeRunning }
-      );
-      const runtimeFromStoredTurns = sessionRuntimeFromStoredTurns(
-        session,
-        runtimeEvents,
-        sidebarRuntimeObservedAt,
-        { includeRunning }
-      );
-      const goalSeconds =
-        sidebarGoalRuntimeBySessionId.get(session.id)?.timeUsedSeconds ?? 0;
-      next.set(
-        session.id,
-        Math.max(runtimeFromStoredTurns ?? runtimeFromEvents, goalSeconds)
-      );
-    }
-    return next;
-  }, [
-    codexHistoryEvents,
-    codexHistorySidebarEvents,
-    rightChatHistoryEvents,
-    runningSessionIds,
-    runtimeIndexes.eventsBySessionId,
-    selectedSessionId,
-    sidebarGoalRuntimeBySessionId,
-    sidebarRuntimeObservedAt,
-    sidebarSessions,
-  ]);
   const selectedTurnCompletionState = useMemo(
     () => latestTurnCompletionState(sessionEvents),
     [sessionEvents]
@@ -441,6 +383,5 @@ export function useSidebarRuntimeState(input: {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
-    sessionRuntimeSecondsById,
   };
 }

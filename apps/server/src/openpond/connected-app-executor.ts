@@ -156,6 +156,7 @@ function cloudConnectedAppToolPayload(
     toolName: request.toolName,
     sessionId: request.sessionId,
     turnId: request.turnId,
+    toolCallId: request.toolCallId,
     userPrompt: request.userPrompt,
     connectionIds: request.connectionIds,
     capabilityIds: request.capabilityIds,

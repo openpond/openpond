@@ -1437,6 +1437,7 @@ export function MainPane({
           <>
             <Suspense fallback={null}>
               <LabsRoute
+                account={bootstrap?.account ?? null}
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
                 onNewModel={(initialTasksetId) => {

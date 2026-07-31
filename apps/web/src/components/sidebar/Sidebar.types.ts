@@ -70,7 +70,6 @@ export type SidebarProps = {
   sidebarProjectIdBySessionId: Record<string, string>;
   terminalSummaries: Record<string, TerminalScopeSummary>;
   runningSessionIds: ReadonlySet<string>;
-  sessionRuntimeSecondsById: ReadonlyMap<string, number>;
   goalRuntimeBySessionId?: ReadonlyMap<string, GoalRuntimeStatus>;
   subagentRuntimeBySessionId?: ReadonlyMap<string, SubagentRuntimeStatus>;
   visibleChatRows: Session[];

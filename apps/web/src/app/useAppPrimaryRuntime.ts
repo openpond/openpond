@@ -813,7 +813,6 @@ export function useAppPrimaryRuntime() {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
-    sessionRuntimeSecondsById,
   } = useSidebarRuntimeState({
     codexHistoryEvents,
     codexHistorySessions,
@@ -1206,7 +1205,6 @@ export function useAppPrimaryRuntime() {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
-    sessionRuntimeSecondsById,
     taskDragSessionId,
     taskPreviewSessionIds,
     startTaskDrag,
