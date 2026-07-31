@@ -7,6 +7,8 @@ import type {
 } from "@openpond/contracts";
 import {
   createWorkRuntimeService,
+  WORK_ENVIRONMENT_PROBE,
+  WORK_RESET_COMMAND,
   waitForWorkReceiptSettlement,
 } from "./work-runtime-service.js";
 
@@ -47,11 +49,18 @@ describe("Work runtime service", () => {
     expect(calls).toContainEqual(expect.objectContaining({
       action: "sandbox_exec",
       args: expect.objectContaining({
-        command: expect.stringContaining("find inputs work outputs"),
+        command: WORK_RESET_COMMAND,
       }),
     }));
     expect(calls.at(-1)?.action).toBe("sandbox_stop");
     expect(stopped.ok).toBe(true);
+  });
+
+  test("uses absolute Work paths so commands survive a resumed runtime cwd", () => {
+    expect(WORK_ENVIRONMENT_PROBE).toMatch(/^cd \/workspace\/work && /);
+    expect(WORK_RESET_COMMAND).toContain(
+      "find /workspace/inputs /workspace/work /workspace/outputs",
+    );
   });
 
   test("rejects an input whose bytes do not match the immutable manifest", async () => {

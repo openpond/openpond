@@ -353,7 +353,7 @@ export function createWorkModelToolDefinitions(deps: {
         required: ["command"],
       },
       execute: withSandbox("work_exec", "sandbox_exec", (context) => ({
-        command: `cd work && ${requiredString(context.args.command)}`,
+        command: `cd /workspace/work && ${requiredString(context.args.command)}`,
         timeoutSeconds:
           typeof context.args.timeoutSeconds === "number"
             ? Math.min(

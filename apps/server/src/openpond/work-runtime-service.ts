@@ -11,13 +11,13 @@ import type {
 export const WORK_RUNTIME_PROFILE_ID = "openpond-work-v1";
 export const WORK_LAYOUT_COMMAND = "mkdir -p inputs work outputs";
 export const WORK_RESET_COMMAND =
-  "find inputs work outputs -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +";
+  "find /workspace/inputs /workspace/work /workspace/outputs -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +";
 export const WORK_SANDBOX_STARTUP_TIMEOUT_MS = 180_000;
 export const WORK_SANDBOX_STARTUP_POLL_MS = 1_000;
 export const WORK_RECEIPT_SETTLEMENT_TIMEOUT_MS = 15_000;
 export const WORK_RECEIPT_SETTLEMENT_POLL_MS = 250;
 export const WORK_ENVIRONMENT_PROBE = [
-  "cd work &&",
+  "cd /workspace/work &&",
   'printf "architecture="; uname -m;',
   'printf "kernel="; uname -sr;',
   'printf "cpu_count="; getconf _NPROCESSORS_ONLN 2>/dev/null || true;',
