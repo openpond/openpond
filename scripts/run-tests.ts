@@ -136,6 +136,11 @@ async function runReleaseTests(env: NodeJS.ProcessEnv): Promise<void> {
 
 async function ensureServerWorkspaceBuild(env: NodeJS.ProcessEnv): Promise<void> {
   if (env.OPENPOND_TEST_REUSE_BUILD === "1" || serverWorkspaceBuildReady) return;
+  // apps/server imports the SDK package entrypoint at runtime. TypeScript project
+  // references emit its declarations, while the package build emits dist/index.js.
+  // Build both so a clean CI checkout cannot compile successfully and then fail
+  // when the node:test contract suite loads the server output.
+  await runCommand(pnpmBinary, ["run", "build:sdk"], { env });
   await runCommand(tscBinary, ["-b", "apps/server"], { env });
   serverWorkspaceBuildReady = true;
 }
@@ -152,7 +157,7 @@ async function runAgentSdkTests(env: NodeJS.ProcessEnv): Promise<void> {
 }
 
 async function runLiveTests(env: NodeJS.ProcessEnv): Promise<void> {
-  await runCommand(tscBinary, ["-b", "apps/server"], { env });
+  await ensureServerWorkspaceBuild(env);
   const liveFiles = await discoverLiveTests();
   if (liveFiles.length === 0) {
     console.log("No live tests found.");
