@@ -110,9 +110,12 @@ npm trust github @openpond/sdk \
   --environment npm-production \
   --allow-publish
 npm trust list @openpond/sdk
+gh workflow run release-sdk.yml --ref master
 ```
 
 The GitHub `npm-production` environment already used by the OpenPond CLI can be reused. The trust record is package-specific, so `@openpond/sdk` still needs its own entry.
+
+The final command dispatches the idempotent recovery path once: npm publication is already complete, so the workflow only creates the missing `sdk-v0.1.0` tag and GitHub release. It does not attempt to republish the immutable version.
 
 After bootstrap, prepare releases independently:
 
