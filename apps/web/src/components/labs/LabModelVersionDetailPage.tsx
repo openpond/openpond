@@ -148,10 +148,7 @@ export function LabModelVersionDetailPage({
         (receipt) => receipt.jobId === selectedJob.id
       ) ?? []
     : [];
-  const hasStepMetrics = Boolean(
-    detail.detail?.stepMetrics.length || detail.detail?.policyMetrics.length
-  );
-
+  const managedEvidence = detail.detail?.managedEvidence ?? null;
   if (!selectedEntry && !selectedLifecycleRun) {
     return (
       <div className="labs-model-version-detail">
@@ -186,13 +183,19 @@ export function LabModelVersionDetailPage({
             : "Not recorded"
         }
         failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}
+        configuration={runConfiguration(selectedPlan)}
+        evidence={managedEvidence}
         method={trainingMethodLabel(
           selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
         )}
         output={
           selectedVersion ? `Version ${selectedVersion.number}` : "No Version"
         }
-        reward={selectedLifecycleRun?.reward?.raw ?? null}
+        reward={
+          selectedLifecycleRun?.reward?.raw ??
+          managedEvidence?.reward.finalMean ??
+          null
+        }
         status={
           selectedLifecycleRun
             ? statusLabel(selectedLifecycleRun.status)
@@ -228,8 +231,7 @@ export function LabModelVersionDetailPage({
         }
       />
 
-      {selectedJob &&
-      (detail.loading || hasStepMetrics || !selectedLifecycleRun) ? (
+      {selectedJob ? (
         <>
           <DetailSection
             title={
@@ -300,6 +302,45 @@ export function LabModelVersionDetailPage({
             label="Version ID"
             value={selectedVersion?.lineage.id ?? "No Version created"}
           />
+          {managedEvidence?.checkpoint ? (
+            <>
+              <Fact
+                label="Checkpoint"
+                value={managedEvidence.checkpoint.id}
+              />
+              <Fact
+                label="Checkpoint size"
+                value={
+                  managedEvidence.checkpoint.sizeBytes == null
+                    ? "Not reported"
+                    : formatBytes(managedEvidence.checkpoint.sizeBytes)
+                }
+              />
+              <Fact
+                label="Checkpoint hash"
+                value={managedEvidence.checkpoint.sha256 ?? "Not reported"}
+              />
+            </>
+          ) : null}
+          {managedEvidence?.evaluations.map((evaluation) => (
+            <Fact
+              key={`${evaluation.kind}:${evaluation.policyVersion}`}
+              label={`${evaluation.kind === "baseline" ? "Baseline" : "Candidate"} evaluation`}
+              value={
+                evaluation.score == null
+                  ? "Not reported"
+                  : evaluation.score.toFixed(6)
+              }
+            />
+          ))}
+          {managedEvidence?.canonicalPublication.state ? (
+            <Fact
+              label="Registry publication"
+              value={managedStateLabel(
+                managedEvidence.canonicalPublication.state
+              )}
+            />
+          ) : null}
         </dl>
       </DetailSection>
       <ManagedAdapterServingStatus projection={managedServing} />
@@ -333,6 +374,57 @@ function baseModelName(
 
 function modelRefName(modelId: string) {
   return modelId.split("/").at(-1) ?? modelId;
+}
+
+function runConfiguration(
+  plan: ReturnType<typeof labModelPlans>[number] | null,
+): Array<{ label: string; value: string }> {
+  if (!plan) return [];
+  const recipe = plan.recipe;
+  if (recipe.method === "grpo") {
+    return [
+      { label: "LoRA rank", value: String(recipe.lora.rank) },
+      {
+        label: "Learning rate",
+        value: scientificNumber(recipe.optimizer.learningRate),
+      },
+      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
+      { label: "Rollouts per update", value: String(recipe.rollout.groupSize) },
+      { label: "Rollout concurrency", value: String(recipe.rollout.concurrency) },
+      {
+        label: "Max output tokens",
+        value: recipe.rollout.maxOutputTokens.toLocaleString(),
+      },
+      { label: "Temperature", value: String(recipe.rollout.temperature) },
+      { label: "Top P", value: String(recipe.rollout.topP) },
+    ];
+  }
+  if (recipe.method === "sft" || recipe.method === "dpo") {
+    return [
+      { label: "LoRA rank", value: String(recipe.lora.rank) },
+      {
+        label: "Learning rate",
+        value: scientificNumber(recipe.optimizer.learningRate),
+      },
+      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
+    ];
+  }
+  return [];
+}
+
+function scientificNumber(value: number): string {
+  return value === 0 ? "0" : value.toExponential(2);
+}
+
+function formatBytes(value: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let current = value;
+  let unit = 0;
+  while (current >= 1024 && unit < units.length - 1) {
+    current /= 1024;
+    unit += 1;
+  }
+  return `${current.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 }
 
 function Fact({ label, value }: { label: string; value: string }) {
@@ -476,6 +568,18 @@ function eventSummary(event: TrainingJobEvent): string {
     return `${kind}${step == null ? "" : ` · step ${step}`}${
       values.length ? ` · ${values.join(" · ")}` : ""
     }`;
+  }
+  if (event.type === "checkpoint") {
+    const policyVersion = finiteNumber(payload.policyVersion);
+    const sizeBytes = finiteNumber(payload.sizeBytes);
+    const details = [
+      policyVersion == null ? null : `policy ${policyVersion}`,
+      sizeBytes == null ? null : formatBytes(sizeBytes),
+      payload.final === true ? "final" : null,
+    ].filter((value): value is string => Boolean(value));
+    return details.length
+      ? `Checkpoint committed · ${details.join(" · ")}.`
+      : "Checkpoint committed.";
   }
   if (event.type === "complete") {
     const artifactCount = finiteNumber(payload.artifactCount);

@@ -1,5 +1,6 @@
 import {
   LearningSignalBatchSchema,
+  TrainingExecutionRefSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
   type OpenPondProfileState,
@@ -43,6 +44,7 @@ export function createDestinationTrainingEngineRegistry(input: {
 }) {
   const adapters = new TrainingAdapterRegistry() as TrainingAdapterRegistry & {
     close(): Promise<void>;
+    refreshManagedEvidence(job: TrainingJob): Promise<void>;
   };
   for (const definition of [
     {
@@ -71,6 +73,15 @@ export function createDestinationTrainingEngineRegistry(input: {
   });
   adapters.registerEngine(managed);
   adapters.close = () => managed.close();
+  adapters.refreshManagedEvidence = async (job) => {
+    const parsed = TrainingExecutionRefSchema.safeParse(
+      job.metadata.portableExecutionRef,
+    );
+    if (!parsed.success || parsed.data.adapterId !== "sandbox-managed-rl") {
+      return;
+    }
+    await managed.refreshEvidence(parsed.data);
+  };
   return adapters;
 }
 

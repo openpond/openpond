@@ -330,6 +330,12 @@ export function createTrainingService(deps: {
     return fireworks.evaluate(job.id);
   }
 
+  async function refreshManagedRunEvidence(jobId: string): Promise<void> {
+    const job = await deps.store.getTrainingJob(jobId);
+    if (!job || job.destinationId !== "openpond_managed") return;
+    await portableAdapters.refreshManagedEvidence(job);
+  }
+
   async function handleFireworksRft(payload: unknown) {
     return fireworksRftEnvironment.handle(payload);
   }
@@ -377,6 +383,7 @@ export function createTrainingService(deps: {
     saveCredential,
     cancelJob,
     evaluateJob,
+    refreshManagedRunEvidence,
     isFireworksModel: fireworksServing.appliesTo,
     startModelServing: fireworksServing.start,
     stopModelServing: fireworksServing.stop,

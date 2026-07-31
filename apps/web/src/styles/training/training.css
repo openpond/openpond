@@ -78,7 +78,7 @@
 .training-run-placeholder{display:grid;min-height:72px;place-items:center;color:var(--muted);font-size:12px;text-align:center}
 .training-run-placeholder.error{color:var(--destructive,#e66)}
 .training-run-metrics,.training-run-evaluation{display:grid;gap:15px}
-.training-metric-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-bottom:1px solid var(--border);padding-bottom:14px}
+.training-metric-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:0;border-bottom:1px solid var(--border);padding-bottom:14px}
 .training-metric-summary>div{display:grid;gap:4px;min-width:0;padding:0 14px;border-right:1px solid var(--border)}
 .training-metric-summary>div:first-child{padding-left:0}
 .training-metric-summary>div:last-child{border-right:0}
@@ -87,10 +87,16 @@
 .training-metric-tabs{display:flex;gap:2px;overflow:auto}
 .training-metric-tabs button{border:0;border-radius:5px;background:transparent;color:var(--muted);padding:6px 8px;font:inherit;font-size:11px;white-space:nowrap;cursor:pointer}
 .training-metric-tabs button.active{background:var(--panel-soft);color:var(--text)}
+.training-metric-chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:14px}
+.training-metric-chart-card{min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--panel-soft) 45%,transparent)}
+.training-metric-chart-card>header{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);padding:11px 13px}
+.training-metric-chart-card>header h4{margin:0;font-size:13px;font-weight:600}
+.training-metric-chart-card>header span{color:var(--muted);font-size:10px}
 .training-line-chart{width:100%;margin:0;color:var(--text)}
-.training-line-chart svg{display:block;width:100%;height:auto;min-height:220px;overflow:visible}
+.training-line-chart svg{display:block;width:100%;height:auto;min-height:210px;overflow:visible;padding:4px 5px 0}
 .training-chart-grid{stroke:var(--border);stroke-width:1}
 .training-chart-axis{stroke:color-mix(in srgb,var(--text) 35%,var(--border));stroke-width:1}
+.training-chart-area{fill:color-mix(in srgb,var(--cyan,var(--text)) 13%,transparent);stroke:none}
 .training-chart-line{fill:none;stroke:var(--cyan,var(--text));stroke-width:2;vector-effect:non-scaling-stroke}
 .training-chart-point{fill:var(--cyan,var(--text));stroke:var(--bg);stroke-width:1.5;vector-effect:non-scaling-stroke}
 .training-chart-label{fill:var(--muted);font-size:10px}

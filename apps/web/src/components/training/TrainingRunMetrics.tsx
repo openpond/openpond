@@ -43,6 +43,7 @@ const METRICS: Array<{ key: MetricKey; label: string; format: (value: number) =>
 type PolicyMetricKey =
   | "meanReward"
   | "meanReturn"
+  | "learningRate"
   | "policyLoss"
   | "valueLoss"
   | "kl"
@@ -58,6 +59,7 @@ const POLICY_METRICS: Array<{
 }> = [
   { key: "meanReward", label: "Reward", format: compactNumber },
   { key: "meanReturn", label: "Return", format: compactNumber },
+  { key: "learningRate", label: "Learning rate", format: scientificNumber },
   { key: "policyLoss", label: "Policy loss", format: compactNumber },
   { key: "valueLoss", label: "Value loss", format: compactNumber },
   { key: "kl", label: "KL", format: compactNumber },
@@ -100,6 +102,10 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
     point[activePolicy.key] == null
       ? []
       : [{ step: point.step, value: point[activePolicy.key] as number }]);
+  const rolloutPoints = useMemo(
+    () => rolloutRewardPoints(detail?.events ?? []),
+    [detail?.events],
+  );
   const summary = detail ? finalSummary(detail) : {};
 
   if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
@@ -119,9 +125,10 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
             label="Policy loss"
             value={latest.policyLoss == null ? null : compactNumber(latest.policyLoss)}
           />
+          <MetricFact label="Rollouts" value={rolloutPoints.length || null} />
           <MetricFact
-            label="Value loss"
-            value={latest.valueLoss == null ? null : compactNumber(latest.valueLoss)}
+            label="Learning rate"
+            value={latest.learningRate == null ? null : scientificNumber(latest.learningRate)}
           />
           <MetricFact
             label="Environment executions"
@@ -144,11 +151,21 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
                 </button>
               ))}
             </div>
-            <MetricLineChart
-              label={activePolicy.label}
-              points={policyPoints}
-              format={activePolicy.format}
-            />
+            <div className="training-metric-chart-grid">
+              {rolloutPoints.length ? (
+                <MetricChartCard
+                  axisLabel="Rollout"
+                  format={compactNumber}
+                  label="Rollout reward"
+                  points={rolloutPoints}
+                />
+              ) : null}
+              <MetricChartCard
+                format={activePolicy.format}
+                label={activePolicy.label}
+                points={policyPoints}
+              />
+            </div>
           </>
         ) : null}
       </div>
@@ -157,6 +174,11 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
   const rft = detail.job.metadata.trainingMethod === "grpo";
   const rewardValues = stepMetrics.flatMap((metric) => metric.reward == null ? [] : [metric.reward]);
   const lossValues = stepMetrics.flatMap((metric) => metric.loss == null ? [] : [metric.loss]);
+  const learningRatePoints = stepMetrics.flatMap((point) =>
+    point.learningRate == null
+      ? []
+      : [{ step: point.step, value: point.learningRate }],
+  );
 
   return (
     <div className="training-run-metrics">
@@ -186,14 +208,64 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
           <div className="training-metric-tabs" role="tablist" aria-label="Training metrics">
             {available.map((metric) => <button key={metric.key} type="button" role="tab" aria-selected={metric.key === active.key} className={metric.key === active.key ? "active" : ""} onClick={() => setRequestedMetric(metric.key)}>{metric.label}</button>)}
           </div>
-          <MetricLineChart label={active.label} points={points} format={active.format} />
+          <div className="training-metric-chart-grid">
+            <MetricChartCard
+              label={active.label}
+              points={points}
+              format={active.format}
+            />
+            {active.key !== "learningRate" && learningRatePoints.length ? (
+              <MetricChartCard
+                label="Learning rate"
+                points={learningRatePoints}
+                format={scientificNumber}
+              />
+            ) : null}
+          </div>
         </>
       ) : <div className="training-run-placeholder">This earlier run recorded its final result but not per-step Trainer logs.</div>}
     </div>
   );
 }
 
-function MetricLineChart({ label, points, format }: { label: string; points: Array<{ step: number; value: number }>; format: (value: number) => string }) {
+function MetricChartCard({
+  label,
+  points,
+  format,
+  axisLabel = "Optimizer step",
+}: {
+  label: string;
+  points: Array<{ step: number; value: number }>;
+  format: (value: number) => string;
+  axisLabel?: string;
+}) {
+  return (
+    <section className="training-metric-chart-card">
+      <header>
+        <h4>{label}</h4>
+        <span>{points.length} {points.length === 1 ? "point" : "points"}</span>
+      </header>
+      <MetricLineChart
+        axisLabel={axisLabel}
+        format={format}
+        label={label}
+        points={points}
+      />
+    </section>
+  );
+}
+
+function MetricLineChart({
+  label,
+  points,
+  format,
+  axisLabel,
+}: {
+  label: string;
+  points: Array<{ step: number; value: number }>;
+  format: (value: number) => string;
+  axisLabel: string;
+}) {
   const width = 760;
   const height = 270;
   const padding = { top: 20, right: 20, bottom: 58, left: 64 };
@@ -209,24 +281,55 @@ function MetricLineChart({ label, points, format }: { label: string; points: Arr
   const x = (step: number) => padding.left + ((step - firstStep) / stepSpan) * (width - padding.left - padding.right);
   const y = (value: number) => padding.top + ((max - value) / (max - min)) * (height - padding.top - padding.bottom);
   const path = points.map((point, index) => `${index ? "L" : "M"}${x(point.step).toFixed(2)},${y(point.value).toFixed(2)}`).join(" ");
+  const chartBottom = height - padding.bottom;
+  const areaPath = points.length
+    ? `${path} L${x(lastPointStep).toFixed(2)},${chartBottom} L${x(firstStep).toFixed(2)},${chartBottom} Z`
+    : "";
+  const pointLabel =
+    axisLabel !== "Optimizer step"
+      ? axisLabel
+      : label === "Learning rate"
+        ? "Update"
+        : "Step";
   return (
-    <figure className="training-line-chart" aria-label={`${label} by optimizer step`}>
+    <figure className="training-line-chart" aria-label={`${label} by ${axisLabel.toLowerCase()}`}>
       <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-labelledby={`metric-${label.replaceAll(" ", "-")}`}>
-        <title id={`metric-${label.replaceAll(" ", "-")}`}>{`${label} by optimizer step`}</title>
+        <title id={`metric-${label.replaceAll(" ", "-")}`}>{`${label} by ${axisLabel.toLowerCase()}`}</title>
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const lineY = padding.top + ratio * (height - padding.top - padding.bottom);
           const value = max - ratio * (max - min);
           return <g key={ratio}><line className="training-chart-grid" x1={padding.left} x2={width - padding.right} y1={lineY} y2={lineY}/><text className="training-chart-label" x={padding.left - 10} y={lineY + 4} textAnchor="end">{format(value)}</text></g>;
         })}
         <line className="training-chart-axis" x1={padding.left} x2={width - padding.right} y1={height - padding.bottom} y2={height - padding.bottom}/>
+        <path className="training-chart-area" d={areaPath}/>
         <path className="training-chart-line" d={path}/>
-        {points.map((point) => <circle key={`${point.step}-${point.value}`} className="training-chart-point" cx={x(point.step)} cy={y(point.value)} r="3"><title>{`Step ${point.step}: ${format(point.value)}`}</title></circle>)}
+        {points.map((point) => <circle key={`${point.step}-${point.value}`} className="training-chart-point" cx={x(point.step)} cy={y(point.value)} r="3"><title>{`${pointLabel} ${point.step}: ${format(point.value)}`}</title></circle>)}
         <text className="training-chart-label" x={padding.left} y={height - 34} textAnchor="middle">{firstStep}</text>
         <text className="training-chart-label" x={width - padding.right} y={height - 34} textAnchor="middle">{lastPointStep}</text>
-        <text className="training-chart-label axis-title" x={(padding.left + width - padding.right) / 2} y={height - 9} textAnchor="middle">Optimizer step</text>
+        <text className="training-chart-label axis-title" x={(padding.left + width - padding.right) / 2} y={height - 9} textAnchor="middle">{axisLabel}</text>
       </svg>
     </figure>
   );
+}
+
+function rolloutRewardPoints(
+  events: TrainingRunDetail["events"],
+): Array<{ step: number; value: number }> {
+  return events.flatMap((event) => {
+    if (
+      event.type !== "metric" ||
+      event.payload.metricKind !== "rollout_trajectory"
+    ) {
+      return [];
+    }
+    const step = finiteNumber(event.payload.rolloutIndex);
+    const value = finiteNumber(event.payload.reward);
+    return step == null || value == null ? [] : [{ step, value }];
+  });
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function MetricFact({ label, value }: { label: string; value: string | number | null }) {

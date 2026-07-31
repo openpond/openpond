@@ -346,7 +346,11 @@ export function createTrainingApi(deps: {
     if (action === "evaluate_job") return deps.training.evaluateJob(requiredString(input.jobId, "jobId"));
     if (action === "save_credential") return deps.training.saveCredential({ destinationId: requiredString(input.destinationId, "destinationId"), value: requiredString(input.value, "value") });
     if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
-    if (action === "run_detail") return trainingRunDetail(deps.store, requiredString(input.jobId, "jobId"));
+    if (action === "run_detail") {
+      const jobId = requiredString(input.jobId, "jobId");
+      await deps.training.refreshManagedRunEvidence(jobId).catch(() => undefined);
+      return trainingRunDetail(deps.store, jobId);
+    }
     throw new Error(`Unknown training action ${action}.`);
   }
 

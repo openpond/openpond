@@ -593,6 +593,7 @@ export const PolicyOptimizationMetricSchema = z.object({
   method: z.enum(["grpo", "ppo"]),
   step: z.number().int().nonnegative(),
   timestamp: TimestampSchema,
+  learningRate: z.number().nonnegative().nullable().default(null),
   policyLoss: z.number().nullable(),
   valueLoss: z.number().nullable(),
   meanReward: z.number().nullable(),
@@ -606,7 +607,59 @@ export const PolicyOptimizationMetricSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   environmentExecutions: z.number().int().nonnegative(),
-  costUsd: z.number().nonnegative(),
+  costUsd: z.number().nonnegative().nullable(),
+});
+
+export const ManagedTrainingRunEvidenceSchema = z.object({
+  schemaVersion: z.literal("openpond.managedTrainingRunEvidence.v1"),
+  provider: IdSchema,
+  providerRunId: IdSchema,
+  state: IdSchema,
+  progress: z.object({
+    targetOptimizerSteps: z.number().int().nonnegative(),
+    committedOptimizerSteps: z.number().int().nonnegative(),
+  }),
+  reward: z.object({
+    finalMean: z.number().nullable(),
+    trajectoryCount: z.number().int().nonnegative(),
+    eligibleTrajectoryCount: z.number().int().nonnegative(),
+  }),
+  usage: z.object({
+    inputTokens: z.number().int().nonnegative(),
+    outputTokens: z.number().int().nonnegative(),
+    environmentExecutions: z.number().int().nonnegative(),
+  }),
+  resource: z.object({
+    provider: IdSchema,
+    gpuType: z.string().trim().min(1).max(300).nullable(),
+    gpuCount: z.number().int().nonnegative().nullable(),
+    hourlyCostUsd: z.number().nonnegative().nullable(),
+  }),
+  cost: z.object({
+    totalUsd: z.number().nonnegative().nullable(),
+  }),
+  checkpoint: z
+    .object({
+      id: IdSchema,
+      policyVersion: z.number().int().nonnegative(),
+      sha256: HashSchema.nullable(),
+      sizeBytes: z.number().int().nonnegative().nullable(),
+    })
+    .nullable(),
+  evaluations: z.array(
+    z.object({
+      kind: z.enum(["baseline", "candidate"]),
+      policyVersion: z.number().int().nonnegative(),
+      score: z.number().nullable(),
+      threshold: z.number().nullable(),
+      passed: z.boolean().nullable(),
+    }),
+  ),
+  canonicalPublication: z.object({
+    state: IdSchema.nullable(),
+    artifactId: IdSchema.nullable(),
+  }),
+  syncedAt: TimestampSchema,
 });
 
 export const TrainingEvaluationAggregateSchema = z.object({
@@ -670,6 +723,7 @@ export const TrainingRunDetailSchema = z.object({
   events: z.array(TrainingJobEventSchema),
   stepMetrics: z.array(SftStepMetricSchema),
   policyMetrics: z.array(PolicyOptimizationMetricSchema).default([]),
+  managedEvidence: ManagedTrainingRunEvidenceSchema.nullable().default(null),
   evaluation: TrainingEvaluationSummarySchema.nullable(),
   generatedAt: TimestampSchema,
 });
@@ -880,6 +934,9 @@ export type TrainingJobEvent = z.infer<typeof TrainingJobEventSchema>;
 export type SftStepMetric = z.infer<typeof SftStepMetricSchema>;
 export type PolicyOptimizationMetric = z.infer<
   typeof PolicyOptimizationMetricSchema
+>;
+export type ManagedTrainingRunEvidence = z.infer<
+  typeof ManagedTrainingRunEvidenceSchema
 >;
 export type TrainingEvaluationAggregate = z.infer<
   typeof TrainingEvaluationAggregateSchema

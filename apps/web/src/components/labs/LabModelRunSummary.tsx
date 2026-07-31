@@ -1,4 +1,7 @@
-import type { CorrelatedTelemetryReceipt } from "@openpond/contracts";
+import type {
+  CorrelatedTelemetryReceipt,
+  ManagedTrainingRunEvidence,
+} from "@openpond/contracts";
 
 import { ChevronRight } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
@@ -16,6 +19,8 @@ export function LabModelRunSummary({
   output,
   reward,
   telemetry,
+  evidence,
+  configuration,
   failure,
   onOpenTaskset,
 }: {
@@ -31,11 +36,16 @@ export function LabModelRunSummary({
   output: string;
   reward: number | null;
   telemetry: CorrelatedTelemetryReceipt | null;
+  evidence: ManagedTrainingRunEvidence | null;
+  configuration: Array<{ label: string; value: string }>;
   failure: string | null;
   onOpenTaskset?: () => void;
 }) {
   const cost =
-    telemetry?.cost.providerReportedUsd ?? telemetry?.cost.estimatedUsd ?? null;
+    telemetry?.cost.providerReportedUsd ??
+    telemetry?.cost.estimatedUsd ??
+    evidence?.cost.totalUsd ??
+    null;
 
   return (
     <div className="labs-model-run-summary">
@@ -61,7 +71,8 @@ export function LabModelRunSummary({
           <SummaryMetric label="Duration" value={duration} />
           <SummaryMetric
             label={
-              telemetry?.cost.providerReportedUsd === null
+              telemetry?.cost.providerReportedUsd === null &&
+              evidence?.cost.totalUsd == null
                 ? "Estimated cost"
                 : "Run cost"
             }
@@ -80,6 +91,13 @@ export function LabModelRunSummary({
             <DetailFact label="Base model" value={baseModel} />
             <DetailFact label="Compute" value={compute} />
             <DetailFact label="Version status" value={versionStatus} />
+            {configuration.map((fact) => (
+              <DetailFact
+                key={fact.label}
+                label={fact.label}
+                value={fact.value}
+              />
+            ))}
             <div>
               <dt>Taskset</dt>
               <dd>
@@ -104,17 +122,26 @@ export function LabModelRunSummary({
           <header>
             <h3>Resource usage</h3>
           </header>
-          {telemetry ? (
+          {telemetry || evidence ? (
             <dl className="labs-run-usage-grid">
               <UsageFact
                 label="GPU"
                 value={
-                  telemetry.resource.gpuCount === null &&
-                  telemetry.resource.gpuType === null
+                  (telemetry?.resource.gpuCount ??
+                    evidence?.resource.gpuCount ??
+                    null) === null &&
+                  (telemetry?.resource.gpuType ??
+                    evidence?.resource.gpuType ??
+                    null) === null
                     ? "Not reported"
-                    : `${telemetry.resource.gpuCount ?? "—"} × ${
-                        telemetry.resource.gpuType
-                          ? humanizeResourceLabel(telemetry.resource.gpuType)
+                    : `${telemetry?.resource.gpuCount ?? evidence?.resource.gpuCount ?? "Unknown"} × ${
+                        telemetry?.resource.gpuType ??
+                        evidence?.resource.gpuType
+                          ? humanizeResourceLabel(
+                              telemetry?.resource.gpuType ??
+                                evidence?.resource.gpuType ??
+                                "unreported"
+                            )
                           : "unreported"
                       }`
                 }
@@ -122,27 +149,41 @@ export function LabModelRunSummary({
               <UsageFact
                 label="Tokens"
                 value={`${formatCount(
-                  telemetry.usage.promptTokens
+                  telemetry?.usage.promptTokens ??
+                    evidence?.usage.inputTokens ??
+                    null
                 )} prompt · ${formatCount(
-                  telemetry.usage.generatedTokens
+                  telemetry?.usage.generatedTokens ??
+                    evidence?.usage.outputTokens ??
+                    null
                 )} generated`}
               />
               <UsageFact
                 label="Trajectories"
                 value={`${formatCount(
-                  telemetry.usage.successfulTrajectories
+                  telemetry?.usage.successfulTrajectories ??
+                    evidence?.reward.eligibleTrajectoryCount ??
+                    null
                 )} succeeded · ${formatCount(
-                  telemetry.usage.failedTrajectories
+                  telemetry?.usage.failedTrajectories ??
+                    (evidence
+                      ? evidence.reward.trajectoryCount -
+                        evidence.reward.eligibleTrajectoryCount
+                      : null)
                 )} failed`}
               />
               <UsageFact
                 label="Optimizer updates"
-                value={formatCount(telemetry.usage.optimizerSteps)}
+                value={formatCount(
+                  telemetry?.usage.optimizerSteps ??
+                    evidence?.progress.committedOptimizerSteps ??
+                    null
+                )}
               />
               <UsageFact
                 label="GPU time"
                 value={
-                  telemetry.usage.gpuSeconds === null
+                  telemetry?.usage.gpuSeconds == null
                     ? "Not reported"
                     : `${telemetry.usage.gpuSeconds.toFixed(1)} seconds`
                 }

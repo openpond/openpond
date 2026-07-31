@@ -1,5 +1,6 @@
 import {
   SftStepMetricSchema,
+  ManagedTrainingRunEvidenceSchema,
   PolicyOptimizationMetricSchema,
   TrainingEvaluationSummarySchema,
   TrainingRunDetailSchema,
@@ -59,6 +60,10 @@ export async function trainingRunDetail(store: SqliteStore, jobId: string): Prom
     events,
     stepMetrics: deduplicateStepMetrics(events.flatMap(stepMetricFromEvent)),
     policyMetrics: deduplicatePolicyMetrics(events.flatMap(policyMetricFromEvent)),
+    managedEvidence:
+      ManagedTrainingRunEvidenceSchema.safeParse(
+        job.metadata.managedTrainingEvidence,
+      ).data ?? null,
     evaluation,
     generatedAt: new Date().toISOString(),
   });

@@ -24,6 +24,10 @@ import {
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
+import {
+  parseManagedJobDetail,
+  persistManagedRunEvidence,
+} from "./openpond-managed-run-evidence.js";
 
 const ADAPTER_ID = "sandbox-managed-rl";
 const QUALIFIED_MODEL = {
@@ -60,10 +64,6 @@ type ManagedJob = {
       };
     };
   };
-};
-
-type ManagedJobDetail = {
-  job: ManagedJob;
 };
 
 type ManagedCandidateBundle = {
@@ -367,21 +367,45 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   async status(ref: TrainingExecutionRef): Promise<TrainingExecutionStatus> {
-    const payload = await this.requestJson<{ job: ManagedJobDetail }>(
+    const payload = await this.requestJson<{ job: unknown }>(
       `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
       {},
       await this.resolveBoundAccess(ref.tenantId),
     );
-    const placement = payload.job.job.inputBundle?.harnessRunManifest?.runtimeTarget?.placement;
+    const detail = parseManagedJobDetail(payload.job);
+    await persistManagedRunEvidence({
+      store: this.dependencies.store,
+      ref,
+      detail,
+    }).catch(() => undefined);
+    const placement =
+      detail.job.inputBundle?.harnessRunManifest?.runtimeTarget?.placement;
     if (placement === "local") {
       this.ensureLocalExecutor(ref, await this.resolveBoundAccess(ref.tenantId));
     }
-    if (["completed", "cancelled", "budget_exhausted", "failed"].includes(payload.job.job.state)) {
+    if (
+      ["completed", "cancelled", "budget_exhausted", "failed"].includes(
+        detail.job.state,
+      )
+    ) {
       const executor = this.localExecutors.get(ref.runId);
       this.localExecutors.delete(ref.runId);
       void executor?.stop();
     }
-    return TrainingExecutionStatusSchema.parse(toExecutionStatus(payload.job.job));
+    return TrainingExecutionStatusSchema.parse(toExecutionStatus(detail.job));
+  }
+
+  async refreshEvidence(ref: TrainingExecutionRef): Promise<void> {
+    const payload = await this.requestJson<{ job: unknown }>(
+      `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
+      {},
+      await this.resolveBoundAccess(ref.tenantId),
+    );
+    await persistManagedRunEvidence({
+      store: this.dependencies.store,
+      ref,
+      detail: parseManagedJobDetail(payload.job),
+    });
   }
 
   async logs(ref: TrainingExecutionRef, cursor?: string) {
@@ -405,16 +429,17 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.localExecutors.delete(ref.runId);
     void executor?.stop();
     const access = await this.resolveBoundAccess(ref.tenantId);
-    const current = await this.requestJson<{ job: ManagedJobDetail }>(
+    const current = await this.requestJson<{ job: unknown }>(
       `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}`,
       {},
       access,
     );
+    const detail = parseManagedJobDetail(current.job);
     await this.requestJson(
       `/v1/managed-rl/jobs/${encodeURIComponent(ref.runId)}/cancel`,
       {
         method: "POST",
-        body: JSON.stringify({ expectedVersion: current.job.job.version }),
+        body: JSON.stringify({ expectedVersion: detail.job.version }),
       },
       access,
     );
