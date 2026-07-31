@@ -1,4 +1,9 @@
-import { loadConfig } from "../../config";
+import {
+  listConfiguredProfiles,
+  loadConfig,
+  type ConfiguredProfile,
+  type LocalConfig,
+} from "../../config";
 import type { OpenPondSandboxClient } from "../../sandbox/client";
 import { createOpenPondSandboxClient } from "../../sandbox/client";
 import type { SandboxTemplateManifest } from "../../sandbox-template/manifest";
@@ -19,6 +24,7 @@ import {
   resolveBaseUrl,
   resolveSandboxApiUrlOption,
 } from "./urls";
+import { ensureStagingVercelProtectionBypass } from "./vercel-protection";
 
 export const SANDBOX_WORKFLOW_MODES: SandboxWorkflowMode[] = [
   "readonly",
@@ -66,18 +72,92 @@ export function resolveSandboxBaseUrl(
 export async function resolveSandboxClient(
   options: Record<string, string | boolean>
 ): Promise<OpenPondSandboxClient> {
-  const config = await loadConfig();
+  const config = await loadSandboxConfig(options);
   const uiBase = resolveBaseUrl(config);
   const apiKey = await ensureApiKey(config, uiBase);
   const sandboxApiUrl =
     resolveSandboxApiUrlOption(options) ||
     process.env.OPENPOND_SANDBOX_API_URL?.trim() ||
     null;
+  const baseUrl = resolveSandboxBaseUrl(config, options);
+  ensureStagingVercelProtectionBypass(sandboxApiUrl ?? baseUrl);
   return createOpenPondSandboxClient(
     sandboxApiUrl
       ? { apiKey, sandboxApiUrl }
-      : { apiKey, baseUrl: resolveSandboxBaseUrl(config, options) }
+      : { apiKey, baseUrl }
   );
+}
+
+async function loadSandboxConfig(
+  options: Record<string, string | boolean>
+): Promise<LocalConfig> {
+  const environment = sandboxEnvironmentOption(options);
+  if (!environment) return loadConfig();
+
+  const profiles = await listConfiguredProfiles();
+  const requestedAccount =
+    typeof options.account === "string"
+      ? options.account.trim().toLowerCase()
+      : typeof options.profile === "string"
+      ? options.profile.trim().toLowerCase()
+      : "";
+  const matches = profiles.filter(
+    (profile) =>
+      profileMatchesEnvironment(profile, environment) &&
+      (!requestedAccount || profile.handle.toLowerCase() === requestedAccount)
+  );
+  const selected = matches.find((profile) => profile.isActive) ??
+    (matches.length === 1 ? matches[0] : null);
+  if (!selected) {
+    throw new Error(
+      matches.length === 0
+        ? `no saved ${environment} OpenPond account found; run openpond login for that environment first`
+        : `multiple saved ${environment} OpenPond accounts found; pass --account and --base-url to select one`
+    );
+  }
+  return loadConfig({
+    account: selected.handle,
+    ...(selected.baseUrl ? { baseUrl: selected.baseUrl } : {}),
+  });
+}
+
+function sandboxEnvironmentOption(
+  options: Record<string, string | boolean>
+): "production" | "staging" | null {
+  const value =
+    typeof options.env === "string"
+      ? options.env.trim().toLowerCase()
+      : typeof options.environment === "string"
+      ? options.environment.trim().toLowerCase()
+      : "";
+  if (!value) return null;
+  if (value !== "production" && value !== "staging") {
+    throw new Error("sandbox env must be staging or production");
+  }
+  return value;
+}
+
+function profileMatchesEnvironment(
+  profile: ConfiguredProfile,
+  environment: "production" | "staging"
+): boolean {
+  const hosts = [profile.baseUrl, profile.apiBaseUrl]
+    .flatMap((value) => {
+      if (!value) return [];
+      try {
+        return [new URL(value).hostname.toLowerCase()];
+      } catch {
+        return [];
+      }
+    });
+  const isStaging = hosts.some(
+    (hostname) =>
+      hostname === "staging.openpond.ai" ||
+      hostname === "staging-api.openpond.ai" ||
+      hostname.endsWith(".staging-api.openpond.ai")
+  );
+  if (environment === "staging") return isStaging;
+  return !isStaging && profile.environment?.toLowerCase() === "production";
 }
 
 export function parseSandboxWorkflowModeOption(
