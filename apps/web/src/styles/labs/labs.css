@@ -15,6 +15,11 @@
   grid-row: 1;
 }
 
+.main-pane.page-active:has(> .labs-route) {
+  align-content: stretch;
+  overflow: hidden;
+}
+
 .main-pane.page-active.diff-open > .labs-route {
   max-height: 100%;
 }
@@ -163,7 +168,9 @@
 .labs-panel {
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
   scrollbar-width: thin;
 }
@@ -479,6 +486,12 @@
 
 .labs-workproduct-use {
   min-height: 28px;
+}
+
+.labs-compact-button {
+  min-height: 28px;
+  padding: 5px 8px;
+  font-size: 11px;
 }
 
 .labs-workproduct-actions {

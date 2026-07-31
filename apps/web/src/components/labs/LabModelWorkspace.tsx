@@ -21,7 +21,6 @@ import {
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
   currentModelBinding,
-  labBaseModelVersion,
   labLifecycleModelRuns,
   labModelJobs,
   labModelPlans,
@@ -97,62 +96,55 @@ export function LabModelRunsPage({
     [state?.modelRunDrafts, workproduct.id],
   );
   const runEntries = useMemo(
-    () => modelRunEntries(jobs, versions, lifecycleRuns),
-    [jobs, lifecycleRuns, versions]
+    () => modelRunEntries(
+      jobs,
+      versions,
+      lifecycleRuns,
+      readOnly ? [] : drafts,
+    ),
+    [drafts, jobs, lifecycleRuns, readOnly, versions],
   );
   const [showAllRuns, setShowAllRuns] = useState(false);
   const visibleRunEntries = showAllRuns
     ? runEntries
     : runEntries.slice(0, 5);
+  const submittedRunCount = runEntries.filter((entry) => !entry.draft).length;
+  const draftCount = runEntries.length - submittedRunCount;
+  const runNumberByKey = useMemo(() => {
+    let runNumber = submittedRunCount;
+    const numbers = new Map<string, number>();
+    for (const entry of runEntries) {
+      if (entry.draft) continue;
+      numbers.set(entry.key, runNumber);
+      runNumber -= 1;
+    }
+    return numbers;
+  }, [runEntries, submittedRunCount]);
+
+  function selectEntry(entry: RunEntry) {
+    if (entry.draft) {
+      onResumeDraft(entry.draft.id);
+      return;
+    }
+    onOpenEntry(entry.key);
+  }
 
   return (
     <section className="labs-model-version-index" aria-label="Model runs">
-      {drafts.length && !readOnly ? (
-        <div className="labs-model-setup-drafts" aria-label="Run setup drafts">
-          <div>
-            <strong>Continue setup</strong>
-            <span>
-              Finish a saved configuration when you are ready to submit a run.
-            </span>
-          </div>
-          <div className="labs-model-setup-draft-list">
-            {drafts.map((draft) => {
-              const taskset = tasksets.find(
-                (candidate) => candidate.id === draft.tasksetRef?.id,
-              );
-              return (
-                <button
-                  key={draft.id}
-                  type="button"
-                  onClick={() => onResumeDraft(draft.id)}
-                >
-                  <span>
-                    <strong>{taskset?.name ?? "Run setup"}</strong>
-                    <small>
-                      {[
-                        draft.method
-                          ? trainingMethodLabel(draft.method)
-                          : "Method not selected",
-                        formatDateTime(draft.updatedAt),
-                      ].join(" · ")}
-                    </small>
-                  </span>
-                  <span>Continue</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
       <header className="labs-model-section-intro">
         <div>
-          <h2>Runs</h2>
-          <p>Training attempts in order, newest first.</p>
+          <h2>Recent runs</h2>
+          <p>Latest training, evaluation, and draft activity.</p>
         </div>
-        <span>{runEntries.length} total</span>
+        <span>
+          {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}
+          {draftCount
+            ? ` · ${draftCount} ${draftCount === 1 ? "draft" : "drafts"}`
+            : ""}
+        </span>
       </header>
       <div className="training-table-wrap">
-        <table className="training-data-table labs-model-versions-table">
+        <table className="training-data-table labs-model-runs-table">
           <thead>
             <tr>
               <th>Run</th>
@@ -168,13 +160,13 @@ export function LabModelRunsPage({
               <tr>
                 <td colSpan={6}>
                   <div className="training-run-placeholder">
-                    No submitted runs yet.
+                    No runs or drafts yet.
                   </div>
                 </td>
               </tr>
             ) : null}
-            {visibleRunEntries.map((entry, index) => {
-              const runNumber = runEntries.length - index;
+            {visibleRunEntries.map((entry) => {
+              const runNumber = runNumberByKey.get(entry.key) ?? null;
               const plan =
                 entry.version?.plan ??
                 (entry.job ? planById.get(entry.job.planId) ?? null : null);
@@ -183,7 +175,8 @@ export function LabModelRunsPage({
                 tasksets.find(
                   (taskset) =>
                     taskset.id ===
-                    (entry.lifecycleRun?.taskset.id ??
+                    (entry.draft?.tasksetRef?.id ??
+                      entry.lifecycleRun?.taskset.id ??
                       plan?.tasksetId)
                 ) ??
                 null;
@@ -191,18 +184,30 @@ export function LabModelRunsPage({
 
               return (
                 <tr
+                  className={entry.draft ? "labs-model-run-draft" : undefined}
                   key={entry.key}
-                  onClick={() => onOpenEntry(entry.key)}
+                  onClick={() => selectEntry(entry)}
                 >
                   <td>
                     <button
                       className="labs-version-row-button"
                       type="button"
-                      onClick={() => onOpenEntry(entry.key)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        selectEntry(entry);
+                      }}
                     >
-                      <strong>{`Run ${runNumber}`}</strong>
+                      <strong>
+                        {entry.draft
+                          ? entry.draft.title || "Run draft"
+                          : `Run ${runNumber}`}
+                      </strong>
                       <small>
-                        {version
+                        {entry.draft
+                          ? entry.draft.status === "ready_to_run"
+                            ? "Ready to submit"
+                            : "Draft setup"
+                          : version
                           ? `Created Version ${version.number}`
                           : entry.lifecycleRun?.kind === "evaluation"
                           ? "Evaluation"
@@ -215,13 +220,18 @@ export function LabModelRunsPage({
                   <td>
                     <LabStatusBadge
                       label={
-                        entry.lifecycleRun
+                        entry.draft
+                          ? entry.draft.status === "ready_to_run"
+                            ? "Ready to run"
+                            : "Draft"
+                          : entry.lifecycleRun
                           ? statusLabel(entry.lifecycleRun.status)
                           : entry.job
                           ? statusLabel(entry.job.status)
                           : "Not started"
                       }
                       value={
+                        entry.draft?.status ??
                         entry.lifecycleRun?.status ??
                         entry.job?.status ??
                         "not_run"
@@ -230,7 +240,9 @@ export function LabModelRunsPage({
                   </td>
                   <td>
                     {trainingMethodLabel(
-                      entry.lifecycleRun?.method ?? plan?.recipe.method
+                      entry.draft?.method ??
+                        entry.lifecycleRun?.method ??
+                        plan?.recipe.method
                     )}
                   </td>
                   <td>
@@ -253,6 +265,7 @@ export function LabModelRunsPage({
                   <td>
                     {formatDateTime(
                       entry.lifecycleRun?.updatedAt ??
+                        entry.draft?.updatedAt ??
                         version?.lineage.importedAt ??
                         entry.job?.updatedAt ??
                       ""
@@ -267,11 +280,13 @@ export function LabModelRunsPage({
       {runEntries.length > 5 ? (
         <div className="labs-model-run-list-actions">
           <button
-            className="settings-secondary compact"
+            className="training-button secondary labs-compact-button"
             type="button"
             onClick={() => setShowAllRuns((visible) => !visible)}
           >
-            {showAllRuns ? "Show latest 5" : `Show all ${runEntries.length} runs`}
+            {showAllRuns
+              ? "Show latest 5"
+              : `Show all ${runEntries.length} activities`}
           </button>
         </div>
       ) : null}
@@ -298,11 +313,6 @@ export function LabModelVersionsPage({
     [runs, state, workproduct]
   );
   const currentBinding = currentModelBinding(workproduct, runs, state);
-  const baseVersion = labBaseModelVersion(workproduct, state);
-  const tasksets = labModelTasksets(state);
-  const baseTaskset = baseVersion
-    ? tasksets.find((taskset) => taskset.id === baseVersion.taskset.id) ?? null
-    : null;
 
   async function setCurrent(versionId: string) {
     if (readOnly) return;
@@ -354,27 +364,6 @@ export function LabModelVersionsPage({
         </div>
         <span>{versions.length} trained</span>
       </header>
-
-      {baseVersion ? (
-        <div className="labs-model-lineage-card">
-          <div>
-            <span>Based on</span>
-            <strong>{baseVersion.baseModel.modelId}</strong>
-            <small>
-              {baseVersion.baseModel.revision
-                ? `Revision ${shortId(baseVersion.baseModel.revision)}`
-                : "Latest available revision"}
-            </small>
-          </div>
-          <dl>
-            <Fact
-              label="Dataset"
-              value={baseTaskset?.name ?? baseVersion.taskset.id}
-            />
-            <Fact label="Profile" value={baseVersion.profileId} />
-          </dl>
-        </div>
-      ) : null}
 
       <div className="training-table-wrap">
         <table className="training-data-table labs-model-versions-table">
@@ -647,7 +636,11 @@ function runEntryTimestamp(entry: RunEntry): string {
 }
 
 function runResult(entry: RunEntry) {
-  if (entry.draft) return "Not started";
+  if (entry.draft) {
+    return entry.draft.status === "ready_to_run"
+      ? "Ready to submit"
+      : "Open setup";
+  }
   if (entry.version) return `Version ${entry.version.number}`;
   if (entry.lifecycleRun?.reward) {
     return `Reward ${entry.lifecycleRun.reward.raw.toFixed(3)}`;
@@ -749,13 +742,4 @@ function shortId(value: string) {
     .replace(/^(?:training_job_|lineage_)(?:fireworks_)?(?:artifact_)?/, "")
     .replace(/^model_run_/, "");
   return normalized.length <= 12 ? normalized : normalized.slice(-8);
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
 }

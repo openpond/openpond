@@ -1,5 +1,5 @@
 .labs-models-table {
-  min-width: 880px;
+  min-width: 780px;
 }
 
 .labs-models-table th:first-child {
@@ -12,65 +12,6 @@
 .labs-models-table td:nth-child(6) {
   color: var(--muted-strong);
   font-size: 11px;
-}
-
-.labs-model-setup-drafts {
-  display: grid;
-  gap: 10px;
-  border: 1px solid color-mix(in srgb, #6291d1 42%, var(--border));
-  border-radius: 9px;
-  background: color-mix(in srgb, #6291d1 7%, var(--panel));
-  padding: 13px;
-}
-
-.labs-model-setup-drafts > div:first-child {
-  display: grid;
-  gap: 3px;
-}
-
-.labs-model-setup-drafts > div:first-child strong {
-  font-size: 12px;
-}
-
-.labs-model-setup-drafts > div:first-child span {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.labs-model-setup-draft-list {
-  display: grid;
-  gap: 6px;
-}
-
-.labs-model-setup-draft-list button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg);
-  color: var(--text);
-  padding: 9px 10px;
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.labs-model-setup-draft-list button > span:first-child {
-  display: grid;
-  gap: 2px;
-  text-align: left;
-}
-
-.labs-model-setup-draft-list small,
-.labs-model-setup-draft-list button > span:last-child {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.labs-model-setup-draft-list button:hover {
-  border-color: color-mix(in srgb, #6291d1 60%, var(--border));
 }
 
 .labs-model-run-list-actions {

@@ -34,7 +34,10 @@ import type { LabDetailLocation } from "./lab-detail-navigation";
 import { LabAgentEvalActions } from "./LabEvalActions";
 import { LabAgentChanges } from "./LabAgentChanges";
 import { LabAgentChangeHistory } from "./LabAgentChangeHistory";
-import { LabModelOverview } from "./LabModelOverview";
+import {
+  LabModelDetails,
+  LabModelOverview,
+} from "./LabModelOverview";
 import {
   LabModelRunsPage,
   LabModelVersionsPage,
@@ -614,7 +617,7 @@ export function LabWorkproductDetail({
             </button>
             {persistedProfileAgent ? (
               <button
-                className="settings-secondary compact"
+                className="training-button secondary labs-compact-button"
                 type="button"
                 onClick={onRenameAgent}
               >
@@ -681,11 +684,18 @@ export function LabWorkproductDetail({
         ) : workproduct.kind === "model" ? (
           <>
             <LabModelOverview
-              connection={connection}
               runs={runs}
               training={training}
               workproduct={workproduct}
+            />
+            <LabModelRunsPage
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              readOnly={readOnlyModel}
+              onOpenDataset={onOpenDataset}
               onOpenEntry={setSelectedModelEntryKey}
+              onResumeDraft={setEditingRunDraftId}
             />
             <LabModelVersionsPage
               runs={runs}
@@ -696,14 +706,10 @@ export function LabWorkproductDetail({
               onOpenEntry={setSelectedModelEntryKey}
               onToast={onToast}
             />
-            <LabModelRunsPage
+            <LabModelDetails
               runs={runs}
               training={training}
               workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onResumeDraft={setEditingRunDraftId}
             />
           </>
         ) : activeTab === "overview" ? (

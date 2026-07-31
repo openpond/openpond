@@ -73,7 +73,7 @@ describe("Work model tools", () => {
       expect.arrayContaining([
         expect.objectContaining({
           args: expect.objectContaining({
-            command: "cd work && python -V",
+            command: "cd /workspace/work && python -V",
             timeoutSeconds: 30,
           }),
         }),

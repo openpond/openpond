@@ -134,7 +134,7 @@ describe("experience capability policy", () => {
       workspaceToolExperienceBlocker({
         session: { experience: "work" },
         action: "sandbox_exec",
-        args: { command: "cd work && python report.py" },
+        args: { command: "cd /workspace/work && python report.py" },
       })
     ).toBeNull();
   });

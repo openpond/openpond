@@ -328,7 +328,7 @@ function TasksetHistory({
       {runs.length > 10 ? (
         <div className="labs-model-run-list-actions">
           <button
-            className="settings-secondary compact"
+            className="training-button secondary labs-compact-button"
             type="button"
             onClick={() => setShowAll((visible) => !visible)}
           >

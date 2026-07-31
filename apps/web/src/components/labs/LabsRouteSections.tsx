@@ -134,7 +134,7 @@ export function WorkproductsTable({
                   <div className="labs-workproduct-actions">
                     {item.kind === "skill" ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -145,7 +145,7 @@ export function WorkproductsTable({
                       </button>
                     ) : item.kind === "agent" && item.useActionId ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -156,7 +156,7 @@ export function WorkproductsTable({
                       </button>
                     ) : item.kind === "model" && item.enabled !== null ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         disabled={!item.enabled}
                         title={
@@ -265,7 +265,7 @@ export function ModelsTable({
                 <td>
                   <div className="labs-workproduct-actions">
                     <button
-                      className="settings-secondary compact labs-workproduct-use"
+                      className="training-button secondary labs-compact-button labs-workproduct-use"
                       disabled={!current}
                       title={
                         current

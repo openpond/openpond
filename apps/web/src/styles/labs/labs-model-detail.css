@@ -35,61 +35,8 @@
   white-space: nowrap;
 }
 
-.labs-model-lineage-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel-soft);
-  padding: 14px 16px;
-}
-
-.labs-model-lineage-card > div {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.labs-model-lineage-card > div > span,
-.labs-model-lineage-card small {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.labs-model-lineage-card > div > strong {
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.labs-model-lineage-card dl {
-  display: flex;
-  gap: 24px;
-  margin: 0;
-}
-
-.labs-model-lineage-card dl > div {
-  display: grid;
-  gap: 3px;
-}
-
-.labs-model-lineage-card dt {
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.labs-model-lineage-card dd {
-  margin: 0;
-  font-size: 11px;
-}
-
 .labs-model-overview {
-  display: grid;
   min-width: 0;
-  gap: 26px;
 }
 
 .labs-model-kpi-grid {
@@ -112,11 +59,6 @@
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
-}
-
-.labs-model-kpi:hover {
-  background: var(--panel-soft);
 }
 
 .labs-model-kpi > span,
@@ -144,70 +86,16 @@
   background: var(--panel);
 }
 
-.labs-model-overview-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
-  gap: 24px;
+.labs-model-runs-table {
+  min-width: 760px;
 }
 
-.labs-model-empty-panel {
-  display: grid;
-  min-height: 220px;
-  place-content: center;
-  justify-items: center;
-  gap: 7px;
-  color: var(--muted);
-  text-align: center;
+.labs-model-run-draft {
+  background: color-mix(in srgb, #6291d1 6%, var(--panel));
 }
 
-.labs-model-empty-panel strong {
-  color: var(--text);
-  font-size: 13px;
-}
-
-.labs-model-empty-panel span {
-  max-width: 380px;
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.labs-model-empty-panel button {
-  margin-top: 5px;
-}
-
-.labs-model-latest-run {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  border: 0;
-  background: transparent;
-  padding: 4px 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.labs-model-latest-run:hover strong {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.labs-model-latest-run > span {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.labs-model-latest-run strong {
-  font-size: 12px;
-}
-
-.labs-model-latest-run small {
-  color: var(--muted);
-  font-size: 10px;
+.labs-model-run-draft .labs-version-row-button small {
+  color: #7da9e4;
 }
 
 .labs-model-version-detail {
@@ -534,6 +422,12 @@
   margin-bottom: 18px;
 }
 
+@media (max-width: 1120px) {
+  .labs-model-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 860px) {
   .labs-header {
     padding: 8px 18px 0;
@@ -601,22 +495,8 @@
     gap: 16px;
   }
 
-  .labs-model-kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .labs-model-overview-columns {
-    grid-template-columns: 1fr;
-  }
-
   .labs-run-summary-columns {
     grid-template-columns: 1fr;
-  }
-
-  .labs-model-lineage-card {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 14px;
   }
 
   .labs-method-tabs {
@@ -665,12 +545,6 @@
   .labs-run-taskset-link {
     justify-content: flex-start;
     text-align: left;
-  }
-
-  .labs-model-lineage-card dl {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
   }
 
   .labs-primary-tabs button {
