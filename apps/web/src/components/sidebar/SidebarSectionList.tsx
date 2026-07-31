@@ -85,7 +85,6 @@ export function SidebarSectionList({
   savedForLaterSessions,
   sectionMenuOpen,
   selectedSessionId,
-  sessionRuntimeSecondsById,
   setChatRowsVisibleCount,
   setSectionMenuOpen,
   setSelectedAppId,
@@ -314,7 +313,6 @@ export function SidebarSectionList({
             subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
             terminalIndicator={terminalIndicatorForSession(session.id)}
             projectLabel={projectLabelForSession(parentSession)}
-            runtimeSeconds={sessionRuntimeSecondsById.get(session.id) ?? 0}
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
             onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
@@ -382,7 +380,6 @@ export function SidebarSectionList({
           subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
           terminalIndicator={terminalIndicatorForSession(session.id)}
           projectLabel={projectLabelForSession(session)}
-          runtimeSeconds={sessionRuntimeSecondsById.get(session.id) ?? 0}
           childSessionCount={childSessions.length}
           childSessionsExpanded={childSessionsExpanded(session, childSessions)}
           onToggleChildSessions={() => toggleChildSessions(session.id)}
