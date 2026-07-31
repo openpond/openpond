@@ -92,6 +92,7 @@ export type ConnectedAppToolCallRequest = {
   toolName: ConnectedAppProviderToolName;
   sessionId: string;
   turnId: string;
+  toolCallId: string;
   userPrompt: string;
   connectionIds: string[];
   capabilityIds: string[];

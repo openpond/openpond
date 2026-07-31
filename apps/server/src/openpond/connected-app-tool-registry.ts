@@ -319,6 +319,7 @@ async function executeConnectedAppToolDefinition(input: {
       toolName: input.toolName,
       sessionId: input.context.session.id,
       turnId: input.context.turnId,
+      toolCallId: input.context.callId,
       userPrompt: input.context.userPrompt,
       connectionIds: [...connectedApp.connectionIds],
       capabilityIds,
