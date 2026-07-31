@@ -5,7 +5,6 @@ import {
 } from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
-import { DetailSection } from "../training/DetailSection";
 import { TrainingRolloutReceipts } from "../training/TrainingModelEvidence";
 import { TrainingRunEvaluation } from "../training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../training/TrainingRunMetrics";
@@ -265,13 +264,11 @@ export function LabModelVersionDetailPage({
         }
       >
         {selectedJob ? (
-          <DetailSection title="Training charts">
-            <TrainingRunMetrics
-              detail={detail.detail}
-              error={detail.error}
-              loading={detail.loading}
-            />
-          </DetailSection>
+          <TrainingRunMetrics
+            detail={detail.detail}
+            error={detail.error}
+            loading={detail.loading}
+          />
         ) : null}
       </LabModelRunSummary>
 
