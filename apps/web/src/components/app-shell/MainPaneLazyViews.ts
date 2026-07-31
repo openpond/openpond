@@ -6,6 +6,11 @@ export const WorkspaceDiffPanel = lazy(() =>
 export const AppsView = lazy(() =>
   import("../apps/AppsView").then((module) => ({ default: module.AppsView })),
 );
+export const HostedScheduledWorkView = lazy(() =>
+  import("../scheduled/HostedScheduledWorkView").then((module) => ({
+    default: module.HostedScheduledWorkView,
+  })),
+);
 export const GetStartedView = lazy(() =>
   import("../get-started/GetStartedView").then((module) => ({ default: module.GetStartedView })),
 );

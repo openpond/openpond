@@ -40,6 +40,7 @@ export type AppView =
   | "team"
   | "community"
   | "apps"
+  | "scheduled"
   | "get-started"
   | "labs"
   | "profile"

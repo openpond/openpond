@@ -27,6 +27,10 @@ import type {
   LocalAgentScheduleRunResponse,
   PatchLocalAgentScheduleRequest,
   LocalAgentScheduleRunNowRequest,
+  HostedWorkSchedulesResponse,
+  HostedWorkScheduleMutationRequest,
+  HostedWorkScheduleRunRequest,
+  HostedWorkScheduleToggleRequest,
   LocalProject,
   UpdateLocalProjectAgentSetupRequest,
   PatchSessionRequest,
@@ -702,6 +706,38 @@ export const api = {
       `/v1/local-agent-schedules/${encodeURIComponent(scheduleId)}/runs${query}`
     );
   },
+  hostedWorkSchedules: (connection: ClientConnection, teamId: string) =>
+    apiFetch<HostedWorkSchedulesResponse>(
+      connection,
+      `/v1/hosted-work-schedules?teamId=${encodeURIComponent(teamId)}`
+    ),
+  runHostedWorkSchedule: (
+    connection: ClientConnection,
+    input: HostedWorkScheduleRunRequest
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/hosted-work-schedules/${encodeURIComponent(input.scheduleId)}/run`,
+      { method: "POST", body: JSON.stringify(input) }
+    ),
+  toggleHostedWorkSchedule: (
+    connection: ClientConnection,
+    input: HostedWorkScheduleToggleRequest
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/hosted-work-schedules/${encodeURIComponent(input.scheduleId)}`,
+      { method: "PATCH", body: JSON.stringify(input) }
+    ),
+  deleteHostedWorkSchedule: (
+    connection: ClientConnection,
+    input: HostedWorkScheduleMutationRequest
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/hosted-work-schedules/${encodeURIComponent(input.scheduleId)}`,
+      { method: "DELETE", body: JSON.stringify(input) }
+    ),
   refreshOpenPondAccounts: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/openpond/accounts/refresh", {
       method: "POST",

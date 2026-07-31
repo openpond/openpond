@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import type { Experience, OpenPondApp } from "@openpond/contracts";
 import {
   BookOpenText,
+  CalendarClock,
   ChartColumnStacked,
   Plug,
   SquarePen,
@@ -49,6 +50,20 @@ export function SidebarNavigation({
         <SquarePen size={16} />
         <span>{experience === "chat" ? "New chat" : "New task"}</span>
       </button>
+      {experience === "work" ? (
+        <button
+          className={`nav-command ${view === "scheduled" ? "active" : ""}`}
+          aria-label="Scheduled"
+          type="button"
+          onClick={() => {
+            clearWorkspaceSelection();
+            setView("scheduled");
+          }}
+        >
+          <CalendarClock size={16} />
+          <span>Scheduled</span>
+        </button>
+      ) : null}
       {experience === "development" ? (
         <>
           <button

@@ -166,6 +166,8 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   const title =
     view === "apps"
       ? "Apps"
+      : view === "scheduled"
+      ? "Scheduled"
       : view === "get-started"
       ? "Docs"
       : view === "labs"

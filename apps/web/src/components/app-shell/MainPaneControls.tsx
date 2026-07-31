@@ -126,6 +126,7 @@ export function mainPaneViewClass(view: AppView, showChatThread: boolean): strin
   if (view === "community") return "community-active";
   if (
     view === "apps" ||
+    view === "scheduled" ||
     view === "get-started" ||
     view === "labs" ||
     view === "profile"

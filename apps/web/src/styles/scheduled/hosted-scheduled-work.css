@@ -1,0 +1,37 @@
+.hosted-scheduled-view { display:flex; flex:1; min-height:0; flex-direction:column; color:var(--text-primary); background:var(--bg-primary); }
+.hosted-scheduled-header { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:28px 32px 22px; border-bottom:1px solid var(--border-subtle); }
+.hosted-scheduled-header h1,.hosted-scheduled-detail h2,.hosted-scheduled-detail h3 { margin:0; }
+.hosted-scheduled-header p,.hosted-scheduled-detail p { margin:6px 0 0; color:var(--text-secondary); }
+.hosted-scheduled-header small { display:block; margin-top:7px; color:var(--text-tertiary); }
+.hosted-scheduled-header-actions,.hosted-scheduled-detail-heading>div:last-child { display:flex; gap:8px; align-items:center; }
+.hosted-scheduled-view button { display:inline-flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--border-default); border-radius:8px; padding:8px 12px; background:var(--text-primary); color:var(--bg-primary); font:inherit; cursor:pointer; }
+.hosted-scheduled-view button.secondary,.hosted-scheduled-view button.icon { background:var(--bg-secondary); color:var(--text-primary); }
+.hosted-scheduled-view button.icon { padding:8px; }
+.hosted-scheduled-view button:disabled { opacity:.55; cursor:default; }
+.hosted-scheduled-body { display:grid; grid-template-columns:minmax(260px,340px) minmax(0,1fr); flex:1; min-height:0; }
+.hosted-scheduled-list { overflow:auto; border-right:1px solid var(--border-subtle); padding:14px; }
+.hosted-scheduled-filters { display:flex; gap:4px; margin-bottom:8px; }
+.hosted-scheduled-filters button { padding:6px 10px; border-color:transparent; background:transparent; color:var(--text-secondary); text-transform:capitalize; }
+.hosted-scheduled-filters button.active { background:var(--bg-tertiary); color:var(--text-primary); }
+.hosted-scheduled-row { width:100%; flex-direction:column; align-items:stretch!important; text-align:left; border:0!important; border-radius:8px!important; background:transparent!important; color:var(--text-primary)!important; padding:12px!important; }
+.hosted-scheduled-row.active { background:var(--bg-secondary)!important; }
+.hosted-scheduled-row>span { display:flex; align-items:center; gap:8px; font-weight:600; }
+.hosted-scheduled-row i { width:8px; height:8px; border-radius:999px; background:var(--text-tertiary); }
+.hosted-scheduled-row i.enabled { background:var(--success-text,#22c55e); }
+.hosted-scheduled-row small { padding-left:16px; color:var(--text-tertiary); }
+.hosted-scheduled-detail { overflow:auto; padding:28px 32px 48px; }
+.hosted-scheduled-detail-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+.hosted-scheduled-detail section { margin-top:30px; }
+.hosted-scheduled-detail h3 { font-size:14px; }
+.hosted-scheduled-detail .prompt { white-space:pre-wrap; line-height:1.55; color:var(--text-primary); }
+.hosted-scheduled-detail dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.hosted-scheduled-detail dl div { padding:12px; border:1px solid var(--border-subtle); border-radius:8px; }
+.hosted-scheduled-detail dt { color:var(--text-tertiary); font-size:12px; }
+.hosted-scheduled-detail dd { margin:4px 0 0; }
+.hosted-scheduled-run { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; padding:11px 0; border-bottom:1px solid var(--border-subtle); color:var(--text-secondary); }
+.hosted-scheduled-loading,.hosted-scheduled-empty,.hosted-scheduled-error { padding:24px 12px; color:var(--text-secondary); }
+.hosted-scheduled-loading { display:flex; gap:8px; align-items:center; }
+.hosted-scheduled-error { color:var(--danger-text,#dc2626); }
+.hosted-scheduled-loading svg { animation:hosted-scheduled-spin 1s linear infinite; }
+@keyframes hosted-scheduled-spin { to { transform:rotate(360deg); } }
+@media (max-width:760px) { .hosted-scheduled-header { align-items:flex-start; padding:20px; flex-direction:column; } .hosted-scheduled-body { grid-template-columns:1fr; } .hosted-scheduled-list { border-right:0; } .hosted-scheduled-detail { padding:20px; } .hosted-scheduled-detail-heading { flex-direction:column; } .hosted-scheduled-detail dl { grid-template-columns:1fr; } }

@@ -86,6 +86,7 @@ import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
 
 import {
   AppsView,
+  HostedScheduledWorkView,
   BrowserSidebar,
   GetStartedView,
   LabsRoute,
@@ -1397,6 +1398,15 @@ export function MainPane({
             account={bootstrap?.account ?? null}
             connection={connection}
             defaultTeamId={bootstrap?.preferences.defaultTeamId ?? null}
+            onToast={showToast}
+          />
+        </Suspense>
+      ) : view === "scheduled" ? (
+        <Suspense fallback={null}>
+          <HostedScheduledWorkView
+            account={bootstrap?.account ?? null}
+            connection={connection}
+            teamId={bootstrap?.preferences.defaultTeamId ?? null}
             onToast={showToast}
           />
         </Suspense>
