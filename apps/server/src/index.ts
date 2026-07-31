@@ -132,6 +132,7 @@ import {
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
+import { waitForWorkReceiptSettlement } from "./openpond/work-runtime-service.js";
 import {
   createImproveLimit,
   createImproveTargetKind,
@@ -453,7 +454,11 @@ export async function createOpenPondServer(
       ),
     };
   }
-  const { resolveFireworksCredential, trainingModelText } =
+  const {
+    resolveFireworksCredential,
+    trainingModelText,
+    trainingModelStream,
+  } =
     createTrainingModelRuntime({
       providerSecretPaths,
       loadLocalByokRuntimeState: localByokRuntimeState,
@@ -501,9 +506,34 @@ export async function createOpenPondServer(
       "openpond-training"
     ),
   });
+  const tasksetWorkRuntime = {
+    createSession,
+    getSession,
+    executeWorkspaceTool,
+    runtimeEventsForSession: (sessionId: string) =>
+      store.runtimeEventsForSession(sessionId),
+    settleCostEvidence: (
+      sessionId: string,
+      options?: { turnId?: string },
+    ) =>
+      waitForWorkReceiptSettlement(() =>
+        executeWorkspaceTool(
+          sessionId,
+          {
+            action: "sandbox_receipts",
+            args: {},
+            source: "chat_action",
+          },
+          { turnId: options?.turnId },
+        )
+      ),
+  };
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
+    modelText: trainingModelText,
+    modelStream: trainingModelStream,
+    workRuntime: tasksetWorkRuntime,
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: async ({ grader, task, attempt }) => {
@@ -603,6 +633,7 @@ export async function createOpenPondServer(
       const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
       return resolveManagedAdapterUserAccess({ teamId });
     },
+    loadProfileState: loadOpenPondProfileState,
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -621,6 +652,7 @@ export async function createOpenPondServer(
     projectDatasetArtifact: datasetArtifactService.project,
     resolveDatasetTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
+    tasksetWorkRuntime,
     deactivateManagedBinding: managedAdapterSyncService.deactivateBinding,
     reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
     activateManagedBinding: managedAdapterSyncService.activateBinding,

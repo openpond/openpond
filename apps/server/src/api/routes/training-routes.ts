@@ -110,6 +110,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/artifacts$/, method: "GET", action: "model_run_artifacts", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
     { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },

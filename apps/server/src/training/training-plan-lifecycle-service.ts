@@ -28,6 +28,7 @@ export type TrainingStartInput = {
   tasksetId: string;
   destinationId: TrainingDestinationId;
   recipe: unknown;
+  environmentPlacement?: "local" | "remote";
   exportApproved?: boolean;
   maximumCostUsd?: number | null;
   retentionDays?: number | null;
@@ -64,17 +65,23 @@ export function createTrainingPlanLifecycleService(deps: {
       taskset,
       destinationId: input.destinationId,
       recipe,
+      environmentPlacement: input.environmentPlacement,
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
       region: input.region,
     });
+    const requestedPlacement =
+      input.environmentPlacement ?? initial.environmentPlacement;
+    const environmentPlacement =
+      capabilities.environmentPlacements.includes(requestedPlacement)
+        ? requestedPlacement
+        : recipe.method === "ppo"
+          && capabilities.environmentPlacements.includes("local")
+          ? "local"
+          : capabilities.environmentPlacements[0] ?? "none";
     const draft = TrainingPlanSchema.parse({
       ...initial,
-      environmentPlacement:
-        recipe.method === "ppo"
-        && capabilities.environmentPlacements.includes("local")
-          ? "local"
-          : capabilities.environmentPlacements[0] ?? "none",
+      environmentPlacement,
     });
     const compatibility = await destination.validate(draft);
     const quote = compatibility.compatible

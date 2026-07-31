@@ -12,7 +12,6 @@ import type {
   TrainingRecipe,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import { TrainingGoalCards } from "../training/TrainingGoalCards";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import {
   TrainingStartDialog,
@@ -24,7 +23,6 @@ import {
   type ModelSetupStepId,
 } from "./ModelSetupSteps";
 import {
-  datasetGuidance,
   methodAvailability,
   presetFor,
   presetsFor,
@@ -102,33 +100,14 @@ export function ModelRunSetupContent({
         onStepChange={onStepChange}
       />
 
-      {activeStep === "goal" ? (
-        <section className="model-build-section">
-          <div className="model-build-section-heading">
-            <h2>What do you want to build?</h2>
-          </div>
-          <TrainingGoalCards
-            value={draft.buildIntent}
-            onChange={(buildIntent) => {
-              setDraft((current) => ({
-                ...current,
-                buildIntent,
-                buildSpecification:
-                  current.buildSpecification?.kind === buildIntent
-                    ? current.buildSpecification
-                    : null,
-                updatedAt: new Date().toISOString(),
-              }));
-              onStepChange("dataset");
-            }}
-          />
-        </section>
-      ) : activeStep === "dataset" ? (
+      {activeStep === "dataset" ? (
         <section className="model-build-section">
           <div className="model-build-section-heading">
             <div>
-              <h2>Choose or build a Taskset</h2>
-              <p>{datasetGuidance(draft.buildIntent)}</p>
+              <h2>Choose a Taskset</h2>
+              <p>
+                Use a ready Taskset, or create one conversationally in Chat.
+              </p>
             </div>
           </div>
           <div className="model-build-dataset-step">
@@ -167,12 +146,6 @@ export function ModelRunSetupContent({
               <button
                 className="training-button secondary"
                 type="button"
-                disabled={!draft.buildIntent}
-                title={
-                  draft.buildIntent
-                    ? undefined
-                    : "Choose a goal before building a Taskset."
-                }
                 onClick={onOpenDatasetBuilder}
               >
                 {draft.datasetMode === "build"
@@ -323,6 +296,32 @@ export function ModelRunSetupContent({
                         ?? "Use Taskset-aware recommended limits."}
                     </small>
                   </label>
+                  {draft.destinationId === "openpond_managed" ? (
+                    <label className="model-build-field">
+                      <span>Rollout execution</span>
+                      <select
+                        aria-label="Rollout execution"
+                        value={draft.managedRolloutPlacement ?? "local"}
+                        onChange={(event) =>
+                          setDraft((current) => ({
+                            ...current,
+                            managedRolloutPlacement:
+                              event.target.value === "remote"
+                                ? "remote"
+                                : "local",
+                            updatedAt: new Date().toISOString(),
+                          }))}
+                      >
+                        <option value="local">This desktop</option>
+                        <option value="remote">Hosted Sandboxes</option>
+                      </select>
+                      <small>
+                        This desktop keeps local integrations and provider
+                        credentials on this device. Hosted Sandboxes can run
+                        unattended.
+                      </small>
+                    </label>
+                  ) : null}
                 </details>
               }
               onReadinessChange={onLaunchStateChange}

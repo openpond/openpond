@@ -17,8 +17,7 @@ import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { prepareTrainingSelection } from "@openpond/training-sdk";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 
-const PRIME_RL_REVISION =
-  "e0d60e4d85ea636873acb2e7083e794740d20226";
+const PRIME_RL_REVISION = "e0d60e4d85ea636873acb2e7083e794740d20226";
 const LOCAL_TARGET_POLICY = {
   executionMode: "local_worker" as const,
   approvalPolicy: null,
@@ -51,8 +50,7 @@ const MANAGED_TARGET_POLICY = {
     minimumRetentionDays: 1,
     maximumRetentionDays: 30,
     defaultRetentionDays: 7,
-    methodRequirement:
-      "Managed training selects qualified compute capacity after approval.",
+    methodRequirement: "Managed training selects qualified compute capacity after approval.",
   },
   limits: {
     maximumSequenceLength: 4_096,
@@ -64,7 +62,7 @@ const MANAGED_TARGET_POLICY = {
     maxSteps: 2,
     rolloutGroupSize: 4,
     rolloutConcurrency: 4,
-    rolloutOutputTokens: 2_048,
+    rolloutOutputTokens: 512,
   },
 };
 const FIREWORKS_TARGET_POLICY = {
@@ -111,11 +109,7 @@ export function createPortableTrainingCatalog(input: {
   now?: string;
 }): TrainingCatalog {
   const generatedAt = input.now ?? new Date().toISOString();
-  const compute = computeCapabilities(
-    input.inventory,
-    generatedAt,
-    input.adapterCompute ?? [],
-  );
+  const compute = computeCapabilities(input.inventory, generatedAt, input.adapterCompute ?? []);
   const engines = engineCapabilities({
     destinations: input.destinations,
     generatedAt,
@@ -140,22 +134,18 @@ export function createPortableTrainingCatalog(input: {
       engineIdForDestination(option.destinationId),
     );
     const cached = Boolean(asset) || candidate.preference.source === "builtin";
-    const providerManaged =
-      candidate.preference.source === "managed";
+    const providerManaged = candidate.preference.source === "managed";
     const chatTemplateHash =
       candidate.preference.chatTemplateHash &&
       /^[a-f0-9]{64}$/.test(candidate.preference.chatTemplateHash)
         ? candidate.preference.chatTemplateHash
         : providerManaged
-          ? sha256(
-              `provider-managed-chat-template:${candidate.preference.modelId}`,
-            )
+          ? sha256(`provider-managed-chat-template:${candidate.preference.modelId}`)
           : null;
-    const exactIdentity = Boolean(
-      candidate.preference.revision &&
-      candidate.preference.tokenizerRevision &&
-      chatTemplateHash,
-    ) || providerManaged;
+    const exactIdentity =
+      Boolean(
+        candidate.preference.revision && candidate.preference.tokenizerRevision && chatTemplateHash,
+      ) || providerManaged;
     const preparationState =
       candidate.preference.source === "managed"
         ? ("provider_managed" as const)
@@ -166,8 +156,7 @@ export function createPortableTrainingCatalog(input: {
       selectionKey: candidate.selectionKey,
       label: candidate.label,
       source:
-        candidate.preference.source === "local" &&
-        asset?.source === "huggingface"
+        candidate.preference.source === "local" && asset?.source === "huggingface"
           ? ("huggingface" as const)
           : candidate.preference.source,
       modelId: candidate.preference.modelId,
@@ -185,39 +174,37 @@ export function createPortableTrainingCatalog(input: {
       searchResolved: false,
       computeAdapterIds: [...new Set(computeAdapterIds)],
       engineAdapterIds: [...new Set(engineAdapterIds)],
-      preparationState: candidate.available && exactIdentity
-        ? preparationState
-        : ("unsupported" as const),
-      reason: candidate.available && exactIdentity
-        ? preparationState === "model_download_required"
-          ? "Pinned Model weights must be downloaded during Run preparation."
-          : preparationState === "provider_managed"
-            ? "The provider prepares these weights after approval."
-            : null
-        : candidate.available
-          ? "This Model is missing an exact revision, tokenizer revision, or canonical chat-template hash."
-          : candidate.unavailableReason,
+      preparationState:
+        candidate.available && exactIdentity ? preparationState : ("unsupported" as const),
+      reason:
+        candidate.available && exactIdentity
+          ? preparationState === "model_download_required"
+            ? "Pinned Model weights must be downloaded during Run preparation."
+            : preparationState === "provider_managed"
+              ? "The provider prepares these weights after approval."
+              : null
+          : candidate.available
+            ? "This Model is missing an exact revision, tokenizer revision, or canonical chat-template hash."
+            : candidate.unavailableReason,
       compatibilities: targets.map((target) => {
         const option = candidate.executionOptions.find(
           (item) => item.destinationId === target.destinationId,
         );
         const methods = option?.methods ?? [];
-        const engine = engines.find(
-          (item) => item.adapterId === target.engineAdapterId,
-        );
+        const engine = engines.find((item) => item.adapterId === target.engineAdapterId);
         const state = !exactIdentity
           ? ("unsupported" as const)
           : !option
-          ? ("unsupported" as const)
-          : !target.available
-            ? target.computeAdapterId === "openpond-managed"
-              ? ("compute_setup_required" as const)
-              : engine && !engine.available
+            ? ("unsupported" as const)
+            : !target.available
+              ? target.computeAdapterId === "openpond-managed"
+                ? ("compute_setup_required" as const)
+                : engine && !engine.available
+                  ? ("unsupported" as const)
+                  : ("compute_setup_required" as const)
+              : !option.available
                 ? ("unsupported" as const)
-                : ("compute_setup_required" as const)
-            : !option.available
-              ? ("unsupported" as const)
-              : preparationState;
+                : preparationState;
         return {
           targetId: target.id,
           methods,
@@ -226,15 +213,15 @@ export function createPortableTrainingCatalog(input: {
             state === "unsupported"
               ? !exactIdentity
                 ? "Import or rescan this Model to record its exact revision, tokenizer revision, and canonical chat-template hash."
-                : option?.unavailableReason ??
-                "This Model is not supported by the selected training target."
+                : (option?.unavailableReason ??
+                  "This Model is not supported by the selected training target.")
               : state === "compute_setup_required"
-                  ? target.unavailableReason
-                  : state === "model_download_required"
-                    ? "Pinned Model weights will be downloaded after Run review."
-                    : state === "provider_managed"
-                      ? "The provider manages Model preparation after approval."
-                      : null,
+                ? target.unavailableReason
+                : state === "model_download_required"
+                  ? "Pinned Model weights will be downloaded after Run review."
+                  : state === "provider_managed"
+                    ? "The provider manages Model preparation after approval."
+                    : null,
         };
       }),
     };
@@ -296,13 +283,12 @@ function trainingTargets(input: {
     {
       id: "openpond-managed",
       label: "OpenPond Managed",
-      description:
-        "Run the approved portable training bundle on OpenPond-managed infrastructure.",
+      description: "Run the approved portable training bundle on OpenPond-managed infrastructure.",
       destinationId: "openpond_managed",
       computeAdapterId: "openpond-managed",
-      runtimeAdapterId: "openpond-managed-harness",
-      engineAdapterId: "sandbox-managed-rft",
-      capabilityPills: ["Managed"],
+      runtimeAdapterId: "local-harness",
+      engineAdapterId: "sandbox-managed-rl",
+      capabilityPills: ["Managed", "Desktop rollouts"],
       ...MANAGED_TARGET_POLICY,
     },
     {
@@ -329,23 +315,14 @@ function trainingTargets(input: {
     },
   ] as const;
   const resolved = definitions.map((definition) => {
-    const compute = input.compute.find(
-      (item) => item.adapterId === definition.computeAdapterId,
-    );
-    const engine = input.engines.find(
-      (item) => item.adapterId === definition.engineAdapterId,
-    );
-    const runtime = input.runtimes.find(
-      (item) => item.adapterId === definition.runtimeAdapterId,
-    );
+    const compute = input.compute.find((item) => item.adapterId === definition.computeAdapterId);
+    const engine = input.engines.find((item) => item.adapterId === definition.engineAdapterId);
+    const runtime = input.runtimes.find((item) => item.adapterId === definition.runtimeAdapterId);
     const destination = input.destinations.find(
       (item) => item.destinationId === definition.destinationId,
     );
     const available = Boolean(
-      compute?.available &&
-      engine?.available &&
-      runtime?.available &&
-      destination?.available,
+      compute?.available && engine?.available && runtime?.available && destination?.available,
     );
     return {
       ...definition,
@@ -354,24 +331,21 @@ function trainingTargets(input: {
       available,
       unavailableReason: available
         ? null
-        : compute?.unavailableReason ??
+        : (compute?.unavailableReason ??
           engine?.unavailableReason ??
           runtime?.unavailableReason ??
           destination?.unavailableReason ??
-          "This training target is not configured.",
+          "This training target is not configured."),
     };
   });
   const selected =
     resolved.find(
       (target) =>
         target.available &&
-        (!input.preferredMethod ||
-          target.methods.includes(input.preferredMethod)),
+        (!input.preferredMethod || target.methods.includes(input.preferredMethod)),
     ) ??
     resolved.find(
-      (target) =>
-        !input.preferredMethod ||
-        target.methods.includes(input.preferredMethod),
+      (target) => !input.preferredMethod || target.methods.includes(input.preferredMethod),
     ) ??
     resolved[0]!;
   return [
@@ -404,14 +378,14 @@ export function preparePortableModelRun(input: {
     catalog: input.catalog,
   });
   const engine = bindings.engine
-    ? input.catalog.engines.find(
+    ? (input.catalog.engines.find(
         (candidate) => candidate.adapterId === bindings.engine!.adapterId,
-      ) ?? null
+      ) ?? null)
     : null;
   const compute = bindings.compute
-    ? input.catalog.compute.find(
+    ? (input.catalog.compute.find(
         (candidate) => candidate.adapterId === bindings.compute!.adapterId,
-      ) ?? null
+      ) ?? null)
     : null;
   return prepareTrainingSelection({
     modelRunId: input.modelRun.id,
@@ -432,6 +406,7 @@ export function preparePortableModelRun(input: {
 export function resolvePortableBindings(input: {
   modelRun: ModelRunDraft;
   catalog: TrainingCatalog;
+  environmentPlacement?: "local" | "remote" | "provider_native" | "colocated" | "none";
 }): {
   runtime: HarnessRuntimeTargetBinding | null;
   compute: ComputeTargetBinding | null;
@@ -445,17 +420,15 @@ export function resolvePortableBindings(input: {
     destinationId === "fireworks"
       ? "provider-native"
       : destinationId === "openpond_managed"
-        ? "openpond-managed-harness"
+        ? input.environmentPlacement === "remote" ||
+          (input.environmentPlacement === undefined &&
+            input.modelRun.managedRolloutPlacement === "remote")
+          ? "openpond-managed-harness"
+          : "local-harness"
         : "local-harness";
-  const compute = input.catalog.compute.find(
-    (candidate) => candidate.adapterId === computeId,
-  );
-  const engine = input.catalog.engines.find(
-    (candidate) => candidate.adapterId === engineId,
-  );
-  const runtime = input.catalog.runtimes.find(
-    (candidate) => candidate.adapterId === runtimeId,
-  );
+  const compute = input.catalog.compute.find((candidate) => candidate.adapterId === computeId);
+  const engine = input.catalog.engines.find((candidate) => candidate.adapterId === engineId);
+  const runtime = input.catalog.runtimes.find((candidate) => candidate.adapterId === runtimeId);
   if (!compute || !engine || !runtime) {
     return { runtime: null, compute: null, engine: null };
   }
@@ -494,29 +467,23 @@ function computeCapabilities(
   checkedAt: string,
   adapters: ComputeTargetCapabilities[],
 ): ComputeTargetCapabilities[] {
-  const localDevices: ComputeTargetCapabilities["devices"] =
-    inventory?.devices.map((device) => ({
-      id: device.id,
-      kind: device.kind,
-      vendor: device.vendor,
-      name: device.name,
-      memoryBytes: device.totalMemoryBytes,
-      runtime:
-        device.vendor === "nvidia"
-          ? "cuda"
-          : device.vendor === "apple"
-            ? "mlx"
-            : "cpu",
-    })) ?? [
-      {
-        id: "cpu",
-        kind: "cpu",
-        vendor: "other",
-        name: "Local CPU",
-        memoryBytes: null,
-        runtime: "cpu",
-      },
-    ];
+  const localDevices: ComputeTargetCapabilities["devices"] = inventory?.devices.map((device) => ({
+    id: device.id,
+    kind: device.kind,
+    vendor: device.vendor,
+    name: device.name,
+    memoryBytes: device.totalMemoryBytes,
+    runtime: device.vendor === "nvidia" ? "cuda" : device.vendor === "apple" ? "mlx" : "cpu",
+  })) ?? [
+    {
+      id: "cpu",
+      kind: "cpu",
+      vendor: "other",
+      name: "Local CPU",
+      memoryBytes: null,
+      runtime: "cpu",
+    },
+  ];
   const capability = (
     adapterId: string,
     kind: ComputeTargetCapabilities["kind"],
@@ -544,15 +511,15 @@ function computeCapabilities(
     unavailableReason: reason,
   });
   const defaults = [
-    capability("local-cpu", "local", null, localDevices.filter((device) => device.kind === "cpu"), true, null),
     capability(
-      "openpond-managed",
-      "managed",
-      "openpond",
-      [],
+      "local-cpu",
+      "local",
+      null,
+      localDevices.filter((device) => device.kind === "cpu"),
       true,
       null,
     ),
+    capability("openpond-managed", "managed", "openpond", [], true, null),
     capability("fireworks-managed", "managed", "fireworks", [], true, null),
   ];
   return mergeAdapterCapabilities(defaults, adapters);
@@ -580,8 +547,8 @@ function engineCapabilities(input: {
     precisions: ["fp32", "fp16", "bf16"],
     topologies: ["single_worker", "single_gpu_phased"],
     workerProtocolVersion:
-      adapterId === "sandbox-managed-rft"
-        ? "openpond.managedRftWorker.v2"
+      adapterId === "sandbox-managed-rl"
+        ? "openpond.managedRlWorker.v2"
         : adapterId === "fireworks-native"
           ? "openpond.fireworksNative.v1"
           : "openpond.localTrainingWorker.v1",
@@ -597,34 +564,44 @@ function engineCapabilities(input: {
     workerImageDigest: null,
   });
   const fireworksAvailable =
-    input.destinations.find(
-      (destination) => destination.destinationId === "fireworks",
-    )?.available ?? false;
+    input.destinations.find((destination) => destination.destinationId === "fireworks")
+      ?.available ?? false;
   const registered = new Set(input.registeredEngineIds);
   return [
-    engine("local-trl", ["sft", "dpo", "ppo"], ["demonstration", "preference", "trajectory", "reward"], registered.has("local-trl"), "trl-0.26.2", registered.has("local-trl") ? null : "The local TRL adapter is not registered."),
     engine(
-      "sandbox-managed-rft",
+      "local-trl",
+      ["sft", "dpo", "ppo"],
+      ["demonstration", "preference", "trajectory", "reward"],
+      registered.has("local-trl"),
+      "trl-0.26.2",
+      registered.has("local-trl") ? null : "The local TRL adapter is not registered.",
+    ),
+    engine(
+      "sandbox-managed-rl",
       ["grpo"],
-      [
-        "trajectory",
-        "reward",
-        "grader_evidence",
-        "infrastructure_failure",
-      ],
-      registered.has("sandbox-managed-rft"),
+      ["trajectory", "reward", "grader_evidence", "infrastructure_failure"],
+      registered.has("sandbox-managed-rl"),
       PRIME_RL_REVISION,
-      registered.has("sandbox-managed-rft")
+      registered.has("sandbox-managed-rl")
         ? null
         : "Register the OpenPond Managed training adapter.",
     ),
-    engine("fireworks-native", ["sft", "grpo"], ["demonstration", "trajectory", "reward"], fireworksAvailable && registered.has("fireworks-native"), "provider-managed", !fireworksAvailable ? "Fireworks is not configured." : !registered.has("fireworks-native") ? "The Fireworks adapter is not registered." : null),
+    engine(
+      "fireworks-native",
+      ["sft", "grpo"],
+      ["demonstration", "trajectory", "reward"],
+      fireworksAvailable && registered.has("fireworks-native"),
+      "provider-managed",
+      !fireworksAvailable
+        ? "Fireworks is not configured."
+        : !registered.has("fireworks-native")
+          ? "The Fireworks adapter is not registered."
+          : null,
+    ),
   ];
 }
 
-function runtimeCapabilities(
-  checkedAt: string,
-): HarnessRuntimeCapabilities[] {
+function runtimeCapabilities(checkedAt: string): HarnessRuntimeCapabilities[] {
   const runtime = (
     adapterId: string,
     placements: HarnessRuntimeCapabilities["placements"],
@@ -656,9 +633,7 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
   defaults: T[],
   adapters: T[],
 ): T[] {
-  const resolved = new Map(
-    defaults.map((capability) => [capability.adapterId, capability]),
-  );
+  const resolved = new Map(defaults.map((capability) => [capability.adapterId, capability]));
   for (const capability of adapters) {
     resolved.set(capability.adapterId, capability);
   }
@@ -678,7 +653,7 @@ function engineIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-trl",
     fireworks: "fireworks-native",
-    openpond_managed: "sandbox-managed-rft",
+    openpond_managed: "sandbox-managed-rl",
   };
   return values[destinationId] ?? "unsupported";
 }

@@ -1,6 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CodexReasoningEffort } from "@openpond/contracts";
-import { Check, ChevronDown, Cloud, Folder, Plus, UploadCloud } from "../icons";
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cloud,
+  Folder,
+  Plus,
+  UploadCloud,
+} from "../icons";
 import { CODEX_MODEL_OPTIONS, CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
 import type { DropdownOption } from "../../lib/app-models";
 import type {
@@ -146,11 +155,11 @@ export function ComposerProjectTargetControl({
   onChange: (value: string) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
   const [query, setQuery] = useState("");
   const menuRef = useRef<HTMLDivElement | null>(null);
   const noProjectSelected = state.value === "none";
   const triggerLabel = noProjectSelected ? "Select Project" : state.label;
-  const triggerDetail = noProjectSelected ? "Choose a project for local or cloud work" : state.detail;
   const selectedIconKind =
     state.options.find((option) => option.value === state.value)?.kind ?? "local";
   const visibleOptions = useMemo(() => {
@@ -162,17 +171,29 @@ export function ComposerProjectTargetControl({
         .some((value) => value.toLowerCase().includes(needle)),
     );
   }, [query, state.options]);
+  const visibleProjectOptions = visibleOptions.filter(
+    (option) => option.kind === "local" || option.kind === "cloud"
+  );
+  const visibleCreationOptions = visibleOptions.filter(
+    (option) => option.kind === "action"
+  );
+  const visibleNoProjectOptions = visibleOptions.filter(
+    (option) => option.kind === "none"
+  );
 
   useEffect(() => {
     if (!open) {
       setQuery("");
+      setNewMenuOpen(false);
       return;
     }
     function handlePointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     }
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      if (newMenuOpen) setNewMenuOpen(false);
+      else setOpen(false);
     }
     document.addEventListener("pointerdown", handlePointerDown);
     document.addEventListener("keydown", handleKeyDown);
@@ -180,12 +201,46 @@ export function ComposerProjectTargetControl({
       document.removeEventListener("pointerdown", handlePointerDown);
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open]);
+  }, [newMenuOpen, open]);
+
+  function renderOption(option: ComposerProjectTargetOption) {
+    const selected = option.value === state.value;
+    const disabled = busy || option.disabled;
+    const action = option.kind === "action";
+    const title =
+      option.disabled && option.disabledReason
+        ? option.disabledReason
+        : `${option.label}: ${option.detail}`;
+    return (
+      <button
+        key={option.value}
+        type="button"
+        role={action ? "menuitem" : "menuitemradio"}
+        aria-checked={action ? undefined : selected}
+        className={`composer-project-option ${
+          selected ? "selected" : ""
+        } ${option.kind}`}
+        disabled={disabled}
+        data-tooltip={title}
+        onClick={() => {
+          onChange(option.value);
+          setNewMenuOpen(false);
+          setOpen(false);
+        }}
+      >
+        <ProjectTargetIcon kind={option.kind} size={14} />
+        <span>
+          <strong>{option.label}</strong>
+          <small>{option.detail}</small>
+        </span>
+        {selected && <Check size={14} />}
+      </button>
+    );
+  }
 
   return (
     <div
       className={`composer-project-target ${placement === "top" ? "open-up" : ""}`}
-      data-tooltip={`${triggerLabel}: ${triggerDetail}`}
       ref={menuRef}
     >
       <button
@@ -195,7 +250,10 @@ export function ComposerProjectTargetControl({
         aria-label="Project"
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          setOpen((current) => !current);
+          setNewMenuOpen(false);
+        }}
       >
         <ProjectTargetIcon kind={selectedIconKind} size={14} />
         <span>{triggerLabel}</span>
@@ -215,39 +273,54 @@ export function ComposerProjectTargetControl({
             {visibleOptions.length === 0 ? (
               <div className="composer-menu-empty">No projects found</div>
             ) : (
-              visibleOptions.map((option) => {
-                const selected = option.value === state.value;
-                const disabled = busy || option.disabled;
-                const title = option.disabled && option.disabledReason
-                  ? option.disabledReason
-                  : `${option.label}: ${option.detail}`;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    role="menuitemradio"
-                    aria-checked={selected}
-                    className={`composer-project-option ${selected ? "selected" : ""} ${option.kind}`}
-                    disabled={disabled}
-                    data-tooltip={title}
-                    onClick={() => {
-                      onChange(option.value);
-                      setOpen(false);
-                    }}
-                  >
-                    <ProjectTargetIcon kind={option.kind} size={14} />
-                    <span>
-                      <strong>{option.label}</strong>
-                      <small>{option.detail}</small>
-                    </span>
-                    {selected && <Check size={14} />}
-                  </button>
-                );
-              })
+              visibleProjectOptions.map(renderOption)
             )}
           </div>
+          {visibleCreationOptions.length > 0 ||
+          visibleNoProjectOptions.length > 0 ? (
+            <div className="composer-project-actions">
+              {visibleCreationOptions.length > 0 ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={`composer-project-option action composer-project-new-trigger ${
+                    newMenuOpen ? "selected" : ""
+                  }`}
+                  aria-haspopup="menu"
+                  aria-expanded={newMenuOpen}
+                  onClick={() => setNewMenuOpen((current) => !current)}
+                >
+                  <Plus size={14} />
+                  <span>
+                    <strong>New</strong>
+                    <small>Create or add a project</small>
+                  </span>
+                  <ChevronRight size={14} />
+                </button>
+              ) : null}
+              {visibleNoProjectOptions.map(renderOption)}
+            </div>
+          ) : null}
         </div>
       )}
+      {open && newMenuOpen ? (
+        <div
+          className="composer-project-new-menu"
+          role="menu"
+          aria-label="New project"
+        >
+          <button
+            type="button"
+            role="menuitem"
+            className="composer-project-new-menu-back"
+            onClick={() => setNewMenuOpen(false)}
+          >
+            <ArrowLeft size={14} />
+            <span>New project</span>
+          </button>
+          {visibleCreationOptions.map(renderOption)}
+        </div>
+      ) : null}
     </div>
   );
 }

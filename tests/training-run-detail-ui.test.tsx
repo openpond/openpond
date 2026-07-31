@@ -1,10 +1,10 @@
 import { describe, expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
-  ModelRunSchema,
+  ManagedTrainingRunEvidenceSchema,
   TrainingRunDetailSchema,
 } from "../packages/contracts/src";
-import { LabLifecycleRunMetrics } from "../apps/web/src/components/labs/LabLifecycleRunMetrics";
+import { LabModelRunSummary } from "../apps/web/src/components/labs/LabModelRunSummary";
 import { TrainingRunEvaluation } from "../apps/web/src/components/training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../apps/web/src/components/training/TrainingRunMetrics";
 
@@ -124,6 +124,70 @@ const detail = TrainingRunDetailSchema.parse({
 });
 
 describe("Training run detail UI", () => {
+  test("treats a Version as an optional run output and merges cost and resources into setup", () => {
+    const evidence = ManagedTrainingRunEvidenceSchema.parse({
+      schemaVersion: "openpond.managedTrainingRunEvidence.v1",
+      provider: "openpond",
+      providerRunId: "managed_job_fixture",
+      state: "completed",
+      progress: {
+        targetOptimizerSteps: 1,
+        committedOptimizerSteps: 1,
+      },
+      reward: {
+        finalMean: 0.75,
+        trajectoryCount: 4,
+        eligibleTrajectoryCount: 4,
+      },
+      usage: {
+        inputTokens: 100,
+        outputTokens: 25,
+        environmentExecutions: 4,
+      },
+      resource: {
+        provider: "openpond",
+        gpuType: "NVIDIA A40",
+        gpuCount: 1,
+        hourlyCostUsd: 0.44,
+      },
+      cost: { totalUsd: 0.12 },
+      checkpoint: null,
+      evaluations: [],
+      canonicalPublication: {
+        state: null,
+        artifactId: null,
+      },
+      syncedAt: "2026-07-30T00:00:00.000Z",
+    });
+    const html = renderToStaticMarkup(
+      <LabModelRunSummary
+        baseModel="Qwen3-0.6B"
+        compute="OpenPond Managed"
+        configuration={[]}
+        duration="5m"
+        evidence={evidence}
+        failure={null}
+        method="RFT"
+        output="No version created"
+        reward={0.75}
+        status="Succeeded"
+        statusValue="succeeded"
+        taskset="Fixture Taskset"
+        telemetry={null}
+        title="Run 1"
+        versionStatus={null}
+      >
+        <div>Chart region</div>
+      </LabModelRunSummary>,
+    );
+    expect(html).toContain("Chart region");
+    expect(html).toContain("No version created");
+    expect(html).not.toContain("Version status");
+    expect(html).toContain("<dt>Run cost</dt><dd>$0.1200</dd>");
+    expect(html).toContain("<dt>GPU</dt><dd>1 × NVIDIA A40</dd>");
+    expect(html).not.toContain("labs-run-outcome-grid");
+  });
+
   test("renders selectable per-step telemetry as an accessible chart", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={detail} loading={false} />
@@ -145,7 +209,7 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Grader feedback");
   });
 
-  test("labels live RFT points as observed optimizer updates without implying completion", () => {
+  test("shows the three RFT charts using only observed optimizer updates", () => {
     const rftDetail = TrainingRunDetailSchema.parse({
       ...detail,
       job: {
@@ -175,8 +239,9 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={rftDetail} loading={false} />
     );
-    expect(html).toContain("Optimizer updates");
-    expect(html).toContain(">2<");
+    expect(html).toContain("<h4>Reward</h4><span>2 points</span>");
+    expect(html).toContain("<h4>Rollout reward</h4><span>0 points</span>");
+    expect(html).toContain("<h4>Learning rate</h4><span>2 points</span>");
     expect(html).not.toContain("2 of 2");
     expect(html).toContain("Reward by optimizer step");
     expect(html.match(/Step 1:/g)).toHaveLength(1);
@@ -204,7 +269,8 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={failedRftDetail} loading={false} />
     );
-    expect(html).toContain("<span>Optimizer updates</span><strong>0</strong>");
+    expect(html).toContain("<h4>Reward</h4><span>0 points</span>");
+    expect(html).not.toContain("Reward by optimizer step");
   });
 
   test("renders DPO preference telemetry as first-class metrics", () => {
@@ -269,110 +335,4 @@ describe("Training run detail UI", () => {
     expect(html).toContain("Reward by optimizer step");
   });
 
-  test("shows retained managed-run results when no step curve was ingested", () => {
-    const hash = "a".repeat(64);
-    const run = ModelRunSchema.parse({
-      schemaVersion: "openpond.modelRun.v1",
-      id: "model_run_managed",
-      modelId: "model_fixture",
-      modelVersionId: "model_version_base",
-      profileId: "default",
-      kind: "training",
-      status: "succeeded",
-      method: "grpo",
-      destinationId: "openpond_managed",
-      taskset: {
-        id: "taskset_fixture",
-        revision: 1,
-        contentHash: hash,
-      },
-      quote: {
-        maximumSpendUsd: 2,
-        hourlyCostUsd: null,
-      },
-      reward: {
-        raw: 0.954,
-        components: {},
-      },
-      receipt: {
-        schemaVersion: "openpond.modelRunReceipt.v1",
-        provider: "openpond_managed",
-        providerRunId: "provider_run_fixture",
-        assignmentHash: hash,
-        resultHash: hash,
-        transcriptHash: hash,
-        traceHash: null,
-        resolvedBundleHash: hash,
-        artifactPath: "managed://provider_run_fixture/adapter",
-        cleanup: {
-          computeReleased: true,
-          tunnelClosed: true,
-        },
-        telemetry: {
-          schemaVersion: "openpond.correlatedTelemetryReceipt.v1",
-          stage: "training",
-          correlation: {
-            modelRunId: "model_run_managed",
-            modelVersionId: "model_version_base",
-            policyVersion: 1,
-            taskId: null,
-            rolloutGroupId: null,
-            providerResourceId: "provider_run_fixture",
-            deploymentId: null,
-            inferenceRequestId: null,
-          },
-          spans: [],
-          usage: {
-            promptTokens: 1200,
-            generatedTokens: 340,
-            gpuSeconds: 1790.7,
-            workerActiveSeconds: 1790.7,
-            optimizerSteps: 1,
-            rolloutGroups: 1,
-            successfulTrajectories: 4,
-            failedTrajectories: 0,
-            peakGpuMemoryBytes: null,
-            peakGpuUtilizationPercent: null,
-          },
-          resource: {
-            provider: "openpond_managed",
-            resourceIds: ["provider_run_fixture"],
-            gpuType: "H100",
-            gpuCount: 1,
-            baseProfileId: null,
-            baseRepository: null,
-            baseRevision: null,
-            adapterContentHash: hash,
-          },
-          cost: {
-            currency: "USD",
-            providerReportedUsd: 1.0366,
-            quotedHourlyUsd: null,
-            estimatedUsd: null,
-            methodologyVersion: "provider_reported",
-            pricingInputs: {},
-            unitEstimates: {},
-          },
-          recordedAt: "2026-07-13T00:01:00.000Z",
-          contentHash: hash,
-        },
-        contentHash: hash,
-      },
-      adapterArtifactLineageId: "lineage_fixture",
-      failure: null,
-      startedAt: "2026-07-13T00:00:00.000Z",
-      completedAt: "2026-07-13T00:01:00.000Z",
-      updatedAt: "2026-07-13T00:01:00.000Z",
-    });
-
-    const html = renderToStaticMarkup(<LabLifecycleRunMetrics run={run} />);
-
-    expect(html).toContain("Final reward");
-    expect(html).toContain("0.954");
-    expect(html).toContain("Successful trajectories");
-    expect(html).toContain(">4<");
-    expect(html).toContain("$1.0366");
-    expect(html).not.toContain("OpenPond retained the final result");
-    expect(html).not.toContain("per-step optimization curve");
-  });
 });

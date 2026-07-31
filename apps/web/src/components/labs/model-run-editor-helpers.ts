@@ -37,7 +37,6 @@ export function newProject(
 export function firstIncompleteSetupStep(
   draft: ModelRunDraft,
 ): ModelSetupStepId {
-  if (!draft.buildIntent) return "goal";
   if (!draft.tasksetRef) return "dataset";
   if (!draft.method) return "method";
   return "configuration";
@@ -49,7 +48,6 @@ export function setupStepComplete(
   taskset: Taskset | null,
   canRun: boolean,
 ): boolean {
-  if (step === "goal") return Boolean(draft.buildIntent);
   if (step === "dataset") return Boolean(taskset);
   if (step === "method") return Boolean(draft.method);
   return canRun;
@@ -87,6 +85,7 @@ export function newDraft(
     baseModel: null,
     method: null,
     destinationId: null,
+    managedRolloutPlacement: "local",
     runPreset: null,
     recipe: null,
     createdAt: timestamp,
@@ -159,11 +158,10 @@ export function buildPageReason(
   launchState: { ready: boolean; reason: string | null },
 ): string | null {
   if (!project.name.trim()) return "Name this Model.";
-  if (!draft.buildIntent) return "Choose what you want to build.";
   if (!draft.datasetMode) {
-    return "Choose an existing Taskset or build a new one.";
+    return "Choose a Taskset.";
   }
-  if (!taskset) return "Choose or build a Taskset to enable Run.";
+  if (!taskset) return "Choose a Taskset to enable Run.";
   if (!draft.method) return "Choose a training method.";
   const readiness = taskset.readiness?.methodReadiness.find(
     (item) => item.method === draft.method,

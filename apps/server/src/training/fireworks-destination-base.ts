@@ -35,6 +35,7 @@ import {
   metadataString,
   stableProviderMetricFingerprint,
 } from "./fireworks-provider-utils.js";
+import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
 const FIREWORKS_MODEL_ALLOWLIST = [
   "accounts/fireworks/models/qwen3-0p6b",
@@ -99,6 +100,7 @@ export type FireworksDestinationDeps = {
   now?: () => Date;
   provisionRftEvaluator?: FireworksRftEvaluatorProvisioner;
   rftPublicBaseUrl?: () => string | null;
+  tasksetWorkRuntime?: TasksetWorkAttemptRuntime;
 };
 
 export class FireworksDestinationBase {

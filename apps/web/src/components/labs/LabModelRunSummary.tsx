@@ -1,4 +1,8 @@
-import type { CorrelatedTelemetryReceipt } from "@openpond/contracts";
+import type {
+  CorrelatedTelemetryReceipt,
+  ManagedTrainingRunEvidence,
+} from "@openpond/contracts";
+import type { ReactNode } from "react";
 
 import { ChevronRight } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
@@ -16,13 +20,16 @@ export function LabModelRunSummary({
   output,
   reward,
   telemetry,
+  evidence,
+  configuration,
+  children,
   failure,
   onOpenTaskset,
 }: {
   title: string;
   status: string;
   statusValue: string;
-  versionStatus: string;
+  versionStatus: string | null;
   method: string;
   baseModel: string;
   taskset: string;
@@ -31,11 +38,17 @@ export function LabModelRunSummary({
   output: string;
   reward: number | null;
   telemetry: CorrelatedTelemetryReceipt | null;
+  evidence: ManagedTrainingRunEvidence | null;
+  configuration: Array<{ label: string; value: string }>;
+  children?: ReactNode;
   failure: string | null;
   onOpenTaskset?: () => void;
 }) {
   const cost =
-    telemetry?.cost.providerReportedUsd ?? telemetry?.cost.estimatedUsd ?? null;
+    telemetry?.cost.providerReportedUsd ??
+    telemetry?.cost.estimatedUsd ??
+    evidence?.cost.totalUsd ??
+    null;
 
   return (
     <div className="labs-model-run-summary">
@@ -51,129 +64,114 @@ export function LabModelRunSummary({
             </p>
           </div>
         </header>
-        <dl className="labs-run-outcome-grid">
-          <SummaryMetric
-            primary
-            label="Final reward"
-            value={reward === null ? "Not reported" : reward.toFixed(3)}
-          />
-          <SummaryMetric label="Output" value={output} />
-          <SummaryMetric label="Duration" value={duration} />
-          <SummaryMetric
-            label={
-              telemetry?.cost.providerReportedUsd === null
-                ? "Estimated cost"
-                : "Run cost"
-            }
-            value={cost === null ? "Not reported" : `$${cost.toFixed(4)}`}
-          />
-        </dl>
       </section>
 
-      <div className="labs-run-summary-columns">
-        <section className="labs-run-summary-card">
-          <header>
-            <h3>Run setup</h3>
-          </header>
-          <dl className="labs-run-detail-list">
-            <DetailFact label="Training method" value={method} />
-            <DetailFact label="Base model" value={baseModel} />
-            <DetailFact label="Compute" value={compute} />
-            <DetailFact label="Version status" value={versionStatus} />
-            <div>
-              <dt>Taskset</dt>
-              <dd>
-                {onOpenTaskset ? (
-                  <button
-                    className="labs-run-taskset-link"
-                    type="button"
-                    onClick={onOpenTaskset}
-                  >
-                    <span>{taskset}</span>
-                    <ChevronRight aria-hidden="true" size={14} />
-                  </button>
-                ) : (
-                  taskset
-                )}
-              </dd>
-            </div>
-          </dl>
-        </section>
+      {children}
 
-        <section className="labs-run-summary-card">
-          <header>
-            <h3>Resource usage</h3>
-          </header>
-          {telemetry ? (
-            <dl className="labs-run-usage-grid">
+      <section className="labs-run-summary-card">
+        <header>
+          <h3>Run setup</h3>
+        </header>
+        <dl className="labs-run-detail-list">
+          <DetailFact label="Training method" value={method} />
+          <DetailFact label="Base model" value={baseModel} />
+          <DetailFact label="Compute" value={compute} />
+          <DetailFact label="Output" value={output} />
+          {versionStatus ? (
+            <DetailFact label="Version status" value={versionStatus} />
+          ) : null}
+          <DetailFact label="Duration" value={duration} />
+          <DetailFact
+            label="Run cost"
+            value={cost === null ? "Not reported" : `$${cost.toFixed(4)}`}
+          />
+          <DetailFact
+            label="Final reward"
+            value={reward === null ? "Not reported" : reward.toFixed(4)}
+          />
+          {configuration.map((fact) => (
+            <DetailFact
+              key={fact.label}
+              label={fact.label}
+              value={fact.value}
+            />
+          ))}
+          {telemetry || evidence ? (
+            <>
               <UsageFact
                 label="GPU"
-                value={
-                  telemetry.resource.gpuCount === null &&
-                  telemetry.resource.gpuType === null
-                    ? "Not reported"
-                    : `${telemetry.resource.gpuCount ?? "—"} × ${
-                        telemetry.resource.gpuType
-                          ? humanizeResourceLabel(telemetry.resource.gpuType)
-                          : "unreported"
-                      }`
-                }
+                value={gpuLabel(telemetry, evidence)}
               />
               <UsageFact
                 label="Tokens"
                 value={`${formatCount(
-                  telemetry.usage.promptTokens
+                  telemetry?.usage.promptTokens ??
+                    evidence?.usage.inputTokens ??
+                    null
                 )} prompt · ${formatCount(
-                  telemetry.usage.generatedTokens
+                  telemetry?.usage.generatedTokens ??
+                    evidence?.usage.outputTokens ??
+                    null
                 )} generated`}
               />
               <UsageFact
                 label="Trajectories"
                 value={`${formatCount(
-                  telemetry.usage.successfulTrajectories
+                  telemetry?.usage.successfulTrajectories ??
+                    evidence?.reward.eligibleTrajectoryCount ??
+                    null
                 )} succeeded · ${formatCount(
-                  telemetry.usage.failedTrajectories
+                  telemetry?.usage.failedTrajectories ??
+                    (evidence
+                      ? evidence.reward.trajectoryCount -
+                        evidence.reward.eligibleTrajectoryCount
+                      : null)
                 )} failed`}
               />
               <UsageFact
                 label="Optimizer updates"
-                value={formatCount(telemetry.usage.optimizerSteps)}
+                value={formatCount(
+                  telemetry?.usage.optimizerSteps ??
+                    evidence?.progress.committedOptimizerSteps ??
+                    null
+                )}
               />
               <UsageFact
                 label="GPU time"
                 value={
-                  telemetry.usage.gpuSeconds === null
+                  telemetry?.usage.gpuSeconds == null
                     ? "Not reported"
                     : `${telemetry.usage.gpuSeconds.toFixed(1)} seconds`
                 }
               />
-            </dl>
+            </>
           ) : (
-            <p className="labs-run-usage-empty">
-              Resource usage was not retained for this run.
-            </p>
+            <DetailFact
+              label="Resource usage"
+              value="Not retained for this run"
+            />
           )}
-        </section>
-      </div>
+          <div>
+            <dt>Taskset</dt>
+            <dd>
+              {onOpenTaskset ? (
+                <button
+                  className="labs-run-taskset-link"
+                  type="button"
+                  onClick={onOpenTaskset}
+                >
+                  <span>{taskset}</span>
+                  <ChevronRight aria-hidden="true" size={14} />
+                </button>
+              ) : (
+                taskset
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
 
       {failure ? <p className="labs-training-error">{failure}</p> : null}
-    </div>
-  );
-}
-
-function SummaryMetric({
-  label,
-  value,
-  primary = false,
-}: {
-  label: string;
-  value: string;
-  primary?: boolean;
-}) {
-  return (
-    <div className={primary ? "primary" : undefined}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
     </div>
   );
 }
@@ -188,12 +186,21 @@ function DetailFact({ label, value }: { label: string; value: string }) {
 }
 
 function UsageFact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
+  return <DetailFact label={label} value={value} />;
+}
+
+function gpuLabel(
+  telemetry: CorrelatedTelemetryReceipt | null,
+  evidence: ManagedTrainingRunEvidence | null,
+): string {
+  const count =
+    telemetry?.resource.gpuCount ?? evidence?.resource.gpuCount ?? null;
+  const type =
+    telemetry?.resource.gpuType ?? evidence?.resource.gpuType ?? null;
+  if (count === null && type === null) return "Not reported";
+  return `${count ?? "Unknown"} × ${
+    type ? humanizeResourceLabel(type) : "Unreported"
+  }`;
 }
 
 function formatCount(value: number | null): string {

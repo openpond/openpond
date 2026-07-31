@@ -1,7 +1,9 @@
 import {
   LearningSignalBatchSchema,
+  TrainingExecutionRefSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
+  type OpenPondProfileState,
   type ResolvedTrainingPlan,
   type TrainingArtifact,
   type TrainingArtifacts,
@@ -37,9 +39,13 @@ export function createDestinationTrainingEngineRegistry(input: {
     token: string;
     teamId: string;
   }>;
+  loadProfileState?: () => Promise<OpenPondProfileState>;
   catalog(): Promise<TrainingCatalog>;
 }) {
-  const adapters = new TrainingAdapterRegistry();
+  const adapters = new TrainingAdapterRegistry() as TrainingAdapterRegistry & {
+    close(): Promise<void>;
+    refreshManagedEvidence(job: TrainingJob): Promise<void>;
+  };
   for (const definition of [
     {
       adapterId: "local-trl",
@@ -59,13 +65,23 @@ export function createDestinationTrainingEngineRegistry(input: {
       }),
     );
   }
-  adapters.registerEngine(
-    new OpenPondManagedTrainingAdapter({
-      store: input.store,
-      storeDir: input.storeDir,
-      resolveAccess: input.resolveManagedAccess,
-    }),
-  );
+  const managed = new OpenPondManagedTrainingAdapter({
+    store: input.store,
+    storeDir: input.storeDir,
+    resolveAccess: input.resolveManagedAccess,
+    loadProfileState: input.loadProfileState,
+  });
+  adapters.registerEngine(managed);
+  adapters.close = () => managed.close();
+  adapters.refreshManagedEvidence = async (job) => {
+    const parsed = TrainingExecutionRefSchema.safeParse(
+      job.metadata.portableExecutionRef,
+    );
+    if (!parsed.success || parsed.data.adapterId !== "sandbox-managed-rl") {
+      return;
+    }
+    await managed.refreshEvidence(parsed.data);
+  };
   return adapters;
 }
 

@@ -21,7 +21,7 @@ import {
   redactConnectedAppToolArguments,
 } from "../apps/server/src/openpond/connected-app-tool-registry";
 import type { ResolvedConnectedAppContext } from "../apps/server/src/openpond/connected-app-context";
-import type { Session } from "../packages/contracts/src";
+import { modelToolSession as baseSession } from "./helpers/model-tool-contract";
 
 describe("model tool registry", () => {
   test("gates browser model tools on desktop executor availability", () => {
@@ -1826,32 +1826,5 @@ function browserExecutor(input: {
       });
       return result("openpond_browser_scroll", "Scrolled browser.");
     },
-  };
-}
-
-function baseSession(overrides: Partial<Session> = {}): Session {
-  return {
-    id: "session_1",
-    provider: "openrouter",
-    modelRef: { providerId: "openrouter", modelId: "test/model" },
-    openPondCommandAccessMode: "ask",
-    title: "BYOK chat",
-    appId: null,
-    appName: null,
-    workspaceKind: undefined,
-    workspaceId: null,
-    workspaceName: null,
-    localProjectId: null,
-    cloudProjectId: null,
-    cloudTeamId: null,
-    cwd: null,
-    codexThreadId: null,
-    createdAt: "2026-06-30T10:00:00.000Z",
-    updatedAt: "2026-06-30T10:00:00.000Z",
-    status: "idle",
-    pinned: false,
-    archived: false,
-    order: 0,
-    ...overrides,
   };
 }

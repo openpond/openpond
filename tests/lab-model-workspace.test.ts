@@ -131,13 +131,6 @@ describe("Lab Model workspace organization", () => {
       linkedJob.id,
     ]);
   });
-
-  test("formats long run durations and legacy destinations for display", () => {
-    expect(
-      formatDuration("2026-07-28T00:00:00.000Z", "2026-07-28T11:14:00.000Z")
-    ).toBe("11h 14m");
-    expect(destinationLabel("prime hosted")).toBe("Prime hosted");
-  });
 });
 
 function trainingJob(

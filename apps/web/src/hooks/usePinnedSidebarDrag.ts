@@ -1,6 +1,10 @@
 import { useRef, useState } from "react";
 import type { Dispatch, DragEvent, SetStateAction } from "react";
-import type { Session, SidebarAppPreferences, SidebarFileBookmark } from "@openpond/contracts";
+import type {
+  Session,
+  SidebarAppPreferences,
+  SidebarFileBookmark,
+} from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import {
   getSidebarDropPosition,
@@ -10,6 +14,7 @@ import {
   type PinnedSidebarItem,
   type SidebarDragItem,
 } from "../lib/app-models";
+import { setSidebarDragImage } from "../lib/sidebar-drag";
 
 type UsePinnedSidebarDragInput = {
   connection: ClientConnection | null;
@@ -24,24 +29,6 @@ type UsePinnedSidebarDragInput = {
   setError: (message: string | null) => void;
 };
 
-function setSidebarDragImage(event: DragEvent<HTMLDivElement>) {
-  const source = event.currentTarget;
-  const rect = source.getBoundingClientRect();
-  const preview = source.cloneNode(true) as HTMLElement;
-  preview.classList.add("sidebar-drag-preview");
-  preview.style.width = `${rect.width}px`;
-  preview.style.height = `${rect.height}px`;
-  preview.style.position = "fixed";
-  preview.style.top = "-1000px";
-  preview.style.left = "-1000px";
-  preview.style.pointerEvents = "none";
-  preview.style.boxSizing = "border-box";
-  preview.style.maxWidth = "none";
-  document.body.appendChild(preview);
-  event.dataTransfer.setDragImage(preview, event.clientX - rect.left, event.clientY - rect.top);
-  window.setTimeout(() => preview.remove(), 0);
-}
-
 export function usePinnedSidebarDrag({
   connection,
   appPreferences,
@@ -55,11 +42,16 @@ export function usePinnedSidebarDrag({
   setError,
 }: UsePinnedSidebarDragInput) {
   const [dragItem, setDragItem] = useState<SidebarDragItem | null>(null);
-  const [pinnedPreviewKeys, setPinnedPreviewKeys] = useState<string[] | null>(null);
+  const [pinnedPreviewKeys, setPinnedPreviewKeys] = useState<string[] | null>(
+    null
+  );
   const dragItemRef = useRef<SidebarDragItem | null>(null);
   const pinnedPreviewKeysRef = useRef<string[] | null>(null);
 
-  function startPinnedDrag(event: DragEvent<HTMLDivElement>, item: SidebarDragItem) {
+  function startPinnedDrag(
+    event: DragEvent<HTMLDivElement>,
+    item: SidebarDragItem
+  ) {
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", `${item.type}:${item.id}`);
     setSidebarDragImage(event);
@@ -77,12 +69,21 @@ export function usePinnedSidebarDrag({
     setPinnedPreviewKeys(null);
   }
 
-  function previewPinnedDrop(event: DragEvent<HTMLDivElement>, target: SidebarDragItem) {
+  function previewPinnedDrop(
+    event: DragEvent<HTMLDivElement>,
+    target: SidebarDragItem
+  ) {
     const activeDragItem = dragItemRef.current;
     if (!activeDragItem) return;
     const position = getSidebarDropPosition(event);
-    const baseKeys = pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key);
-    const nextKeys = reorderIds(baseKeys, sidebarDragKey(activeDragItem), sidebarDragKey(target), position);
+    const baseKeys =
+      pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key);
+    const nextKeys = reorderIds(
+      baseKeys,
+      sidebarDragKey(activeDragItem),
+      sidebarDragKey(target),
+      position
+    );
     if (sameIds(baseKeys, nextKeys)) return;
     pinnedPreviewKeysRef.current = nextKeys;
     setPinnedPreviewKeys(nextKeys);
@@ -99,7 +100,9 @@ export function usePinnedSidebarDrag({
     if (sameIds(currentKeys, nextKeys)) return;
 
     const previousPreferences = appPreferences;
-    const previousSessionById = new Map(sessions.map((session) => [session.id, session]));
+    const previousSessionById = new Map(
+      sessions.map((session) => [session.id, session])
+    );
     const previousSidebarFileBookmarks = sidebarFileBookmarks;
     const itemByKey = new Map(pinnedItems.map((item) => [item.key, item]));
 
@@ -119,16 +122,23 @@ export function usePinnedSidebarDrag({
     });
 
     const applySessionOrder = (current: Session[]) => {
-      const currentById = new Map(current.map((session) => [session.id, session]));
+      const currentById = new Map(
+        current.map((session) => [session.id, session])
+      );
       const nextSessions = nextKeys
         .map((key, order) => {
           const item = itemByKey.get(key);
-          const session = item?.type === "session" ? currentById.get(item.id) : null;
+          const session =
+            item?.type === "session" ? currentById.get(item.id) : null;
           return session ? { ...session, order } : null;
         })
         .filter((session): session is Session => Boolean(session));
-      const nextSessionById = new Map(nextSessions.map((session) => [session.id, session]));
-      return current.map((session) => nextSessionById.get(session.id) ?? session);
+      const nextSessionById = new Map(
+        nextSessions.map((session) => [session.id, session])
+      );
+      return current.map(
+        (session) => nextSessionById.get(session.id) ?? session
+      );
     };
     setSessions(applySessionOrder);
     setCodexHistorySessions(applySessionOrder);
@@ -149,9 +159,14 @@ export function usePinnedSidebarDrag({
         const item = itemByKey.get(key);
         if (!item) return Promise.resolve(null);
         if (item.type === "project") {
-          return api.patchSidebarAppPreference(connection, item.id, { pinned: true, archived: false, order });
+          return api.patchSidebarAppPreference(connection, item.id, {
+            pinned: true,
+            archived: false,
+            order,
+          });
         }
-        if (item.type === "session") return api.patchSession(connection, item.id, { order });
+        if (item.type === "session")
+          return api.patchSession(connection, item.id, { order });
         return api.patchSidebarFile(connection, {
           workspaceKind: item.file.workspaceKind,
           workspaceId: item.file.workspaceId,
@@ -163,21 +178,36 @@ export function usePinnedSidebarDrag({
         });
       })
     ).catch((reorderError) => {
-      setError(reorderError instanceof Error ? reorderError.message : String(reorderError));
+      setError(
+        reorderError instanceof Error
+          ? reorderError.message
+          : String(reorderError)
+      );
       setAppPreferences(previousPreferences);
       const rollbackSessionOrder = (current: Session[]) =>
-        current.map((session) => previousSessionById.get(session.id) ?? session);
+        current.map(
+          (session) => previousSessionById.get(session.id) ?? session
+        );
       setSessions(rollbackSessionOrder);
       setCodexHistorySessions(rollbackSessionOrder);
       setSidebarFileBookmarks(previousSidebarFileBookmarks);
     });
   }
 
-  function commitPinnedDrop(event: DragEvent<HTMLDivElement>, target: SidebarDragItem) {
+  function commitPinnedDrop(
+    event: DragEvent<HTMLDivElement>,
+    target: SidebarDragItem
+  ) {
     const activeDragItem = dragItemRef.current;
     if (activeDragItem) {
-      const baseKeys = pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key);
-      const nextKeys = reorderIds(baseKeys, sidebarDragKey(activeDragItem), sidebarDragKey(target), getSidebarDropPosition(event));
+      const baseKeys =
+        pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key);
+      const nextKeys = reorderIds(
+        baseKeys,
+        sidebarDragKey(activeDragItem),
+        sidebarDragKey(target),
+        getSidebarDropPosition(event)
+      );
       persistPinnedOrder(nextKeys);
     }
     clearSidebarDrag();
@@ -186,7 +216,9 @@ export function usePinnedSidebarDrag({
   function commitPinnedPreviewDrop() {
     const activeDragItem = dragItemRef.current;
     if (activeDragItem) {
-      persistPinnedOrder(pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key));
+      persistPinnedOrder(
+        pinnedPreviewKeysRef.current ?? pinnedItems.map((item) => item.key)
+      );
     }
     clearSidebarDrag();
   }

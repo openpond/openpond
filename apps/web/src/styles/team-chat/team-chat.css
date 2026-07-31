@@ -29,6 +29,54 @@
   background: var(--bg);
 }
 
+.team-chat-pro-view {
+  place-items: center;
+  padding: 32px;
+}
+
+.team-chat-pro-content {
+  display: grid;
+  justify-items: center;
+  width: min(440px, 100%);
+  gap: 8px;
+  text-align: center;
+}
+
+.team-chat-pro-icon {
+  display: inline-grid;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 6px;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(45, 212, 191, 0.1);
+  color: #67d4c0;
+}
+
+.team-chat-pro-content h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 650;
+}
+
+.team-chat-pro-content p,
+.team-chat-pro-content small {
+  margin: 0;
+}
+
+.team-chat-pro-content p {
+  color: var(--muted-strong);
+  font-size: 14px;
+}
+
+.team-chat-pro-content small {
+  max-width: 390px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .team-chat-main {
   position: relative;
   display: grid;

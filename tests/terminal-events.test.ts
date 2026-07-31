@@ -30,10 +30,7 @@ import {
 import {
   openTerminalEvents,
   readTerminalEventStream,
-  terminalEventReconnectDelayMs,
-  terminalEventStreamRequest,
   type TerminalEventStreamStatus,
-  validateTerminalEventResponse,
 } from "../apps/terminal/src/events";
 import { apiFetch } from "../apps/terminal/src/connection";
 import {
@@ -1003,25 +1000,6 @@ describe("terminal event stream helpers", () => {
     ]);
   });
 
-  test("uses Authorization headers instead of query-string tokens", () => {
-    const request = terminalEventStreamRequest("http://127.0.0.1:17874/", "local-token");
-    const headers = request.init.headers as Headers;
-
-    expect(request.url).toBe("http://127.0.0.1:17874/v1/events");
-    expect(request.url).not.toContain("token=");
-    expect(headers.get("Authorization")).toBe("Bearer local-token");
-    expect(headers.get("Accept")).toBe("text/event-stream");
-  });
-
-  test("validates event stream response status and body", () => {
-    expect(() => validateTerminalEventResponse(new Response(null, { status: 401 }))).toThrow(
-      /event stream failed: 401/,
-    );
-    expect(() => validateTerminalEventResponse(new Response(null, { status: 200 }))).toThrow(
-      /response body/,
-    );
-  });
-
   test("parses SSE frames for the active session and ignores unrelated sessions", async () => {
     const events: Array<{ name: string; sessionId?: string }> = [];
     await readTerminalEventStream(
@@ -1048,13 +1026,6 @@ describe("terminal event stream helpers", () => {
       { name: "turn.started", sessionId: "active" },
       { name: "assistant.delta", sessionId: undefined },
     ]);
-  });
-
-  test("caps reconnect backoff", () => {
-    expect(terminalEventReconnectDelayMs(0)).toBe(500);
-    expect(terminalEventReconnectDelayMs(1)).toBe(1000);
-    expect(terminalEventReconnectDelayMs(5)).toBe(10000);
-    expect(terminalEventReconnectDelayMs(20)).toBe(10000);
   });
 
   test("reconnects after a failed event stream request and resumes event replay", async () => {

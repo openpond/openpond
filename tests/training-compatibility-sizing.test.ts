@@ -168,6 +168,54 @@ describe("training trajectory sizing", () => {
       "rft_train_split_empty",
     );
   });
+
+  test.each(["local", "remote"] as const)(
+    "accepts OpenPond Managed RL with %s rollout placement",
+    (environmentPlacement) => {
+      const taskset = rftTasksetFixture();
+      const recipe = fireworksRftRecipe();
+      const plan: TrainingPlan = {
+        schemaVersion: "openpond.trainingPlan.v1",
+        id: `plan-managed-rl-${environmentPlacement}`,
+        tasksetId: taskset.id,
+        tasksetHash: taskset.contentHash,
+        destinationId: "openpond_managed",
+        recipe,
+        environmentPlacement,
+        compatibility: null,
+        dataPolicy: {
+          exportApproved: true,
+          approvedSourceIds: taskset.sourceRefs.map((source) => source.id),
+          retentionDays: 1,
+          region: null,
+        },
+        estimatedCostUsd: null,
+        createdAt: "2026-07-29T00:00:00.000Z",
+        contentHash: `planhash-managed-rl-${environmentPlacement}`,
+      };
+
+      const report = validateTrainingCompatibility({
+        taskset,
+        plan,
+        capabilities: {
+          schemaVersion: "openpond.trainingDestinationCapabilities.v1",
+          destinationId: "openpond_managed",
+          available: true,
+          methods: ["grpo"],
+          parameterizations: ["lora"],
+          modelAllowlist: [recipe.baseModel.id],
+          maxDatasetBytes: null,
+          environmentPlacements: ["local", "remote"],
+          nonProduction: true,
+          unavailableReason: null,
+          checkedAt: "2026-07-29T00:00:00.000Z",
+        },
+      });
+
+      expect(report.compatible).toBe(true);
+      expect(report.issues).toEqual([]);
+    },
+  );
 });
 
 function structuredTaskset() {

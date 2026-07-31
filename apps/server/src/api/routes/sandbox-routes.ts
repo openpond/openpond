@@ -46,6 +46,19 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
     );
     return true;
   }
+  if (request.method === "DELETE" && sandboxMatch) {
+    sendJson(
+      response,
+      200,
+      await sandboxPayload({
+        type: "delete",
+        sandboxId: decodeURIComponent(sandboxMatch[1]!),
+        failOnUnpreservedChanges:
+          requestUrl.searchParams.get("failOnUnpreservedChanges") === "true",
+      }),
+    );
+    return true;
+  }
   const sandboxIntegrationsMatch = /^\/v1\/sandboxes\/([^/]+)\/integrations$/.exec(
     requestUrl.pathname,
   );

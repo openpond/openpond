@@ -5,14 +5,15 @@ import {
   TaskAttemptResultSchema,
   TrainingArtifactSchema,
   type TaskAttemptResult,
-  type TaskDataRecord,
   type Taskset,
   type TrainingArtifact,
   type TrainingJob,
   type TrainingPlan,
 } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
+import { resolveArtifactFrozenTasks } from "./fireworks-artifact-frozen-tasks.js";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
+import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 import {
   FireworksApiClient,
   resourceId,
@@ -31,6 +32,10 @@ import {
   withFireworksEvaluationExecutionLock,
   type FireworksEvaluationDeploymentReceipt,
 } from "./fireworks-evaluation-runtime.js";
+import {
+  summarizeFireworksFrozenEvaluation,
+  type FireworksFrozenEvaluationResult,
+} from "./fireworks-frozen-evaluation-summary.js";
 import {
   errorMessage,
   metadataNumber,
@@ -92,17 +97,13 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
   }): Promise<TrainingArtifact | null> {
     if (!this.deps.gradeAttempt) return null;
     const frozen = input.taskset.datasetArtifact
-      ? await this.artifactFrozenTasks(input.taskset, input.job)
+      ? await resolveArtifactFrozenTasks({
+          deps: this.deps,
+          taskset: input.taskset,
+          job: input.job,
+        })
       : input.taskset.tasks.filter((task) => task.split === "frozen_eval");
-    const results: Array<{
-      taskId: string;
-      stage: "base" | "trained";
-      attemptId: string;
-      gradeId: string;
-      passed: boolean;
-      score: number | null;
-      infrastructureError: string | null;
-    }> = [];
+    const results: FireworksFrozenEvaluationResult[] = [];
     const reusableStages: Array<"base" | "trained"> = [];
     const [persistedAttempts, persistedGrades] = await Promise.all([
       this.deps.store.listTaskAttempts(input.taskset.id),
@@ -616,6 +617,27 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
             spec.servingMode === "direct" ? deploymentName : undefined;
           for (const task of frozen) {
             const providerUsage: unknown[] = [];
+            const modelToolStream: TasksetWorkModelStream =
+              async function* (request) {
+                const completion = await retryFireworksInference(
+                  () => input.client.chatCompletionWithTools({
+                    model: inferenceModel,
+                    deployment: inferenceDeployment,
+                    messages: request.messages,
+                    tools: request.tools,
+                    toolChoice: request.toolChoice,
+                    maxTokens,
+                    reasoningEffort: "none",
+                  }),
+                  deadlineMs,
+                );
+                providerUsage.push(completion.usage);
+                yield {
+                  text: completion.text,
+                  toolCalls: completion.toolCalls,
+                  usage: completion.usage,
+                };
+              };
             const attempt = await runPostTrainingEvaluationAttempt({
               store: this.deps.store,
               storeDir: this.deps.storeDir,
@@ -639,25 +661,13 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
                 providerUsage.push(completion.usage);
                 return completion.text;
               },
-              crossSystemStream: async function* (request) {
-                const completion = await retryFireworksInference(
-                  () => input.client.chatCompletionWithTools({
-                    model: inferenceModel,
-                    deployment: inferenceDeployment,
-                    messages: request.messages,
-                    tools: request.tools,
-                    toolChoice: request.toolChoice,
-                    maxTokens,
-                    reasoningEffort: "none",
-                  }),
-                  deadlineMs,
-                );
-                providerUsage.push(completion.usage);
-                yield {
-                  text: completion.text,
-                  toolCalls: completion.toolCalls,
-                };
-              },
+              crossSystemStream: modelToolStream,
+              work: this.deps.tasksetWorkRuntime
+                ? {
+                    stream: modelToolStream,
+                    runtime: this.deps.tasksetWorkRuntime,
+                  }
+                : undefined,
               attemptInput: {
                 tasksetId: input.taskset.id,
                 task,
@@ -822,54 +832,23 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
         }
       }
     }
-    const basePassed = results.filter((result) => result.stage === "base" && result.passed).length;
-    const trainedPassed = results.filter((result) => result.stage === "trained" && result.passed).length;
-    const baseInfrastructureFailures = results.filter(
-      (result) => result.stage === "base" && result.infrastructureError !== null,
-    ).length;
-    const trainedInfrastructureFailures = results.filter(
-      (result) => result.stage === "trained" && result.infrastructureError !== null,
-    ).length;
-    const infrastructureFailureCount =
-      baseInfrastructureFailures + trainedInfrastructureFailures;
-    const deploymentCleanupComplete = deployments.every(
-      (deployment) =>
-        (
-          deployment.deletionStatus === "deleted" ||
-          deployment.deletionStatus === "not_created"
-        ) &&
-        deployment.addonUnloadStatus !== "failed",
-    );
-    const estimatedDeploymentCostUsd = deployments.reduce(
-      (total, deployment) => total + deployment.estimatedCostUsd,
-      0,
-    );
-    const cumulativeEvaluationCostUsd =
-      priorEvaluationCostUsd + estimatedDeploymentCostUsd;
-    const receiptedProviderCostUsd =
-      providerTrainingCostUsd + cumulativeEvaluationCostUsd;
-    const cumulativeProviderCostUsd =
-      Math.max(
-        0,
-        receiptedProviderCostUsd -
-          nonBillableStartupCorrectionUsd +
-          unreceiptedEvaluationCostReserveUsd,
-      );
-    const evaluationComplete =
-      frozen.length > 0 &&
-      infrastructureFailureCount === 0 &&
-      deploymentCleanupComplete;
-    const basePassRate = frozen.length ? basePassed / frozen.length : 0;
-    const trainedPassRate = frozen.length ? trainedPassed / frozen.length : 0;
-    const absolutePassRateGain = trainedPassRate - basePassRate;
-    const thresholdPassed =
-      evaluationComplete &&
-      trainedPassRate >= FIREWORKS_MINIMUM_TRAINED_PASS_RATE &&
-      absolutePassRateGain >= FIREWORKS_MINIMUM_ABSOLUTE_PASS_RATE_GAIN;
-    const summary = {
+    const summary = summarizeFireworksFrozenEvaluation({
+      results,
+      deployments,
+      taskCount: frozen.length,
+      minimumTrainedPassRate: FIREWORKS_MINIMUM_TRAINED_PASS_RATE,
+      minimumAbsolutePassRateGain:
+        FIREWORKS_MINIMUM_ABSOLUTE_PASS_RATE_GAIN,
+      priorEvaluationCostUsd,
+      providerTrainingCostUsd,
+      unreceiptedEvaluationCostReserveUsd,
+      nonBillableStartupCorrectionUsd,
+      maximumDeploymentCostUsd,
+      maximumRuntimeMs,
+    });
+    const {
       basePassed,
       trainedPassed,
-      totalPerSubject: frozen.length,
       basePassRate,
       trainedPassRate,
       absolutePassRateGain,
@@ -878,17 +857,12 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
       infrastructureFailureCount,
       deploymentCleanupComplete,
       estimatedDeploymentCostUsd,
-      priorEvaluationCostUsd,
-      unreceiptedEvaluationCostReserveUsd,
-      nonBillableStartupCorrectionUsd,
       cumulativeEvaluationCostUsd,
       receiptedProviderCostUsd,
       cumulativeProviderCostUsd,
-      maximumDeploymentCostUsd,
-      maximumRuntimeMs,
       evaluationComplete,
       thresholdPassed,
-    };
+    } = summary;
     const bytes = Buffer.from(`${JSON.stringify({
       schemaVersion: "openpond.fireworksFrozenEvaluation.v1",
       jobId: input.job.id,
@@ -970,30 +944,4 @@ export class FireworksDestinationEvaluation extends FireworksDestinationBase {
     return artifact;
   }
 
-  private async artifactFrozenTasks(
-    taskset: Taskset,
-    job: TrainingJob,
-  ): Promise<TaskDataRecord[]> {
-    if (!this.deps.resolveTrainingSelection || !this.deps.resolveTask) {
-      throw new Error(
-        "Artifact-backed frozen evaluation is unavailable.",
-      );
-    }
-    const plan = await this.deps.store.getTrainingPlan(job.planId);
-    if (!plan || plan.tasksetHash !== taskset.contentHash) {
-      throw new Error("Frozen evaluation plan no longer matches its Dataset.");
-    }
-    const selection = await this.deps.resolveTrainingSelection({
-      taskset,
-      plan,
-      split: "frozen_eval",
-      maximumBytes: 10 * 1024 * 1024,
-    });
-    return Promise.all(selection.records.map((record) =>
-      this.deps.resolveTask!({
-        tasksetId: taskset.id,
-        taskId: record.id,
-        split: "frozen_eval",
-      })));
-  }
 }

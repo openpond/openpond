@@ -79,7 +79,6 @@ function createHarness(defaultTeamId: string | null = ownerOrganization.teamId) 
     selectedProjectId,
     applyBootstrapPayload: (payload) => payloads.push(payload),
     expandProject: (projectId) => expanded.push(projectId),
-    revealProjectsSection: () => {},
     setExpandedProjectIds: (next) => {
       expandedProjectIds = applyState(expandedProjectIds, next);
     },

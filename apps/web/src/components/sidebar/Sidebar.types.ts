@@ -10,7 +10,6 @@ import type {
   CommunityChannel,
   CommunitySummary,
   Experience,
-  WorkspaceState,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
@@ -21,7 +20,6 @@ import type {
   SidebarProjectItem,
 } from "../../lib/app-models";
 import type { TerminalScopeSummary } from "../terminal/terminal-state";
-import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
@@ -49,33 +47,35 @@ export type SidebarProps = {
   account: AccountState | null;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
-  projectsCollapsed: boolean;
   cloudProjectsCollapsed: boolean;
   chatsCollapsed: boolean;
   savedForLaterCollapsed: boolean;
   archivedChatsOpen: boolean;
-  projectsExpanded: boolean;
   cloudProjectsExpanded: boolean;
   sectionMenuOpen: SidebarSectionMenuId | null;
   dragItem: SidebarDragItem | null;
+  taskDragSessionId: string | null;
+  taskPreviewSessionIds: string[] | null;
+  activeSessions: Session[];
+  archivedSessions: Session[];
   pinnedRows: PinnedSidebarItem[];
   pinnedSessions: Session[];
   savedForLaterSessions: Session[];
   savedForLaterFiles: SidebarFileBookmark[];
   projectRows?: SidebarProjectItem[];
-  visibleProjectRows: SidebarProjectItem[];
   localProjectRows: SidebarProjectItem[];
   cloudProjectRows: SidebarProjectItem[];
-  workspaceStates: Record<string, WorkspaceState>;
   projectSessionRowsByProjectId: Record<string, Session[]>;
   childSessionRowsByParentId?: Record<string, Session[]>;
   sidebarProjectIdBySessionId: Record<string, string>;
   terminalSummaries: Record<string, TerminalScopeSummary>;
   runningSessionIds: ReadonlySet<string>;
+  sessionRuntimeSecondsById: ReadonlyMap<string, number>;
   goalRuntimeBySessionId?: ReadonlyMap<string, GoalRuntimeStatus>;
   subagentRuntimeBySessionId?: ReadonlyMap<string, SubagentRuntimeStatus>;
   visibleChatRows: Session[];
   chatRows: Session[];
+  chatRowsVisibleCount: number;
   expandedProjectIds: ReadonlySet<string>;
   currentVersion?: string | null;
   platform?: string | null;
@@ -90,33 +90,19 @@ export type SidebarProps = {
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSettingsSection: Dispatch<SetStateAction<SettingsSection>>;
   onTogglePinnedCollapsed: () => void;
-  onToggleProjectsCollapsed: () => void;
   onToggleCloudProjectsCollapsed: () => void;
   onToggleChatsCollapsed: () => void;
   onToggleSavedForLaterCollapsed: () => void;
   setArchivedChatsOpen: Dispatch<SetStateAction<boolean>>;
-  setProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
   dockSessionRight: (session: Session) => void;
-  createCloudEnvironment: () => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;
   discoverCommunities: () => void;
   selectCommunity: (communityId: string) => void;
   selectCommunityChannel: (channelId: string) => void;
-  addProjectFolder: () => void;
-  startExistingProjectFromPath: () => void;
-  startProjectFromScratch: () => void;
-  startCloudProjectFromScratch: () => void;
-  moveProjectToCloud: (item: SidebarProjectItem) => void;
-  switchProjectWorkspaceTarget: (
-    projectId: string,
-    target: WorkspaceTargetValue
-  ) => void;
-  removeProject: (item: SidebarProjectItem) => void;
-  toggleProjectPinned: (item: SidebarProjectItem) => void;
   toggleSessionPinned: (session: Session) => void;
   toggleSessionSavedForLater: (session: Session) => void;
   openSidebarFile: (file: SidebarFileBookmark) => void;
@@ -143,4 +129,22 @@ export type SidebarProps = {
     target: SidebarDragItem
   ) => void;
   commitPinnedPreviewDrop: () => void;
+  startTaskDrag: (
+    event: DragEvent<HTMLDivElement>,
+    input: {
+      allSessionIds: string[];
+      visibleSessionIds: string[];
+      sessionId: string;
+    }
+  ) => void;
+  clearTaskDrag: () => void;
+  previewTaskDrop: (
+    event: DragEvent<HTMLDivElement>,
+    targetSessionId: string
+  ) => void;
+  commitTaskDrop: (
+    event: DragEvent<HTMLDivElement>,
+    targetSessionId: string
+  ) => void;
+  commitTaskPreviewDrop: () => void;
 };

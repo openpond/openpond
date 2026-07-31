@@ -1,6 +1,9 @@
 import {
+  TaskFailureClassSchema,
   type GradeComponent,
   type GradeResult,
+  type GraderSpec,
+  type TaskFailureClass,
 } from "@openpond/contracts";
 import { contentHash, gradeAttempt } from "@openpond/taskset-sdk";
 
@@ -32,8 +35,57 @@ type CrossSystemEvaluationGrade = {
 export async function gradeTasksetEvaluationAttempt(
   input: Parameters<typeof gradeAttempt>[0],
 ): Promise<GradeResult> {
+  const workFailure = tasksetWorkFailure(input.attempt);
+  if (workFailure) {
+    const graderSetHash = contentHash(input.graders);
+    const feedback =
+      `Taskset Work attempt ended with ${workFailure.failureClass}: `
+      + workFailure.message;
+    return {
+      schemaVersion: "openpond.gradeResult.v1",
+      id: `grade_${contentHash([
+        input.attempt.id,
+        graderSetHash,
+        workFailure,
+      ]).slice(0, 24)}`,
+      attemptId: input.attempt.id,
+      graderSetHash,
+      score: null,
+      passed: false,
+      components: input.graders.map((grader) => ({
+        graderId: grader.id,
+        graderVersion: grader.version,
+        score: 0,
+        passed: false,
+        hardGate: grader.hardGate,
+        rewardEligible: false,
+        feedback,
+        evidenceRefs: input.attempt.artifactRefs,
+        judge: grader.kind === "model_judge" ? grader.judge : null,
+        calibrationStatus:
+          grader.kind === "model_judge"
+            ? grader.calibrationStatus
+            : "not_applicable",
+      })),
+      failureClass: workFailure.failureClass,
+      feedback: [feedback],
+      rewardEligible: false,
+      createdAt: input.now?.() ?? new Date().toISOString(),
+    };
+  }
   const verified = crossSystemGrade(input.attempt.metadata);
-  if (!verified) return gradeAttempt(input);
+  if (!verified) {
+    try {
+      return await gradeAttempt(input);
+    } catch (error) {
+      return graderFailureResult({
+        attempt: input.attempt,
+        graders: input.graders,
+        now: input.now,
+        error,
+      });
+    }
+  }
 
   const graderSetHash = contentHash(input.graders);
   const score = verified.rewardEligible
@@ -76,6 +128,78 @@ export async function gradeTasksetEvaluationAttempt(
     feedback: [feedback],
     rewardEligible: verified.rewardEligible,
     createdAt: input.now?.() ?? new Date().toISOString(),
+  };
+}
+
+function graderFailureResult(input: {
+  attempt: Parameters<typeof gradeAttempt>[0]["attempt"];
+  graders: GraderSpec[];
+  now?: () => string;
+  error: unknown;
+}): GradeResult {
+  const graderSetHash = contentHash(input.graders);
+  const detail = (input.error instanceof Error
+    ? input.error.message
+    : String(input.error)).slice(0, 19_000);
+  const feedback = `Taskset grader failed: ${detail}`;
+  return {
+    schemaVersion: "openpond.gradeResult.v1",
+    id: `grade_${contentHash([
+      input.attempt.id,
+      graderSetHash,
+      "grader_failure",
+      detail,
+    ]).slice(0, 24)}`,
+    attemptId: input.attempt.id,
+    graderSetHash,
+    score: null,
+    passed: false,
+    components: input.graders.map((grader) => ({
+      graderId: grader.id,
+      graderVersion: grader.version,
+      score: 0,
+      passed: false,
+      hardGate: grader.hardGate,
+      rewardEligible: false,
+      feedback,
+      evidenceRefs: input.attempt.artifactRefs,
+      judge: grader.kind === "model_judge" ? grader.judge : null,
+      calibrationStatus:
+        grader.kind === "model_judge"
+          ? grader.calibrationStatus
+          : "not_applicable",
+    })),
+    failureClass: "grader_failure",
+    feedback: [feedback],
+    rewardEligible: false,
+    createdAt: input.now?.() ?? new Date().toISOString(),
+  };
+}
+
+function tasksetWorkFailure(
+  attempt: Parameters<typeof gradeAttempt>[0]["attempt"],
+): { failureClass: TaskFailureClass; message: string } | null {
+  if (
+    attempt.metadata.execution !== "taskset_work"
+    || !attempt.infrastructureError
+  ) {
+    return null;
+  }
+  const parsed = TaskFailureClassSchema.safeParse(
+    attempt.metadata.failureClass,
+  );
+  if (
+    !parsed.success
+    || parsed.data === "policy_failure"
+    || parsed.data === "grader_failure"
+  ) {
+    throw new Error(
+      "Taskset Work attempt is missing a trusted execution failure class.",
+    );
+  }
+  return {
+    failureClass: parsed.data,
+    message: attempt.infrastructureError,
   };
 }
 

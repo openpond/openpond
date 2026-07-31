@@ -250,6 +250,60 @@ describe("ProfileSettingsSection", () => {
     expect(hostedIndex).toBeLessThan(agentsIndex);
   });
 
+  test("renders the standalone Profile selector as names-only dropdown options", () => {
+    const payload = profilePayload();
+    const defaultRef = {
+      source: "local" as const,
+      repositoryId: "default-repo",
+      profileId: "default",
+    };
+    const researchRef = {
+      source: "local" as const,
+      repositoryId: "research-repo",
+      profileId: "research",
+    };
+    payload.profileLibrary = {
+      lastUsed: defaultRef,
+      profiles: [
+        {
+          ref: defaultRef,
+          name: "default",
+          repoPath: "/profiles/default",
+          state: payload.profile,
+        },
+        {
+          ref: researchRef,
+          name: "research",
+          repoPath: "/profiles/research",
+          state: payload.profile,
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      createElement(ProfileSettingsSection, {
+        catalogPresentation: "select",
+        payload,
+        connection: null,
+        onPayload: noop,
+        onError: noop,
+      }),
+    );
+
+    expect(html).toContain('aria-label="Active profile"');
+    expect(html).toContain("<option");
+    expect(html).toContain(">default</option>");
+    expect(html).toContain(">research</option>");
+    expect(html).toContain('aria-label="Profile settings"');
+    expect(html).not.toContain(">Refresh<");
+    expect(html).not.toContain(">Add profile<");
+    expect(html).not.toContain("profile-catalog-row");
+    expect(html).not.toContain("profile-local-status");
+    expect(html).not.toContain("Profile ready.");
+    expect(html).not.toContain("/profiles/default");
+    expect(html).not.toContain("/profiles/research");
+  });
+
   test("keeps the built-in Dataset Builder Agent above Skills", () => {
     const payload = profilePayload();
     payload.profile.agents = [];
@@ -271,6 +325,8 @@ describe("ProfileSettingsSection", () => {
     expect(agentsIndex).toBeGreaterThan(-1);
     expect(datasetBuilderIndex).toBeGreaterThan(agentsIndex);
     expect(skillsIndex).toBeGreaterThan(datasetBuilderIndex);
+    expect(html).not.toContain("Profile Agents are exposed");
+    expect(html).not.toContain("No schedules");
   });
 
   test("renders profile skills beside profile agents", () => {
@@ -313,9 +369,12 @@ describe("ProfileSettingsSection", () => {
     expect(html).toContain("release-notes");
     expect(html).toContain("Draft release notes from user-facing changes.");
     expect(html).toContain("skills/release-notes/SKILL.md");
+    expect(html).toContain(
+      '<span class="profile-skill-source" title="/workspace/openpond-profile/profiles/default">',
+    );
     expect(html).toContain(">Use<");
     expect(html).toContain(">Edit<");
-    expect(html).toContain(">Create<");
+    expect(html).not.toContain(">Create<");
   });
 
   test("marks hosted profile sync as account-scoped when the default team changes", () => {

@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import {
+  type BaseModelCandidate,
   CrossSystemExpertBootstrapPreviewSchema,
   type TrainingStateResponse,
 } from "@openpond/contracts";
@@ -9,6 +10,8 @@ import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
+import { LabModelCreateDialog } from "../apps/web/src/components/labs/LabModelCreateDialog";
+import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
 import {
   labWorkproductProjection,
@@ -21,26 +24,120 @@ import { planFixture, tasksetFixture } from "./helpers/training-fixtures";
 
 const noop = () => undefined;
 
+function modelCandidate(input: {
+  available?: boolean;
+  label: string;
+  modelId: string;
+  nonProduction?: boolean;
+  selectionKey: string;
+  source: BaseModelCandidate["preference"]["source"];
+  sourceLabel: string;
+}): BaseModelCandidate {
+  const available = input.available ?? true;
+  const destinationId =
+    input.source === "managed"
+      ? "openpond_managed"
+      : "local_cpu_fixture";
+  return {
+    schemaVersion: "openpond.baseModelCandidate.v1",
+    selectionKey: input.selectionKey,
+    label: input.label,
+    sourceLabel: input.sourceLabel,
+    preference: {
+      schemaVersion: "openpond.baseModelPreference.v1",
+      modelId: input.modelId,
+      revision: null,
+      tokenizerRevision: null,
+      chatTemplateHash: null,
+      modelAssetId: null,
+      source: input.source,
+    },
+    available,
+    nonProduction: input.nonProduction ?? false,
+    unavailableReason: available ? null : "Provider setup required.",
+    methods: ["sft"],
+    executionOptions: [
+      {
+        destinationId,
+        available,
+        methods: ["sft"],
+        parameterizations: ["lora"],
+        nonProduction: input.nonProduction ?? false,
+        unavailableReason: available ? null : "Provider setup required.",
+      },
+    ],
+  };
+}
+
 describe("Lab workspace", () => {
   test("renders first-class Taskset and Model tabs", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
-        activeTab: "workproducts",
-        suggestionCount: 3,
+        activeTab: "models",
         onTabChange: noop,
-        onCreateAgent: noop,
         onCreateDataset: noop,
         onCreateModel: noop,
         children: createElement("div", null, "Unified inventory"),
       }),
     );
 
-    expect(markup).toContain('aria-label="Lab"');
-    expect(markup).toContain(">Home<");
-    expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain('aria-label="Models"');
+    expect(markup).toContain('aria-label="Model sections"');
     expect(markup).toContain(">Models<");
-    expect(markup).toContain(">Suggestions<");
+    expect(markup).toContain(">Tasksets<");
+    expect(markup).not.toContain(">Profile<");
+    expect(markup).not.toContain(">Home<");
+    expect(markup).not.toContain(">Suggestions<");
+    expect(markup).not.toContain("<svg");
     expect(markup).toContain("Unified inventory");
+  });
+
+  test("creates a standalone Model without requiring a run", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LabModelCreateDialog, {
+        baseModelCandidates: [
+          modelCandidate({
+            selectionKey: "managed_qwen",
+            label: "Qwen 3 0.6B",
+            modelId: "Qwen/Qwen3-0.6B",
+            source: "managed",
+            sourceLabel: "OpenPond Managed",
+          }),
+          modelCandidate({
+            available: false,
+            selectionKey: "unavailable_qwen",
+            label: "Qwen 3 8B",
+            modelId: "accounts/fireworks/models/qwen3-8b",
+            source: "managed",
+            sourceLabel: "Fireworks",
+          }),
+          modelCandidate({
+            selectionKey: "cpu_fixture",
+            label: "Tiny CPU correctness fixture",
+            modelId: "openpond/tiny-cpu-gpt2-fixture",
+            nonProduction: true,
+            source: "builtin",
+            sourceLabel: "This machine",
+          }),
+        ],
+        busy: false,
+        initialName: "Model 1",
+        onClose: noop,
+        onCreate: async () => true,
+        onManageModels: noop,
+      }),
+    );
+
+    expect(markup).toContain("New model");
+    expect(markup).toContain("Tasksets, runs, and releases can be added later.");
+    expect(markup).toContain("Starting model");
+    expect(markup).toContain("Choose later");
+    expect(markup).toContain("Qwen 3 0.6B · OpenPond Managed");
+    expect(markup).toContain("Qwen 3 8B · Fireworks · Unavailable");
+    expect(markup).toContain('aria-label="Add starting model"');
+    expect(markup).not.toContain("Tiny CPU correctness fixture");
+    expect(markup).not.toContain("labs-rename-dialog-icon");
+    expect(markup).not.toContain("first run");
   });
 
   test("keeps Taskset Lab focused on review instead of a builder", () => {
@@ -65,6 +162,24 @@ describe("Lab workspace", () => {
     expect(markup).toContain('aria-label="Search Tasksets"');
     expect(markup).not.toContain(">Build</button>");
     expect(markup).not.toContain("Embedded Taskset builder");
+  });
+
+  test("uses Taskset language in Lab breadcrumbs", () => {
+    const breadcrumbs = buildLabDetailBreadcrumbs(
+      {
+        kind: "dataset",
+        kindLabel: "Tasksets",
+        workproductLabel: "Evaluation cases",
+        segments: [],
+      },
+      noop,
+    );
+
+    expect(breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
+      "Models",
+      "Tasksets",
+      "Evaluation cases",
+    ]);
   });
 
   test("reviews exact expert trajectories before bootstrap", () => {
@@ -146,7 +261,7 @@ describe("Lab workspace", () => {
           providerId: "openrouter",
           modelId: "test/model",
         },
-        tab: "evals",
+        tab: "scoring",
         taskset,
         onOpenFiles: noop,
         onToast: noop,

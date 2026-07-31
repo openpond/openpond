@@ -37,9 +37,7 @@ export async function importPortableModelRunArtifacts(input: {
     provider,
   });
   if (provider === "sandbox") {
-    const weights = artifacts.find(
-      (artifact) => artifact.metadata.managedRftCandidate === true,
-    );
+    const weights = artifacts.find((artifact) => artifact.metadata.managedRlCandidate === true);
     if (!weights || artifacts.length !== 1) {
       throw new Error(
         "Sandbox managed training completed without one canonical candidate receipt.",
@@ -58,21 +56,17 @@ export async function importPortableModelRunArtifacts(input: {
       name: portableFilename(artifact.metadata.providerFilename),
     }))
     .filter(
-      (entry): entry is {
+      (
+        entry,
+      ): entry is {
         artifact: TrainingArtifact;
         name: string;
       } => entry.name !== null,
     );
   const weights =
-    portableFiles.find(
-      ({ name }) => name === "adapter_model.safetensors",
-    )
-    ?? portableFiles.find(({ name }) =>
-      /^adapter_model-\d{5}-of-\d{5}\.safetensors$/.test(name),
-    );
-  const configuration = portableFiles.find(
-    ({ name }) => name === "adapter_config.json",
-  );
+    portableFiles.find(({ name }) => name === "adapter_model.safetensors") ??
+    portableFiles.find(({ name }) => /^adapter_model-\d{5}-of-\d{5}\.safetensors$/.test(name));
+  const configuration = portableFiles.find(({ name }) => name === "adapter_config.json");
   if (!weights || !configuration) {
     throw new Error(
       "Portable training completed without complete LoRA weights and adapter configuration.",
@@ -97,19 +91,15 @@ export async function readRecoveredPortableArtifacts(input: {
     sha256(input.runId),
     "portable-artifacts.json",
   );
-  const serialized = await readFile(receipt, "utf8").catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") return null;
-      throw error;
-    },
-  );
+  const serialized = await readFile(receipt, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
   if (serialized === null) return null;
   const artifacts = TrainingArtifactsSchema.parse(JSON.parse(serialized));
   const { contentHash: supplied, ...base } = artifacts;
   if (supplied !== contentHash(base)) {
-    throw new Error(
-      "Recovered portable artifact receipt failed content verification.",
-    );
+    throw new Error("Recovered portable artifact receipt failed content verification.");
   }
   return artifacts;
 }
@@ -122,17 +112,15 @@ function assertArtifacts(
   const parsed = TrainingArtifactsSchema.parse(artifacts);
   const { contentHash: supplied, ...base } = parsed;
   const expectedManifestHash =
-    ref.manifestHash
-    ?? (
-      typeof job.metadata.harnessRunManifestHash === "string"
-        ? job.metadata.harnessRunManifestHash
-        : null
-    );
+    ref.manifestHash ??
+    (typeof job.metadata.harnessRunManifestHash === "string"
+      ? job.metadata.harnessRunManifestHash
+      : null);
   if (
-    parsed.runId !== ref.runId
-    || !expectedManifestHash
-    || parsed.manifestHash !== expectedManifestHash
-    || supplied !== contentHash(base)
+    parsed.runId !== ref.runId ||
+    !expectedManifestHash ||
+    parsed.manifestHash !== expectedManifestHash ||
+    supplied !== contentHash(base)
   ) {
     throw new Error(
       "Portable training artifacts changed execution, manifest, or content identity.",
@@ -153,22 +141,13 @@ async function persistPortableArtifacts(input: {
 }): Promise<TrainingArtifact[]> {
   const existing = await input.store.listTrainingArtifacts(input.job.id);
   const optimizerReceiptHash =
-    input.portable.artifacts.find(
-      (artifact) => artifact.kind === "receipt",
-    )?.sha256 ?? input.portable.contentHash;
+    input.portable.artifacts.find((artifact) => artifact.kind === "receipt")?.sha256 ??
+    input.portable.contentHash;
   const persisted: TrainingArtifact[] = [];
   for (const portable of input.portable.artifacts) {
-    const managedCandidate = managedRftCandidateRef(
-      portable.objectRef,
-      input.executionRef.runId,
-    );
-    if (
-      input.provider === "sandbox" &&
-      (!managedCandidate || portable.kind !== "adapter")
-    ) {
-      throw new Error(
-        "Sandbox managed training returned an invalid remote candidate receipt.",
-      );
+    const managedCandidate = managedRlCandidateRef(portable.objectRef, input.executionRef.runId);
+    if (input.provider === "sandbox" && (!managedCandidate || portable.kind !== "adapter")) {
+      throw new Error("Sandbox managed training returned an invalid remote candidate receipt.");
     }
     const artifactPath = managedCandidate
       ? portable.objectRef
@@ -176,28 +155,22 @@ async function persistPortableArtifacts(input: {
     if (!managedCandidate) {
       const info = await stat(artifactPath);
       if (!info.isFile() || info.size !== portable.sizeBytes) {
-        throw new Error(
-          `Portable artifact ${portable.objectRef} changed before import.`,
-        );
+        throw new Error(`Portable artifact ${portable.objectRef} changed before import.`);
       }
       const bytes = await readFile(artifactPath);
       if (sha256(bytes) !== portable.sha256) {
-        throw new Error(
-          `Portable artifact ${portable.objectRef} failed hash verification.`,
-        );
+        throw new Error(`Portable artifact ${portable.objectRef} failed hash verification.`);
       }
     }
     const duplicate = existing.find(
-      (artifact) =>
-        artifact.path === artifactPath
-        && artifact.sha256 === portable.sha256,
+      (artifact) => artifact.path === artifactPath && artifact.sha256 === portable.sha256,
     );
     if (duplicate) {
       persisted.push(duplicate);
       continue;
     }
     const providerFilename = managedCandidate
-      ? "managed-rft-candidate"
+      ? "managed-rl-candidate"
       : portableFilenameFromRef(portable.objectRef);
     const isWeights = isAdapterWeights(providerFilename);
     const metadata: Record<string, unknown> = {
@@ -208,17 +181,14 @@ async function persistPortableArtifacts(input: {
       verified: true,
       ...(managedCandidate
         ? {
-            managedRftCandidate: true,
-            managedRftJobId: managedCandidate.jobId,
-            managedRftModelArtifactId: managedCandidate.modelArtifactId,
-            managedRftTeamId: input.executionRef.tenantId ?? null,
+            managedRlCandidate: true,
+            managedRlJobId: managedCandidate.jobId,
+            managedRlModelArtifactId: managedCandidate.modelArtifactId,
+            managedRlTeamId: input.executionRef.tenantId ?? null,
           }
         : {}),
     };
-    if (
-      input.draft.method === "grpo"
-      && isWeights
-    ) {
+    if (input.draft.method === "grpo" && isWeights) {
       metadata.groupedGrpoReceiptHash = optimizerReceiptHash;
     }
     const artifact = await input.store.saveTrainingArtifact(
@@ -251,36 +221,28 @@ async function persistPortableArtifacts(input: {
 function localArtifactPath(objectRef: string): string {
   if (objectRef.startsWith("file:")) return fileURLToPath(objectRef);
   if (/^[a-z][a-z0-9+.-]*:/i.test(objectRef)) {
-    throw new Error(
-      `Portable artifact ${objectRef} was not materialized locally.`,
-    );
+    throw new Error(`Portable artifact ${objectRef} was not materialized locally.`);
   }
   return path.resolve(objectRef);
 }
 
-function managedRftCandidateRef(
+function managedRlCandidateRef(
   objectRef: string,
   expectedJobId: string,
 ): { jobId: string; modelArtifactId: string } | null {
-  const match = objectRef.match(
-    /^sandbox-managed-rft:\/\/([^/]+)\/([^/?#]+)$/,
-  );
+  const match = objectRef.match(/^sandbox-managed-rl:\/\/([^/]+)\/([^/?#]+)$/);
   if (!match) return null;
   try {
     const jobId = decodeURIComponent(match[1]!);
     const modelArtifactId = decodeURIComponent(match[2]!);
-    return jobId === expectedJobId && modelArtifactId
-      ? { jobId, modelArtifactId }
-      : null;
+    return jobId === expectedJobId && modelArtifactId ? { jobId, modelArtifactId } : null;
   } catch {
     return null;
   }
 }
 
 function portableFilenameFromRef(objectRef: string): string {
-  const local = objectRef.startsWith("file:")
-    ? fileURLToPath(objectRef)
-    : objectRef;
+  const local = objectRef.startsWith("file:") ? fileURLToPath(objectRef) : objectRef;
   const segments = local.replaceAll("\\", "/").split("/").filter(Boolean);
   let objectDirectory = -1;
   for (let index = segments.length - 1; index >= 0; index -= 1) {
@@ -309,8 +271,8 @@ function portableFilename(value: unknown): string | null {
 function isAdapterWeights(name: string): boolean {
   const filename = path.basename(name.replaceAll("\\", "/"));
   return (
-    filename === "adapter_model.safetensors"
-    || /^adapter_model-\d{5}-of-\d{5}\.safetensors$/.test(filename)
+    filename === "adapter_model.safetensors" ||
+    /^adapter_model-\d{5}-of-\d{5}\.safetensors$/.test(filename)
   );
 }
 
@@ -340,6 +302,6 @@ function portableProvider(job: TrainingJob): string {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
+    ? (value as Record<string, unknown>)
     : {};
 }

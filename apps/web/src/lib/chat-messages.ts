@@ -18,7 +18,7 @@ import {
   completeActivityGroup,
   isCodexGoalContextEvent,
   isCompactionEvent,
-  settleLatestActivityGroup,
+  settleRunningActivityGroups,
 } from "./chat-activities";
 import { classifyChatError } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
@@ -43,6 +43,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
   for (const item of items) {
     if (item.name === "turn.started") {
+      settleRunningActivityGroups(messages, item);
       const prompt = extractPrompt(item.args);
       if (prompt) {
         const marker = codexControlMessage(prompt);
@@ -106,7 +107,7 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     if (item.name === "assistant.delta") {
       const content = item.output ?? "";
       if (!content) continue;
-      settleLatestActivityGroup(messages, item);
+      settleRunningActivityGroups(messages, item);
       const previous = messages[messages.length - 1];
       if (previous?.role === "assistant" && previous.turnId === item.turnId && !previous.createImproveRun) {
         previous.content = `${previous.content ?? ""}${content}`;

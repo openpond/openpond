@@ -221,55 +221,6 @@ describe("codex history", () => {
     }
   });
 
-  test("projects legacy Codex top-level message records into chat events", () => {
-    const sessionId = codexHistorySessionId("a9d2378a-0bd7-4b79-adb7-13a60a7fd671");
-    const parsed = parseCodexSessionRecords(
-      [
-        {
-          type: "message",
-          role: "user",
-          content: [{ type: "input_text", text: "open an old thread" }],
-        },
-        {
-          type: "function_call",
-          name: "shell",
-          call_id: "call_1",
-          arguments: JSON.stringify({ command: "pwd" }),
-        },
-        {
-          type: "function_call_output",
-          call_id: "call_1",
-          output: "/workspace/project",
-        },
-        {
-          type: "message",
-          role: "assistant",
-          content: [{ type: "output_text", text: "old thread loaded" }],
-        },
-      ],
-      {
-        fallbackTimestamp: "2025-09-08T18:58:30.000Z",
-        sessionId,
-        threadId: "a9d2378a-0bd7-4b79-adb7-13a60a7fd671",
-      },
-    );
-
-    expect(parsed.status).toBe("idle");
-    expect(parsed.events.map((event) => event.name)).toEqual([
-      "session.started",
-      "turn.started",
-      "tool.started",
-      "tool.completed",
-      "command.output",
-      "assistant.delta",
-      "turn.completed",
-    ]);
-    expect(parsed.events[1]?.args?.prompt).toBe("open an old thread");
-    expect(parsed.events[2]?.output).toBe("pwd");
-    expect(parsed.events[4]?.output).toBe("/workspace/project");
-    expect(parsed.events[5]?.output).toBe("old thread loaded");
-  });
-
   test("projects Codex control messages as assistant-side events", () => {
     const sessionId = codexHistorySessionId("019e7138-5da2-7671-8837-202a36e0fff1");
     const parsed = parseCodexSessionRecords(

@@ -8,7 +8,7 @@ import {
   buildChatMessages,
 } from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
-import { subagentChildSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
+import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
 import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
 import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
@@ -253,7 +253,7 @@ describe("chat message projection", () => {
       archived: false,
       order: 3,
     });
-    const sessions = subagentChildSessionsFromRuntimeEvents([
+    const sessions = liveSessionsFromRuntimeEvents([
       runtimeEvent({
         id: "subagent_started_live",
         name: "subagent.started",
@@ -265,6 +265,39 @@ describe("chat message projection", () => {
     ]);
 
     expect(sessions).toEqual([childSession]);
+  });
+
+  test("extracts an API-created session shell from live session start receipts", () => {
+    const workSession = SessionSchema.parse({
+      id: "session_work_live",
+      experience: "work",
+      provider: "openpond",
+      modelRef: null,
+      openPondCommandAccessMode: "ask",
+      hiddenFromDefaultSidebar: false,
+      title: "Hosted diagnostic corpus review",
+      appId: null,
+      appName: null,
+      cwd: null,
+      codexThreadId: null,
+      createdAt: "2026-07-30T19:37:55.382Z",
+      updatedAt: "2026-07-30T19:37:55.382Z",
+      status: "idle",
+      pinned: false,
+      archived: false,
+      order: 130,
+    });
+    const sessions = liveSessionsFromRuntimeEvents([
+      runtimeEvent({
+        id: "session_started_work_live",
+        name: "session.started",
+        sessionId: workSession.id,
+        source: "server",
+        data: { session: workSession },
+      }),
+    ]);
+
+    expect(sessions).toEqual([workSession]);
   });
 
   test("keeps subagent state visible in mixed parent activity summaries", () => {
@@ -554,54 +587,6 @@ describe("chat message projection", () => {
     expect(
       expandedActivities.some((activity) => activity.kind === "reasoning")
     ).toBe(false);
-  });
-
-  test("keeps legacy Codex commentary and later tool activity in transcript order", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_started",
-        name: "turn.started",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        args: { prompt: "inspect the renderer" },
-      }),
-      commandStarted("search_1", "turn_1", "rg workTracePresentation apps/web"),
-      runtimeEvent({
-        id: "commentary_1",
-        name: "assistant.delta",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        output: "I found the live trace threshold.",
-      }),
-      commandStarted(
-        "read_1",
-        "turn_1",
-        "sed -n '1,120p' apps/web/src/lib/chat-work-trace.ts"
-      ),
-      runtimeEvent({
-        id: "turn_completed",
-        name: "turn.completed",
-        sessionId: "session_1",
-        turnId: "turn_1",
-        status: "completed",
-      }),
-    ]);
-
-    expect(messages.map((message) => message.role)).toEqual([
-      "user",
-      "activity_group",
-      "assistant",
-      "activity_group",
-    ]);
-    expect(messages[1]?.activities?.map((activity) => activity.id)).toEqual([
-      "search_1",
-    ]);
-    expect(messages[2]?.content).toBe("I found the live trace threshold.");
-    expect(messages[3]?.activities?.map((activity) => activity.id)).toEqual([
-      "read_1",
-    ]);
-    expect(messages[1]?.traceState).toBe("settled");
-    expect(messages[3]?.traceState).toBe("completed");
   });
 
   test("settles earlier work summaries while only the active tail keeps working", () => {

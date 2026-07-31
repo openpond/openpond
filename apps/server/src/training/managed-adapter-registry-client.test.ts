@@ -26,7 +26,7 @@ describe("managed adapter registry client", () => {
             },
           ],
           lifecycle: { policyOwner: "sandbox" },
-        })
+        }),
       ) as typeof fetch,
       resolveRegistryAccess: async (teamId) => ({
         apiBaseUrl: "https://api.test",
@@ -49,58 +49,52 @@ describe("managed adapter registry client", () => {
 
   test("uploads desktop Fireworks bytes as a user-scoped direct import", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(
-      async (input: string | URL | Request, init = {}) => {
-        const url = String(input);
-        requests.push({ url, init });
-        if (url.endsWith("/v1/model-adapters/uploads")) {
-          return Response.json({
-            upload: { id: "upload-1", version: 1, state: "uploading" },
-            uploadCapabilities: [
-              {
-                path: "adapter_config.json",
-                url: "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/config",
-                headers: { "content-type": "application/json" },
-              },
-              {
-                path: "adapter_model.safetensors",
-                url: "https://openpond-test.s3.us-east-2.amazonaws.com/weights",
-                headers: {
-                  "content-type": "application/vnd.safetensors",
-                },
-              },
-            ],
-          });
-        }
-        if (
-          url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/") ||
-          url.startsWith(
-            "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/"
-          )
-        ) {
-          return new Response(null, { status: 200 });
-        }
-        if (url.endsWith("/v1/model-adapters/uploads/upload-1/complete")) {
-          return Response.json({
-            artifact: {
-              id: "artifact-1",
-              source: "direct_upload",
-              sourceRef: "upload:upload-1",
-              state: "imported_unvalidated",
-              promotable: false,
-              customerBindingAllowed: false,
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init = {}) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.endsWith("/v1/model-adapters/uploads")) {
+        return Response.json({
+          upload: { id: "upload-1", version: 1, state: "uploading" },
+          uploadCapabilities: [
+            {
+              path: "adapter_config.json",
+              url: "https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/config",
+              headers: { "content-type": "application/json" },
             },
-          });
-        }
-        throw new Error(`Unexpected request: ${url}`);
+            {
+              path: "adapter_model.safetensors",
+              url: "https://openpond-test.s3.us-east-2.amazonaws.com/weights",
+              headers: {
+                "content-type": "application/vnd.safetensors",
+              },
+            },
+          ],
+        });
       }
-    );
+      if (
+        url.startsWith("https://openpond-test.s3.us-east-2.amazonaws.com/") ||
+        url.startsWith("https://f82ac02df53f47472f99ef52b737795d.r2.cloudflarestorage.com/")
+      ) {
+        return new Response(null, { status: 200 });
+      }
+      if (url.endsWith("/v1/model-adapters/uploads/upload-1/complete")) {
+        return Response.json({
+          artifact: {
+            id: "artifact-1",
+            source: "direct_upload",
+            sourceRef: "upload:upload-1",
+            state: "imported_unvalidated",
+            promotable: false,
+            customerBindingAllowed: false,
+          },
+        });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       readFileImpl: (async (path: string) =>
-        path.endsWith("config")
-          ? Buffer.from("{}")
-          : Buffer.from([1, 2, 3])) as never,
+        path.endsWith("config") ? Buffer.from("{}") : Buffer.from([1, 2, 3])) as never,
       resolveRegistryAccess: async (teamId) => ({
         apiBaseUrl: "https://api.test",
         token: "opk_user",
@@ -113,64 +107,54 @@ describe("managed adapter registry client", () => {
     const artifact = await client.publishFireworksSource(sourceImport());
     expect(artifact.id).toBe("artifact-1");
     const create = requests.find((request) => request.url.endsWith("/uploads"));
-    const body = JSON.parse(String(create?.init.body)) as Record<
-      string,
-      unknown
-    >;
+    const body = JSON.parse(String(create?.init.body)) as Record<string, unknown>;
     expect(body.baseProfileId).toBe(MANAGED_QWEN3_8B_BASE_PROFILE_ID);
     expect(body).not.toHaveProperty("teamId");
     expect(body).not.toHaveProperty("token");
     expect(body).not.toHaveProperty("source");
     expect(body).not.toHaveProperty("sourceProvenance");
-    expect(new Headers(create?.init.headers).get("openpond-api-key")).toBe(
-      "opk_user"
-    );
-    expect(new Headers(create?.init.headers).get("x-openpond-team-id")).toBe(
-      "team_qa"
-    );
+    expect(new Headers(create?.init.headers).get("openpond-api-key")).toBe("opk_user");
+    expect(new Headers(create?.init.headers).get("x-openpond-team-id")).toBe("team_qa");
     expect(fetchImpl).toHaveBeenCalledTimes(4);
   });
 
   test("uses the explicit user workspace for registry reads and binding sync", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
-    const fetchImpl = vi.fn(
-      async (input: string | URL | Request, init: RequestInit = {}) => {
-        const url = String(input);
-        requests.push({ url, init });
-        if (url.includes("/artifacts?")) {
-          return Response.json({
-            artifacts: [
-              {
-                id: "artifact-1",
-                source: "sandbox_managed_rft",
-                sourceRef:
-                  "r2://managed-rft/jobs/managed-job-1/candidate.json",
-                state: "promotable",
-                promotable: true,
-                customerBindingAllowed: true,
-                contentHash: "1".repeat(64),
-                baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
-              },
-            ],
-          });
-        }
-        if (url.endsWith("/deployments")) {
-          return Response.json({
-            deployments: [
-              {
-                id: "deployment-1",
-                artifactId: "artifact-1",
-                state: "failed",
-              },
-            ],
-          });
-        }
-        if (url.endsWith("/binding-projections")) {
-          return Response.json({});
-        }
-        throw new Error(`Unexpected request: ${url}`);
+    const fetchImpl = vi.fn(async (input: string | URL | Request, init: RequestInit = {}) => {
+      const url = String(input);
+      requests.push({ url, init });
+      if (url.includes("/artifacts?")) {
+        return Response.json({
+          artifacts: [
+            {
+              id: "artifact-1",
+              source: "sandbox_managed_rl",
+              sourceRef: "r2://managed-rl/jobs/managed-job-1/candidate.json",
+              state: "promotable",
+              promotable: true,
+              customerBindingAllowed: true,
+              contentHash: "1".repeat(64),
+              baseProfileId: MANAGED_QWEN3_0_6B_BASE_PROFILE_ID,
+            },
+          ],
+        });
       }
-    );
+      if (url.endsWith("/deployments")) {
+        return Response.json({
+          deployments: [
+            {
+              id: "deployment-1",
+              artifactId: "artifact-1",
+              state: "failed",
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/binding-projections")) {
+        return Response.json({});
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       env: {
@@ -221,9 +205,7 @@ describe("managed adapter registry client", () => {
       const headers = new Headers(request.init.headers);
       expect(headers.get("openpond-api-key")).toBe("opk_user");
       expect(headers.get("x-openpond-team-id")).toBe("team_customer");
-      expect(headers.get("x-vercel-protection-bypass")).toBe(
-        "staging-bypass"
-      );
+      expect(headers.get("x-vercel-protection-bypass")).toBe("staging-bypass");
     }
   });
 
@@ -238,9 +220,7 @@ describe("managed adapter registry client", () => {
       }),
     });
 
-    await expect(client.listRegistry("team_customer")).rejects.toThrow(
-      "different OpenPond team"
-    );
+    await expect(client.listRegistry("team_customer")).rejects.toThrow("different OpenPond team");
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 
@@ -282,9 +262,9 @@ describe("managed adapter registry client", () => {
       }),
     });
 
-    await expect(
-      client.publishFireworksSource(sourceImport())
-    ).resolves.toMatchObject({ id: "artifact-replayed" });
+    await expect(client.publishFireworksSource(sourceImport())).resolves.toMatchObject({
+      id: "artifact-replayed",
+    });
     expect(readFileImpl).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
@@ -296,22 +276,20 @@ describe("managed adapter registry client", () => {
           new TextEncoder().encode(
             'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\n' +
               'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":4,"completion_tokens":1}}\n\n' +
-              "data: [DONE]\n\n"
-          )
+              "data: [DONE]\n\n",
+          ),
         );
         controller.close();
       },
     });
     let observedInit: RequestInit | undefined;
-    const fetchImpl = vi.fn(
-      async (_input: string | URL | Request, init?: RequestInit) => {
-        observedInit = init;
-        return new Response(stream, {
-          status: 200,
-          headers: { "content-type": "text/event-stream" },
-        });
-      }
-    );
+    const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
+      observedInit = init;
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "text/event-stream" },
+      });
+    });
     const client = createManagedAdapterRegistryClient({
       fetchImpl: fetchImpl as typeof fetch,
       env: {
@@ -347,9 +325,7 @@ describe("managed adapter registry client", () => {
     expect(headers.get("idempotency-key")).toBe("request-1");
     expect(headers.get("openpond-api-key")).toBe("opk_user");
     expect(headers.get("x-openpond-team-id")).toBe("team_customer");
-    expect(headers.get("x-vercel-protection-bypass")).toBe(
-      "staging-bypass"
-    );
+    expect(headers.get("x-vercel-protection-bypass")).toBe("staging-bypass");
   });
 });
 
@@ -373,9 +349,7 @@ function trainingArtifact(id: string, sha256: string, sizeBytes: number) {
 }
 
 const artifactReader = (async (path: string) =>
-  path.endsWith("config")
-    ? Buffer.from("{}")
-    : Buffer.from([1, 2, 3])) as never;
+  path.endsWith("config") ? Buffer.from("{}") : Buffer.from([1, 2, 3])) as never;
 
 function sourceImport() {
   return {

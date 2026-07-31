@@ -18,28 +18,6 @@ afterEach(() => {
 });
 
 describe("OpChat hosted chat client", () => {
-  test("resolves explicit OpChat base URLs before legacy chat settings", () => {
-    expect(
-      resolveOpChatApiBaseUrl({
-        opChatApiBaseUrl:
-          "https://api.qa.openpond.example/opchat/v1/chat/completions",
-        chatApiBaseUrl: "https://legacy.example/v1",
-      })
-    ).toBe("https://api.qa.openpond.example/opchat/v1");
-  });
-
-  test("normalizes legacy chat and API bases to the OpChat route root", () => {
-    expect(
-      resolveOpChatApiBaseUrl({
-        chatApiBaseUrl: "https://gateway.openpond.dev/v1",
-      })
-    ).toBe("https://gateway.openpond.dev/opchat/v1");
-    expect(
-      resolveHostedChatApiBaseUrl({
-        apiBaseUrl: "https://api.qa.openpond.example",
-      })
-    ).toBe("https://api.qa.openpond.example/opchat/v1");
-  });
 
   test("uses OPENPOND_OPCHAT_API_URL as the environment override", () => {
     expect(

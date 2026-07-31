@@ -618,7 +618,10 @@ export async function sandboxRequestPayload(
     return { sandbox: await client.get(action.sandboxId), account };
   }
   if (action.type === "start") {
-    return { ...(await client.start(action.sandboxId)), account };
+    return {
+      ...(await client.start(action.sandboxId, { respondAsync: true })),
+      account,
+    };
   }
   if (action.type === "delete") {
     const options = await sandboxLifecycleRequestOptions(
@@ -1027,7 +1030,9 @@ export function sandboxLifecycleRequiresSynchronousAccounting(
   sandbox: Pick<SandboxRecord, "state" | "reservation">
 ): boolean {
   return (
-    sandbox.state === "creating" && sandbox.reservation.status === "reserved"
+    sandbox.reservation.status === "reserved" &&
+    (sandbox.state === "creating" ||
+      terminalSandboxLifecycleStates.has(sandbox.state))
   );
 }
 

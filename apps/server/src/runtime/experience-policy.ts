@@ -135,7 +135,7 @@ function workWorkspaceRequestBlocker(
   if (action === "sandbox_exec") {
     const command =
       typeof args.command === "string" ? args.command.trimStart() : "";
-    return command.startsWith("cd work && ")
+    return command.startsWith("cd /workspace/work && ")
       ? null
       : "Work commands must execute from /workspace/work.";
   }

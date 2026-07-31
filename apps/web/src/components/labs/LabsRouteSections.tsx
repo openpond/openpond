@@ -3,10 +3,6 @@ import type {
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
-import {
-  managedAdapterCustomerBindingAllowed,
-  resolveModelBindingPromotionGate,
-} from "@openpond/contracts";
 
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
@@ -18,7 +14,6 @@ import {
   Loader2,
   XCircle,
 } from "../icons";
-import { trainingMethodLabel } from "../training/training-model-data";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { labBaseModelVersion, labModelVersions } from "./lab-models";
@@ -139,7 +134,7 @@ export function WorkproductsTable({
                   <div className="labs-workproduct-actions">
                     {item.kind === "skill" ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -150,7 +145,7 @@ export function WorkproductsTable({
                       </button>
                     ) : item.kind === "agent" && item.useActionId ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -161,7 +156,7 @@ export function WorkproductsTable({
                       </button>
                     ) : item.kind === "model" && item.enabled !== null ? (
                       <button
-                        className="settings-secondary compact labs-workproduct-use"
+                        className="training-button secondary labs-compact-button labs-workproduct-use"
                         type="button"
                         disabled={!item.enabled}
                         title={
@@ -222,9 +217,9 @@ export function ModelsTable({
         <thead>
           <tr>
             <th>Model</th>
-            <th>Profile</th>
-            <th>Active</th>
-            <th>Eval</th>
+            <th>Hosting</th>
+            <th>Active release</th>
+            <th>Starting model</th>
             <th>Runs</th>
             <th>Updated</th>
             <th>
@@ -237,7 +232,14 @@ export function ModelsTable({
             const versions = labModelVersions(item, runs, state);
             const baseVersion = labBaseModelVersion(item, state);
             const current = versions.find((version) => version.current) ?? null;
-            const latest = versions[0] ?? null;
+            const project =
+              state?.modelProjects.find(
+                (candidate) => candidate.id === item.id,
+              ) ?? null;
+            const startingModel =
+              baseVersion?.baseModel.modelId ??
+              project?.defaultBaseModel?.modelId ??
+              "Choose later";
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
                 <td>
@@ -250,48 +252,20 @@ export function ModelsTable({
                     <span>{item.description}</span>
                   </button>
                 </td>
-                <td>{item.ownerProfileId ?? "Unknown"}</td>
-                <td>
-                  {current
-                    ? `Version ${current.number} · ${trainingMethodLabel(
-                        current.plan?.recipe.method
-                      )}`
-                    : baseVersion
-                    ? "Base version 0"
-                    : "Not selected"}
-                </td>
                 <td>
                   <LabStatusBadge
-                    label={
-                      latest
-                        ? resolveModelBindingPromotionGate(latest.lineage) ||
-                          managedAdapterCustomerBindingAllowed(latest.lineage)
-                          ? "Passed"
-                          : latest.lineage.frozenEvaluationArtifactId ||
-                            latest.lineage.managedServing
-                              ?.customerBindingAllowed
-                          ? "Failed"
-                          : "Not run"
-                        : "Not run"
-                    }
-                    value={
-                      latest &&
-                      (resolveModelBindingPromotionGate(latest.lineage) ||
-                        managedAdapterCustomerBindingAllowed(latest.lineage))
-                        ? "passed"
-                        : latest?.lineage.frozenEvaluationArtifactId ||
-                          latest?.lineage.managedServing?.customerBindingAllowed
-                        ? "failed"
-                        : "not_run"
-                    }
+                    label={current ? "Hosted" : "Not hosted"}
+                    value={current ? "ready" : "not_run"}
                   />
                 </td>
+                <td>{current ? `Release ${current.number}` : "—"}</td>
+                <td>{startingModel}</td>
                 <td>{item.trainingRunCount}</td>
                 <td>{compactUpdatedAt(item.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">
                     <button
-                      className="settings-secondary compact labs-workproduct-use"
+                      className="training-button secondary labs-compact-button labs-workproduct-use"
                       disabled={!current}
                       title={
                         current

@@ -1,6 +1,4 @@
-import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
 import type {
   OutputRef,
   WorkspaceToolRequest,
@@ -11,23 +9,15 @@ import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
 } from "./model-tool-registry.js";
+import {
+  createWorkRuntimeService,
+  WORK_ENVIRONMENT_PROBE,
+  WORK_RUNTIME_PROFILE_ID,
+  workPath,
+  type WorkRuntimeInput,
+} from "./work-runtime-service.js";
 
-const WORK_RUNTIME_PROFILE_ID = "openpond-work-v1";
-const WORK_LAYOUT_COMMAND = "mkdir -p inputs work outputs";
-const WORK_SANDBOX_STARTUP_TIMEOUT_MS = 180_000;
-const WORK_SANDBOX_STARTUP_POLL_MS = 1_000;
-const TERMINAL_WORK_SANDBOX_STATES = new Set(["archived", "deleted", "error"]);
-const WORK_ENVIRONMENT_PROBE = [
-  "cd work &&",
-  'printf "architecture="; uname -m;',
-  'printf "kernel="; uname -sr;',
-  'printf "cpu_count="; getconf _NPROCESSORS_ONLN 2>/dev/null || true;',
-  "printf \"memory_kb=\"; awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || true;",
-  "printf \"workspace_bytes=\"; df -Pk .. 2>/dev/null | awk 'NR==2 {print $4 * 1024}' || true;",
-  'printf "tools=";',
-  'for tool in python3 pip node npm npx pnpm java gcc g++ make git ffmpeg convert magick pandoc pdftotext pdfinfo pdftoppm curl wget jq rg; do command -v "$tool" >/dev/null 2>&1 && printf "%s " "$tool"; done;',
-  "printf '\\n'",
-].join(" ");
+export { waitForWorkSandboxReady } from "./work-runtime-service.js";
 
 export function createWorkModelToolDefinitions(deps: {
   executeWorkspaceTool: (
@@ -38,13 +28,9 @@ export function createWorkModelToolDefinitions(deps: {
       workspaceDiffBaseline?: ModelToolExecutionContext["workspaceDiffBaseline"];
     }
   ) => Promise<WorkspaceToolResult>;
-  inputs?: ReadonlyArray<{
-    localPath?: string;
-    storageName?: string;
-  }>;
+  inputs?: ReadonlyArray<WorkRuntimeInput>;
 }): ModelToolDefinition[] {
-  const pendingSandboxBySessionId = new Map<string, Promise<void>>();
-  const sandboxReadySessionIds = new Set<string>();
+  const runtime = createWorkRuntimeService(deps);
 
   async function execute(
     context: ModelToolExecutionContext,
@@ -52,14 +38,7 @@ export function createWorkModelToolDefinitions(deps: {
     args: Record<string, unknown>,
     toolName: string
   ) {
-    const result = await deps.executeWorkspaceTool(
-      context.session.id,
-      { action, args, source: "chat_action" },
-      {
-        turnId: context.turnId,
-        workspaceDiffBaseline: context.workspaceDiffBaseline,
-      }
-    );
+    const result = await runtime.execute(context, action, args);
     return workspaceToolResult(
       context.callId,
       toolName,
@@ -72,120 +51,7 @@ export function createWorkModelToolDefinitions(deps: {
   async function ensureSandbox(
     context: ModelToolExecutionContext
   ): Promise<void> {
-    if (sandboxReadySessionIds.has(context.session.id)) return;
-    const alreadyAttached =
-      context.session.workspaceKind === "sandbox" &&
-      Boolean(context.session.workspaceId);
-    const current = pendingSandboxBySessionId.get(context.session.id);
-    if (current) return current;
-    const pending = (async () => {
-      if (!alreadyAttached) {
-        const result = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_create",
-            source: "chat_action",
-            args: {
-              attachToSession: true,
-              command: WORK_LAYOUT_COMMAND,
-              visibility: "private",
-              reuseDefaultRuntime: false,
-              markDefaultRuntime: false,
-              runtime: {
-                runtimeProfileId: WORK_RUNTIME_PROFILE_ID,
-                workflowMode: "attempt",
-                promotionPolicy: "none",
-                metadata: {
-                  source: "openpond-work",
-                  experience: "work",
-                },
-              },
-              metadata: {
-                source: "openpond-work",
-                experience: "work",
-              },
-            },
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        );
-        if (!result.ok) throw new Error(result.output);
-      } else {
-        const status = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_status",
-            source: "chat_action",
-            args: {},
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        );
-        if (!status.ok) throw new Error(status.output);
-        if (sandboxState(status.data) === "stopped") {
-          const started = await deps.executeWorkspaceTool(
-            context.session.id,
-            {
-              action: "sandbox_start",
-              source: "chat_action",
-              args: {},
-            },
-            {
-              turnId: context.turnId,
-              workspaceDiffBaseline: context.workspaceDiffBaseline,
-            }
-          );
-          if (!started.ok) throw new Error(started.output);
-        }
-      }
-      await waitForWorkSandboxReady(() =>
-        deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_status",
-            source: "chat_action",
-            args: {},
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        )
-      );
-      for (const input of deps.inputs ?? []) {
-        if (!input.localPath || !input.storageName) continue;
-        const bytes = await fs.readFile(input.localPath);
-        const result = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_upload_file",
-            source: "chat_action",
-            args: {
-              path: workPath("inputs", input.storageName, ["inputs"]),
-              contentsBase64: bytes.toString("base64"),
-            },
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        );
-        if (!result.ok) throw new Error(result.output);
-      }
-      sandboxReadySessionIds.add(context.session.id);
-    })();
-    pendingSandboxBySessionId.set(context.session.id, pending);
-    try {
-      await pending;
-    } finally {
-      if (pendingSandboxBySessionId.get(context.session.id) === pending) {
-        pendingSandboxBySessionId.delete(context.session.id);
-      }
-    }
+    await runtime.ensureReady(context);
   }
 
   const withSandbox =
@@ -198,9 +64,6 @@ export function createWorkModelToolDefinitions(deps: {
       const resolvedArgs = args(context);
       await ensureSandbox(context);
       const result = await execute(context, action, resolvedArgs, toolName);
-      if (action === "sandbox_stop" && result.ok) {
-        sandboxReadySessionIds.delete(context.session.id);
-      }
       return result;
     };
 
@@ -260,18 +123,7 @@ export function createWorkModelToolDefinitions(deps: {
       parameters: emptyObjectParameters(),
       execute: async (context) => {
         await ensureSandbox(context);
-        const status = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_status",
-            source: "chat_action",
-            args: {},
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        );
+        const status = await runtime.execute(context, "sandbox_status", {});
         if (!status.ok) {
           return workspaceToolResult(
             context.callId,
@@ -279,22 +131,11 @@ export function createWorkModelToolDefinitions(deps: {
             status
           );
         }
-        const probe = await deps.executeWorkspaceTool(
-          context.session.id,
-          {
-            action: "sandbox_exec",
-            source: "chat_action",
-            args: {
-              command: WORK_ENVIRONMENT_PROBE,
-              timeoutSeconds: 30,
-              autoPreserveSource: false,
-            },
-          },
-          {
-            turnId: context.turnId,
-            workspaceDiffBaseline: context.workspaceDiffBaseline,
-          }
-        );
+        const probe = await runtime.execute(context, "sandbox_exec", {
+          command: WORK_ENVIRONMENT_PROBE,
+          timeoutSeconds: 30,
+          autoPreserveSource: false,
+        });
         const simulated = simulatedSandboxCommandResult(probe);
         const probeResult = simulated
           ? simulatedSandboxFailure("sandbox_exec")
@@ -512,7 +353,7 @@ export function createWorkModelToolDefinitions(deps: {
         required: ["command"],
       },
       execute: withSandbox("work_exec", "sandbox_exec", (context) => ({
-        command: `cd work && ${requiredString(context.args.command)}`,
+        command: `cd /workspace/work && ${requiredString(context.args.command)}`,
         timeoutSeconds:
           typeof context.args.timeoutSeconds === "number"
             ? Math.min(
@@ -798,20 +639,11 @@ export function createWorkModelToolDefinitions(deps: {
         "Stop Work compute after durable outputs have been saved. Saved OutputRefs remain available.",
       parameters: emptyObjectParameters(),
       execute: async (context) => {
-        if (
-          context.session.workspaceKind !== "sandbox" ||
-          !context.session.workspaceId
-        ) {
-          return workspaceToolResult(context.callId, "work_stop", {
-            ok: true,
-            action: "sandbox_stop",
-            output: "No Work compute is attached to this task.",
-            data: { stopped: false, reason: "not_attached" },
-          });
-        }
-        const result = await execute(context, "sandbox_stop", {}, "work_stop");
-        if (result.ok) sandboxReadySessionIds.delete(context.session.id);
-        return result;
+        return workspaceToolResult(
+          context.callId,
+          "work_stop",
+          await runtime.stop(context),
+        );
       },
     },
   ];
@@ -869,31 +701,6 @@ function workAreaProperty() {
   };
 }
 
-function workPath(
-  rawArea: unknown,
-  rawPath: string,
-  allowedAreas: readonly string[] = ["inputs", "work", "outputs"]
-): string {
-  const area = requiredString(rawArea);
-  if (!allowedAreas.includes(area)) {
-    throw new Error(`Unknown Work area: ${area}`);
-  }
-  const value = rawPath.trim().replaceAll("\\", "/");
-  if (!value || value === ".") return area;
-  if (value.startsWith("/")) {
-    throw new Error("Work paths must be relative to their selected area.");
-  }
-  const normalized = path.posix.normalize(value);
-  if (
-    normalized === ".." ||
-    normalized.startsWith("../") ||
-    normalized.includes("/../")
-  ) {
-    throw new Error("Work path escaped its selected area.");
-  }
-  return `${area}/${normalized}`;
-}
-
 function requiredString(value: unknown, allowEmpty = false): string {
   if (typeof value !== "string" || (!allowEmpty && !value.trim())) {
     throw new Error("A required string argument is missing.");
@@ -903,53 +710,6 @@ function requiredString(value: unknown, allowEmpty = false): string {
 
 function optionalString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
-}
-
-function sandboxState(value: unknown): string {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
-  const sandbox = (value as Record<string, unknown>).sandbox;
-  if (!sandbox || typeof sandbox !== "object" || Array.isArray(sandbox)) {
-    return "";
-  }
-  const state = (sandbox as Record<string, unknown>).state;
-  return typeof state === "string" ? state : "";
-}
-
-export async function waitForWorkSandboxReady(
-  readStatus: () => Promise<WorkspaceToolResult>,
-  options: {
-    timeoutMs?: number;
-    pollMs?: number;
-    now?: () => number;
-    sleep?: (milliseconds: number) => Promise<void>;
-  } = {}
-): Promise<WorkspaceToolResult> {
-  const timeoutMs = options.timeoutMs ?? WORK_SANDBOX_STARTUP_TIMEOUT_MS;
-  const pollMs = options.pollMs ?? WORK_SANDBOX_STARTUP_POLL_MS;
-  const now = options.now ?? Date.now;
-  const sleep =
-    options.sleep ??
-    ((milliseconds: number) =>
-      new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
-  const startedAt = now();
-  let lastState = "";
-
-  while (now() - startedAt <= timeoutMs) {
-    const status = await readStatus();
-    if (!status.ok) throw new Error(status.output);
-    lastState = sandboxState(status.data);
-    if (lastState === "running") return status;
-    if (TERMINAL_WORK_SANDBOX_STATES.has(lastState)) {
-      throw new Error(`Work sandbox entered ${lastState} during startup.`);
-    }
-    await sleep(pollMs);
-  }
-
-  throw new Error(
-    `Work sandbox did not become ready within ${timeoutMs}ms${
-      lastState ? ` (last state: ${lastState})` : ""
-    }.`
-  );
 }
 
 function validHttpUrl(value: unknown): string {

@@ -1,10 +1,25 @@
-import { useCallback, useId, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
-import type { CloudProject, LocalProject, Session, SidebarFileBookmark, WorkspaceState } from "@openpond/contracts";
 import {
-  Archive,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type ReactNode,
+} from "react";
+import type {
+  CloudProject,
+  LocalProject,
+  Session,
+  SidebarFileBookmark,
+  WorkspaceState,
+} from "@openpond/contracts";
+import {
   ArchiveRestore,
   Bookmark,
   BookmarkX,
+  Check,
   ChevronDown,
   ChevronRight,
   Cloud,
@@ -21,8 +36,11 @@ import {
   SquarePen,
   X,
 } from "../icons";
-import { relativeAge } from "../../lib/chat-messages";
-import { cloudWorkspaceStateNote, localWorkspaceStateNote } from "../../lib/project-workflow-state";
+import { formatSidebarRuntime } from "../../lib/session-runtime";
+import {
+  cloudWorkspaceStateNote,
+  localWorkspaceStateNote,
+} from "../../lib/project-workflow-state";
 import { CloudMoveIcon } from "../common/CloudMoveIcon";
 import { ProjectKindIcon } from "../common/ProjectKindIcon";
 import type { SidebarTerminalIndicator } from "../terminal/terminal-state";
@@ -44,6 +62,8 @@ function syncedRunningPulseStyle(): CSSProperties {
 export function SidebarSection({
   label,
   actions,
+  actionsVisible = false,
+  className,
   titleAccessory,
   children,
   collapsed = false,
@@ -53,6 +73,8 @@ export function SidebarSection({
 }: {
   label: string;
   actions?: ReactNode;
+  actionsVisible?: boolean;
+  className?: string;
   titleAccessory?: ReactNode;
   children: ReactNode;
   collapsed?: boolean;
@@ -61,7 +83,15 @@ export function SidebarSection({
   onToggleCollapsed?: () => void;
 }) {
   return (
-    <section className="sidebar-section">
+    <section
+      className={[
+        "sidebar-section",
+        className,
+        actionsVisible ? "actions-visible" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="section-header">
         <div className="section-title-row">
           {onTitleClick ? (
@@ -81,7 +111,11 @@ export function SidebarSection({
                   aria-expanded={!collapsed}
                   onClick={onToggleCollapsed}
                 >
-                  {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                  {collapsed ? (
+                    <ChevronRight size={13} />
+                  ) : (
+                    <ChevronDown size={13} />
+                  )}
                 </button>
               )}
             </div>
@@ -94,7 +128,11 @@ export function SidebarSection({
               onClick={onToggleCollapsed}
             >
               <span>{label}</span>
-              {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+              {collapsed ? (
+                <ChevronRight size={13} />
+              ) : (
+                <ChevronDown size={13} />
+              )}
             </button>
           ) : (
             <span>{label}</span>
@@ -105,47 +143,6 @@ export function SidebarSection({
       </div>
       {!collapsed && <div className="sidebar-section-body">{children}</div>}
     </section>
-  );
-}
-
-export function SidebarSectionMenu({
-  id,
-  open,
-  archivedOpen,
-  archivedLabel,
-  onToggleOpen,
-  onToggleArchived,
-}: {
-  id: string;
-  open: boolean;
-  archivedOpen: boolean;
-  archivedLabel: string;
-  onToggleOpen: () => void;
-  onToggleArchived: () => void;
-}) {
-  const menuId = `${id}-section-menu`;
-  return (
-    <div className="section-menu">
-      <button
-        type="button"
-        className={`section-icon ${open ? "active" : ""}`}
-        data-tooltip="More"
-        aria-label="More"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={onToggleOpen}
-      >
-        <MoreHorizontal size={14} />
-      </button>
-      {open && (
-        <div className="section-menu-popover" id={menuId} role="menu">
-          <button type="button" role="menuitem" onClick={onToggleArchived}>
-            {archivedOpen ? `Hide ${archivedLabel}` : `Show ${archivedLabel}`}
-          </button>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -178,6 +175,8 @@ export function SidebarSessionRow({
   goalRuntime,
   subagentRuntime,
   terminalIndicator,
+  projectLabel,
+  runtimeSeconds = 0,
   childSessionCount = 0,
   childSessionsExpanded = false,
   onSelect,
@@ -204,6 +203,8 @@ export function SidebarSessionRow({
   goalRuntime?: GoalRuntimeStatus | null;
   subagentRuntime?: SubagentRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
+  projectLabel?: string | null;
+  runtimeSeconds?: number;
   childSessionCount?: number;
   childSessionsExpanded?: boolean;
   onSelect: () => void;
@@ -222,27 +223,45 @@ export function SidebarSessionRow({
   const goalQueued = goalRuntime?.status === "queued";
   const goalRunning = goalRuntime?.tone === "active" && !goalQueued;
   const subagentRunning = (subagentRuntime?.activeCount ?? 0) > 0;
-  const hasChildSessions = childSessionCount > 0 && Boolean(onToggleChildSessions);
+  const hasChildSessions =
+    childSessionCount > 0 && Boolean(onToggleChildSessions);
   const effectiveHideIcon = hideIcon && !hasChildSessions;
-  const rowRunning = subagentRunning || goalRunning || (!goalQueued && (running ?? session.status === "active"));
-  const runningLabel = subagentRunning && subagentRuntime
-    ? subagentRuntime.label
-    : goalRunning && goalRuntime
+  const rowRunning =
+    subagentRunning ||
+    goalRunning ||
+    (!goalQueued && (running ?? session.status === "active"));
+  const runningLabel =
+    subagentRunning && subagentRuntime
+      ? subagentRuntime.label
+      : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
-  const rowClassName = [onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "", rowRunning ? "has-running-dot" : ""]
+  const runtimeLabel = formatSidebarRuntime(runtimeSeconds);
+  const rowClassName = [
+    "sidebar-task-row",
+    onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "",
+    rowRunning ? "has-running-dot" : "",
+    projectLabel ? "has-project-detail" : "",
+  ]
     .filter(Boolean)
     .join(" ");
   const rowShellRef = useRef<HTMLDivElement | null>(null);
   const runningPopoverId = useId();
-  const [runningPopoverStyle, setRunningPopoverStyle] = useState<ProjectLocationsPopoverStyle>({});
+  const [runningPopoverStyle, setRunningPopoverStyle] =
+    useState<ProjectLocationsPopoverStyle>({});
   const updateRunningPopoverPosition = useCallback(() => {
     if (typeof window === "undefined") return;
     const rect = rowShellRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const maxLeft = Math.max(12, window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12);
-    const maxTop = Math.max(12, window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE);
+    const maxLeft = Math.max(
+      12,
+      window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12
+    );
+    const maxTop = Math.max(
+      12,
+      window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE
+    );
     const left = Math.max(12, Math.min(rect.right + 10, maxLeft));
     const top = Math.max(12, Math.min(rect.top - 4, maxTop));
     const nextStyle: ProjectLocationsPopoverStyle = {
@@ -252,8 +271,10 @@ export function SidebarSessionRow({
 
     setRunningPopoverStyle((current) => {
       if (
-        current["--sidebar-project-locations-left"] === nextStyle["--sidebar-project-locations-left"] &&
-        current["--sidebar-project-locations-top"] === nextStyle["--sidebar-project-locations-top"]
+        current["--sidebar-project-locations-left"] ===
+          nextStyle["--sidebar-project-locations-left"] &&
+        current["--sidebar-project-locations-top"] ===
+          nextStyle["--sidebar-project-locations-top"]
       ) {
         return current;
       }
@@ -283,8 +304,14 @@ export function SidebarSessionRow({
         <button
           type="button"
           className="sidebar-child-toggle"
-          data-tooltip={childSessionsExpanded ? "Hide subagent conversations" : "Show subagent conversations"}
-          aria-label={`${childSessionsExpanded ? "Hide" : "Show"} ${childSessionCount} subagent ${
+          data-tooltip={
+            childSessionsExpanded
+              ? "Hide subagent conversations"
+              : "Show subagent conversations"
+          }
+          aria-label={`${
+            childSessionsExpanded ? "Hide" : "Show"
+          } ${childSessionCount} subagent ${
             childSessionCount === 1 ? "conversation" : "conversations"
           }`}
           aria-expanded={childSessionsExpanded}
@@ -293,17 +320,26 @@ export function SidebarSessionRow({
             onToggleChildSessions?.();
           }}
         >
-          {childSessionsExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {childSessionsExpanded ? (
+            <ChevronDown size={13} />
+          ) : (
+            <ChevronRight size={13} />
+          )}
         </button>
       ) : (
         icon ?? <MessageSquare size={15} />
       )}
-      <span className="row-label-shell">
+      <span className={`row-label-shell${projectLabel ? " has-detail" : ""}`}>
         <span className="row-label">{session.title}</span>
+        {projectLabel ? (
+          <span className="sidebar-session-project-label">{projectLabel}</span>
+        ) : null}
       </span>
       <div className="row-meta">
         <span className="row-meta-status">
-          {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
+          {terminalIndicator ? (
+            <SidebarTerminalStatusIcon indicator={terminalIndicator} />
+          ) : null}
           {rowRunning ? (
             <span
               className={`sidebar-running-dot${
@@ -312,9 +348,13 @@ export function SidebarSessionRow({
               style={runningDotStyle}
               aria-label={runningLabel}
             />
-          ) : (
-            <time>{relativeAge(session.updatedAt)}</time>
-          )}
+          ) : null}
+          <time
+            dateTime={`PT${Math.max(0, Math.floor(runtimeSeconds))}S`}
+            aria-label={`Runtime ${runtimeLabel}`}
+          >
+            {runtimeLabel}
+          </time>
         </span>
         <div className="sidebar-row-actions">
           {onDockRight ? (
@@ -322,34 +362,53 @@ export function SidebarSessionRow({
               <PanelRight size={13} />
             </SidebarRowAction>
           ) : null}
-          <SidebarRowAction label={session.pinned ? "Unpin chat" : "Pin chat"} onClick={onTogglePin}>
+          <SidebarRowAction
+            label={session.pinned ? "Unpin chat" : "Pin chat"}
+            onClick={onTogglePin}
+          >
             {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
           </SidebarRowAction>
           {onToggleSaveForLater ? (
             <SidebarRowAction
-              label={session.savedForLater ? "Remove from Save for later" : "Save for later"}
+              label={
+                session.savedForLater ? "Return to active" : "Save for later"
+              }
               onClick={onToggleSaveForLater}
             >
-              {session.savedForLater ? <BookmarkX size={13} /> : <Bookmark size={13} />}
+              {session.savedForLater ? (
+                <BookmarkX size={13} />
+              ) : (
+                <Bookmark size={13} />
+              )}
             </SidebarRowAction>
           ) : null}
-          <SidebarRowAction label={archived ? "Restore chat" : "Archive chat"} onClick={onArchive}>
-            {archived ? <ArchiveRestore size={13} /> : <Archive size={13} />}
+          <SidebarRowAction
+            label={archived ? "Reopen" : "Mark done"}
+            onClick={onArchive}
+          >
+            {archived ? <ArchiveRestore size={13} /> : <Check size={13} />}
           </SidebarRowAction>
         </div>
       </div>
     </SidebarInteractiveRow>
-);
+  );
 
-  const renameDialog = renameOpen && onRename ? (
-    <RenameChatDialog
-      session={session}
-      onSave={(title) => onRename(session, title)}
-      onClose={() => setRenameOpen(false)}
-    />
-  ) : null;
+  const renameDialog =
+    renameOpen && onRename ? (
+      <RenameChatDialog
+        session={session}
+        onSave={(title) => onRename(session, title)}
+        onClose={() => setRenameOpen(false)}
+      />
+    ) : null;
 
-  if (!rowRunning) return (<>{row}{renameDialog}</>);
+  if (!rowRunning)
+    return (
+      <>
+        {row}
+        {renameDialog}
+      </>
+    );
 
   return (
     <div
@@ -361,7 +420,9 @@ export function SidebarSessionRow({
       {row}
       {renameDialog}
       <SidebarSessionRunningPopover
-        goalRuntime={!subagentRunning && goalRunning ? goalRuntime ?? null : null}
+        goalRuntime={
+          !subagentRunning && goalRunning ? goalRuntime ?? null : null
+        }
         id={runningPopoverId}
         label={runningLabel}
         style={runningPopoverStyle}
@@ -400,7 +461,9 @@ export function SidebarFileRow({
     <SidebarInteractiveRow
       selected={selected}
       placeholder={placeholder}
-      className={`sidebar-file-row actions-2${file.available ? "" : " unavailable"}`}
+      className={`sidebar-file-row actions-2${
+        file.available ? "" : " unavailable"
+      }`}
       onSelect={onSelect}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -417,13 +480,25 @@ export function SidebarFileRow({
             label={file.status === "pinned" ? "Unpin file" : "Pin file"}
             onClick={onTogglePin}
           >
-            {file.status === "pinned" ? <PinOff size={13} /> : <Pin size={13} />}
+            {file.status === "pinned" ? (
+              <PinOff size={13} />
+            ) : (
+              <Pin size={13} />
+            )}
           </SidebarRowAction>
           <SidebarRowAction
-            label={file.status === "saved_for_later" ? "Remove from Save for later" : "Save file for later"}
+            label={
+              file.status === "saved_for_later"
+                ? "Remove from Save for later"
+                : "Save file for later"
+            }
             onClick={onToggleSaveForLater}
           >
-            {file.status === "saved_for_later" ? <BookmarkX size={13} /> : <Bookmark size={13} />}
+            {file.status === "saved_for_later" ? (
+              <BookmarkX size={13} />
+            ) : (
+              <Bookmark size={13} />
+            )}
           </SidebarRowAction>
         </div>
       </div>
@@ -452,14 +527,18 @@ function SidebarSessionRunningPopover({
     subagentRuntime
       ? subagentRuntime.tooltip
       : goalRuntime?.objective.trim() || "Response in progress",
-    5,
+    5
   );
   const detail = subagentRuntime
     ? subagentPopoverDetail(subagentRuntime)
     : goalRuntime
-      ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}`
-      : "Chat response running";
-  const rowKind = subagentRuntime ? "subagent" : goalRuntime ? "goal" : "running";
+    ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}`
+    : "Chat response running";
+  const rowKind = subagentRuntime
+    ? "subagent"
+    : goalRuntime
+    ? "goal"
+    : "running";
   return (
     <aside
       className="sidebar-project-locations-popover sidebar-session-running-popover"
@@ -471,13 +550,20 @@ function SidebarSessionRunningPopover({
       <div className="sidebar-project-locations-title">{label}</div>
       <div className="sidebar-project-location-list">
         <div className={`sidebar-project-location-row ${rowKind}`}>
-          <span className="sidebar-project-location-icon running" aria-hidden="true">
-            <span className={`sidebar-running-popover-dot${
-              subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""
-            }`} />
+          <span
+            className="sidebar-project-location-icon running"
+            aria-hidden="true"
+          >
+            <span
+              className={`sidebar-running-popover-dot${
+                subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""
+              }`}
+            />
           </span>
           <span className="sidebar-project-location-copy">
-            <span className="sidebar-session-running-objective">{objective}</span>
+            <span className="sidebar-session-running-objective">
+              {objective}
+            </span>
             <span className="sidebar-session-running-detail">{detail}</span>
           </span>
         </div>
@@ -510,6 +596,7 @@ export function SidebarProjectRow({
   pinned = false,
   selected,
   expanded = false,
+  disclosure = true,
   workspaceState,
   cloudLinkTrusted = true,
   cloudLinkWarning = null,
@@ -531,6 +618,7 @@ export function SidebarProjectRow({
   pinned?: boolean;
   selected: boolean;
   expanded?: boolean;
+  disclosure?: boolean;
   workspaceState?: WorkspaceState | null;
   cloudLinkTrusted?: boolean;
   cloudLinkWarning?: string | null;
@@ -549,17 +637,26 @@ export function SidebarProjectRow({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const rowShellRef = useRef<HTMLDivElement | null>(null);
-  const [locationsStyle, setLocationsStyle] = useState<ProjectLocationsPopoverStyle>({});
+  const [locationsStyle, setLocationsStyle] =
+    useState<ProjectLocationsPopoverStyle>({});
   const hasMenuActions = Boolean(onMoveToCloud) || Boolean(onRemove);
   const linkedCloud =
-    kind === "local" && cloudLinkTrusted !== false && Boolean((project as LocalProject).linkedSandboxProject?.projectId);
+    kind === "local" &&
+    cloudLinkTrusted !== false &&
+    Boolean((project as LocalProject).linkedSandboxProject?.projectId);
   const updateLocationsPosition = useCallback(() => {
     if (typeof window === "undefined") return;
     const rect = rowShellRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const maxLeft = Math.max(12, window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12);
-    const maxTop = Math.max(12, window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE);
+    const maxLeft = Math.max(
+      12,
+      window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12
+    );
+    const maxTop = Math.max(
+      12,
+      window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE
+    );
     const left = Math.max(12, Math.min(rect.right + 10, maxLeft));
     const top = Math.max(12, Math.min(rect.top - 4, maxTop));
     const nextStyle: ProjectLocationsPopoverStyle = {
@@ -569,8 +666,10 @@ export function SidebarProjectRow({
 
     setLocationsStyle((current) => {
       if (
-        current["--sidebar-project-locations-left"] === nextStyle["--sidebar-project-locations-left"] &&
-        current["--sidebar-project-locations-top"] === nextStyle["--sidebar-project-locations-top"]
+        current["--sidebar-project-locations-left"] ===
+          nextStyle["--sidebar-project-locations-left"] &&
+        current["--sidebar-project-locations-top"] ===
+          nextStyle["--sidebar-project-locations-top"]
       ) {
         return current;
       }
@@ -589,15 +688,22 @@ export function SidebarProjectRow({
   return (
     <div
       ref={rowShellRef}
-      className={["sidebar-project-row-shell", menuOpen ? "project-menu-open" : ""].filter(Boolean).join(" ")}
+      className={[
+        "sidebar-project-row-shell",
+        menuOpen ? "project-menu-open" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onFocusCapture={updateLocationsPosition}
       onPointerEnter={updateLocationsPosition}
     >
       <SidebarInteractiveRow
         selected={selected}
         placeholder={placeholder}
-        className={["sidebar-project-row", menuOpen ? "project-menu-open" : ""].filter(Boolean).join(" ")}
-        ariaExpanded={expanded}
+        className={["sidebar-project-row", menuOpen ? "project-menu-open" : ""]
+          .filter(Boolean)
+          .join(" ")}
+        ariaExpanded={disclosure ? expanded : undefined}
         onSelect={handleSelect}
         onDragStart={onDragStart}
         onDragEnd={onDragEnd}
@@ -613,16 +719,27 @@ export function SidebarProjectRow({
         />
         <span className="row-label-shell">
           <span className="row-label">{project.name}</span>
-          <span className="sidebar-project-caret" aria-hidden="true">
-            {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </span>
+          {disclosure ? (
+            <span className="sidebar-project-caret" aria-hidden="true">
+              {expanded ? (
+                <ChevronDown size={13} />
+              ) : (
+                <ChevronRight size={13} />
+              )}
+            </span>
+          ) : null}
         </span>
         <div className="row-meta">
           <span className="row-meta-status">
-            {terminalIndicator ? <SidebarTerminalStatusIcon indicator={terminalIndicator} /> : null}
+            {terminalIndicator ? (
+              <SidebarTerminalStatusIcon indicator={terminalIndicator} />
+            ) : null}
           </span>
           <div className="sidebar-row-actions">
-            <SidebarRowAction label={pinned ? "Unpin project" : "Pin project"} onClick={onTogglePin}>
+            <SidebarRowAction
+              label={pinned ? "Unpin project" : "Pin project"}
+              onClick={onTogglePin}
+            >
               {pinned ? <PinOff size={13} /> : <Pin size={13} />}
             </SidebarRowAction>
             {hasMenuActions && (
@@ -649,10 +766,14 @@ export function SidebarProjectRow({
       {menuOpen && (
         <SidebarProjectMenuPopover
           onClose={closeMenu}
-          onMoveToCloud={onMoveToCloud ? () => {
-            closeMenu();
-            onMoveToCloud();
-          } : undefined}
+          onMoveToCloud={
+            onMoveToCloud
+              ? () => {
+                  closeMenu();
+                  onMoveToCloud();
+                }
+              : undefined
+          }
           onRemove={() => {
             closeMenu();
             onRemove();
@@ -663,7 +784,11 @@ export function SidebarProjectRow({
   );
 }
 
-function SidebarTerminalStatusIcon({ indicator }: { indicator: SidebarTerminalIndicator }) {
+function SidebarTerminalStatusIcon({
+  indicator,
+}: {
+  indicator: SidebarTerminalIndicator;
+}) {
   return (
     <span
       className={`sidebar-terminal-indicator ${indicator.status}`}
@@ -713,10 +838,14 @@ function SidebarProjectLocationsPopover({
     project,
     workspaceState,
     cloudLinkTrusted,
-    cloudLinkWarning,
+    cloudLinkWarning
   );
   return (
-    <aside className="sidebar-project-locations-popover" aria-label={`${project.name} status`} style={style}>
+    <aside
+      className="sidebar-project-locations-popover"
+      aria-label={`${project.name} status`}
+      style={style}
+    >
       <div className="sidebar-project-locations-title">{project.name}</div>
       <div className="sidebar-project-location-list">
         {rows.map((row) => {
@@ -724,10 +853,17 @@ function SidebarProjectLocationsPopover({
             "sidebar-project-location-row",
             row.tone ?? "",
             row.actionTarget ? "clickable" : "",
-          ].filter(Boolean).join(" ");
+          ]
+            .filter(Boolean)
+            .join(" ");
           const content = (
             <>
-              <span className={["sidebar-project-location-icon", row.key].filter(Boolean).join(" ")} aria-hidden="true">
+              <span
+                className={["sidebar-project-location-icon", row.key]
+                  .filter(Boolean)
+                  .join(" ")}
+                aria-hidden="true"
+              >
                 {row.icon}
               </span>
               <span className="sidebar-project-location-copy">
@@ -773,8 +909,13 @@ function ProjectLocationValue({ value }: { value: string }) {
     <span className="sidebar-project-location-value" aria-label={value}>
       {parts.branch ? (
         <>
-          <span className="sidebar-project-location-branch">{parts.branch}</span>
-          <span className="sidebar-project-location-separator" aria-hidden="true">
+          <span className="sidebar-project-location-branch">
+            {parts.branch}
+          </span>
+          <span
+            className="sidebar-project-location-separator"
+            aria-hidden="true"
+          >
             /
           </span>
         </>
@@ -784,7 +925,10 @@ function ProjectLocationValue({ value }: { value: string }) {
   );
 }
 
-function splitProjectLocationValue(value: string): { branch: string | null; status: string } {
+function splitProjectLocationValue(value: string): {
+  branch: string | null;
+  status: string;
+} {
   const separator = " / ";
   const separatorIndex = value.indexOf(separator);
   if (separatorIndex === -1) return { branch: null, status: value };
@@ -799,19 +943,29 @@ function projectLocationRows(
   project: LocalProject | CloudProject,
   workspaceState?: WorkspaceState | null,
   cloudLinkTrusted: boolean = true,
-  cloudLinkWarning: string | null = null,
+  cloudLinkWarning: string | null = null
 ): ProjectLocationRow[] {
-  if (kind === "cloud") return cloudProjectLocationRows(project as CloudProject);
-  return localProjectLocationRows(project as LocalProject, workspaceState, cloudLinkTrusted, cloudLinkWarning);
+  if (kind === "cloud")
+    return cloudProjectLocationRows(project as CloudProject);
+  return localProjectLocationRows(
+    project as LocalProject,
+    workspaceState,
+    cloudLinkTrusted,
+    cloudLinkWarning
+  );
 }
 
 function localProjectLocationRows(
   project: LocalProject,
   workspaceState?: WorkspaceState | null,
   cloudLinkTrusted: boolean = true,
-  cloudLinkWarning: string | null = null,
+  cloudLinkWarning: string | null = null
 ): ProjectLocationRow[] {
-  const localRepoNote = localRepoStatusNote(project, workspaceState, cloudLinkTrusted);
+  const localRepoNote = localRepoStatusNote(
+    project,
+    workspaceState,
+    cloudLinkTrusted
+  );
   const localAttention = workspaceHasUnstagedChanges(workspaceState);
   const cloudLinked = localProjectHasCloud(project, cloudLinkTrusted);
   const cloudWarning = cloudLinkTrusted === false && cloudLinkWarning;
@@ -820,7 +974,12 @@ function localProjectLocationRows(
       key: "local",
       value: localRepoNote,
       tone: localAttention ? "attention" : "local",
-      icon: project.source === "git" ? <FolderGit2 size={13} /> : <Folder size={13} />,
+      icon:
+        project.source === "git" ? (
+          <FolderGit2 size={13} />
+        ) : (
+          <Folder size={13} />
+        ),
       actionTarget: "local",
     },
     {
@@ -828,8 +987,8 @@ function localProjectLocationRows(
       value: cloudWarning
         ? cloudWarning
         : cloudLinked
-          ? cloudProjectStatusValue(project, workspaceState, cloudLinkTrusted)
-          : "not in cloud",
+        ? cloudProjectStatusValue(project, workspaceState, cloudLinkTrusted)
+        : "not in cloud",
       tone: cloudWarning ? "attention" : "cloud",
       icon: <Cloud size={13} />,
       actionTarget: cloudLinked ? "cloud" : "upload_cloud",
@@ -852,7 +1011,7 @@ function cloudProjectLocationRows(project: CloudProject): ProjectLocationRow[] {
 function localRepoStatusNote(
   project: LocalProject,
   state: WorkspaceState | null | undefined,
-  cloudLinkTrusted: boolean,
+  cloudLinkTrusted: boolean
 ): string {
   const fallbackBranch = localProjectBranch(project, state);
   if (!state) return `${fallbackBranch} / available`;
@@ -860,33 +1019,54 @@ function localRepoStatusNote(
   if (!state.initialized) return `${fallbackBranch} / not checked out`;
   return localWorkspaceStateNote(state, {
     branch: project.linkedSandboxProject?.defaultBranch ?? null,
-    linkedCloudSourceKnown: project.linkedSandboxProject?.projectId && cloudLinkTrusted
-      ? Boolean(project.linkedSandboxProject.lastUploadedCommit) || !state.headCommit
-      : true,
+    linkedCloudSourceKnown:
+      project.linkedSandboxProject?.projectId && cloudLinkTrusted
+        ? Boolean(project.linkedSandboxProject.lastUploadedCommit) ||
+          !state.headCommit
+        : true,
   });
 }
 
-function workspaceHasUnstagedChanges(state: WorkspaceState | null | undefined): boolean {
-  return Boolean(state?.dirty || (state?.changedFilesCount ?? 0) > 0 || (state?.untrackedFilesCount ?? 0) > 0);
+function workspaceHasUnstagedChanges(
+  state: WorkspaceState | null | undefined
+): boolean {
+  return Boolean(
+    state?.dirty ||
+      (state?.changedFilesCount ?? 0) > 0 ||
+      (state?.untrackedFilesCount ?? 0) > 0
+  );
 }
 
-function localProjectBranch(project: LocalProject, state: WorkspaceState | null | undefined): string {
-  return state?.currentBranch ?? state?.defaultBranch ?? project.linkedSandboxProject?.defaultBranch ?? "local";
+function localProjectBranch(
+  project: LocalProject,
+  state: WorkspaceState | null | undefined
+): string {
+  return (
+    state?.currentBranch ??
+    state?.defaultBranch ??
+    project.linkedSandboxProject?.defaultBranch ??
+    "local"
+  );
 }
 
-function localProjectHasCloud(project: LocalProject, cloudLinkTrusted: boolean = true): boolean {
+function localProjectHasCloud(
+  project: LocalProject,
+  cloudLinkTrusted: boolean = true
+): boolean {
   return Boolean(
     (cloudLinkTrusted && project.linkedSandboxProject?.projectId) ||
-      project.linkedOpenPondApp?.appId,
+      project.linkedOpenPondApp?.appId
   );
 }
 
 function cloudProjectStatusValue(
   project: LocalProject,
   workspaceState: WorkspaceState | null | undefined,
-  cloudLinkTrusted: boolean,
+  cloudLinkTrusted: boolean
 ): string {
-  return cloudWorkspaceStateNote(project, null, workspaceState, { cloudLinkTrusted });
+  return cloudWorkspaceStateNote(project, null, workspaceState, {
+    cloudLinkTrusted,
+  });
 }
 
 function cloudProjectRowStatusValue(project: CloudProject): string {
@@ -940,7 +1120,10 @@ function SidebarProjectMenuPopover({
           onClose();
         }}
       />
-      <div className="section-menu-popover sidebar-project-row-popover" role="menu">
+      <div
+        className="section-menu-popover sidebar-project-row-popover"
+        role="menu"
+      >
         {onMoveToCloud && (
           <button
             type="button"

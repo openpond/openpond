@@ -1,8 +1,6 @@
 import { loadOpenPondAccountContext, type RuntimeAccountContext } from "@openpond/runtime";
 
 const DEFAULT_OPENPOND_API_BASE_URL = "https://api.openpond.ai";
-export const MANAGED_ADAPTER_TEAM_ID_ENV =
-  "OPENPOND_MODEL_ADAPTER_TEAM_ID";
 
 export type HostedApiAccessDependencies = {
   loadAccountContext?: () => Promise<RuntimeAccountContext>;
@@ -13,7 +11,7 @@ export async function resolveHostedApiAccess(
   dependencies: HostedApiAccessDependencies = {},
 ): Promise<{ apiBaseUrl: string; token: string }> {
   const context = await (dependencies.loadAccountContext ?? loadOpenPondAccountContext)();
-  const token = process.env.OPENPOND_SANDBOX_API_KEY?.trim() || context.token?.trim();
+  const token = context.token?.trim();
   if (!token) throw new Error("OpenPond account API key is required.");
   return { apiBaseUrl: resolveApiBaseUrl(context), token };
 }
@@ -38,8 +36,6 @@ export function hostedApiAuthHeaders(token: string): Headers {
 
 function resolveApiBaseUrl(context: RuntimeAccountContext): string {
   return (
-    normalizeOptionalUrl(process.env.OPENPOND_API_URL) ??
-    apiBaseUrlFromSandboxApiUrl(process.env.OPENPOND_SANDBOX_API_URL) ??
     normalizeOptionalUrl(context.apiBaseUrl) ??
     normalizeOptionalUrl(context.account?.apiBaseUrl) ??
     normalizeOptionalUrl(context.config.apiBaseUrl) ??
@@ -72,13 +68,9 @@ export function apiBaseUrlFromSandboxApiUrl(value?: string | null): string | nul
 }
 
 function managedAdapterTeamId(explicitTeamId?: string | null): string {
-  const teamId =
-    explicitTeamId?.trim() ??
-    process.env[MANAGED_ADAPTER_TEAM_ID_ENV]?.trim();
+  const teamId = explicitTeamId?.trim();
   if (!teamId || !/^[A-Za-z0-9_-]{3,191}$/.test(teamId)) {
-    throw new Error(
-      `${MANAGED_ADAPTER_TEAM_ID_ENV} must identify the explicit OpenPond workspace for managed adapters.`,
-    );
+    throw new Error("Select an OpenPond workspace before using OpenPond Managed RL.");
   }
   return teamId;
 }

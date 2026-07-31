@@ -11,7 +11,10 @@ import type {
   WorkspaceState,
   WorkspaceKind,
 } from "@openpond/contracts";
-import type { ComposerProjectTargetState } from "../components/chat/Composer";
+import type {
+  ComposerProjectTargetOption,
+  ComposerProjectTargetState,
+} from "../components/chat/Composer";
 import { normalizeChatModel, normalizePreferences } from "../lib/app-models";
 import {
   cloudWorkspaceStateNote,
@@ -36,6 +39,39 @@ function firstPresentText(...values: Array<string | null | undefined>): string {
   }
   return "";
 }
+
+export const COMPOSER_PROJECT_ACTION_OPTIONS = [
+  {
+    value: "action:new-local-project",
+    label: "New local project",
+    detail: "Create a new project folder on this machine",
+    kind: "action",
+  },
+  {
+    value: "action:add-local-project",
+    label: "Use existing folder",
+    detail: "Choose a folder on this machine",
+    kind: "action",
+  },
+  {
+    value: "action:add-local-project-path",
+    label: "Use existing folder path",
+    detail: "Enter a local folder path manually",
+    kind: "action",
+  },
+  {
+    value: "action:new-cloud-project",
+    label: "New cloud project",
+    detail: "Create a project in OpenPond Cloud",
+    kind: "action",
+  },
+  {
+    value: "action:create-cloud-environment",
+    label: "Create cloud environment",
+    detail: "Set up compute for a cloud project",
+    kind: "action",
+  },
+] satisfies readonly ComposerProjectTargetOption[];
 
 function firstPresentNonEmailText(...values: Array<string | null | undefined>): string {
   return firstPresentText(...values.map((value) => {
@@ -276,12 +312,7 @@ export function useWorkspaceTargetState({
       options: [
         ...localOptions,
         ...cloudOptions,
-        {
-          value: "action:add-local-project",
-          label: "Add Local Project",
-          detail: "Choose a folder on this machine",
-          kind: "action" as const,
-        },
+        ...COMPOSER_PROJECT_ACTION_OPTIONS,
         {
           value: "none",
           label: "Don't work in a project",

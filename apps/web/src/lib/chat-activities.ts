@@ -28,7 +28,7 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
     return;
   }
 
-  settleLatestActivityGroup(messages, item);
+  settleRunningActivityGroups(messages, item);
   messages.push({
     id: item.id,
     role: "activity_group",
@@ -40,20 +40,18 @@ export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEven
   });
 }
 
-export function settleLatestActivityGroup(messages: ChatMessage[], item: RuntimeEvent): void {
+export function settleRunningActivityGroups(messages: ChatMessage[], item: RuntimeEvent): void {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const candidate = messages[index]!;
-    if (candidate.turnId !== item.turnId) return;
     if (
       candidate.role !== "activity_group" ||
       candidate.activities?.some((activity) => activity.subagentMessage)
     ) {
       continue;
     }
-    if (candidate.traceState !== "running") return;
+    if (candidate.traceState !== "running") continue;
     candidate.traceState = "settled";
     candidate.traceCompletedAt = item.timestamp;
-    return;
   }
 }
 

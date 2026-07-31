@@ -319,6 +319,48 @@
   bottom: calc(100% + 5px);
 }
 
+.composer-project-new-menu {
+  position: absolute;
+  z-index: 71;
+  left: 328px;
+  top: calc(100% + 5px);
+  display: grid;
+  width: min(272px, calc(100vw - 28px));
+  border: 0;
+  border-radius: 11px;
+  background: #1f1f1f;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 6px;
+}
+
+.composer-project-target.open-up .composer-project-new-menu {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+.composer-project-new-menu-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #8f8f8f;
+  padding: 0 7px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.composer-project-new-menu-back:hover,
+.composer-project-new-menu-back:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: #d8d8d8;
+}
+
 .composer-profile-target.open-up .composer-project-menu {
   top: auto;
   bottom: calc(100% + 5px);
@@ -652,10 +694,24 @@
   color: #f3f3f3;
 }
 
-.composer-project-option.action {
+.composer-project-actions {
+  display: grid;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 0 0 8px 8px;
-  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.composer-project-new-trigger > svg:last-child {
+  color: #747474;
+}
+
+.composer-project-target .composer-project-menu {
+  max-height: min(560px, calc(100vh - 118px));
+}
+
+@media (max-width: 680px) {
+  .composer-project-new-menu {
+    left: 0;
+  }
 }
 
 .composer-project-option:disabled,

@@ -4,45 +4,46 @@ import {
   TasksetSchema,
   TrainingApprovalSchema,
 } from "@openpond/contracts";
-import {
-  computeTasksetHash,
-  contentHash,
-  sha256,
-} from "@openpond/taskset-sdk";
-import {
-  buildTasksetTrainingBundle,
-  createTrainingPlan,
-} from "@openpond/training-sdk";
+import { computeTasksetHash, contentHash, sha256 } from "@openpond/taskset-sdk";
+import { buildTasksetTrainingBundle, createTrainingPlan } from "@openpond/training-sdk";
 import { describe, expect, test, vi } from "vitest";
 
 import { OpenPondManagedTrainingAdapter } from "../apps/server/src/training/openpond-managed-training-adapter.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
-import {
-  fireworksRftRecipe,
-  rftTasksetFixture,
-} from "./helpers/fireworks-destination-fixtures.js";
-import {
-  FIXED_TIME,
-  withTrainingStore,
-} from "./helpers/training-fixtures.js";
+import { fireworksRftRecipe, rftTasksetFixture } from "./helpers/fireworks-destination-fixtures.js";
+import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
 
 const MANAGED_MODEL = {
   id: "Qwen/Qwen3-0.6B",
   revision: "c1899de289a04d12100db370d81485cdf75e47ca",
   tokenizerRevision: "c1899de289a04d12100db370d81485cdf75e47ca",
-  chatTemplateHash:
-    "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+  chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
 } as const;
 
 describe("OpenPond Managed training adapter", () => {
   test("uploads a verified portable bundle without choosing a cloud provider", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const baseTaskset = rftTasksetFixture();
-      const trainTask = baseTaskset.tasks.find(
-        (task) => task.split === "train",
-      )!;
+      const trainTask = baseTaskset.tasks.find((task) => task.split === "train")!;
       const tasksetDraft = {
         ...baseTaskset,
+        capabilities: {
+          ...baseTaskset.capabilities,
+          taskKind: "chat" as const,
+          rewardKinds: ["exact" as const],
+          requiresTools: false,
+          requiresState: false,
+          requiresPrivilegedGrading: false,
+          environmentPlacements: ["remote" as const],
+        },
+        environment: {
+          ...baseTaskset.environment,
+          kind: "chat" as const,
+          entrypoint: "openpond/exact-text",
+          stateful: false,
+          toolNames: [],
+          actionBindings: [],
+        },
         tasks: [
           ...baseTaskset.tasks,
           {
@@ -59,6 +60,10 @@ describe("OpenPond Managed training adapter", () => {
       const recipe = {
         ...fireworksRftRecipe(),
         baseModel: MANAGED_MODEL,
+        dataset: {
+          ...fireworksRftRecipe().dataset,
+          maxPromptTokens: 4_096,
+        },
         lora: { rank: 16 },
       };
       const draft = ModelRunDraftSchema.parse({
@@ -98,6 +103,7 @@ describe("OpenPond Managed training adapter", () => {
         taskset,
         destinationId: "openpond_managed",
         recipe,
+        environmentPlacement: "remote",
         exportApproved: true,
       });
       const approval = TrainingApprovalSchema.parse({
@@ -133,11 +139,10 @@ describe("OpenPond Managed training adapter", () => {
         provider: "openpond",
       };
       const engine = {
-        adapterId: "sandbox-managed-rft",
-        workerVersion: "managed-rft-v2",
+        adapterId: "sandbox-managed-rl",
+        workerVersion: "managed-rl-v2",
         workerImageDigest: null,
-        upstreamRevision:
-          "e0d60e4d85ea636873acb2e7083e794740d20226",
+        upstreamRevision: "e0d60e4d85ea636873acb2e7083e794740d20226",
         capabilityReceipt,
       };
       const graph = buildTasksetTrainingBundle({
@@ -152,7 +157,7 @@ describe("OpenPond Managed training adapter", () => {
           maximumSpendUsd: approval.maximumCostUsd,
         },
         openpondRelease: "0.0.38",
-        workerProtocol: "openpond.managedRftWorker.v2",
+        workerProtocol: "openpond.managedRlWorker.v2",
       });
       await publishRunGraph({
         storeDir: directory,
@@ -177,11 +182,11 @@ describe("OpenPond Managed training adapter", () => {
         contentHash: contentHash(base),
       });
       const request = vi.fn<typeof fetch>(async (input, init) => {
-        expect(String(input)).toBe(
-          "https://api.example.test/v1/managed-rft/portable-launches",
-        );
-        expect(new Headers(init?.headers).get("x-openpond-team-id")).toBe(
-          "team-test",
+        expect(String(input)).toBe("https://api-new.staging-api.openpond.ai/v1/managed-rl/portable-launches");
+        const headers = new Headers(init?.headers);
+        expect(headers.get("x-openpond-team-id")).toBe("team-test");
+        expect(headers.get("x-vercel-protection-bypass")).toBe(
+          "staging-bypass",
         );
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
         const serialized = JSON.stringify(body);
@@ -190,7 +195,7 @@ describe("OpenPond Managed training adapter", () => {
         expect(serialized).not.toContain("providerType");
         expect(serialized).not.toContain("cloudId");
         expect(body).toMatchObject({
-          schemaVersion: "openpond.managedRftPortableSubmission.v1",
+          schemaVersion: "openpond.managedRlPortableSubmission.v1",
           sourceRunRef: `openpond:model-run:${graph.manifest.id}`,
         });
         expect(body.validationTasks).toEqual(
@@ -219,8 +224,11 @@ describe("OpenPond Managed training adapter", () => {
         store,
         storeDir: directory,
         fetchImpl: request,
+        env: {
+          VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
+        },
         resolveAccess: async () => ({
-          apiBaseUrl: "https://api.example.test",
+          apiBaseUrl: "https://api-new.staging-api.openpond.ai",
           token: "opk_test",
           teamId: "team-test",
         }),
@@ -231,7 +239,7 @@ describe("OpenPond Managed training adapter", () => {
       });
       await expect(adapter.launch(resolvedPlan)).resolves.toMatchObject({
         runId: "managed-job-1",
-        adapterId: "sandbox-managed-rft",
+        adapterId: "sandbox-managed-rl",
         tenantId: "team-test",
         manifestHash: graph.manifest.contentHash,
       });
@@ -243,10 +251,7 @@ describe("OpenPond Managed training adapter", () => {
       const request = vi.fn<typeof fetch>(async (input, init) => {
         const url = new URL(String(input));
         const method = init?.method ?? "GET";
-        if (
-          method === "GET" &&
-          url.pathname === "/v1/managed-rft/jobs/managed-job-2"
-        ) {
+        if (method === "GET" && url.pathname === "/v1/managed-rl/jobs/managed-job-2") {
           return json({
             job: {
               job: {
@@ -261,10 +266,7 @@ describe("OpenPond Managed training adapter", () => {
             },
           });
         }
-        if (
-          method === "GET" &&
-          url.pathname === "/v1/managed-rft/jobs/managed-job-2/logs"
-        ) {
+        if (method === "GET" && url.pathname === "/v1/managed-rl/jobs/managed-job-2/logs") {
           expect(url.searchParams.get("cursor")).toBe("1");
           return json({
             cursor: "2",
@@ -277,11 +279,7 @@ describe("OpenPond Managed training adapter", () => {
             ],
           });
         }
-        if (
-          method === "POST" &&
-          url.pathname ===
-            "/v1/managed-rft/jobs/managed-job-2/cancel"
-        ) {
+        if (method === "POST" && url.pathname === "/v1/managed-rl/jobs/managed-job-2/cancel") {
           expect(JSON.parse(String(init?.body))).toEqual({
             expectedVersion: 4,
           });
@@ -295,18 +293,13 @@ describe("OpenPond Managed training adapter", () => {
             },
           });
         }
-        if (
-          method === "GET" &&
-          url.pathname ===
-            "/v1/managed-rft/jobs/managed-job-2/artifacts"
-        ) {
+        if (method === "GET" && url.pathname === "/v1/managed-rl/jobs/managed-job-2/artifacts") {
           return json({
             candidateBundle: {
               jobId: "managed-job-2",
               artifact: {
                 modelArtifactId: "model-artifact-2",
-                uri:
-                  "r2://managed-rft/jobs/managed-job-2/candidate",
+                uri: "r2://managed-rl/jobs/managed-job-2/candidate",
                 sha256: "d".repeat(64),
                 sizeBytes: 128,
               },
@@ -327,7 +320,7 @@ describe("OpenPond Managed training adapter", () => {
       });
       const ref = {
         runId: "managed-job-2",
-        adapterId: "sandbox-managed-rft",
+        adapterId: "sandbox-managed-rl",
         providerJobId: "managed-job-2",
         tenantId: "team-test",
         leaseId: null,
@@ -357,8 +350,7 @@ describe("OpenPond Managed training adapter", () => {
         artifacts: [
           {
             kind: "adapter",
-            objectRef:
-              "sandbox-managed-rft://managed-job-2/model-artifact-2",
+            objectRef: "sandbox-managed-rl://managed-job-2/model-artifact-2",
             sha256: "d".repeat(64),
             sizeBytes: 128,
           },

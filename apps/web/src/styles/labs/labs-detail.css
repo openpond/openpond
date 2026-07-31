@@ -719,20 +719,6 @@
   margin-top: 14px;
 }
 
-.labs-models-table {
-  min-width: 820px;
-}
-
-.labs-models-table th:first-child,
-.labs-models-table td:first-child {
-  width: 36%;
-}
-
-.labs-models-table th:nth-child(2),
-.labs-models-table td:nth-child(2) {
-  width: 190px;
-}
-
 .labs-model-versions-table {
-  min-width: 860px;
+  min-width: 760px;
 }

@@ -159,6 +159,17 @@ export function labWorkproductProjection(input: {
     const lifecycleRuns = (input.training?.modelRuns ?? [])
       .filter((run) => run.modelId === project.id)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    const lifecycleRunIds = new Set(lifecycleRuns.map((run) => run.id));
+    const submittedJobCount = [
+      ...(jobIdsByModelId.get(project.id) ?? []),
+    ].filter((jobId) => {
+      const job = input.training?.jobs.find((candidate) => candidate.id === jobId);
+      const modelRunId =
+        typeof job?.metadata.modelRunId === "string"
+          ? job.metadata.modelRunId
+          : null;
+      return !modelRunId || !lifecycleRunIds.has(modelRunId);
+    }).length;
     const latestLifecycleRun = lifecycleRuns[0] ?? null;
     const baseVersion =
       (input.training?.modelVersions ?? []).find(
@@ -174,9 +185,7 @@ export function labWorkproductProjection(input: {
       id: project.id,
       ownerProfileId: project.profileId,
       name: conciseWorkproductName(project.name, "Untitled Model"),
-      description:
-        project.objective ??
-        "Configure this Model and run its first training job.",
+      description: project.objective ?? "No description",
       status: latestLifecycleRun
         ? lifecycleModelRunStatus(latestLifecycleRun.status)
         : latestDraft?.status === "ready_to_run"
@@ -205,7 +214,7 @@ export function labWorkproductProjection(input: {
         latestDraft?.tasksetRef?.id ??
         baseVersion?.taskset.id ??
         null,
-      trainingRunCount: drafts.length + lifecycleRuns.length,
+      trainingRunCount: lifecycleRuns.length + submittedJobCount,
       evaluationStatus: "not_run",
       useActionId: null,
     });

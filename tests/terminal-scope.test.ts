@@ -42,13 +42,12 @@ describe("terminal scope state", () => {
       terminalTab("terminal_a_2", sessionAScope),
     ];
 
-    expect(terminalTabsForScope(tabs, sessionAScope).map((tab) => tab.id)).toEqual([
-      "terminal_a_1",
-      "terminal_a_2",
-    ]);
-    expect(terminalTabsForScope(tabs, sessionBScope).map((tab) => tab.id)).toEqual([
-      "terminal_b_1",
-    ]);
+    expect(
+      terminalTabsForScope(tabs, sessionAScope).map((tab) => tab.id)
+    ).toEqual(["terminal_a_1", "terminal_a_2"]);
+    expect(
+      terminalTabsForScope(tabs, sessionBScope).map((tab) => tab.id)
+    ).toEqual(["terminal_b_1"]);
   });
 
   test("migrates draft terminal tabs to the created session scope", () => {
@@ -106,9 +105,17 @@ describe("terminal scope state", () => {
     const projectScope = terminalScopeForProject("local:project_1");
     const summaries = terminalScopeSummaries([
       terminalTab("tab_session_idle", sessionScope, { commandStatus: "idle" }),
-      terminalTab("tab_session_running", sessionScope, { commandStatus: "running" }),
-      terminalTab("tab_project_failed", projectScope, { commandStatus: "failed", lastExitCode: 1 }),
-      terminalTab("tab_project_success", projectScope, { commandStatus: "success", lastExitCode: 0 }),
+      terminalTab("tab_session_running", sessionScope, {
+        commandStatus: "running",
+      }),
+      terminalTab("tab_project_failed", projectScope, {
+        commandStatus: "failed",
+        lastExitCode: 1,
+      }),
+      terminalTab("tab_project_success", projectScope, {
+        commandStatus: "success",
+        lastExitCode: 0,
+      }),
     ]);
 
     expect(summaries[terminalScopeKey(sessionScope)]).toMatchObject({
@@ -116,7 +123,9 @@ describe("terminal scope state", () => {
       runningCount: 1,
       status: "running",
     });
-    expect(sidebarTerminalIndicator(summaries[terminalScopeKey(sessionScope)])).toEqual({
+    expect(
+      sidebarTerminalIndicator(summaries[terminalScopeKey(sessionScope)])
+    ).toEqual({
       status: "running",
       label: "Terminal running",
     });
@@ -126,7 +135,9 @@ describe("terminal scope state", () => {
       lastExitCode: 0,
       status: "failed",
     });
-    expect(sidebarTerminalIndicator(summaries[terminalScopeKey(projectScope)])).toEqual({
+    expect(
+      sidebarTerminalIndicator(summaries[terminalScopeKey(projectScope)])
+    ).toEqual({
       status: "failed",
       label: "Terminal last command failed",
     });
@@ -141,9 +152,15 @@ describe("terminal scope state", () => {
       command: "pnpm test",
     };
 
-    expect(terminalQueuedCommandAppliesToScope(queuedCommand, sessionAScope)).toBe(true);
-    expect(terminalQueuedCommandAppliesToScope(queuedCommand, sessionBScope)).toBe(false);
-    expect(terminalQueuedCommandAppliesToScope(null, sessionAScope)).toBe(false);
+    expect(
+      terminalQueuedCommandAppliesToScope(queuedCommand, sessionAScope)
+    ).toBe(true);
+    expect(
+      terminalQueuedCommandAppliesToScope(queuedCommand, sessionBScope)
+    ).toBe(false);
+    expect(terminalQueuedCommandAppliesToScope(null, sessionAScope)).toBe(
+      false
+    );
   });
 });
 
@@ -153,7 +170,7 @@ describe("terminal shell integration parser", () => {
     const parsed = parseTerminalIntegrationOutput(
       `before\x1b]1337;OpenPond;command_start;sequence=1;command=${command}\x07middle` +
         `\x1b]1337;OpenPond;command_end;sequence=2;exitCode=0\x07after` +
-        `\x1b]1337;OpenPond;prompt_ready;sequence=3\x07`,
+        `\x1b]1337;OpenPond;prompt_ready;sequence=3\x07`
     );
 
     expect(parsed.output).toBe("beforemiddleafter");
@@ -166,15 +183,21 @@ describe("terminal shell integration parser", () => {
   });
 
   test("holds partial markers until the next chunk", () => {
-    const first = parseTerminalIntegrationOutput("left\x1b]1337;OpenPond;command_end;sequence=4");
+    const first = parseTerminalIntegrationOutput(
+      "left\x1b]1337;OpenPond;command_end;sequence=4"
+    );
     expect(first.output).toBe("left");
     expect(first.pending).toBe("\x1b]1337;OpenPond;command_end;sequence=4");
     expect(first.events).toEqual([]);
 
-    const second = parseTerminalIntegrationOutput(`${first.pending};exitCode=7\x07right`);
+    const second = parseTerminalIntegrationOutput(
+      `${first.pending};exitCode=7\x07right`
+    );
     expect(second.output).toBe("right");
     expect(second.pending).toBe("");
-    expect(second.events).toEqual([{ type: "command_end", sequence: 4, exitCode: 7 }]);
+    expect(second.events).toEqual([
+      { type: "command_end", sequence: 4, exitCode: 7 },
+    ]);
   });
 
   test("passes through ordinary PTY output when integration markers are absent", () => {
@@ -188,12 +211,25 @@ describe("terminal shell integration parser", () => {
 
 describe("terminal websocket scope validation", () => {
   test("requires valid scope on start messages", () => {
-    expect(parseClientMessage(Buffer.from(JSON.stringify({ type: "start", terminalId: "terminal_1" })), false)).toBeNull();
     expect(
       parseClientMessage(
-        Buffer.from(JSON.stringify({ type: "start", terminalId: "terminal_1", scope: { kind: "session", id: "session_1" } })),
-        false,
-      ),
+        Buffer.from(
+          JSON.stringify({ type: "start", terminalId: "terminal_1" })
+        ),
+        false
+      )
+    ).toBeNull();
+    expect(
+      parseClientMessage(
+        Buffer.from(
+          JSON.stringify({
+            type: "start",
+            terminalId: "terminal_1",
+            scope: { kind: "session", id: "session_1" },
+          })
+        ),
+        false
+      )
     ).toMatchObject({
       type: "start",
       terminalId: "terminal_1",
@@ -205,26 +241,26 @@ describe("terminal websocket scope validation", () => {
     expect(
       terminalScopesCompatibleForAttach(
         { kind: "session", id: "session_1" },
-        { kind: "session", id: "session_1" },
-      ),
+        { kind: "session", id: "session_1" }
+      )
     ).toBe(true);
     expect(
       terminalScopesCompatibleForAttach(
         { kind: "draft", id: "new-chat" },
-        { kind: "session", id: "session_1" },
-      ),
+        { kind: "session", id: "session_1" }
+      )
     ).toBe(true);
     expect(
       terminalScopesCompatibleForAttach(
         { kind: "session", id: "session_1" },
-        { kind: "session", id: "session_2" },
-      ),
+        { kind: "session", id: "session_2" }
+      )
     ).toBe(false);
     expect(
       terminalScopesCompatibleForAttach(
         { kind: "project", id: "local:project_1" },
-        { kind: "session", id: "session_1" },
-      ),
+        { kind: "session", id: "session_1" }
+      )
     ).toBe(false);
   });
 });
@@ -241,14 +277,16 @@ describe("sidebar terminal indicators", () => {
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
-    expect(markup).toContain('aria-label="Remove from Save for later"');
+    expect(markup).toContain('aria-label="Return to active"');
     expect(markup).toContain('aria-label="Open in right panel"');
     expect(markup).toContain('aria-label="Pin chat"');
-    expect(markup).toContain('aria-label="Archive chat"');
-    expect(markup.indexOf('aria-label="Open in right panel"')).toBeLessThan(markup.indexOf('aria-label="Pin chat"'));
+    expect(markup).toContain('aria-label="Mark done"');
+    expect(markup.indexOf('aria-label="Open in right panel"')).toBeLessThan(
+      markup.indexOf('aria-label="Pin chat"')
+    );
     expect(markup).not.toContain("Add to training");
   });
 
@@ -263,11 +301,11 @@ describe("sidebar terminal indicators", () => {
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain("sidebar-terminal-indicator running");
-    expect(markup).toContain("aria-label=\"Terminal running\"");
+    expect(markup).toContain('aria-label="Terminal running"');
   });
 
   test("renders goal running state with objective tooltip on chat rows", () => {
@@ -287,23 +325,28 @@ describe("sidebar terminal indicators", () => {
           timeLabel: "12s",
           label: "Goal 12s",
           detail: "Active",
-          tooltip: "Goal runtime: 12 seconds. Active. Review command access doc",
+          tooltip:
+            "Goal runtime: 12 seconds. Active. Review command access doc",
           tone: "active",
         },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain("has-running-dot");
     expect(markup).toContain("sidebar-running-dot goal");
-    expect(markup).toContain("sidebar-project-locations-popover sidebar-session-running-popover");
+    expect(markup).toContain(
+      "sidebar-project-locations-popover sidebar-session-running-popover"
+    );
     expect(markup).toContain("Pursuing goal");
     expect(markup).toContain("Review command access doc");
     expect(markup).not.toContain("Pursuing goal: Review command access doc");
-    expect(markup).not.toContain('data-tooltip="Pursuing goal: Review command access doc"');
+    expect(markup).not.toContain(
+      'data-tooltip="Pursuing goal: Review command access doc"'
+    );
   });
 
   test("renders queued goals without a sidebar running dot", () => {
@@ -323,14 +366,15 @@ describe("sidebar terminal indicators", () => {
           timeLabel: "0s",
           label: "Goal 0s",
           detail: "Queued",
-          tooltip: "Goal runtime: 0 seconds. Queued. Wait for continuation worker",
+          tooltip:
+            "Goal runtime: 0 seconds. Queued. Wait for continuation worker",
           tone: "active",
         },
         onSelect: () => undefined,
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
     expect(markup).not.toContain("sidebar-running-dot");
@@ -347,7 +391,14 @@ describe("sidebar terminal indicators", () => {
         hideIcon: true,
         running: true,
         goalRuntime: {
-          objective: ["line 1", "line 2", "line 3", "line 4", "line 5", "line 6"].join("\n"),
+          objective: [
+            "line 1",
+            "line 2",
+            "line 3",
+            "line 4",
+            "line 5",
+            "line 6",
+          ].join("\n"),
           status: "active",
           timeUsedSeconds: 12,
           tokensUsed: null,
@@ -363,7 +414,7 @@ describe("sidebar terminal indicators", () => {
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain("line 5");
@@ -388,7 +439,8 @@ describe("sidebar terminal indicators", () => {
           timeLabel: "12s",
           label: "Goal 12s",
           detail: "Active",
-          tooltip: "Goal runtime: 12 seconds. Active. Review command access doc",
+          tooltip:
+            "Goal runtime: 12 seconds. Active. Review command access doc",
           tone: "active",
         },
         subagentRuntime: subagentRuntimeFixture(),
@@ -396,7 +448,7 @@ describe("sidebar terminal indicators", () => {
         onTogglePin: () => undefined,
         onToggleSaveForLater: () => undefined,
         onArchive: () => undefined,
-      }),
+      })
     );
 
     expect(markup).toContain("sidebar-running-dot subagent");
@@ -410,7 +462,7 @@ describe("sidebar terminal indicators", () => {
 function terminalTab(
   id: string,
   scope: TerminalTab["scope"],
-  overrides: Partial<TerminalTab> = {},
+  overrides: Partial<TerminalTab> = {}
 ): TerminalTab {
   return {
     id,

@@ -1,9 +1,6 @@
-import path from "node:path";
-import { mkdir, writeFile } from "node:fs/promises";
 import {
   CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
-  TaskAttemptArtifactSchema,
   TaskAttemptResultSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
@@ -12,14 +9,20 @@ import {
   type TaskDataRecord,
   type Taskset,
 } from "@openpond/contracts";
-import { contentHash, sha256 } from "@openpond/taskset-sdk";
+import { contentHash } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
+import { persistJsonTaskAttemptArtifact } from "./task-attempt-artifact-service.js";
 import {
   resolveCrossSystemTask,
   runCrossSystemRollout,
   verifyCrossSystemTrajectory,
   type CrossSystemModelStream,
 } from "./cross-system-operations/index.js";
+import {
+  runTasksetWorkAttempt,
+  type TasksetWorkAttemptRuntime,
+  type TasksetWorkModelStream,
+} from "./taskset-work-attempt-runner.js";
 
 type ModelTextRunner = (input: {
   model: ChatModelRef;
@@ -52,6 +55,13 @@ export async function runPostTrainingEvaluationAttempt(input: {
   storeDir: string;
   modelText: ModelTextRunner;
   crossSystemStream: CrossSystemModelStream;
+  work?: {
+    stream: TasksetWorkModelStream;
+    runtime: TasksetWorkAttemptRuntime;
+    validateRequiredOutput?: Parameters<
+      typeof runTasksetWorkAttempt
+    >[0]["validateRequiredOutput"];
+  };
   timestamp?: () => string;
   resultId?: string;
   attemptInput: TrainingEvaluationAttemptInput;
@@ -60,6 +70,29 @@ export async function runPostTrainingEvaluationAttempt(input: {
   const taskset = await input.store.getTaskset(input.attemptInput.tasksetId);
   if (!taskset) {
     throw new Error(`Taskset ${input.attemptInput.tasksetId} was not found.`);
+  }
+  if (taskset.environment.kind === "work") {
+    if (!input.work) {
+      throw new Error(
+        "Taskset Work execution is not configured for this evaluator.",
+      );
+    }
+    return runTasksetWorkAttempt({
+      store: input.store,
+      storeDir: input.storeDir,
+      taskset,
+      task: input.attemptInput.task,
+      model: input.attemptInput.model,
+      seed: input.attemptInput.seed,
+      attempt: input.attemptInput.attempt,
+      sampling: input.attemptInput.sampling,
+      signal: input.attemptInput.signal,
+      stream: input.work.stream,
+      runtime: input.work.runtime,
+      timestamp: input.timestamp,
+      resultId: input.resultId,
+      validateRequiredOutput: input.work.validateRequiredOutput,
+    });
   }
   return isCrossSystemTaskset(taskset)
     ? runCrossSystemAttempt({
@@ -165,7 +198,7 @@ async function runCrossSystemAttempt(input: {
       trajectory.id,
       verifier.outcome,
     ]).slice(0, 24)}`;
-    const artifact = await persistEvaluationArtifact({
+    const artifact = await persistJsonTaskAttemptArtifact({
       store: input.store,
       storeDir: input.storeDir,
       tasksetId: taskset.id,
@@ -254,7 +287,7 @@ async function runTextAttempt(input: {
     const completedAt = input.timestamp();
     const attemptId =
       input.resultId ?? `attempt_${contentHash([requestId, text]).slice(0, 24)}`;
-    const artifact = await persistEvaluationArtifact({
+    const artifact = await persistJsonTaskAttemptArtifact({
       store: input.store,
       storeDir: input.storeDir,
       tasksetId: attemptInput.tasksetId,
@@ -303,7 +336,7 @@ async function runTextAttempt(input: {
     const message = error instanceof Error ? error.message : String(error);
     const attemptId =
       input.resultId ?? `attempt_${contentHash([requestId, "failure"]).slice(0, 24)}`;
-    const artifact = await persistEvaluationArtifact({
+    const artifact = await persistJsonTaskAttemptArtifact({
       store: input.store,
       storeDir: input.storeDir,
       tasksetId: attemptInput.tasksetId,
@@ -370,54 +403,6 @@ function policyMessages(
     return [{ role: "user", content: task.input.prompt }];
   }
   throw new Error(`Evaluation task ${task.id} has no policy-visible prompt.`);
-}
-
-async function persistEvaluationArtifact(input: {
-  store: SqliteStore;
-  storeDir: string;
-  tasksetId: string;
-  taskId: string;
-  attemptId: string;
-  requestId: string;
-  kind: "raw_model_response" | "runtime_trace";
-  payload: Record<string, unknown>;
-  timestamp: () => string;
-}) {
-  const directory = path.join(
-    input.storeDir,
-    "training",
-    "evaluation-artifacts",
-    input.tasksetId,
-  );
-  const file = path.join(directory, `${input.attemptId}.json`);
-  const bytes = Buffer.from(`${JSON.stringify({
-    schemaVersion: "openpond.rawEvaluationArtifact.v1",
-    requestId: input.requestId,
-    ...input.payload,
-  }, null, 2)}\n`, "utf8");
-  await mkdir(directory, { recursive: true });
-  await writeFile(file, bytes, { mode: 0o600 });
-  const artifact = TaskAttemptArtifactSchema.parse({
-    schemaVersion: "openpond.taskAttemptArtifact.v1",
-    id: `attempt_artifact_${contentHash([
-      input.attemptId,
-      sha256(bytes),
-    ]).slice(0, 24)}`,
-    tasksetId: input.tasksetId,
-    taskId: input.taskId,
-    attemptId: input.attemptId,
-    kind: input.kind,
-    path: file,
-    sha256: sha256(bytes),
-    sizeBytes: bytes.byteLength,
-    createdAt: input.timestamp(),
-    metadata: {
-      requestId: input.requestId,
-      localOnly: true,
-      containsPrivilegedOutcome: false,
-    },
-  });
-  return input.store.saveTaskAttemptArtifact(artifact);
 }
 
 function evaluationRequestId(

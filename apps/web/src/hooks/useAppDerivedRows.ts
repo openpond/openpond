@@ -36,7 +36,7 @@ export function useAppDerivedRows({
 }) {
   const pinnedRows = useMemo(
     () => orderPinnedItemsByKeys(pinnedItems, pinnedPreviewKeys),
-    [pinnedItems, pinnedPreviewKeys],
+    [pinnedItems, pinnedPreviewKeys]
   );
   const contextWindowStatus: ContextWindowStatus = useMemo(
     () =>
@@ -45,7 +45,7 @@ export function useAppDerivedRows({
         snapshot: contextUsage,
         preferences: contextCompaction,
       }),
-    [activeProvider, contextCompaction, contextUsage],
+    [activeProvider, contextCompaction, contextUsage]
   );
   const sidebarWorkspaceAppIds = useMemo(
     () =>
@@ -53,15 +53,12 @@ export function useAppDerivedRows({
         new Set(
           [...pinnedProjects, ...visibleProjectRows]
             .filter(isLocalSidebarProjectItem)
-            .map((item) => item.project.id),
-        ),
+            .map((item) => item.project.id)
+        )
       ),
-    [pinnedProjects, visibleProjectRows],
+    [pinnedProjects, visibleProjectRows]
   );
-  const commandProjectRows = useMemo(
-    () => [...pinnedProjects, ...projectRows],
-    [pinnedProjects, projectRows],
-  );
+  const commandProjectRows = useMemo(() => projectRows, [projectRows]);
 
   return {
     commandProjectRows,

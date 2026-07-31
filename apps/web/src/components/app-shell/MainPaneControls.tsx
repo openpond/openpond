@@ -124,6 +124,11 @@ export function shouldShowRightSidebarHomePanel(input: {
 export function mainPaneViewClass(view: AppView, showChatThread: boolean): string {
   if (view === "team") return "team-active";
   if (view === "community") return "community-active";
-  if (view === "apps" || view === "get-started" || view === "labs") return "page-active";
+  if (
+    view === "apps" ||
+    view === "get-started" ||
+    view === "labs" ||
+    view === "profile"
+  ) return "page-active";
   return showChatThread ? "chat-active" : "chat-start";
 }

@@ -10,7 +10,6 @@ import type {
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
-  localPathWorkspaceId,
 } from "@openpond/contracts";
 import { useProjectConfirmDialog } from "../components/app-shell/ProjectConfirmDialog";
 import type { CloudSetupDialogState } from "../components/workspace/CloudSetupDialog";
@@ -56,6 +55,7 @@ import { useAppConversationContext } from "../hooks/useAppConversationContext";
 import { useCodexPreferenceActions } from "../hooks/useCodexPreferenceActions";
 import { useCodexHistoryEvents } from "../hooks/useCodexHistoryEvents";
 import { usePinnedSidebarDrag } from "../hooks/usePinnedSidebarDrag";
+import { useSidebarTaskOrder } from "../hooks/useSidebarTaskOrder";
 import { usePendingChatMessages } from "../hooks/usePendingChatMessages";
 import { useOpenPondCommandAccessActions } from "../hooks/useOpenPondCommandAccessActions";
 import { useSidebarData } from "../hooks/useSidebarData";
@@ -352,10 +352,6 @@ export function useAppPrimaryRuntime() {
     setBootstrap,
     setError,
   });
-  const revealProjectsSection = useCallback(() => {
-    if (projectsCollapsed) toggleProjectsCollapsed();
-  }, [projectsCollapsed, toggleProjectsCollapsed]);
-
   const {
     cloudProjectById,
     linkedProjectByAppId,
@@ -524,21 +520,10 @@ export function useAppPrimaryRuntime() {
     selectedSession?.provider === "codex"
       ? openPondCommandAccessMode
       : selectedSession?.openPondCommandAccessMode ?? openPondCommandAccessMode;
-  const profileWorkspaceId =
-    view === "labs" &&
-    bootstrap?.profile?.mode === "local" &&
-    bootstrap.profile.repoPath
-      ? localPathWorkspaceId(bootstrap.profile.repoPath)
-      : null;
-  const profileWorkspaceName = profileWorkspaceId
-    ? `${bootstrap?.profile?.activeProfile ?? "default"} profile`
-    : null;
-  const viewWorkspaceAppId = profileWorkspaceId ?? activeWorkspaceAppId;
-  const viewWorkspaceId = profileWorkspaceId ?? activeWorkspaceId;
-  const viewWorkspaceKind = profileWorkspaceId
-    ? ("local_project" as const)
-    : activeWorkspaceKind;
-  const viewWorkspaceName = profileWorkspaceName ?? workspaceName;
+  const viewWorkspaceAppId = activeWorkspaceAppId;
+  const viewWorkspaceId = activeWorkspaceId;
+  const viewWorkspaceKind = activeWorkspaceKind;
+  const viewWorkspaceName = workspaceName;
   const { openPondActionCatalog, selectedActionCatalog } =
     useSandboxActionContext({
       cloudProjectById,
@@ -679,6 +664,7 @@ export function useAppPrimaryRuntime() {
 
   const {
     activeSessions,
+    archivedSessions,
     pinnedProjects,
     pinnedSessions,
     savedForLaterSessions,
@@ -827,6 +813,7 @@ export function useAppPrimaryRuntime() {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
+    sessionRuntimeSecondsById,
   } = useSidebarRuntimeState({
     codexHistoryEvents,
     codexHistorySessions,
@@ -870,6 +857,21 @@ export function useAppPrimaryRuntime() {
     sidebarFileBookmarks,
     setSidebarFileBookmarks,
     setError,
+  });
+  const {
+    clearTaskDrag,
+    commitTaskDrop,
+    commitTaskPreviewDrop,
+    previewTaskDrop,
+    startTaskDrag,
+    taskDragSessionId,
+    taskPreviewSessionIds,
+  } = useSidebarTaskOrder({
+    connection,
+    sessions: sidebarSessions,
+    setCodexHistorySessions,
+    setError,
+    setSessions,
   });
   const {
     commandProjectRows,
@@ -1106,7 +1108,6 @@ export function useAppPrimaryRuntime() {
     toggleSavedForLaterCollapsed,
     startSidebarResize,
     startDiffPanelResize,
-    revealProjectsSection,
     cloudProjectById,
     localProjectById,
     selectedApp,
@@ -1147,7 +1148,6 @@ export function useAppPrimaryRuntime() {
     toggleTeamAiSidebar,
     selectedProjectConfirmedCloudProject,
     activeOpenPondCommandAccessMode,
-    profileWorkspaceId,
     viewWorkspaceAppId,
     viewWorkspaceId,
     viewWorkspaceKind,
@@ -1174,6 +1174,7 @@ export function useAppPrimaryRuntime() {
     loadMoreSelectedChatHistory,
     selectedPagedSessionEvents,
     activeSessions,
+    archivedSessions,
     pinnedSessions,
     savedForLaterSessions,
     pinnedFiles,
@@ -1189,6 +1190,7 @@ export function useAppPrimaryRuntime() {
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
+    chatRowsVisibleCount,
     sessionEvents,
     chatMessages,
     goalRuntime,
@@ -1204,6 +1206,14 @@ export function useAppPrimaryRuntime() {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
+    sessionRuntimeSecondsById,
+    taskDragSessionId,
+    taskPreviewSessionIds,
+    startTaskDrag,
+    clearTaskDrag,
+    previewTaskDrop,
+    commitTaskDrop,
+    commitTaskPreviewDrop,
     dragItem,
     startPinnedDrag,
     clearSidebarDrag,

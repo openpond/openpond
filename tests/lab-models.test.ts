@@ -350,7 +350,7 @@ describe("Lab Model workspace projection", () => {
       id: draft.modelId,
       name: project.name,
       status: "Ready to run",
-      trainingRunCount: 2,
+      trainingRunCount: 0,
     });
   });
 

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { Buffer } from "node:buffer";
 import { performance } from "node:perf_hooks";
-import { createElement, type ComponentProps, type Dispatch, type SetStateAction } from "react";
+import {
+  createElement,
+  type ComponentProps,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
   LocalProject,
@@ -12,7 +17,10 @@ import type {
 import { emptyOpenPondProfileState } from "@openpond/contracts";
 
 import { Composer } from "../apps/web/src/components/chat/Composer";
-import { MessageRow, ThinkingIndicator } from "../apps/web/src/components/chat/Messages";
+import {
+  MessageRow,
+  ThinkingIndicator,
+} from "../apps/web/src/components/chat/Messages";
 import { CommandMenu } from "../apps/web/src/components/command/CommandMenu";
 import { ProviderSettingsSection } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import { SidebarSectionList } from "../apps/web/src/components/sidebar/SidebarSectionList";
@@ -20,7 +28,10 @@ import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.ty
 import { WorkspaceDiffPanel } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanel";
 import { useSidebarData } from "../apps/web/src/hooks/useSidebarData";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
-import { SIDEBAR_SECTION_LIMIT, projectSelectionKey } from "../apps/web/src/lib/app-models";
+import {
+  SIDEBAR_SECTION_LIMIT,
+  projectSelectionKey,
+} from "../apps/web/src/lib/app-models";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
 import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import type { WorkspaceTargetState } from "../apps/web/src/lib/workspace-location";
@@ -35,12 +46,12 @@ describe("renderer performance budgets", () => {
     const first = measureStaticRender(
       "composer typing baseline",
       createElement(Composer, composerProps("/cr")),
-      200,
+      200
     );
     const typed = measureStaticRender(
       "composer typing updated prompt",
       createElement(Composer, composerProps("/skill")),
-      200,
+      200
     );
 
     expect(first.html).toContain("Author Agent");
@@ -49,7 +60,9 @@ describe("renderer performance budgets", () => {
   });
 
   test("keeps long streaming transcript rows bounded", () => {
-    const messages = Array.from({ length: 320 }, (_, index) => chatMessage(index));
+    const messages = Array.from({ length: 320 }, (_, index) =>
+      chatMessage(index)
+    );
     const result = measureStaticRender(
       "streaming transcript rows",
       createElement(
@@ -60,11 +73,11 @@ describe("renderer performance budgets", () => {
             key: message.id,
             message,
             showFooter: index === messages.length - 1,
-          }),
+          })
         ),
-        createElement(ThinkingIndicator),
+        createElement(ThinkingIndicator)
       ),
-      600,
+      600
     );
 
     expect(result.html).toContain("Support stream update 319");
@@ -93,7 +106,7 @@ describe("renderer performance budgets", () => {
         onOpenBrowser: noop,
         onOpenBrowserUrl: noop,
       }),
-      650,
+      650
     );
 
     expect(diff.files).toHaveLength(200);
@@ -117,32 +130,35 @@ describe("renderer performance budgets", () => {
         saveProviderCredential: noopAsync,
         validateProvider: noopAsync,
       }),
-      350,
+      350
     );
     const sidebar = measureStaticRender(
       "sidebar with large chat list",
       createElement(SidebarSectionList, sidebarProps(160)),
-      500,
+      500
     );
-    const expandedProjectSidebar = measureStaticRender(
-      "sidebar with expanded project history",
+    const projectTaskSidebar = measureStaticRender(
+      "sidebar with project task metadata",
       createElement(SidebarSectionList, sidebarPropsWithExpandedProject(240)),
-      650,
+      650
     );
 
     expect(settings.html).toContain("400 models");
     expect(settings.html).not.toContain("Fixture Model 399</option>");
     expect(sidebar.html).toContain("Support thread 159");
     expect(sidebar.bytes).toBeGreaterThan(30_000);
-    expect(expandedProjectSidebar.html).toContain("Project 47 thread 4");
-    expect(expandedProjectSidebar.bytes).toBeGreaterThan(40_000);
+    expect(projectTaskSidebar.html).toContain("Project 47 thread 4");
+    expect(projectTaskSidebar.bytes).toBeGreaterThan(40_000);
   });
 
   test("keeps sidebar data grouping bounded for large local history", () => {
     const result = measureStaticRender(
       "sidebar data grouping 3000 sessions",
-      createElement(SidebarDataProbe, { sessionCount: 3_000, projectCount: 12 }),
-      450,
+      createElement(SidebarDataProbe, {
+        sessionCount: 3_000,
+        projectCount: 12,
+      }),
+      450
     );
 
     expect(result.html).toContain("projects=12");
@@ -153,7 +169,7 @@ describe("renderer performance budgets", () => {
     const result = measureStaticRender(
       "command palette large history",
       createElement(CommandMenu, commandMenuProps(3_000, 300)),
-      250,
+      250
     );
 
     expect(result.html).toContain("Support thread 9");
@@ -162,12 +178,18 @@ describe("renderer performance budgets", () => {
   });
 });
 
-function measureStaticRender(label: string, element: React.ReactElement, maxDurationMs: number) {
+function measureStaticRender(
+  label: string,
+  element: React.ReactElement,
+  maxDurationMs: number
+) {
   const startedAt = performance.now();
   const html = renderToStaticMarkup(element);
   const durationMs = performance.now() - startedAt;
   const bytes = Buffer.byteLength(html);
-  console.info(`[renderer-perf] ${label}: ${durationMs.toFixed(2)}ms, ${bytes} bytes`);
+  console.info(
+    `[renderer-perf] ${label}: ${durationMs.toFixed(2)}ms, ${bytes} bytes`
+  );
   expect(durationMs).toBeLessThan(maxDurationMs);
   expect(bytes).toBeGreaterThan(100);
   return { bytes, durationMs, html };
@@ -193,7 +215,14 @@ function composerProps(prompt: string): React.ComponentProps<typeof Composer> {
       value: "none",
       label: "No project",
       detail: "General chat",
-      options: [{ value: "none", label: "No project", detail: "General chat", kind: "none" }],
+      options: [
+        {
+          value: "none",
+          label: "No project",
+          detail: "General chat",
+          kind: "none",
+        },
+      ],
       busy: false,
     },
     actionCatalog: [],
@@ -233,10 +262,25 @@ function workspaceTargetState(): WorkspaceTargetState {
     label: "Local",
     detail: "Use local workspace",
     options: [
-      { value: "local", label: "Local", detail: "Use local workspace", disabled: false },
-      { value: "cloud", label: "Cloud", detail: "Use cloud workspace", disabled: false },
+      {
+        value: "local",
+        label: "Local",
+        detail: "Use local workspace",
+        disabled: false,
+      },
+      {
+        value: "cloud",
+        label: "Cloud",
+        detail: "Use cloud workspace",
+        disabled: false,
+      },
     ],
-    action: { value: "cloud", label: "Move to Cloud", detail: "Create a cloud workspace", disabled: false },
+    action: {
+      value: "cloud",
+      label: "Move to Cloud",
+      detail: "Create a cloud workspace",
+      disabled: false,
+    },
     busy: false,
   };
 }
@@ -270,7 +314,9 @@ function workspaceDiffSummary(fileCount: number): WorkspaceDiffSummary {
       `+export const value = ${index + 1};`,
       "+export const status = 'ready';",
     ].join("\n"),
-    content: `export const value = ${index + 1};\nexport const status = 'ready';\n`,
+    content: `export const value = ${
+      index + 1
+    };\nexport const status = 'ready';\n`,
   }));
   return {
     appId: "local_project_1",
@@ -308,12 +354,31 @@ function providerSettings(modelCount: number): ProviderSettings {
   return {
     version: 1,
     providers: {
-      openpond: { enabled: true, baseUrl: null, defaultModel: "openpond-chat", modelOverrides: [], updatedAt: NOW },
-      openai: { enabled: true, baseUrl: "https://api.openai.com/v1", defaultModel: "fixture-model-399", modelOverrides: [], updatedAt: NOW },
+      openpond: {
+        enabled: true,
+        baseUrl: null,
+        defaultModel: "openpond-chat",
+        modelOverrides: [],
+        updatedAt: NOW,
+      },
+      openai: {
+        enabled: true,
+        baseUrl: "https://api.openai.com/v1",
+        defaultModel: "fixture-model-399",
+        modelOverrides: [],
+        updatedAt: NOW,
+      },
     },
     statuses: {
-      openpond: providerStatus("openpond", "OpenPond Chat", true, ["openpond-chat"]),
-      openai: providerStatus("openai", "OpenAI", true, models.map((model) => model.id)),
+      openpond: providerStatus("openpond", "OpenPond Chat", true, [
+        "openpond-chat",
+      ]),
+      openai: providerStatus(
+        "openai",
+        "OpenAI",
+        true,
+        models.map((model) => model.id)
+      ),
     },
     modelCaches: {
       openai: {
@@ -328,13 +393,23 @@ function providerSettings(modelCount: number): ProviderSettings {
   } as ProviderSettings;
 }
 
-function providerStatus(id: string, displayName: string, available: boolean, modelIds: string[]) {
+function providerStatus(
+  id: string,
+  displayName: string,
+  available: boolean,
+  modelIds: string[]
+) {
   return {
     id,
     displayName,
     lifecycleStatus: "active",
     credentialModes: ["local_secret"],
-    routing: { hostedOpChat: id === "openpond", localRuntime: true, localByok: id !== "openpond", hostedByok: false },
+    routing: {
+      hostedOpChat: id === "openpond",
+      localRuntime: true,
+      localByok: id !== "openpond",
+      hostedByok: false,
+    },
     capabilities: {
       chatCompletions: true,
       streaming: true,
@@ -366,7 +441,7 @@ function sidebarProps(chatCount: number): SidebarProps {
       title: `Support thread ${index}`,
       order: index,
       updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
-    }),
+    })
   );
   const localProjectRows = Array.from({ length: 40 }, (_, index) => {
     const project = localProject(index);
@@ -386,26 +461,29 @@ function sidebarProps(chatCount: number): SidebarProps {
     account: null,
     profile: emptyOpenPondProfileState(),
     pinnedCollapsed: false,
-    projectsCollapsed: false,
     cloudProjectsCollapsed: false,
     chatsCollapsed: false,
     savedForLaterCollapsed: true,
     archivedChatsOpen: false,
-    projectsExpanded: true,
     cloudProjectsExpanded: true,
     sectionMenuOpen: null,
     dragItem: null,
+    taskDragSessionId: null,
+    taskPreviewSessionIds: null,
+    activeSessions: visibleChatRows,
+    archivedSessions: [],
     pinnedRows: [],
     pinnedSessions: [],
     savedForLaterSessions: [],
-    visibleProjectRows: localProjectRows,
     localProjectRows,
     cloudProjectRows: [],
     projectSessionRowsByProjectId: {},
     sidebarProjectIdBySessionId: {},
     runningSessionIds: new Set(["session-3"]),
+    sessionRuntimeSecondsById: new Map(),
     visibleChatRows,
     chatRows: visibleChatRows,
+    chatRowsVisibleCount: chatCount,
     expandedProjectIds: new Set(),
     onSidebarResizeStart: noop,
     setSidebarOpen: noopDispatch,
@@ -417,24 +495,14 @@ function sidebarProps(chatCount: number): SidebarProps {
     setSectionMenuOpen: noopDispatch,
     setSettingsSection: noopDispatch,
     onTogglePinnedCollapsed: noop,
-    onToggleProjectsCollapsed: noop,
     onToggleCloudProjectsCollapsed: noop,
     onToggleChatsCollapsed: noop,
     onToggleSavedForLaterCollapsed: noop,
     setArchivedChatsOpen: noopDispatch,
-    setProjectsExpanded: noopDispatch,
     setCloudProjectsExpanded: noopDispatch,
     setChatRowsVisibleCount: noopDispatch,
     beginNewChat: noop,
     dockSessionRight: noop,
-    createCloudEnvironment: noop,
-    addProjectFolder: noop,
-    startExistingProjectFromPath: noop,
-    startProjectFromScratch: noop,
-    startCloudProjectFromScratch: noop,
-    moveProjectToCloud: noop,
-    removeProject: noop,
-    toggleProjectPinned: noop,
     toggleSessionPinned: noop,
     toggleSessionSavedForLater: noop,
     archiveSession: noop,
@@ -446,10 +514,17 @@ function sidebarProps(chatCount: number): SidebarProps {
     previewPinnedDrop: noop,
     commitPinnedDrop: noop,
     commitPinnedPreviewDrop: noop,
+    startTaskDrag: noop,
+    clearTaskDrag: noop,
+    previewTaskDrop: noop,
+    commitTaskDrop: noop,
+    commitTaskPreviewDrop: noop,
   };
 }
 
-function sidebarPropsWithExpandedProject(projectChildRowCount: number): SidebarProps {
+function sidebarPropsWithExpandedProject(
+  projectChildRowCount: number
+): SidebarProps {
   const props = sidebarProps(24);
   const projectCount = Math.ceil(projectChildRowCount / SIDEBAR_SECTION_LIMIT);
   const projectRows = Array.from({ length: projectCount }, (_, index) => {
@@ -463,35 +538,49 @@ function sidebarPropsWithExpandedProject(projectChildRowCount: number): SidebarP
     };
   });
   const projectSessionRowsByProjectId: Record<string, Session[]> = {};
+  const projectTaskRows: Session[] = [];
+  const sidebarProjectIdBySessionId: Record<string, string> = {};
   const expandedProjectIds = new Set<string>();
   for (const item of projectRows) {
     expandedProjectIds.add(item.id);
-    projectSessionRowsByProjectId[item.id] = Array.from({ length: SIDEBAR_SECTION_LIMIT }, (_, index) =>
+    const sessions = Array.from({ length: SIDEBAR_SECTION_LIMIT }, (_, index) =>
       session({
         id: `${item.id}-session-${index}`,
         title: `Project ${item.order} thread ${index}`,
-        order: index,
+        order: projectTaskRows.length + index,
         localProjectId: item.project.id,
         workspaceId: item.project.id,
         cwd: item.project.path,
-        updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
-      }),
+        updatedAt: new Date(
+          Date.parse(NOW) + (projectTaskRows.length + index) * 1000
+        ).toISOString(),
+      })
     );
+    projectSessionRowsByProjectId[item.id] = sessions;
+    for (const projectSession of sessions) {
+      projectTaskRows.push(projectSession);
+      sidebarProjectIdBySessionId[projectSession.id] = item.id;
+    }
   }
 
   return {
     ...props,
     selectedProjectId: projectRows[0]?.id ?? null,
-    visibleProjectRows: projectRows,
     localProjectRows: projectRows,
+    projectRows,
     projectSessionRowsByProjectId,
+    sidebarProjectIdBySessionId,
+    activeSessions: projectTaskRows,
+    chatRows: projectTaskRows,
+    chatRowsVisibleCount: projectTaskRows.length,
+    visibleChatRows: projectTaskRows,
     expandedProjectIds,
   };
 }
 
 function commandMenuProps(
   sessionCount: number,
-  projectCount: number,
+  projectCount: number
 ): ComponentProps<typeof CommandMenu> {
   return {
     open: true,
@@ -512,7 +601,7 @@ function commandMenuProps(
         title: `Support thread ${index}`,
         order: index,
         updatedAt: new Date(Date.parse(NOW) + index * 1000).toISOString(),
-      }),
+      })
     ),
     onQueryChange: noop,
     onClose: noop,
@@ -522,8 +611,16 @@ function commandMenuProps(
   };
 }
 
-function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number; projectCount: number }) {
-  const localProjects = Array.from({ length: projectCount }, (_, index) => localProject(index));
+function SidebarDataProbe({
+  sessionCount,
+  projectCount,
+}: {
+  sessionCount: number;
+  projectCount: number;
+}) {
+  const localProjects = Array.from({ length: projectCount }, (_, index) =>
+    localProject(index)
+  );
   const sessions = Array.from({ length: sessionCount }, (_, index) => {
     const project = localProjects[index % localProjects.length]!;
     return session({
@@ -548,14 +645,13 @@ function SidebarDataProbe({ sessionCount, projectCount }: { sessionCount: number
     projectsExpanded: true,
     chatRowsVisibleCount: sessionCount,
   });
-  const projectChildCount = Object.values(data.projectSessionRowsByProjectId).reduce(
-    (total, rows) => total + rows.length,
-    0,
-  );
+  const projectChildCount = Object.values(
+    data.projectSessionRowsByProjectId
+  ).reduce((total, rows) => total + rows.length, 0);
   return createElement(
     "span",
     null,
-    `sidebar-data-probe projects=${data.localProjectRows.length};children=${projectChildCount};chats=${data.chatRows.length};grouping=bounded;active=${data.activeSessions.length};visible=${data.visibleProjectRows.length};selected=grouped-session-0`,
+    `sidebar-data-probe projects=${data.localProjectRows.length};children=${projectChildCount};chats=${data.chatRows.length};grouping=bounded;active=${data.activeSessions.length};visible=${data.visibleProjectRows.length};selected=grouped-session-0`
   );
 }
 

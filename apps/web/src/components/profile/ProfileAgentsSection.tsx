@@ -21,19 +21,14 @@ export function ProfileAgentsSection({
   selectedDefaultTeamId: string;
 }) {
   const schedules = useLocalAgentSchedules(connection);
+  const groupedSchedules = partitionProfileSchedules(schedules.schedules);
   useErrorToast(schedules.error, { prefix: "Local schedules" });
 
   return (
     <div className="account-list profile-agent-list" aria-label="Profile agents">
       <div className="account-list-heading profile-agent-list-heading">
         <span>Agents</span>
-        <div className="profile-skill-heading-actions">
-          <small>{scheduleHeadingLabel(schedules.schedules.length, schedules.loading)}</small>
-        </div>
       </div>
-      <p className="settings-help">
-        Profile Agents are exposed to the normal Chat loop as scoped native actions. Built-in Agents are available in every Profile.
-      </p>
       <div className="profile-table-frame">
           <table className="profile-data-table profile-agent-table" aria-label="Profile agents table">
             <colgroup>
@@ -51,6 +46,17 @@ export function ProfileAgentsSection({
               </tr>
             </thead>
             <tbody>
+              {groupedSchedules.active.map((schedule) => (
+                <ProfileScheduleAgentRow
+                  key={schedule.id}
+                  pending={schedules.pendingScheduleIds.has(schedule.id)}
+                  schedule={schedule}
+                  refreshing={schedules.loading}
+                  onRefresh={() => void schedules.refresh()}
+                  onRun={() => void schedules.run(schedule)}
+                  onToggle={() => void schedules.toggle(schedule)}
+                />
+              ))}
               <ProfileBuiltInDatasetAgentRow />
               {profile.agents.map((agent) => (
                 <ProfileAgentRow
@@ -61,7 +67,7 @@ export function ProfileAgentsSection({
                   selectedDefaultTeamId={selectedDefaultTeamId}
                 />
               ))}
-              {schedules.schedules.map((schedule) => (
+              {groupedSchedules.paused.map((schedule) => (
                 <ProfileScheduleAgentRow
                   key={schedule.id}
                   pending={schedules.pendingScheduleIds.has(schedule.id)}
@@ -209,12 +215,29 @@ function ProfileStatusText({ status }: { status: ProfileStatusCell }) {
   return <span className={`profile-status-text ${status.state}`}>{status.label}</span>;
 }
 
-function scheduleHeadingLabel(count: number, loading: boolean): string {
-  if (loading && count === 0) return "Loading schedules";
-  if (loading) return `${count} scheduled, refreshing`;
-  if (count === 1) return "1 scheduled";
-  if (count > 1) return `${count} scheduled`;
-  return "No schedules";
+export function partitionProfileSchedules(schedules: LocalAgentSchedule[]): {
+  active: LocalAgentSchedule[];
+  paused: LocalAgentSchedule[];
+} {
+  const active: LocalAgentSchedule[] = [];
+  const paused: LocalAgentSchedule[] = [];
+
+  for (const schedule of schedules) {
+    if (schedule.enabled) active.push(schedule);
+    else paused.push(schedule);
+  }
+
+  active.sort((left, right) => (
+    activeSchedulePriority(left) - activeSchedulePriority(right)
+  ));
+
+  return { active, paused };
+}
+
+function activeSchedulePriority(schedule: LocalAgentSchedule): number {
+  if (schedule.lastRunStatus === "running") return 0;
+  if (schedule.lastRunStatus === "queued") return 1;
+  return 2;
 }
 
 function localScheduleStatus(schedule: LocalAgentSchedule): ProfileStatusCell {

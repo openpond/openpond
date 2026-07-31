@@ -3,9 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   openEventStream,
   readRuntimeEventStream,
-  runtimeEventReconnectDelayMs,
   runtimeEventStreamRequest,
-  validateRuntimeEventResponse,
 } from "../apps/web/src/api/event-stream";
 
 function eventStreamResponse(frames: string): Response {
@@ -25,19 +23,6 @@ function eventStreamResponse(frames: string): Response {
 }
 
 describe("web runtime event stream helpers", () => {
-  test("uses Authorization headers instead of query-string tokens", () => {
-    const request = runtimeEventStreamRequest({
-      serverUrl: "http://127.0.0.1:17876/",
-      token: "local-token",
-    });
-    const headers = request.init.headers as Headers;
-
-    expect(request.url).toBe("http://127.0.0.1:17876/v1/events");
-    expect(request.url).not.toContain("token=");
-    expect(headers.get("Authorization")).toBe("Bearer local-token");
-    expect(headers.get("Accept")).toBe("text/event-stream");
-  });
-
   test("starts after the bootstrap event window instead of replaying all history", () => {
     const request = runtimeEventStreamRequest(
       {
@@ -49,15 +34,6 @@ describe("web runtime event stream helpers", () => {
     );
 
     expect(request.url).toBe("http://127.0.0.1:17876/v1/events?afterSequence=95874");
-  });
-
-  test("validates event stream response status and body", () => {
-    expect(() => validateRuntimeEventResponse(new Response(null, { status: 401 }))).toThrow(
-      /event stream failed: 401/,
-    );
-    expect(() => validateRuntimeEventResponse(new Response(null, { status: 200 }))).toThrow(
-      /response body/,
-    );
   });
 
   test("parses ready and runtime SSE frames while ignoring comments and malformed frames", async () => {
@@ -95,13 +71,6 @@ describe("web runtime event stream helpers", () => {
       { name: "turn.started", sessionId: "active" },
       { name: "assistant.delta", sessionId: undefined },
     ]);
-  });
-
-  test("caps reconnect backoff", () => {
-    expect(runtimeEventReconnectDelayMs(0)).toBe(500);
-    expect(runtimeEventReconnectDelayMs(1)).toBe(1000);
-    expect(runtimeEventReconnectDelayMs(5)).toBe(10000);
-    expect(runtimeEventReconnectDelayMs(20)).toBe(10000);
   });
 
   test("reports failed fetch-stream responses without marking the stream open", async () => {

@@ -42,6 +42,7 @@ export type AppView =
   | "apps"
   | "get-started"
   | "labs"
+  | "profile"
   | "settings";
 export type SettingsSection =
   | "account"
@@ -188,6 +189,7 @@ export type ChatMessage = {
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;
+export const SIDEBAR_TASK_INITIAL_LIMIT = 15;
 export const SIDEBAR_CHAT_PAGE_SIZE = 10;
 
 export type DropdownOption = {

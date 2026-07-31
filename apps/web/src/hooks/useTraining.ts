@@ -25,6 +25,9 @@ import type {
   DatasetImportJob,
   DatasetImportMapping,
   DatasetRowPage,
+  GradeResult,
+  TaskAttemptArtifact,
+  TaskAttemptResult,
   Taskset,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
@@ -218,6 +221,29 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     patchCandidate: (id: string, patch: Record<string, unknown>) => mutate("candidate", `/candidates/${encodeURIComponent(id)}`, patch, "PATCH"),
     createCandidate: (id: string, mode: "defaults" | "customize", analysisModel?: ChatModelRef | null, analysisReasoningEffort?: CodexReasoningEffort | null) => mutate<TaskCreationSnapshot>("create-candidate", `/candidates/${encodeURIComponent(id)}/create`, { mode, analysisModel: analysisModel ?? null, analysisReasoningEffort: analysisReasoningEffort ?? null }),
     auditGraders: (tasksetId: string) => mutate<{ passed: boolean; results: Array<{ id: string; label: string; expectedPassed?: boolean; expectedRewardEligible?: boolean; result: { passed: boolean; score: number | null; rewardEligible: boolean } }>; failures: Array<{ label: string; gradeId: string }> }>("audit-graders", "/audit-graders", { tasksetId }),
+    executeTasksetAttempt: (
+      tasksetId: string,
+      taskId: string,
+      model: ChatModelRef,
+    ) => mutate<{
+      attempt: TaskAttemptResult;
+      grade: GradeResult;
+      artifacts: TaskAttemptArtifact[];
+    }>(
+      "execute-taskset-attempt",
+      `/tasksets/${encodeURIComponent(tasksetId)}/attempts`,
+      {
+        taskId,
+        model,
+        seed: 17,
+        attempt: 0,
+        sampling: {
+          maxOutputTokens: 4_096,
+          temperature: 0,
+          topP: 1,
+        },
+      },
+    ),
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     readiness: (tasksetId: string) => mutate("readiness", "/readiness", { tasksetId }),
     previewExpertBootstrap: (tasksetId: string) => mutate<CrossSystemExpertBootstrapPreview>(
@@ -262,6 +288,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       input: {
         maximumSpendUsd: number | null;
         retentionDays: number | null;
+        exportApproved: boolean;
         manifest?: unknown;
       },
     ) => mutate<{

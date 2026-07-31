@@ -91,9 +91,11 @@ import {
   LabsRoute,
   LabSkillSidebar,
   NativeSkillSidebar,
+  ProfileView,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
+  TeamChatProView,
   TeamChatView,
   CommunityView,
   WorkspaceDiffPanel,
@@ -533,6 +535,20 @@ export function MainPane({
       showToast,
     ]
   );
+  const openProfileSkillCommand = useCallback(
+    (command: string, provider?: ChatProvider) => {
+      composerDraftStore.set(command);
+      setMentionedAppId(null);
+      if (provider) changeDraftProvider(provider);
+      setView("chat");
+    },
+    [
+      changeDraftProvider,
+      composerDraftStore,
+      setMentionedAppId,
+      setView,
+    ]
+  );
   const appPreferences = useMemo(
     () => normalizePreferences(bootstrap?.preferences),
     [bootstrap?.preferences]
@@ -830,7 +846,7 @@ export function MainPane({
           if (command.command === "train") {
             if (attachments.length > 0) {
               showToast(
-                "/train uses the selected chat; add other chats from Lab.",
+                "/train uses the selected chat; add other chats from Models.",
                 "error"
               );
               return false;
@@ -1386,7 +1402,11 @@ export function MainPane({
         </Suspense>
       ) : view === "team" ? (
         <Suspense fallback={null}>
-          <TeamChatView {...teamChat} />
+          {teamChat.teamId ? (
+            <TeamChatView {...teamChat} />
+          ) : (
+            <TeamChatProView />
+          )}
           {showRightPanel ? rightPanel : null}
         </Suspense>
       ) : view === "community" ? (
@@ -1396,6 +1416,19 @@ export function MainPane({
       ) : view === "get-started" ? (
         <Suspense fallback={null}>
           <GetStartedView />
+        </Suspense>
+      ) : view === "profile" ? (
+        <Suspense fallback={null}>
+          <ProfileView
+            catalogPresentation="select"
+            className="profile-page"
+            payload={bootstrap}
+            connection={connection}
+            onPayload={onPayload}
+            onError={onError}
+            onToast={showToast}
+            onSkillCommand={openProfileSkillCommand}
+          />
         </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
@@ -1443,14 +1476,7 @@ export function MainPane({
                   onPayload,
                   onError,
                   onToast: showToast,
-                  onSkillCommand: (command, provider) => {
-                    composerDraftStore.set(command);
-                    setMentionedAppId(null);
-                    if (provider) {
-                      changeDraftProvider(provider);
-                    }
-                    setView("chat");
-                  },
+                  onSkillCommand: openProfileSkillCommand,
                 }}
                 training={{
                   training,

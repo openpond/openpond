@@ -1,37 +1,31 @@
 import type { Session } from "@openpond/contracts";
-import { useEffect, useState } from "react";
-import {
-  Cloud,
-  FolderOpen,
-  FolderPlus,
-  ListFilter,
-  Plus,
-  Settings,
-  SquarePen,
-} from "../icons";
-import type { AppView, SidebarProjectItem } from "../../lib/app-models";
+import { useEffect, useMemo, useState } from "react";
 import {
   SIDEBAR_CHAT_PAGE_SIZE,
-  SIDEBAR_SECTION_LIMIT,
+  SIDEBAR_TASK_INITIAL_LIMIT,
 } from "../../lib/app-models";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
+import {
+  isSidebarTaskPinned,
+  sidebarTaskEmptyLabel,
+  sidebarTaskRows,
+  sidebarTaskShortcutState,
+  type SidebarTaskFilter,
+  type SidebarTaskSort,
+} from "../../lib/sidebar-task-list";
 import {
   sidebarTerminalIndicator,
   terminalScopeKey,
   type TerminalScopeSummary,
 } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
-import { SidebarTeamSection } from "./SidebarTeamSection";
-import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import {
-  SidebarProjectRow,
-  SidebarFileRow,
   SidebarSection,
-  SidebarSectionMenu,
   SidebarSessionRow,
   SidebarShowMoreButton,
 } from "./SidebarRows";
+import { SidebarTaskListControls } from "./SidebarTaskListControls";
 
 const EMPTY_TERMINAL_SUMMARIES: Record<string, TerminalScopeSummary> = {};
 const EMPTY_GOAL_RUNTIME_BY_SESSION_ID = new Map<string, GoalRuntimeStatus>();
@@ -40,25 +34,13 @@ const EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID = new Map<
   SubagentRuntimeStatus
 >();
 
-export type SidebarProjectClickAction =
-  | "select_draft_project"
-  | "toggle_project";
-
-export function sidebarProjectClickAction(input: {
-  selectedSessionId: string | null;
-  view: AppView;
-}): SidebarProjectClickAction {
-  return input.view === "chat" && !input.selectedSessionId
-    ? "select_draft_project"
-    : "toggle_project";
-}
-
 export function nextSidebarChatVisibleCount(
   currentCount: number,
   totalCount: number
 ): number {
   return Math.min(
-    Math.max(currentCount, SIDEBAR_SECTION_LIMIT) + SIDEBAR_CHAT_PAGE_SIZE,
+    Math.max(currentCount, SIDEBAR_TASK_INITIAL_LIMIT) +
+      SIDEBAR_CHAT_PAGE_SIZE,
     totalCount
   );
 }
@@ -68,112 +50,159 @@ export function previousSidebarChatVisibleCount(
   totalCount: number
 ): number {
   const boundedCount = Math.max(
-    SIDEBAR_SECTION_LIMIT,
+    SIDEBAR_TASK_INITIAL_LIMIT,
     Math.min(currentCount, totalCount)
   );
-  if (boundedCount <= SIDEBAR_SECTION_LIMIT) return SIDEBAR_SECTION_LIMIT;
+  if (boundedCount <= SIDEBAR_TASK_INITIAL_LIMIT)
+    return SIDEBAR_TASK_INITIAL_LIMIT;
   const pageCount = Math.ceil(
-    (boundedCount - SIDEBAR_SECTION_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE
+    (boundedCount - SIDEBAR_TASK_INITIAL_LIMIT) / SIDEBAR_CHAT_PAGE_SIZE
   );
   return Math.max(
-    SIDEBAR_SECTION_LIMIT,
-    SIDEBAR_SECTION_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE
+    SIDEBAR_TASK_INITIAL_LIMIT,
+    SIDEBAR_TASK_INITIAL_LIMIT + (pageCount - 1) * SIDEBAR_CHAT_PAGE_SIZE
   );
 }
 
 export function SidebarSectionList({
-  addProjectFolder,
-  archivedChatsOpen,
+  activeSessions,
   archiveSession,
-  beginNewChat,
-  chatsCollapsed,
-  chatRows,
-  cloudProjectRows,
-  workspaceStates = {},
+  archivedSessions,
+  chatRowsVisibleCount,
   childSessionRowsByParentId = {},
-  clearSidebarDrag,
-  commitPinnedDrop,
-  commitPinnedPreviewDrop,
-  dragItem,
+  cloudProjectRows,
+  commitTaskDrop,
+  commitTaskPreviewDrop,
   dockSessionRight,
-  expandedProjectIds,
   experience = "development",
-  expandProject,
-  onToggleChatsCollapsed,
-  onTogglePinnedCollapsed,
-  onToggleProjectsCollapsed,
-  onToggleSavedForLaterCollapsed,
-  createCloudEnvironment,
-  pinnedCollapsed,
-  pinnedRows,
-  previewPinnedDrop,
-  localProjectRows,
-  projectsCollapsed,
-  projectsExpanded,
-  projectRows,
-  projectSessionRowsByProjectId,
-  moveProjectToCloud,
-  removeProject,
-  restoreSession,
-  renameSession,
-  runningSessionIds,
-  savedForLaterCollapsed,
-  savedForLaterSessions,
-  savedForLaterFiles = [],
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
-  subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
+  localProjectRows,
+  previewTaskDrop,
+  projectRows,
+  renameSession,
+  restoreSession,
+  runningSessionIds,
+  savedForLaterSessions,
   sectionMenuOpen,
-  selectTeamThread,
-  openTeamDm,
-  selectedTeamThreadId,
-  teamChatEnabled,
-  teamChatOrganization,
-  teamChatLoading = false,
-  currentUserId,
-  teamMembers = [],
-  teamThreads = [],
-  communityItems = [],
-  communityChannels = [],
-  communityLoading = false,
-  communityError,
-  selectedCommunityId,
-  selectedCommunityChannelId,
-  discoverCommunities,
-  selectCommunity,
-  selectCommunityChannel,
-  selectedProjectId,
   selectedSessionId,
-  sidebarProjectIdBySessionId,
-  startExistingProjectFromPath,
-  terminalSummaries = EMPTY_TERMINAL_SUMMARIES,
-  setArchivedChatsOpen,
+  sessionRuntimeSecondsById,
   setChatRowsVisibleCount,
-  setProjectsExpanded,
-  setSearchOpen,
   setSectionMenuOpen,
   setSelectedAppId,
   setSelectedProjectId,
   setSelectedSessionId,
   setView,
-  startPinnedDrag,
-  startCloudProjectFromScratch,
-  startProjectFromScratch,
-  switchProjectWorkspaceTarget,
-  toggleProjectPinned,
-  toggleProjectExpanded,
+  sidebarProjectIdBySessionId,
+  startTaskDrag,
+  subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
+  taskDragSessionId,
+  taskPreviewSessionIds,
+  terminalSummaries = EMPTY_TERMINAL_SUMMARIES,
   toggleSessionPinned,
   toggleSessionSavedForLater,
-  openSidebarFile,
-  setSidebarFileStatus,
-  visibleChatRows,
-  visibleProjectRows,
   view,
+  clearTaskDrag,
 }: SidebarProps) {
-  const [projectChatVisibleCounts, setProjectChatVisibleCounts] = useState<
-    Record<string, number>
-  >({});
+  const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
+  const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
   const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] =
     useState<Set<string>>(() => new Set());
+  const taskNoun = experience === "chat" ? "chats" : "tasks";
+  const taskSectionLabel = experience === "chat" ? "Chats" : "Tasks";
+  const activeTaskCount = Math.max(
+    0,
+    activeSessions.length - savedForLaterSessions.length
+  );
+  const taskShortcut = sidebarTaskShortcutState({
+    activeCount: activeTaskCount,
+    filter: taskFilter,
+    savedForLaterCount: savedForLaterSessions.length,
+  });
+  const projectsSectionRows = projectRows ?? [
+    ...localProjectRows,
+    ...cloudProjectRows,
+  ];
+  const projectLabelById = useMemo(
+    () =>
+      new Map(
+        projectsSectionRows.map((item) => [item.id, item.project.name] as const)
+      ),
+    [projectsSectionRows]
+  );
+  const inProgressSessionIds = useMemo(() => {
+    const next = new Set(runningSessionIds);
+    for (const session of activeSessions) {
+      const goalRuntime = goalRuntimeBySessionId.get(session.id);
+      const subagentRuntime = subagentRuntimeBySessionId.get(session.id);
+      if (
+        (goalRuntime?.tone === "active" && goalRuntime.status !== "queued") ||
+        (subagentRuntime?.activeCount ?? 0) > 0 ||
+        terminalIndicatorForSession(session.id)?.status === "running"
+      ) {
+        next.add(session.id);
+      }
+    }
+    return next;
+  }, [
+    activeSessions,
+    goalRuntimeBySessionId,
+    runningSessionIds,
+    subagentRuntimeBySessionId,
+    terminalSummaries,
+  ]);
+  const allManualTaskRows = useMemo(
+    () =>
+      sidebarTaskRows({
+        activeSessions,
+        doneSessions: archivedSessions,
+        filter: "all",
+        inProgressSessionIds,
+        sort: "manual",
+      }),
+    [activeSessions, archivedSessions, inProgressSessionIds]
+  );
+  const filteredTaskRows = useMemo(
+    () =>
+      sidebarTaskRows({
+        activeSessions,
+        doneSessions: archivedSessions,
+        filter: taskFilter,
+        inProgressSessionIds,
+        previewSessionIds: taskPreviewSessionIds,
+        sort: taskSort,
+      }),
+    [
+      activeSessions,
+      archivedSessions,
+      inProgressSessionIds,
+      taskFilter,
+      taskPreviewSessionIds,
+      taskSort,
+    ]
+  );
+  const visibleTaskRows = filteredTaskRows.slice(
+    0,
+    Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)
+  );
+  const canShowMoreTasks = visibleTaskRows.length < filteredTaskRows.length;
+  const canShowLessTasks =
+    visibleTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT;
+  const allManualTaskIds = allManualTaskRows.map((session) => session.id);
+  const filteredTaskIds = filteredTaskRows.map((session) => session.id);
+  const pinnedTaskRows =
+    taskSort === "recent"
+      ? filteredTaskRows.filter(isSidebarTaskPinned)
+      : [];
+  const pinnedTaskIds = pinnedTaskRows.map((session) => session.id);
+  const separatePinnedTaskRows =
+    pinnedTaskRows.length > 0 &&
+    pinnedTaskRows.length < filteredTaskRows.length;
+  const firstPinnedTaskId = separatePinnedTaskRows
+    ? pinnedTaskRows[0]?.id ?? null
+    : null;
+  const lastPinnedTaskId = separatePinnedTaskRows
+    ? pinnedTaskRows[pinnedTaskRows.length - 1]?.id ?? null
+    : null;
   const activeChildSessionExpansionKey = JSON.stringify(
     Object.entries(childSessionRowsByParentId)
       .filter(
@@ -207,80 +236,33 @@ export function SidebarSectionList({
         [...parentSessionIds].every((parentSessionId) =>
           current.has(parentSessionId)
         )
-      )
+      ) {
         return current;
+      }
       return new Set([...current, ...parentSessionIds]);
     });
   }, [activeChildSessionExpansionKey]);
-  const projectsSectionRows =
-    projectRows ??
-    [...localProjectRows, ...cloudProjectRows].filter((item) => !item.pinned);
-  const visiblePinnedRows =
-    experience === "development"
-      ? pinnedRows
-      : pinnedRows.filter((row) => row.type === "session");
 
-  function showMoreProjectChats(projectId: string, totalCount: number) {
-    setProjectChatVisibleCounts((current) => {
-      const currentCount = current[projectId] ?? SIDEBAR_SECTION_LIMIT;
-      const nextCount = nextSidebarChatVisibleCount(currentCount, totalCount);
-      if (nextCount === currentCount) return current;
-      return { ...current, [projectId]: nextCount };
-    });
+  function terminalIndicatorForSession(sessionId: string) {
+    return sidebarTerminalIndicator(
+      terminalSummaries[terminalScopeKey({ kind: "session", id: sessionId })]
+    );
   }
 
-  function showLessProjectChats(projectId: string, totalCount: number) {
-    setProjectChatVisibleCounts((current) => {
-      const currentCount = current[projectId] ?? SIDEBAR_SECTION_LIMIT;
-      const previousCount = previousSidebarChatVisibleCount(
-        currentCount,
-        totalCount
+  function projectLabelForSession(session: Session): string | null {
+    if (experience !== "development") return null;
+    const projectId = sidebarProjectIdBySessionId[session.id];
+    if (projectId) {
+      return (
+        projectLabelById.get(projectId) ?? session.workspaceName ?? "Project"
       );
-      if (previousCount === currentCount) return current;
-      if (previousCount <= SIDEBAR_SECTION_LIMIT) {
-        const next = { ...current };
-        delete next[projectId];
-        return next;
-      }
-      return { ...current, [projectId]: previousCount };
-    });
-  }
-
-  function selectDraftProject(item: SidebarProjectItem) {
-    setSelectedAppId(null);
-    setSelectedProjectId(item.id);
-    setSelectedSessionId(null);
-    setView("chat");
-    if (selectedProjectId === item.id && !selectedSessionId) {
-      toggleProjectExpanded(item.id);
-    } else {
-      expandProject(item.id);
     }
-  }
-
-  function selectProjectRow(item: SidebarProjectItem) {
-    if (
-      sidebarProjectClickAction({ selectedSessionId, view }) ===
-      "select_draft_project"
-    ) {
-      selectDraftProject(item);
-      return;
-    }
-    toggleProjectExpanded(item.id);
-  }
-
-  function beginProjectChat(item: SidebarProjectItem) {
-    setSelectedAppId(null);
-    setSelectedProjectId(item.id);
-    setSelectedSessionId(null);
-    setView("chat");
-    expandProject(item.id);
+    return "Chat";
   }
 
   function selectSession(session: Session) {
     setSelectedSessionId(session.id);
     const projectId = sidebarProjectIdBySessionId[session.id] ?? null;
-    if (projectId) expandProject(projectId);
     setSelectedAppId(projectId ? null : session.appId);
     setSelectedProjectId(projectId);
     setView("chat");
@@ -303,130 +285,23 @@ export function SidebarSectionList({
   function toggleChildSessions(parentSessionId: string) {
     setExpandedChildSessionParentIds((current) => {
       const next = new Set(current);
-      if (next.has(parentSessionId)) {
-        next.delete(parentSessionId);
-      } else {
-        next.add(parentSessionId);
-      }
+      if (next.has(parentSessionId)) next.delete(parentSessionId);
+      else next.add(parentSessionId);
       return next;
     });
   }
 
-  function terminalIndicatorForSession(sessionId: string) {
-    return sidebarTerminalIndicator(
-      terminalSummaries[terminalScopeKey({ kind: "session", id: sessionId })]
-    );
-  }
-
-  function terminalIndicatorForProject(projectId: string) {
-    return sidebarTerminalIndicator(
-      terminalSummaries[terminalScopeKey({ kind: "project", id: projectId })]
-    );
-  }
-
-  function renderProjectChildren(item: SidebarProjectItem) {
-    if (!expandedProjectIds.has(item.id)) return null;
-    const sessions = projectSessionRowsByProjectId[item.id] ?? [];
-    if (sessions.length === 0) return null;
-    const visibleCount = Math.max(
-      SIDEBAR_SECTION_LIMIT,
-      projectChatVisibleCounts[item.id] ?? SIDEBAR_SECTION_LIMIT
-    );
-    const visibleSessions = sessions.slice(0, visibleCount);
-    const canShowMoreProjectChats = visibleSessions.length < sessions.length;
-    const canShowLessProjectChats =
-      visibleSessions.length > SIDEBAR_SECTION_LIMIT;
-    return (
-      <div className="sidebar-project-children">
-        {visibleSessions.map((session) => (
-          <div key={session.id} className="sidebar-session-group">
-            <SidebarSessionRow
-              session={session}
-              selected={view === "chat" && selectedSessionId === session.id}
-              hideIcon
-              nested
-              running={runningSessionIds.has(session.id)}
-              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              subagentRuntime={
-                subagentRuntimeBySessionId.get(session.id) ?? null
-              }
-              terminalIndicator={terminalIndicatorForSession(session.id)}
-              childSessionCount={childSessionsFor(session).length}
-              childSessionsExpanded={childSessionsExpanded(
-                session,
-                childSessionsFor(session)
-              )}
-              onToggleChildSessions={() => toggleChildSessions(session.id)}
-              onSelect={() => selectSession(session)}
-              onTogglePin={() => toggleSessionPinned(session)}
-              onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-              onDockRight={() => dockSessionRight(session)}
-              onArchive={() => archiveSession(session)}
-              onRename={renameSession}
-            />
-            {renderChildSessionRows(session, { nested: true })}
-          </div>
-        ))}
-        {sessions.length > SIDEBAR_SECTION_LIMIT &&
-          (canShowMoreProjectChats || canShowLessProjectChats) && (
-            <div
-              className="sidebar-pagination-controls"
-              aria-label={`Showing ${visibleSessions.length} of ${sessions.length} project chats`}
-            >
-              {canShowMoreProjectChats ? (
-                <SidebarShowMoreButton
-                  onClick={() => showMoreProjectChats(item.id, sessions.length)}
-                >
-                  Show more
-                </SidebarShowMoreButton>
-              ) : null}
-              {canShowLessProjectChats ? (
-                <SidebarShowMoreButton
-                  onClick={() => showLessProjectChats(item.id, sessions.length)}
-                >
-                  Show less
-                </SidebarShowMoreButton>
-              ) : null}
-            </div>
-          )}
-      </div>
-    );
-  }
-
-  const canShowMoreChats = visibleChatRows.length < chatRows.length;
-  const canShowLessChats = visibleChatRows.length > SIDEBAR_SECTION_LIMIT;
-
-  function showMoreChats() {
-    setChatRowsVisibleCount((count) =>
-      nextSidebarChatVisibleCount(count, chatRows.length)
-    );
-  }
-
-  function showLessChats() {
-    setChatRowsVisibleCount((count) =>
-      previousSidebarChatVisibleCount(count, chatRows.length)
-    );
-  }
-
-  function renderChildSessionRows(
-    parentSession: Session,
-    options: { nested?: boolean } = {}
-  ) {
+  function renderChildSessionRows(parentSession: Session) {
     const childSessions = childSessionsFor(parentSession);
     if (
       childSessions.length === 0 ||
       !childSessionsExpanded(parentSession, childSessions)
-    )
+    ) {
       return null;
-    const groupClassName = [
-      "sidebar-child-session-group",
-      options.nested ? "nested" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    }
 
     return (
-      <div className={groupClassName}>
+      <div className="sidebar-child-session-group">
         {childSessions.map((session) => (
           <SidebarSessionRow
             key={session.id}
@@ -434,14 +309,21 @@ export function SidebarSectionList({
             selected={view === "chat" && selectedSessionId === session.id}
             hideIcon
             nested
-            running={runningSessionIds.has(session.id)}
+            running={inProgressSessionIds.has(session.id)}
             goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
             subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
             terminalIndicator={terminalIndicatorForSession(session.id)}
+            projectLabel={projectLabelForSession(parentSession)}
+            runtimeSeconds={sessionRuntimeSecondsById.get(session.id) ?? 0}
             onSelect={() => selectSession(session)}
             onTogglePin={() => toggleSessionPinned(session)}
+            onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
             onDockRight={() => dockSessionRight(session)}
-            onArchive={() => archiveSession(session)}
+            onArchive={() =>
+              session.archived
+                ? restoreSession(session)
+                : archiveSession(session)
+            }
             onRename={renameSession}
           />
         ))}
@@ -449,506 +331,165 @@ export function SidebarSectionList({
     );
   }
 
+  function renderTaskSession(session: Session) {
+    const archived = session.archived;
+    const isDragged = taskDragSessionId === session.id;
+    const childSessions = childSessionsFor(session);
+    const groupClassName = [
+      "sidebar-session-group",
+      session.id === firstPinnedTaskId ? "pinned-group-first" : "",
+      session.id === lastPinnedTaskId ? "pinned-group-last" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const pinnedInRecentMode =
+      taskSort === "recent" && isSidebarTaskPinned(session);
+    const draggableTaskIds = pinnedInRecentMode
+      ? pinnedTaskIds
+      : filteredTaskIds;
+    const dragProps =
+      taskSort === "manual" || pinnedInRecentMode
+        ? {
+            onDragStart: (event: React.DragEvent<HTMLDivElement>) =>
+              startTaskDrag(event, {
+                allSessionIds: allManualTaskIds,
+                visibleSessionIds: draggableTaskIds,
+                sessionId: session.id,
+              }),
+            onDragEnd: clearTaskDrag,
+            onDragOver: (event: React.DragEvent<HTMLDivElement>) => {
+              if (!isDragged) previewTaskDrop(event, session.id);
+            },
+            onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+              if (isDragged) commitTaskPreviewDrop();
+              else commitTaskDrop(event, session.id);
+            },
+          }
+        : {};
+
+    return (
+      <div key={session.id} className={groupClassName}>
+        <SidebarSessionRow
+          session={session}
+          selected={
+            !archived && view === "chat" && selectedSessionId === session.id
+          }
+          archived={archived}
+          hideIcon
+          placeholder={isDragged}
+          running={inProgressSessionIds.has(session.id)}
+          goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+          subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+          terminalIndicator={terminalIndicatorForSession(session.id)}
+          projectLabel={projectLabelForSession(session)}
+          runtimeSeconds={sessionRuntimeSecondsById.get(session.id) ?? 0}
+          childSessionCount={childSessions.length}
+          childSessionsExpanded={childSessionsExpanded(session, childSessions)}
+          onToggleChildSessions={() => toggleChildSessions(session.id)}
+          onSelect={() => {
+            if (archived) restoreSession(session);
+            selectSession(session);
+          }}
+          onTogglePin={() => toggleSessionPinned(session)}
+          onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
+          onDockRight={() => dockSessionRight(session)}
+          onArchive={() =>
+            archived ? restoreSession(session) : archiveSession(session)
+          }
+          onRename={renameSession}
+          {...dragProps}
+        />
+        {!isDragged ? renderChildSessionRows(session) : null}
+      </div>
+    );
+  }
+
+  function changeTaskFilter(nextFilter: SidebarTaskFilter) {
+    setTaskFilter(nextFilter);
+    setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+  }
+
+  function changeTaskSort(nextSort: SidebarTaskSort) {
+    setTaskSort(nextSort);
+    setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+  }
+
+  function showMoreTasks() {
+    setChatRowsVisibleCount((count) =>
+      nextSidebarChatVisibleCount(count, filteredTaskRows.length)
+    );
+  }
+
+  function showLessTasks() {
+    setChatRowsVisibleCount((count) =>
+      previousSidebarChatVisibleCount(count, filteredTaskRows.length)
+    );
+  }
+
   return (
     <div className="sidebar-scroll">
-      <SidebarCommunitySection
-        communities={communityItems}
-        channels={communityChannels}
-        loading={communityLoading}
-        error={communityError}
-        selectedCommunityId={selectedCommunityId}
-        selectedChannelId={selectedCommunityChannelId}
-        view={view}
-        onDiscover={discoverCommunities}
-        onSelectCommunity={selectCommunity}
-        onSelectChannel={selectCommunityChannel}
-      />
-      <SidebarTeamSection
-        currentUserId={currentUserId}
-        enabled={teamChatEnabled}
-        loading={teamChatLoading}
-        members={teamMembers}
-        openTeamDm={openTeamDm}
-        organization={teamChatOrganization}
-        selectedTeamThreadId={selectedTeamThreadId}
-        selectTeamThread={selectTeamThread}
-        threads={teamThreads}
-        view={view}
-      />
-
       <SidebarSection
-        label="Pinned"
-        collapsed={pinnedCollapsed}
-        onToggleCollapsed={onTogglePinnedCollapsed}
-      >
-        {visiblePinnedRows.map((row) => {
-          const isDraggedRow =
-            dragItem?.type === row.type && dragItem.id === row.id;
-          if (row.type === "project") {
-            return (
-              <div key={row.key} className="sidebar-project-group">
-                <SidebarProjectRow
-                  kind={row.item.kind}
-                  project={row.item.project}
-                  pinned={row.item.pinned}
-                  selected={
-                    view === "chat" &&
-                    selectedProjectId === row.id &&
-                    !selectedSessionId
-                  }
-                  expanded={expandedProjectIds.has(row.id)}
-                  workspaceState={
-                    row.item.kind === "local"
-                      ? workspaceStates[row.item.project.id] ?? null
-                      : null
-                  }
-                  cloudLinkTrusted={row.item.cloudLinkTrusted}
-                  cloudLinkWarning={row.item.cloudLinkWarning}
-                  placeholder={isDraggedRow}
-                  terminalIndicator={terminalIndicatorForProject(row.item.id)}
-                  onSelect={() => selectProjectRow(row.item)}
-                  onNewChat={() => beginProjectChat(row.item)}
-                  onMoveToCloud={
-                    row.item.kind === "local"
-                      ? () => moveProjectToCloud(row.item)
-                      : undefined
-                  }
-                  onWorkspaceTargetSelect={(target) =>
-                    switchProjectWorkspaceTarget(row.item.id, target)
-                  }
-                  onTogglePin={() => toggleProjectPinned(row.item)}
-                  onRemove={() => removeProject(row.item)}
-                  onDragStart={(event) =>
-                    startPinnedDrag(event, { type: "project", id: row.id })
-                  }
-                  onDragEnd={clearSidebarDrag}
-                  onDragOver={(event) => {
-                    if (isDraggedRow) return;
-                    previewPinnedDrop(event, { type: "project", id: row.id });
-                  }}
-                  onDrop={(event) => {
-                    if (isDraggedRow) {
-                      commitPinnedPreviewDrop();
-                      return;
-                    }
-                    commitPinnedDrop(event, { type: "project", id: row.id });
-                  }}
-                />
-                {!isDraggedRow && renderProjectChildren(row.item)}
-              </div>
-            );
-          }
-          if (row.type === "session")
-            return (
-              <div key={row.key} className="sidebar-session-group">
-                <SidebarSessionRow
-                  session={row.session}
-                  selected={view === "chat" && selectedSessionId === row.id}
-                  hideIcon
-                  placeholder={isDraggedRow}
-                  running={runningSessionIds.has(row.session.id)}
-                  goalRuntime={
-                    goalRuntimeBySessionId.get(row.session.id) ?? null
-                  }
-                  subagentRuntime={
-                    subagentRuntimeBySessionId.get(row.session.id) ?? null
-                  }
-                  terminalIndicator={terminalIndicatorForSession(
-                    row.session.id
-                  )}
-                  childSessionCount={childSessionsFor(row.session).length}
-                  childSessionsExpanded={childSessionsExpanded(
-                    row.session,
-                    childSessionsFor(row.session)
-                  )}
-                  onToggleChildSessions={() =>
-                    toggleChildSessions(row.session.id)
-                  }
-                  onSelect={() => selectSession(row.session)}
-                  onTogglePin={() => toggleSessionPinned(row.session)}
-                  onToggleSaveForLater={() =>
-                    toggleSessionSavedForLater(row.session)
-                  }
-                  onDockRight={() => dockSessionRight(row.session)}
-                  onArchive={() => archiveSession(row.session)}
-                  onRename={renameSession}
-                  onDragStart={(event) =>
-                    startPinnedDrag(event, { type: "session", id: row.id })
-                  }
-                  onDragEnd={clearSidebarDrag}
-                  onDragOver={(event) => {
-                    if (isDraggedRow) return;
-                    previewPinnedDrop(event, { type: "session", id: row.id });
-                  }}
-                  onDrop={(event) => {
-                    if (isDraggedRow) {
-                      commitPinnedPreviewDrop();
-                      return;
-                    }
-                    commitPinnedDrop(event, { type: "session", id: row.id });
-                  }}
-                />
-                {!isDraggedRow && renderChildSessionRows(row.session)}
-              </div>
-            );
-          return (
-            <SidebarFileRow
-              key={row.key}
-              file={row.file}
-              placeholder={isDraggedRow}
-              onSelect={() => openSidebarFile(row.file)}
-              onTogglePin={() =>
-                setSidebarFileStatus(
-                  row.file,
-                  row.file.status === "pinned" ? "none" : "pinned"
-                )
-              }
-              onToggleSaveForLater={() =>
-                setSidebarFileStatus(
-                  row.file,
-                  row.file.status === "saved_for_later"
-                    ? "none"
-                    : "saved_for_later"
-                )
-              }
-              onDragStart={(event) =>
-                startPinnedDrag(event, { type: "file", id: row.id })
-              }
-              onDragEnd={clearSidebarDrag}
-              onDragOver={(event) => {
-                if (isDraggedRow) return;
-                previewPinnedDrop(event, { type: "file", id: row.id });
-              }}
-              onDrop={(event) => {
-                if (isDraggedRow) {
-                  commitPinnedPreviewDrop();
-                  return;
-                }
-                commitPinnedDrop(event, { type: "file", id: row.id });
-              }}
-            />
-          );
-        })}
-      </SidebarSection>
-
-      {experience === "development" ? (
-        <SidebarSection
-          label="Projects"
-          collapsed={projectsCollapsed}
-          onToggleCollapsed={onToggleProjectsCollapsed}
-          actions={
-            <>
-              <div className="section-menu">
-                <button
-                  type="button"
-                  className={`section-icon ${
-                    sectionMenuOpen === "projects" ? "active" : ""
-                  }`}
-                  data-tooltip="Add project"
-                  aria-label="Add project"
-                  aria-haspopup="menu"
-                  aria-expanded={sectionMenuOpen === "projects"}
-                  onClick={() =>
-                    setSectionMenuOpen((current) =>
-                      current === "projects" ? null : "projects"
-                    )
-                  }
-                >
-                  <Plus size={14} />
-                </button>
-                {sectionMenuOpen === "projects" && (
-                  <div className="section-menu-popover" role="menu">
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSectionMenuOpen(null);
-                        startProjectFromScratch();
-                      }}
-                    >
-                      <FolderPlus size={13} />
-                      <span>New Local Project</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSectionMenuOpen(null);
-                        addProjectFolder();
-                      }}
-                    >
-                      <FolderOpen size={13} />
-                      <span>Use existing folder</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSectionMenuOpen(null);
-                        startExistingProjectFromPath();
-                      }}
-                    >
-                      <FolderOpen size={13} />
-                      <span>Use existing folder path</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSectionMenuOpen(null);
-                        startCloudProjectFromScratch();
-                      }}
-                    >
-                      <Cloud size={13} />
-                      <span>New Cloud Project</span>
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setSectionMenuOpen(null);
-                        createCloudEnvironment();
-                      }}
-                    >
-                      <Settings size={13} />
-                      <span>Create environment</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            </>
-          }
-        >
-          {visibleProjectRows.map((item) => (
-            <div key={item.id} className="sidebar-project-group">
-              <SidebarProjectRow
-                kind={item.kind}
-                project={item.project}
-                pinned={item.pinned}
-                selected={
-                  view === "chat" &&
-                  selectedProjectId === item.id &&
-                  !selectedSessionId
-                }
-                expanded={expandedProjectIds.has(item.id)}
-                workspaceState={
-                  item.kind === "local"
-                    ? workspaceStates[item.project.id] ?? null
-                    : null
-                }
-                cloudLinkTrusted={item.cloudLinkTrusted}
-                cloudLinkWarning={item.cloudLinkWarning}
-                terminalIndicator={terminalIndicatorForProject(item.id)}
-                onSelect={() => selectProjectRow(item)}
-                onNewChat={() => beginProjectChat(item)}
-                onMoveToCloud={
-                  item.kind === "local"
-                    ? () => moveProjectToCloud(item)
-                    : undefined
-                }
-                onWorkspaceTargetSelect={(target) =>
-                  switchProjectWorkspaceTarget(item.id, target)
-                }
-                onTogglePin={() => toggleProjectPinned(item)}
-                onRemove={() => removeProject(item)}
-              />
-              {renderProjectChildren(item)}
-            </div>
-          ))}
-          {visibleProjectRows.length === 0 &&
-            localProjectRows.length === 0 &&
-            cloudProjectRows.length === 0 && (
-              <div className="empty-row">No projects</div>
-            )}
-          {projectsSectionRows.length > SIDEBAR_SECTION_LIMIT && (
-            <SidebarShowMoreButton
-              expanded={projectsExpanded}
-              onClick={() => setProjectsExpanded((expanded) => !expanded)}
-            />
-          )}
-        </SidebarSection>
-      ) : null}
-
-      <SidebarSection
-        label={experience === "work" ? "Tasks" : "Chats"}
-        collapsed={chatsCollapsed}
-        onToggleCollapsed={onToggleChatsCollapsed}
+        label={taskSectionLabel}
+        className={`sidebar-task-section${
+          experience === "development" ? " development" : ""
+        }`}
+        titleAccessory={
+          experience !== "chat" ? (
+            <button
+              type="button"
+              className={`section-icon sidebar-task-count-bubble${
+                taskFilter === "saved_for_later" ? " active" : ""
+              }`}
+              aria-label={`Show ${taskShortcut.count} ${
+                taskShortcut.targetLabel
+              } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
+              onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
+            >
+              <span>{taskShortcut.label}</span>
+              <span className="sidebar-task-count-badge" aria-hidden="true">
+                {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
+              </span>
+            </button>
+          ) : null
+        }
+        actionsVisible={
+          sectionMenuOpen === "chats" || sectionMenuOpen === "tasks-filter"
+        }
         actions={
-          <>
-            <SidebarSectionMenu
-              id="chats"
-              open={sectionMenuOpen === "chats"}
-              archivedOpen={archivedChatsOpen}
-              archivedLabel="archived chats"
-              onToggleOpen={() =>
-                setSectionMenuOpen((current) =>
-                  current === "chats" ? null : "chats"
-                )
-              }
-              onToggleArchived={() => {
-                setArchivedChatsOpen((open) => !open);
-                setSectionMenuOpen(null);
-              }}
-            />
-            <button
-              className="section-icon"
-              data-tooltip={
-                experience === "work" ? "Filter tasks" : "Filter chats"
-              }
-              aria-label={
-                experience === "work" ? "Filter tasks" : "Filter chats"
-              }
-              onClick={() => {
-                setSectionMenuOpen(null);
-                setSearchOpen(true);
-              }}
-            >
-              <ListFilter size={14} />
-            </button>
-            <button
-              className="section-icon"
-              data-tooltip={experience === "chat" ? "New chat" : "New task"}
-              aria-label={experience === "chat" ? "New chat" : "New task"}
-              onClick={() => beginNewChat(null)}
-            >
-              <SquarePen size={14} />
-            </button>
-          </>
+          <SidebarTaskListControls
+            filter={taskFilter}
+            noun={taskNoun}
+            onFilterChange={changeTaskFilter}
+            onSortChange={changeTaskSort}
+            openMenu={sectionMenuOpen}
+            setOpenMenu={setSectionMenuOpen}
+            sort={taskSort}
+          />
         }
       >
-        {visibleChatRows.map((session) =>
-          session.archived ? (
-            <div key={session.id} className="sidebar-session-group">
-              <SidebarSessionRow
-                session={session}
-                selected={false}
-                archived
-                hideIcon
-                running={runningSessionIds.has(session.id)}
-                goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-                subagentRuntime={
-                  subagentRuntimeBySessionId.get(session.id) ?? null
-                }
-                terminalIndicator={terminalIndicatorForSession(session.id)}
-                childSessionCount={childSessionsFor(session).length}
-                childSessionsExpanded={childSessionsExpanded(
-                  session,
-                  childSessionsFor(session)
-                )}
-                onToggleChildSessions={() => toggleChildSessions(session.id)}
-                onSelect={() => {
-                  restoreSession(session);
-                  selectSession(session);
-                }}
-                onTogglePin={() => toggleSessionPinned(session)}
-                onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-                onDockRight={() => dockSessionRight(session)}
-                onArchive={() => restoreSession(session)}
-                onRename={renameSession}
-              />
-              {renderChildSessionRows(session)}
-            </div>
-          ) : (
-            <div key={session.id} className="sidebar-session-group">
-              <SidebarSessionRow
-                session={session}
-                selected={view === "chat" && selectedSessionId === session.id}
-                hideIcon
-                running={runningSessionIds.has(session.id)}
-                goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-                subagentRuntime={
-                  subagentRuntimeBySessionId.get(session.id) ?? null
-                }
-                terminalIndicator={terminalIndicatorForSession(session.id)}
-                childSessionCount={childSessionsFor(session).length}
-                childSessionsExpanded={childSessionsExpanded(
-                  session,
-                  childSessionsFor(session)
-                )}
-                onToggleChildSessions={() => toggleChildSessions(session.id)}
-                onSelect={() => selectSession(session)}
-                onTogglePin={() => toggleSessionPinned(session)}
-                onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-                onDockRight={() => dockSessionRight(session)}
-                onArchive={() => archiveSession(session)}
-                onRename={renameSession}
-              />
-              {renderChildSessionRows(session)}
-            </div>
-          )
-        )}
-        {chatRows.length === 0 && (
+        {visibleTaskRows.map(renderTaskSession)}
+        {filteredTaskRows.length === 0 ? (
           <div className="empty-row">
-            {experience === "work" ? "No tasks" : "No chats"}
+            {sidebarTaskEmptyLabel(taskFilter, taskNoun)}
           </div>
-        )}
-        {chatRows.length > SIDEBAR_SECTION_LIMIT &&
-          (canShowMoreChats || canShowLessChats) && (
-            <div
-              className="sidebar-pagination-controls"
-              aria-label={`Showing ${visibleChatRows.length} of ${chatRows.length} chats`}
-            >
-              {canShowMoreChats ? (
-                <SidebarShowMoreButton onClick={showMoreChats}>
-                  Show more
-                </SidebarShowMoreButton>
-              ) : null}
-              {canShowLessChats ? (
-                <SidebarShowMoreButton onClick={showLessChats}>
-                  Show less
-                </SidebarShowMoreButton>
-              ) : null}
-            </div>
-          )}
-      </SidebarSection>
-
-      <SidebarSection
-        label="Save for later"
-        collapsed={savedForLaterCollapsed}
-        onToggleCollapsed={onToggleSavedForLaterCollapsed}
-      >
-        {savedForLaterSessions.map((session) => (
-          <div key={session.id} className="sidebar-session-group">
-            <SidebarSessionRow
-              session={session}
-              selected={view === "chat" && selectedSessionId === session.id}
-              hideIcon
-              running={runningSessionIds.has(session.id)}
-              goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
-              subagentRuntime={
-                subagentRuntimeBySessionId.get(session.id) ?? null
-              }
-              terminalIndicator={terminalIndicatorForSession(session.id)}
-              childSessionCount={childSessionsFor(session).length}
-              childSessionsExpanded={childSessionsExpanded(
-                session,
-                childSessionsFor(session)
-              )}
-              onToggleChildSessions={() => toggleChildSessions(session.id)}
-              onSelect={() => selectSession(session)}
-              onTogglePin={() => toggleSessionPinned(session)}
-              onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
-              onDockRight={() => dockSessionRight(session)}
-              onArchive={() => archiveSession(session)}
-              onRename={renameSession}
-            />
-            {renderChildSessionRows(session)}
+        ) : null}
+        {filteredTaskRows.length > SIDEBAR_TASK_INITIAL_LIMIT &&
+        (canShowMoreTasks || canShowLessTasks) ? (
+          <div
+            className="sidebar-pagination-controls"
+            aria-label={`Showing ${visibleTaskRows.length} of ${filteredTaskRows.length} ${taskNoun}`}
+          >
+            {canShowMoreTasks ? (
+              <SidebarShowMoreButton onClick={showMoreTasks}>
+                Show more
+              </SidebarShowMoreButton>
+            ) : null}
+            {canShowLessTasks ? (
+              <SidebarShowMoreButton onClick={showLessTasks}>
+                Show less
+              </SidebarShowMoreButton>
+            ) : null}
           </div>
-        ))}
-        {(experience === "development" ? savedForLaterFiles : []).map(
-          (file) => (
-            <SidebarFileRow
-              key={file.id}
-              file={file}
-              onSelect={() => openSidebarFile(file)}
-              onTogglePin={() => setSidebarFileStatus(file, "pinned")}
-              onToggleSaveForLater={() => setSidebarFileStatus(file, "none")}
-            />
-          )
-        )}
-        {savedForLaterSessions.length === 0 &&
-        (experience !== "development" || savedForLaterFiles.length === 0) ? (
-          <div className="empty-row">No saved items</div>
         ) : null}
       </SidebarSection>
     </div>

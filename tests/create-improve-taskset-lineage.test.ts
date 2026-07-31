@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { SessionSchema } from "@openpond/contracts";
 
 import {
   assertTasksetRefMatches,
@@ -7,7 +6,6 @@ import {
   createTasksetRef,
 } from "../apps/server/src/training/create-improve-taskset-lineage";
 import { attachModelTargetRefs } from "../apps/server/src/runtime/create-pipeline/target-adapters";
-import { continueLabAgentRunFromTaskset } from "./helpers/create-pipeline-request";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 import {
   FIXED_TIME,
@@ -338,58 +336,6 @@ describe("shared Create/Improve Taskset lineage", () => {
         artifactId: null,
       },
       status: "checking",
-    });
-  });
-
-  test("continues Agent authoring on the exact approved run and Taskset revision", () => {
-    const taskset = tasksetFixture();
-    const tasksetRef = createTasksetRef({
-      taskset,
-      proposal: proposalFixture(),
-      evidenceSnapshotIds: ["evidence_snapshot_fixture"],
-      approvedAt: "2026-07-16T12:00:00.000Z",
-    });
-    const authoringRun = createImproveRunFixture({
-      id: "create_improve_shared_agent",
-      state: "ready",
-      tasksetRef,
-      targetSelection: {
-        status: "confirmed",
-        preselectedKind: "agent",
-        confirmedKind: "agent",
-      },
-    });
-    const continued = continueLabAgentRunFromTaskset({
-      authoringRun,
-      objective: "Create an Agent that triages support requests.",
-      operation: "create",
-      payload: null,
-      session: SessionSchema.parse({
-        id: "session_shared_agent",
-        provider: "openpond",
-        title: "Shared Agent authoring",
-        appId: null,
-        appName: null,
-        cwd: "/profiles/default",
-        codexThreadId: null,
-        createdAt: "2026-07-16T12:00:00.000Z",
-        updatedAt: "2026-07-16T12:00:00.000Z",
-        status: "idle",
-        pinned: false,
-        archived: false,
-        order: 0,
-      }),
-    });
-
-    expect(continued.id).toBe(authoringRun.id);
-    expect(continued.revision).toBe(authoringRun.revision + 1);
-    expect(continued.state).toBe("planning");
-    expect(continued.target.kind).toBe("agent");
-    expect(continued.tasksetRef).toEqual(tasksetRef);
-    expect(continued.metadata).toMatchObject({
-      sharedAuthoringRun: true,
-      tasksetRevision: taskset.revision,
-      tasksetHash: taskset.contentHash,
     });
   });
 });

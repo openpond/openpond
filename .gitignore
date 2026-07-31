@@ -88,6 +88,8 @@ tmp/
 .local-examples/
 .openpond-negative/
 .openpond-test-fixtures/
+output/
+artifacts/
 
 # Local/CDN video artifacts (restored with pnpm media:pull)
 apps/web/public/courses/post-training/*.mp4

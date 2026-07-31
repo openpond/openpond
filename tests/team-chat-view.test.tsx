@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   TeamAgentConversationPanel,
   TeamAiThreadPanel,
+  TeamChatProView,
   TeamChatView,
   restoreFailedTeamChatPrompt,
   type TeamChatViewProps,
@@ -20,6 +21,15 @@ const noopAsync = async () => undefined;
 const noopBoolean = async () => true;
 
 describe("team chat view", () => {
+  test("explains Pro mode when Team Chat has no team", () => {
+    const markup = renderToStaticMarkup(createElement(TeamChatProView));
+
+    expect(markup).toContain('aria-label="Team Chat"');
+    expect(markup).toContain("Team Chat is available with Pro mode.");
+    expect(markup).toContain("Create or join a Pro team");
+    expect(markup).not.toContain('contentEditable="true"');
+  });
+
   test("restores a failed optimistic submission without discarding a newer draft", () => {
     expect(restoreFailedTeamChatPrompt("", "First message")).toBe("First message");
     expect(restoreFailedTeamChatPrompt("Second message", "First message")).toBe(

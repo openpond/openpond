@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   type ManagedAdapterServingProjection,
   type TrainingJobEvent,
 } from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
-import { DetailSection } from "../training/DetailSection";
 import { TrainingRolloutReceipts } from "../training/TrainingModelEvidence";
 import { TrainingRunEvaluation } from "../training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../training/TrainingRunMetrics";
@@ -17,7 +16,6 @@ import {
   trainingMethodLabel,
 } from "../training/training-model-data";
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
-import { LabLifecycleRunMetrics } from "./LabLifecycleRunMetrics";
 import { LabModelRunSummary } from "./LabModelRunSummary";
 import {
   labLifecycleModelRuns,
@@ -32,6 +30,13 @@ import {
   type ModelWorkspaceProps,
 } from "./LabModelWorkspace";
 
+type RunDetailTab =
+  | "artifacts"
+  | "evaluation"
+  | "rollouts"
+  | "serving"
+  | "activity";
+
 export function LabModelVersionDetailPage({
   connection,
   selectedEntryKey,
@@ -39,17 +44,12 @@ export function LabModelVersionDetailPage({
   runs,
   training,
   onOpenDataset,
-  onTabChange,
 }: ModelWorkspaceProps & {
   connection: ClientConnection | null;
   selectedEntryKey: string;
-  onTabChange?: (
-    tab: "summary" | "metrics" | "evals" | "artifacts" | "logs"
-  ) => void;
 }) {
-  const [activeRunTab, setActiveRunTab] = useState<
-    "summary" | "metrics" | "evals" | "artifacts" | "logs"
-  >("summary");
+  const [requestedDetailTab, setRequestedDetailTab] =
+    useState<RunDetailTab>("artifacts");
   const state = training.payload;
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
@@ -156,14 +156,30 @@ export function LabModelVersionDetailPage({
         (receipt) => receipt.jobId === selectedJob.id
       ) ?? []
     : [];
-  const hasStepMetrics = Boolean(
-    detail.detail?.stepMetrics.length || detail.detail?.policyMetrics.length
-  );
-  useEffect(() => {
-    setActiveRunTab("summary");
-    onTabChange?.("summary");
-  }, [onTabChange, selectedEntryKey]);
-
+  const managedEvidence = detail.detail?.managedEvidence ?? null;
+  const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
+    { id: "artifacts", label: "Artifacts" },
+    ...(detail.loading ||
+    detail.detail?.evaluation ||
+    selectedEvaluationArtifactId ||
+    managedEvidence?.evaluations.length
+      ? [{ id: "evaluation" as const, label: "Evaluation" }]
+      : []),
+    ...(receipts.length
+      ? [{ id: "rollouts" as const, label: "Rollouts" }]
+      : []),
+    ...(managedServing
+      ? [{ id: "serving" as const, label: "Serving" }]
+      : []),
+    ...(selectedJob
+      ? [{ id: "activity" as const, label: "Activity" }]
+      : []),
+  ];
+  const activeDetailTab = detailTabs.some(
+    (tab) => tab.id === requestedDetailTab,
+  )
+    ? requestedDetailTab
+    : detailTabs[0]!.id;
   if (!selectedEntry && !selectedLifecycleRun) {
     return (
       <div className="labs-model-version-detail">
@@ -176,171 +192,114 @@ export function LabModelVersionDetailPage({
 
   return (
     <div className="labs-model-version-detail">
-      <div
-        className="training-detail-tabs"
-        role="tablist"
-        aria-label="Run detail"
-      >
-        {(
-          [
-            ["summary", "Summary"],
-            ["metrics", "Metrics"],
-            ["evals", "Evals"],
-            ["artifacts", "Artifacts"],
-            ["logs", "Logs"],
-          ] as const
-        ).map(([id, label]) => (
-          <button
-            aria-selected={activeRunTab === id}
-            className={activeRunTab === id ? "active" : undefined}
-            key={id}
-            role="tab"
-            type="button"
-            onClick={() => {
-              setActiveRunTab(id);
-              onTabChange?.(id);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {activeRunTab === "summary" ? (
-        <LabModelRunSummary
-          baseModel={baseModelName(selectedPlan, selectedBaseModelId)}
-          compute={
-            selectedLifecycleRun
-              ? destinationLabel(selectedLifecycleRun.destinationId)
-              : selectedPlan
-              ? destinationLabel(selectedPlan.destinationId)
-              : selectedJob
-              ? destinationLabel(selectedJob.destinationId)
-              : "Not recorded"
-          }
-          duration={
-            selectedLifecycleRun
-              ? formatDuration(
-                  selectedLifecycleRun.startedAt,
-                  selectedLifecycleRun.completedAt
-                )
-              : selectedJob
-              ? formatDuration(selectedJob.startedAt, selectedJob.completedAt)
-              : "Not recorded"
-          }
-          failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}
-          method={trainingMethodLabel(
-            selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
-          )}
-          output={
-            selectedVersion ? `Version ${selectedVersion.number}` : "No Version"
-          }
-          reward={selectedLifecycleRun?.reward?.raw ?? null}
-          status={
-            selectedLifecycleRun
-              ? statusLabel(selectedLifecycleRun.status)
-              : selectedJob
-              ? statusLabel(selectedJob.status)
-              : "Imported"
-          }
-          statusValue={
-            selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"
-          }
-          taskset={selectedTaskset?.name ?? "Unavailable"}
-          telemetry={selectedLifecycleRun?.receipt?.telemetry ?? null}
-          title={
-            selectedLifecycleRun || selectedJob
-              ? selectedRunNumber
-                ? `Run ${selectedRunNumber}`
-                : "Run details"
-              : selectedVersion
-              ? `Version ${selectedVersion.number}`
+      <LabModelRunSummary
+        baseModel={baseModelName(selectedPlan, selectedBaseModelId)}
+        compute={
+          selectedLifecycleRun
+            ? destinationLabel(selectedLifecycleRun.destinationId)
+            : selectedPlan
+            ? destinationLabel(selectedPlan.destinationId)
+            : selectedJob
+            ? destinationLabel(selectedJob.destinationId)
+            : "Not recorded"
+        }
+        duration={
+          selectedLifecycleRun
+            ? formatDuration(
+                selectedLifecycleRun.startedAt,
+                selectedLifecycleRun.completedAt
+              )
+            : selectedJob
+            ? formatDuration(selectedJob.startedAt, selectedJob.completedAt)
+            : "Not recorded"
+        }
+        failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}
+        configuration={runConfiguration(selectedPlan)}
+        evidence={managedEvidence}
+        method={trainingMethodLabel(
+          selectedLifecycleRun?.method ?? selectedPlan?.recipe.method
+        )}
+        output={
+          selectedVersion
+            ? `Version ${selectedVersion.number}`
+            : "No version created"
+        }
+        reward={
+          selectedLifecycleRun?.reward?.raw ??
+          managedEvidence?.reward.finalMean ??
+          null
+        }
+        status={
+          selectedLifecycleRun
+            ? statusLabel(selectedLifecycleRun.status)
+            : selectedJob
+            ? statusLabel(selectedJob.status)
+            : "Imported"
+        }
+        statusValue={
+          selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"
+        }
+        taskset={selectedTaskset?.name ?? "Unavailable"}
+        telemetry={selectedLifecycleRun?.receipt?.telemetry ?? null}
+        title={
+          selectedLifecycleRun || selectedJob
+            ? selectedRunNumber
+              ? `Run ${selectedRunNumber}`
               : "Run details"
-          }
-          versionStatus={
-            selectedVersion
-              ? selectedVersion.current
-                ? "Active"
-                : "Available"
-              : "Not created"
-          }
-          onOpenTaskset={
-            selectedTaskset
-              ? () => onOpenDataset(selectedTaskset.id)
-              : undefined
-          }
-        />
-      ) : null}
+            : selectedVersion
+            ? `Version ${selectedVersion.number}`
+            : "Run details"
+        }
+        versionStatus={
+          selectedVersion
+            ? selectedVersion.current
+              ? "Active"
+              : "Available"
+            : null
+        }
+        onOpenTaskset={
+          selectedTaskset
+            ? () => onOpenDataset(selectedTaskset.id)
+            : undefined
+        }
+      >
+        {selectedJob ? (
+          <TrainingRunMetrics
+            detail={detail.detail}
+            error={detail.error}
+            loading={detail.loading}
+          />
+        ) : null}
+      </LabModelRunSummary>
 
-      {activeRunTab === "metrics" ? (
-        <>
-          <DetailSection
-            title={
-              (selectedLifecycleRun?.method ?? selectedPlan?.recipe.method) ===
-              "grpo"
-                ? "Rollout scores"
-                : "Training metrics"
-            }
-          >
-            {selectedJob &&
-            (detail.loading || hasStepMetrics || !selectedLifecycleRun) ? (
-              <TrainingRunMetrics
-                detail={detail.detail}
-                error={detail.error}
-                loading={detail.loading}
-              />
-            ) : selectedLifecycleRun ? (
-              <LabLifecycleRunMetrics run={selectedLifecycleRun} />
-            ) : selectedJob ? (
-              <TrainingRunMetrics
-                detail={detail.detail}
-                error={detail.error}
-                loading={detail.loading}
-              />
-            ) : (
-              <div className="training-run-placeholder">
-                Metrics were not recorded for this imported Version.
-              </div>
-            )}
-          </DetailSection>
-          {(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method) ===
-          "grpo" ? (
-            <DetailSection title="Rollout traces">
-              <TrainingRolloutReceipts receipts={receipts} />
-            </DetailSection>
-          ) : null}
-        </>
-      ) : null}
-
-      {activeRunTab === "evals" ? (
-        <>
-          <DetailSection title="Product-quality evaluation">
-            <div className="training-run-evaluation">
-              <TrainingRunEvaluation
-                detail={detail.detail}
-                loading={detail.loading}
-              />
-              {selectedEvaluationArtifactId ? (
-                <button
-                  className="training-button secondary"
-                  type="button"
-                  onClick={() =>
-                    void training.actions.downloadArtifact(
-                      selectedEvaluationArtifactId
-                    )
-                  }
-                >
-                  Download evaluation receipt
-                </button>
-              ) : null}
-            </div>
-          </DetailSection>
-        </>
-      ) : null}
-
-      {activeRunTab === "artifacts" ? (
-        <>
-          <DetailSection title="Configuration and artifacts">
+      <section className="labs-run-detail-tabs">
+        <div
+          className="training-detail-tabs"
+          role="tablist"
+          aria-label="Run details"
+        >
+          {detailTabs.map((tab) => (
+            <button
+              aria-controls={`run-detail-panel-${tab.id}`}
+              aria-selected={activeDetailTab === tab.id}
+              className={activeDetailTab === tab.id ? "active" : undefined}
+              id={`run-detail-tab-${tab.id}`}
+              key={tab.id}
+              role="tab"
+              type="button"
+              onClick={() => setRequestedDetailTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div
+          aria-labelledby={`run-detail-tab-${activeDetailTab}`}
+          className="labs-run-detail-tab-panel"
+          id={`run-detail-panel-${activeDetailTab}`}
+          role="tabpanel"
+        >
+          {activeDetailTab === "artifacts" ? (
             <dl className="training-configuration-list">
               <Fact
                 label="Training attempt"
@@ -356,27 +315,100 @@ export function LabModelVersionDetailPage({
               />
               <Fact
                 label="Version ID"
-                value={selectedVersion?.lineage.id ?? "No Version created"}
+                value={
+                  selectedVersion?.lineage.id ?? "No version created"
+                }
               />
+              {managedEvidence?.checkpoint ? (
+                <>
+                  <Fact
+                    label="Checkpoint"
+                    value={managedEvidence.checkpoint.id}
+                  />
+                  <Fact
+                    label="Checkpoint size"
+                    value={
+                      managedEvidence.checkpoint.sizeBytes == null
+                        ? "Not reported"
+                        : formatBytes(managedEvidence.checkpoint.sizeBytes)
+                    }
+                  />
+                  <Fact
+                    label="Checkpoint hash"
+                    value={
+                      managedEvidence.checkpoint.sha256 ?? "Not reported"
+                    }
+                  />
+                </>
+              ) : null}
+              {managedEvidence?.canonicalPublication.state ? (
+                <Fact
+                  label="Registry publication"
+                  value={managedStateLabel(
+                    managedEvidence.canonicalPublication.state
+                  )}
+                />
+              ) : null}
             </dl>
-          </DetailSection>
-          <ManagedAdapterServingStatus projection={managedServing} />
-        </>
-      ) : null}
-
-      {activeRunTab === "logs" ? (
-        selectedJob ? (
-          <TrainingEventLog
-            error={selectedJob.error ?? detail.error}
-            events={detail.detail?.events ?? []}
-            loading={detail.loading}
-          />
-        ) : (
-          <div className="training-run-placeholder">
-            No run log entries yet.
-          </div>
-        )
-      ) : null}
+          ) : null}
+          {activeDetailTab === "evaluation" ? (
+            <div className="training-run-evaluation">
+              {detail.loading || detail.detail?.evaluation ? (
+                <TrainingRunEvaluation
+                  detail={detail.detail}
+                  loading={detail.loading}
+                />
+              ) : null}
+              {!detail.detail?.evaluation &&
+              managedEvidence?.evaluations.length ? (
+                <dl className="labs-inline-facts">
+                  {managedEvidence.evaluations.map((evaluation) => (
+                    <Fact
+                      key={`${evaluation.kind}:${evaluation.policyVersion}`}
+                      label={
+                        evaluation.kind === "baseline"
+                          ? "Baseline score"
+                          : "Candidate score"
+                      }
+                      value={
+                        evaluation.score == null
+                          ? "Not reported"
+                          : evaluation.score.toFixed(6)
+                      }
+                    />
+                  ))}
+                </dl>
+              ) : null}
+              {selectedEvaluationArtifactId ? (
+                <button
+                  className="training-button secondary"
+                  type="button"
+                  onClick={() =>
+                    void training.actions.downloadArtifact(
+                      selectedEvaluationArtifactId
+                    )
+                  }
+                >
+                  Download evaluation receipt
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+          {activeDetailTab === "rollouts" ? (
+            <TrainingRolloutReceipts receipts={receipts} />
+          ) : null}
+          {activeDetailTab === "serving" ? (
+            <ManagedAdapterServingStatus projection={managedServing} />
+          ) : null}
+          {activeDetailTab === "activity" && selectedJob ? (
+            <TrainingEventLog
+              error={selectedJob.error ?? detail.error}
+              events={detail.detail?.events ?? []}
+              loading={detail.loading}
+            />
+          ) : null}
+        </div>
+      </section>
     </div>
   );
 }
@@ -401,6 +433,57 @@ function modelRefName(modelId: string) {
   return modelId.split("/").at(-1) ?? modelId;
 }
 
+function runConfiguration(
+  plan: ReturnType<typeof labModelPlans>[number] | null,
+): Array<{ label: string; value: string }> {
+  if (!plan) return [];
+  const recipe = plan.recipe;
+  if (recipe.method === "grpo") {
+    return [
+      { label: "LoRA rank", value: String(recipe.lora.rank) },
+      {
+        label: "Learning rate",
+        value: scientificNumber(recipe.optimizer.learningRate),
+      },
+      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
+      { label: "Rollouts per update", value: String(recipe.rollout.groupSize) },
+      { label: "Rollout concurrency", value: String(recipe.rollout.concurrency) },
+      {
+        label: "Max output tokens",
+        value: recipe.rollout.maxOutputTokens.toLocaleString(),
+      },
+      { label: "Temperature", value: String(recipe.rollout.temperature) },
+      { label: "Top P", value: String(recipe.rollout.topP) },
+    ];
+  }
+  if (recipe.method === "sft" || recipe.method === "dpo") {
+    return [
+      { label: "LoRA rank", value: String(recipe.lora.rank) },
+      {
+        label: "Learning rate",
+        value: scientificNumber(recipe.optimizer.learningRate),
+      },
+      { label: "Optimizer steps", value: String(recipe.optimizer.maxSteps) },
+    ];
+  }
+  return [];
+}
+
+function scientificNumber(value: number): string {
+  return value === 0 ? "0" : value.toExponential(2);
+}
+
+function formatBytes(value: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let current = value;
+  let unit = 0;
+  while (current >= 1024 && unit < units.length - 1) {
+    current /= 1024;
+    unit += 1;
+  }
+  return `${current.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
+}
+
 function Fact({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -417,33 +500,31 @@ function ManagedAdapterServingStatus({
 }) {
   if (!projection) return null;
   return (
-    <DetailSection title="Serving readiness">
-      <dl className="labs-inline-facts">
-        <Fact
-          label="Admission"
-          value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
-        />
-        <Fact
-          label="Artifact"
-          value={managedStateLabel(projection.canonicalArtifactState)}
-        />
-        <Fact
-          label="Deployment"
-          value={managedStateLabel(projection.canonicalDeploymentState)}
-        />
-        <Fact
-          label="Base profile"
-          value={projection.baseProfileId ?? "Pending"}
-        />
-        <Fact
-          label="Last synchronized"
-          value={formatDateTime(projection.lastSyncedAt)}
-        />
-        {projection.lastError ? (
-          <Fact label="Synchronization" value={projection.lastError} />
-        ) : null}
-      </dl>
-    </DetailSection>
+    <dl className="labs-inline-facts">
+      <Fact
+        label="Admission"
+        value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
+      />
+      <Fact
+        label="Artifact"
+        value={managedStateLabel(projection.canonicalArtifactState)}
+      />
+      <Fact
+        label="Deployment"
+        value={managedStateLabel(projection.canonicalDeploymentState)}
+      />
+      <Fact
+        label="Base profile"
+        value={projection.baseProfileId ?? "Pending"}
+      />
+      <Fact
+        label="Last synchronized"
+        value={formatDateTime(projection.lastSyncedAt)}
+      />
+      {projection.lastError ? (
+        <Fact label="Synchronization" value={projection.lastError} />
+      ) : null}
+    </dl>
   );
 }
 
@@ -494,7 +575,7 @@ function TrainingEventLog({
           ))}
           {error ? (
             <tr>
-              <td>—</td>
+              <td>Not available</td>
               <td>Failure</td>
               <td>{error}</td>
             </tr>
@@ -542,6 +623,18 @@ function eventSummary(event: TrainingJobEvent): string {
     return `${kind}${step == null ? "" : ` · step ${step}`}${
       values.length ? ` · ${values.join(" · ")}` : ""
     }`;
+  }
+  if (event.type === "checkpoint") {
+    const policyVersion = finiteNumber(payload.policyVersion);
+    const sizeBytes = finiteNumber(payload.sizeBytes);
+    const details = [
+      policyVersion == null ? null : `policy ${policyVersion}`,
+      sizeBytes == null ? null : formatBytes(sizeBytes),
+      payload.final === true ? "final" : null,
+    ].filter((value): value is string => Boolean(value));
+    return details.length
+      ? `Checkpoint committed · ${details.join(" · ")}.`
+      : "Checkpoint committed.";
   }
   if (event.type === "complete") {
     const artifactCount = finiteNumber(payload.artifactCount);

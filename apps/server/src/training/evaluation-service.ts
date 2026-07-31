@@ -3,6 +3,7 @@ import {
   GraderAuditReportSchema,
   TasksetSchema,
   TaskAttemptResultSchema,
+  type ChatModelRef,
   type DatasetSplit,
   type TaskDataRecord,
 } from "@openpond/contracts";
@@ -20,6 +21,12 @@ import { artifactSplit, fixtureAttempt } from "./evaluation-helpers.js";
 import { buildTasksetReadiness } from "./readiness.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 import { gradeTasksetEvaluationAttempt } from "./task-evaluation-grade-runner.js";
+import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
+import type {
+  TasksetWorkAttemptRuntime,
+  TasksetWorkModelStream,
+  TasksetWorkRequiredOutputValidator,
+} from "./taskset-work-attempt-runner.js";
 
 type AuditFixtureInput = {
   label:
@@ -45,7 +52,72 @@ export function createTaskEvaluationService(deps: {
     taskId: string;
     split?: DatasetSplit | null;
   }) => Promise<TaskDataRecord>;
+  modelText?: Parameters<
+    typeof runPostTrainingEvaluationAttempt
+  >[0]["modelText"];
+  modelStream?: TasksetWorkModelStream;
+  workRuntime?: TasksetWorkAttemptRuntime;
+  validateWorkRequiredOutput?: TasksetWorkRequiredOutputValidator;
 }) {
+  async function execute(input: {
+    tasksetId: string;
+    taskId: string;
+    model: ChatModelRef;
+    seed: number;
+    attempt: number;
+    sampling?: {
+      maxOutputTokens: number;
+      temperature: number;
+      topP: number;
+    };
+    signal?: AbortSignal;
+    resultId?: string;
+  }) {
+    if (
+      !deps.storeDir
+      || !deps.modelText
+      || !deps.modelStream
+      || !deps.workRuntime
+    ) {
+      throw new Error("Taskset execution is not configured.");
+    }
+    const taskset = await requireTaskset(input.tasksetId);
+    const task = await findTask(taskset, input.taskId);
+    const attempt = await runPostTrainingEvaluationAttempt({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      modelText: deps.modelText,
+      crossSystemStream: deps.modelStream,
+      work: {
+        stream: deps.modelStream,
+        runtime: deps.workRuntime,
+        validateRequiredOutput: deps.validateWorkRequiredOutput,
+      },
+      resultId: input.resultId,
+      attemptInput: {
+        tasksetId: taskset.id,
+        task,
+        model: input.model,
+        seed: input.seed,
+        attempt: input.attempt,
+        sampling: input.sampling,
+        signal: input.signal,
+      },
+    });
+    const gradeResult = await grade({
+      tasksetId: taskset.id,
+      taskId: task.id,
+      attempt,
+    });
+    return {
+      attempt,
+      grade: gradeResult,
+      artifacts: await deps.store.listTaskAttemptArtifacts({
+        attemptId: attempt.id,
+      }),
+    };
+  }
+
   async function grade(input: {
     tasksetId: string;
     taskId: string;
@@ -409,6 +481,7 @@ export function createTaskEvaluationService(deps: {
   }
 
   return {
+    execute,
     grade,
     auditFixtures,
     calibrateModelJudges,

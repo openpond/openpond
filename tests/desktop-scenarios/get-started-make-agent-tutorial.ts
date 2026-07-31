@@ -13,7 +13,7 @@ export default desktopScenario({
   async run(harness) {
     await reloadRenderer(harness);
     await resizeHarness(harness, 1440, 900);
-    await clickButton(harness, "Get started", ".sidebar-nav");
+    await clickButton(harness, "Docs", ".sidebar-utility-nav");
 
     await harness.renderer.assertText("Videos", { label: "Videos heading" });
     await harness.renderer.assertText("What is an OpenPond Agent?", {

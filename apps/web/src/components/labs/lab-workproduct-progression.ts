@@ -186,8 +186,8 @@ function progressionForModel(input: {
   const conversationId = input.latestRun?.scope.conversationId ?? null;
   if (!input.taskset) {
     return {
-      statusLabel: "Creating data",
-      statusValue: "planning",
+      statusLabel: "Not hosted",
+      statusValue: "not_run",
       action: conversationId
         ? { kind: "open_conversation", label: "View progress" }
         : null,

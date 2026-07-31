@@ -68,7 +68,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     searchOpen,
     archivedChatsOpen,
     sectionMenuOpen,
-    projectsExpanded,
     cloudProjectsExpanded,
     sidebarOpen,
     view,
@@ -103,7 +102,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setSearchOpen,
     setArchivedChatsOpen,
     setSectionMenuOpen,
-    setProjectsExpanded,
     setCloudProjectsExpanded,
     setChatRowsVisibleCount,
     setSidebarOpen,
@@ -121,7 +119,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setTerminalOpen,
     setSettingsSection,
     setNewProjectDialogOpen,
-    setNewProjectMode,
     setNewProjectName,
     setNewProjectPath,
     setCommitDialogOpen,
@@ -139,7 +136,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     startup,
     training,
     pinnedCollapsed,
-    projectsCollapsed,
     cloudProjectsCollapsed,
     chatsCollapsed,
     savedForLaterCollapsed,
@@ -148,7 +144,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     diffPanelWidth,
     diffPanelResizing,
     togglePinnedCollapsed,
-    toggleProjectsCollapsed,
     toggleCloudProjectsCollapsed,
     toggleChatsCollapsed,
     toggleSavedForLaterCollapsed,
@@ -177,7 +172,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     teamAiThreadId,
     toggleTeamAiSidebar,
     activeOpenPondCommandAccessMode,
-    profileWorkspaceId,
     viewWorkspaceAppId,
     viewWorkspaceId,
     viewWorkspaceKind,
@@ -199,6 +193,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     loadMoreSelectedChatHistory,
     selectedPagedSessionEvents,
     activeSessions,
+    archivedSessions,
     pinnedSessions,
     savedForLaterSessions,
     savedForLaterFiles,
@@ -207,13 +202,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setSessions,
     projectRows,
     localProjectRows,
-    visibleProjectRows,
     cloudProjectRows,
     projectSessionRowsByProjectId,
     childSessionRowsByParentId,
     sidebarProjectIdBySessionId,
     chatRows,
     visibleChatRows,
+    chatRowsVisibleCount,
     sessionEvents,
     goalRuntime,
     subagentRuntime,
@@ -226,6 +221,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
+    sessionRuntimeSecondsById,
+    taskDragSessionId,
+    taskPreviewSessionIds,
+    startTaskDrag,
+    clearTaskDrag,
+    previewTaskDrop,
+    commitTaskDrop,
+    commitTaskPreviewDrop,
     dragItem,
     startPinnedDrag,
     clearSidebarDrag,
@@ -235,7 +238,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     commandProjectRows,
     contextWindowStatus,
     pinnedRows,
-    workspaceStates,
     workspaceBusy,
     diffBusy,
     visibleWorkspaceState,
@@ -252,9 +254,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     browserConversationId,
     handleWorkspaceDiffPanelViewStateChange,
     openSessionInChat,
-    openExistingProjectPathDialog,
-    addProjectFolder,
-    removeProject,
     changeProjectTarget,
     submitNewProjectDialog,
     changeWorkspaceBranch,
@@ -280,17 +279,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     archiveSession,
     restoreSession,
     renameSession,
-    toggleProjectPinned,
     toggleSessionPinned,
     toggleSessionSavedForLater,
-    moveProjectToCloud,
     startCloudSetupUpload,
     changeWorkspaceTarget,
-    switchProjectWorkspaceTarget,
     sendPromptFromMainComposer,
     openSandboxWorkspace,
-    createCloudEnvironmentFromSidebar,
-    openCloudProjectDialog,
     openUrlInBrowserPanel,
     showBrowserPanel,
     showChangesPanel,
@@ -580,9 +574,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const desktopShell = isDesktopShell();
   const platform = connection?.platform ?? navigator.platform;
   const isMac = desktopShell && isMacPlatform(platform);
-  const viewTerminalScope: TerminalScope = profileWorkspaceId
-    ? { kind: "project", id: profileWorkspaceId }
-    : activeTerminalScope;
+  const viewTerminalScope: TerminalScope = activeTerminalScope;
   const terminalCwd = visibleWorkspaceState?.initialized
     ? visibleWorkspaceState.repoPath
     : selectedSession?.cwd ?? null;
@@ -652,33 +644,35 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           account,
           profile: bootstrap?.profile,
           pinnedCollapsed,
-          projectsCollapsed,
           cloudProjectsCollapsed,
           chatsCollapsed,
           savedForLaterCollapsed,
           archivedChatsOpen,
-          projectsExpanded,
           cloudProjectsExpanded,
           sectionMenuOpen,
           dragItem,
+          taskDragSessionId,
+          taskPreviewSessionIds,
+          activeSessions,
+          archivedSessions,
           pinnedRows,
           pinnedSessions,
           savedForLaterSessions,
           savedForLaterFiles,
           projectRows,
-          visibleProjectRows,
           localProjectRows,
           cloudProjectRows,
-          workspaceStates,
           projectSessionRowsByProjectId,
           childSessionRowsByParentId,
           sidebarProjectIdBySessionId,
           terminalSummaries,
           runningSessionIds,
+          sessionRuntimeSecondsById,
           goalRuntimeBySessionId: sidebarGoalRuntimeBySessionId,
           subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
           visibleChatRows,
           chatRows,
+          chatRowsVisibleCount,
           expandedProjectIds,
           currentVersion: bootstrap?.server.version ?? null,
           platform,
@@ -693,17 +687,14 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setSectionMenuOpen,
           setSettingsSection,
           onTogglePinnedCollapsed: togglePinnedCollapsed,
-          onToggleProjectsCollapsed: toggleProjectsCollapsed,
           onToggleCloudProjectsCollapsed: toggleCloudProjectsCollapsed,
           onToggleChatsCollapsed: toggleChatsCollapsed,
           onToggleSavedForLaterCollapsed: toggleSavedForLaterCollapsed,
           setArchivedChatsOpen,
-          setProjectsExpanded,
           setCloudProjectsExpanded,
           setChatRowsVisibleCount,
           beginNewChat,
           dockSessionRight: openRightChatPanel,
-          createCloudEnvironment: createCloudEnvironmentFromSidebar,
           selectTeamThread: (threadId) => {
             setView("team");
             void teamChat.selectThread(threadId);
@@ -712,19 +703,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             setView("team");
             void teamChat.openDm(userId);
           },
-          addProjectFolder: () => void addProjectFolder(),
-          startExistingProjectFromPath: openExistingProjectPathDialog,
-          startProjectFromScratch: () => {
-            setNewProjectMode("local");
-            setNewProjectName("");
-            setNewProjectPath("");
-            setNewProjectDialogOpen(true);
-          },
-          startCloudProjectFromScratch: openCloudProjectDialog,
-          moveProjectToCloud,
-          switchProjectWorkspaceTarget,
-          removeProject: (project) => void removeProject(project),
-          toggleProjectPinned,
           toggleSessionPinned,
           toggleSessionSavedForLater,
           openSidebarFile,
@@ -740,6 +718,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           previewPinnedDrop,
           commitPinnedDrop,
           commitPinnedPreviewDrop,
+          startTaskDrag,
+          clearTaskDrag,
+          previewTaskDrop,
+          commitTaskDrop,
+          commitTaskPreviewDrop,
         }}
         topBar={{
           sidebarOpen,
@@ -752,10 +735,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           busy,
           workspaceState: visibleWorkspaceState,
           workspaceKind: viewWorkspaceKind,
-          selectedApp: profileWorkspaceId
-            ? null
-            : selectedProjectLinkedApp ?? selectedApp,
-          selectedProject: profileWorkspaceId ? null : selectedProject,
+          selectedApp: selectedProjectLinkedApp ?? selectedApp,
+          selectedProject,
           workspaceDiff: visibleWorkspaceDiff,
           managedWorkspace,
           workspaceBusy,
@@ -797,6 +778,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "team" &&
             view !== "community" &&
             view !== "labs" &&
+            view !== "profile" &&
             activeExperience === "development",
         }}
         mainPane={{
