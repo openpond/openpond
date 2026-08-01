@@ -565,6 +565,8 @@ Options:
   --dockerfile-target <string>
   --docker-registry-secret-refs <string>
   --domain <string>
+  --env <string>
+  --environment <string>
   --env-literal <string>
   --env-name <string>
   --env-ref <string>

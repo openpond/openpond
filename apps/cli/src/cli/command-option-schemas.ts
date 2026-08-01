@@ -20,6 +20,7 @@ export const SANDBOX_OPTION_SCHEMA = {
   cpu: number, create: boolean, description: string, diskGb: number,
   dockerBuildArgs: json, dockerRegistrySecretRefs: string, dockerfile: string,
   dockerfileContext: string, dockerfileTarget: string, domain: string,
+  env: string, environment: string,
   envLiteral: string, envName: string, envRef: string, expectedMppMode: string,
   expectedVersion: integer, failOnUnpreservedChanges: boolean, ffOnly: boolean,
   forceWithLease: boolean, fork: boolean, fromPath: string, idempotencyKey: string,

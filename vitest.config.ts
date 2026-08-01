@@ -82,6 +82,14 @@ export default defineConfig({
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
         },
       },
+      {
+        extends: true,
+        test: {
+          ...shared,
+          name: "sdk",
+          include: ["packages/sdk/test/**/*.test.ts"],
+        },
+      },
     ],
   },
 });

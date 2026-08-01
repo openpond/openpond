@@ -1,0 +1,50 @@
+{
+  "name": "@openpond/sdk",
+  "version": "0.0.1",
+  "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/types/packages/sdk/src/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/packages/sdk/src/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openpond/openpond.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/openpond/openpond/tree/master/packages/sdk#readme",
+  "bugs": {
+    "url": "https://github.com/openpond/openpond/issues"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "esbuild": "0.28.1",
+    "tsx": "4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}

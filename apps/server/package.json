@@ -10,6 +10,7 @@
     "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
+    "@openpond/sdk": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/trainer-local": "workspace:*",
     "@openpond/training-sdk": "workspace:*",

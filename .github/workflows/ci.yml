@@ -35,6 +35,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run cli:typecheck
       - run: pnpm run agent-sdk:typecheck
+      - run: pnpm run sdk:check
       - run: pnpm run build:artifacts
       - run: pnpm run cli:build
       - run: pnpm run budgets:cli:check
@@ -54,6 +55,7 @@ jobs:
             apps/desktop/dist
             apps/cli/dist
             packages/cloud/dist
+            packages/sdk/dist
           if-no-files-found: error
 
   unit:
