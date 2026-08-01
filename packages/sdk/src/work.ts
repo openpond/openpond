@@ -338,7 +338,7 @@ function boundedInteger(
 
 function truncate(value: string, maximum: number): string {
   if (value.length <= maximum) return value;
-  return `${value.slice(0, maximum)}\n… output truncated by @openpond/sdk`;
+  return `${value.slice(0, maximum)}\n… output truncated by openpond-sdk`;
 }
 
 function errorMessage(error: unknown): string {

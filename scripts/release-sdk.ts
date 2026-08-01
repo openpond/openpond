@@ -90,11 +90,11 @@ async function main(): Promise<void> {
       "--title",
       title,
       "--body",
-      `Publishes \`@openpond/sdk@${version}\` after this PR merges and CI passes. This does not change the desktop, CLI, or TUI version.`,
+      `Publishes \`openpond-sdk@${version}\` after this PR merges and CI passes. This does not change the desktop, CLI, or TUI version.`,
     ],
     dryRun,
   );
-  console.log(`Merge the release PR after CI passes. release-sdk.yml will publish @openpond/sdk@${version}.`);
+  console.log(`Merge the release PR after CI passes. release-sdk.yml will publish openpond-sdk@${version}.`);
 }
 
 void main().catch((error) => {

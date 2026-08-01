@@ -72,7 +72,7 @@
     "@openpond/contracts": "workspace:*",
     "@openpond/local-server": "workspace:*",
     "@openpond/runtime": "workspace:*",
-    "@openpond/sdk": "workspace:*",
+    "openpond-sdk": "workspace:*",
     "@openpond/terminal": "workspace:*",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "24.13.3"
@@ -82,7 +82,7 @@
     "@openpond/contracts",
     "@openpond/local-server",
     "@openpond/runtime",
-    "@openpond/sdk",
+    "openpond-sdk",
     "@openpond/terminal"
   ]
 }

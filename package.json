@@ -123,7 +123,7 @@
     "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",
     "@openpond/runtime": "workspace:*",
-    "@openpond/sdk": "workspace:*",
+    "openpond-sdk": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
     "@types/node": "24.13.3",

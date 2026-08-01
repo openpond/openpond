@@ -37,6 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           version="$(node -p "require('./packages/sdk/package.json').version")"
+          package_name="$(node -p "require('./packages/sdk/package.json').name")"
           tag="sdk-v${version}"
           should_publish="true"
           should_release="true"
@@ -44,27 +45,32 @@ jobs:
 
           if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             if ! git cat-file -e "${GITHUB_SHA}^:packages/sdk/package.json"; then
-              echo "The first @openpond/sdk publication must be bootstrapped manually; see packages/sdk/README.md."
+              echo "The first openpond-sdk publication must be bootstrapped manually; see packages/sdk/README.md."
               should_publish="false"
               should_release="false"
             else
-              previous_version="$(
-                git show "${GITHUB_SHA}^:packages/sdk/package.json" \
-                  | node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)"
+              previous_manifest="$(git show "${GITHUB_SHA}^:packages/sdk/package.json")"
+              previous_name="$(
+                node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).name)" \
+                  <<<"${previous_manifest}"
               )"
-              if [[ "${version}" == "${previous_version}" ]]; then
+              previous_version="$(
+                node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)" \
+                  <<<"${previous_manifest}"
+              )"
+              if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then
                 echo "packages/sdk/package.json changed without a version bump." >&2
                 exit 1
               fi
             fi
           fi
 
-          if ! npm view @openpond/sdk name >/dev/null 2>&1; then
-            echo "@openpond/sdk does not exist yet. Complete the one-time npm bootstrap documented in packages/sdk/README.md."
+          if ! npm view openpond-sdk name >/dev/null 2>&1; then
+            echo "openpond-sdk does not exist yet. Complete the one-time npm bootstrap documented in packages/sdk/README.md."
             should_publish="false"
             should_release="false"
-          elif npm view "@openpond/sdk@${version}" version >/dev/null 2>&1; then
-            echo "@openpond/sdk@${version} is already published; publication will be skipped."
+          elif npm view "openpond-sdk@${version}" version >/dev/null 2>&1; then
+            echo "openpond-sdk@${version} is already published; publication will be skipped."
             should_publish="false"
             already_published="true"
             if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
@@ -72,7 +78,7 @@ jobs:
               should_release="false"
             fi
           elif git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
-            echo "${tag} exists but @openpond/sdk@${version} does not. Refusing an ambiguous release." >&2
+            echo "${tag} exists but openpond-sdk@${version} does not. Refusing an ambiguous release." >&2
             exit 1
           fi
 
@@ -118,7 +124,7 @@ jobs:
           exit 1
 
   publish:
-    name: Publish @openpond/sdk
+    name: Publish openpond-sdk
     needs: [meta, ci_gate]
     if: needs.meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
@@ -157,15 +163,15 @@ jobs:
         run: |
           set -euo pipefail
           for attempt in {1..30}; do
-            published="$(npm view "@openpond/sdk@${VERSION}" version 2>/dev/null || true)"
+            published="$(npm view "openpond-sdk@${VERSION}" version 2>/dev/null || true)"
             if [[ "${published}" == "${VERSION}" ]]; then
-              echo "Verified @openpond/sdk@${VERSION} on npm."
+              echo "Verified openpond-sdk@${VERSION} on npm."
               exit 0
             fi
             echo "Waiting for npm registry propagation (attempt ${attempt}/30)."
             sleep 10
           done
-          echo "@openpond/sdk@${VERSION} was not visible after publication." >&2
+          echo "openpond-sdk@${VERSION} was not visible after publication." >&2
           exit 1
 
   github_release:

@@ -1,4 +1,4 @@
-# `@openpond/sdk`
+# `openpond-sdk`
 
 The OpenPond SDK is the server-side TypeScript client for running agentic work in OpenPond sandboxes. It gives Node.js applications, Next.js route handlers, workers, and backend services a small API for creating sandboxes, executing commands, managing files and runtimes, and running a model/tool loop in a persistent workspace.
 
@@ -7,7 +7,7 @@ OpenPond is an open-source agent orchestration system for doing durable work wit
 ## Install
 
 ```bash
-npm install @openpond/sdk
+npm install openpond-sdk
 ```
 
 Node.js 22.14 or newer is required. This package is server-only: never expose an OpenPond API key in browser code or a `NEXT_PUBLIC_*` environment variable.
@@ -16,7 +16,7 @@ Node.js 22.14 or newer is required. This package is server-only: never expose an
 
 ```ts
 // app/api/work/route.ts
-import { createOpenPondClient } from "@openpond/sdk";
+import { createOpenPondClient } from "openpond-sdk";
 
 export const runtime = "nodejs";
 export const maxDuration = 800;
@@ -40,7 +40,7 @@ Work requires a real `remote-firecracker` runtime. It fails closed if an environ
 ## Raw sandbox API
 
 ```ts
-import { createOpenPondClient } from "@openpond/sdk";
+import { createOpenPondClient } from "openpond-sdk";
 
 const openpond = createOpenPondClient({
   apiKey: process.env.OPENPOND_API_KEY!,
@@ -93,7 +93,7 @@ From the OpenPond monorepo:
 pnpm sdk:check
 ```
 
-The package has an independent version and release workflow. Updating `@openpond/sdk` does not change the desktop, CLI, or TUI version.
+The package has an independent version and release workflow. Updating `openpond-sdk` does not change the desktop, CLI, or TUI version.
 
 ## Maintainer release setup
 
@@ -102,18 +102,18 @@ The first release requires a one-time npm bootstrap because npm trusted publishi
 ```bash
 pnpm sdk:check
 npm login
-npm publish ./packages/sdk --access public --ignore-scripts
+npm publish ./packages/sdk --access public --ignore-scripts --provenance=false
 npm install --global npm@^11.15.0
-npm trust github @openpond/sdk \
+npm trust github openpond-sdk \
   --repo openpond/openpond \
   --file release-sdk.yml \
   --environment npm-production \
   --allow-publish
-npm trust list @openpond/sdk
+npm trust list openpond-sdk
 gh workflow run release-sdk.yml --ref master
 ```
 
-The GitHub `npm-production` environment already used by the OpenPond CLI can be reused. The trust record is package-specific, so `@openpond/sdk` still needs its own entry.
+The GitHub `npm-production` environment already used by the OpenPond CLI can be reused. The trust record is package-specific, so `openpond-sdk` still needs its own entry.
 
 The final command dispatches the idempotent recovery path once: npm publication is already complete, so the workflow only creates the missing `sdk-v0.0.1` tag and GitHub release. It does not attempt to republish the immutable version.
 
