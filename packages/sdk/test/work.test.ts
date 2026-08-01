@@ -153,6 +153,15 @@ describe("OpenPondWorkClient", () => {
       sandboxId: "sb_test",
       text: "Workspace is ready.",
       steps: 2,
+      lifecycle: {
+        cleanupPolicy: "keep",
+        persistence: {
+          status: "not_requested",
+          outputCount: 1,
+          persistedCount: 0,
+        },
+        cleanup: { status: "not_requested" },
+      },
       outputs: [
         {
           path: "/workspace/outputs/report.docx",
@@ -266,6 +275,233 @@ describe("OpenPondWorkClient", () => {
 
     await expect(work.run({ prompt: "Run pwd" })).rejects.toBe(unavailable);
     expect(fetchMock).toHaveBeenCalledOnce();
+    fetchMock.mockRestore();
+  });
+
+  test("persists every output before deleting the sandbox", async () => {
+    const record = sandbox();
+    const deleted = sandbox("deleted");
+    const order: string[] = [];
+    const outputFile = {
+      path: "/workspace/outputs/report.pdf",
+      type: "file" as const,
+      sizeBytes: 3,
+      updatedAt: new Date(1).toISOString(),
+      isBinary: true,
+      previewable: true,
+    };
+    const fakeSandboxes = {
+      create: vi.fn().mockResolvedValue(record),
+      get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi
+        .fn()
+        .mockResolvedValueOnce({ sandbox: record, files: [] })
+        .mockResolvedValueOnce({ sandbox: record, files: [outputFile] }),
+      downloadFileResponse: vi.fn().mockImplementation(async () => {
+        order.push("download");
+        return {
+          sandbox: record,
+          file: {
+            ...outputFile,
+            contentsBase64: "UEsD",
+            offsetBytes: 0,
+            returnedBytes: 3,
+            totalSizeBytes: 3,
+            truncated: false,
+          },
+        };
+      }),
+      delete: vi.fn().mockImplementation(async () => {
+        order.push("delete");
+        return deleted;
+      }),
+    } as unknown as OpenPondSandboxClient;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "Done." } }] }),
+    );
+    const work = new OpenPondWorkClient({
+      apiKey: "opk_test",
+      apiBaseUrl: "https://api.example.com",
+      chatApiBaseUrl: "https://api.example.com/opchat/v1",
+      sandboxes: fakeSandboxes,
+    });
+
+    const result = await work.run({
+      prompt: "Create a PDF",
+      cleanup: "delete",
+      persistOutput: async ({ download }) => {
+        order.push("persist-start");
+        await Promise.all([download(), download()]);
+        order.push("persist-complete");
+      },
+    });
+
+    expect(order).toEqual([
+      "persist-start",
+      "download",
+      "persist-complete",
+      "delete",
+    ]);
+    expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledOnce();
+    expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledWith("sb_test", {
+      path: "/workspace/outputs/report.pdf",
+      maxBytes: 3,
+    });
+    expect(result.lifecycle).toEqual({
+      cleanupPolicy: "delete",
+      persistence: {
+        status: "complete",
+        outputCount: 1,
+        persistedCount: 1,
+      },
+      cleanup: { status: "complete", finalSandboxState: "deleted" },
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("stops instead of deleting when output persistence fails", async () => {
+    const record = sandbox();
+    const stopped = sandbox("stopped");
+    const persistenceFailure = new Error("object store unavailable");
+    const fakeSandboxes = {
+      create: vi.fn().mockResolvedValue(record),
+      get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi
+        .fn()
+        .mockResolvedValueOnce({ sandbox: record, files: [] })
+        .mockResolvedValueOnce({
+          sandbox: record,
+          files: [
+            {
+              path: "/workspace/outputs/result.txt",
+              type: "file",
+              sizeBytes: 6,
+              updatedAt: new Date(1).toISOString(),
+            },
+          ],
+        }),
+      stop: vi.fn().mockResolvedValue({ sandbox: stopped }),
+      delete: vi.fn(),
+    } as unknown as OpenPondSandboxClient;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "Done." } }] }),
+    );
+    const work = new OpenPondWorkClient({
+      apiKey: "opk_test",
+      apiBaseUrl: "https://api.example.com",
+      chatApiBaseUrl: "https://api.example.com/opchat/v1",
+      sandboxes: fakeSandboxes,
+    });
+
+    await expect(
+      work.run({
+        prompt: "Create output",
+        cleanup: "delete",
+        persistOutput: async () => {
+          throw persistenceFailure;
+        },
+      }),
+    ).rejects.toBe(persistenceFailure);
+    expect(fakeSandboxes.stop).toHaveBeenCalledWith("sb_test");
+    expect(fakeSandboxes.delete).not.toHaveBeenCalled();
+    expect(
+      (persistenceFailure as Error & { workLifecycle?: unknown }).workLifecycle,
+    ).toMatchObject({
+      persistence: { status: "failed", persistedCount: 0 },
+      cleanup: { status: "complete", finalSandboxState: "stopped" },
+    });
+    fetchMock.mockRestore();
+  });
+
+  test("requires explicit custody or discard before deleting outputs", async () => {
+    const record = sandbox();
+    const stopped = sandbox("stopped");
+    const fakeSandboxes = {
+      create: vi.fn().mockResolvedValue(record),
+      get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi
+        .fn()
+        .mockResolvedValueOnce({ sandbox: record, files: [] })
+        .mockResolvedValueOnce({
+          sandbox: record,
+          files: [
+            {
+              path: "/workspace/outputs/result.txt",
+              type: "file",
+              sizeBytes: 6,
+              updatedAt: new Date(1).toISOString(),
+            },
+          ],
+        }),
+      stop: vi.fn().mockResolvedValue({ sandbox: stopped }),
+      delete: vi.fn(),
+    } as unknown as OpenPondSandboxClient;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "Done." } }] }),
+    );
+    const work = new OpenPondWorkClient({
+      apiKey: "opk_test",
+      apiBaseUrl: "https://api.example.com",
+      chatApiBaseUrl: "https://api.example.com/opchat/v1",
+      sandboxes: fakeSandboxes,
+    });
+
+    await expect(
+      work.run({ prompt: "Create output", cleanup: "delete" }),
+    ).rejects.toThrow("requires persistOutput or discardOutputs: true");
+    expect(fakeSandboxes.stop).toHaveBeenCalledWith("sb_test");
+    expect(fakeSandboxes.delete).not.toHaveBeenCalled();
+    fetchMock.mockRestore();
+  });
+
+  test("stages durable prior outputs with a structured manifest", async () => {
+    const record = sandbox();
+    const fakeSandboxes = {
+      create: vi.fn().mockResolvedValue(record),
+      get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      uploadFileBase64: vi.fn().mockResolvedValue({ sandbox: record }),
+      uploadFile: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi.fn().mockResolvedValue({ sandbox: record, files: [] }),
+    } as unknown as OpenPondSandboxClient;
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({ choices: [{ message: { content: "Revised." } }] }),
+    );
+    const work = new OpenPondWorkClient({
+      apiKey: "opk_test",
+      apiBaseUrl: "https://api.example.com",
+      chatApiBaseUrl: "https://api.example.com/opchat/v1",
+      sandboxes: fakeSandboxes,
+    });
+
+    await work.run({
+      prompt: "Revise the report",
+      inputs: [
+        {
+          id: "output/1",
+          name: "quarterly report.docx",
+          contentsBase64: "UEsD",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          revision: 2,
+          checksumSha256: "abc123",
+        },
+      ],
+    });
+
+    expect(fakeSandboxes.uploadFileBase64).toHaveBeenCalledWith(
+      "sb_test",
+      "/workspace/inputs/previous-outputs/output-1-quarterly-report.docx",
+      "UEsD",
+    );
+    expect(fakeSandboxes.uploadFile).toHaveBeenCalledWith(
+      "sb_test",
+      "/workspace/inputs/.openpond-context.json",
+      expect.stringContaining('"checksumSha256": "abc123"'),
+    );
     fetchMock.mockRestore();
   });
 });

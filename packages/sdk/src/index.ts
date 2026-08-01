@@ -41,8 +41,12 @@ export { OpenPondWorkClient } from "./work.js";
 export { OpenPondApiError } from "../../cloud/src/api/core.js";
 export type {
   OpenPondWorkEvent,
+  OpenPondWorkCleanup,
   OpenPondWorkHistoryMessage,
+  OpenPondWorkInputFile,
+  OpenPondWorkLifecycle,
   OpenPondWorkOutput,
+  OpenPondWorkOutputPersistenceContext,
   OpenPondWorkRunInput,
   OpenPondWorkRunResult,
 } from "./work.js";
