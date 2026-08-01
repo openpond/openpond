@@ -345,6 +345,20 @@ export type TurnRunnerDependencies = {
   executeWorkspaceTool: WorkspaceToolExecutorPort["executeWorkspaceTool"];
   forkSandboxForSubagent?: SubagentWorkspacePort["forkSandboxForSubagent"];
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
+  finalizeWorkTurn?: (input: {
+    session: Session;
+    turnId: string;
+    outcome: "completed" | "failed" | "interrupted";
+  }) => Promise<Session>;
+  workInputsForSession?: (session: Session) => Promise<
+    ReadonlyArray<{
+      localPath?: string;
+      storageName?: string;
+      bytes?: Uint8Array;
+      sha256?: string;
+      sizeBytes?: number;
+    }>
+  >;
   executeOpenPondCommand?: (
     input: OpenPondCommandExecutionInput
   ) => Promise<OpenPondCommandRunResult>;

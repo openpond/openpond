@@ -1,6 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
 import type { WorkspaceToolResult } from "@openpond/contracts";
-import { waitForWorkSandboxReady } from "./work-tool-registry.js";
+import {
+  createWorkModelToolDefinitions,
+  waitForWorkSandboxReady,
+} from "./work-tool-registry.js";
 
 function statusResult(state: string, ok = true): WorkspaceToolResult {
   return {
@@ -16,6 +19,27 @@ function statusResult(state: string, ok = true): WorkspaceToolResult {
 }
 
 describe("waitForWorkSandboxReady", () => {
+  test("hides model-owned save and stop tools when lifecycle is automatic", () => {
+    const definitions = createWorkModelToolDefinitions({
+      automaticLifecycle: true,
+      executeWorkspaceTool: async () => ({
+        ok: true,
+        action: "sandbox_status",
+        output: "ok",
+      }),
+    });
+
+    expect(definitions.map((definition) => definition.name)).not.toContain(
+      "work_save_output"
+    );
+    expect(definitions.map((definition) => definition.name)).not.toContain(
+      "work_stop"
+    );
+    expect(definitions.map((definition) => definition.name)).toContain(
+      "work_exec"
+    );
+  });
+
   test("returns immediately when the sandbox is already running", async () => {
     const readStatus = vi.fn(async () => statusResult("running"));
     const sleep = vi.fn(async () => undefined);

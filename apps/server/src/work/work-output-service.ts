@@ -19,6 +19,7 @@ export type SaveWorkOutputInput = {
   sandboxPath: string;
   suggestedName?: string | null;
   validation?: OutputValidationEvidence[];
+  validationPolicy?: "strict" | "preserve";
 };
 
 export type SaveWorkOutputResult = {
@@ -105,6 +106,7 @@ export function createWorkOutputService(input: {
       contentType,
       title,
       supplied: request.validation ?? [],
+      policy: request.validationPolicy ?? "strict",
     });
     const identity = await nextOutputIdentity({
       runtimeEventsForSession: input.runtimeEventsForSession,
@@ -164,6 +166,82 @@ export function createWorkOutputService(input: {
         sizeBytes: bytes.byteLength,
       },
     };
+  }
+
+  async function saveAllWorkOutputs(request: {
+    session: Session;
+    sourceTurnId: string;
+  }): Promise<SaveWorkOutputResult[]> {
+    if (
+      request.session.experience !== "work" ||
+      request.session.workspaceKind !== "sandbox" ||
+      !request.session.workspaceId
+    ) {
+      return [];
+    }
+    const listed = asRecord(
+      await sandboxRequest({
+        type: "list_files",
+        sandboxId: request.session.workspaceId,
+        payload: {
+          path: "outputs",
+          recursive: true,
+          maxEntries: 500,
+        },
+      })
+    );
+    const files = Array.isArray(listed.files) ? listed.files : [];
+    const events = await input.runtimeEventsForSession(request.session.id);
+    const alreadySaved = new Set(
+      fileOutputRefs(events)
+        .filter((output) => output.sourceTurnId === request.sourceTurnId)
+        .map((output) => output.title)
+    );
+    const saved: SaveWorkOutputResult[] = [];
+    for (const value of files) {
+      const file = asRecord(value);
+      if (file.type !== "file" || typeof file.path !== "string") continue;
+      const sandboxPath = file.path.replace(/^\/workspace\//, "");
+      const title = safeOutputName(path.posix.basename(sandboxPath));
+      if (alreadySaved.has(title)) continue;
+      saved.push(
+        await saveWorkOutput({
+          session: request.session,
+          sourceTurnId: request.sourceTurnId,
+          sandboxPath,
+          suggestedName: title,
+          validationPolicy: "preserve",
+        })
+      );
+      alreadySaved.add(title);
+    }
+    return saved;
+  }
+
+  async function workInputsForSession(session: Session): Promise<
+    Array<{
+      localPath: string;
+      storageName: string;
+      sha256: string;
+      sizeBytes: number;
+    }>
+  > {
+    if (session.experience !== "work") return [];
+    const events = await input.runtimeEventsForSession(session.id);
+    const latestByTitle = new Map<string, FileOutputRef>();
+    for (const output of fileOutputRefs(events)) {
+      if (output.location.kind !== "local") continue;
+      const current = latestByTitle.get(output.title);
+      if (!current || output.revision > current.revision) {
+        latestByTitle.set(output.title, output);
+      }
+    }
+    return [...latestByTitle.values()].map((output) => ({
+      localPath: output.location.kind === "local" ? output.location.path : "",
+      storageName: `${safePathSegment(output.id)}-${safeOutputName(output.title)}`,
+      sha256: output.sha256,
+      sizeBytes: output.sizeBytes,
+    }));
   }
 
   async function resolveLocalOutput(request: {
@@ -244,7 +322,9 @@ export function createWorkOutputService(input: {
     outputRoot,
     deleteWorkOutput,
     readWorkOutput,
+    saveAllWorkOutputs,
     saveWorkOutput,
+    workInputsForSession,
   };
 }
 
@@ -253,6 +333,7 @@ function validateWorkOutput(input: {
   contentType: string;
   title: string;
   supplied: OutputValidationEvidence[];
+  policy: "strict" | "preserve";
 }): OutputValidationEvidence[] {
   const capability = workFormatCapabilityForContentType(input.contentType);
   if (!capability) return input.supplied;
@@ -272,12 +353,34 @@ function validateWorkOutput(input: {
     if (
       !evidence.some((item) => item.kind === kind && item.status === "passed")
     ) {
-      throw new Error(
-        `${input.title} requires passed ${kind} validation evidence before it can be saved as a completed Work output.`
-      );
+      if (input.policy === "strict") {
+        throw new Error(
+          `${input.title} requires passed ${kind} validation evidence before it can be saved as a completed Work output.`
+        );
+      }
+      evidence.push({
+        kind,
+        status: "not_run",
+        label: `${input.title} ${kind} validation was not run before automatic preservation`,
+        detail:
+          "The file was preserved automatically at turn completion; review this revision before relying on presentation or playback quality.",
+      });
     }
   }
   return evidence;
+}
+
+function fileOutputRefs(value: unknown, depth = 0): FileOutputRef[] {
+  if (depth > 8 || value == null) return [];
+  const parsed = FileOutputRefSchema.safeParse(value);
+  if (parsed.success) return [parsed.data];
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => fileOutputRefs(item, depth + 1));
+  }
+  const record = asRecord(value);
+  return Object.values(record).flatMap((child) =>
+    fileOutputRefs(child, depth + 1)
+  );
 }
 
 function structuralValidation(input: {
