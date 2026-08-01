@@ -61,6 +61,17 @@ describe("OpenPond runtime OpChat routing", () => {
         "https://api.openpond.ai",
       ),
     ).toBe("https://api.qa.openpond.example/opchat/v1");
+    expect(
+      resolveHostedChatApiBaseUrl(
+        {
+          handle: "staging",
+          chatApiBaseUrl:
+            "https://api-new.staging-api.openpond.ai/opchat/v1",
+        },
+        {},
+        "https://api-new.staging-api.openpond.ai",
+      ),
+    ).toBe("https://staging-api.openpond.ai/opchat/v1");
   });
 
   test("lists models from /opchat/v1/models", async () => {

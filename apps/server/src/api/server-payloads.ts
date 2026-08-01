@@ -688,7 +688,7 @@ export function createServerPayloads(deps: {
     for (const [providerId, cache] of Object.entries(settings.modelCaches)) {
       modelCaches[providerId] = {
         ...cache,
-        models: [],
+        models: providerId === "openpond" ? cache.models : [],
       };
     }
     return {
@@ -875,7 +875,7 @@ export function createServerPayloads(deps: {
       await loadProviderSettings({
         account: openPond.account,
         codex,
-        refreshCatalog: false,
+        refreshCatalog: true,
       })
     );
     const cloudProjects = await loadCloudProjectsForBootstrap(
