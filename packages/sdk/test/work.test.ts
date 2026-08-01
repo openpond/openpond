@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 
+import { OpenPondApiError } from "../../cloud/src/api/core.js";
 import type { OpenPondSandboxClient } from "../../cloud/src/sandbox/client.js";
 import type { SandboxRecord } from "../../cloud/src/sandbox/types/index.js";
 import { OpenPondWorkClient, type OpenPondWorkEvent } from "../src/work.js";
@@ -8,7 +9,6 @@ function sandbox(state: SandboxRecord["state"] = "running"): SandboxRecord {
   return {
     id: "sb_test",
     state,
-    runtimeDriver: "remote-firecracker",
     repo: null,
     teamId: "team_test",
     projectId: null,
@@ -115,7 +115,6 @@ describe("OpenPondWorkClient", () => {
       type: "sandbox",
       sandboxId: "sb_test",
       state: "running",
-      runtimeDriver: "remote-firecracker",
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockRestore();
@@ -146,24 +145,17 @@ describe("OpenPondWorkClient", () => {
     fetchMock.mockRestore();
   });
 
-  test("fails when a nominal remote sandbox does not execute commands", async () => {
+  test("propagates stable sandbox API failures", async () => {
     const record = sandbox();
+    const unavailable = new OpenPondApiError(
+      503,
+      "sandbox_runner_unavailable",
+      "Sandbox request",
+    );
     const fakeSandboxes = {
       create: vi.fn().mockResolvedValue(record),
       get: vi.fn().mockResolvedValue(record),
-      exec: vi.fn().mockResolvedValue({
-        sandbox: record,
-        command: {
-          id: "cmd_simulated",
-          command: "pwd",
-          status: "succeeded",
-          output: "command accepted by simulated-firecracker driver\nno host command was executed",
-          exitCode: 0,
-          startedAt: new Date(0).toISOString(),
-          completedAt: new Date(0).toISOString(),
-        },
-      }),
-      delete: vi.fn().mockResolvedValue(sandbox("deleted")),
+      exec: vi.fn().mockRejectedValue(unavailable),
     } as unknown as OpenPondSandboxClient;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({
@@ -171,7 +163,7 @@ describe("OpenPondWorkClient", () => {
           message: {
             content: null,
             tool_calls: [{
-              id: "call_simulated",
+              id: "call_unavailable",
               type: "function",
               function: { name: "run_command", arguments: '{"command":"pwd"}' },
             }],
@@ -186,11 +178,7 @@ describe("OpenPondWorkClient", () => {
       sandboxes: fakeSandboxes,
     });
 
-    await expect(work.run({ prompt: "Run pwd" })).rejects.toMatchObject({
-      code: "OPENPOND_NON_EXECUTING_SANDBOX",
-      sandboxId: "sb_test",
-    });
-    expect(fakeSandboxes.delete).toHaveBeenCalledWith("sb_test", { async: true });
+    await expect(work.run({ prompt: "Run pwd" })).rejects.toBe(unavailable);
     expect(fetchMock).toHaveBeenCalledOnce();
     fetchMock.mockRestore();
   });

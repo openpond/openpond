@@ -121,7 +121,7 @@ describe("Work model tools", () => {
     ).rejects.toThrow("escaped");
   });
 
-  test("does not report simulated command acknowledgements as executed work", async () => {
+  test("propagates stable sandbox execution failures", async () => {
     const definitions = createWorkModelToolDefinitions({
       executeWorkspaceTool: async (_sessionId, payload) => {
         const request = payload as WorkspaceToolRequest;
@@ -135,11 +135,10 @@ describe("Work model tools", () => {
         }
         if (request.action === "sandbox_exec") {
           return {
-            ok: true,
+            ok: false,
             action: request.action,
-            output:
-              "Command succeeded\n[poc-runner] command accepted by simulated-firecracker driver\n[poc-runner] no host command was executed",
-            data: { command: { status: "succeeded", exitCode: 0 } },
+            output: "Sandbox request failed: 503 sandbox_runner_unavailable",
+            data: { code: "sandbox_runner_unavailable" },
           } satisfies WorkspaceToolResult;
         }
         return {
@@ -176,13 +175,12 @@ describe("Work model tools", () => {
       data: { executionBacked: false },
     });
     expect(environmentResult.contentText).toContain(
-      "does not currently execute commands"
+      "sandbox_runner_unavailable"
     );
     expect(execResult).toMatchObject({
       ok: false,
       data: {
-        code: "sandbox_execution_unavailable",
-        executionBacked: false,
+        code: "sandbox_runner_unavailable",
       },
     });
   });

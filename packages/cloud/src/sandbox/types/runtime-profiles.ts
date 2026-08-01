@@ -1,5 +1,5 @@
 export const SANDBOX_RUNTIME_PROFILE_IDS = [
-  "openpond-generic-firecracker-v1",
+  "openpond-generic-v1",
   "openpond-work-v1",
   "openpond-coding-core-v1",
   "openpond-agent-harness-v1",

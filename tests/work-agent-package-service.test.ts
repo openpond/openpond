@@ -67,7 +67,7 @@ describe("Work Agent package service", () => {
     }
   });
 
-  test("rejects a sandbox that acknowledges commands without executing them", async () => {
+  test("rejects a stable sandbox execution failure", async () => {
     const storeDir = await mkdtemp(
       path.join(os.tmpdir(), "openpond-work-agent-")
     );
@@ -80,10 +80,9 @@ describe("Work Agent package service", () => {
         request.type === "exec"
           ? {
               command: {
-                status: "succeeded",
-                exitCode: 0,
-                output:
-                  "[poc-runner] command accepted by simulated-firecracker driver\n[poc-runner] no host command was executed",
+                status: "failed",
+                exitCode: null,
+                output: "sandbox_runner_unavailable",
               },
             }
           : { file: { path: "inputs/openpond-agent-sdk.tgz" } },
@@ -96,7 +95,7 @@ describe("Work Agent package service", () => {
           directory: "agent",
           template: "blank-agent",
         })
-      ).rejects.toThrow("requires an execution-backed Work sandbox");
+      ).rejects.toThrow("failed: sandbox_runner_unavailable");
     } finally {
       await rm(storeDir, { recursive: true, force: true });
     }

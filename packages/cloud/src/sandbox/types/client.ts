@@ -20,7 +20,6 @@ import type {
   SandboxReservation,
   SandboxRuntime,
   SandboxRuntimeCheckpointInput,
-  SandboxRuntimeDriver,
   SandboxRuntimeEventInput,
   SandboxRuntimeEventResponse,
   SandboxRuntimeEventsResponse,
@@ -44,7 +43,6 @@ export type SandboxSmokeOptions = {
   preview?: boolean;
   snapshot?: boolean;
   fork?: boolean;
-  expectedRuntimeDriver?: SandboxRuntimeDriver;
   expectedMppMode?: NonNullable<SandboxReservation["mpp"]>["mode"];
 };
 

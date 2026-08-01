@@ -565,14 +565,6 @@ function assertSandboxCommandPassed(value: unknown, label: string): void {
   const status = stringValue(command.status);
   const output = stringValue(command.output);
   if (
-    output.includes("no host command was executed") ||
-    output.includes("command accepted by simulated-firecracker driver")
-  ) {
-    throw new Error(
-      `${label} requires an execution-backed Work sandbox; this sandbox acknowledged the command without running it. Do not retry through a generic command or substitute manual files for a validated Agent package.`
-    );
-  }
-  if (
     !["completed", "succeeded"].includes(status) ||
     (exitCode !== null && exitCode !== 0) ||
     ["failed", "error", "timed_out", "cancelled"].includes(status)

@@ -1,3 +1,4 @@
+import { OpenPondApiError } from "../../cloud/src/api/core.js";
 import {
   sendHostedChatTurn,
   type HostedChatMessage,
@@ -11,17 +12,6 @@ const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
 
-export class OpenPondNonExecutingSandboxError extends Error {
-  readonly code = "OPENPOND_NON_EXECUTING_SANDBOX";
-
-  constructor(readonly sandboxId: string) {
-    super(
-      `Sandbox ${sandboxId} accepted a command without executing it. A real remote runner is required for OpenPond Work.`,
-    );
-    this.name = "OpenPondNonExecutingSandboxError";
-  }
-}
-
 export type OpenPondWorkHistoryMessage = {
   role: "user" | "assistant";
   content: string;
@@ -33,7 +23,6 @@ export type OpenPondWorkEvent =
       type: "sandbox";
       sandboxId: string;
       state: SandboxRecord["state"];
-      runtimeDriver: SandboxRecord["runtimeDriver"];
     }
   | { type: "assistant"; text: string }
   | {
@@ -56,8 +45,6 @@ export type OpenPondWorkRunInput = {
   model?: string;
   maxSteps?: number;
   budgetUsd?: string;
-  /** Test-only escape hatch. Work rejects non-executing simulated sandboxes by default. */
-  allowSimulated?: boolean;
   timeoutSeconds?: number;
   signal?: AbortSignal;
   metadata?: Record<string, unknown>;
@@ -98,19 +85,10 @@ export class OpenPondWorkClient {
     const emit = async (event: OpenPondWorkEvent) => input.onEvent?.(event);
     await emit({ type: "status", message: "Preparing sandbox" });
     const sandbox = await this.#resolveSandbox(input);
-    if (sandbox.runtimeDriver === "simulated-firecracker" && !input.allowSimulated) {
-      if (!input.sandboxId) {
-        await this.#sandboxes.delete(sandbox.id, { async: true }).catch(() => undefined);
-      }
-      throw new Error(
-        "OpenPond Work requires a remote-firecracker sandbox, but this environment returned the non-executing simulated-firecracker driver.",
-      );
-    }
     await emit({
       type: "sandbox",
       sandboxId: sandbox.id,
       state: sandbox.state,
-      runtimeDriver: sandbox.runtimeDriver,
     });
     const messages: HostedChatMessage[] = [
       { role: "system", content: systemPrompt(sandbox.id) },
@@ -257,18 +235,6 @@ export class OpenPondWorkClient {
         timeoutSeconds: boundedInteger(timeoutSeconds, 1, 900, 180),
       });
       const output = truncate(response.command.output, MAX_TOOL_OUTPUT_CHARS);
-      if (isNonExecutingSandboxOutput(output)) {
-        await emit({
-          type: "tool",
-          toolCallId,
-          command,
-          status: "failed",
-          output: "Staging accepted the command but did not execute it.",
-          exitCode: response.command.exitCode,
-        });
-        await this.#sandboxes.delete(sandboxId, { async: true }).catch(() => undefined);
-        throw new OpenPondNonExecutingSandboxError(sandboxId);
-      }
       const status = response.command.status === "succeeded" ? "succeeded" : "failed";
       await emit({
         type: "tool",
@@ -284,7 +250,7 @@ export class OpenPondWorkClient {
         output,
       });
     } catch (error) {
-      if (error instanceof OpenPondNonExecutingSandboxError) throw error;
+      if (error instanceof OpenPondApiError) throw error;
       const output = errorMessage(error);
       await emit({ type: "tool", toolCallId, command, status: "failed", output });
       return toolMessage(toolCallId, { status: "failed", error: output });
@@ -343,14 +309,6 @@ function truncate(value: string, maximum: number): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function isNonExecutingSandboxOutput(output: string): boolean {
-  const normalized = output.toLowerCase();
-  return (
-    normalized.includes("command accepted by simulated-firecracker driver") ||
-    normalized.includes("no host command was executed")
-  );
 }
 
 function sleep(milliseconds: number, signal?: AbortSignal): Promise<void> {

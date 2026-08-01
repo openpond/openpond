@@ -4,7 +4,6 @@ export function sandboxRecord(
   return {
     id: "sandbox_test",
     state: "running",
-    runtimeDriver: "remote-firecracker",
     repo: null,
     teamId: "team_test",
     projectId: null,

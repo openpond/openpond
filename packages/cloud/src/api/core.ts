@@ -27,6 +27,21 @@ export class ApiResponseTooLargeError extends Error {
   }
 }
 
+export class OpenPondApiError extends Error {
+  readonly code = "OPENPOND_API_ERROR";
+
+  constructor(
+    readonly status: number,
+    readonly apiError: string | null,
+    label: string,
+    readonly apiMessage: string | null = null,
+  ) {
+    const detail = apiMessage || apiError;
+    super(`${label} failed: ${status}${detail ? ` ${detail}` : ""}`);
+    this.name = "OpenPondApiError";
+  }
+}
+
 export async function apiFetch(
   baseUrl: string,
   token: string | null,
@@ -85,12 +100,10 @@ export async function readApiJson<T>(response: Response, label: string): Promise
     payload = {} as T & { error?: unknown; message?: unknown };
   }
   if (!response.ok) {
-    const message = typeof payload.message === "string"
-      ? payload.message
-      : typeof payload.error === "string"
-        ? payload.error
-        : "";
-    throw new Error(`${label} failed: ${response.status}${message ? ` ${message}` : ""}`);
+    const apiError = typeof payload.error === "string" ? payload.error : null;
+    const apiMessage =
+      typeof payload.message === "string" ? payload.message : null;
+    throw new OpenPondApiError(response.status, apiError, label, apiMessage);
   }
   return payload as T;
 }
