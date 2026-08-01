@@ -226,6 +226,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWorkspaceTool,
     forkSandboxForSubagent,
     cleanupSandboxForSubagent,
+    finalizeWorkTurn,
+    workInputsForSession,
     executeOpenPondCommand,
     executeProfileAction,
     executeDatasetBuilderAction,
@@ -728,10 +730,29 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throw new Error("A turn is already running for this chat.");
     }
     let session = await getSession(sessionId);
+    let workTurnFinalizationAttempted = false;
     session = {
       ...session,
       experience: session.experience ?? DEFAULT_SESSION_EXPERIENCE,
     };
+    async function finalizeAttachedWorkSandbox(
+      turnId: string,
+      outcome: "completed" | "failed" | "interrupted"
+    ): Promise<void> {
+      if (
+        workTurnFinalizationAttempted ||
+        session.experience !== "work" ||
+        !finalizeWorkTurn
+      ) {
+        return;
+      }
+      workTurnFinalizationAttempted = true;
+      session = await finalizeWorkTurn({
+        session: await getSession(sessionId),
+        turnId,
+        outcome,
+      });
+    }
     const requestedProvider =
       input.modelRef?.providerId ??
       session.modelRef?.providerId ??
@@ -982,6 +1003,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         turnId: turn.id,
         attachments: input.attachments,
       });
+      const workInputs =
+        session.experience === "work"
+          ? [
+              ...(workInputsForSession
+                ? await workInputsForSession(session)
+                : []),
+              ...attachmentContexts,
+            ]
+          : undefined;
       const attachmentContext = chatAttachmentContext(attachmentContexts);
       const providerPrompt = formatPromptWithAttachmentContext(
         promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
@@ -1182,7 +1212,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               : [],
           profileSkillRuntime,
           workInputs:
-            session.experience === "work" ? attachmentContexts : undefined,
+            workInputs,
           userPrompt: providerPrompt,
           workspaceDiffBaseline: initialWorkspaceDiff,
           signal: controller.signal,
@@ -1209,6 +1239,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }
           },
         });
+        await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
             sessionId,
@@ -1367,7 +1398,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               : [],
           profileSkillRuntime,
           workInputs:
-            session.experience === "work" ? attachmentContexts : undefined,
+            workInputs,
           userPrompt: providerPrompt,
           workspaceDiffBaseline: initialWorkspaceDiff,
           signal: controller.signal,
@@ -1399,6 +1430,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             }
           },
         });
+        await finalizeAttachedWorkSandbox(turn.id, "completed");
         await appendRuntimeEvent(
           event({
             sessionId,
@@ -1470,7 +1502,33 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       });
       return completeTurn(sessionId, turn.id, providerTurn.turnId);
     } catch (error) {
-      if (controller.signal.aborted || (await turnWasInterrupted(turn.id))) {
+      const interrupted =
+        controller.signal.aborted || (await turnWasInterrupted(turn.id));
+      try {
+        await finalizeAttachedWorkSandbox(
+          turn.id,
+          interrupted ? "interrupted" : "failed"
+        );
+      } catch (finalizationError) {
+        if (workTurnFinalizationAttempted) {
+          await appendRuntimeEvent(
+            event({
+              sessionId,
+              turnId: turn.id,
+              name: "diagnostic",
+              source: "server",
+              appId: session.appId,
+              status: "failed",
+              output:
+                finalizationError instanceof Error
+                  ? finalizationError.message
+                  : String(finalizationError),
+              data: { phase: "work_turn_finalization" },
+            })
+          );
+        }
+      }
+      if (interrupted) {
         return interruptTurn(
           session,
           turn.id,

@@ -5,6 +5,7 @@ import type {
 } from "@openpond/contracts";
 
 import { Search } from "../icons";
+import { DropdownSelect } from "../DropdownSelect";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 import { ModelsTable, Pagination } from "./LabsRouteSections";
 
@@ -79,25 +80,22 @@ export function LabModelsPage({
             }}
           />
         </label>
-        <label className="labs-model-profile-filter">
-          <span className="sr-only">Filter Models by Profile</span>
-          <select
-            aria-label="Filter Models by Profile"
-            value={profileId}
-            onChange={(event) => {
-              setProfileId(event.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="all">All profiles</option>
-            {profileIds.map((candidate) => (
-              <option key={candidate} value={candidate}>
-                {candidate}
-                {candidate === activeProfileId ? " (active)" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+        <DropdownSelect
+          className="labs-model-profile-filter"
+          label="Filter Models by Profile"
+          value={profileId}
+          options={[
+            { value: "all", label: "All profiles" },
+            ...profileIds.map((candidate) => ({
+              value: candidate,
+              label: `${candidate}${candidate === activeProfileId ? " (active)" : ""}`,
+            })),
+          ]}
+          onChange={(value) => {
+            setProfileId(value);
+            setPage(1);
+          }}
+        />
       </div>
       <ModelsTable
         emptyMessage={emptyMessage}

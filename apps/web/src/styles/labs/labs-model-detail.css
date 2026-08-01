@@ -39,6 +39,19 @@
   min-width: 0;
 }
 
+.labs-workproduct-description {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.labs-workproduct-detail .training-detail-sections {
+  gap: 22px;
+  padding-top: 22px;
+}
+
 .labs-model-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -391,7 +404,8 @@
     flex-direction: column;
   }
 
-  .labs-workproduct-toolbar select {
+  .labs-workproduct-toolbar select,
+  .labs-workproduct-toolbar .dropdown-select {
     width: 100%;
   }
 

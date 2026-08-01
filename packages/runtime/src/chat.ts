@@ -39,7 +39,7 @@ type OpChatProvidersResponse = {
 
 type OpChatProviderCatalogResponse = ProviderCatalog;
 
-const PROVIDER_CATALOG_FETCH_TIMEOUT_MS = 2500;
+const PROVIDER_CATALOG_FETCH_TIMEOUT_MS = 15_000;
 
 function displayNameForHostedModel(id: string): string {
   if (id === DEFAULT_OPENPOND_CHAT_MODEL) return "OpenPond Chat";

@@ -266,7 +266,9 @@
 .sidebar-scroll {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-x: none;
   padding-bottom: 12px;
   scrollbar-color: transparent transparent;
   scrollbar-width: thin;
@@ -763,7 +765,9 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
 }
 
 .row-label-shell.has-detail {
@@ -793,7 +797,46 @@
 }
 
 .sidebar-task-row .row-label {
+  display: block;
+  width: 100%;
+  max-width: 100%;
   font-size: 15px;
+}
+
+.sidebar-task-title-text {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
+  width: max-content;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  animation: sidebar-task-title-ticker
+    var(--sidebar-title-ticker-duration, 3.2s) ease-in-out 260ms infinite alternate;
+}
+
+@keyframes sidebar-task-title-ticker {
+  0%,
+  12% {
+    transform: translateX(0);
+  }
+
+  88%,
+  100% {
+    transform: translateX(var(--sidebar-title-ticker-distance, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
+    animation: none;
+  }
 }
 
 .sidebar-project-row .row-label {

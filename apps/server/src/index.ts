@@ -97,6 +97,7 @@ import { createTurnRunner } from "./runtime/turn-runner.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
+import { createWorkSandboxLifecycleService } from "./work/work-sandbox-lifecycle-service.js";
 import { createWorkAgentPackageService } from "./work/work-agent-package-service.js";
 import { createWorkAgentSdkArchiveLoader } from "./work/work-agent-sdk-archive.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
@@ -424,6 +425,13 @@ export async function createOpenPondServer(
   });
   const openPondCommandAccess = createOpenPondCommandAccessService({
     upsertApproval,
+    appendRuntimeEvent,
+  });
+  const workSandboxLifecycle = createWorkSandboxLifecycleService({
+    storeDir,
+    saveAllWorkOutputs: workOutputService.saveAllWorkOutputs,
+    sandboxRequest: sandboxRequestPayload,
+    updateSession,
     appendRuntimeEvent,
   });
   const {
@@ -761,6 +769,8 @@ export async function createOpenPondServer(
       sandboxRequestPayload({ type: "fork", sandboxId, payload }),
     cleanupSandboxForSubagent: async ({ sandboxId }) =>
       sandboxRequestPayload({ type: "delete", sandboxId }),
+    finalizeWorkTurn: workSandboxLifecycle.finalizeTurn,
+    workInputsForSession: workOutputService.workInputsForSession,
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
     executeDatasetBuilderAction: async ({
@@ -1724,6 +1734,7 @@ export async function createOpenPondServer(
     serverId,
   });
   await turnRunner.recoverPendingSubagentCompletions();
+  workSandboxLifecycle.start();
   taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
 
@@ -1764,6 +1775,7 @@ export async function createOpenPondServer(
       closeCloudWorkspaceReadiness,
       closeWorkspaceLsp,
       voiceTranscription.close,
+      workSandboxLifecycle.close,
     ],
   });
 

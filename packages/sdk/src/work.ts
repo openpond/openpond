@@ -16,7 +16,13 @@ const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
 const WORK_OUTPUT_DIRECTORY = "/workspace/outputs";
+const WORK_INPUT_DIRECTORY = "/workspace/inputs/previous-outputs";
+const WORK_INPUT_MANIFEST = "/workspace/inputs/.openpond-context.json";
 const MAX_WORK_OUTPUTS = 100;
+const MAX_WORK_INPUTS = 100;
+const MAX_WORK_INPUT_BYTES = 100 * 1024 * 1024;
+
+export type OpenPondWorkCleanup = "keep" | "stop" | "delete";
 
 export type OpenPondWorkHistoryMessage = {
   role: "user" | "assistant";
@@ -31,6 +37,37 @@ export type OpenPondWorkOutput = {
   updatedAt: string;
   isBinary: boolean | null;
   previewable: boolean;
+};
+
+export type OpenPondWorkInputFile = {
+  id: string;
+  name: string;
+  contentsBase64: string;
+  mimeType?: string;
+  checksumSha256?: string;
+  revision?: number;
+  metadata?: Record<string, unknown>;
+};
+
+export type OpenPondWorkOutputPersistenceContext = {
+  output: OpenPondWorkOutput;
+  /** Downloads and verifies the complete output at most once. */
+  download: () => Promise<SandboxFileDownloadResponse>;
+};
+
+export type OpenPondWorkLifecycle = {
+  cleanupPolicy: OpenPondWorkCleanup;
+  persistence: {
+    status: "not_requested" | "not_needed" | "running" | "complete" | "failed";
+    outputCount: number;
+    persistedCount: number;
+    error?: string;
+  };
+  cleanup: {
+    status: "not_requested" | "running" | "complete" | "pending" | "failed";
+    finalSandboxState?: SandboxRecord["state"];
+    error?: string;
+  };
 };
 
 export type OpenPondWorkEvent =
@@ -51,11 +88,25 @@ export type OpenPondWorkEvent =
     }
   | { type: "output"; output: OpenPondWorkOutput }
   | {
+      type: "persistence";
+      output: OpenPondWorkOutput;
+      status: "started" | "succeeded" | "failed";
+      error?: string;
+    }
+  | {
+      type: "cleanup";
+      policy: OpenPondWorkCleanup;
+      status: "started" | "complete" | "pending" | "failed";
+      sandboxState?: SandboxRecord["state"];
+      error?: string;
+    }
+  | {
       type: "done";
       sandboxId: string;
       text: string;
       steps: number;
       outputs: OpenPondWorkOutput[];
+      lifecycle: OpenPondWorkLifecycle;
     };
 
 export type OpenPondWorkRunInput = {
@@ -71,6 +122,16 @@ export type OpenPondWorkRunInput = {
   timeoutSeconds?: number;
   signal?: AbortSignal;
   metadata?: Record<string, unknown>;
+  /** Defaults to keep for backwards compatibility. First-party Work callers use delete. */
+  cleanup?: OpenPondWorkCleanup;
+  /** Required before delete when a turn creates outputs, unless discardOutputs is true. */
+  persistOutput?: (
+    context: OpenPondWorkOutputPersistenceContext,
+  ) => void | Promise<void>;
+  /** Explicitly allows delete to discard detected outputs. */
+  discardOutputs?: boolean;
+  /** Durable outputs or other caller-owned files to stage into fresh compute. */
+  inputs?: OpenPondWorkInputFile[];
   onEvent?: (event: OpenPondWorkEvent) => void | Promise<void>;
 };
 
@@ -79,6 +140,7 @@ export type OpenPondWorkRunResult = {
   text: string;
   steps: number;
   outputs: OpenPondWorkOutput[];
+  lifecycle: OpenPondWorkLifecycle;
 };
 
 type WorkClientInput = {
@@ -107,85 +169,247 @@ export class OpenPondWorkClient {
     input.signal?.throwIfAborted();
 
     const emit = async (event: OpenPondWorkEvent) => input.onEvent?.(event);
-    await emit({ type: "status", message: "Preparing sandbox" });
-    const sandbox = await this.#resolveSandbox(input);
-    await emit({
-      type: "sandbox",
-      sandboxId: sandbox.id,
-      state: sandbox.state,
-    });
-    const outputBaseline = await this.#prepareOutputDirectory(sandbox.id);
-    const messages: HostedChatMessage[] = [
-      { role: "system", content: systemPrompt(sandbox.id) },
-      ...(input.history ?? []).map((message) => ({ ...message })),
-      { role: "user", content: prompt },
-    ];
+    const cleanupPolicy = input.cleanup ?? "keep";
+    const lifecycle = initialLifecycle(cleanupPolicy);
+    let sandbox: SandboxRecord | null = null;
+    let outputBaseline: Map<string, string> | null = null;
+    let finalizationAttempted = false;
     const maxSteps = boundedInteger(input.maxSteps, 1, 100, DEFAULT_MAX_STEPS);
     let finalText = "";
-
-    for (let step = 1; step <= maxSteps; step += 1) {
-      input.signal?.throwIfAborted();
-      await emit({ type: "status", message: `Thinking · step ${step}` });
-      const completion = await sendHostedChatTurn({
-        apiBaseUrl: this.#chatApiBaseUrl,
-        token: this.#apiKey,
-        model: input.model?.trim() || DEFAULT_MODEL,
-        messages,
-        tools: WORK_TOOLS,
-        toolChoice: "auto",
-        signal: input.signal,
-        metadata: {
-          source: "openpond-sdk-work",
-          sandboxId: sandbox.id,
-          apiBaseUrl: this.#apiBaseUrl,
-          ...input.metadata,
+    try {
+      await emit({ type: "status", message: "Preparing sandbox" });
+      sandbox = await this.#resolveSandbox(input);
+      await emit({
+        type: "sandbox",
+        sandboxId: sandbox.id,
+        state: sandbox.state,
+      });
+      await this.#stageInputs(sandbox.id, input.inputs ?? []);
+      outputBaseline = await this.#prepareOutputDirectory(sandbox.id);
+      const messages: HostedChatMessage[] = [
+        {
+          role: "system",
+          content: systemPrompt(sandbox.id, (input.inputs?.length ?? 0) > 0),
         },
-      });
-      const choice = completion.choices?.[0];
-      const assistantText = choice?.message?.content?.trim() ?? "";
-      const toolCalls = choice?.message?.tool_calls ?? [];
-      messages.push({
-        role: "assistant",
-        content: assistantText || null,
-        ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
-      });
+        ...(input.history ?? []).map((message) => ({ ...message })),
+        { role: "user", content: prompt },
+      ];
 
-      if (assistantText) {
-        finalText = assistantText;
-        await emit({ type: "assistant", text: assistantText });
-      }
-      if (toolCalls.length === 0) {
-        const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
-        for (const output of outputs) await emit({ type: "output", output });
-        const result = {
-          sandboxId: sandbox.id,
-          text: finalText,
-          steps: step,
-          outputs,
-        };
-        await emit({ type: "done", ...result });
-        return result;
+      for (let step = 1; step <= maxSteps; step += 1) {
+        input.signal?.throwIfAborted();
+        await emit({ type: "status", message: `Thinking · step ${step}` });
+        const completion = await sendHostedChatTurn({
+          apiBaseUrl: this.#chatApiBaseUrl,
+          token: this.#apiKey,
+          model: input.model?.trim() || DEFAULT_MODEL,
+          messages,
+          tools: WORK_TOOLS,
+          toolChoice: "auto",
+          signal: input.signal,
+          metadata: {
+            source: "openpond-sdk-work",
+            sandboxId: sandbox.id,
+            apiBaseUrl: this.#apiBaseUrl,
+            ...input.metadata,
+          },
+        });
+        const choice = completion.choices?.[0];
+        const assistantText = choice?.message?.content?.trim() ?? "";
+        const toolCalls = choice?.message?.tool_calls ?? [];
+        messages.push({
+          role: "assistant",
+          content: assistantText || null,
+          ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
+        });
+
+        if (assistantText) {
+          finalText = assistantText;
+          await emit({ type: "assistant", text: assistantText });
+        }
+        if (toolCalls.length === 0) {
+          const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
+          for (const output of outputs) await emit({ type: "output", output });
+          finalizationAttempted = true;
+          await this.#finalizeSandbox(sandbox.id, outputs, input, lifecycle, emit);
+          const result = {
+            sandboxId: sandbox.id,
+            text: finalText,
+            steps: step,
+            outputs,
+            lifecycle,
+          };
+          await emit({ type: "done", ...result });
+          return result;
+        }
+
+        for (const [index, toolCall] of toolCalls.entries()) {
+          const result = await this.#executeTool(
+            sandbox.id,
+            toolCall,
+            index,
+            input.timeoutSeconds,
+            emit,
+          );
+          messages.push(result);
+        }
       }
 
-      for (const [index, toolCall] of toolCalls.entries()) {
-        const result = await this.#executeTool(
-          sandbox.id,
-          toolCall,
-          index,
-          input.timeoutSeconds,
-          emit,
-        );
-        messages.push(result);
+      throw new Error(`Work did not finish within ${maxSteps} steps`);
+    } catch (error) {
+      if (sandbox && outputBaseline && !finalizationAttempted) {
+        try {
+          const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
+          for (const output of outputs) await emit({ type: "output", output });
+          await this.#finalizeSandbox(sandbox.id, outputs, input, lifecycle, emit);
+        } catch (finalizationError) {
+          attachWorkFailure(error, lifecycle, finalizationError);
+        }
       }
+      attachWorkFailure(error, lifecycle);
+      throw error;
     }
-
-    throw new Error(`Work did not finish within ${maxSteps} steps`);
   }
 
   async deleteSandbox(sandboxId: string): Promise<void> {
     const sandbox = await this.#sandboxes.get(sandboxId);
     if (sandbox.state === "deleted") return;
-    await this.#sandboxes.delete(sandboxId, { async: true });
+    await this.#sandboxes.delete(sandboxId);
+  }
+
+  async #stageInputs(
+    sandboxId: string,
+    inputs: OpenPondWorkInputFile[],
+  ): Promise<void> {
+    if (inputs.length === 0) return;
+    if (inputs.length > MAX_WORK_INPUTS) {
+      throw new Error(`Work inputs exceed the ${MAX_WORK_INPUTS} file limit`);
+    }
+    const decodedBytes = inputs.reduce(
+      (total, input) => total + Buffer.byteLength(input.contentsBase64, "base64"),
+      0,
+    );
+    if (decodedBytes > MAX_WORK_INPUT_BYTES) {
+      throw new Error(`Work inputs exceed the ${MAX_WORK_INPUT_BYTES} byte limit`);
+    }
+
+    await this.#sandboxes.mkdir(sandboxId, {
+      path: WORK_INPUT_DIRECTORY,
+      recursive: true,
+    });
+    const usedNames = new Set<string>();
+    const manifest = [];
+    for (const [index, input] of inputs.entries()) {
+      const name = uniqueInputName(input, index, usedNames);
+      const stagedPath = `${WORK_INPUT_DIRECTORY}/${name}`;
+      await this.#sandboxes.uploadFileBase64(
+        sandboxId,
+        stagedPath,
+        input.contentsBase64,
+      );
+      manifest.push({
+        id: input.id,
+        path: stagedPath,
+        name: input.name,
+        mimeType: input.mimeType ?? null,
+        checksumSha256: input.checksumSha256 ?? null,
+        revision: input.revision ?? null,
+        metadata: input.metadata ?? {},
+      });
+    }
+    await this.#sandboxes.uploadFile(
+      sandboxId,
+      WORK_INPUT_MANIFEST,
+      JSON.stringify({ version: 1, files: manifest }, null, 2),
+    );
+  }
+
+  async #finalizeSandbox(
+    sandboxId: string,
+    outputs: OpenPondWorkOutput[],
+    input: OpenPondWorkRunInput,
+    lifecycle: OpenPondWorkLifecycle,
+    emit: (event: OpenPondWorkEvent) => void | Promise<void>,
+  ): Promise<void> {
+    lifecycle.persistence.outputCount = outputs.length;
+    if (outputs.length === 0) {
+      lifecycle.persistence.status = "not_needed";
+    } else if (input.persistOutput) {
+      lifecycle.persistence.status = "running";
+      for (const output of outputs) {
+        await emit({ type: "persistence", output, status: "started" });
+        try {
+          const download = lazyOutputDownload(this.#sandboxes, sandboxId, output);
+          await input.persistOutput({ output, download });
+          lifecycle.persistence.persistedCount += 1;
+          await emit({ type: "persistence", output, status: "succeeded" });
+        } catch (error) {
+          const message = errorMessage(error);
+          lifecycle.persistence.status = "failed";
+          lifecycle.persistence.error = message;
+          await emit({
+            type: "persistence",
+            output,
+            status: "failed",
+            error: message,
+          });
+          if ((input.cleanup ?? "keep") !== "keep") {
+            await this.#cleanupSandbox(sandboxId, "stop", lifecycle, emit);
+          }
+          throw error;
+        }
+      }
+      lifecycle.persistence.status = "complete";
+    } else if ((input.cleanup ?? "keep") === "delete" && !input.discardOutputs) {
+      lifecycle.persistence.status = "failed";
+      lifecycle.persistence.error =
+        "Deleting a Work sandbox with outputs requires persistOutput or discardOutputs: true";
+      await this.#cleanupSandbox(sandboxId, "stop", lifecycle, emit);
+      throw new Error(lifecycle.persistence.error);
+    } else {
+      lifecycle.persistence.status = "not_requested";
+    }
+
+    await this.#cleanupSandbox(
+      sandboxId,
+      input.cleanup ?? "keep",
+      lifecycle,
+      emit,
+    );
+  }
+
+  async #cleanupSandbox(
+    sandboxId: string,
+    policy: OpenPondWorkCleanup,
+    lifecycle: OpenPondWorkLifecycle,
+    emit: (event: OpenPondWorkEvent) => void | Promise<void>,
+  ): Promise<void> {
+    if (policy === "keep") return;
+    lifecycle.cleanup.status = "running";
+    await emit({ type: "cleanup", policy, status: "started" });
+    try {
+      const sandbox =
+        policy === "delete"
+          ? await this.#sandboxes.delete(sandboxId)
+          : (await this.#sandboxes.stop(sandboxId)).sandbox;
+      lifecycle.cleanup.finalSandboxState = sandbox.state;
+      lifecycle.cleanup.status =
+        (policy === "delete" && sandbox.state === "deleted") ||
+        (policy === "stop" && sandbox.state === "stopped")
+          ? "complete"
+          : "pending";
+      await emit({
+        type: "cleanup",
+        policy,
+        status: lifecycle.cleanup.status,
+        sandboxState: sandbox.state,
+      });
+    } catch (error) {
+      const message = errorMessage(error);
+      lifecycle.cleanup.status = "failed";
+      lifecycle.cleanup.error = message;
+      await emit({ type: "cleanup", policy, status: "failed", error: message });
+      throw error;
+    }
   }
 
   downloadOutput(
@@ -352,16 +576,97 @@ const WORK_TOOLS: HostedChatTool[] = [
   },
 ];
 
-function systemPrompt(sandboxId: string): string {
+function systemPrompt(sandboxId: string, hasInputs: boolean): string {
   return [
-    "You are OpenPond Work, a careful coding agent operating in a persistent Linux sandbox.",
+    "You are OpenPond Work, a careful coding agent operating in an isolated Linux sandbox.",
     `The active sandbox is ${sandboxId}.`,
+    ...(hasInputs
+      ? [
+          `Caller-provided durable files are staged under ${WORK_INPUT_DIRECTORY}; structured metadata is in ${WORK_INPUT_MANIFEST}.`,
+        ]
+      : []),
     "Use run_command to inspect the workspace, edit files, and validate your work.",
     `Place completed user-facing files in ${WORK_OUTPUT_DIRECTORY}. The runtime collects new and revised files there automatically when the turn completes.`,
     "Do the requested work completely. Preserve existing user changes and avoid destructive commands.",
     "Keep the user informed with concise prose, but call tools whenever verification or file changes are needed.",
     "Before finishing, run relevant tests and summarize the concrete result.",
   ].join("\n");
+}
+
+function initialLifecycle(
+  cleanupPolicy: OpenPondWorkCleanup,
+): OpenPondWorkLifecycle {
+  return {
+    cleanupPolicy,
+    persistence: {
+      status: "not_requested",
+      outputCount: 0,
+      persistedCount: 0,
+    },
+    cleanup: { status: "not_requested" },
+  };
+}
+
+function lazyOutputDownload(
+  sandboxes: OpenPondSandboxClient,
+  sandboxId: string,
+  output: OpenPondWorkOutput,
+): () => Promise<SandboxFileDownloadResponse> {
+  let pending: Promise<SandboxFileDownloadResponse> | null = null;
+  return () => {
+    pending ??= sandboxes
+      .downloadFileResponse(sandboxId, {
+        path: output.path,
+        maxBytes: Math.max(1, output.sizeBytes),
+      })
+      .then((response) => {
+        const decodedBytes = Buffer.byteLength(
+          response.file.contentsBase64,
+          "base64",
+        );
+        if (
+          response.file.truncated ||
+          response.file.returnedBytes !== response.file.totalSizeBytes ||
+          decodedBytes !== output.sizeBytes
+        ) {
+          throw new Error(`Output download was incomplete for ${output.name}`);
+        }
+        return response;
+      });
+    return pending;
+  };
+}
+
+function uniqueInputName(
+  input: OpenPondWorkInputFile,
+  index: number,
+  usedNames: Set<string>,
+): string {
+  const safeId = input.id.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(0, 80) || `input-${index + 1}`;
+  const safeName = input.name.replace(/[^a-zA-Z0-9._-]+/g, "-").slice(-120) || "file";
+  const base = `${safeId}-${safeName}`;
+  let candidate = base;
+  let collision = 1;
+  while (usedNames.has(candidate)) {
+    collision += 1;
+    candidate = `${base}-${collision}`;
+  }
+  usedNames.add(candidate);
+  return candidate;
+}
+
+function attachWorkFailure(
+  error: unknown,
+  lifecycle: OpenPondWorkLifecycle,
+  finalizationError?: unknown,
+): void {
+  if (!error || typeof error !== "object") return;
+  Object.assign(error, {
+    workLifecycle: lifecycle,
+    ...(finalizationError
+      ? { workFinalizationError: errorMessage(finalizationError) }
+      : {}),
+  });
 }
 
 function outputSignatures(files: SandboxFileEntry[]): Map<string, string> {

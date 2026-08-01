@@ -57,6 +57,7 @@ import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { WorkSidebarPanel } from "./WorkSidebarPanel";
 import { WorkStarterPrompts } from "./WorkStarterPrompts";
+import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
@@ -118,6 +119,7 @@ const TrainingCreationPanel = lazy(() =>
 );
 export function MainPane({
   experience,
+  onNewExperienceChange,
   view,
   teamChat,
   community,
@@ -1687,6 +1689,10 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
+            <NewExperienceSwitcher
+              value={experience}
+              onChange={onNewExperienceChange}
+            />
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {experience === "work" ? (

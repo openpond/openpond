@@ -145,8 +145,7 @@
 }
 
 .composer-steer-edit-field textarea:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.14);
-  outline-offset: 1px;
+  outline: 0;
 }
 
 .composer-steer-edit-actions {

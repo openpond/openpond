@@ -761,6 +761,50 @@ export function useAppPrimaryRuntime() {
       sidebarSessions,
     ]
   );
+  const changeNewExperience = useCallback(
+    (experience: Experience) => {
+      const draft = composerDraftStore.getSnapshot();
+      setDraftExperience(experience);
+      if (selectedSessionId || selectedAppId || selectedProjectId) {
+        appDispatch({ type: "beginNewChat", appId: null });
+        if (draft) composerDraftStore.set(draft);
+      }
+      if (experience !== "development" && activeProvider === "codex") {
+        const provider =
+          providerOptionsFromSettings(bootstrap?.providers, {
+            enabledOnly: true,
+          }).find((option) => option.value !== "codex")?.value ??
+          DEFAULT_CHAT_PROVIDER;
+        setDraftProvider(provider);
+        setDraftModel(
+          defaultModelForProvider(provider, bootstrap?.providers) ??
+            DEFAULT_CHAT_MODEL
+        );
+      }
+      if (experience !== "development") {
+        setTerminalOpen(false);
+        setDiffPanelExpanded(false);
+        setRightPanelMode("home");
+      }
+      setView("chat");
+    },
+    [
+      activeProvider,
+      appDispatch,
+      bootstrap?.providers,
+      composerDraftStore,
+      selectedAppId,
+      selectedProjectId,
+      selectedSessionId,
+      setDiffPanelExpanded,
+      setDraftExperience,
+      setDraftModel,
+      setDraftProvider,
+      setRightPanelMode,
+      setTerminalOpen,
+      setView,
+    ]
+  );
   const {
     pendingChatUserMessages,
     recordPendingChatUserMessage,
@@ -1017,6 +1061,7 @@ export function useAppPrimaryRuntime() {
     draftExperience,
     activeExperience,
     changeExperience,
+    changeNewExperience,
     codexPermissionMode,
     codexReasoningEffort,
     openPondCommandAccessMode,

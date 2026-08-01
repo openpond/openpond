@@ -119,6 +119,7 @@ export function createCapabilityCatalogRuntime(deps: {
       ...createWorkModelToolDefinitions({
         executeWorkspaceTool: deps.executeWorkspaceTool,
         inputs: options.workInputs,
+        automaticLifecycle: true,
       })
     );
     definitions.push(

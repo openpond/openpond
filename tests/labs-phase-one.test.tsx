@@ -15,7 +15,11 @@ import {
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
-import { LabModelCreateDialog } from "../apps/web/src/components/labs/LabModelCreateDialog";
+import {
+  LabModelCreateDialog,
+  labModelCreateCandidates,
+} from "../apps/web/src/components/labs/LabModelCreateDialog";
+import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
 import {
@@ -112,6 +116,46 @@ describe("Lab workspace", () => {
     ).toBe("?profile=qa");
   });
 
+  test("summarizes availability and recent run status on the Models index", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ModelsTable, {
+        items: [
+          {
+            key: "model:model_fixture",
+            kind: "model",
+            id: "model_fixture",
+            name: "Fixture Model",
+            description: "A focused model summary.",
+            status: "Ready",
+            updatedAt: "2026-07-30T12:00:00.000Z",
+            path: null,
+            enabled: false,
+            runIds: [],
+            conversationId: null,
+            tasksetId: null,
+            trainingRunCount: 0,
+            evaluationStatus: "not_run",
+            useActionId: null,
+            ownerProfileId: "default",
+          },
+        ],
+        loading: false,
+        runs: [],
+        state: null,
+        onSelect: noop,
+        onUseModel: noop,
+      }),
+    );
+
+    expect(markup).toContain(">Availability<");
+    expect(markup).toContain(">Recent run<");
+    expect(markup).toContain("No active release");
+    expect(markup).toContain("Not run");
+    expect(markup).toContain("0 runs");
+    expect(markup).not.toContain(">Starting model<");
+    expect(markup).not.toContain(">Active release<");
+  });
+
   test("keeps temporary sessions and managed publication separate in Serving", () => {
     const rows = labServingRows({
       modelProjects: [
@@ -158,33 +202,34 @@ describe("Lab workspace", () => {
   });
 
   test("creates a standalone Model without requiring a run", () => {
+    const baseModelCandidates = [
+      modelCandidate({
+        selectionKey: "managed_qwen",
+        label: "Qwen 3 0.6B",
+        modelId: "Qwen/Qwen3-0.6B",
+        source: "managed",
+        sourceLabel: "OpenPond Managed",
+      }),
+      modelCandidate({
+        available: false,
+        selectionKey: "unavailable_qwen",
+        label: "Qwen 3 8B",
+        modelId: "accounts/fireworks/models/qwen3-8b",
+        source: "managed",
+        sourceLabel: "Fireworks",
+      }),
+      modelCandidate({
+        selectionKey: "cpu_fixture",
+        label: "Tiny CPU correctness fixture",
+        modelId: "openpond/tiny-cpu-gpt2-fixture",
+        nonProduction: true,
+        source: "builtin",
+        sourceLabel: "This machine",
+      }),
+    ];
     const markup = renderToStaticMarkup(
       createElement(LabModelCreateDialog, {
-        baseModelCandidates: [
-          modelCandidate({
-            selectionKey: "managed_qwen",
-            label: "Qwen 3 0.6B",
-            modelId: "Qwen/Qwen3-0.6B",
-            source: "managed",
-            sourceLabel: "OpenPond Managed",
-          }),
-          modelCandidate({
-            available: false,
-            selectionKey: "unavailable_qwen",
-            label: "Qwen 3 8B",
-            modelId: "accounts/fireworks/models/qwen3-8b",
-            source: "managed",
-            sourceLabel: "Fireworks",
-          }),
-          modelCandidate({
-            selectionKey: "cpu_fixture",
-            label: "Tiny CPU correctness fixture",
-            modelId: "openpond/tiny-cpu-gpt2-fixture",
-            nonProduction: true,
-            source: "builtin",
-            sourceLabel: "This machine",
-          }),
-        ],
+        baseModelCandidates,
         busy: false,
         initialName: "Model 1",
         onClose: noop,
@@ -197,10 +242,12 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Tasksets, runs, and releases can be added later.");
     expect(markup).toContain("Starting model");
     expect(markup).toContain("Choose later");
-    expect(markup).toContain("Qwen 3 0.6B · OpenPond Managed");
-    expect(markup).toContain("Qwen 3 8B · Fireworks · Unavailable");
     expect(markup).toContain('aria-label="Add starting model"');
-    expect(markup).not.toContain("Tiny CPU correctness fixture");
+    expect(
+      labModelCreateCandidates(baseModelCandidates).map(
+        (candidate) => candidate.selectionKey
+      )
+    ).toEqual(["managed_qwen", "unavailable_qwen"]);
     expect(markup).not.toContain("labs-rename-dialog-icon");
     expect(markup).not.toContain("first run");
   });

@@ -689,7 +689,18 @@ Usage:
   openpond opchat <command> [args]
 
 Options:
+  --compatibility-model <string>
+  --compat-model <string>
+  --env <string>
+  --environment <string>
   --json
+  --message <string>
+  --model <string>
+  --opchat-api-base-url <string>
+  --opchat-api-url <string>
+  --prompt <string>
+  --skip-stream
+  --skip-tool
   --stream
 ```
 ## teams-bot

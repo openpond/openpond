@@ -425,6 +425,14 @@
   font-size: 12px;
 }
 
+.labs-workproduct-toolbar .dropdown-select {
+  min-width: 160px;
+}
+
+.labs-workproduct-toolbar .dropdown-trigger {
+  background: var(--panel);
+}
+
 .labs-table-empty {
   display: flex;
   min-height: 88px;

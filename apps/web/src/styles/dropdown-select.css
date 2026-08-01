@@ -163,6 +163,16 @@
   color: var(--text);
 }
 
+.dropdown-menu button:disabled {
+  opacity: 0.46;
+  cursor: default;
+}
+
+.dropdown-menu button:disabled:hover {
+  background: transparent;
+  color: var(--muted-strong);
+}
+
 .dropdown-menu button small {
   color: #8d8d8d;
   font-size: 11px;

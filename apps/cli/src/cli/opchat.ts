@@ -17,7 +17,7 @@ import {
 } from "./common";
 
 const STAGING_OPCHAT_API_BASE_URL =
-  "https://api-new.staging-api.openpond.ai/opchat/v1";
+  "https://staging-api.openpond.ai/opchat/v1";
 
 export async function runOpChatCommand(
   options: Record<string, string | boolean>,

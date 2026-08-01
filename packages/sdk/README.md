@@ -1,6 +1,6 @@
 # `openpond-sdk`
 
-The OpenPond SDK is the server-side TypeScript client for running agentic work in OpenPond sandboxes. It gives Node.js applications, Next.js route handlers, workers, and backend services a small API for creating sandboxes, executing commands, managing files and runtimes, and running a model/tool loop in a persistent workspace.
+The OpenPond SDK is the server-side TypeScript client for running agentic work in OpenPond sandboxes. It gives Node.js applications, Next.js route handlers, workers, and backend services a small API for creating sandboxes, executing commands, managing files and runtimes, and running a model/tool loop in an isolated workspace.
 
 OpenPond is an open-source agent orchestration system for doing durable work with any model, provider, or subscription. The desktop app, CLI/TUI, and this SDK live in the same repository and share the sandbox client implementation. Desktop builds use the workspace source directly; installing this package from npm is only for external applications.
 
@@ -27,13 +27,21 @@ const openpond = createOpenPondClient({
 });
 
 export async function POST(request: Request) {
-  const { prompt, sandboxId } = await request.json();
-  const result = await openpond.work.run({ prompt, sandboxId });
+  const { prompt } = await request.json();
+  const result = await openpond.work.run({
+    prompt,
+    cleanup: "delete",
+    persistOutput: async ({ output, download }) => {
+      const response = await download();
+      const bytes = Buffer.from(response.file.contentsBase64, "base64");
+      await durableOutputStore.put({ output, bytes });
+    },
+  });
   return Response.json(result);
 }
 ```
 
-`work.run` creates a sandbox when `sandboxId` is omitted. Pass the returned ID into the next turn to continue in the same filesystem. Use `onEvent` to stream sandbox, model, command, and output progress to a client.
+`work.run` creates a sandbox when `sandboxId` is omitted. Use `onEvent` to stream sandbox, model, command, persistence, and cleanup progress to a client. Keep API keys and the persistence callback in server code.
 
 Completed files written under `/workspace/outputs` are collected automatically. The model does not need to publish or register them. Each detected file is emitted as an `output` event and returned in `result.outputs`:
 
@@ -55,7 +63,7 @@ for (const output of result.outputs) {
 }
 ```
 
-Output descriptors include the sandbox path, filename, MIME type, size, modification time, and preview hints. `downloadOutput` remains a separate deterministic file operation, so downloading a result never starts another model turn.
+Output descriptors include the sandbox path, filename, MIME type, size, modification time, and preview hints. `downloadOutput` remains available when the sandbox is kept. For ephemeral Work, use the lazy `download` function inside `persistOutput`; it verifies that the complete file arrived before deletion can begin.
 
 If sandbox execution is unavailable, the API fails with the stable `sandbox_runner_unavailable` error instead of returning a successful command result.
 
@@ -88,15 +96,43 @@ console.log(result.command.output);
 
 The package also exports `createOpenPondSandboxClient`, all public sandbox input and response types, and the OpChat helpers used by the Work loop.
 
-## Lifecycle and cleanup
+## Lifecycle, persistence, and cleanup
 
-Work sandboxes remain available so conversations can continue. Delete them when a conversation is removed or expires:
+The generic SDK defaults to `cleanup: "keep"` for backwards compatibility. Applications can choose one of three explicit terminal policies:
+
+- `keep` leaves the sandbox running and makes the caller responsible for cleanup.
+- `stop` releases active compute while retaining the sandbox for deliberate resume.
+- `delete` removes ephemeral compute after output persistence succeeds.
+
+Deleting a turn that produced outputs requires an awaited `persistOutput` callback. If an application intentionally does not need the files, it must say so with `discardOutputs: true`. A persistence failure stops the sandbox instead of deleting recoverable output state. `result.lifecycle` and `persistence`/`cleanup` events expose the ordering and final observed state.
+
+For a follow-up turn on fresh compute, stage selected durable outputs as structured inputs:
+
+```ts
+await openpond.work.run({
+  prompt: "Revise the report",
+  cleanup: "delete",
+  inputs: [{
+    id: savedOutput.id,
+    name: savedOutput.name,
+    contentsBase64: savedOutput.contentsBase64,
+    mimeType: savedOutput.mimeType,
+    checksumSha256: savedOutput.sha256,
+    revision: savedOutput.revision,
+  }],
+  persistOutput: saveOutput,
+});
+```
+
+Inputs are placed under `/workspace/inputs/previous-outputs/` with a structured manifest at `/workspace/inputs/.openpond-context.json`. Arbitrary scratch files are not retained by ephemeral Work.
+
+You can still delete a caller-managed sandbox directly:
 
 ```ts
 await openpond.work.deleteSandbox(sandboxId);
 ```
 
-Use conservative budgets and application-level retention. API keys, provider credentials, and bypass secrets must remain in server-side configuration.
+The sandbox's 15-minute idle timeout is crash protection, not the normal successful-turn cleanup path. Use conservative budgets and application-level retention. API keys, provider credentials, and bypass secrets must remain in server-side configuration.
 
 ## Development
 

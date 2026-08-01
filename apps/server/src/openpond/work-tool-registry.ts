@@ -29,6 +29,7 @@ export function createWorkModelToolDefinitions(deps: {
     }
   ) => Promise<WorkspaceToolResult>;
   inputs?: ReadonlyArray<WorkRuntimeInput>;
+  automaticLifecycle?: boolean;
 }): ModelToolDefinition[] {
   const runtime = createWorkRuntimeService(deps);
 
@@ -61,7 +62,7 @@ export function createWorkModelToolDefinitions(deps: {
       return result;
     };
 
-  return [
+  const definitions: ModelToolDefinition[] = [
     {
       name: "work_capabilities",
       description:
@@ -329,7 +330,7 @@ export function createWorkModelToolDefinitions(deps: {
     {
       name: "work_exec",
       description:
-        "Run a bounded shell command from /workspace/work. Write finished deliverables to ../outputs, inspect them, then call work_save_output.",
+        "Run a bounded shell command from /workspace/work. Write finished deliverables to ../outputs and inspect them; the runtime preserves output files automatically when the turn ends.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -475,7 +476,7 @@ export function createWorkModelToolDefinitions(deps: {
     {
       name: "work_save_output",
       description:
-        "Copy one completed file from /workspace/outputs to durable OpenPond output storage and return its OutputRef. Use only after inspecting or validating the file.",
+        "Explicitly copy one completed file from /workspace/outputs to durable OpenPond output storage before turn completion. Normal Work turns preserve output files automatically.",
       parameters: {
         type: "object",
         additionalProperties: false,
@@ -638,6 +639,13 @@ export function createWorkModelToolDefinitions(deps: {
       },
     },
   ];
+  return deps.automaticLifecycle
+    ? definitions.filter(
+        (definition) =>
+          definition.name !== "work_save_output" &&
+          definition.name !== "work_stop"
+      )
+    : definitions;
 }
 
 function workspaceToolResult(

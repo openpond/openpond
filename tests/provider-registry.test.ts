@@ -173,6 +173,77 @@ describe("local BYOK provider registry", () => {
     expect(settings.statuses.openpond).toBeDefined();
   });
 
+  test("loads managed OpChat models into the OpenPond model cache", () => {
+    const catalog = ProviderCatalogSchema.parse({
+      version: 1,
+      generatedAt: "2026-07-31T10:00:00.000Z",
+      providers: [
+        {
+          id: "openpond",
+          displayName: "OpenPond",
+          lifecycleStatus: "active",
+          credentialModes: ["openpond-account", "openpond-managed"],
+          routing: {
+            hostedOpChat: true,
+            localRuntime: true,
+            localByok: false,
+            hostedByok: false,
+          },
+          capabilities: {
+            chatCompletions: true,
+            streaming: true,
+            modelDiscovery: "hosted",
+            toolCalling: true,
+            reasoning: true,
+            imageInput: true,
+            structuredOutput: true,
+          },
+          defaultModel: "openpond-chat",
+          defaultEnabled: true,
+          modelCacheSource: "hosted",
+          models: [
+            {
+              id: "openpond-chat",
+              displayName: "OpenPond Chat",
+              contextWindow: 1_048_576,
+              capabilities: { streaming: true, reasoning: true },
+            },
+            {
+              id: "accounts/fireworks/models/kimi-k3",
+              displayName: "Kimi K3",
+              contextWindow: 1_048_576,
+              capabilities: {
+                streaming: true,
+                toolCalling: true,
+                reasoning: true,
+                vision: true,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    const settings = buildProviderSettings({
+      file: emptyProvidersFile(),
+      catalog,
+    });
+
+    expect(settings.modelCaches.openpond?.models).toEqual([
+      expect.objectContaining({
+        id: "openpond-chat",
+        providerId: "openpond",
+        contextWindow: 1_048_576,
+      }),
+      expect.objectContaining({
+        id: "accounts/fireworks/models/kimi-k3",
+        providerId: "openpond",
+        displayName: "Kimi K3",
+        contextWindow: 1_048_576,
+      }),
+    ]);
+  });
+
   test("enriches stale hosted OpenAI catalog with the current GPT-5.6 family", () => {
     const catalog = ProviderCatalogSchema.parse({
       version: 1,
