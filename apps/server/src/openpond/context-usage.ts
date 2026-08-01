@@ -37,12 +37,13 @@ export function trustedProviderContextLimit(input: {
 }): number | null {
   const model = input.model?.trim();
   if (!model) return null;
-  const hostedProvider = hostedContextProvider(input.provider);
-  if (hostedProvider) return hostedContextLimit(hostedProvider, model);
-
   const cache = input.settings?.modelCaches[input.provider];
   const cachedModel = cache?.models.find((candidate) => candidate.id === model);
-  return cachedModel?.contextWindow ?? null;
+  if (cachedModel?.contextWindow) return cachedModel.contextWindow;
+
+  const hostedProvider = hostedContextProvider(input.provider);
+  if (hostedProvider) return hostedContextLimit(hostedProvider, model);
+  return null;
 }
 
 export function estimateHostedMessageTokens(messages: HostedChatMessage[]): number {

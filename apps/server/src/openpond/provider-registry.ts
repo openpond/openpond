@@ -133,7 +133,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
       {
         id: "openpond-chat",
         displayName: "OpenPond Chat",
-        contextWindow: 128000,
+        contextWindow: 1_048_576,
         capabilities: COMMON_OPENAI_COMPATIBLE_MODELS,
       },
     ],

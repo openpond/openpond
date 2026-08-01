@@ -14,6 +14,19 @@ describe("hosted context usage", () => {
   test("resolves trusted provider context windows from model metadata", () => {
     const settings = ProviderSettingsSchema.parse({
       modelCaches: {
+        openpond: {
+          providerId: "openpond",
+          source: "hosted",
+          models: [
+            {
+              id: "accounts/fireworks/models/kimi-k3",
+              providerId: "openpond",
+              displayName: "Kimi K3",
+              contextWindow: 1_048_576,
+              source: "hosted",
+            },
+          ],
+        },
         zai: {
           providerId: "zai",
           source: "curated",
@@ -40,6 +53,14 @@ describe("hosted context usage", () => {
     assert.equal(trustedProviderContextLimit({ provider: "zai", model: "glm-5.2", settings }), 1_000_000);
     assert.equal(trustedProviderContextLimit({ provider: "zai", model: "glm-5.1", settings }), 200_000);
     assert.equal(trustedProviderContextLimit({ provider: "zai", model: "unknown", settings }), null);
+    assert.equal(
+      trustedProviderContextLimit({
+        provider: "openpond",
+        model: "accounts/fireworks/models/kimi-k3",
+        settings,
+      }),
+      1_048_576,
+    );
   });
 
   test("keeps small local-model context windows usable", () => {
