@@ -33,7 +33,29 @@ export async function POST(request: Request) {
 }
 ```
 
-`work.run` creates a sandbox when `sandboxId` is omitted. Pass the returned ID into the next turn to continue in the same filesystem. Use `onEvent` to stream sandbox, model, and command progress to a client.
+`work.run` creates a sandbox when `sandboxId` is omitted. Pass the returned ID into the next turn to continue in the same filesystem. Use `onEvent` to stream sandbox, model, command, and output progress to a client.
+
+Completed files written under `/workspace/outputs` are collected automatically. The model does not need to publish or register them. Each detected file is emitted as an `output` event and returned in `result.outputs`:
+
+```ts
+const result = await openpond.work.run({
+  prompt: "Create a DOCX summary",
+  onEvent(event) {
+    if (event.type === "output") console.log(event.output.name);
+  },
+});
+
+for (const output of result.outputs) {
+  const downloaded = await openpond.work.downloadOutput(
+    result.sandboxId,
+    output,
+  );
+  const bytes = Buffer.from(downloaded.file.contentsBase64, "base64");
+  // Stream bytes from your authenticated server route.
+}
+```
+
+Output descriptors include the sandbox path, filename, MIME type, size, modification time, and preview hints. `downloadOutput` remains a separate deterministic file operation, so downloading a result never starts another model turn.
 
 If sandbox execution is unavailable, the API fails with the stable `sandbox_runner_unavailable` error instead of returning a successful command result.
 
@@ -65,17 +87,6 @@ console.log(result.command.output);
 ```
 
 The package also exports `createOpenPondSandboxClient`, all public sandbox input and response types, and the OpChat helpers used by the Work loop.
-
-## Staging
-
-Use a server-only environment file while developing:
-
-```dotenv
-OPENPOND_API_KEY=opk_...
-OPENPOND_API_URL=https://staging-api.openpond.ai
-```
-
-If the staging deployment has Vercel protection enabled, also set `VERCEL_AUTOMATION_BYPASS_SECRET`. The SDK only sends that bypass header to OpenPond staging hosts.
 
 ## Lifecycle and cleanup
 

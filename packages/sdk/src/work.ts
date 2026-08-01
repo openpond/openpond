@@ -6,15 +6,31 @@ import {
   type HostedChatToolCall,
 } from "../../cloud/src/hosted-chat.js";
 import type { OpenPondSandboxClient } from "../../cloud/src/sandbox/client.js";
-import type { SandboxRecord } from "../../cloud/src/sandbox/types/index.js";
+import type {
+  SandboxFileDownloadResponse,
+  SandboxFileEntry,
+  SandboxRecord,
+} from "../../cloud/src/sandbox/types/index.js";
 
 const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
+const WORK_OUTPUT_DIRECTORY = "/workspace/outputs";
+const MAX_WORK_OUTPUTS = 100;
 
 export type OpenPondWorkHistoryMessage = {
   role: "user" | "assistant";
   content: string;
+};
+
+export type OpenPondWorkOutput = {
+  path: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  updatedAt: string;
+  isBinary: boolean | null;
+  previewable: boolean;
 };
 
 export type OpenPondWorkEvent =
@@ -33,7 +49,14 @@ export type OpenPondWorkEvent =
       output?: string;
       exitCode?: number | null;
     }
-  | { type: "done"; sandboxId: string; text: string; steps: number };
+  | { type: "output"; output: OpenPondWorkOutput }
+  | {
+      type: "done";
+      sandboxId: string;
+      text: string;
+      steps: number;
+      outputs: OpenPondWorkOutput[];
+    };
 
 export type OpenPondWorkRunInput = {
   prompt: string;
@@ -55,6 +78,7 @@ export type OpenPondWorkRunResult = {
   sandboxId: string;
   text: string;
   steps: number;
+  outputs: OpenPondWorkOutput[];
 };
 
 type WorkClientInput = {
@@ -90,6 +114,7 @@ export class OpenPondWorkClient {
       sandboxId: sandbox.id,
       state: sandbox.state,
     });
+    const outputBaseline = await this.#prepareOutputDirectory(sandbox.id);
     const messages: HostedChatMessage[] = [
       { role: "system", content: systemPrompt(sandbox.id) },
       ...(input.history ?? []).map((message) => ({ ...message })),
@@ -130,7 +155,14 @@ export class OpenPondWorkClient {
         await emit({ type: "assistant", text: assistantText });
       }
       if (toolCalls.length === 0) {
-        const result = { sandboxId: sandbox.id, text: finalText, steps: step };
+        const outputs = await this.#collectOutputs(sandbox.id, outputBaseline);
+        for (const output of outputs) await emit({ type: "output", output });
+        const result = {
+          sandboxId: sandbox.id,
+          text: finalText,
+          steps: step,
+          outputs,
+        };
         await emit({ type: "done", ...result });
         return result;
       }
@@ -154,6 +186,49 @@ export class OpenPondWorkClient {
     const sandbox = await this.#sandboxes.get(sandboxId);
     if (sandbox.state === "deleted") return;
     await this.#sandboxes.delete(sandboxId, { async: true });
+  }
+
+  downloadOutput(
+    sandboxId: string,
+    output: OpenPondWorkOutput | string,
+  ): Promise<SandboxFileDownloadResponse> {
+    return this.#sandboxes.downloadFileResponse(
+      sandboxId,
+      typeof output === "string" ? output : output.path,
+    );
+  }
+
+  async #prepareOutputDirectory(sandboxId: string): Promise<Map<string, string>> {
+    await this.#sandboxes.mkdir(sandboxId, {
+      path: WORK_OUTPUT_DIRECTORY,
+      recursive: true,
+    });
+    return outputSignatures(await this.#listOutputFiles(sandboxId));
+  }
+
+  async #collectOutputs(
+    sandboxId: string,
+    baseline: Map<string, string>,
+  ): Promise<OpenPondWorkOutput[]> {
+    const files = await this.#listOutputFiles(sandboxId);
+    return files
+      .filter((file) => baseline.get(file.path) !== outputSignature(file))
+      .sort((left, right) => left.path.localeCompare(right.path))
+      .slice(0, MAX_WORK_OUTPUTS)
+      .map(workOutputFromFile);
+  }
+
+  async #listOutputFiles(sandboxId: string): Promise<SandboxFileEntry[]> {
+    const listed = await this.#sandboxes.listFiles(sandboxId, {
+      path: WORK_OUTPUT_DIRECTORY,
+      recursive: true,
+      maxEntries: 500,
+    });
+    return listed.files.filter(
+      (file) =>
+        file.type === "file" &&
+        !normalizedOutputPath(file.path).includes("/.openpond-"),
+    );
   }
 
   async #resolveSandbox(input: OpenPondWorkRunInput): Promise<SandboxRecord> {
@@ -282,11 +357,73 @@ function systemPrompt(sandboxId: string): string {
     "You are OpenPond Work, a careful coding agent operating in a persistent Linux sandbox.",
     `The active sandbox is ${sandboxId}.`,
     "Use run_command to inspect the workspace, edit files, and validate your work.",
+    `Place completed user-facing files in ${WORK_OUTPUT_DIRECTORY}. The runtime collects new and revised files there automatically when the turn completes.`,
     "Do the requested work completely. Preserve existing user changes and avoid destructive commands.",
     "Keep the user informed with concise prose, but call tools whenever verification or file changes are needed.",
     "Before finishing, run relevant tests and summarize the concrete result.",
   ].join("\n");
 }
+
+function outputSignatures(files: SandboxFileEntry[]): Map<string, string> {
+  return new Map(files.map((file) => [file.path, outputSignature(file)]));
+}
+
+function outputSignature(file: SandboxFileEntry): string {
+  return `${file.sizeBytes}:${file.updatedAt}`;
+}
+
+function workOutputFromFile(file: SandboxFileEntry): OpenPondWorkOutput {
+  const name = normalizedOutputPath(file.path).split("/").at(-1) || file.path;
+  const mimeType = workOutputMimeType(name);
+  return {
+    path: file.path,
+    name,
+    mimeType,
+    sizeBytes: file.sizeBytes,
+    updatedAt: file.updatedAt,
+    isBinary: file.isBinary ?? null,
+    previewable:
+      file.previewable ??
+      (mimeType.startsWith("image/") ||
+        mimeType === "application/pdf" ||
+        mimeType.startsWith("text/")),
+  };
+}
+
+function normalizedOutputPath(value: string): string {
+  return value.replaceAll("\\", "/");
+}
+
+function workOutputMimeType(name: string): string {
+  const extension = name.toLowerCase().match(/\.[^.]+$/)?.[0] ?? "";
+  return WORK_OUTPUT_MIME_TYPES[extension] ?? "application/octet-stream";
+}
+
+const WORK_OUTPUT_MIME_TYPES: Readonly<Record<string, string>> = Object.freeze({
+  ".avif": "image/avif",
+  ".csv": "text/csv",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".gif": "image/gif",
+  ".html": "text/html",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".json": "application/json",
+  ".m4a": "audio/mp4",
+  ".md": "text/markdown",
+  ".mov": "video/quicktime",
+  ".mp3": "audio/mpeg",
+  ".mp4": "video/mp4",
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ".svg": "image/svg+xml",
+  ".tsv": "text/tab-separated-values",
+  ".txt": "text/plain",
+  ".wav": "audio/wav",
+  ".webm": "video/webm",
+  ".webp": "image/webp",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+});
 
 function toolMessage(toolCallId: string, payload: Record<string, unknown>): HostedChatMessage {
   return { role: "tool", tool_call_id: toolCallId, content: JSON.stringify(payload) };

@@ -42,6 +42,7 @@ export { OpenPondApiError } from "../../cloud/src/api/core.js";
 export type {
   OpenPondWorkEvent,
   OpenPondWorkHistoryMessage,
+  OpenPondWorkOutput,
   OpenPondWorkRunInput,
   OpenPondWorkRunResult,
 } from "./work.js";
