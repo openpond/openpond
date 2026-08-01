@@ -35,7 +35,9 @@ export async function POST(request: Request) {
 
 `work.run` creates a sandbox when `sandboxId` is omitted. Pass the returned ID into the next turn to continue in the same filesystem. Use `onEvent` to stream sandbox, model, and command progress to a client.
 
-Work requires a real `remote-firecracker` runtime. It fails closed if an environment returns the simulator or a nominal remote sandbox responds with a non-executing command marker, so an accepted command can never be mistaken for actual filesystem work.
+If sandbox execution is unavailable, the API fails with the stable `sandbox_runner_unavailable` error instead of returning a successful command result.
+
+API failures are exposed as `OpenPondApiError`, with `status` and stable `code` fields for server-side handling. `work.run` propagates these failures instead of asking the model to interpret infrastructure errors.
 
 ## Raw sandbox API
 

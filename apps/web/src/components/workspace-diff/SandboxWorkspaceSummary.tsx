@@ -172,10 +172,6 @@ export function SandboxWorkspaceSummary({
               <dd>{shortId(sandbox.id)}</dd>
             </div>
             <div>
-              <dt>Runtime</dt>
-              <dd>{sandbox.runtimeDriver}</dd>
-            </div>
-            <div>
               <dt>Spend</dt>
               <dd>
                 {formatUsd(sandbox.reservation.capturedUsd)} / {formatUsd(sandbox.budget.maxUsd)}

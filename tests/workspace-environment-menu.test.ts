@@ -113,7 +113,6 @@ function sandboxRecord(overrides: {
   return {
     id: "sandbox_123",
     state: overrides.state ?? "running",
-    runtimeDriver: "remote-firecracker",
     repo: null,
     teamId: "team_123",
     projectId: "project_123",

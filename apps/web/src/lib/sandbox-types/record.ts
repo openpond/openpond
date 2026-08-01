@@ -4,7 +4,6 @@ import type {
   SandboxReceipt,
   SandboxReservation,
   SandboxResources,
-  SandboxRuntimeDriver,
   SandboxState,
   SandboxVolumeMount,
 } from "./base";
@@ -21,7 +20,6 @@ import type {
 export type SandboxRecord = {
   id: string;
   state: SandboxState;
-  runtimeDriver: SandboxRuntimeDriver;
   repo: string | null;
   repoRef?: string | null;
   sourceCommitSha?: string | null;

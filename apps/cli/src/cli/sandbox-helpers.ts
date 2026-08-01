@@ -101,7 +101,6 @@ export function formatSandboxLine(sandbox: SandboxRecord): string {
   return [
     sandbox.id,
     sandbox.state,
-    sandbox.runtimeDriver,
     `spent=${captured}/${budget}`,
     mppMode,
     repo,
@@ -872,7 +871,6 @@ export function summarizeSandbox(
   return {
     id: sandbox.id,
     state: sandbox.state,
-    runtimeDriver: sandbox.runtimeDriver,
     repo: sandbox.repo,
     runtimeId: sandbox.runtimeId ?? null,
     repoRef: sandbox.repoRef ?? null,

@@ -39,13 +39,7 @@ export function createWorkModelToolDefinitions(deps: {
     toolName: string
   ) {
     const result = await runtime.execute(context, action, args);
-    return workspaceToolResult(
-      context.callId,
-      toolName,
-      action === "sandbox_exec" && simulatedSandboxCommandResult(result)
-        ? simulatedSandboxFailure(action)
-        : result
-    );
+    return workspaceToolResult(context.callId, toolName, result);
   }
 
   async function ensureSandbox(
@@ -136,10 +130,7 @@ export function createWorkModelToolDefinitions(deps: {
           timeoutSeconds: 30,
           autoPreserveSource: false,
         });
-        const simulated = simulatedSandboxCommandResult(probe);
-        const probeResult = simulated
-          ? simulatedSandboxFailure("sandbox_exec")
-          : probe;
+        const probeResult = probe;
         return {
           toolCallId: context.callId,
           name: "work_environment",
@@ -162,7 +153,7 @@ export function createWorkModelToolDefinitions(deps: {
                 },
                 status: status.data ?? null,
                 probe: probeResult.data ?? { output: probeResult.output },
-                executionBacked: !simulated,
+                executionBacked: probeResult.ok,
               },
             },
             null,
@@ -174,7 +165,7 @@ export function createWorkModelToolDefinitions(deps: {
             cwd: "/workspace/work",
             status: status.data ?? null,
             probe: probeResult.data ?? null,
-            executionBacked: !simulated,
+            executionBacked: probeResult.ok,
           },
         };
       },
@@ -647,29 +638,6 @@ export function createWorkModelToolDefinitions(deps: {
       },
     },
   ];
-}
-
-function simulatedSandboxCommandResult(result: WorkspaceToolResult): boolean {
-  const serialized = JSON.stringify(result);
-  return (
-    serialized.includes("no host command was executed") ||
-    serialized.includes("command accepted by simulated-firecracker driver")
-  );
-}
-
-function simulatedSandboxFailure(
-  action: WorkspaceToolRequest["action"]
-): WorkspaceToolResult {
-  return {
-    ok: false,
-    action,
-    output:
-      "This Work sandbox can store files but does not currently execute commands. Use an execution-backed runtime for command, build, validation, or eval work.",
-    data: {
-      code: "sandbox_execution_unavailable",
-      executionBacked: false,
-    },
-  };
 }
 
 function workspaceToolResult(

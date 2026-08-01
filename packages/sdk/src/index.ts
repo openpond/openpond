@@ -37,7 +37,8 @@ export function createOpenPondClient(options: OpenPondClientOptions): OpenPondCl
 }
 
 export type { OpenPondClientOptions } from "./types.js";
-export { OpenPondNonExecutingSandboxError, OpenPondWorkClient } from "./work.js";
+export { OpenPondWorkClient } from "./work.js";
+export { OpenPondApiError } from "../../cloud/src/api/core.js";
 export type {
   OpenPondWorkEvent,
   OpenPondWorkHistoryMessage,

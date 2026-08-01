@@ -16,7 +16,6 @@ describe("runSandboxSmoke", () => {
         id: "sandbox_smoke",
         state,
         logs: [],
-        runtimeDriver: "remote-firecracker",
         reservation: {
           mpp: {
             mode: "simulated_poc",

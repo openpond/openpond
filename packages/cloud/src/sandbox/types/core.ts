@@ -6,10 +6,6 @@ export type SandboxState =
   | "deleted"
   | "error";
 
-export type SandboxRuntimeDriver =
-  | "simulated-firecracker"
-  | "remote-firecracker";
-
 export type SandboxResources = {
   cpu: number;
   memoryGb: number;

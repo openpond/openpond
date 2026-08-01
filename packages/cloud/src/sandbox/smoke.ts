@@ -49,14 +49,6 @@ export async function runSandboxSmoke(
     );
     sandboxId = sandbox.id;
 
-    const expectedRuntimeDriver =
-      options.expectedRuntimeDriver ?? "remote-firecracker";
-    if (sandbox.runtimeDriver !== expectedRuntimeDriver) {
-      throw new Error(
-        `expected ${expectedRuntimeDriver}, got ${sandbox.runtimeDriver}`
-      );
-    }
-
     const expectedMppMode = options.expectedMppMode;
     if (expectedMppMode && sandbox.reservation.mpp?.mode !== expectedMppMode) {
       throw new Error(
