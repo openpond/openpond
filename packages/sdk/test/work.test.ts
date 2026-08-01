@@ -45,6 +45,58 @@ describe("OpenPondWorkClient", () => {
     const fakeSandboxes = {
       create: vi.fn().mockResolvedValue(record),
       get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi
+        .fn()
+        .mockResolvedValueOnce({
+          sandbox: record,
+          files: [
+            {
+              path: "/workspace/outputs/previous.txt",
+              type: "file",
+              sizeBytes: 8,
+              updatedAt: new Date(0).toISOString(),
+              isBinary: false,
+              previewable: true,
+            },
+          ],
+        })
+        .mockResolvedValueOnce({
+          sandbox: record,
+          files: [
+            {
+              path: "/workspace/outputs/previous.txt",
+              type: "file",
+              sizeBytes: 8,
+              updatedAt: new Date(0).toISOString(),
+              isBinary: false,
+              previewable: true,
+            },
+            {
+              path: "/workspace/outputs/report.docx",
+              type: "file",
+              sizeBytes: 4812,
+              updatedAt: new Date(1).toISOString(),
+              isBinary: true,
+              previewable: false,
+            },
+          ],
+        }),
+      downloadFileResponse: vi.fn().mockResolvedValue({
+        sandbox: record,
+        file: {
+          path: "/workspace/outputs/report.docx",
+          sizeBytes: 4812,
+          updatedAt: new Date(1).toISOString(),
+          isBinary: true,
+          previewable: false,
+          contentsBase64: "UEs=",
+          offsetBytes: 0,
+          returnedBytes: 2,
+          totalSizeBytes: 2,
+          truncated: false,
+        },
+      }),
       exec: vi.fn().mockResolvedValue({
         sandbox: record,
         command: {
@@ -97,7 +149,23 @@ describe("OpenPondWorkClient", () => {
       },
     });
 
-    expect(result).toEqual({ sandboxId: "sb_test", text: "Workspace is ready.", steps: 2 });
+    expect(result).toEqual({
+      sandboxId: "sb_test",
+      text: "Workspace is ready.",
+      steps: 2,
+      outputs: [
+        {
+          path: "/workspace/outputs/report.docx",
+          name: "report.docx",
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          sizeBytes: 4812,
+          updatedAt: new Date(1).toISOString(),
+          isBinary: true,
+          previewable: false,
+        },
+      ],
+    });
     expect(fakeSandboxes.create).toHaveBeenCalledOnce();
     expect(fakeSandboxes.exec).toHaveBeenCalledWith("sb_test", {
       command: "pwd",
@@ -111,10 +179,24 @@ describe("OpenPondWorkClient", () => {
       output: "/workspace\n",
       exitCode: 0,
     });
+    await expect(work.downloadOutput(result.sandboxId, result.outputs[0]!)).resolves.toMatchObject({
+      file: { path: "/workspace/outputs/report.docx", contentsBase64: "UEs=" },
+    });
+    expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledWith(
+      "sb_test",
+      "/workspace/outputs/report.docx",
+    );
     expect(events).toContainEqual({
       type: "sandbox",
       sandboxId: "sb_test",
       state: "running",
+    });
+    expect(events).toContainEqual({
+      type: "output",
+      output: expect.objectContaining({
+        path: "/workspace/outputs/report.docx",
+        name: "report.docx",
+      }),
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     fetchMock.mockRestore();
@@ -126,6 +208,8 @@ describe("OpenPondWorkClient", () => {
     const fakeSandboxes = {
       get: vi.fn().mockResolvedValueOnce(stopped).mockResolvedValue(running),
       start: vi.fn().mockResolvedValue({ sandbox: stopped }),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: running }),
+      listFiles: vi.fn().mockResolvedValue({ sandbox: running, files: [] }),
     } as unknown as OpenPondSandboxClient;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({ choices: [{ message: { content: "Continued." } }] }),
@@ -155,6 +239,8 @@ describe("OpenPondWorkClient", () => {
     const fakeSandboxes = {
       create: vi.fn().mockResolvedValue(record),
       get: vi.fn().mockResolvedValue(record),
+      mkdir: vi.fn().mockResolvedValue({ sandbox: record }),
+      listFiles: vi.fn().mockResolvedValue({ sandbox: record, files: [] }),
       exec: vi.fn().mockRejectedValue(unavailable),
     } as unknown as OpenPondSandboxClient;
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
