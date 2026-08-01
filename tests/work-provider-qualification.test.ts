@@ -39,7 +39,7 @@ describe.each(PROVIDER_PATHS)(
       );
     });
 
-    test("creates and saves a Markdown result through multiple tool rounds", async () => {
+    test("creates and reviews a Markdown result through multiple tool rounds", async () => {
       const calls: WorkspaceToolRequest[] = [];
       const harness = createByokTurnRunnerHarness({
         providerId,
@@ -59,21 +59,15 @@ describe.each(PROVIDER_PATHS)(
           ],
           2: [
             {
-              name: "work_save_output",
+              name: "work_read_file",
               args: {
+                area: "outputs",
                 path: "summary.md",
-                validation: [
-                  {
-                    kind: "structural",
-                    status: "passed",
-                    label: "Markdown content inspected",
-                  },
-                ],
               },
             },
           ],
         },
-        finalText: "Created and saved summary.md after validating it.",
+        finalText: "Created and reviewed summary.md.",
         executeWorkspaceTool: async (_sessionId, payload) => {
           const request = payload as WorkspaceToolRequest;
           calls.push(request);
@@ -89,27 +83,6 @@ describe.each(PROVIDER_PATHS)(
                       state: "running",
                     },
                   }
-                : request.action === "sandbox_save_output"
-                ? {
-                    outputRef: {
-                      kind: "file",
-                      id: "output_qualified",
-                      title: "summary.md",
-                      contentType: "text/markdown",
-                      sizeBytes: 22,
-                      sha256: "a".repeat(64),
-                      sourceTaskId: "session_1",
-                      sourceTurnId: "turn_qualified",
-                      revision: 1,
-                      createdAt: "2026-07-28T12:00:00.000Z",
-                      location: {
-                        kind: "local",
-                        path: "/tmp/summary.md",
-                        deviceId: "device_test",
-                      },
-                      validation: [],
-                    },
-                  }
                 : {},
           } satisfies WorkspaceToolResult;
         },
@@ -122,11 +95,16 @@ describe.each(PROVIDER_PATHS)(
 
       expect(turn.status).toBe("completed");
       expect(harness.streamInputs).toHaveLength(3);
+      expect(
+        harness.streamInputs[0].tools.map(
+          (tool: { function: { name: string } }) => tool.function.name
+        )
+      ).not.toContain("work_save_output");
       expect(calls.map((call) => call.action)).toEqual([
         "sandbox_create",
         "sandbox_status",
         "sandbox_write_file",
-        "sandbox_save_output",
+        "sandbox_read_file",
       ]);
     });
 

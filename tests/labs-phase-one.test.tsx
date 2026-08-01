@@ -15,7 +15,10 @@ import {
 import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
-import { LabModelCreateDialog } from "../apps/web/src/components/labs/LabModelCreateDialog";
+import {
+  LabModelCreateDialog,
+  labModelCreateCandidates,
+} from "../apps/web/src/components/labs/LabModelCreateDialog";
 import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
@@ -199,33 +202,34 @@ describe("Lab workspace", () => {
   });
 
   test("creates a standalone Model without requiring a run", () => {
+    const baseModelCandidates = [
+      modelCandidate({
+        selectionKey: "managed_qwen",
+        label: "Qwen 3 0.6B",
+        modelId: "Qwen/Qwen3-0.6B",
+        source: "managed",
+        sourceLabel: "OpenPond Managed",
+      }),
+      modelCandidate({
+        available: false,
+        selectionKey: "unavailable_qwen",
+        label: "Qwen 3 8B",
+        modelId: "accounts/fireworks/models/qwen3-8b",
+        source: "managed",
+        sourceLabel: "Fireworks",
+      }),
+      modelCandidate({
+        selectionKey: "cpu_fixture",
+        label: "Tiny CPU correctness fixture",
+        modelId: "openpond/tiny-cpu-gpt2-fixture",
+        nonProduction: true,
+        source: "builtin",
+        sourceLabel: "This machine",
+      }),
+    ];
     const markup = renderToStaticMarkup(
       createElement(LabModelCreateDialog, {
-        baseModelCandidates: [
-          modelCandidate({
-            selectionKey: "managed_qwen",
-            label: "Qwen 3 0.6B",
-            modelId: "Qwen/Qwen3-0.6B",
-            source: "managed",
-            sourceLabel: "OpenPond Managed",
-          }),
-          modelCandidate({
-            available: false,
-            selectionKey: "unavailable_qwen",
-            label: "Qwen 3 8B",
-            modelId: "accounts/fireworks/models/qwen3-8b",
-            source: "managed",
-            sourceLabel: "Fireworks",
-          }),
-          modelCandidate({
-            selectionKey: "cpu_fixture",
-            label: "Tiny CPU correctness fixture",
-            modelId: "openpond/tiny-cpu-gpt2-fixture",
-            nonProduction: true,
-            source: "builtin",
-            sourceLabel: "This machine",
-          }),
-        ],
+        baseModelCandidates,
         busy: false,
         initialName: "Model 1",
         onClose: noop,
@@ -238,10 +242,12 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Tasksets, runs, and releases can be added later.");
     expect(markup).toContain("Starting model");
     expect(markup).toContain("Choose later");
-    expect(markup).toContain("Qwen 3 0.6B · OpenPond Managed");
-    expect(markup).toContain("Qwen 3 8B · Fireworks · Unavailable");
     expect(markup).toContain('aria-label="Add starting model"');
-    expect(markup).not.toContain("Tiny CPU correctness fixture");
+    expect(
+      labModelCreateCandidates(baseModelCandidates).map(
+        (candidate) => candidate.selectionKey
+      )
+    ).toEqual(["managed_qwen", "unavailable_qwen"]);
     expect(markup).not.toContain("labs-rename-dialog-icon");
     expect(markup).not.toContain("first run");
   });
