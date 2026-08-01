@@ -22,9 +22,8 @@ describe("OpenPondApiError", () => {
     await expect(request).rejects.toEqual(
       expect.objectContaining({
         name: "OpenPondApiError",
-        code: "OPENPOND_API_ERROR",
+        code: "sandbox_runner_unavailable",
         status: 503,
-        apiError: "sandbox_runner_unavailable",
       }),
     );
     await request.catch((error: unknown) => {

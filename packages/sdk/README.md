@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
 If sandbox execution is unavailable, the API fails with the stable `sandbox_runner_unavailable` error instead of returning a successful command result.
 
-API failures are exposed as `OpenPondApiError`, with `status` and `apiError` fields for server-side handling. `work.run` propagates these failures instead of asking the model to interpret infrastructure errors.
+API failures are exposed as `OpenPondApiError`, with `status` and stable `code` fields for server-side handling. `work.run` propagates these failures instead of asking the model to interpret infrastructure errors.
 
 ## Raw sandbox API
 
