@@ -16,6 +16,7 @@ import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
 import { LabModelCreateDialog } from "../apps/web/src/components/labs/LabModelCreateDialog";
+import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
 import {
@@ -110,6 +111,46 @@ describe("Lab workspace", () => {
     expect(
       searchWithLabPrimaryTab("?profile=qa&modelsTab=usage", "models"),
     ).toBe("?profile=qa");
+  });
+
+  test("summarizes availability and recent run status on the Models index", () => {
+    const markup = renderToStaticMarkup(
+      createElement(ModelsTable, {
+        items: [
+          {
+            key: "model:model_fixture",
+            kind: "model",
+            id: "model_fixture",
+            name: "Fixture Model",
+            description: "A focused model summary.",
+            status: "Ready",
+            updatedAt: "2026-07-30T12:00:00.000Z",
+            path: null,
+            enabled: false,
+            runIds: [],
+            conversationId: null,
+            tasksetId: null,
+            trainingRunCount: 0,
+            evaluationStatus: "not_run",
+            useActionId: null,
+            ownerProfileId: "default",
+          },
+        ],
+        loading: false,
+        runs: [],
+        state: null,
+        onSelect: noop,
+        onUseModel: noop,
+      }),
+    );
+
+    expect(markup).toContain(">Availability<");
+    expect(markup).toContain(">Recent run<");
+    expect(markup).toContain("No active release");
+    expect(markup).toContain("Not run");
+    expect(markup).toContain("0 runs");
+    expect(markup).not.toContain(">Starting model<");
+    expect(markup).not.toContain(">Active release<");
   });
 
   test("keeps temporary sessions and managed publication separate in Serving", () => {

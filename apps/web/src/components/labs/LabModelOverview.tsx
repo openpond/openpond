@@ -5,12 +5,10 @@ import {
 } from "@openpond/contracts";
 
 import type { useTraining } from "../../hooks/useTraining";
-import { DetailSection } from "../training/DetailSection";
+import { statusLabel } from "../training/training-model-data";
 import {
-  labBaseModelVersion,
   labLifecycleModelRuns,
   labModelJobs,
-  labModelTasksets,
   labModelVersions,
 } from "./lab-models";
 import { modelRunEntries, type ModelWorkspaceProps } from "./LabModelWorkspace";
@@ -42,11 +40,17 @@ export function LabModelOverview({
     () => modelRunEntries(jobs, versions, lifecycleRuns).length,
     [jobs, lifecycleRuns, versions],
   );
+  const latestRun = useMemo(
+    () => modelRunEntries(jobs, versions, lifecycleRuns)[0] ?? null,
+    [jobs, lifecycleRuns, versions],
+  );
   const currentVersion = versions.find((version) => version.current) ?? null;
   const evaluation = versionEvaluation(
     currentVersion,
     workproduct.evaluationStatus,
   );
+  const latestRunStatus =
+    latestRun?.lifecycleRun?.status ?? latestRun?.job?.status ?? null;
 
   return (
     <section className="labs-model-overview" aria-label="Model summary">
@@ -61,12 +65,14 @@ export function LabModelOverview({
           }
         />
         <OverviewKpi
-          label="Hosting"
-          value={currentVersion ? "Ready" : "Not hosted"}
+          label="Recent run"
+          value={latestRunStatus ? statusLabel(latestRunStatus) : "Not started"}
           supporting={
-            currentVersion
-              ? "Available through OpenPond"
-              : "Activate a passing release to host it"
+            latestRun
+              ? latestRun.version
+                ? `Run ${runCount} created Version ${latestRun.version.number}`
+                : `Run ${runCount} has no trained output yet`
+              : "Start a run to train this Model"
           }
         />
         <OverviewKpi
@@ -83,51 +89,6 @@ export function LabModelOverview({
         />
       </div>
     </section>
-  );
-}
-
-export function LabModelDetails({
-  workproduct,
-  runs,
-  training,
-}: ModelSummaryProps) {
-  const state = training.payload;
-  const versions = labModelVersions(workproduct, runs, state);
-  const currentVersion = versions.find((version) => version.current) ?? null;
-  const baseVersion = labBaseModelVersion(workproduct, state);
-  const project =
-    state?.modelProjects.find((candidate) => candidate.id === workproduct.id) ??
-    null;
-  const tasksets = labModelTasksets(state);
-  const dataset =
-    currentVersion?.taskset ??
-    (baseVersion
-      ? tasksets.find((taskset) => taskset.id === baseVersion.taskset.id) ??
-        null
-      : null);
-
-  return (
-    <DetailSection title="Details">
-      <dl className="training-configuration-list">
-        <Fact
-          label="Base model"
-          value={
-            baseVersion?.baseModel.modelId ??
-            project?.defaultBaseModel?.modelId ??
-            "Not selected"
-          }
-        />
-        <Fact label="Dataset" value={dataset?.name ?? "Not selected"} />
-        <Fact
-          label="Profile"
-          value={workproduct.ownerProfileId ?? "Unknown"}
-        />
-        <Fact label="Model ID" value={workproduct.id} />
-      </dl>
-      {workproduct.description ? (
-        <p className="labs-detail-copy">{workproduct.description}</p>
-      ) : null}
-    </DetailSection>
   );
 }
 
@@ -184,13 +145,4 @@ function versionEvaluation(
     label: "Not run",
     supporting: `Version ${version.number} has not been evaluated`,
   };
-}
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
 }

@@ -22,6 +22,11 @@ textarea {
   font: inherit;
 }
 
+textarea:focus,
+textarea:focus-visible {
+  outline: 0;
+}
+
 button {
   cursor: pointer;
 }

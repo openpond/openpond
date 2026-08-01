@@ -6,6 +6,7 @@ import type {
 } from "@openpond/contracts";
 import { api } from "../api";
 import { modelRefForTurn } from "../lib/app-models";
+import { newExperienceTitle } from "../lib/experience-options";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
@@ -178,7 +179,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
         : "Team Chat"
       : view === "community"
       ? communities.preview?.displayName ?? "Communities"
-      : selectedSession?.title ?? "New task";
+      : selectedSession?.title ?? newExperienceTitle(activeExperience);
   const { browserConversationId, handleWorkspaceDiffPanelViewStateChange } =
     useConversationSidebarState({
       appDispatch,

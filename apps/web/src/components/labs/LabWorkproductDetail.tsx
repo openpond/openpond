@@ -34,10 +34,7 @@ import type { LabDetailLocation } from "./lab-detail-navigation";
 import { LabAgentEvalActions } from "./LabEvalActions";
 import { LabAgentChanges } from "./LabAgentChanges";
 import { LabAgentChangeHistory } from "./LabAgentChangeHistory";
-import {
-  LabModelDetails,
-  LabModelOverview,
-} from "./LabModelOverview";
+import { LabModelOverview } from "./LabModelOverview";
 import {
   LabModelRunsPage,
   LabModelVersionsPage,
@@ -543,6 +540,12 @@ export function LabWorkproductDetail({
               value={headerStatus.value}
             />
           </div>
+          {workproduct.description &&
+          workproduct.description !== "No description" ? (
+            <p className="labs-workproduct-description">
+              {workproduct.description}
+            </p>
+          ) : null}
         </div>
         {workproduct.kind === "model" ? (
           <div className="labs-workproduct-header-actions">
@@ -688,20 +691,6 @@ export function LabWorkproductDetail({
               training={training}
               workproduct={workproduct}
             />
-            <LabModelVersionsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onToast={onToast}
-            />
-            <LabModelDetails
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-            />
             <LabModelRunsPage
               runs={runs}
               training={training}
@@ -710,6 +699,15 @@ export function LabWorkproductDetail({
               onOpenDataset={onOpenDataset}
               onOpenEntry={setSelectedModelEntryKey}
               onResumeDraft={setEditingRunDraftId}
+            />
+            <LabModelVersionsPage
+              runs={runs}
+              training={training}
+              workproduct={workproduct}
+              readOnly={readOnlyModel}
+              onOpenDataset={onOpenDataset}
+              onOpenEntry={setSelectedModelEntryKey}
+              onToast={onToast}
             />
           </>
         ) : activeTab === "overview" ? (

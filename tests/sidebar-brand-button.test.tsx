@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
-  EXPERIENCE_MENU_OPTIONS,
   SidebarExperienceMenu,
 } from "../apps/web/src/components/sidebar/SidebarExperienceMenu";
+import { EXPERIENCE_OPTIONS } from "../apps/web/src/lib/experience-options";
 
 describe("Sidebar experience wordmark", () => {
   test("renders the selected experience in the accessible wordmark trigger", () => {
@@ -23,7 +23,7 @@ describe("Sidebar experience wordmark", () => {
     expect(markup).toContain(
       '<span class="sidebar-experience-label">Work</span>'
     );
-    expect(EXPERIENCE_MENU_OPTIONS.map((option) => option.value)).toEqual([
+    expect(EXPERIENCE_OPTIONS.map((option) => option.value)).toEqual([
       "chat",
       "work",
       "development",

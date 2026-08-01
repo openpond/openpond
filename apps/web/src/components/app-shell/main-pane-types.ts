@@ -66,6 +66,7 @@ import type { SkillPackageSourceSelection } from "./skill-package-source";
 
 export type MainPaneProps = {
   experience: Experience;
+  onNewExperienceChange: (experience: Experience) => void;
   view: AppView;
   teamChat: TeamChatViewProps;
   community: CommunityViewProps;

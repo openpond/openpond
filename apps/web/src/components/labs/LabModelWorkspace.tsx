@@ -134,7 +134,7 @@ export function LabModelRunsPage({
       <header className="labs-model-section-intro">
         <div>
           <h2>Recent runs</h2>
-          <p>Latest training, evaluation, and draft activity.</p>
+          <p>Training and evaluation history, including unfinished drafts.</p>
         </div>
         <span>
           {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}
@@ -147,7 +147,7 @@ export function LabModelRunsPage({
         <table className="training-data-table labs-model-runs-table">
           <thead>
             <tr>
-              <th>Run</th>
+              <th>Run or draft</th>
               <th>Status</th>
               <th>Method</th>
               <th>Dataset</th>
@@ -205,8 +205,8 @@ export function LabModelRunsPage({
                       <small>
                         {entry.draft
                           ? entry.draft.status === "ready_to_run"
-                            ? "Ready to submit"
-                            : "Draft setup"
+                            ? "Review and run"
+                            : "Resume draft"
                           : version
                           ? `Created Version ${version.number}`
                           : entry.lifecycleRun?.kind === "evaluation"
@@ -638,8 +638,8 @@ function runEntryTimestamp(entry: RunEntry): string {
 function runResult(entry: RunEntry) {
   if (entry.draft) {
     return entry.draft.status === "ready_to_run"
-      ? "Ready to submit"
-      : "Open setup";
+      ? "Review and run"
+      : "Resume draft";
   }
   if (entry.version) return `Version ${entry.version.number}`;
   if (entry.lifecycleRun?.reward) {

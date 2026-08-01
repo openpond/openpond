@@ -199,6 +199,7 @@ export type DropdownOption = {
   description?: string;
   icon?: "plus";
   separatorBefore?: boolean;
+  disabled?: boolean;
 };
 
 export const DEFAULT_APP_PREFERENCES: AppPreferences = {

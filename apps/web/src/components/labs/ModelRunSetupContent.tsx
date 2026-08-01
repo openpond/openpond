@@ -12,6 +12,7 @@ import type {
   TrainingRecipe,
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
+import { DropdownSelect } from "../DropdownSelect";
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import {
   TrainingStartDialog,
@@ -112,37 +113,34 @@ export function ModelRunSetupContent({
           </div>
           <div className="model-build-dataset-step">
             <div className="model-build-existing-dataset">
-              <label className="model-build-field">
+              <div className="model-build-field">
                 <span>Taskset revision</span>
-                <select
-                  aria-label="Taskset revision"
+                <DropdownSelect
+                  label="Taskset revision"
                   value={selectedTaskset?.id ?? ""}
-                  onChange={(event) => {
+                  options={[
+                    {
+                      value: "",
+                      label: tasksets.length
+                        ? "Select a Taskset"
+                        : "No Tasksets yet",
+                      disabled: tasksets.length === 0,
+                    },
+                    ...tasksets.map((taskset) => ({
+                      value: taskset.id,
+                      label: `${taskset.name} · r${taskset.revision} · ${
+                        taskset.readiness?.ready ? "ready" : "needs work"
+                      }`,
+                    })),
+                  ]}
+                  onChange={(value) => {
                     const taskset = tasksets.find(
-                      (candidate) =>
-                        candidate.id === event.target.value,
+                      (candidate) => candidate.id === value,
                     );
                     if (taskset) onSelectTaskset(taskset);
                   }}
-                >
-                  <option value="">
-                    {tasksets.length
-                      ? "Select a Taskset"
-                      : "No Tasksets yet"}
-                  </option>
-                  {tasksets.map((taskset) => (
-                    <option
-                      key={`${taskset.id}:${taskset.revision}`}
-                      value={taskset.id}
-                    >
-                      {taskset.name} · r{taskset.revision} ·{" "}
-                      {taskset.readiness?.ready
-                        ? "ready"
-                        : "needs work"}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                />
+              </div>
               <button
                 className="training-button secondary"
                 type="button"
@@ -270,57 +268,55 @@ export function ModelRunSetupContent({
                         ?? "Recommended"}
                     </strong>
                   </summary>
-                  <label className="model-build-field">
+                  <div className="model-build-field">
                     <span>Training budget</span>
-                    <select
-                      aria-label="Training budget"
+                    <DropdownSelect
+                      label="Training budget"
                       value={draft.runPreset ?? "standard"}
-                      onChange={(event) =>
+                      options={presetsFor(draft.method).map((preset) => ({
+                        value: preset.id,
+                        label: preset.label,
+                      }))}
+                      onChange={(value) =>
                         setDraft((current) => ({
                           ...current,
-                          runPreset:
-                            event.target.value as ModelRunPreset,
+                          runPreset: value as ModelRunPreset,
                           recipe: null,
                           updatedAt: new Date().toISOString(),
                         }))}
-                    >
-                      {presetsFor(draft.method).map((preset) => (
-                        <option key={preset.id} value={preset.id}>
-                          {preset.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <small>
                       {presetFor(draft.method, draft.runPreset)
                         ?.description
                         ?? "Use Taskset-aware recommended limits."}
                     </small>
-                  </label>
+                  </div>
                   {draft.destinationId === "openpond_managed" ? (
-                    <label className="model-build-field">
+                    <div className="model-build-field">
                       <span>Rollout execution</span>
-                      <select
-                        aria-label="Rollout execution"
+                      <DropdownSelect
+                        label="Rollout execution"
                         value={draft.managedRolloutPlacement ?? "local"}
-                        onChange={(event) =>
+                        options={[
+                          { value: "local", label: "This desktop" },
+                          { value: "remote", label: "Hosted Sandboxes" },
+                        ]}
+                        onChange={(value) =>
                           setDraft((current) => ({
                             ...current,
                             managedRolloutPlacement:
-                              event.target.value === "remote"
+                              value === "remote"
                                 ? "remote"
                                 : "local",
                             updatedAt: new Date().toISOString(),
                           }))}
-                      >
-                        <option value="local">This desktop</option>
-                        <option value="remote">Hosted Sandboxes</option>
-                      </select>
+                      />
                       <small>
                         This desktop keeps local integrations and provider
                         credentials on this device. Hosted Sandboxes can run
                         unattended.
                       </small>
-                    </label>
+                    </div>
                   ) : null}
                 </details>
               }

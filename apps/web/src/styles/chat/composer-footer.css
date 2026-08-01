@@ -63,6 +63,21 @@
   z-index: 90;
 }
 
+.composer-primary-controls .dropdown-select.compact .dropdown-trigger,
+.composer-primary-controls .codex-model-trigger {
+  border: 0;
+  border-radius: 999px;
+  outline: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer-primary-controls .dropdown-select.compact .dropdown-trigger:focus-visible,
+.composer-primary-controls .codex-model-trigger:focus-visible {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .composer.has-create-runtime .composer-primary-controls {
   right: 28px;
   left: 28px;

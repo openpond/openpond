@@ -1,29 +1,8 @@
 import type { Experience } from "@openpond/contracts";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { EXPERIENCE_OPTIONS } from "../../lib/experience-options";
 import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import { Check, ChevronDown } from "../icons";
-
-export const EXPERIENCE_MENU_OPTIONS: ReadonlyArray<{
-  value: Experience;
-  label: string;
-  description: string;
-}> = [
-  {
-    value: "chat",
-    label: "Chat",
-    description: "Questions, explanations, brainstorming, and short drafts",
-  },
-  {
-    value: "work",
-    label: "Work",
-    description: "Multi-step tasks with reviewable results",
-  },
-  {
-    value: "development",
-    label: "Development",
-    description: "Projects, code, and developer tools",
-  },
-];
 
 export function SidebarExperienceMenu({
   value,
@@ -37,8 +16,8 @@ export function SidebarExperienceMenu({
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeOption =
-    EXPERIENCE_MENU_OPTIONS.find((option) => option.value === value) ??
-    EXPERIENCE_MENU_OPTIONS[0];
+    EXPERIENCE_OPTIONS.find((option) => option.value === value) ??
+    EXPERIENCE_OPTIONS[0];
 
   useEffect(() => {
     if (!open) return;
@@ -144,7 +123,7 @@ export function SidebarExperienceMenu({
           aria-label="Choose experience"
           onKeyDown={onMenuKeyDown}
         >
-          {EXPERIENCE_MENU_OPTIONS.map((option) => {
+          {EXPERIENCE_OPTIONS.map((option) => {
             const selected = option.value === value;
             return (
               <button

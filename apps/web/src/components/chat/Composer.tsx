@@ -304,8 +304,10 @@ export function Composer({
         : "What should we build?"
       : "Ask for follow-up changes";
   const modelValue = normalizeChatModel(provider, model, providerSettings);
-  const dropdownPlacement =
-    mode === "dock" || showProjectFooter ? "top" : "bottom";
+  // Composer controls sit against the lower edge of the input surface. Opening
+  // upward keeps provider/model/permission menus inside the viewport instead
+  // of letting them run below the window on the start experience.
+  const dropdownPlacement = "top" as const;
   const addMenuId = useId();
   const contextStatusTooltipId = useId();
   const goalDetailsId = useId();

@@ -6,6 +6,7 @@ import type {
 
 import type { TrainingWorkspaceProps } from "../training/training-workspace-types";
 import { TrainingSuggestions } from "../training/TrainingSuggestions";
+import { statusLabel } from "../training/training-model-data";
 import {
   ChartColumnStacked,
   CheckCircle2,
@@ -16,7 +17,12 @@ import {
 } from "../icons";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
-import { labBaseModelVersion, labModelVersions } from "./lab-models";
+import {
+  labLifecycleModelRuns,
+  labModelJobs,
+  labModelVersions,
+} from "./lab-models";
+import { modelRunEntries } from "./LabModelWorkspace";
 import { type LabWorkproductProgression } from "./lab-workproduct-progression";
 import type { LabsRouteProps } from "./LabsRoute";
 
@@ -217,10 +223,8 @@ export function ModelsTable({
         <thead>
           <tr>
             <th>Model</th>
-            <th>Hosting</th>
-            <th>Active release</th>
-            <th>Starting model</th>
-            <th>Runs</th>
+            <th>Availability</th>
+            <th>Recent run</th>
             <th>Updated</th>
             <th>
               <span className="sr-only">Actions</span>
@@ -230,16 +234,17 @@ export function ModelsTable({
         <tbody>
           {items.map((item) => {
             const versions = labModelVersions(item, runs, state);
-            const baseVersion = labBaseModelVersion(item, state);
             const current = versions.find((version) => version.current) ?? null;
-            const project =
-              state?.modelProjects.find(
-                (candidate) => candidate.id === item.id,
-              ) ?? null;
-            const startingModel =
-              baseVersion?.baseModel.modelId ??
-              project?.defaultBaseModel?.modelId ??
-              "Choose later";
+            const runEntries = modelRunEntries(
+              labModelJobs(item, runs, state),
+              versions,
+              labLifecycleModelRuns(item, state),
+            );
+            const recentRun = runEntries[0] ?? null;
+            const recentRunStatus =
+              recentRun?.lifecycleRun?.status ??
+              recentRun?.job?.status ??
+              "not_run";
             return (
               <tr key={item.key} onClick={() => onSelect(item.key)}>
                 <td>
@@ -253,14 +258,30 @@ export function ModelsTable({
                   </button>
                 </td>
                 <td>
-                  <LabStatusBadge
-                    label={current ? "Hosted" : "Not hosted"}
-                    value={current ? "ready" : "not_run"}
-                  />
+                  <div className="labs-model-table-summary">
+                    <LabStatusBadge
+                      label={current ? "Hosted" : "Not hosted"}
+                      value={current ? "ready" : "not_run"}
+                    />
+                    <span>
+                      {current
+                        ? `Release ${current.number}`
+                        : "No active release"}
+                    </span>
+                  </div>
                 </td>
-                <td>{current ? `Release ${current.number}` : "—"}</td>
-                <td>{startingModel}</td>
-                <td>{item.trainingRunCount}</td>
+                <td>
+                  <div className="labs-model-table-summary">
+                    <LabStatusBadge
+                      label={statusLabel(recentRunStatus)}
+                      value={recentRunStatus}
+                    />
+                    <span>
+                      {item.trainingRunCount}{" "}
+                      {item.trainingRunCount === 1 ? "run" : "runs"}
+                    </span>
+                  </div>
+                </td>
                 <td>{compactUpdatedAt(item.updatedAt)}</td>
                 <td>
                   <div className="labs-workproduct-actions">

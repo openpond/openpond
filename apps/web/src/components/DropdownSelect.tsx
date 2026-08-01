@@ -96,12 +96,14 @@ export function DropdownSelect({
               type="button"
               role="menuitemradio"
               aria-checked={option.value === value}
+              disabled={option.disabled}
               className={[
                 option.value === value ? "selected" : "",
                 option.separatorBefore ? "separator-before" : "",
                 option.icon ? "with-icon" : "",
               ].filter(Boolean).join(" ")}
               onClick={() => {
+                if (option.disabled) return;
                 onChange(option.value);
                 setQuery("");
                 setOpen(false);

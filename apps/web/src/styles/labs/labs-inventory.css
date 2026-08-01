@@ -1,17 +1,35 @@
 .labs-models-table {
-  min-width: 780px;
+  min-width: 660px;
 }
 
 .labs-models-table th:first-child {
-  width: 34%;
+  width: 42%;
 }
 
-.labs-models-table td:nth-child(3),
-.labs-models-table td:nth-child(4),
-.labs-models-table td:nth-child(5),
-.labs-models-table td:nth-child(6) {
+.labs-models-table th:nth-child(2),
+.labs-models-table th:nth-child(3) {
+  width: 18%;
+}
+
+.labs-models-table th:nth-child(4) {
+  width: 12%;
+}
+
+.labs-models-table td:nth-child(4) {
   color: var(--muted-strong);
   font-size: 11px;
+}
+
+.labs-model-table-summary {
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+}
+
+.labs-model-table-summary > span {
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 
 .labs-model-run-list-actions {
@@ -76,6 +94,14 @@
   gap: 7px;
 }
 
+.labs-model-create-select-row .dropdown-select {
+  width: 100%;
+}
+
+.labs-model-create-select-row .dropdown-trigger {
+  background: var(--bg);
+}
+
 .labs-model-create-add {
   display: inline-flex;
   width: 34px;
@@ -117,10 +143,9 @@
   font-weight: 500;
 }
 
-.labs-model-create-dialog textarea:focus,
-.labs-model-create-dialog select:focus {
-  border-color: #5c8cc9;
-  box-shadow: 0 0 0 2px rgba(92, 140, 201, 0.18);
+.labs-model-create-dialog textarea:focus {
+  border-color: var(--border);
+  box-shadow: none;
 }
 
 .labs-model-create-dialog footer button[type="submit"] {

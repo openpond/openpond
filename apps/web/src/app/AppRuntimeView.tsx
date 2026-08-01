@@ -82,6 +82,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     rightPanelMode,
     activeExperience,
     changeExperience,
+    changeNewExperience,
     terminalOpen,
     settingsSection,
     newProjectDialogOpen,
@@ -781,6 +782,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         }}
         mainPane={{
           experience: activeExperience,
+          onNewExperienceChange: changeNewExperience,
           view,
           teamChat: {
             currentUserId: teamChat.currentUserId,

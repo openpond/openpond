@@ -819,6 +819,48 @@
   height: 100%;
 }
 
+.new-experience-switcher {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 50%;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.new-experience-option {
+  min-width: 82px;
+  height: 30px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-strong);
+  padding: 0 13px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.new-experience-option:hover {
+  color: var(--text);
+}
+
+.new-experience-option.active {
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+.new-experience-option:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.62);
+  outline-offset: 1px;
+}
+
 .start-welcome {
   position: absolute;
   z-index: 0;
@@ -874,6 +916,15 @@
 }
 
 @media (max-width: 720px) {
+  .new-experience-switcher {
+    top: 12px;
+  }
+
+  .new-experience-option {
+    min-width: 72px;
+    padding-inline: 10px;
+  }
+
   .activity-child-message-group {
     width: 100%;
   }

@@ -9,6 +9,7 @@ import {
 } from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
+import { newExperienceTitle } from "../../lib/experience-options";
 
 type SidebarDestinationProps = {
   experience?: Experience;
@@ -47,7 +48,7 @@ export function SidebarNavigation({
         onClick={() => beginNewChat(null)}
       >
         <SquarePen size={16} />
-        <span>{experience === "chat" ? "New chat" : "New task"}</span>
+        <span>{newExperienceTitle(experience)}</span>
       </button>
       {experience === "development" ? (
         <>

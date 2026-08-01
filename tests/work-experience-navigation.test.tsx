@@ -7,9 +7,13 @@ import {
   storedSessionExperience,
 } from "../apps/server/src/store/store-persistence";
 import {
-  EXPERIENCE_MENU_OPTIONS,
   SidebarExperienceMenu,
 } from "../apps/web/src/components/sidebar/SidebarExperienceMenu";
+import { NewExperienceSwitcher } from "../apps/web/src/components/app-shell/NewExperienceSwitcher";
+import {
+  EXPERIENCE_OPTIONS,
+  newExperienceTitle,
+} from "../apps/web/src/lib/experience-options";
 import {
   WORK_STARTER_PROMPTS,
   WorkStarterPrompts,
@@ -80,17 +84,31 @@ describe("Work experience navigation", () => {
       })
     );
 
-    expect(EXPERIENCE_MENU_OPTIONS.map((option) => option.label)).toEqual([
+    const switcher = renderToStaticMarkup(
+      createElement(NewExperienceSwitcher, {
+        value: "development",
+        onChange: () => undefined,
+      })
+    );
+
+    expect(EXPERIENCE_OPTIONS.map((option) => option.label)).toEqual([
       "Chat",
       "Work",
-      "Development",
+      "Developer",
     ]);
+    expect(newExperienceTitle("chat")).toBe("New chat");
+    expect(newExperienceTitle("work")).toBe("New task");
+    expect(newExperienceTitle("development")).toBe("New task");
     expect(menu).toContain("sidebar-experience-trigger");
     expect(menu).toContain(
       '<span class="sidebar-experience-label">Work</span>'
     );
     expect(menu).toContain("OpenPond experience: Work");
     expect(menu).toContain('aria-haspopup="menu"');
+    expect(switcher).toContain('role="radiogroup"');
+    expect(switcher).toContain('aria-label="Choose experience"');
+    expect(switcher).toContain('data-experience="development"');
+    expect(switcher).toContain('aria-checked="true"');
     expect(WORK_STARTER_PROMPTS).toHaveLength(4);
     for (const starter of WORK_STARTER_PROMPTS) {
       expect(starters).toContain(starter.label);

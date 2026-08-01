@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type DragEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import type {
@@ -56,6 +57,23 @@ function syncedRunningPulseStyle(): CSSProperties {
   return {
     animationDelay: `${-(Date.now() % SIDEBAR_RUNNING_PULSE_MS)}ms`,
   };
+}
+
+function prepareSidebarTitleTicker(event: ReactPointerEvent<HTMLSpanElement>) {
+  const viewport = event.currentTarget;
+  const title = viewport.firstElementChild;
+  if (!(title instanceof HTMLElement)) return;
+  const overflow = Math.max(0, title.scrollWidth - viewport.clientWidth);
+  const overflowing = overflow > 2;
+  viewport.dataset.overflowing = String(overflowing);
+  viewport.style.setProperty(
+    "--sidebar-title-ticker-distance",
+    `${-overflow}px`,
+  );
+  viewport.style.setProperty(
+    "--sidebar-title-ticker-duration",
+    `${Math.min(6.5, Math.max(2.8, overflow / 42 + 2.4))}s`,
+  );
 }
 
 export function SidebarSection({
@@ -326,7 +344,13 @@ export function SidebarSessionRow({
         icon ?? <MessageSquare size={15} />
       )}
       <span className={`row-label-shell${projectLabel ? " has-detail" : ""}`}>
-        <span className="row-label">{session.title}</span>
+        <span
+          className="row-label sidebar-task-title"
+          data-overflowing="false"
+          onPointerEnter={prepareSidebarTitleTicker}
+        >
+          <span className="sidebar-task-title-text">{session.title}</span>
+        </span>
         {projectLabel ? (
           <span className="sidebar-session-project-label">{projectLabel}</span>
         ) : null}

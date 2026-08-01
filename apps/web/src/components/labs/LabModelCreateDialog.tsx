@@ -5,6 +5,7 @@ import type {
 } from "@openpond/contracts";
 
 import { AppDialog } from "../dialogs/AppDialog";
+import { DropdownSelect } from "../DropdownSelect";
 import { X } from "../icons";
 
 export type LabModelCreateInput = {
@@ -102,23 +103,21 @@ export function LabModelCreateDialog({
         <div className="labs-model-create-field">
           <span>Starting model <small>Optional</small></span>
           <div className="labs-model-create-select-row">
-            <select
-              aria-label="Starting model"
+            <DropdownSelect
+              label="Starting model"
               value={baseModelKey}
-              onChange={(event) => setBaseModelKey(event.currentTarget.value)}
-            >
-              <option value="">Choose later</option>
-              {listedCandidates.map((candidate) => (
-                <option
-                  disabled={!candidate.available}
-                  key={candidate.selectionKey}
-                  value={candidate.selectionKey}
-                >
-                  {candidate.label} · {candidate.sourceLabel}
-                  {candidate.available ? "" : " · Unavailable"}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: "Choose later" },
+                ...listedCandidates.map((candidate) => ({
+                  value: candidate.selectionKey,
+                  label: `${candidate.label} · ${candidate.sourceLabel}${
+                    candidate.available ? "" : " · Unavailable"
+                  }`,
+                  disabled: !candidate.available,
+                })),
+              ]}
+              onChange={setBaseModelKey}
+            />
             <button
               aria-label="Add starting model"
               className="labs-model-create-add"
