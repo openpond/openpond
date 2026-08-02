@@ -18,6 +18,21 @@ export function openPondOrganizationCacheKey(
   return openPondAccountWorkspaceScopeKey(account);
 }
 
+export function shouldRefreshMissingActiveTeamWorkspace(
+  account: BootstrapPayload["account"] | null | undefined,
+  organizations: OpenPondOrganization[],
+): boolean {
+  const activeWorkspace = account?.state === "signed_in"
+    ? account.workspaces?.activeWorkspace
+    : null;
+  return Boolean(
+    activeWorkspace?.type === "team" &&
+      !organizations.some(
+        (organization) => organization.teamId === activeWorkspace.id,
+      ),
+  );
+}
+
 export function readOpenPondOrganizationsFromMemory(
   accountKey: string | null | undefined,
 ): OpenPondOrganization[] | null {

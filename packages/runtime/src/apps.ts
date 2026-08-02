@@ -3,6 +3,7 @@ import {
   getOpenPondAccount,
   listApps,
 } from "@openpond/cloud";
+import { OpenPondApiError } from "@openpond/cloud/api/core";
 import type { CreateRepoRequest, CreateRepoResponse, OpenPondAccountResponse } from "@openpond/cloud";
 import { SandboxAppActionRegistrySchema, type OpenPondApp } from "@openpond/contracts";
 import type {
@@ -136,6 +137,11 @@ type AccountProfileLookup = {
   error: string | null;
 };
 
+export function isOpenPondAuthenticationError(error: unknown): boolean {
+  return error instanceof OpenPondApiError &&
+    (error.status === 401 || error.status === 403);
+}
+
 async function loadAccountProfileLookups(context: RuntimeAccountContext): Promise<Record<string, AccountProfileLookup>> {
   const accounts = Array.isArray(context.config.accounts) ? context.config.accounts : [];
   const entries = await Promise.all(
@@ -162,7 +168,7 @@ async function loadAccountProfileLookups(context: RuntimeAccountContext): Promis
           key,
           {
             response: null,
-            authFailed: true,
+            authFailed: isOpenPondAuthenticationError(error),
             error: errorMessage(error),
           },
         ] as const;
@@ -186,13 +192,16 @@ async function loadOpenPondAccountStateForContext(
     context.token && activeLookup?.authFailed
       ? activeLookup.error || "OpenPond account authentication failed."
       : null;
+  const lookupError = context.token && activeLookup?.error
+    ? activeLookup.error
+    : null;
   return {
     account: toAccountState({
       ...context,
       accountResponse,
       accountProfiles,
       authFailed: Boolean(authError),
-      error: authError,
+      error: authError ?? lookupError,
     }),
   };
 }

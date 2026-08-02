@@ -28,6 +28,7 @@ import type { OpenPondOrganization } from "../lib/organization-types";
 import {
   openPondOrganizationCacheKey,
   preloadOpenPondOrganizations,
+  shouldRefreshMissingActiveTeamWorkspace,
 } from "../lib/openpond-organization-memory";
 import { preloadSandboxAgents } from "../lib/sandbox-agent-memory";
 import {
@@ -398,7 +399,18 @@ export function useAppBootstrap(params: {
         const activeWorkspaceAvailable = activeOrganizations.some(
           (organization) => organization.teamId === activeWorkspaceId,
         );
-        if (activeWorkspaceAvailable) await preloadTeamAgents(activeWorkspaceId);
+        if (activeWorkspaceAvailable) {
+          await preloadTeamAgents(activeWorkspaceId);
+        } else if (
+          shouldRefreshMissingActiveTeamWorkspace(
+            bootstrap.account,
+            activeOrganizations,
+          )
+        ) {
+          const payload = await api.refreshOpenPondBootstrap(connection);
+          if (cancelled) return;
+          applyBootstrapPayload(payload);
+        }
         completeStartup();
       })
       .catch((workspacePreloadError) => {
@@ -417,6 +429,7 @@ export function useAppBootstrap(params: {
   }, [
     bootstrap?.account,
     bootstrap?.accountMeta.asOf,
+    applyBootstrapPayload,
     completeStartup,
     connection,
     setBlockingStartupStage,
@@ -426,34 +439,31 @@ export function useAppBootstrap(params: {
   useEffect(() => {
     if (!connection || !organizationRefreshAccountKey) return;
     let refreshing = false;
-    const refreshOrganizations = () => {
+    const refreshAccount = () => {
       if (refreshing) return;
       refreshing = true;
-      void preloadOpenPondOrganizations({
-        accountKey: organizationRefreshAccountKey,
-        force: true,
-        fetchOrganizations: () => fetchActiveOpenPondOrganizations(connection),
-      })
+      void api.refreshOpenPondBootstrap(connection)
+        .then(applyBootstrapPayload)
         .catch(() => undefined)
         .finally(() => {
           refreshing = false;
         });
     };
     const refreshWhenVisible = () => {
-      if (document.visibilityState === "visible") refreshOrganizations();
+      if (document.visibilityState === "visible") refreshAccount();
     };
     const intervalId = window.setInterval(
-      refreshOrganizations,
+      refreshAccount,
       ORGANIZATION_REFRESH_INTERVAL_MS,
     );
-    window.addEventListener("focus", refreshOrganizations);
+    window.addEventListener("focus", refreshAccount);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       window.clearInterval(intervalId);
-      window.removeEventListener("focus", refreshOrganizations);
+      window.removeEventListener("focus", refreshAccount);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [connection, organizationRefreshAccountKey]);
+  }, [applyBootstrapPayload, connection, organizationRefreshAccountKey]);
 
   const load = useCallback(async () => {
     setBlockingStartupStage("connecting");

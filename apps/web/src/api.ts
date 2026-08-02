@@ -182,6 +182,11 @@ export const api = {
   ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  refreshOpenPondBootstrap: (connection: ClientConnection) =>
+    apiFetch<BootstrapPayload>(
+      connection,
+      "/v1/bootstrap?refreshOpenPond=1&ensureProfile=0",
+    ),
   extensionCatalog: (connection: ClientConnection) =>
     apiFetch<OpenPondExtensionCatalog>(connection, "/v1/extensions"),
   extensionPreview: (

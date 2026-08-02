@@ -98,6 +98,19 @@ export function openPondWorkspaceCacheScope(account: AccountState): string {
   return `${openPondAccountCacheScope(account)}|profile:${stableAccountId}|workspace:${activeWorkspaceId}`;
 }
 
+export function shouldPreserveCachedAccountOnRefresh(
+  freshAccount: AccountState,
+  cachedAccount: AccountState | null | undefined,
+): boolean {
+  return Boolean(
+    cachedAccount?.state === "signed_in" &&
+      cachedAccount.workspaces &&
+      freshAccount.state === "signed_in" &&
+      freshAccount.error &&
+      !freshAccount.workspaces,
+  );
+}
+
 export function createOpenPondCache(deps: {
   store: SqliteStore;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -195,6 +208,12 @@ export function createOpenPondCache(deps: {
         cachedAccounts
       );
       const accountScope = openPondAccountCacheScope(account);
+      const cachedAccount = cachedAccounts.find(
+        (candidate) => openPondAccountCacheScope(candidate) === accountScope,
+      );
+      if (shouldPreserveCachedAccountOnRefresh(account, cachedAccount)) {
+        throw new Error(account.error ?? "OpenPond account refresh failed.");
+      }
       const workspaceScope = openPondCacheScope(account);
       const [accountEntry, appsEntry] = await Promise.all([
         store.setCacheEntry(

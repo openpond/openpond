@@ -763,11 +763,7 @@ export async function getOpenPondAccount(
   const response = await apiFetch(baseUrl, token, "/v1/account", {
     method: "GET",
   });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`Account lookup failed: ${response.status} ${text}`);
-  }
-  return (await response.json()) as OpenPondAccountResponse;
+  return readApiJson<OpenPondAccountResponse>(response, "Account lookup");
 }
 
 export async function selectOpenPondAccountWorkspace(

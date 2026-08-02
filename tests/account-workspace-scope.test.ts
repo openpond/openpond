@@ -6,7 +6,10 @@ import {
   openPondAccountScopeKey,
   openPondAccountWorkspaceScopeKey,
 } from "../apps/web/src/lib/account-scope";
-import { openPondOrganizationCacheKey } from "../apps/web/src/lib/openpond-organization-memory";
+import {
+  openPondOrganizationCacheKey,
+  shouldRefreshMissingActiveTeamWorkspace,
+} from "../apps/web/src/lib/openpond-organization-memory";
 
 function account(activeWorkspaceId: string): AccountState {
   return {
@@ -57,5 +60,21 @@ describe("OpenPond account/workspace scope", () => {
     expect(openPondOrganizationCacheKey(personal)).toBe(
       openPondAccountWorkspaceScopeKey(personal),
     );
+  });
+
+  test("reconciles only a Team workspace missing from the active membership list", () => {
+    const team = account("team_engine");
+    const personal = account("personal_ada");
+    const organizations = [
+      { teamId: "team_engine" } as Parameters<
+        typeof shouldRefreshMissingActiveTeamWorkspace
+      >[1][number],
+    ];
+
+    expect(shouldRefreshMissingActiveTeamWorkspace(team, [])).toBe(true);
+    expect(
+      shouldRefreshMissingActiveTeamWorkspace(team, organizations),
+    ).toBe(false);
+    expect(shouldRefreshMissingActiveTeamWorkspace(personal, [])).toBe(false);
   });
 });

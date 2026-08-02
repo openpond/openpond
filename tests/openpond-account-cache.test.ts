@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
+import { OpenPondApiError } from "@openpond/cloud/api/core";
 import type { AccountState } from "@openpond/contracts";
 import {
   openPondAccountCacheScope,
   openPondWorkspaceCacheScope,
   preserveCachedAccountIdentities,
+  shouldPreserveCachedAccountOnRefresh,
 } from "../apps/server/src/openpond/server-openpond-cache";
+import { isOpenPondAuthenticationError } from "../packages/runtime/src/apps";
 
 function accountState(overrides: Partial<AccountState> = {}): AccountState {
   return {
@@ -105,5 +108,69 @@ describe("preserveCachedAccountIdentities", () => {
         },
       ],
     });
+  });
+});
+
+describe("account refresh failure handling", () => {
+  const cachedTeam = accountState({
+    state: "signed_in",
+    error: null,
+    profile: { id: "user_qa" } as AccountState["profile"],
+    workspaces: {
+      activeWorkspace: { id: "team_engine", type: "team" },
+    } as AccountState["workspaces"],
+  });
+
+  test("keeps the last valid Team projection during a transient network failure", () => {
+    const failedRefresh = accountState({
+      state: "signed_in",
+      error: "Account lookup failed: network unavailable",
+      workspaces: null,
+    });
+
+    expect(
+      shouldPreserveCachedAccountOnRefresh(failedRefresh, cachedTeam),
+    ).toBe(true);
+  });
+
+  test("does not preserve Team state after authentication failure or Personal fallback", () => {
+    const authFailure = accountState({
+      state: "auth_error",
+      error: "Account lookup failed: 401 Unauthorized",
+      workspaces: null,
+    });
+    const personalFallback = accountState({
+      state: "signed_in",
+      error: null,
+      workspaces: {
+        activeWorkspace: { id: "personal_qa", type: "personal" },
+      } as AccountState["workspaces"],
+    });
+
+    expect(
+      shouldPreserveCachedAccountOnRefresh(authFailure, cachedTeam),
+    ).toBe(false);
+    expect(
+      shouldPreserveCachedAccountOnRefresh(personalFallback, cachedTeam),
+    ).toBe(false);
+  });
+
+  test("classifies only 401 and 403 API responses as authentication failures", () => {
+    expect(
+      isOpenPondAuthenticationError(
+        new OpenPondApiError(401, "UNAUTHORIZED", "Account lookup"),
+      ),
+    ).toBe(true);
+    expect(
+      isOpenPondAuthenticationError(
+        new OpenPondApiError(403, "FORBIDDEN", "Account lookup"),
+      ),
+    ).toBe(true);
+    expect(
+      isOpenPondAuthenticationError(
+        new OpenPondApiError(500, "INTERNAL", "Account lookup"),
+      ),
+    ).toBe(false);
+    expect(isOpenPondAuthenticationError(new Error("offline"))).toBe(false);
   });
 });
