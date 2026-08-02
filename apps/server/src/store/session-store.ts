@@ -14,12 +14,21 @@ import {
 import type { SqliteStore } from "./store.js";
 import { event, now } from "../utils.js";
 
+export type OpenPondSessionScope = {
+  accountId: string;
+  personalWorkspaceId: string;
+  teamWorkspaceId: string | null;
+  activeWorkspaceId: string;
+  activeWorkspaceType: "personal" | "team";
+};
+
 export function createSessionStore(deps: {
   store: SqliteStore;
   defaultSessionCwd: (appId?: string | null) => string;
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
+  loadOpenPondSessionScope?: () => Promise<OpenPondSessionScope | null>;
 }) {
   const {
     store,
@@ -27,7 +36,12 @@ export function createSessionStore(deps: {
     loadAppPreferences,
     appendRuntimeEvent,
     loadLastUsedProfile,
+    loadOpenPondSessionScope,
   } = deps;
+
+  async function resolveOpenPondSessionScope(): Promise<OpenPondSessionScope | null> {
+    return loadOpenPondSessionScope ? loadOpenPondSessionScope() : null;
+  }
 
   async function createSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
@@ -46,6 +60,7 @@ export function createSessionStore(deps: {
         : loadLastUsedProfile
         ? await loadLastUsedProfile()
         : null;
+    const openPondScope = await resolveOpenPondSessionScope();
     const session: Session = {
       id: randomUUID(),
       experience: input.experience ?? DEFAULT_SESSION_EXPERIENCE,
@@ -68,6 +83,9 @@ export function createSessionStore(deps: {
       localProjectId: input.localProjectId ?? null,
       cloudProjectId: input.cloudProjectId ?? null,
       cloudTeamId: input.cloudTeamId ?? null,
+      openPondAccountId: openPondScope?.accountId ?? null,
+      openPondWorkspaceId: openPondScope?.activeWorkspaceId ?? null,
+      openPondWorkspaceType: openPondScope?.activeWorkspaceType ?? null,
       currentProfile,
       ...(input.metadata ? { metadata: input.metadata } : {}),
       cwd: input.cwd === undefined ? defaultSessionCwd(input.appId) : input.cwd,
@@ -98,6 +116,41 @@ export function createSessionStore(deps: {
       })
     );
     return session;
+  }
+
+  async function ensureSessionOpenPondScope(sessionId: string): Promise<Session> {
+    const session = await getSession(sessionId);
+    const currentScope = await resolveOpenPondSessionScope();
+    if (!currentScope) return session;
+    const boundAccountId = session.openPondAccountId?.trim() ?? "";
+    const boundWorkspaceId = session.openPondWorkspaceId?.trim() ?? "";
+    const boundWorkspaceType = session.openPondWorkspaceType ?? null;
+    if (boundAccountId || boundWorkspaceId || boundWorkspaceType) {
+      if (
+        !boundAccountId ||
+        !boundWorkspaceId ||
+        !boundWorkspaceType
+      ) {
+        throw new Error("This chat has an incomplete OpenPond account/workspace binding.");
+      }
+      if (boundAccountId !== currentScope.accountId) {
+        throw new Error("Switch to the OpenPond account that owns this chat before continuing it.");
+      }
+      const authorizedWorkspaceId =
+        boundWorkspaceType === "personal"
+          ? currentScope.personalWorkspaceId
+          : currentScope.teamWorkspaceId;
+      if (boundWorkspaceId !== authorizedWorkspaceId) {
+        throw new Error("This chat's OpenPond workspace is no longer available to this account.");
+      }
+      return session;
+    }
+
+    return updateSession(sessionId, {
+      openPondAccountId: currentScope.accountId,
+      openPondWorkspaceId: currentScope.personalWorkspaceId,
+      openPondWorkspaceType: "personal",
+    });
   }
 
   async function patchSession(
@@ -220,6 +273,7 @@ export function createSessionStore(deps: {
 
   return {
     createSession,
+    ensureSessionOpenPondScope,
     patchSession,
     getSession,
     updateSession,
@@ -268,6 +322,9 @@ function normalizeSession(
       ? parsed.data
       : DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
     currentProfile: session.currentProfile ?? null,
+    openPondAccountId: session.openPondAccountId ?? null,
+    openPondWorkspaceId: session.openPondWorkspaceId ?? null,
+    openPondWorkspaceType: session.openPondWorkspaceType ?? null,
     pinned,
     savedForLater,
     archived,

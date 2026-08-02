@@ -190,6 +190,7 @@ export async function* streamOpenPondHostedChatTurn(
     toolChoice: input.toolChoice,
     requestId: input.requestId,
     reasoningEffort: input.reasoningEffort,
+    workspaceId: input.workspaceId,
     signal: input.signal,
   });
 }
@@ -261,7 +262,8 @@ export async function* streamOpChatChatCompletion(
       requestUrl,
       options.token,
       "text/event-stream",
-      options.requestId
+      options.requestId,
+      options.workspaceId
     ),
     body: JSON.stringify(buildOpChatBody(options)),
     signal: options.signal,
@@ -351,7 +353,8 @@ function opChatHeaders(
   requestUrl: string,
   token: string,
   accept: string,
-  requestId?: string
+  requestId?: string,
+  workspaceId?: string | null
 ): Headers {
   const trimmed = token.trim();
   if (!trimmed) throw new Error("OpenPond API key is required for OpChat.");
@@ -361,6 +364,10 @@ function opChatHeaders(
   headers.set("Accept", accept);
   headers.set("x-openpond-client", "openpond-app");
   headers.set("x-openpond-request-id", requestId || randomUUID());
+  const normalizedWorkspaceId = workspaceId?.trim();
+  if (normalizedWorkspaceId) {
+    headers.set("x-openpond-team-id", normalizedWorkspaceId);
+  }
   return withVercelProtectionBypass(requestUrl, headers);
 }
 

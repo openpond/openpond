@@ -338,6 +338,60 @@ describe("session store patches", () => {
       await rm(storeDir, { recursive: true, force: true });
     }
   });
+
+  test("binds new chats to the active workspace and preserves legacy chats as Personal", async () => {
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-scope-")
+    );
+    const store = new SqliteStore(storeDir);
+    let scope = {
+      accountId: "user_ada",
+      personalWorkspaceId: "personal_ada",
+      teamWorkspaceId: "team_engine" as string | null,
+      activeWorkspaceId: "team_engine",
+      activeWorkspaceType: "team" as const,
+    };
+
+    try {
+      const scopedStore = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async () => undefined,
+        loadOpenPondSessionScope: async () => scope,
+      });
+      const teamChat = await scopedStore.createSession({ provider: "openpond" });
+      expect(teamChat).toMatchObject({
+        openPondAccountId: "user_ada",
+        openPondWorkspaceId: "team_engine",
+        openPondWorkspaceType: "team",
+      });
+
+      const legacyStore = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/tmp/openpond",
+        appendRuntimeEvent: async () => undefined,
+      });
+      const legacyChat = await legacyStore.createSession({ provider: "openpond" });
+      expect(legacyChat.openPondWorkspaceId).toBeNull();
+      expect(await scopedStore.ensureSessionOpenPondScope(legacyChat.id)).toMatchObject({
+        openPondAccountId: "user_ada",
+        openPondWorkspaceId: "personal_ada",
+        openPondWorkspaceType: "personal",
+      });
+
+      scope = { ...scope, accountId: "user_grace" };
+      await expect(scopedStore.ensureSessionOpenPondScope(teamChat.id)).rejects.toThrow(
+        "Switch to the OpenPond account that owns this chat",
+      );
+      scope = { ...scope, accountId: "user_ada", teamWorkspaceId: null };
+      await expect(scopedStore.ensureSessionOpenPondScope(teamChat.id)).rejects.toThrow(
+        "workspace is no longer available",
+      );
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
 });
 
 function session(id: string): Session {

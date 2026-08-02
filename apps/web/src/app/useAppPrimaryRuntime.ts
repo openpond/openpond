@@ -40,7 +40,7 @@ import {
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
 import { openPondAccountScopeKey } from "../lib/account-scope";
-import { resolveTeamChatOpenPondOrganization } from "../lib/cloud-project-utils";
+import { resolveActiveTeamChatOpenPondOrganization } from "../lib/cloud-project-utils";
 import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 import {
   useActiveWorkspaceViewState,
@@ -441,11 +441,11 @@ export function useAppPrimaryRuntime() {
   const organizations = useOpenPondOrganizations(organizationCacheKey);
   const teamChatOrganization = useMemo(
     () =>
-      resolveTeamChatOpenPondOrganization(
+      resolveActiveTeamChatOpenPondOrganization(
         organizations,
-        appDefaults.defaultTeamId
+        bootstrap?.account.workspaces
       ),
-    [appDefaults.defaultTeamId, organizations]
+    [bootstrap?.account.workspaces, organizations]
   );
   const teamChatTeamId = teamChatOrganization?.teamId ?? null;
   const teamChat = useTeamChat({

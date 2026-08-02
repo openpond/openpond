@@ -108,6 +108,7 @@ export type HostedChatTurnInput = {
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
   reasoningEffort?: CodexReasoningEffort | null;
+  workspaceId?: string | null;
   signal?: AbortSignal;
 };
 

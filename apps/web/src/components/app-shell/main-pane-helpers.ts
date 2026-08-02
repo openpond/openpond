@@ -37,22 +37,26 @@ function userMessageRows(element: HTMLElement): HTMLElement[] {
 }
 
 export function billingTargetForContext({
-  activeWorkspaceId,
+  activeAccountWorkspaceId,
+  activeAccountWorkspaceType,
   cloudProjects,
 }: {
-  activeWorkspaceId: string | null;
+  activeAccountWorkspaceId: string | null;
+  activeAccountWorkspaceType: "personal" | "team" | null;
   cloudProjects: CloudProject[];
 }): { organizationSlug: string | null; teamId: string | null } {
-  const selectedProject = cloudProjects.find(
-    (project) => project.id === activeWorkspaceId
-  );
-  const fallbackProject = cloudProjects.find(
-    (project) => project.organizationSlug || project.teamId
-  );
-  const project = selectedProject ?? fallbackProject ?? null;
+  if (!activeAccountWorkspaceId || !activeAccountWorkspaceType) {
+    return { organizationSlug: null, teamId: null };
+  }
+  const project =
+    activeAccountWorkspaceType === "team"
+      ? cloudProjects.find(
+          (candidate) => candidate.teamId === activeAccountWorkspaceId
+        ) ?? null
+      : null;
   return {
     organizationSlug: project?.organizationSlug ?? null,
-    teamId: project?.teamId ?? null,
+    teamId: activeAccountWorkspaceId,
   };
 }
 

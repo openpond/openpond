@@ -751,7 +751,10 @@ export function MainPane({
     bootstrap?.account.activeProfile?.baseUrl ??
     null;
   const billingTarget = billingTargetForContext({
-    activeWorkspaceId,
+    activeAccountWorkspaceId:
+      bootstrap?.account.workspaces?.activeWorkspace.id ?? null,
+    activeAccountWorkspaceType:
+      bootstrap?.account.workspaces?.activeWorkspace.type ?? null,
     cloudProjects,
   });
   const showThinkingIndicator =

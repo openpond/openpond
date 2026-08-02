@@ -1,3 +1,5 @@
+import type { AccountWorkspaceProjection } from "@openpond/contracts";
+
 import type { OpenPondOrganization } from "./organization-types";
 
 export function slugifyCloudProjectName(name: string): string {
@@ -101,5 +103,21 @@ export function resolveTeamChatOpenPondOrganization(
     sharedOrganizations.find((organization) => organization.role === "admin") ??
     sharedOrganizations[0] ??
     null
+  );
+}
+
+export function resolveActiveTeamChatOpenPondOrganization(
+  organizations: OpenPondOrganization[],
+  workspaces: AccountWorkspaceProjection | null | undefined,
+): OpenPondOrganization | null {
+  if (workspaces?.activeWorkspace.type !== "team") return null;
+
+  return (
+    organizations.find(
+      (organization) =>
+        organization.status === "active" &&
+        organization.workspaceKind === "shared" &&
+        organization.teamId === workspaces.activeWorkspace.id,
+    ) ?? null
   );
 }

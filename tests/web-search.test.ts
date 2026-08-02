@@ -104,6 +104,24 @@ describe("hosted web search executor", () => {
     });
   });
 
+  test("sends the bound workspace on hosted search requests", async () => {
+    let workspaceHeader: string | null = null;
+    const execute = createHostedWebSearchExecutor({
+      endpoint: "https://search.example.test/v1/web",
+      apiKey: "search-token",
+      fetchImpl: async (_input, init) => {
+        workspaceHeader = new Headers(init?.headers).get("x-openpond-team-id");
+        return new Response(JSON.stringify({ provider: "test", results: [] }), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await execute({ query: "OpenPond" }, { workspaceId: "team_engine" });
+
+    expect(workspaceHeader).toBe("team_engine");
+  });
+
   test("resolves Search API endpoints from account and env bases", () => {
     expect(normalizeSearchApiUrl("https://api.example.test")).toBe(
       "https://api.example.test/v1/search",

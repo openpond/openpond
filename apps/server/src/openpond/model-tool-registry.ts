@@ -743,7 +743,10 @@ export function createWebSearchModelToolDefinition(deps: {
             ? { domains: context.args.domains.filter((item): item is string => typeof item === "string") }
             : {}),
         },
-        { signal: context.signal },
+        {
+          signal: context.signal,
+          workspaceId: context.session.openPondWorkspaceId,
+        },
       );
       return {
         toolCallId: context.callId,

@@ -243,6 +243,7 @@ export function createHostedCompactionRuntime(deps: {
             model: streamInput.model,
             messages: streamInput.messages,
             requestId: streamInput.requestId,
+            workspaceId: input.session.openPondWorkspaceId,
             signal: streamInput.signal,
           })) {
             if (delta.type === "text_delta" && delta.text) yield { text: delta.text, raw: delta.raw };

@@ -21,6 +21,7 @@ import {
 } from "@openpond/cloud";
 import {
   getBundledRuntimeVersion,
+  loadOpenPondAccountState,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 import {
@@ -366,6 +367,7 @@ export async function createOpenPondServer(
 
   const {
     createSession,
+    ensureSessionOpenPondScope,
     patchSession,
     getSession,
     updateSession,
@@ -379,6 +381,20 @@ export async function createOpenPondServer(
     appendRuntimeEvent,
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
+    loadOpenPondSessionScope: async () => {
+      const result = await loadOpenPondAccountState().catch(() => null);
+      const account = result?.account;
+      const accountId = account?.profile?.id?.trim() ?? "";
+      const workspaces = account?.workspaces;
+      if (account?.state !== "signed_in" || !accountId || !workspaces) return null;
+      return {
+        accountId,
+        personalWorkspaceId: workspaces.personal.id,
+        teamWorkspaceId: workspaces.team?.id ?? null,
+        activeWorkspaceId: workspaces.activeWorkspace.id,
+        activeWorkspaceType: workspaces.activeWorkspace.type,
+      };
+    },
   });
 
   const {
@@ -899,6 +915,7 @@ export async function createOpenPondServer(
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
     executeWebSearch: executeWebSearch ?? undefined,
+    ensureSessionOpenPondScope,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
     manageSidebarFile: async ({ session, action, path: requestedPath }) => {
@@ -1217,6 +1234,7 @@ export async function createOpenPondServer(
                 model: streamInput.model,
                 messages: streamInput.messages,
                 requestId: streamInput.requestId,
+                workspaceId: input.session.openPondWorkspaceId,
                 signal: streamInput.signal,
               })) {
                 if (delta.type === "text_delta" && delta.text)

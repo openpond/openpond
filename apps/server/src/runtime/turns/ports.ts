@@ -419,6 +419,7 @@ export type TurnRunnerDependencies = {
     profileRef: OpenPondProfileRef | null;
   }) => Promise<ProfileSkillCommandResult | null>;
   executeWebSearch?: WebSearchExecutor;
+  ensureSessionOpenPondScope?: (sessionId: string) => Promise<Session>;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
   manageSidebarFile?: (input: {

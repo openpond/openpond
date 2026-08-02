@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { Session } from "@openpond/contracts";
-import { mergedSidebarSessions } from "../apps/web/src/hooks/useAppSelectionState";
+import type { AccountState, Session } from "@openpond/contracts";
+import {
+  mergedSidebarSessions,
+  sessionsForOpenPondWorkspace,
+} from "../apps/web/src/hooks/useAppSelectionState";
 
 const older = "2026-07-01T10:00:00.000Z";
 const newer = "2026-07-01T10:00:01.000Z";
@@ -27,6 +30,73 @@ function session(overrides: Partial<Session> = {}): Session {
     archived: false,
     order: 10,
     ...overrides,
+  };
+}
+
+function account(active: "personal" | "team"): AccountState {
+  const usage = {
+    scope: "workspace" as const,
+    limitsScope: "workspace" as const,
+    periodStart: "2026-08-01T00:00:00.000Z",
+    sandbox: { hours: 0, retailUsd: null, includedHours: 5, maxConcurrent: 1 },
+    opChat: { tokens: 0, includedTokens: 1_000 },
+    search: { calls: 0, includedCalls: 10 },
+    personalizedInference: { requests: 0, includedRequests: 10 },
+    totalRetailUsd: null,
+  };
+  const personal = {
+    id: "personal_ada",
+    type: "personal" as const,
+    displayName: "Personal",
+    role: "owner" as const,
+    isBillingAdmin: true,
+    canManageBilling: true,
+    planKey: "free",
+    accessState: "active",
+    usage,
+  };
+  const team = {
+    ...personal,
+    id: "team_engine",
+    type: "team" as const,
+    displayName: "Engine",
+  };
+  return {
+    state: "signed_in",
+    activeProfile: { handle: "ada", baseUrl: null },
+    label: "Ada",
+    email: "ada@example.com",
+    avatarUrl: null,
+    environment: "staging",
+    baseUrl: null,
+    apiBaseUrl: "https://api.example.test",
+    chatApiBaseUrl: "https://api.example.test/opchat/v1",
+    creditsLabel: null,
+    profile: {
+      id: "user_ada",
+      email: "ada@example.com",
+      name: "Ada",
+      handle: "ada",
+      image: null,
+      timezone: "UTC",
+      isAdmin: false,
+      isVerified: true,
+      dailyAgentAppId: null,
+      dailyAgentDeploymentId: null,
+      credits: null,
+    },
+    products: [],
+    workspaces: {
+      personal,
+      team,
+      activeWorkspace: active === "personal"
+        ? { id: personal.id, type: "personal" }
+        : { id: team.id, type: "team" },
+      hasMembershipConflict: false,
+    },
+    apiHealth: null,
+    accounts: [],
+    error: null,
   };
 }
 
@@ -96,5 +166,39 @@ describe("app selection state", () => {
       objective: "Keep working",
       status: "active",
     });
+  });
+
+  test("keeps legacy chats Personal and partitions bound chats by active workspace", () => {
+    const legacy = session({ id: "legacy", codexThreadId: "legacy_thread" });
+    const personal = session({
+      id: "personal",
+      codexThreadId: "personal_thread",
+      openPondAccountId: "user_ada",
+      openPondWorkspaceId: "personal_ada",
+      openPondWorkspaceType: "personal",
+    });
+    const team = session({
+      id: "team",
+      codexThreadId: "team_thread",
+      openPondAccountId: "user_ada",
+      openPondWorkspaceId: "team_engine",
+      openPondWorkspaceType: "team",
+    });
+    const anotherAccount = session({
+      id: "other",
+      codexThreadId: "other_thread",
+      openPondAccountId: "user_other",
+      openPondWorkspaceId: "personal_other",
+      openPondWorkspaceType: "personal",
+    });
+
+    expect(
+      sessionsForOpenPondWorkspace([legacy, personal, team, anotherAccount], account("personal"))
+        .map((item) => item.id),
+    ).toEqual(["legacy", "personal"]);
+    expect(
+      sessionsForOpenPondWorkspace([legacy, personal, team, anotherAccount], account("team"))
+        .map((item) => item.id),
+    ).toEqual(["team"]);
   });
 });

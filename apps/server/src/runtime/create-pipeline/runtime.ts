@@ -447,6 +447,7 @@ export function createCreateImproveRuntime(deps: {
             model,
             messages,
             requestId: `${input.turn.id}:create-improve-planner`,
+            workspaceId: input.session.openPondWorkspaceId,
             signal: input.signal,
           })) {
             if (delta.type === "text_delta" && delta.text) {

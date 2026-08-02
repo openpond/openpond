@@ -646,6 +646,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             if (!connection) throw new Error("OpenPond is not connected.");
             try {
               applyBootstrapPayload(await api.selectOpenPondWorkspace(connection, input));
+              setSelectedAppId(null);
+              setSelectedProjectId(null);
+              setSelectedSessionId(null);
             } catch (workspaceError) {
               const message =
                 workspaceError instanceof Error ? workspaceError.message : String(workspaceError);

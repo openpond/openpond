@@ -29,7 +29,7 @@ export type WebSearchResult = {
 
 export type WebSearchExecutor = (
   request: WebSearchRequest,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; workspaceId?: string | null },
 ) => Promise<WebSearchResult>;
 
 type WebSearchAccountContext = Pick<
@@ -59,6 +59,8 @@ export function createHostedWebSearchExecutor(input: {
       if (apiKey.startsWith("opk_")) headers.set("openpond-api-key", apiKey);
       headers.set("Authorization", `Bearer ${apiKey}`);
     }
+    const workspaceId = options?.workspaceId?.trim();
+    if (workspaceId) headers.set("x-openpond-team-id", workspaceId);
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers,

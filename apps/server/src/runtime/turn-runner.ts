@@ -729,7 +729,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     if (existingTurn) {
       throw new Error("A turn is already running for this chat.");
     }
-    let session = await getSession(sessionId);
+    let session = deps.ensureSessionOpenPondScope
+      ? await deps.ensureSessionOpenPondScope(sessionId)
+      : await getSession(sessionId);
     let workTurnFinalizationAttempted = false;
     session = {
       ...session,
@@ -1224,6 +1226,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               toolChoice: options?.toolChoice,
               requestId: options?.requestId ?? turn.id,
               reasoningEffort: turnPermissions.codexReasoningEffort,
+              workspaceId: session.openPondWorkspaceId,
               signal: controller.signal,
             })) {
               if (delta.type === "text_delta" && delta.text)

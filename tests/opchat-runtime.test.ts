@@ -312,6 +312,26 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(JSON.stringify(requests[0])).not.toContain("continuation");
   });
 
+  test("sends the bound workspace on hosted chat requests", async () => {
+    let workspaceHeader: string | null = null;
+    globalThis.fetch = async (_input, init) => {
+      workspaceHeader = new Headers(init?.headers).get("x-openpond-team-id");
+      return streamResponse(["data: [DONE]\n\n"]);
+    };
+
+    for await (const _delta of streamOpChatChatCompletion({
+      apiBaseUrl: "https://api.example.test/opchat/v1",
+      token: "opk_test",
+      model: "openpond-chat",
+      messages: [{ role: "user", content: "hello" }],
+      workspaceId: "team_engine",
+    })) {
+      // No content is expected from the terminal SSE marker.
+    }
+
+    expect(workspaceHeader).toBe("team_engine");
+  });
+
   test("shows OpenAI-style provider errors from OpChat failures", async () => {
     globalThis.fetch = async () =>
       jsonResponse(

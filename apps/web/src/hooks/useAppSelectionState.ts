@@ -1,5 +1,5 @@
 import { useMemo, useRef } from "react";
-import type { BootstrapPayload, CloudProject, Session } from "@openpond/contracts";
+import type { AccountState, BootstrapPayload, CloudProject, Session } from "@openpond/contracts";
 import { sandboxMentionApps } from "../lib/chat-app-mentions";
 import { currentOpenPondAppIds, currentOpenPondProjectLink } from "../lib/project-links";
 import {
@@ -79,8 +79,12 @@ export function useAppSelectionState({
   );
   const sidebarSessionOrderKeysRef = useRef<string[]>([]);
   const sidebarSessions = useMemo(
-    () => mergedSidebarSessions(sessions, codexHistorySessions, sidebarSessionOrderKeysRef.current),
-    [codexHistorySessions, sessions],
+    () =>
+      sessionsForOpenPondWorkspace(
+        mergedSidebarSessions(sessions, codexHistorySessions, sidebarSessionOrderKeysRef.current),
+        bootstrap?.account ?? null,
+      ),
+    [bootstrap?.account, codexHistorySessions, sessions],
   );
   const selectedSession = useMemo(
     () => sidebarSessions.find((session) => session.id === selectedSessionId) ?? null,
@@ -137,6 +141,29 @@ export function useAppSelectionState({
     selectedSessionLinkedProject,
     sidebarSessions,
   };
+}
+
+export function sessionsForOpenPondWorkspace(
+  sessions: Session[],
+  account: AccountState | null,
+): Session[] {
+  const workspaces = account?.workspaces;
+  const accountId = account?.profile?.id?.trim() ?? "";
+  if (!workspaces || !accountId) return sessions;
+  const activeWorkspace = workspaces.activeWorkspace;
+  return sessions.filter((session) => {
+    const sessionAccountId = session.openPondAccountId?.trim() ?? "";
+    const sessionWorkspaceId = session.openPondWorkspaceId?.trim() ?? "";
+    const sessionWorkspaceType = session.openPondWorkspaceType ?? null;
+    if (!sessionAccountId && !sessionWorkspaceId && !sessionWorkspaceType) {
+      return activeWorkspace.type === "personal";
+    }
+    return (
+      sessionAccountId === accountId &&
+      sessionWorkspaceId === activeWorkspace.id &&
+      sessionWorkspaceType === activeWorkspace.type
+    );
+  });
 }
 
 export function mergedSidebarSessions(
