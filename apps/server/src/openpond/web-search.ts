@@ -136,12 +136,6 @@ export function normalizeSearchApiUrl(value: string): string {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Hosted web search endpoint must use http or https.");
   }
-  if (
-    url.hostname === "api.staging-api.openpond.ai" ||
-    url.hostname === "staging-api.openpond.ai"
-  ) {
-    url.hostname = "api-new.staging-api.openpond.ai";
-  }
   const segments = url.pathname.split("/").filter(Boolean);
   const opchatIndex = segments.findIndex((segment) => segment.toLowerCase() === "opchat");
   if (opchatIndex >= 0) {

@@ -130,7 +130,10 @@ describe("hosted web search executor", () => {
       "https://api.example.test/v1/search",
     );
     expect(normalizeSearchApiUrl("https://api.staging-api.openpond.ai")).toBe(
-      "https://api-new.staging-api.openpond.ai/v1/search",
+      "https://api.staging-api.openpond.ai/v1/search",
+    );
+    expect(normalizeSearchApiUrl("https://staging-api.openpond.ai")).toBe(
+      "https://staging-api.openpond.ai/v1/search",
     );
     expect(
       resolveWebSearchEndpoint(
