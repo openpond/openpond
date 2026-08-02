@@ -12,6 +12,7 @@ import {
   PreviewLocalProjectCloudSourceRequestSchema,
   ReorderSidebarAppsRequestSchema,
   SaveOpenPondAccountRequestSchema,
+  SelectOpenPondWorkspaceRequestSchema,
   SessionSchema,
   SwitchOpenPondAccountRequestSchema,
   UpdateOpenPondAccountConfigRequestSchema,
@@ -47,6 +48,7 @@ import {
   loadOpenPondApps,
   removeOpenPondAccount,
   saveOpenPondAccount,
+  selectOpenPondWorkspace,
   switchOpenPondAccount,
   updateOpenPondAccountConfig,
 } from "@openpond/runtime";
@@ -1664,6 +1666,29 @@ export function createServerPayloads(deps: {
     });
   }
 
+  async function selectOpenPondWorkspacePayload(
+    payload: unknown
+  ): Promise<BootstrapPayload> {
+    const input = SelectOpenPondWorkspaceRequestSchema.parse(payload);
+    await selectOpenPondWorkspace(input);
+    await updateAppPreferencesPayload({
+      defaultTeamId: input.workspaceType === "team" ? input.workspaceId : null,
+    });
+    await appendRuntimeEvent(
+      event({
+        name: "diagnostic",
+        source: "server",
+        action: "openpond.workspace.select",
+        status: "completed",
+        output: `Selected ${input.workspaceType} OpenPond workspace.`,
+      })
+    );
+    return bootstrapPayload({
+      forceOpenPond: true,
+      refreshCloudProjects: true,
+    });
+  }
+
   async function saveOpenPondAccountPayload(
     payload: unknown
   ): Promise<BootstrapPayload> {
@@ -1786,6 +1811,7 @@ export function createServerPayloads(deps: {
     refreshOpenPondPayload,
     loadMoreOpenPondAppsPayload,
     switchOpenPondPayload,
+    selectOpenPondWorkspacePayload,
     saveOpenPondAccountPayload,
     removeOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,

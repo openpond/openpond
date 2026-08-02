@@ -35,6 +35,7 @@ export {
 export { saveOpenPondAccount } from "./save-account.js";
 export { removeOpenPondAccount } from "./remove-account.js";
 export { updateOpenPondAccountConfig } from "./update-account-config.js";
+export { selectOpenPondWorkspace } from "./workspace.js";
 export {
   deleteOpenPondSchedule,
   deployOpenPondApp,

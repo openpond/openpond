@@ -19,6 +19,8 @@ import type {
   HeadlessAppsResponse,
   OpenPondAccount,
   OpenPondAccountResponse,
+  OpenPondAccountWorkspaceSelection,
+  OpenPondAccountWorkspaceSelectionResponse,
   OpenPondApiHealth,
   OpenPondApiHealthResponse,
   OpenToolRecipe,
@@ -89,6 +91,10 @@ export type {
   OpenPondAccount,
   OpenPondAccountProduct,
   OpenPondAccountResponse,
+  OpenPondAccountWorkspace,
+  OpenPondAccountWorkspaceProjection,
+  OpenPondAccountWorkspaceSelection,
+  OpenPondAccountWorkspaceSelectionResponse,
   OpenPondApiHealth,
   OpenPondApiHealthResponse,
   OpenToolRecipe,
@@ -762,6 +768,22 @@ export async function getOpenPondAccount(
     throw new Error(`Account lookup failed: ${response.status} ${text}`);
   }
   return (await response.json()) as OpenPondAccountResponse;
+}
+
+export async function selectOpenPondAccountWorkspace(
+  baseUrl: string,
+  token: string,
+  input: OpenPondAccountWorkspaceSelection
+): Promise<OpenPondAccountWorkspaceSelectionResponse> {
+  const response = await apiFetch(baseUrl, token, "/v1/account/workspace", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Workspace selection failed: ${response.status} ${text}`);
+  }
+  return (await response.json()) as OpenPondAccountWorkspaceSelectionResponse;
 }
 
 export async function checkOpenPondApiHealth(

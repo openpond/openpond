@@ -526,9 +526,55 @@ export type OpenPondAccount = {
   credits: string;
 };
 
+export type OpenPondAccountWorkspaceUsage = {
+  scope: "member" | "workspace";
+  limitsScope: "member" | "workspace";
+  periodStart: string;
+  sandbox: {
+    hours: number;
+    retailUsd: string | null;
+    includedHours: number | null;
+    maxConcurrent: number | null;
+  };
+  opChat: { tokens: number; includedTokens: number | null };
+  search: { calls: number; includedCalls: number | null };
+  personalizedInference: { requests: number; includedRequests: number | null };
+  totalRetailUsd: string | null;
+};
+
+export type OpenPondAccountWorkspace = {
+  id: string;
+  type: "personal" | "team";
+  displayName: string;
+  role: "owner" | "admin" | "member";
+  isBillingAdmin: boolean;
+  canManageBilling: boolean;
+  planKey: string;
+  accessState: string;
+  usage: OpenPondAccountWorkspaceUsage;
+};
+
+export type OpenPondAccountWorkspaceProjection = {
+  personal: OpenPondAccountWorkspace;
+  team: OpenPondAccountWorkspace | null;
+  activeWorkspace: { id: string; type: "personal" | "team" };
+  hasMembershipConflict: boolean;
+};
+
 export type OpenPondAccountResponse = {
   account: OpenPondAccount;
   products: OpenPondAccountProduct[];
+  workspaces: OpenPondAccountWorkspaceProjection;
+  asOf: string;
+};
+
+export type OpenPondAccountWorkspaceSelection = {
+  workspaceId: string;
+  workspaceType: "personal" | "team";
+};
+
+export type OpenPondAccountWorkspaceSelectionResponse = {
+  workspaces: OpenPondAccountWorkspaceProjection;
   asOf: string;
 };
 

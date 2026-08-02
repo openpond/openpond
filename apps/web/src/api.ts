@@ -712,6 +712,14 @@ export const api = {
       account: BootstrapPayload["account"];
       accountMeta: BootstrapPayload["accountMeta"];
     }>(connection, "/v1/openpond/account?refresh=1"),
+  selectOpenPondWorkspace: (
+    connection: ClientConnection,
+    input: { workspaceId: string; workspaceType: "personal" | "team" }
+  ) =>
+    apiFetch<BootstrapPayload>(connection, "/v1/openpond/workspace", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
   loadMoreOpenPondApps: (
     connection: ClientConnection,
     input: { offset: number; limit: number }

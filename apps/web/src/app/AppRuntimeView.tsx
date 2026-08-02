@@ -642,6 +642,18 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           teamThreads: teamChat.threads,
           ...communitySidebar,
           account,
+          onSelectWorkspace: async (input) => {
+            if (!connection) throw new Error("OpenPond is not connected.");
+            try {
+              applyBootstrapPayload(await api.selectOpenPondWorkspace(connection, input));
+            } catch (workspaceError) {
+              const message =
+                workspaceError instanceof Error ? workspaceError.message : String(workspaceError);
+              setError(message);
+              showToast(message, "error");
+              throw workspaceError;
+            }
+          },
           profile: bootstrap?.profile,
           pinnedCollapsed,
           cloudProjectsCollapsed,

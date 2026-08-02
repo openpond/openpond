@@ -151,6 +151,7 @@ export function toAccountState(input: {
     creditsLabel: profile?.credits ?? null,
     profile,
     products: normalizeProducts(accountResponse?.products),
+    workspaces: accountResponse?.workspaces ?? null,
     apiHealth: normalizeHealth(health ?? null, apiBaseUrl),
     accounts: visibleProfileRows.map((candidate) => {
       const candidateBaseUrl = normalizeBaseUrl(candidate.baseUrl);

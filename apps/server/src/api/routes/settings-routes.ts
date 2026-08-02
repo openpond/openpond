@@ -12,6 +12,7 @@ export async function handleSettingsRoutes({
     startGitInstallPayload,
     refreshOpenPondPayload,
     switchOpenPondPayload,
+    selectOpenPondWorkspacePayload,
     saveOpenPondAccountPayload,
     removeOpenPondAccountPayload,
     updateOpenPondAccountConfigPayload,
@@ -32,6 +33,17 @@ export async function handleSettingsRoutes({
   } = deps;
   if (request.method === "GET" && requestUrl.pathname === "/v1/system/git") {
     sendJson(response, 200, await gitAvailabilityPayload());
+    return true;
+  }
+  if (
+    request.method === "PUT" &&
+    requestUrl.pathname === "/v1/openpond/workspace"
+  ) {
+    sendJson(
+      response,
+      200,
+      await selectOpenPondWorkspacePayload(await readJson(request))
+    );
     return true;
   }
   if (

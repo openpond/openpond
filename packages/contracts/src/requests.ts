@@ -307,6 +307,15 @@ export type UpdateAppPreferencesRequest = z.infer<
   typeof UpdateAppPreferencesRequestSchema
 >;
 
+export const SelectOpenPondWorkspaceRequestSchema = z.object({
+  workspaceId: z.string().trim().min(1).max(191),
+  workspaceType: z.enum(["personal", "team"]),
+});
+
+export type SelectOpenPondWorkspaceRequest = z.infer<
+  typeof SelectOpenPondWorkspaceRequestSchema
+>;
+
 export const UpdateProviderSettingsRequestSchema = ProviderSettingsUpdateSchema;
 
 export type UpdateProviderSettingsRequest = z.infer<

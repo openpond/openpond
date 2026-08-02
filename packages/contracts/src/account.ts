@@ -51,6 +51,57 @@ export const ActiveProfileSelectorSchema = z.object({
 
 export type ActiveProfileSelector = z.infer<typeof ActiveProfileSelectorSchema>;
 
+export const AccountWorkspaceUsageSchema = z.object({
+  scope: z.enum(["member", "workspace"]),
+  limitsScope: z.enum(["member", "workspace"]),
+  periodStart: z.string(),
+  sandbox: z.object({
+    hours: z.number(),
+    retailUsd: z.string().nullable(),
+    includedHours: z.number().nullable(),
+    maxConcurrent: z.number().nullable(),
+  }),
+  opChat: z.object({
+    tokens: z.number(),
+    includedTokens: z.number().nullable(),
+  }),
+  search: z.object({
+    calls: z.number(),
+    includedCalls: z.number().nullable(),
+  }),
+  personalizedInference: z.object({
+    requests: z.number(),
+    includedRequests: z.number().nullable(),
+  }),
+  totalRetailUsd: z.string().nullable(),
+});
+
+export const AccountWorkspaceSchema = z.object({
+  id: z.string(),
+  type: z.enum(["personal", "team"]),
+  displayName: z.string(),
+  role: z.enum(["owner", "admin", "member"]),
+  isBillingAdmin: z.boolean(),
+  canManageBilling: z.boolean(),
+  planKey: z.string(),
+  accessState: z.string(),
+  usage: AccountWorkspaceUsageSchema,
+});
+
+export type AccountWorkspace = z.infer<typeof AccountWorkspaceSchema>;
+
+export const AccountWorkspaceProjectionSchema = z.object({
+  personal: AccountWorkspaceSchema,
+  team: AccountWorkspaceSchema.nullable(),
+  activeWorkspace: z.object({
+    id: z.string(),
+    type: z.enum(["personal", "team"]),
+  }),
+  hasMembershipConflict: z.boolean(),
+});
+
+export type AccountWorkspaceProjection = z.infer<typeof AccountWorkspaceProjectionSchema>;
+
 export const AccountStateSchema = z.object({
   state: z.enum(["signed_out", "signed_in", "loading", "switching", "auth_error"]),
   activeProfile: ActiveProfileSelectorSchema.nullable(),
@@ -64,6 +115,7 @@ export const AccountStateSchema = z.object({
   creditsLabel: z.string().nullable(),
   profile: AccountProfileSchema.nullable(),
   products: z.array(AccountProductSchema),
+  workspaces: AccountWorkspaceProjectionSchema.nullable().default(null),
   apiHealth: AccountApiHealthSchema.nullable(),
   accounts: z.array(
     z.object({

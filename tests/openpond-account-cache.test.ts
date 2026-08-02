@@ -19,6 +19,7 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
     creditsLabel: null,
     profile: null,
     products: [],
+    workspaces: null,
     apiHealth: null,
     accounts: [],
     error: "Unauthorized",

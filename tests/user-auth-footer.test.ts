@@ -31,6 +31,7 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
       credits: null,
     },
     products: [],
+    workspaces: null,
     apiHealth: null,
     accounts: [
       {
@@ -55,6 +56,7 @@ describe("UserAuthFooter", () => {
     const markup = renderToStaticMarkup(
       createElement(UserAuthFooter, {
         account: accountState(),
+        onSelectWorkspace: async () => undefined,
         onOpenSettings: () => undefined,
       }),
     );
@@ -63,6 +65,57 @@ describe("UserAuthFooter", () => {
     expect(markup).toContain('src="https://example.com/ada.png"');
     expect(markup).toContain('aria-haspopup="menu"');
     expect(markup).not.toContain("Sign out");
+  });
+
+  test("shows the active team as a cyan footer badge", () => {
+    const usage = {
+      scope: "workspace" as const,
+      limitsScope: "workspace" as const,
+      periodStart: "2026-08-01T00:00:00.000Z",
+      sandbox: { hours: 0, retailUsd: "0", includedHours: 5, maxConcurrent: 1 },
+      opChat: { tokens: 0, includedTokens: 1000 },
+      search: { calls: 0, includedCalls: 10 },
+      personalizedInference: { requests: 0, includedRequests: 10 },
+      totalRetailUsd: "0",
+    };
+    const personal = {
+      id: "personal_ada",
+      type: "personal" as const,
+      displayName: "Personal",
+      role: "owner" as const,
+      isBillingAdmin: true,
+      canManageBilling: true,
+      planKey: "free",
+      accessState: "active",
+      usage,
+    };
+    const team = {
+      ...personal,
+      id: "team_analytical_engine",
+      type: "team" as const,
+      displayName: "Analytical Engine",
+      role: "member" as const,
+      isBillingAdmin: false,
+      canManageBilling: false,
+      planKey: "team",
+    };
+    const markup = renderToStaticMarkup(
+      createElement(UserAuthFooter, {
+        account: accountState({
+          workspaces: {
+            personal,
+            team,
+            activeWorkspace: { id: team.id, type: "team" },
+            hasMembershipConflict: false,
+          },
+        }),
+        onSelectWorkspace: async () => undefined,
+        onOpenSettings: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('class="user-auth-team-badge"');
+    expect(markup).toContain("Analytical Engine");
   });
 
   test("falls back to the active account record when profile details are absent", () => {

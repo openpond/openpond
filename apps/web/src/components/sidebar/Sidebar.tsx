@@ -118,6 +118,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar-footer-row">
         <UserAuthFooter
           account={props.account}
+          onSelectWorkspace={props.onSelectWorkspace}
           onOpenActivity={() => {
             setSectionMenuOpen(null);
             setSettingsSection("usage");

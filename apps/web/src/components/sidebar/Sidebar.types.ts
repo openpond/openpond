@@ -45,6 +45,10 @@ export type SidebarProps = {
   selectedCommunityId: string | null;
   selectedCommunityChannelId: string | null;
   account: AccountState | null;
+  onSelectWorkspace: (input: {
+    workspaceId: string;
+    workspaceType: "personal" | "team";
+  }) => Promise<void>;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
   cloudProjectsCollapsed: boolean;
