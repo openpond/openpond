@@ -21,12 +21,12 @@ const noopAsync = async () => undefined;
 const noopBoolean = async () => true;
 
 describe("team chat view", () => {
-  test("explains Pro mode when Team Chat has no team", () => {
+  test("explains that Team Chat requires a Team workspace", () => {
     const markup = renderToStaticMarkup(createElement(TeamChatProView));
 
     expect(markup).toContain('aria-label="Team Chat"');
-    expect(markup).toContain("Team Chat is available with Pro mode.");
-    expect(markup).toContain("Create or join a Pro team");
+    expect(markup).toContain("Team Chat is available in a Team workspace.");
+    expect(markup).toContain("Join a Team");
     expect(markup).not.toContain('contentEditable="true"');
   });
 

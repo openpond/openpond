@@ -91,7 +91,7 @@ describe("notification settings", () => {
     expect(markup).not.toContain(">general<");
   });
 
-  test("keeps Team Chat available as a destination without a team", () => {
+  test("hides Team Chat without an active Team workspace", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarTeamSection, {
         currentUserId: null,
@@ -108,9 +108,7 @@ describe("notification settings", () => {
       }),
     );
 
-    expect(markup).toContain("Team Chat");
-    expect(markup).toContain("section-title-link active");
-    expect(markup).not.toContain("Team unavailable");
+    expect(markup).toBe("");
   });
 
   test("uses readable labels for direct messages and groups", () => {

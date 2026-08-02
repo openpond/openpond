@@ -166,10 +166,9 @@ export function TeamChatProView() {
           <MessageSquare size={22} />
         </span>
         <h1>Team Chat</h1>
-        <p>Team Chat is available with Pro mode.</p>
+        <p>Team Chat is available in a Team workspace.</p>
         <small>
-          Create or join a Pro team to chat with teammates, coordinate work,
-          and share agents.
+          Join a Team to chat with teammates, coordinate work, and share agents.
         </small>
       </div>
     </section>

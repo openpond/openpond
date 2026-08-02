@@ -650,6 +650,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
               setSelectedAppId(null);
               setSelectedProjectId(null);
               setSelectedSessionId(null);
+              setView("chat");
             } catch (workspaceError) {
               const message =
                 workspaceError instanceof Error ? workspaceError.message : String(workspaceError);

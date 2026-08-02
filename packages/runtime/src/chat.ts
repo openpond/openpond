@@ -320,10 +320,19 @@ function buildOpChatBody(options: {
   if (options.toolChoice !== undefined) {
     body.tool_choice = options.toolChoice;
   }
-  if (options.reasoningEffort) {
-    body.reasoning_effort = options.reasoningEffort;
+  const reasoningEffort = opChatReasoningEffort(options.reasoningEffort);
+  if (reasoningEffort) {
+    body.reasoning_effort = reasoningEffort;
   }
   return body;
+}
+
+function opChatReasoningEffort(
+  effort: HostedChatTurnInput["reasoningEffort"],
+): "high" | "max" | null {
+  if (effort === "high") return "high";
+  if (effort === "xhigh") return "max";
+  return null;
 }
 
 function opChatMessage(message: HostedChatMessage): Record<string, unknown> {

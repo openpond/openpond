@@ -37,20 +37,7 @@ export function SidebarTeamSection({
 }: SidebarTeamSectionProps) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [teamExpanded, setTeamExpanded] = useState(true);
-  if (!enabled) {
-    return (
-      <div className="team-sidebar-section">
-        <SidebarSection
-          label="Team Chat"
-          collapsed
-          titleActive={view === "team"}
-          onTitleClick={onOpen}
-        >
-          {null}
-        </SidebarSection>
-      </div>
-    );
-  }
+  if (!enabled) return null;
 
   const generalThread = threads.find((thread) => thread.kind === "general") ?? null;
   const dmThreadByUserId = new Map<string, TeamChatThread>();

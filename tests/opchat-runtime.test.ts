@@ -164,6 +164,26 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
+  test.each([
+    ["low", undefined],
+    ["medium", undefined],
+    ["high", "high"],
+    ["xhigh", "max"],
+  ] as const)(
+    "maps Desktop %s reasoning to the supported OpChat value %s",
+    async (desktopEffort, expectedOpChatEffort) => {
+      let requestBody: Record<string, unknown> | null = null;
+      globalThis.fetch = async (_input, init) => {
+        requestBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        return streamResponse(["data: [DONE]\n\n"]);
+      };
+
+      await collectStream({ reasoningEffort: desktopEffort });
+
+      expect(requestBody?.reasoning_effort).toBe(expectedOpChatEffort);
+    },
+  );
+
   test("sends native tools to OpChat and preserves reasoning for tool follow-ups", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
