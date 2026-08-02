@@ -23,7 +23,7 @@ import {
 type AppsViewProps = {
   account: AccountState | null;
   connection: ClientConnection | null;
-  defaultTeamId?: string | null;
+  activeWorkspaceId?: string | null;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
@@ -32,7 +32,12 @@ type AppFilter = (typeof APP_FILTERS)[number];
 
 const FEATURED_APP_IDS = new Set<ConnectedAppId>(["slack", "google", "github", "mcp"]);
 
-export function AppsView({ account, connection, defaultTeamId, onToast }: AppsViewProps) {
+export function AppsView({
+  account,
+  connection,
+  activeWorkspaceId,
+  onToast,
+}: AppsViewProps) {
   const [selectedApp, setSelectedApp] = useState<ConnectedAppStatusRow | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<AppFilter>("For agents");
@@ -40,9 +45,8 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
     buildConnectedAppStatusRows(),
   );
   const [statusState, setStatusState] = useState<"idle" | "loading" | "ready" | "error">("idle");
-  const [statusTeamId, setStatusTeamId] = useState<string | null>(null);
   const accountBaseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl ?? null;
-  const setupTeamId = connectedAppSetupTeamId(defaultTeamId, statusTeamId);
+  const setupTeamId = activeWorkspaceId?.trim() || null;
   const filteredApps = useMemo(
     () =>
       statusRows.filter((app) => appMatchesFilter(app, filter)).filter((app) =>
@@ -53,10 +57,9 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
 
   useEffect(() => {
     let active = true;
-    if (!connection) {
+    if (!connection || !setupTeamId) {
       setStatusRows(buildConnectedAppStatusRows());
       setStatusState("idle");
-      setStatusTeamId(null);
       return () => {
         active = false;
       };
@@ -64,27 +67,30 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
     setStatusState("loading");
     void api
       .connectedAppStatus(connection, {
+        teamId: setupTeamId,
         status: "all",
       })
       .then((payload) => {
         if (!active) return;
         setStatusRows(payload.apps);
-        setStatusTeamId(payload.teamId?.trim() || null);
         setStatusState("ready");
       })
       .catch((caught) => {
         if (!active) return;
         console.warn("Unable to load connected app status.", caught);
         setStatusRows(buildConnectedAppStatusRows());
-        setStatusTeamId(null);
         setStatusState("error");
       });
     return () => {
       active = false;
     };
-  }, [connection]);
+  }, [connection, setupTeamId]);
 
   function openInstallUrl(app: ConnectedAppStatusRow) {
+    if (!setupTeamId) {
+      onToast?.("Select an OpenPond workspace before connecting an app.", "error");
+      return;
+    }
     const url = buildConnectedAppInstallUrl({
       appId: app.id,
       baseUrl: accountBaseUrl,
@@ -173,15 +179,6 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
       ) : null}
     </section>
   );
-}
-
-export function connectedAppSetupTeamId(
-  defaultTeamId: string | null | undefined,
-  statusTeamId: string | null | undefined,
-): string | null {
-  const explicitTeamId = defaultTeamId?.trim();
-  if (explicitTeamId) return explicitTeamId;
-  return statusTeamId?.trim() || null;
 }
 
 export function ConnectedAppRow({

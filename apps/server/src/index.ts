@@ -24,13 +24,7 @@ import {
   loadOpenPondAccountState,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
-import {
-  APP_PREFERENCES_CACHE_KEY,
-  APP_PREFERENCES_CACHE_TYPE,
-  DEFAULT_HOST,
-  DEFAULT_PORT,
-  VERSION,
-} from "./constants.js";
+import { DEFAULT_HOST, DEFAULT_PORT, VERSION } from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
@@ -151,7 +145,6 @@ import { createComputeService } from "./compute/compute-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
-import { normalizeAppPreferences } from "./preferences.js";
 import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
 import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
@@ -595,17 +588,16 @@ export async function createOpenPondServer(
       "openpond-training"
     ),
   });
+  const resolveActiveOpenPondWorkspaceId = async (): Promise<string | null> => {
+    const result = await loadOpenPondAccountState().catch(() => null);
+    if (result?.account.state !== "signed_in") return null;
+    return result.account.workspaces?.activeWorkspace.id.trim() || null;
+  };
   const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
   const managedAdapterSyncService = createManagedAdapterSyncService({
     store,
     client: managedAdapterRegistryClient,
-    resolveSelectedTeamId: async () => {
-      const entry = await store.getCacheEntry<unknown>(
-        APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY
-      );
-      return normalizeAppPreferences(entry?.payload).defaultTeamId;
-    },
+    resolveSelectedTeamId: resolveActiveOpenPondWorkspaceId,
   });
   const computePayload = async (action: string, payload: unknown) => {
     if (action === "state") return computeService.state();
@@ -650,14 +642,10 @@ export async function createOpenPondServer(
       (await computeService.settings()).modelStorePath,
     computeInventory: computeService.inventory,
     ...portableTrainingDependencies,
-    resolveManagedTrainingAccess: async () => {
-      const entry = await store.getCacheEntry<unknown>(
-        APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY
-      );
-      const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
-      return resolveManagedAdapterUserAccess({ teamId });
-    },
+    resolveManagedTrainingAccess: async () =>
+      resolveManagedAdapterUserAccess({
+        teamId: await resolveActiveOpenPondWorkspaceId(),
+      }),
     loadProfileState: loadOpenPondProfileState,
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;

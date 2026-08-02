@@ -776,11 +776,14 @@ export function createServerPayloads(deps: {
     });
   }
 
-  async function refreshCloudProjects(scope: string): Promise<CloudProject[]> {
+  async function refreshCloudProjects(
+    scope: string,
+    workspaceId: string,
+  ): Promise<CloudProject[]> {
     const existing = cloudProjectRefreshes.get(scope);
     if (existing) return existing;
     const refresh = (async () => {
-      const projects = await fetchCloudProjects();
+      const projects = await fetchCloudProjects(workspaceId);
       const entry = await store.setCacheEntry(
         CLOUD_PROJECT_CACHE_TYPE,
         scope,
@@ -806,9 +809,12 @@ export function createServerPayloads(deps: {
     return refresh;
   }
 
-  function refreshCloudProjectsInBackground(scope: string): void {
+  function refreshCloudProjectsInBackground(
+    scope: string,
+    workspaceId: string,
+  ): void {
     if (cloudProjectRefreshes.has(scope) || isClosing()) return;
-    void refreshCloudProjects(scope).catch((error) => {
+    void refreshCloudProjects(scope, workspaceId).catch((error) => {
       if (isClosing()) return;
       void appendRuntimeEvent(
         event({
@@ -826,14 +832,16 @@ export function createServerPayloads(deps: {
     options: { force?: boolean; refreshIfMissing?: boolean } = {}
   ): Promise<CloudProject[]> {
     if (account.state !== "signed_in") return [];
+    const workspaceId = account.workspaces?.activeWorkspace.id.trim() ?? "";
+    if (!workspaceId) return [];
     const scope = openPondCacheScope(account);
-    if (options.force) return refreshCloudProjects(scope);
+    if (options.force) return refreshCloudProjects(scope, workspaceId);
     const cached = await store.getCacheEntry<CloudProject[]>(
       CLOUD_PROJECT_CACHE_TYPE,
       scope
     );
     if (!cached && options.refreshIfMissing !== false) {
-      refreshCloudProjectsInBackground(scope);
+      refreshCloudProjectsInBackground(scope, workspaceId);
     }
     return cached?.payload ?? [];
   }
@@ -1671,9 +1679,6 @@ export function createServerPayloads(deps: {
   ): Promise<BootstrapPayload> {
     const input = SelectOpenPondWorkspaceRequestSchema.parse(payload);
     await selectOpenPondWorkspace(input);
-    await updateAppPreferencesPayload({
-      defaultTeamId: input.workspaceType === "team" ? input.workspaceId : null,
-    });
     await appendRuntimeEvent(
       event({
         name: "diagnostic",

@@ -1401,7 +1401,9 @@ export function MainPane({
           <AppsView
             account={bootstrap?.account ?? null}
             connection={connection}
-            defaultTeamId={bootstrap?.preferences.defaultTeamId ?? null}
+            activeWorkspaceId={
+              bootstrap?.account.workspaces?.activeWorkspace.id ?? null
+            }
             onToast={showToast}
           />
         </Suspense>

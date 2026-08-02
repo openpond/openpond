@@ -183,7 +183,6 @@ export const AppPreferencesSchema = z.object({
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.default(DEFAULT_OPENPOND_COMMAND_ACCESS_MODE),
   defaultBranchPrefix: z.string().trim().max(48).default("feat/"),
   defaultNewProjectDirectory: z.string().trim().max(4096).default(""),
-  defaultTeamId: z.string().trim().max(191).nullable().default(null),
   advancedWorkspaceControls: z.boolean().default(false),
   contextCompaction: ContextCompactionPreferencesSchema.optional().default(() =>
     ContextCompactionPreferencesSchema.parse({}),

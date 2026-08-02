@@ -66,46 +66,6 @@ export function normalizeOpenPondOrganization(value: OpenPondOrganization): Open
   };
 }
 
-export function resolveDefaultOpenPondOrganization(organizations: OpenPondOrganization[]): OpenPondOrganization | null {
-  return (
-    organizations.find(
-      (organization) =>
-        organization.workspaceKind === "personal" ||
-        organization.isPersonalDefault === true ||
-        organization.kind === "personal_default"
-    ) ??
-    organizations.find((organization) => organization.name.trim().toLowerCase() === "default") ??
-    organizations.find(
-      (organization) => organization.isManagedClient !== true && organization.kind !== "managed_client"
-    ) ??
-    organizations[0] ??
-    null
-  );
-}
-
-export function resolveTeamChatOpenPondOrganization(
-  organizations: OpenPondOrganization[],
-  preferredTeamId?: string | null,
-): OpenPondOrganization | null {
-  const sharedOrganizations = organizations.filter(
-    (organization) =>
-      organization.status === "active" && organization.workspaceKind === "shared",
-  );
-  const normalizedPreferredTeamId = preferredTeamId?.trim() ?? "";
-  if (normalizedPreferredTeamId) {
-    const preferred = sharedOrganizations.find(
-      (organization) => organization.teamId === normalizedPreferredTeamId,
-    );
-    if (preferred) return preferred;
-  }
-  return (
-    sharedOrganizations.find((organization) => organization.role === "owner") ??
-    sharedOrganizations.find((organization) => organization.role === "admin") ??
-    sharedOrganizations[0] ??
-    null
-  );
-}
-
 export function resolveActiveTeamChatOpenPondOrganization(
   organizations: OpenPondOrganization[],
   workspaces: AccountWorkspaceProjection | null | undefined,

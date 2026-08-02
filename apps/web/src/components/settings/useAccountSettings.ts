@@ -30,17 +30,12 @@ export function useAccountSettings({
     setSaving(true);
     onError(null);
     try {
-      const switchedPayload = await api.switchOpenPondAccount(connection, {
-        handle: handleValue,
-        baseUrl: baseUrlValue ?? null,
-      });
-      const preferencesPayload = await api.savePreferences(connection, {
-        defaultTeamId: null,
-      });
-      onPayload({
-        ...switchedPayload,
-        preferences: preferencesPayload.preferences,
-      });
+      onPayload(
+        await api.switchOpenPondAccount(connection, {
+          handle: handleValue,
+          baseUrl: baseUrlValue ?? null,
+        }),
+      );
     } catch (switchError) {
       onError(
         switchError instanceof Error ? switchError.message : String(switchError)
@@ -82,21 +77,16 @@ export function useAccountSettings({
     try {
       const handle = input.handle?.trim();
       const environment = input.environment?.trim();
-      const savedPayload = await api.saveOpenPondAccount(connection, {
-        apiKey: input.apiKey.trim(),
-        handle: handle || undefined,
-        baseUrl: input.baseUrl,
-        apiBaseUrl: input.apiBaseUrl,
-        environment: environment || "custom",
-        setActive: true,
-      });
-      const preferencesPayload = await api.savePreferences(connection, {
-        defaultTeamId: null,
-      });
-      onPayload({
-        ...savedPayload,
-        preferences: preferencesPayload.preferences,
-      });
+      onPayload(
+        await api.saveOpenPondAccount(connection, {
+          apiKey: input.apiKey.trim(),
+          handle: handle || undefined,
+          baseUrl: input.baseUrl,
+          apiBaseUrl: input.apiBaseUrl,
+          environment: environment || "custom",
+          setActive: true,
+        }),
+      );
     } catch (saveError) {
       onError(
         saveError instanceof Error ? saveError.message : String(saveError)

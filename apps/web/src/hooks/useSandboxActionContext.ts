@@ -36,7 +36,7 @@ export function useSandboxActionContext({
   cloudProjectById,
   cloudProjects,
   connection,
-  defaultTeamId,
+  activeWorkspaceId,
   accountScopeKey,
   localProjects,
   profile,
@@ -46,7 +46,7 @@ export function useSandboxActionContext({
   cloudProjectById: Map<string, CloudProject>;
   cloudProjects: CloudProject[];
   connection: ClientConnection | null;
-  defaultTeamId: string | null;
+  activeWorkspaceId: string | null;
   accountScopeKey?: string | null;
   localProjects: LocalProject[];
   profile: OpenPondProfileState | null | undefined;
@@ -57,7 +57,7 @@ export function useSandboxActionContext({
   const [slashAgents, setSlashAgents] = useState<SandboxAgent[]>([]);
   const slashAgentTeamIds = useMemo(() => {
     const ids = new Set<string>();
-    if (defaultTeamId) ids.add(defaultTeamId);
+    if (activeWorkspaceId) ids.add(activeWorkspaceId);
     for (const project of cloudProjects) ids.add(project.teamId);
     for (const project of localProjects) {
       const linkedProject = cloudProjects.find(
@@ -68,7 +68,7 @@ export function useSandboxActionContext({
       if (linkedProject?.teamId) ids.add(linkedProject.teamId);
     }
     return [...ids].sort();
-  }, [cloudProjects, defaultTeamId, localProjects]);
+  }, [activeWorkspaceId, cloudProjects, localProjects]);
   const slashAgentTeamIdKey = slashAgentTeamIds.join("\0");
   const selectedActionProjectTarget = useMemo(
     () => openPondActionProjectTarget({ cloudProjects, selectedCloudProject, selectedProject }),

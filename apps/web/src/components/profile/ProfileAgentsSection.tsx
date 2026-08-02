@@ -14,11 +14,11 @@ type ProfileStatusCell = {
 export function ProfileAgentsSection({
   connection,
   profile,
-  selectedDefaultTeamId,
+  activeWorkspaceId,
 }: {
   connection: ClientConnection | null;
   profile: ProfileState;
-  selectedDefaultTeamId: string;
+  activeWorkspaceId: string;
 }) {
   const schedules = useLocalAgentSchedules(connection);
   const groupedSchedules = partitionProfileSchedules(schedules.schedules);
@@ -64,7 +64,7 @@ export function ProfileAgentsSection({
                   defaultAction={profile.summary.defaultAction}
                   key={agent.id}
                   profile={profile}
-                  selectedDefaultTeamId={selectedDefaultTeamId}
+                  activeWorkspaceId={activeWorkspaceId}
                 />
               ))}
               {groupedSchedules.paused.map((schedule) => (
@@ -112,14 +112,14 @@ function ProfileAgentRow({
   agent,
   defaultAction,
   profile,
-  selectedDefaultTeamId,
+  activeWorkspaceId,
 }: {
   agent: ProfileAgent;
   defaultAction: string | null;
   profile: ProfileState;
-  selectedDefaultTeamId: string;
+  activeWorkspaceId: string;
 }) {
-  const rowStatus = profileAgentRowStatus(profile, agent, selectedDefaultTeamId);
+  const rowStatus = profileAgentRowStatus(profile, agent, activeWorkspaceId);
   return (
     <tr className="profile-agent-row">
       <td>
@@ -271,7 +271,7 @@ function formatScheduleDate(value: string): string {
 function profileAgentRowStatus(
   profile: ProfileState,
   agent: ProfileAgent,
-  selectedDefaultTeamId: string,
+  activeWorkspaceId: string,
 ): { check: ProfileStatusCell; sync: ProfileStatusCell } {
   if (!agent.enabled) {
     return {
@@ -322,7 +322,7 @@ function profileAgentRowStatus(
       sync: { state: "loading", label: "Waiting" },
     };
   }
-  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) {
+  if (profileHostedTeamMismatch(profile, activeWorkspaceId)) {
     return {
       check: { state: "ready", label: "Passed" },
       sync: { state: "warning", label: "Sync acct" },
@@ -350,9 +350,9 @@ function profileAgentRowStatus(
   };
 }
 
-function profileHostedTeamMismatch(profile: ProfileState, selectedDefaultTeamId: string): boolean {
+function profileHostedTeamMismatch(profile: ProfileState, activeWorkspaceId: string): boolean {
   const hostedTeamId = profile.hosted?.teamId?.trim() ?? "";
-  return Boolean(hostedTeamId && selectedDefaultTeamId && hostedTeamId !== selectedDefaultTeamId);
+  return Boolean(hostedTeamId && activeWorkspaceId && hostedTeamId !== activeWorkspaceId);
 }
 
 function profileAgentChangeCount(profile: ProfileState, agent: ProfileAgent): number {

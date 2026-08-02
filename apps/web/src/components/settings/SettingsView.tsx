@@ -221,7 +221,6 @@ export function SettingsView({
             payload={payload}
             connection={connection}
             onPayload={onPayload}
-            onPreferences={applyPreferencesPayload}
             onError={onError}
             onToast={onToast}
             {...accountSettings}

@@ -9,10 +9,7 @@ import {
   type ConnectedAppId,
 } from "@openpond/contracts";
 
-import {
-  ConnectedAppRow,
-  connectedAppSetupTeamId,
-} from "../apps/web/src/components/apps/AppsView";
+import { ConnectedAppRow } from "../apps/web/src/components/apps/AppsView";
 import { useAppConversationContext } from "../apps/web/src/hooks/useAppConversationContext";
 import { buildRuntimeIndexes } from "../apps/web/src/lib/runtime-indexes";
 import { ComposerMentionMenu } from "../apps/web/src/components/chat/ComposerMentionMenu";
@@ -156,40 +153,24 @@ describe("connected app product proof", () => {
     }
   });
 
-  test("scopes setup URLs to the resolved status team when preferences have no default team", () => {
-    const statusTeamId = " team_from_status ";
-    const fallbackTeamId = connectedAppSetupTeamId(null, statusTeamId);
-    const explicitTeamId = connectedAppSetupTeamId(" team_from_preferences ", statusTeamId);
-
-    expect(fallbackTeamId).toBe("team_from_status");
-    expect(explicitTeamId).toBe("team_from_preferences");
-
-    const fallbackUrl = new URL(
-      buildConnectedAppInstallUrl({
-        appId: "x",
-        baseUrl: "https://staging.openpond.ai",
-        teamId: fallbackTeamId,
-      }),
-    );
-    const explicitUrl = new URL(
+  test("scopes setup URLs to the canonical active workspace", () => {
+    const workspaceId = " team_from_account ".trim();
+    const url = new URL(
       buildConnectedAppInstallUrl({
         appId: "github",
         baseUrl: "https://staging.openpond.ai",
-        teamId: explicitTeamId,
+        teamId: workspaceId,
       }),
     );
 
-    expect(fallbackUrl.pathname).toBe("/sandboxes/apps");
-    expect(fallbackUrl.searchParams.get("app")).toBe("x");
-    expect(fallbackUrl.searchParams.get("teamId")).toBe("team_from_status");
-    expect(explicitUrl.searchParams.get("app")).toBe("github");
-    expect(explicitUrl.searchParams.get("teamId")).toBe("team_from_preferences");
+    expect(url.searchParams.get("app")).toBe("github");
+    expect(url.searchParams.get("teamId")).toBe("team_from_account");
   });
 });
 
 function ScopedConversationProbe() {
   const context = useAppConversationContext({
-    bootstrap: null,
+    cloudProjects: [],
     connectedAppRows: productProofStatusRows(),
     mentionableSandboxApps: [{ id: "app_alpha", name: "Alpha" }] as never,
     runtimeIndexes: buildRuntimeIndexes([], []),

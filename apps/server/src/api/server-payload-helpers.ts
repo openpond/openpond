@@ -48,32 +48,30 @@ export function hasObjectKey(value: unknown, key: string): boolean {
   return Boolean(value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key));
 }
 
-export async function fetchCloudProjects(): Promise<CloudProject[]> {
+export async function fetchCloudProjects(
+  activeWorkspaceId: string,
+): Promise<CloudProject[]> {
   try {
     const organizationPayload = asRecord(await organizationRequestPayload({ type: "list" }));
     const organizationRows = asRecordArray(organizationPayload.organizations);
     const organizations = (organizationRows.length > 0 ? organizationRows : asRecordArray(organizationPayload.teams))
       .map(normalizeOpenPondOrganization)
       .filter((organization): organization is OpenPondOrganizationSummary => Boolean(organization?.teamId));
-    const projectLists = await Promise.all(
-      organizations.map(async (organization) => {
-        try {
-          const payload = asRecord(
-            await sandboxRequestPayload({
-              type: "project_list",
-              payload: { teamId: organization.teamId },
-            }),
-          );
-          return asRecordArray(payload.projects)
-            .map((project) => normalizeCloudProject(project, organization))
-            .filter((project): project is CloudProject => Boolean(project));
-        } catch {
-          return [];
-        }
+    const organization = organizations.find(
+      (candidate) => candidate.teamId === activeWorkspaceId,
+    );
+    if (!organization) return [];
+    const payload = asRecord(
+      await sandboxRequestPayload({
+        type: "project_list",
+        payload: { teamId: organization.teamId },
       }),
     );
+    const projects = asRecordArray(payload.projects)
+      .map((project) => normalizeCloudProject(project, organization))
+      .filter((project): project is CloudProject => Boolean(project));
     const byKey = new Map<string, CloudProject>();
-    for (const project of projectLists.flat()) {
+    for (const project of projects) {
       byKey.set(`${project.teamId}:${project.id}`, project);
     }
     return Array.from(byKey.values()).sort((left, right) => {

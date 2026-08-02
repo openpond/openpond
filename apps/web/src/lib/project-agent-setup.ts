@@ -24,9 +24,12 @@ export function resolveProjectAgentSetup(input: {
   organizations: OpenPondOrganization[];
   projects: SandboxProject[];
   agents: SandboxAgent[];
-  defaultTeamId?: string | null;
+  activeWorkspaceId?: string | null;
 }): ProjectAgentSetupResolution {
-  const organization = implicitOrganization(input.organizations, input.defaultTeamId);
+  const organization = activeWorkspaceOrganization(
+    input.organizations,
+    input.activeWorkspaceId,
+  );
   const canManage = canManageOpenPondOrganization(organization);
   const localProject = input.localProject ?? null;
   if (!localProject) {
@@ -132,24 +135,16 @@ function blocked(reason: string): ProjectAgentSetupResolution {
   };
 }
 
-export function implicitOrganization(
+export function activeWorkspaceOrganization(
   organizations: OpenPondOrganization[],
-  defaultTeamId?: string | null,
+  activeWorkspaceId?: string | null,
 ): OpenPondOrganization | null {
-  if (organizations.length === 0) return null;
-  const normalizedDefaultTeamId = defaultTeamId?.trim() ?? "";
-  if (normalizedDefaultTeamId) {
-    const defaultOrganization = organizations.find(
-      (organization) => organization.teamId === normalizedDefaultTeamId,
-    );
-    if (defaultOrganization) return defaultOrganization;
-  }
-  if (organizations.length === 1) return organizations[0] ?? null;
+  const normalizedWorkspaceId = activeWorkspaceId?.trim() ?? "";
+  if (!normalizedWorkspaceId) return null;
   return (
-    organizations.find((organization) => organization.role === "owner") ??
-    organizations.find((organization) => organization.role === "admin") ??
-    organizations[0] ??
-    null
+    organizations.find(
+      (organization) => organization.teamId === normalizedWorkspaceId,
+    ) ?? null
   );
 }
 

@@ -61,7 +61,7 @@ function cloudProject(input: Record<string, unknown> = {}) {
   };
 }
 
-function createHarness(defaultTeamId: string | null = ownerOrganization.teamId) {
+function createHarness(activeWorkspaceId: string | null = ownerOrganization.teamId) {
   let error: string | null = null;
   let selectedProjectId: string | null = null;
   let selectedAppId: string | null = "app_1";
@@ -74,7 +74,7 @@ function createHarness(defaultTeamId: string | null = ownerOrganization.teamId) 
 
   const actions = useProjectActions({
     connection,
-    defaultTeamId,
+    activeWorkspaceId,
     sessions: [],
     selectedProjectId,
     applyBootstrapPayload: (payload) => payloads.push(payload),

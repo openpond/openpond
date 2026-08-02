@@ -211,7 +211,6 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   openPondCommandAccessMode: DEFAULT_OPENPOND_COMMAND_ACCESS_MODE,
   defaultBranchPrefix: "feat/",
   defaultNewProjectDirectory: "",
-  defaultTeamId: null,
   advancedWorkspaceControls: false,
   contextCompaction: {
     autoEnabled: true,
@@ -668,7 +667,6 @@ export function normalizePreferences(preferences?: AppPreferences | null): AppPr
     defaultBranchPrefix: normalizeBranchPrefix(preferences?.defaultBranchPrefix),
     defaultNewProjectDirectory:
       preferences?.defaultNewProjectDirectory ?? DEFAULT_APP_PREFERENCES.defaultNewProjectDirectory,
-    defaultTeamId: preferences?.defaultTeamId?.trim() || null,
     advancedWorkspaceControls:
       preferences?.advancedWorkspaceControls ?? DEFAULT_APP_PREFERENCES.advancedWorkspaceControls,
     contextCompaction: {

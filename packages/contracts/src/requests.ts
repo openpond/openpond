@@ -293,7 +293,6 @@ export const UpdateAppPreferencesRequestSchema = z.object({
   openPondCommandAccessMode: OpenPondCommandAccessModeSchema.optional(),
   defaultBranchPrefix: z.string().trim().max(48).optional(),
   defaultNewProjectDirectory: z.string().trim().max(4096).optional(),
-  defaultTeamId: z.string().trim().max(191).nullable().optional(),
   advancedWorkspaceControls: z.boolean().optional(),
   contextCompaction: ContextCompactionPreferencesSchema.optional(),
   training: TrainingPreferencesSchema.optional(),

@@ -14,7 +14,7 @@ import {
 } from "../lib/cloud-environment-setup";
 import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
 import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
-import { implicitOrganization } from "../lib/project-agent-setup";
+import { activeWorkspaceOrganization } from "../lib/project-agent-setup";
 import {
   isCloudWorkspaceKind,
   type WorkspaceLocation,
@@ -41,7 +41,7 @@ export function useCloudWorkspaceSetup({
   cloudSetupDialog,
   cloudProjects,
   connection,
-  defaultTeamId,
+  activeWorkspaceId,
   expandProject,
   localProjectById,
   selectedCloudProject,
@@ -68,7 +68,7 @@ export function useCloudWorkspaceSetup({
   cloudSetupDialog: CloudSetupDialogState | null;
   cloudProjects: CloudProject[];
   connection: ClientConnection | null;
-  defaultTeamId: string | null;
+  activeWorkspaceId: string | null;
   expandProject: (projectId: string) => void;
   localProjectById: Map<string, LocalProject>;
   selectedCloudProject: CloudProject | null;
@@ -178,12 +178,12 @@ export function useCloudWorkspaceSetup({
       );
       try {
         const organizationPayload = await api.organizations(connection);
-        const organization = implicitOrganization(
+        const organization = activeWorkspaceOrganization(
           organizationPayload.organizations
             .map(normalizeOpenPondOrganization)
             .filter((candidate): candidate is OpenPondOrganization => Boolean(candidate))
             .filter((candidate) => candidate.status === "active"),
-          defaultTeamId,
+          activeWorkspaceId,
         );
         if (!organization) {
           throw new Error("Add an OpenPond account before creating a Cloud environment.");
@@ -282,7 +282,7 @@ export function useCloudWorkspaceSetup({
       cloudSetupDialog,
       cloudProjects,
       connection,
-      defaultTeamId,
+      activeWorkspaceId,
       expandProject,
       localProjectById,
       setCloudSetupDialog,

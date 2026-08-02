@@ -21,10 +21,7 @@ import {
   openPondCommandAccessPreferencesWithLocalOverride,
   storedOpenPondCommandAccessPreferenceSyncPatch,
 } from "../lib/openpond-command-access-preferences";
-import {
-  normalizeOpenPondOrganization,
-  resolveDefaultOpenPondOrganization,
-} from "../lib/cloud-project-utils";
+import { normalizeOpenPondOrganization } from "../lib/cloud-project-utils";
 import { isSameConnection } from "../lib/layout";
 import { isConnectionErrorMessage } from "../lib/error-messages";
 import type { OpenPondOrganization } from "../lib/organization-types";
@@ -105,8 +102,7 @@ export function useAppBootstrap(params: {
   const bootstrapServerIdRef = useRef<string | null>(null);
   const codexPreferenceSyncKeyRef = useRef<string | null>(null);
   const openPondCommandAccessPreferenceSyncKeyRef = useRef<string | null>(null);
-  const defaultTeamSyncKeyRef = useRef<string | null>(null);
-  const latestDefaultTeamIdRef = useRef("");
+  const workspacePreloadKeyRef = useRef<string | null>(null);
   const startupReadyRef = useRef(false);
   const startupStartedAtRef = useRef(Date.now());
   const startupCompleteTimerRef = useRef<number | null>(null);
@@ -183,7 +179,6 @@ export function useAppBootstrap(params: {
               serverId: payload.server.id,
             },
       );
-      latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
       setEvents((current) => sameServer
         ? mergeBootstrapRuntimeEvents(payload.events, current)
@@ -260,7 +255,6 @@ export function useAppBootstrap(params: {
   );
 
   const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
-    latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
     setBootstrap((current) => (current ? { ...current, preferences: payload.preferences } : current));
   }, []);
 
@@ -351,33 +345,33 @@ export function useAppBootstrap(params: {
 
   useEffect(() => {
     if (!connection || !bootstrap) {
-      defaultTeamSyncKeyRef.current = null;
+      workspacePreloadKeyRef.current = null;
       return;
     }
 
     if (bootstrap.account.state !== "signed_in") {
-      defaultTeamSyncKeyRef.current = null;
+      workspacePreloadKeyRef.current = null;
       completeStartup();
       return;
     }
 
     const accountKey = openPondOrganizationCacheKey(bootstrap.account);
-    if (!accountKey) {
-      defaultTeamSyncKeyRef.current = null;
+    const activeWorkspaceId = bootstrap.account.workspaces?.activeWorkspace.id.trim() ?? "";
+    if (!accountKey || !activeWorkspaceId) {
+      workspacePreloadKeyRef.current = null;
       completeStartup();
       return;
     }
     completeStartup();
     setBlockingStartupStage("team");
 
-    const currentDefaultTeamId = bootstrap.preferences.defaultTeamId?.trim() ?? "";
-    const syncKey = defaultTeamPreferenceSyncKey(
+    const syncKey = workspacePreloadKey(
       accountKey,
-      currentDefaultTeamId,
+      activeWorkspaceId,
       bootstrap.accountMeta.asOf ?? "initial",
     );
-    if (defaultTeamSyncKeyRef.current === syncKey) return;
-    defaultTeamSyncKeyRef.current = syncKey;
+    if (workspacePreloadKeyRef.current === syncKey) return;
+    workspacePreloadKeyRef.current = syncKey;
 
     let cancelled = false;
     const preloadTeamAgents = (teamId: string) =>
@@ -389,8 +383,8 @@ export function useAppBootstrap(params: {
           return agentsPayload.agents;
         },
       }).catch(() => {
-        if (!cancelled && defaultTeamSyncKeyRef.current === syncKey) {
-          defaultTeamSyncKeyRef.current = null;
+        if (!cancelled && workspacePreloadKeyRef.current === syncKey) {
+          workspacePreloadKeyRef.current = null;
         }
       });
 
@@ -401,77 +395,28 @@ export function useAppBootstrap(params: {
     })
       .then(async (activeOrganizations) => {
         if (cancelled) return;
-        if (activeOrganizations.length === 0) {
-          completeStartup();
-          return;
-        }
-
-        const currentDefaultStillActive =
-          Boolean(currentDefaultTeamId) &&
-          activeOrganizations.some((organization) => organization.teamId === currentDefaultTeamId);
-        if (currentDefaultStillActive) {
-          await preloadTeamAgents(currentDefaultTeamId);
-          completeStartup();
-          return;
-        }
-
-        const fallbackTeamId = resolveDefaultOpenPondOrganization(activeOrganizations)?.teamId;
-        if (!fallbackTeamId) {
-          completeStartup();
-          return;
-        }
-        const latestDefaultTeamId = latestDefaultTeamIdRef.current;
-        if (latestDefaultTeamId && latestDefaultTeamId !== currentDefaultTeamId) {
-          completeStartup();
-          return;
-        }
-        const preloadAgentsPromise = preloadTeamAgents(fallbackTeamId);
-        defaultTeamSyncKeyRef.current = defaultTeamPreferenceSyncKey(
-          accountKey,
-          fallbackTeamId,
-          bootstrap.accountMeta.asOf ?? "initial",
+        const activeWorkspaceAvailable = activeOrganizations.some(
+          (organization) => organization.teamId === activeWorkspaceId,
         );
-        const updatedPayload = await api.savePreferences(connection, { defaultTeamId: fallbackTeamId });
-        await preloadAgentsPromise;
-        const latestDefaultTeamIdAfterSave = latestDefaultTeamIdRef.current;
-        if (cancelled) {
-          if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-            void api
-              .savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave })
-              .then(applyPreferencesPayload)
-              .catch((defaultTeamError) => {
-                setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
-              });
-          }
-          return;
-        }
-        if (latestDefaultTeamIdAfterSave && latestDefaultTeamIdAfterSave !== fallbackTeamId) {
-          applyPreferencesPayload(
-            await api.savePreferences(connection, { defaultTeamId: latestDefaultTeamIdAfterSave }),
-          );
-          completeStartup();
-          return;
-        }
-        if (!cancelled) {
-          applyPreferencesPayload(updatedPayload);
-          completeStartup();
-        }
+        if (activeWorkspaceAvailable) await preloadTeamAgents(activeWorkspaceId);
+        completeStartup();
       })
-      .catch((defaultTeamError) => {
+      .catch((workspacePreloadError) => {
         if (cancelled) return;
-        defaultTeamSyncKeyRef.current = null;
-        setError(defaultTeamError instanceof Error ? defaultTeamError.message : String(defaultTeamError));
+        workspacePreloadKeyRef.current = null;
+        setError(
+          workspacePreloadError instanceof Error
+            ? workspacePreloadError.message
+            : String(workspacePreloadError),
+        );
         completeStartup();
       });
     return () => {
       cancelled = true;
     };
   }, [
-    applyBootstrapPayload,
-    applyPreferencesPayload,
     bootstrap?.account,
     bootstrap?.accountMeta.asOf,
-    bootstrap?.preferences.defaultTeamId,
     completeStartup,
     connection,
     setBlockingStartupStage,
@@ -623,10 +568,10 @@ export function startupSplashRemainingMs(elapsedMs: number): number {
   return Math.max(0, STARTUP_SPLASH_FAST_MINIMUM_MS - elapsedMs);
 }
 
-function defaultTeamPreferenceSyncKey(
+function workspacePreloadKey(
   accountKey: string,
-  defaultTeamId: string,
+  workspaceId: string,
   accountRefreshKey: string,
 ): string {
-  return `${accountKey}::${defaultTeamId || "none"}::${accountRefreshKey}`;
+  return `${accountKey}::${workspaceId}::${accountRefreshKey}`;
 }

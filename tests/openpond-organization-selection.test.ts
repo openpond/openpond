@@ -3,8 +3,6 @@ import { describe, expect, test } from "vitest";
 import {
   normalizeOpenPondOrganization,
   resolveActiveTeamChatOpenPondOrganization,
-  resolveDefaultOpenPondOrganization,
-  resolveTeamChatOpenPondOrganization,
 } from "../apps/web/src/lib/cloud-project-utils";
 import type { OpenPondOrganization } from "../apps/web/src/lib/organization-types";
 
@@ -27,22 +25,7 @@ function organization(
   };
 }
 
-describe("OpenPond default organization selection", () => {
-  test("prefers the account personal default team over response order", () => {
-    const newTeam = organization("team_new", {
-      displayName: "New team",
-      kind: "team",
-    });
-    const defaultTeam = organization("team_default", {
-      displayName: "My Organization",
-      isPersonalDefault: true,
-      kind: "personal_default",
-      name: "default",
-    });
-
-    expect(resolveDefaultOpenPondOrganization([newTeam, defaultTeam])).toBe(defaultTeam);
-  });
-
+describe("OpenPond organization selection", () => {
   test("preserves default-team metadata while normalizing API responses", () => {
     const normalized = normalizeOpenPondOrganization(
       organization("team_default", {
@@ -85,37 +68,6 @@ describe("OpenPond default organization selection", () => {
 
     expect(normalized?.workspaceKind).toBe("personal");
     expect(normalized?.isPersonalDefault).toBe(true);
-  });
-
-  test("selects the shared team for chat when the default workspace is personal", () => {
-    const personal = organization("team_personal", {
-      workspaceKind: "personal",
-      kind: "personal_default",
-      isPersonalDefault: true,
-    });
-    const shared = organization("team_shared", {
-      workspaceKind: "shared",
-      kind: "team",
-      role: "member",
-    });
-
-    expect(resolveTeamChatOpenPondOrganization([personal, shared], personal.teamId)).toBe(shared);
-  });
-
-  test("honors a preferred shared team and otherwise prefers an owned team", () => {
-    const memberTeam = organization("team_member", {
-      workspaceKind: "shared",
-      role: "member",
-    });
-    const ownedTeam = organization("team_owned", {
-      workspaceKind: "shared",
-      role: "owner",
-    });
-
-    expect(resolveTeamChatOpenPondOrganization([memberTeam, ownedTeam], memberTeam.teamId)).toBe(
-      memberTeam,
-    );
-    expect(resolveTeamChatOpenPondOrganization([memberTeam, ownedTeam], null)).toBe(ownedTeam);
   });
 
   test("enables Team Chat only for the canonical active Team workspace", () => {

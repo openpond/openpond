@@ -22,13 +22,11 @@ export function normalizeAppPreferences(value: unknown): AppPreferences {
   const migrated = migrateSubagentDefaults(value);
   const parsed = AppPreferencesSchema.safeParse(migrated ?? {});
   const preferences = parsed.success ? parsed.data : AppPreferencesSchema.parse({});
-  const defaultTeamId = preferences.defaultTeamId?.trim() || null;
   const legacyCodexDefaultModel =
     preferences.defaultChatProvider === "codex" &&
     (preferences.defaultChatModel === "codex-default" || preferences.defaultChatModel === "gpt-5.5");
   return {
     ...preferences,
-    defaultTeamId,
     ...(legacyCodexDefaultModel ? { defaultChatModel: DEFAULT_CODEX_CHAT_MODEL } : {}),
     ...(legacyCodexDefaultModel && preferences.codexReasoningEffort === "medium"
       ? { codexReasoningEffort: DEFAULT_CODEX_REASONING_EFFORT }

@@ -63,7 +63,7 @@ import {
   canManageOpenPondOrganization,
   type OpenPondOrganization,
 } from "../lib/organization-types";
-import { implicitOrganization } from "../lib/project-agent-setup";
+import { activeWorkspaceOrganization } from "../lib/project-agent-setup";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import type {
   SandboxActionCatalogEntry,
@@ -393,14 +393,14 @@ export function useChatActions({
       );
     }
     const organizationPayload = await api.organizations(connection);
-    const organization = implicitOrganization(
+    const organization = activeWorkspaceOrganization(
       organizationPayload.organizations
         .map(normalizeOpenPondOrganization)
         .filter((candidate): candidate is OpenPondOrganization =>
           Boolean(candidate)
         )
         .filter((candidate) => candidate.status === "active"),
-      bootstrap?.preferences.defaultTeamId ?? null
+      bootstrap?.account.workspaces?.activeWorkspace.id ?? null
     );
     if (!organization)
       throw new Error(

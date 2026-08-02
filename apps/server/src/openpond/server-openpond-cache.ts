@@ -82,6 +82,22 @@ export function preserveCachedAccountIdentities(
   };
 }
 
+export function openPondAccountCacheScope(account: AccountState): string {
+  const activeProfile = account.activeProfile;
+  return `${activeProfile?.handle ?? "signed_out"}|${
+    activeProfile?.baseUrl ?? "default"
+  }|${account.apiBaseUrl ?? "default"}|${
+    account.chatApiBaseUrl ?? "default"
+  }`;
+}
+
+export function openPondWorkspaceCacheScope(account: AccountState): string {
+  const stableAccountId = account.profile?.id?.trim() || "unknown";
+  const activeWorkspaceId =
+    account.workspaces?.activeWorkspace.id.trim() || "none";
+  return `${openPondAccountCacheScope(account)}|profile:${stableAccountId}|workspace:${activeWorkspaceId}`;
+}
+
 export function createOpenPondCache(deps: {
   store: SqliteStore;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -94,12 +110,7 @@ export function createOpenPondCache(deps: {
   } | null = null;
 
   function openPondCacheScope(account: AccountState): string {
-    const activeProfile = account.activeProfile;
-    return `${activeProfile?.handle ?? "signed_out"}|${
-      activeProfile?.baseUrl ?? "default"
-    }|${account.apiBaseUrl ?? "default"}|${
-      account.chatApiBaseUrl ?? "default"
-    }`;
+    return openPondWorkspaceCacheScope(account);
   }
 
   async function loadScaffoldApps(scope: string): Promise<OpenPondApp[]> {
@@ -183,20 +194,21 @@ export function createOpenPondCache(deps: {
         AccountStateSchema.parse(result.account),
         cachedAccounts
       );
-      const scope = openPondCacheScope(account);
+      const accountScope = openPondAccountCacheScope(account);
+      const workspaceScope = openPondCacheScope(account);
       const [accountEntry, appsEntry] = await Promise.all([
         store.setCacheEntry(
           "openpond.account",
-          scope,
+          accountScope,
           account,
           account.error
         ),
-        store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope),
+        store.getCacheEntry<OpenPondApp[]>("openpond.apps", workspaceScope),
       ]);
 
       return {
         account: accountEntry.payload,
-        apps: await mergeScaffoldApps(scope, appsEntry?.payload ?? []),
+        apps: await mergeScaffoldApps(workspaceScope, appsEntry?.payload ?? []),
         appsError: appsEntry?.error ?? null,
         accountMeta: metaFromCache(accountEntry, "fresh", false),
         appsMeta: metaFromCache(
@@ -232,11 +244,17 @@ export function createOpenPondCache(deps: {
     options: { force?: boolean } = {}
   ): Promise<OpenPondCachedData> {
     const context = await loadOpenPondAccountContext();
-    const scope = openPondCacheScope(context.accountState);
-    const [cachedAccount, cachedApps] = await Promise.all([
-      store.getCacheEntry<AccountState>("openpond.account", scope),
-      store.getCacheEntry<OpenPondApp[]>("openpond.apps", scope),
-    ]);
+    const accountScope = openPondAccountCacheScope(context.accountState);
+    const cachedAccount = await store.getCacheEntry<AccountState>(
+      "openpond.account",
+      accountScope,
+    );
+    const account = cachedAccount?.payload ?? context.accountState;
+    const workspaceScope = openPondCacheScope(account);
+    const cachedApps = await store.getCacheEntry<OpenPondApp[]>(
+      "openpond.apps",
+      workspaceScope,
+    );
     const hasAccountCache = Boolean(cachedAccount);
     const needsFreshAccountProfile = Boolean(
       context.token &&
@@ -247,19 +265,19 @@ export function createOpenPondCache(deps: {
     );
 
     if (options.force) {
-      return refreshOpenPondCache(scope);
+      return refreshOpenPondCache(accountScope);
     }
 
     if (context.token && (needsFreshAccountProfile || !hasAccountCache)) {
-      refreshOpenPondCacheInBackground(scope);
+      refreshOpenPondCacheInBackground(accountScope);
     }
 
     const refreshingThisScope = Boolean(
-      refreshPromise && refreshPromise.scope === scope
+      refreshPromise && refreshPromise.scope === accountScope
     );
     return {
-      account: cachedAccount?.payload ?? context.accountState,
-      apps: await mergeScaffoldApps(scope, cachedApps?.payload ?? []),
+      account,
+      apps: await mergeScaffoldApps(workspaceScope, cachedApps?.payload ?? []),
       appsError: cachedApps?.error ?? null,
       accountMeta: metaFromCache(
         cachedAccount,

@@ -66,7 +66,8 @@ export function ProfileSettingsSection({
   const [removeProfileTarget, setRemoveProfileTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
   const [publicationTarget, setPublicationTarget] = useState<OpenPondProfileCatalogEntry | null>(null);
   const profile = payload?.profile ?? null;
-  const selectedDefaultTeamId = payload?.preferences.defaultTeamId?.trim() || "";
+  const activeWorkspaceId =
+    payload?.account.workspaces?.activeWorkspace.id.trim() || "";
   const showControls = section === "all" || section === "profile" || section === "controls";
   const showCatalog = section === "all" || section === "profile";
   const showAgents = section === "all" || section === "agents";
@@ -110,12 +111,12 @@ export function ProfileSettingsSection({
 
   function submitProfilePush() {
     void runProfileControl("push", async () => {
-      if (!selectedDefaultTeamId) {
-        throw new Error("Select a default team before syncing a hosted profile.");
+      if (!activeWorkspaceId) {
+        throw new Error("Select a workspace before syncing a hosted profile.");
       }
       await api.profileCheck(connection!, { kind: "all" });
       await api.profilePush(connection!, {
-        teamId: selectedDefaultTeamId,
+        teamId: activeWorkspaceId,
         ensureHosted: true,
         message: null,
       });
@@ -189,8 +190,8 @@ export function ProfileSettingsSection({
                       profile={profile}
                       profileBusy={profileBusy}
                       profileCommitMessage={profileCommitMessage}
-                      selectedDefaultTeamId={selectedDefaultTeamId}
-                      syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
+                      activeWorkspaceId={activeWorkspaceId}
+                      syncDisabledReason={profileSyncDisabledReason(profile, activeWorkspaceId)}
                       setProfileCommitMessage={setProfileCommitMessage}
                       submitProfileCommit={submitProfileCommit}
                       submitProfilePush={submitProfilePush}
@@ -219,8 +220,8 @@ export function ProfileSettingsSection({
                     profile={profile}
                     profileBusy={profileBusy}
                     profileCommitMessage={profileCommitMessage}
-                    selectedDefaultTeamId={selectedDefaultTeamId}
-                    syncDisabledReason={profileSyncDisabledReason(profile, selectedDefaultTeamId)}
+                    activeWorkspaceId={activeWorkspaceId}
+                    syncDisabledReason={profileSyncDisabledReason(profile, activeWorkspaceId)}
                     setProfileCommitMessage={setProfileCommitMessage}
                     submitProfileCommit={submitProfileCommit}
                     submitProfilePush={submitProfilePush}
@@ -236,7 +237,7 @@ export function ProfileSettingsSection({
             <ProfileAgentsSection
               connection={connection}
               profile={profile}
-              selectedDefaultTeamId={selectedDefaultTeamId}
+              activeWorkspaceId={activeWorkspaceId}
             />
           ) : null}
 
@@ -572,7 +573,7 @@ type ProfileControlsProps = {
   profile: ProfileState | null;
   profileBusy: string | null;
   profileCommitMessage: string;
-  selectedDefaultTeamId: string;
+  activeWorkspaceId: string;
   syncDisabledReason: string | null;
   setProfileCommitMessage: (value: string) => void;
   submitProfileCommit: () => void;
@@ -587,7 +588,7 @@ function ProfileControls({
   profile,
   profileBusy,
   profileCommitMessage,
-  selectedDefaultTeamId,
+  activeWorkspaceId,
   syncDisabledReason,
   setProfileCommitMessage,
   submitProfileCommit,
@@ -609,7 +610,7 @@ function ProfileControls({
           repoDisabled={Boolean(profileBusy) || !profile}
           syncDisabled={disabled || !profile}
           syncLabel={profileBusy === "push" ? "Syncing" : "Sync"}
-          syncStatus={profile ? profileHostedValue(profile, selectedDefaultTeamId) : null}
+          syncStatus={profile ? profileHostedValue(profile, activeWorkspaceId) : null}
           onAdd={onAdd}
           onCommit={() => setCommitDialogOpen(true)}
           onRefresh={onRefresh}
@@ -650,11 +651,11 @@ function ProfileControls({
               {profile ? (
                 <span
                   className="profile-hosted-status"
-                  title={`Profile sync status: ${profileHostedValue(profile, selectedDefaultTeamId)}`}
+                  title={`Profile sync status: ${profileHostedValue(profile, activeWorkspaceId)}`}
                 >
                   <CloudUpload size={14} />
                   <span>Profile sync</span>
-                  <strong>{profileHostedValue(profile, selectedDefaultTeamId)}</strong>
+                  <strong>{profileHostedValue(profile, activeWorkspaceId)}</strong>
                 </span>
               ) : null}
             </div>
@@ -691,7 +692,7 @@ function ProfileControls({
           disabled={disabled}
           profile={profile}
           profileBusy={profileBusy}
-          selectedDefaultTeamId={selectedDefaultTeamId}
+          activeWorkspaceId={activeWorkspaceId}
           syncDisabledReason={syncDisabledReason}
           submitProfilePush={submitProfilePush}
           onClose={() => setSyncDialogOpen(false)}
@@ -768,7 +769,7 @@ function ProfileSyncDialog({
   disabled,
   profile,
   profileBusy,
-  selectedDefaultTeamId,
+  activeWorkspaceId,
   syncDisabledReason,
   submitProfilePush,
   onClose,
@@ -776,12 +777,12 @@ function ProfileSyncDialog({
   disabled: boolean;
   profile: ProfileState;
   profileBusy: string | null;
-  selectedDefaultTeamId: string;
+  activeWorkspaceId: string;
   syncDisabledReason: string | null;
   submitProfilePush: () => void;
   onClose: () => void;
 }) {
-  const differences = profileSyncDifferences(profile, selectedDefaultTeamId);
+  const differences = profileSyncDifferences(profile, activeWorkspaceId);
   const outOfSyncCount = differences.reduce((count, difference) => count + difference.count, 0);
   const canSync = !disabled && !syncDisabledReason;
 
@@ -1034,31 +1035,31 @@ function shortSha(value: string | null | undefined): string {
 
 function profileHostedValue(
   profile: NonNullable<BootstrapPayload["profile"]>,
-  selectedDefaultTeamId: string,
+  activeWorkspaceId: string,
 ): string {
-  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) return "Sync this account";
+  if (profileHostedTeamMismatch(profile, activeWorkspaceId)) return "Sync this account";
   if (!profile.hosted?.sourceCommitSha) return "Not pushed";
   const promotion = profile.hosted.promotionStatus ?? "uploaded";
   return `${promotion} ${shortSha(profile.hosted.sourceCommitSha)}`;
 }
 
-function profileSyncDisabledReason(profile: ProfileState, selectedDefaultTeamId: string): string | null {
-  if (!selectedDefaultTeamId) return "Select a default team before syncing.";
+function profileSyncDisabledReason(profile: ProfileState, activeWorkspaceId: string): string | null {
+  if (!activeWorkspaceId) return "Select a workspace before syncing.";
   if (!profile.git?.head) return "Commit the profile before syncing.";
   if (profile.git.dirty) return "Commit local profile changes before syncing.";
   return null;
 }
 
-function profileSyncDifferences(profile: ProfileState, selectedDefaultTeamId: string): ProfileSyncDifference[] {
+function profileSyncDifferences(profile: ProfileState, activeWorkspaceId: string): ProfileSyncDifference[] {
   const differences: ProfileSyncDifference[] = [];
   const localHead = profile.summary.localHead ?? profile.git?.head ?? null;
   const pushedLocalHead = profile.hosted?.lastPushedLocalHead ?? null;
   const hostedUploadHead = profile.summary.hostedHead ?? profile.hosted?.sourceCommitSha ?? null;
 
-  if (profileHostedTeamMismatch(profile, selectedDefaultTeamId)) {
+  if (profileHostedTeamMismatch(profile, activeWorkspaceId)) {
     differences.push({
       label: "Account",
-      detail: "Hosted profile metadata was synced under a different default team.",
+      detail: "Hosted profile metadata was synced under a different workspace.",
       count: 1,
       tone: "warning",
     });
@@ -1152,7 +1153,7 @@ function profileDiffSummary(profile: ProfileState): string {
   return parts.join(", ") || "Profile source has local changes.";
 }
 
-function profileHostedTeamMismatch(profile: ProfileState, selectedDefaultTeamId: string): boolean {
+function profileHostedTeamMismatch(profile: ProfileState, activeWorkspaceId: string): boolean {
   const hostedTeamId = profile.hosted?.teamId?.trim() ?? "";
-  return Boolean(hostedTeamId && selectedDefaultTeamId && hostedTeamId !== selectedDefaultTeamId);
+  return Boolean(hostedTeamId && activeWorkspaceId && hostedTeamId !== activeWorkspaceId);
 }

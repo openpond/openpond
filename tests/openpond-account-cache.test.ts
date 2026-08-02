@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { AccountState } from "@openpond/contracts";
-import { preserveCachedAccountIdentities } from "../apps/server/src/openpond/server-openpond-cache";
+import {
+  openPondAccountCacheScope,
+  openPondWorkspaceCacheScope,
+  preserveCachedAccountIdentities,
+} from "../apps/server/src/openpond/server-openpond-cache";
 
 function accountState(overrides: Partial<AccountState> = {}): AccountState {
   return {
@@ -28,6 +32,32 @@ function accountState(overrides: Partial<AccountState> = {}): AccountState {
 }
 
 describe("preserveCachedAccountIdentities", () => {
+  test("keeps account discovery stable while partitioning workspace caches", () => {
+    const personal = accountState({
+      state: "signed_in",
+      profile: { id: "user_qa" } as AccountState["profile"],
+      workspaces: {
+        activeWorkspace: { id: "personal_qa", type: "personal" },
+      } as AccountState["workspaces"],
+    });
+    const team = accountState({
+      ...personal,
+      workspaces: {
+        activeWorkspace: { id: "team_engine", type: "team" },
+      } as AccountState["workspaces"],
+    });
+
+    expect(openPondAccountCacheScope(personal)).toBe(
+      openPondAccountCacheScope(team),
+    );
+    expect(openPondWorkspaceCacheScope(personal)).not.toBe(
+      openPondWorkspaceCacheScope(team),
+    );
+    expect(openPondWorkspaceCacheScope(team)).toContain(
+      "profile:user_qa|workspace:team_engine",
+    );
+  });
+
   test("retains last-known email and display identity while using fresh auth status", () => {
     const fresh = accountState({
       accounts: [

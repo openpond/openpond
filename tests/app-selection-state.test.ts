@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { AccountState, Session } from "@openpond/contracts";
+import type { AccountState, CloudProject, Session } from "@openpond/contracts";
 import {
+  cloudProjectsForOpenPondWorkspace,
   mergedSidebarSessions,
   sessionsForOpenPondWorkspace,
 } from "../apps/web/src/hooks/useAppSelectionState";
@@ -101,6 +102,26 @@ function account(active: "personal" | "team"): AccountState {
 }
 
 describe("app selection state", () => {
+  test("shows cloud projects only from the canonical active workspace", () => {
+    const projects = [
+      { id: "personal_project", teamId: "personal_ada" },
+      { id: "team_project", teamId: "team_engine" },
+      { id: "other_project", teamId: "team_other" },
+    ] as CloudProject[];
+
+    expect(
+      cloudProjectsForOpenPondWorkspace(projects, account("personal")).map(
+        (project) => project.id,
+      ),
+    ).toEqual(["personal_project"]);
+    expect(
+      cloudProjectsForOpenPondWorkspace(projects, account("team")).map(
+        (project) => project.id,
+      ),
+    ).toEqual(["team_project"]);
+    expect(cloudProjectsForOpenPondWorkspace(projects, null)).toEqual([]);
+  });
+
   test("keeps sidebar sessions in existing order when a chat receives a newer turn", () => {
     const first = session({ id: "session_first", codexThreadId: "thread_first", updatedAt: older });
     const second = session({ id: "session_second", codexThreadId: "thread_second", updatedAt: older });

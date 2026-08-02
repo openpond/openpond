@@ -72,7 +72,7 @@ export function AgentConfigDialog({
 export function ConnectProjectDialog({
   busy,
   defaultBranch,
-  defaultTeamId,
+  workspaceId,
   error,
   projectName,
   sourceIdentity,
@@ -81,14 +81,14 @@ export function ConnectProjectDialog({
 }: {
   busy: boolean;
   defaultBranch: string;
-  defaultTeamId: string;
+  workspaceId: string;
   error: string | null;
   projectName: string;
   sourceIdentity: string;
   onClose: () => void;
   onSubmit: (input: ConnectProjectDialogInput) => void;
 }) {
-  const teamId = defaultTeamId;
+  const teamId = workspaceId;
   const [name, setName] = useState(projectName);
   const [sourceType, setSourceType] = useState<SandboxProjectSourceType>(
     /github\.com[:/]/i.test(sourceIdentity) ? "github_repo" : "manual",

@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import type {
-  BootstrapPayload,
   CloudProject,
   ConnectedAppStatusRow,
   LocalProject,
@@ -16,7 +15,7 @@ import {
 } from "../lib/runtime-indexes";
 
 export function useAppConversationContext({
-  bootstrap,
+  cloudProjects,
   connectedAppRows,
   mentionableSandboxApps,
   runtimeIndexes,
@@ -26,7 +25,7 @@ export function useAppConversationContext({
   selectedSession,
   selectedSessionId,
 }: {
-  bootstrap: BootstrapPayload | null;
+  cloudProjects: CloudProject[];
   connectedAppRows: ConnectedAppStatusRow[];
   mentionableSandboxApps: OpenPondApp[];
   runtimeIndexes: RuntimeIndexes;
@@ -38,13 +37,13 @@ export function useAppConversationContext({
 }) {
   const cloudProjectIdsByTeam = useMemo(() => {
     const groups = new Map<string, string[]>();
-    for (const project of bootstrap?.cloudProjects ?? []) {
+    for (const project of cloudProjects) {
       const existing = groups.get(project.teamId) ?? [];
       existing.push(project.id);
       groups.set(project.teamId, existing);
     }
     return groups;
-  }, [bootstrap?.cloudProjects]);
+  }, [cloudProjects]);
   const hasScopedConversationContext = Boolean(selectedSession || selectedApp || selectedProject || selectedCloudProject);
   const chatMentionApps = hasScopedConversationContext ? [] : mentionableSandboxApps;
   const connectedAppMentions = useMemo(

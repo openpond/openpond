@@ -9,7 +9,7 @@ export type AppStartupState = {
 const APP_STARTUP_LABELS: Record<AppStartupStageId, string> = {
   connecting: "Connecting to OpenPond",
   account: "Loading account",
-  team: "Loading default team",
+  team: "Loading workspace",
   ready: "Ready",
 };
 

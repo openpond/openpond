@@ -53,7 +53,7 @@ export function AppTopBar({
   workspaceDiff,
   managedWorkspace,
   workspaceBusy,
-  defaultTeamId,
+  openPondWorkspaceId,
   showDiffControls,
   diffPanelOpen,
   terminalOpen,
@@ -90,7 +90,7 @@ export function AppTopBar({
   workspaceDiff: WorkspaceDiffSummary | null;
   managedWorkspace: boolean;
   workspaceBusy: boolean;
-  defaultTeamId?: string | null;
+  openPondWorkspaceId?: string | null;
   showDiffControls: boolean;
   diffPanelOpen: boolean;
   terminalOpen: boolean;
@@ -226,7 +226,7 @@ export function AppTopBar({
                   selectedApp={selectedApp}
                   selectedProject={selectedProject}
                   workspaceBusy={workspaceBusy}
-                  defaultTeamId={defaultTeamId}
+                  openPondWorkspaceId={openPondWorkspaceId}
                   workspaceDiff={workspaceDiff}
                   managedWorkspace={managedWorkspace}
                   showDiffControls={showDiffControls}

@@ -44,9 +44,7 @@ function payload(account: AccountState): BootstrapPayload {
       lastRefreshError: null,
       source: "fresh",
     },
-    preferences: {
-      defaultTeamId: null,
-    },
+    preferences: {},
     server: {
       id: "server",
       host: "127.0.0.1",
@@ -116,7 +114,7 @@ describe("AccountSettingsSection", () => {
     expect(html).toContain("No account connected");
     expect(html).toContain("not signed in");
     expect(html).toContain(
-      "Cloud projects, hosted agents, and team defaults are disabled until you sign in."
+      "Workspace-scoped cloud projects and hosted agents are disabled until you sign in."
     );
     expect(html).toContain(">Add account<");
     expect(html).not.toContain("account-login-form");
@@ -157,6 +155,43 @@ describe("AccountSettingsSection", () => {
     expect(html).not.toContain("Add or update account");
     expect(html).not.toContain(">Save account<");
     expect(html).not.toContain("Connect this app to your OpenPond account");
+    expect(html).not.toContain("Default team");
+  });
+
+  test("shows the canonical active workspace plan instead of legacy products", () => {
+    const html = renderAccountSettings(
+      accountState({
+        state: "signed_in",
+        label: "QA User",
+        products: [
+          {
+            id: "legacy_free",
+            name: "Free",
+            type: "subscription",
+            status: "active",
+            isActive: true,
+            price: null,
+            currency: null,
+            credits: null,
+          },
+        ],
+        workspaces: {
+          activeWorkspace: { id: "team_openpond", type: "team" },
+          team: {
+            id: "team_openpond",
+            type: "team",
+            displayName: "openpondai",
+            planKey: "enterprise",
+            accessState: "active",
+          },
+        } as AccountState["workspaces"],
+      }),
+    );
+
+    expect(html).toContain("Active workspace");
+    expect(html).toContain("openpondai");
+    expect(html).toContain("Enterprise plan");
+    expect(html).not.toContain("<strong>Free</strong>");
   });
 
   test("shows one concise wrapped account error at the bottom", () => {

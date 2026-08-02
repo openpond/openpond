@@ -24,3 +24,15 @@ export function openPondAccountScopeKey(account: AccountInput): string | null {
     chatApiBaseUrl,
   ].join("|");
 }
+
+export function activeOpenPondWorkspaceId(account: AccountInput): string | null {
+  if (!account || account.state !== "signed_in") return null;
+  return account.workspaces?.activeWorkspace.id.trim() || null;
+}
+
+export function openPondAccountWorkspaceScopeKey(account: AccountInput): string | null {
+  const accountKey = openPondAccountScopeKey(account);
+  const workspaceId = activeOpenPondWorkspaceId(account);
+  if (!accountKey || !workspaceId) return null;
+  return `${accountKey}|workspace:${workspaceId}`;
+}

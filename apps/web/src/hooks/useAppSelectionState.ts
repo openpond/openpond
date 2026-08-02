@@ -31,9 +31,17 @@ export function useAppSelectionState({
     () => new Map((bootstrap?.localProjects ?? []).map((project) => [project.id, project])),
     [bootstrap?.localProjects],
   );
+  const scopedCloudProjects = useMemo(
+    () =>
+      cloudProjectsForOpenPondWorkspace(
+        bootstrap?.cloudProjects ?? [],
+        bootstrap?.account ?? null,
+      ),
+    [bootstrap?.account, bootstrap?.cloudProjects],
+  );
   const cloudProjectById = useMemo(
-    () => new Map((bootstrap?.cloudProjects ?? []).map((project) => [project.id, project])),
-    [bootstrap?.cloudProjects],
+    () => new Map(scopedCloudProjects.map((project) => [project.id, project])),
+    [scopedCloudProjects],
   );
   const selectedProjectSelection = useMemo(
     () => parseProjectSelection(selectedProjectId),
@@ -140,7 +148,17 @@ export function useAppSelectionState({
     selectedSession,
     selectedSessionLinkedProject,
     sidebarSessions,
+    scopedCloudProjects,
   };
+}
+
+export function cloudProjectsForOpenPondWorkspace(
+  projects: CloudProject[],
+  account: AccountState | null,
+): CloudProject[] {
+  const activeWorkspaceId = account?.workspaces?.activeWorkspace.id.trim() ?? "";
+  if (account?.state !== "signed_in" || !activeWorkspaceId) return [];
+  return projects.filter((project) => project.teamId === activeWorkspaceId);
 }
 
 export function sessionsForOpenPondWorkspace(

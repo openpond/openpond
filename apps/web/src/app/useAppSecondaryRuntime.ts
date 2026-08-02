@@ -5,6 +5,7 @@ import type {
   SubagentDelegationMode,
 } from "@openpond/contracts";
 import { api } from "../api";
+import { activeOpenPondWorkspaceId } from "../lib/account-scope";
 import { modelRefForTurn } from "../lib/app-models";
 import { newExperienceTitle } from "../lib/experience-options";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
@@ -110,6 +111,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setEvents,
     setSessions,
     cloudProjectById,
+    scopedCloudProjects,
     localProjectById,
     selectedApp,
     selectedCloudProject,
@@ -164,6 +166,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     projectTarget,
     workspaceTarget,
   } = primary;
+  const activeAccountWorkspaceId = activeOpenPondWorkspaceId(
+    bootstrap?.account,
+  );
   const title =
     view === "apps"
       ? "Apps"
@@ -238,7 +243,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     removeProject,
   } = useProjectActions({
     connection,
-    defaultTeamId: appDefaults.defaultTeamId,
+    activeWorkspaceId: activeAccountWorkspaceId,
     sessions,
     selectedProjectId,
     confirmProjectAction,
@@ -273,7 +278,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     commitNextStep,
     draftModel,
     draftProvider,
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     selectedApp,
     selectedProject,
     selectedProjectLinkedOpenPondApp,
@@ -302,7 +307,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const ensureCloudSessionReady = useCloudSessionReady({
     applyBootstrapPayload,
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     connection,
     localProjectById,
     selectedCloudProject,
@@ -417,7 +422,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     selectedApp,
     selectedActionCatalog,
     openPondActionCatalog,
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     accountScopeKey,
     selectedCloudProject,
     selectedProject,
@@ -476,9 +481,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     applyBootstrapPayload,
     busy,
     cloudSetupDialog,
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     connection,
-    defaultTeamId: appDefaults.defaultTeamId,
+    activeWorkspaceId: activeAccountWorkspaceId,
     expandProject,
     localProjectById,
     selectedCloudProject,
@@ -675,7 +680,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     account,
     browserConversationId,
     cloudProjectById,
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     diffPanelOpen,
     rightPanelMode,
     selectedProjectId,

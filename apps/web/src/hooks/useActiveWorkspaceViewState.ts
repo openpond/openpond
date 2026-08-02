@@ -95,6 +95,7 @@ export function accountWelcomeIdentity(account: AccountState | null | undefined)
 
 export function useActiveWorkspaceViewState({
   bootstrap,
+  cloudProjects,
   draftModel,
   draftProvider,
   selectedApp,
@@ -106,6 +107,7 @@ export function useActiveWorkspaceViewState({
   selectedSessionLinkedProject,
 }: {
   bootstrap: BootstrapPayload | null;
+  cloudProjects: CloudProject[];
   draftModel: string;
   draftProvider: ChatProvider;
   selectedApp: OpenPondApp | null;
@@ -135,7 +137,7 @@ export function useActiveWorkspaceViewState({
   const providerSettings = bootstrap?.providers ?? null;
   const selectedProjectConfirmedCloudProject = confirmedLinkedCloudProject(
     selectedProject,
-    bootstrap?.cloudProjects ?? [],
+    cloudProjects,
   );
   const activeProvider = selectedCloudProject ? "openpond" : draftProvider;
   const activeModel =
@@ -256,6 +258,7 @@ export function useWorkspaceTargetState({
   accountSignedOut,
   activeWorkspaceLocation,
   bootstrap,
+  cloudProjects,
   busy,
   cloudLinked,
   selectedCloudProject,
@@ -269,6 +272,7 @@ export function useWorkspaceTargetState({
   accountSignedOut: boolean;
   activeWorkspaceLocation: WorkspaceLocation;
   bootstrap: BootstrapPayload | null;
+  cloudProjects: CloudProject[];
   busy: boolean;
   cloudLinked: boolean;
   selectedCloudProject: CloudProject | null;
@@ -280,7 +284,7 @@ export function useWorkspaceTargetState({
 }) {
   const selectedProjectConfirmedCloudProject = confirmedLinkedCloudProject(
     selectedProject,
-    bootstrap?.cloudProjects ?? [],
+    cloudProjects,
   );
   const selectedProjectRawCloudLinked = Boolean(selectedProject?.linkedSandboxProject?.projectId);
   const selectedProjectCloudLinkTrusted = !selectedProjectRawCloudLinked || Boolean(selectedProjectConfirmedCloudProject);
@@ -291,7 +295,7 @@ export function useWorkspaceTargetState({
       detail: project.workspacePath,
       kind: "local" as const,
     }));
-    const cloudOptions = (bootstrap?.cloudProjects ?? []).map((project) => ({
+    const cloudOptions = cloudProjects.map((project) => ({
       value: `cloud:${project.id}`,
       label: project.name,
       detail: project.organizationName ?? project.sourceLabel ?? "OpenPond Cloud",
@@ -321,7 +325,7 @@ export function useWorkspaceTargetState({
         },
       ],
     };
-  }, [bootstrap?.cloudProjects, bootstrap?.localProjects, busy, selectedCloudProject, selectedProject, workspaceBusy]);
+  }, [bootstrap?.localProjects, busy, cloudProjects, selectedCloudProject, selectedProject, workspaceBusy]);
   const cloudSetupAvailable = Boolean(cloudLinked || selectedProject);
   const hybridLinked = Boolean(
     selectedCloudProject?.id ||

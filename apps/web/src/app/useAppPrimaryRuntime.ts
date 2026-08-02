@@ -39,7 +39,10 @@ import {
   isCloudWorkspaceKind,
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
-import { openPondAccountScopeKey } from "../lib/account-scope";
+import {
+  activeOpenPondWorkspaceId,
+  openPondAccountScopeKey,
+} from "../lib/account-scope";
 import { resolveActiveTeamChatOpenPondOrganization } from "../lib/cloud-project-utils";
 import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
 import {
@@ -321,7 +324,10 @@ export function useAppPrimaryRuntime() {
     },
     [connection, setError, sidebarFileBookmarks]
   );
-  const connectedAppRows = useConnectedAppStatusRows(connection);
+  const connectedAppRows = useConnectedAppStatusRows(
+    connection,
+    bootstrap?.account.workspaces?.activeWorkspace.id ?? null,
+  );
   const training = useTraining({
     connection,
     profileId: bootstrap?.profile?.activeProfile ?? "default",
@@ -365,6 +371,7 @@ export function useAppPrimaryRuntime() {
     selectedSession,
     selectedSessionLinkedProject,
     sidebarSessions,
+    scopedCloudProjects,
   } = useAppSelectionState({
     bootstrap,
     codexHistorySessions,
@@ -381,7 +388,7 @@ export function useAppPrimaryRuntime() {
   const runtimeIndexes = useRuntimeIndexes(events, approvals);
   const { chatMentionApps, connectedAppMentions, pendingApproval } =
     useAppConversationContext({
-      bootstrap,
+      cloudProjects: scopedCloudProjects,
       connectedAppRows,
       mentionableSandboxApps,
       runtimeIndexes,
@@ -420,6 +427,7 @@ export function useAppPrimaryRuntime() {
     workspaceName,
   } = useActiveWorkspaceViewState({
     bootstrap,
+    cloudProjects: scopedCloudProjects,
     draftModel,
     draftProvider,
     selectedApp,
@@ -433,6 +441,9 @@ export function useAppPrimaryRuntime() {
   const accountScopeKey = useMemo(
     () => openPondAccountScopeKey(bootstrap?.account ?? null),
     [bootstrap?.account]
+  );
+  const activeAccountWorkspaceId = activeOpenPondWorkspaceId(
+    bootstrap?.account,
   );
   const organizationCacheKey = useMemo(
     () => openPondOrganizationCacheKey(bootstrap?.account ?? null),
@@ -512,9 +523,9 @@ export function useAppPrimaryRuntime() {
     () =>
       confirmedLinkedCloudProject(
         selectedProject,
-        bootstrap?.cloudProjects ?? []
+        scopedCloudProjects
       ),
-    [bootstrap?.cloudProjects, selectedProject]
+    [scopedCloudProjects, selectedProject]
   );
   const activeOpenPondCommandAccessMode =
     selectedSession?.provider === "codex"
@@ -527,9 +538,9 @@ export function useAppPrimaryRuntime() {
   const { openPondActionCatalog, selectedActionCatalog } =
     useSandboxActionContext({
       cloudProjectById,
-      cloudProjects: bootstrap?.cloudProjects ?? [],
+      cloudProjects: scopedCloudProjects,
       connection,
-      defaultTeamId: appDefaults.defaultTeamId,
+      activeWorkspaceId: activeAccountWorkspaceId,
       accountScopeKey,
       localProjects: bootstrap?.localProjects ?? [],
       profile: bootstrap?.profile,
@@ -687,7 +698,7 @@ export function useAppPrimaryRuntime() {
     subagentRuntime,
   } = useSidebarData({
     localProjects: bootstrap?.localProjects ?? [],
-    cloudProjects: bootstrap?.cloudProjects ?? [],
+    cloudProjects: scopedCloudProjects,
     sessions: experienceSidebarSessions,
     runtimeIndexes: selectedRuntimeIndexes,
     appPreferences,
@@ -1005,6 +1016,7 @@ export function useAppPrimaryRuntime() {
     accountSignedOut,
     activeWorkspaceLocation,
     bootstrap,
+    cloudProjects: scopedCloudProjects,
     busy,
     cloudLinked,
     selectedCloudProject,
@@ -1153,6 +1165,7 @@ export function useAppPrimaryRuntime() {
     startSidebarResize,
     startDiffPanelResize,
     cloudProjectById,
+    scopedCloudProjects,
     localProjectById,
     selectedApp,
     selectedCloudProject,

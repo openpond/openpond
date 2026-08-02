@@ -150,6 +150,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleSavedForLaterCollapsed,
     startSidebarResize,
     startDiffPanelResize,
+    scopedCloudProjects,
     selectedApp,
     selectedProject,
     selectedProjectLinkedApp,
@@ -754,7 +755,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           workspaceDiff: visibleWorkspaceDiff,
           managedWorkspace,
           workspaceBusy,
-          defaultTeamId: appDefaults.defaultTeamId,
+          openPondWorkspaceId:
+            bootstrap?.account.workspaces?.activeWorkspace.id ?? null,
           showDiffControls:
             view === "chat" && activeExperience === "development",
           diffPanelOpen,
@@ -932,7 +934,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onTrainingChatHandoffDismiss: dismissTrainingChatHandoff,
           onOpenSession: openSessionInChat,
           onExperienceHandoff: handoffExperience,
-          cloudProjects: bootstrap?.cloudProjects ?? [],
+          cloudProjects: scopedCloudProjects,
           chatHistoryHasMore: selectedChatHistoryHasMore,
           chatHistoryLoading: selectedChatHistoryLoading,
           onDiffPanelResizeStart: startDiffPanelResize,

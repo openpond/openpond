@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { LocalProject } from "@openpond/contracts";
-import { implicitOrganization, resolveProjectAgentSetup } from "../apps/web/src/lib/project-agent-setup";
+import {
+  activeWorkspaceOrganization,
+  resolveProjectAgentSetup,
+} from "../apps/web/src/lib/project-agent-setup";
 import type { OpenPondOrganization } from "../apps/web/src/lib/organization-types";
 import type { SandboxAgent, SandboxProject } from "../apps/web/src/lib/sandbox-types";
 
@@ -113,17 +116,20 @@ function sandboxAgent(input: Partial<SandboxAgent> = {}): SandboxAgent {
 }
 
 describe("project agent setup resolver", () => {
-  test("uses a manageable organization for implicit multi-team setup", () => {
+  test("resolves only the canonical active workspace", () => {
     const member = { ...memberOrg, teamId: "team_member", displayName: "Member Team" };
     const admin = { ...ownerOrg, role: "admin" as const, teamId: "team_admin", displayName: "Admin Team" };
 
-    expect(implicitOrganization([member, admin])?.teamId).toBe("team_admin");
+    expect(activeWorkspaceOrganization([member, admin], "team_member")).toBe(member);
+    expect(activeWorkspaceOrganization([member, admin], "team_unknown")).toBeNull();
+    expect(activeWorkspaceOrganization([member, admin], null)).toBeNull();
   });
 
   test("asks admins to add config when openpond.yaml is missing", () => {
     const resolved = resolveProjectAgentSetup({
       localProject: localProject(),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [],
       agents: [],
     });
@@ -145,6 +151,7 @@ describe("project agent setup resolver", () => {
         },
       }),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [],
       agents: [],
     });
@@ -178,6 +185,7 @@ describe("project agent setup resolver", () => {
         },
       }),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [project],
       agents: [],
     });
@@ -205,6 +213,7 @@ describe("project agent setup resolver", () => {
         },
       }),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [project],
       agents: [],
     });
@@ -232,6 +241,7 @@ describe("project agent setup resolver", () => {
         },
       }),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [project],
       agents: [],
     });
@@ -261,6 +271,7 @@ describe("project agent setup resolver", () => {
         preferredSandboxAgentId: agent.id,
       }),
       organizations: [ownerOrg],
+      activeWorkspaceId: ownerOrg.teamId,
       projects: [project],
       agents: [agent],
     });
@@ -273,6 +284,7 @@ describe("project agent setup resolver", () => {
     const resolved = resolveProjectAgentSetup({
       localProject: localProject(),
       organizations: [memberOrg],
+      activeWorkspaceId: memberOrg.teamId,
       projects: [],
       agents: [],
     });

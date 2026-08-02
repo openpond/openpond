@@ -10,8 +10,11 @@ const NOW = "2026-06-30T12:00:00.000Z";
 
 function profilePayload(): BootstrapPayload {
   return {
-    preferences: {
-      defaultTeamId: "team_1",
+    preferences: {},
+    account: {
+      workspaces: {
+        activeWorkspace: { id: "team_1", type: "team" },
+      },
     },
     profile: {
       mode: "local",
@@ -377,9 +380,12 @@ describe("ProfileSettingsSection", () => {
     expect(html).not.toContain(">Create<");
   });
 
-  test("marks hosted profile sync as account-scoped when the default team changes", () => {
+  test("marks hosted profile sync as account-scoped when the active workspace changes", () => {
     const payload = profilePayload();
-    payload.preferences.defaultTeamId = "team_2";
+    payload.account.workspaces!.activeWorkspace = {
+      id: "team_2",
+      type: "team",
+    };
 
     const html = renderToStaticMarkup(
       createElement(ProfileSettingsSection, {

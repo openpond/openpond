@@ -10,7 +10,7 @@ import {
 } from "../lib/app-models";
 import { normalizeOpenPondOrganization, slugifyCloudProjectName, utf8ToBase64 } from "../lib/cloud-project-utils";
 import { canManageOpenPondOrganization, type OpenPondOrganization } from "../lib/organization-types";
-import { implicitOrganization } from "../lib/project-agent-setup";
+import { activeWorkspaceOrganization } from "../lib/project-agent-setup";
 
 type ShowToast = (
   message: string,
@@ -24,7 +24,7 @@ type ShowToast = (
 
 type UseProjectActionsInput = {
   connection: ClientConnection | null;
-  defaultTeamId?: string | null;
+  activeWorkspaceId?: string | null;
   sessions: Session[];
   selectedProjectId: string | null;
   confirmProjectAction?: (request: {
@@ -47,7 +47,7 @@ type UseProjectActionsInput = {
 
 export function useProjectActions({
   connection,
-  defaultTeamId,
+  activeWorkspaceId,
   sessions,
   selectedProjectId,
   confirmProjectAction,
@@ -130,12 +130,12 @@ export function useProjectActions({
     setError(null);
     try {
       const organizationPayload = await api.organizations(connection);
-      const organization = implicitOrganization(
+      const organization = activeWorkspaceOrganization(
         organizationPayload.organizations
           .map(normalizeOpenPondOrganization)
           .filter((candidate): candidate is OpenPondOrganization => Boolean(candidate))
           .filter((candidate) => candidate.status === "active"),
-        defaultTeamId,
+        activeWorkspaceId,
       );
       if (!organization) {
         throw new Error("Add an OpenPond account before creating a Cloud Project.");

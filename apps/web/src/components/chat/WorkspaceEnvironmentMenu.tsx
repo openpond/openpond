@@ -24,7 +24,10 @@ import {
 } from "../icons";
 import { api, type ClientConnection } from "../../api";
 import { normalizeOpenPondOrganization } from "../../lib/cloud-project-utils";
-import { implicitOrganization, resolveProjectAgentSetup } from "../../lib/project-agent-setup";
+import {
+  activeWorkspaceOrganization,
+  resolveProjectAgentSetup,
+} from "../../lib/project-agent-setup";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 import type { SandboxAgent, SandboxProject, SandboxRecord } from "../../lib/sandbox-types";
 import {
@@ -158,7 +161,7 @@ export function WorkspaceEnvironmentMenu({
   selectedApp,
   selectedProject,
   workspaceBusy,
-  defaultTeamId,
+  openPondWorkspaceId,
   workspaceDiff,
   managedWorkspace,
   showDiffControls,
@@ -181,7 +184,7 @@ export function WorkspaceEnvironmentMenu({
   selectedApp?: OpenPondApp | null;
   selectedProject?: LocalProject | null;
   workspaceBusy?: boolean;
-  defaultTeamId?: string | null;
+  openPondWorkspaceId?: string | null;
   workspaceDiff?: WorkspaceDiffSummary | null;
   managedWorkspace?: boolean;
   showDiffControls?: boolean;
@@ -259,9 +262,12 @@ export function WorkspaceEnvironmentMenu({
     organizations,
     projects: sandboxProjects,
     agents: sandboxAgents,
-    defaultTeamId,
+    activeWorkspaceId: openPondWorkspaceId,
   });
-  const implicitTeam = implicitOrganization(organizations, defaultTeamId);
+  const implicitTeam = activeWorkspaceOrganization(
+    organizations,
+    openPondWorkspaceId,
+  );
   const canPublishProject =
     isProjectWorkspace && projectSandboxTemplate && !projectHasStoredOpenPondLink;
   const canCreateSandboxProject =
@@ -320,7 +326,10 @@ export function WorkspaceEnvironmentMenu({
           .filter((organization): organization is OpenPondOrganization => Boolean(organization))
           .filter((organization) => organization.status === "active");
         setOrganizations(organizations);
-        const organization = implicitOrganization(organizations, defaultTeamId);
+        const organization = activeWorkspaceOrganization(
+          organizations,
+          openPondWorkspaceId,
+        );
         if (!organization) return;
         const [projectPayload, agentPayload] = await Promise.all([
           api.listSandboxProjects(connection, { teamId: organization.teamId }),
@@ -339,7 +348,7 @@ export function WorkspaceEnvironmentMenu({
     return () => {
       cancelled = true;
     };
-  }, [connection, defaultTeamId, isProjectWorkspace, open]);
+  }, [connection, isProjectWorkspace, open, openPondWorkspaceId]);
 
   useEffect(() => {
     if (!open || !isSandboxWorkspace || !connection || !sandboxWorkspaceId) {
@@ -1021,7 +1030,7 @@ export function WorkspaceEnvironmentMenu({
         <ConnectProjectDialog
           busy={agentSetupBusy}
           error={agentSetupError}
-          defaultTeamId={implicitTeam.teamId}
+          workspaceId={implicitTeam.teamId}
           projectName={selectedProject.name}
           sourceIdentity={workspaceState?.remoteUrl ?? ""}
           defaultBranch={workspaceState?.currentBranch ?? "main"}

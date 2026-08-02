@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
 import { Plus, RefreshCw, Trash2 } from "../icons";
-import { api, type ClientConnection, type PreferencesPayload } from "../../api";
-import { DropdownSelect } from "../DropdownSelect";
+import { api, type ClientConnection } from "../../api";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
 import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
 import {
@@ -10,21 +9,6 @@ import {
   type AccountEndpointUpdate,
 } from "./AccountEndpointDialog";
 import type { SaveOpenPondAccountInput } from "./useAccountSettings";
-import type { DropdownOption } from "../../lib/app-models";
-import {
-  normalizeOpenPondOrganization,
-  resolveDefaultOpenPondOrganization,
-} from "../../lib/cloud-project-utils";
-import {
-  openPondOrganizationRoleLabel,
-  type OpenPondOrganization,
-} from "../../lib/organization-types";
-import {
-  openPondOrganizationCacheKey,
-  preloadOpenPondOrganizations,
-  readOpenPondOrganizationsFromMemory,
-} from "../../lib/openpond-organization-memory";
-import { preloadSandboxAgents } from "../../lib/sandbox-agent-memory";
 
 type AccountSettingsSectionProps = {
   payload: BootstrapPayload | null;
@@ -42,14 +26,13 @@ type AccountSettingsSectionProps = {
     baseUrlValue?: string | null
   ) => Promise<boolean>;
   onPayload: (payload: BootstrapPayload) => void;
-  onPreferences: (payload: PreferencesPayload) => void;
   onError: (message: string | null) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
 type AccountRow = AccountState["accounts"][number];
 const ACCOUNT_SCOPE_CHANGE_BODY =
-  "Changing the active OpenPond account rechecks cloud projects, hosted agents, default team, and profile sync for that account. Local projects stay on this machine; projects uploaded from another account will need to be synced again for this account.";
+  "Changing the active OpenPond account rechecks its active workspace, cloud projects, hosted agents, and profile sync. Local projects stay on this machine; projects uploaded from another account will need to be synced again for this account.";
 
 export function AccountSettingsSection({
   payload,
@@ -61,7 +44,6 @@ export function AccountSettingsSection({
   switchAccount,
   removeAccount,
   onPayload,
-  onPreferences,
   onError,
   onToast,
 }: AccountSettingsSectionProps) {
@@ -72,19 +54,6 @@ export function AccountSettingsSection({
   const authError = accountState === "auth_error";
   const accountEmail = account?.email?.trim() || null;
   const accounts = account?.accounts ?? [];
-  const [organizations, setOrganizations] = useState<OpenPondOrganization[]>(
-    []
-  );
-  const [, setOrganizationsLoading] = useState(false);
-  const [organizationsError, setOrganizationsError] = useState<string | null>(
-    null
-  );
-  const [savingDefaultTeamId, setSavingDefaultTeamId] = useState<string | null>(
-    null
-  );
-  const [pendingDefaultTeamId, setPendingDefaultTeamId] = useState<
-    string | null
-  >(null);
   const [endpointDialogAccount, setEndpointDialogAccount] =
     useState<AccountRow | null>(null);
   const [addAccountDialogOpen, setAddAccountDialogOpen] =
@@ -99,10 +68,6 @@ export function AccountSettingsSection({
   } = useConfirmDialog();
   const activeCandidate =
     accounts.find((candidate) => candidate.isActive) ?? accounts[0] ?? null;
-  const defaultTeamId = payload?.preferences.defaultTeamId?.trim() || null;
-  const visibleDefaultTeamId = pendingDefaultTeamId ?? defaultTeamId;
-  const organizationCacheKey = openPondOrganizationCacheKey(account);
-  const accountRefreshKey = payload?.accountMeta.asOf ?? "";
   const activeEnvironment = firstPresentText(
     account?.environment,
     activeCandidate?.environment
@@ -125,50 +90,17 @@ export function AccountSettingsSection({
     : authError
     ? "Not connected"
     : signedOut
-    ? "Cloud projects, hosted agents, and team defaults are disabled until you sign in."
+    ? "Workspace-scoped cloud projects and hosted agents are disabled until you sign in."
     : "Checking account status.";
   const showAccountList = accounts.length > 0;
+  const activeWorkspace = account?.workspaces
+    ? account.workspaces.activeWorkspace.type === "team"
+      ? account.workspaces.team
+      : account.workspaces.personal
+    : null;
   const accountError = authError
     ? conciseAccountError(account?.error)
     : null;
-  const activeOrganizations = useMemo(
-    () =>
-      organizations.filter((organization) => organization.status === "active"),
-    [organizations]
-  );
-  const persistedDefaultOrganization = useMemo(
-    () =>
-      visibleDefaultTeamId
-        ? activeOrganizations.find(
-            (organization) => organization.teamId === visibleDefaultTeamId
-          ) ?? null
-        : null,
-    [activeOrganizations, visibleDefaultTeamId]
-  );
-  const selectedDefaultOrganization =
-    persistedDefaultOrganization ??
-    resolveDefaultOpenPondOrganization(activeOrganizations);
-  const selectedDefaultTeamId = selectedDefaultOrganization?.teamId ?? "";
-  const teamOptions = useMemo<DropdownOption[]>(() => {
-    return activeOrganizations.map((organization) => ({
-      value: organization.teamId,
-      label: firstPresentText(
-        organization.displayName,
-        organization.name,
-        organization.slug,
-        "Team"
-      ),
-      description: openPondOrganizationRoleLabel(organization.role),
-    }));
-  }, [activeOrganizations]);
-  const teamDropdownValue =
-    selectedDefaultTeamId || teamOptions[0]?.value || "";
-  const showTeamControl = teamOptions.length > 0;
-  const teamDropdownDisabled =
-    !connection ||
-    Boolean(savingDefaultTeamId) ||
-    Boolean(organizationsError) ||
-    activeOrganizations.length === 0;
   const endpointDialogKey = endpointDialogAccount
     ? accountListKey(endpointDialogAccount)
     : null;
@@ -176,105 +108,6 @@ export function AccountSettingsSection({
     endpointDialogKey && savingEndpointKey === endpointDialogKey
   );
   const shouldWarnAccountScopeChange = signedIn || authError;
-
-  useEffect(() => {
-    if (!connection || !organizationCacheKey) {
-      setOrganizations([]);
-      setOrganizationsError(null);
-      setOrganizationsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    const cachedOrganizations =
-      readOpenPondOrganizationsFromMemory(organizationCacheKey);
-    if (cachedOrganizations) {
-      setOrganizations(cachedOrganizations);
-      setOrganizationsLoading(false);
-    } else {
-      setOrganizations([]);
-      setOrganizationsLoading(true);
-    }
-    setOrganizationsError(null);
-    preloadOpenPondOrganizations({
-      accountKey: organizationCacheKey,
-      force: Boolean(accountRefreshKey),
-      fetchOrganizations: async () => {
-        const payload = await api.organizations(connection);
-        return payload.organizations
-          .map(normalizeOpenPondOrganization)
-          .filter((organization): organization is OpenPondOrganization =>
-            Boolean(organization)
-          )
-          .filter((organization) => organization.status === "active");
-      },
-    })
-      .then((nextOrganizations) => {
-        if (cancelled) return;
-        setOrganizations(nextOrganizations);
-      })
-      .catch((caught) => {
-        if (cancelled) return;
-        if (!cachedOrganizations) setOrganizations([]);
-        setOrganizationsError(
-          caught instanceof Error ? caught.message : String(caught)
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setOrganizationsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountRefreshKey, connection, organizationCacheKey]);
-
-  useEffect(() => {
-    if (pendingDefaultTeamId && defaultTeamId === pendingDefaultTeamId) {
-      setPendingDefaultTeamId(null);
-    }
-  }, [defaultTeamId, pendingDefaultTeamId]);
-
-  async function setDefaultTeamId(
-    teamId: string,
-    options: { notify: boolean } = { notify: true }
-  ) {
-    const organization =
-      activeOrganizations.find((candidate) => candidate.teamId === teamId) ??
-      null;
-    if (
-      !connection ||
-      !organization ||
-      savingDefaultTeamId ||
-      (pendingDefaultTeamId ?? defaultTeamId) === organization.teamId
-    )
-      return;
-    setPendingDefaultTeamId(organization.teamId);
-    setSavingDefaultTeamId(organization.teamId);
-    onError(null);
-    void preloadSandboxAgents({
-      teamId: organization.teamId,
-      accountKey: organizationCacheKey,
-      force: true,
-      fetchAgents: async (nextTeamId) => {
-        const agentsPayload = await api.listSandboxAgents(connection, {
-          teamId: nextTeamId,
-        });
-        return agentsPayload.agents;
-      },
-    }).catch(() => undefined);
-    try {
-      onPreferences(
-        await api.savePreferences(connection, {
-          defaultTeamId: organization.teamId,
-        })
-      );
-      if (options.notify) onToast?.("Default team updated", "success");
-    } catch (caught) {
-      setPendingDefaultTeamId(null);
-      onError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setSavingDefaultTeamId(null);
-    }
-  }
 
   async function confirmAccountScopeChange(
     confirmLabel = "Continue"
@@ -416,17 +249,6 @@ export function AccountSettingsSection({
               >
                 {activeMetaLabel}
               </small>
-              {signedIn && showTeamControl ? (
-                <DropdownSelect
-                  className="account-team-dropdown"
-                  compact
-                  disabled={teamDropdownDisabled}
-                  label="Default team"
-                  options={teamOptions}
-                  value={teamDropdownValue}
-                  onChange={(teamId) => void setDefaultTeamId(teamId)}
-                />
-              ) : null}
             </div>
           </div>
         </div>
@@ -535,23 +357,23 @@ export function AccountSettingsSection({
         </div>
       ) : null}
 
-      {account?.products && account.products.length > 0 && (
+      {activeWorkspace ? (
         <div className="account-list">
           <div className="account-list-heading">
-            <span>Products</span>
-            <small>{account.products.length} active</small>
+            <span>Active workspace</span>
+            <small>
+              {activeWorkspace.type === "team" ? "Team" : "Personal"}
+            </small>
           </div>
-          {account.products.map((product) => (
-            <div className="product-row" key={product.id}>
-              <div>
-                <strong>{product.name}</strong>
-                <span>{product.type}</span>
-              </div>
-              <AccountStateBadge state={product.status} />
+          <div className="product-row">
+            <div>
+              <strong>{activeWorkspace.displayName}</strong>
+              <span>{workspacePlanLabel(activeWorkspace.planKey)}</span>
             </div>
-          ))}
+            <AccountStateBadge state={activeWorkspace.accessState} />
+          </div>
         </div>
-      )}
+      ) : null}
 
       <div className="settings-footnote">
         <span>{payload?.server.runtimeVersion ?? "Runtime loading"}</span>
@@ -649,4 +471,10 @@ function customEnvironmentName(value?: string | null): string {
 function isCustomAccountEnvironment(value?: string | null): boolean {
   const normalized = value?.trim().toLowerCase();
   return Boolean(normalized && normalized !== "production");
+}
+
+function workspacePlanLabel(planKey: string): string {
+  const normalized = planKey.trim();
+  if (!normalized) return "Plan unavailable";
+  return `${normalized.charAt(0).toUpperCase()}${normalized.slice(1)} plan`;
 }

@@ -132,7 +132,7 @@ export async function handleTerminalSlashCommand(
     const url = buildConnectedAppInstallUrl({
       appId: app.id,
       baseUrl: latest.account.baseUrl ?? latest.account.activeProfile?.baseUrl ?? null,
-      teamId: latest.preferences.defaultTeamId ?? null,
+      teamId: latest.account.workspaces?.activeWorkspace.id ?? null,
     });
     context.openUrl(url);
     context.addItem(systemItem(`Opened ${app.label} setup:\n${url}`));

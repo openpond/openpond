@@ -292,7 +292,7 @@ export function resolveModelSelection(
 
 export function formatConnectedApps(payload: BootstrapPayload | null): string {
   const baseUrl = payload?.account.baseUrl ?? payload?.account.activeProfile?.baseUrl ?? null;
-  const teamId = payload?.preferences.defaultTeamId ?? null;
+  const teamId = payload?.account.workspaces?.activeWorkspace.id ?? null;
   const idWidth = Math.max(...CONNECTED_APP_CATALOG.map((app) => app.id.length));
   const rows = CONNECTED_APP_CATALOG.map((app) => {
     const url = buildConnectedAppInstallUrl({ appId: app.id, baseUrl, teamId });

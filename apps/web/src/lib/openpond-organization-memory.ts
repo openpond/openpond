@@ -1,4 +1,6 @@
 import type { BootstrapPayload } from "@openpond/contracts";
+
+import { openPondAccountWorkspaceScopeKey } from "./account-scope";
 import type { OpenPondOrganization } from "./organization-types";
 
 type OpenPondOrganizationCacheEntry = {
@@ -13,15 +15,7 @@ const listenersByAccountKey = new Map<string, Set<() => void>>();
 export function openPondOrganizationCacheKey(
   account: BootstrapPayload["account"] | null | undefined,
 ): string | null {
-  if (!account || account.state !== "signed_in") return null;
-  const activeAccount = account.accounts.find((candidate) => candidate.isActive) ?? null;
-  const handle =
-    account.activeProfile?.handle?.trim() ||
-    activeAccount?.handle?.trim() ||
-    account.label.trim() ||
-    "signed_in";
-  const baseUrl = account.activeProfile?.baseUrl ?? activeAccount?.baseUrl ?? account.baseUrl ?? "";
-  return [handle, baseUrl, account.apiBaseUrl ?? "", account.chatApiBaseUrl ?? ""].join("|");
+  return openPondAccountWorkspaceScopeKey(account);
 }
 
 export function readOpenPondOrganizationsFromMemory(
