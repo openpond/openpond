@@ -197,6 +197,10 @@ describe("OpenPond Managed training adapter", () => {
         expect(body).toMatchObject({
           schemaVersion: "openpond.managedRlPortableSubmission.v1",
           sourceRunRef: `openpond:model-run:${graph.manifest.id}`,
+          sourceModel: {
+            id: trainingPlan.modelId,
+            name: trainingPlan.modelId,
+          },
         });
         expect(body.validationTasks).toEqual(
           taskset.tasks.filter((task) => task.split === "frozen_eval"),

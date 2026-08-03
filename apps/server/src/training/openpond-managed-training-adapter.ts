@@ -315,9 +315,16 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         };
       }),
     );
+    const modelProject = await this.dependencies.store.getModelProject(
+      trainingPlan.modelId,
+    );
     const submission = {
       schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
       sourceRunRef: `openpond:model-run:${plan.manifest.id}`,
+      sourceModel: {
+        id: trainingPlan.modelId,
+        name: modelProject?.name ?? trainingPlan.modelId,
+      },
       name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 191),
       idempotencyKey: `openpond-managed:${plan.manifest.contentHash}`.slice(0, 191),
       manifest: plan.manifest,
