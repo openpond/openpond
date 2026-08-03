@@ -10,6 +10,7 @@ import type {
   CommunityChannel,
   CommunitySummary,
   Experience,
+  ProductArea,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
@@ -25,8 +26,9 @@ import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
 
 export type SidebarProps = {
+  productArea: ProductArea;
+  onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;
-  onExperienceChange: (experience: Experience) => void;
   view: AppView;
   selectedAppId: string | null;
   selectedProjectId: string | null;

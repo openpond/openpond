@@ -1,5 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { Experience, OpenPondApp } from "@openpond/contracts";
+import type {
+  Experience,
+  OpenPondApp,
+  ProductArea,
+} from "@openpond/contracts";
 import {
   BookOpenText,
   ChartColumnStacked,
@@ -13,6 +17,7 @@ import { newExperienceTitle } from "../../lib/experience-options";
 
 type SidebarDestinationProps = {
   experience?: Experience;
+  productArea?: ProductArea;
   setSectionMenuOpen: Dispatch<SetStateAction<SidebarSectionMenuId | null>>;
   setSelectedAppId: Dispatch<SetStateAction<string | null>>;
   setSelectedProjectId: Dispatch<SetStateAction<string | null>>;
@@ -23,6 +28,7 @@ type SidebarDestinationProps = {
 
 export function SidebarNavigation({
   experience = "development",
+  productArea = "development",
   beginNewChat,
   setSectionMenuOpen,
   setSelectedAppId,
@@ -42,15 +48,31 @@ export function SidebarNavigation({
 
   return (
     <nav className="sidebar-nav" aria-label="Primary">
-      <button
-        className="nav-command"
-        type="button"
-        onClick={() => beginNewChat(null)}
-      >
-        <SquarePen size={16} />
-        <span>{newExperienceTitle(experience)}</span>
-      </button>
-      {experience === "development" ? (
+      {productArea === "models" ? null : (
+        <button
+          className="nav-command"
+          type="button"
+          onClick={() => beginNewChat(null)}
+        >
+          <SquarePen size={16} />
+          <span>{newExperienceTitle(experience)}</span>
+        </button>
+      )}
+      {productArea === "models" ? (
+        <button
+          className={`nav-command ${view === "labs" ? "active" : ""}`}
+          aria-label="Models"
+          type="button"
+          onClick={() => {
+            clearWorkspaceSelection();
+            setView("labs");
+          }}
+        >
+          <ChartColumnStacked size={16} />
+          <span>Models</span>
+        </button>
+      ) : null}
+      {productArea === "development" ? (
         <>
           <button
             className={`nav-command ${view === "profile" ? "active" : ""}`}
@@ -64,21 +86,9 @@ export function SidebarNavigation({
             <UserRound size={16} />
             <span>Profile</span>
           </button>
-          <button
-            className={`nav-command ${view === "labs" ? "active" : ""}`}
-            aria-label="Models"
-            type="button"
-            onClick={() => {
-              clearWorkspaceSelection();
-              setView("labs");
-            }}
-          >
-            <ChartColumnStacked size={16} />
-            <span>Models</span>
-          </button>
         </>
       ) : null}
-      {experience !== "chat" ? (
+      {productArea === "development" ? (
         <button
           className={`nav-command ${view === "apps" ? "active" : ""}`}
           onClick={() => {

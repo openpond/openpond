@@ -700,6 +700,17 @@
   padding-left: 10px;
 }
 
+/* Chat actions are hover controls, so they should overlay the title instead of
+   permanently shortening it while hidden. The meta cell still anchors the
+   controls and runtime status to the row's trailing edge. */
+.sidebar-row.sidebar-task-row {
+  grid-template-columns: 18px minmax(0, 1fr) 0;
+}
+
+.sidebar-row.sidebar-task-row.iconless {
+  grid-template-columns: minmax(0, 1fr) 0;
+}
+
 .sidebar-row.nested .row-label {
   font-size: 13px;
 }
@@ -1395,6 +1406,9 @@ button.sidebar-project-location-row:disabled {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding: 1px 3px 1px 12px;
+  border-radius: 9px;
+  background: linear-gradient(90deg, transparent 0, var(--panel) 12px);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);

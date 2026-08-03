@@ -6,7 +6,7 @@ import {
 } from "./SidebarNavigation";
 import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import { SidebarSectionList } from "./SidebarSectionList";
-import { SidebarExperienceMenu } from "./SidebarExperienceMenu";
+import { SidebarProductMenu } from "./SidebarProductMenu";
 import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
@@ -18,7 +18,8 @@ export function Sidebar(props: SidebarProps) {
     arch,
     currentVersion,
     experience,
-    onExperienceChange,
+    productArea,
+    onProductAreaChange,
     onSidebarResizeStart,
     platform,
     setSectionMenuOpen,
@@ -50,9 +51,9 @@ export function Sidebar(props: SidebarProps) {
         >
           <PanelLeft size={16} />
         </button>
-        <SidebarExperienceMenu
-          value={experience}
-          onChange={onExperienceChange}
+        <SidebarProductMenu
+          value={productArea}
+          onChange={onProductAreaChange}
         />
         {availableUpdate && (
           <button
@@ -69,6 +70,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
 
       <SidebarNavigation
+        productArea={productArea}
         experience={experience}
         beginNewChat={beginNewChat}
         setSectionMenuOpen={setSectionMenuOpen}
@@ -79,41 +81,43 @@ export function Sidebar(props: SidebarProps) {
         view={view}
       />
 
-      <SidebarSectionList {...props} />
+      {productArea === "models" ? null : <SidebarSectionList {...props} />}
 
-      <div className="sidebar-collaboration-sections">
-        <SidebarCommunitySection
-          communities={props.communityItems}
-          channels={props.communityChannels}
-          loading={props.communityLoading}
-          error={props.communityError}
-          selectedCommunityId={props.selectedCommunityId}
-          selectedChannelId={props.selectedCommunityChannelId}
-          view={view}
-          onDiscover={props.discoverCommunities}
-          onSelectCommunity={props.selectCommunity}
-          onSelectChannel={props.selectCommunityChannel}
-        />
-        <SidebarTeamSection
-          currentUserId={props.currentUserId}
-          enabled={props.teamChatEnabled}
-          loading={props.teamChatLoading ?? false}
-          members={props.teamMembers}
-          onOpen={() => {
-            setSelectedAppId(null);
-            setSelectedProjectId(null);
-            setSelectedSessionId(null);
-            setSectionMenuOpen(null);
-            setView("team");
-          }}
-          openTeamDm={props.openTeamDm}
-          organization={props.teamChatOrganization}
-          selectedTeamThreadId={props.selectedTeamThreadId}
-          selectTeamThread={props.selectTeamThread}
-          threads={props.teamThreads}
-          view={view}
-        />
-      </div>
+      {productArea === "models" ? null : (
+        <div className="sidebar-collaboration-sections">
+          <SidebarCommunitySection
+            communities={props.communityItems}
+            channels={props.communityChannels}
+            loading={props.communityLoading}
+            error={props.communityError}
+            selectedCommunityId={props.selectedCommunityId}
+            selectedChannelId={props.selectedCommunityChannelId}
+            view={view}
+            onDiscover={props.discoverCommunities}
+            onSelectCommunity={props.selectCommunity}
+            onSelectChannel={props.selectCommunityChannel}
+          />
+          <SidebarTeamSection
+            currentUserId={props.currentUserId}
+            enabled={props.teamChatEnabled}
+            loading={props.teamChatLoading ?? false}
+            members={props.teamMembers}
+            onOpen={() => {
+              setSelectedAppId(null);
+              setSelectedProjectId(null);
+              setSelectedSessionId(null);
+              setSectionMenuOpen(null);
+              setView("team");
+            }}
+            openTeamDm={props.openTeamDm}
+            organization={props.teamChatOrganization}
+            selectedTeamThreadId={props.selectedTeamThreadId}
+            selectTeamThread={props.selectTeamThread}
+            threads={props.teamThreads}
+            view={view}
+          />
+        </div>
+      )}
 
       <div className="sidebar-footer-row">
         <UserAuthFooter

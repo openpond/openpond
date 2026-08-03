@@ -38,6 +38,7 @@ export * from "./dataset-sources.js";
 export * from "./dataset-artifacts.js";
 export * from "./dataset-imports.js";
 export * from "./task-mining.js";
+export * from "./continuous-learning.js";
 export * from "./training.js";
 export * from "./model-lifecycle.js";
 export * from "./training-benchmark.js";

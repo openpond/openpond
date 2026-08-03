@@ -1689,10 +1689,12 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            <NewExperienceSwitcher
-              value={experience}
-              onChange={onNewExperienceChange}
-            />
+            {experience === "development" ? null : (
+              <NewExperienceSwitcher
+                value={experience}
+                onChange={onNewExperienceChange}
+              />
+            )}
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {experience === "work" ? (

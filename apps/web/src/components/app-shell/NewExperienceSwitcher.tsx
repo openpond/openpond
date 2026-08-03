@@ -1,13 +1,15 @@
-import type { Experience } from "@openpond/contracts";
 import type { KeyboardEvent } from "react";
-import { EXPERIENCE_OPTIONS } from "../../lib/experience-options";
+import {
+  CHAT_TASK_MODE_OPTIONS,
+  type ChatTaskMode,
+} from "../../lib/experience-options";
 
 export function NewExperienceSwitcher({
   value,
   onChange,
 }: {
-  value: Experience;
-  onChange: (experience: Experience) => void;
+  value: ChatTaskMode;
+  onChange: (experience: ChatTaskMode) => void;
 }) {
   const selectAdjacentExperience = (
     event: KeyboardEvent<HTMLButtonElement>,
@@ -17,19 +19,19 @@ export function NewExperienceSwitcher({
     if (event.key === "Home") {
       nextIndex = 0;
     } else if (event.key === "End") {
-      nextIndex = EXPERIENCE_OPTIONS.length - 1;
+      nextIndex = CHAT_TASK_MODE_OPTIONS.length - 1;
     } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
-      nextIndex = (currentIndex + 1) % EXPERIENCE_OPTIONS.length;
+      nextIndex = (currentIndex + 1) % CHAT_TASK_MODE_OPTIONS.length;
     } else if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
       nextIndex =
-        (currentIndex - 1 + EXPERIENCE_OPTIONS.length) %
-        EXPERIENCE_OPTIONS.length;
+        (currentIndex - 1 + CHAT_TASK_MODE_OPTIONS.length) %
+        CHAT_TASK_MODE_OPTIONS.length;
     } else {
       return;
     }
 
     event.preventDefault();
-    const nextExperience = EXPERIENCE_OPTIONS[nextIndex];
+    const nextExperience = CHAT_TASK_MODE_OPTIONS[nextIndex];
     if (!nextExperience) return;
 
     onChange(nextExperience.value);
@@ -44,9 +46,9 @@ export function NewExperienceSwitcher({
     <div
       className="new-experience-switcher"
       role="radiogroup"
-      aria-label="Choose experience"
+      aria-label="Choose task mode"
     >
-      {EXPERIENCE_OPTIONS.map((option, index) => {
+      {CHAT_TASK_MODE_OPTIONS.map((option, index) => {
         const selected = option.value === value;
         return (
           <button

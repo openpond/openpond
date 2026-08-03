@@ -1,8 +1,11 @@
 import { describe, expect, test } from "vitest";
 import { createElement, type Dispatch, type SetStateAction } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { OpenPondApp } from "@openpond/contracts";
-import type { Experience } from "@openpond/contracts";
+import type {
+  Experience,
+  OpenPondApp,
+  ProductArea,
+} from "@openpond/contracts";
 
 import {
   SidebarNavigation,
@@ -15,7 +18,8 @@ const noopDispatch = (() => undefined) as Dispatch<SetStateAction<never>>;
 
 function renderSidebarNavigation(
   view: AppView,
-  experience: Experience = "development"
+  experience: Experience = "development",
+  productArea: ProductArea = "development"
 ): string {
   const setView = ((_value: SetStateAction<AppView>) => undefined) as Dispatch<
     SetStateAction<AppView>
@@ -23,6 +27,7 @@ function renderSidebarNavigation(
   return renderToStaticMarkup(
     createElement(SidebarNavigation, {
       experience,
+      productArea,
       beginNewChat: (_app?: OpenPondApp | null) => undefined,
       setSectionMenuOpen: noopDispatch as Dispatch<
         SetStateAction<SidebarSectionMenuId | null>
@@ -72,12 +77,11 @@ describe("Sidebar navigation", () => {
 
     expect(markup).toContain("New task");
     expect(markup).toContain("Profile");
-    expect(markup).toContain("Models");
+    expect(markup).not.toContain("Models");
     expect(markup).not.toContain("Docs");
     expect(markup).toContain("Apps");
     expect(markup.indexOf("New task")).toBeLessThan(markup.indexOf("Profile"));
-    expect(markup.indexOf("Profile")).toBeLessThan(markup.indexOf("Models"));
-    expect(markup.indexOf("Models")).toBeLessThan(markup.indexOf("Apps"));
+    expect(markup.indexOf("Profile")).toBeLessThan(markup.indexOf("Apps"));
     expect(markup).not.toContain("Projects");
     expect(markup).not.toContain("Agents");
     expect(markup).not.toContain("Training");
@@ -96,7 +100,7 @@ describe("Sidebar navigation", () => {
 
   test("highlights the standalone Profile and Models destinations independently", () => {
     const profile = renderSidebarNavigation("profile");
-    const models = renderSidebarNavigation("labs");
+    const models = renderSidebarNavigation("labs", "development", "models");
 
     expect(profile).toContain('class="nav-command active" aria-label="Profile"');
     expect(profile).not.toContain('class="nav-command active" aria-label="Models"');
@@ -106,9 +110,9 @@ describe("Sidebar navigation", () => {
     expect(models).not.toContain("Local profile changes are not committed");
   });
 
-  test("keeps Chat minimal and places Apps in the Work primary navigation", () => {
-    const chat = renderSidebarNavigation("chat", "chat");
-    const work = renderSidebarNavigation("chat", "work");
+  test("keeps Chat and Work inside Chat while Apps remains in Developer", () => {
+    const chat = renderSidebarNavigation("chat", "chat", "chat");
+    const work = renderSidebarNavigation("chat", "work", "chat");
     const chatUtilities = renderSidebarUtilityNavigation("chat", "chat");
     const workUtilities = renderSidebarUtilityNavigation("chat", "work");
 
@@ -119,7 +123,7 @@ describe("Sidebar navigation", () => {
     expect(work).toContain("New task");
     expect(work).not.toContain("Profile");
     expect(work).not.toContain("Models");
-    expect(work).toContain("Apps");
+    expect(work).not.toContain("Apps");
     expect(chatUtilities).toContain('aria-label="Docs"');
     expect(chatUtilities).not.toContain("Apps");
     expect(workUtilities).toContain('aria-label="Docs"');

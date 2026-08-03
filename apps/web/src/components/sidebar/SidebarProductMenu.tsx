@@ -1,23 +1,23 @@
-import type { Experience } from "@openpond/contracts";
+import type { ProductArea } from "@openpond/contracts";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { EXPERIENCE_OPTIONS } from "../../lib/experience-options";
+import { PRODUCT_AREA_OPTIONS } from "../../lib/experience-options";
 import { OPENPOND_WORDMARK_WHITE_URL } from "../../lib/public-assets";
 import { Check, ChevronDown } from "../icons";
 
-export function SidebarExperienceMenu({
+export function SidebarProductMenu({
   value,
   onChange,
 }: {
-  value: Experience;
-  onChange: (experience: Experience) => void;
+  value: ProductArea;
+  onChange: (productArea: ProductArea) => void;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeOption =
-    EXPERIENCE_OPTIONS.find((option) => option.value === value) ??
-    EXPERIENCE_OPTIONS[0];
+    PRODUCT_AREA_OPTIONS.find((option) => option.value === value) ??
+    PRODUCT_AREA_OPTIONS[0];
 
   useEffect(() => {
     if (!open) return;
@@ -47,7 +47,7 @@ export function SidebarExperienceMenu({
           ? options[0]
           : position === "last"
           ? options.at(-1)
-          : options.find((option) => option.dataset.experience === value);
+          : options.find((option) => option.dataset.productArea === value);
       target?.focus();
     });
   };
@@ -99,7 +99,7 @@ export function SidebarExperienceMenu({
         ref={triggerRef}
         type="button"
         className="sidebar-wordmark-button sidebar-experience-trigger"
-        aria-label={`OpenPond experience: ${activeOption.label}`}
+        aria-label={`OpenPond product: ${activeOption.label}`}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
@@ -120,10 +120,10 @@ export function SidebarExperienceMenu({
           ref={menuRef}
           className="sidebar-experience-popover"
           role="menu"
-          aria-label="Choose experience"
+          aria-label="Choose product"
           onKeyDown={onMenuKeyDown}
         >
-          {EXPERIENCE_OPTIONS.map((option) => {
+          {PRODUCT_AREA_OPTIONS.map((option) => {
             const selected = option.value === value;
             return (
               <button
@@ -132,7 +132,7 @@ export function SidebarExperienceMenu({
                 role="menuitemradio"
                 aria-checked={selected}
                 className={selected ? "active" : ""}
-                data-experience={option.value}
+                data-product-area={option.value}
                 onClick={() => {
                   setOpen(false);
                   if (!selected) onChange(option.value);

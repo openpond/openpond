@@ -361,6 +361,8 @@ describe("sidebar task filters", () => {
 
 function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
   return {
+    productArea: "development",
+    onProductAreaChange: noop,
     experience: "development",
     view: "chat",
     selectedAppId: null,
@@ -409,7 +411,6 @@ function sidebarProps(overrides: Partial<SidebarProps> = {}): SidebarProps {
     chatRows: [],
     chatRowsVisibleCount: 5,
     expandedProjectIds: new Set(),
-    onExperienceChange: noop,
     onSidebarResizeStart: noop,
     setSidebarOpen: noopDispatch,
     setView: noopDispatch,
