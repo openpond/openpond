@@ -1,5 +1,6 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
+
+import { sha256Hex } from "./sha256.js";
 
 export const MAX_PORTABLE_PATH_BYTES = 2_000;
 export const MAX_PORTABLE_ASSET_BYTES = 250_000_000;
@@ -43,7 +44,7 @@ export function canonicalJson(value: unknown): string {
 }
 
 export function sha256(value: string | Uint8Array): string {
-  return createHash("sha256").update(value).digest("hex");
+  return sha256Hex(value);
 }
 
 export function contentHash(value: unknown): string {

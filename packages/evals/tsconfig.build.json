@@ -5,9 +5,10 @@
     "composite": true,
     "declaration": true,
     "declarationMap": true,
-    "emitDeclarationOnly": true,
+    "declarationDir": "dist/types",
+    "emitDeclarationOnly": false,
     "noEmit": false,
-    "outDir": "dist/types",
+    "outDir": "dist",
     "rootDir": "src",
     "tsBuildInfoFile": "./node_modules/.cache/tsconfig.build.tsbuildinfo",
     "types": ["node"]

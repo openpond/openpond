@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import {
@@ -20,7 +22,7 @@ import {
   rewardEligibleReceipts,
 } from "../src/runs.js";
 import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
-import { contentHash } from "../src/common.js";
+import { contentHash, sha256 } from "../src/common.js";
 
 const artifact = {
   id: "artifact-trace",
@@ -30,6 +32,30 @@ const artifact = {
 };
 
 describe("public package conformance", () => {
+  it.each([
+    ["", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"],
+    ["abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"],
+    ["The quick brown fox jumps over the lazy dog", "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592"],
+    ["OpenPond 🐸", "da0a643a3c08da1791bc7e01a5060048a113557cc586101f1978c4ec07acfd2e"],
+  ])("hashes the standard UTF-8 vector %j without a host crypto dependency", (value, expected) => {
+    expect(sha256(value)).toBe(expected);
+  });
+
+  it("hashes binary input without converting it to text", () => {
+    expect(sha256(Uint8Array.of(0, 1, 2, 255))).toBe(
+      "3d1f57c984978ef98a18378c8166c1cb8ede02c03eeb6aee7e2f121dfeee3e56",
+    );
+  });
+
+  it.each([0, 1, 55, 56, 63, 64, 65, 127, 128, 129, 1_000_000])(
+    "matches the host reference across the %i-byte padding boundary",
+    (length) => {
+      const value = Uint8Array.from({ length }, (_, index) => (index * 31 + 17) & 0xff);
+      const expected = createHash("sha256").update(value).digest("hex");
+      expect(sha256(value)).toBe(expected);
+    },
+  );
+
   it.each([
     ["generic", genericToolConformance],
     ["marketing", marketingPortfolioConformance],
