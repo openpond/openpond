@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { CloudProject, LocalProject, OpenPondApp } from "@openpond/contracts";
@@ -498,6 +498,56 @@ describe("composer slash behavior", () => {
 
     expect(markup).toContain('class="composer-notice warning"');
     expect(markup).toContain("Provider setup is required before this action can run.");
+  });
+
+  test("desktop Work composer explains its local runtime above the input", () => {
+    vi.stubGlobal("window", {
+      openpond: { closeWindow: () => undefined },
+    });
+
+    try {
+      const markup = renderToStaticMarkup(
+        createElement(Composer, {
+          experience: "work",
+          mode: "start",
+          prompt: "",
+          mentionApps: [],
+          selectedMentionAppId: null,
+          contextWindowStatus,
+          goalRuntime: null,
+          busy: false,
+          running: false,
+          connection: null,
+          provider: "openpond",
+          model: "openpond-chat",
+          projectTarget,
+          actionCatalog: [],
+          workspaceTarget,
+          codexPermissionMode: "default",
+          codexReasoningEffort: "medium",
+          onProviderChange: noop,
+          onProjectTargetChange: noop,
+          onWorkspaceTargetChange: noop,
+          onModelChange: noop,
+          onCodexPermissionModeChange: noop,
+          onCodexReasoningEffortChange: noop,
+          onPromptChange: noop,
+          onMentionAppSelect: noop,
+          showToast: noop,
+          onSubmit: async () => true,
+          onStop: noop,
+        }),
+      );
+
+      const guidanceIndex = markup.indexOf("composer-local-work-guidance");
+      expect(markup).toContain(
+        "Work uses your local AI and Openpond Sandboxes, schedules are local. Use Work mode on the web app for cloud based Work",
+      );
+      expect(guidanceIndex).toBeGreaterThan(-1);
+      expect(guidanceIndex).toBeLessThan(markup.indexOf("composer-input-shell"));
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   test("resolves slash action target from a local project linked to Cloud", () => {

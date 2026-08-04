@@ -50,6 +50,7 @@ import {
   replaceActiveProfileSkillInvocation,
 } from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
+import { isDesktopShell } from "../app-shell/WindowControls";
 import {
   ComposerProjectTargetControl,
   ComposerProfileTargetControl,
@@ -303,6 +304,8 @@ export function Composer({
         ? "Ask anything"
         : "What should we build?"
       : "Ask for follow-up changes";
+  const showLocalWorkGuidance =
+    experience === "work" && surface === "chat" && isDesktopShell();
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   // Composer controls sit against the lower edge of the input surface. Opening
   // upward keeps provider/model/permission menus inside the viewport instead
@@ -1675,6 +1678,12 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
+      {showLocalWorkGuidance ? (
+        <p className="composer-local-work-guidance">
+          Work uses your local AI and Openpond Sandboxes, schedules are local.
+          Use Work mode on the web app for cloud based Work
+        </p>
+      ) : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
