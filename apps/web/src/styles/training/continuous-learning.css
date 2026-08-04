@@ -1,0 +1,48 @@
+.models-learning-banner {
+  margin: 18px 28px 4px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-raised, var(--surface)) 94%, var(--accent) 6%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.models-learning-copy { min-width: 0; }
+.models-learning-copy h2 { margin: 3px 0 6px; font-size: 17px; }
+.models-learning-copy p { margin: 0; max-width: 760px; color: var(--text-muted); line-height: 1.45; }
+.models-learning-copy small { display: block; margin-top: 8px; color: var(--text-muted); }
+.models-learning-eyebrow { color: var(--accent); font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; }
+.models-learning-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: 0 0 auto; }
+.models-learning-error { display: block; margin-top: 8px; color: var(--destructive, #c44); font-size: 12px; }
+.models-learning-dialog { width: min(620px, calc(100vw - 32px)); border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised, var(--surface)); color: var(--text); box-shadow: 0 24px 70px rgb(0 0 0 / .28); }
+.models-learning-dialog > header { padding: 20px 22px 12px; }
+.models-learning-dialog h2, .models-learning-dialog p { margin: 0; }
+.models-learning-dialog header p { margin-top: 5px; color: var(--text-muted); }
+.models-learning-dialog-body { padding: 10px 22px 18px; display: grid; gap: 14px; }
+.models-learning-dialog form label { display: grid; gap: 5px; }
+.models-learning-dialog input, .models-learning-dialog select { color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 8px 9px; }
+.models-learning-dialog fieldset { border: 1px solid var(--border); border-radius: 8px; display: grid; gap: 8px; }
+.models-learning-dialog fieldset label { display: flex; align-items: center; gap: 8px; }
+.models-learning-dialog fieldset small { color: var(--text-muted); }
+.models-learning-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.models-learning-disclosure { padding: 10px; border-radius: 8px; background: var(--surface-subtle, color-mix(in srgb, var(--surface) 90%, var(--text) 10%)); color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+.models-learning-dialog > footer, .models-learning-dialog form > footer { padding: 14px 22px 20px; display: flex; justify-content: flex-end; gap: 8px; }
+@media (max-width: 720px) {
+  .models-learning-banner { margin: 12px 14px 4px; align-items: stretch; flex-direction: column; }
+  .models-learning-actions { justify-content: flex-start; }
+  .models-learning-grid { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .models-learning-banner *, .models-learning-dialog * { scroll-behavior: auto !important; transition: none !important; }
+}
+.chat-learning-consent { margin: 0 auto 8px; width: min(760px, calc(100% - 24px)); padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-raised, var(--surface)); display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.chat-learning-consent > div { min-width: 0; display: grid; gap: 2px; }
+.chat-learning-consent strong { font-size: 12px; }
+.chat-learning-consent span { color: var(--text-muted); font-size: 11px; }
+.chat-learning-consent .chat-learning-consent-error { color: var(--destructive, #c44); }
+@media (max-width: 620px) {
+  .chat-learning-consent { align-items: stretch; flex-direction: column; }
+  .chat-learning-consent button { align-self: flex-start; }
+}

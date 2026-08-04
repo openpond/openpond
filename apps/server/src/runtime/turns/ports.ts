@@ -410,6 +410,10 @@ export type TurnRunnerDependencies = {
   }) => Promise<ProfileSkillReadResult>;
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
+  getContinuousLearningConversations?: (
+    session: Session,
+    args: unknown
+  ) => Promise<import("@openpond/contracts").GetConversationsToolResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (
     name: string

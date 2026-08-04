@@ -89,6 +89,21 @@ export type HttpRouteDeps = {
     scheduleId: string,
     payload?: unknown
   ) => Promise<unknown>;
+  listLocalContinuousLearningPayload: () => Promise<unknown>;
+  ensureLocalContinuousLearningPayload: (payload: unknown) => Promise<unknown>;
+  patchLocalContinuousLearningPayload: (
+    stateId: string,
+    payload: unknown
+  ) => Promise<unknown>;
+  runLocalContinuousLearningPayload: (stateId: string) => Promise<unknown>;
+  cancelLocalContinuousLearningRunPayload: (
+    stateId: string,
+    runId: string
+  ) => Promise<unknown>;
+  setLocalConversationLearningConsentPayload: (
+    sessionId: string,
+    payload: unknown
+  ) => Promise<unknown>;
   loadMoreOpenPondAppsPayload: (requestUrl: URL) => Promise<unknown>;
   workspaceTemplateConfigPayload: (appId: string) => Promise<unknown>;
   refreshOpenPondPayload: () => Promise<unknown>;

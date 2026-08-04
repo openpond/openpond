@@ -15,11 +15,34 @@ export const CONTINUOUS_LEARNING_TEMPLATE_KEY =
   "openpond.continuous-learning-review.v1" as const;
 export const CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT_VERSION =
   "openpond.continuous-learning-review-prompt.v1" as const;
+export const CONTINUOUS_LEARNING_DEFAULT_POLICY_VERSION =
+  "openpond.continuous-learning-policy.v1" as const;
+export const CONTINUOUS_LEARNING_DEFAULT_POLICY = {
+  cadence: {
+    kind: "daily",
+    localTime: "02:00",
+  },
+  lookbackDays: 30,
+  model: {
+    provider: "openpond",
+    model: "openpond-chat",
+    reasoningEffort: "high",
+  },
+  limits: {
+    maxConversations: 12,
+    maxMessagesPerConversation: 16,
+    maxEvidenceTokens: 48_000,
+    maxOutputTokens: 4_000,
+    maxDurationMs: 300_000,
+    maxCostUsd: 1,
+  },
+} as const;
 export const CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT = [
   "Review the eligible conversations for recurring, verifiable opportunities to improve future model behavior.",
   "Call get_conversations exactly once. Its scope is already configured for this Work item.",
   "Use the OpenPond Taskset Authoring skill to review the returned conversations and recommend at most three next actions: Taskset, Skill, prompting, retrieval, or no action.",
   "Cite only returned source reference IDs and do not request other conversation, file, browser, shell, connected-app, or workspace access.",
+  "Write a concise human-readable recommendation, then append exactly one <openpond-continuous-learning-recommendation> JSON object </openpond-continuous-learning-recommendation>. The JSON must contain schemaVersion openpond.continuousLearningRecommendation.v1, the configured scope, recommendations, and noRecommendationReason. Each recommendation must contain candidateFingerprint, title, summary, rationale, proposedAction, and at least three returned sourceReferenceIds.",
   "Stop after writing the recommendation. Do not materialize a Taskset or start an Evaluation, training Run, Model Version, deployment, or binding.",
 ].join("\n\n");
 
@@ -392,4 +415,203 @@ export type ContinuousLearningRunStatus = z.infer<
 >;
 export type ContinuousLearningReceipt = z.infer<
   typeof ContinuousLearningReceiptSchema
+>;
+
+export const LocalConversationLearningConsentSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localConversationLearningConsent.v1"),
+    status: z.enum(["granted", "revoked"]),
+    scope: ContinuousLearningScopeSchema,
+    workspaceId: IdSchema.nullable(),
+    grantedAt: TimestampSchema,
+    revokedAt: TimestampSchema.nullable(),
+  })
+  .strict();
+
+export const LocalContinuousLearningDefinitionSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localSavedWorkDefinition.v1"),
+    id: IdSchema,
+    profileId: IdSchema,
+    scope: ContinuousLearningScopeSchema,
+    workspaceId: IdSchema.nullable(),
+    templateKey: z.literal(CONTINUOUS_LEARNING_TEMPLATE_KEY),
+    version: z.number().int().positive(),
+    promptVersion: z.literal(
+      CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT_VERSION,
+    ),
+    prompt: z.string().trim().min(1).max(20_000),
+    policyVersion: z.literal(CONTINUOUS_LEARNING_DEFAULT_POLICY_VERSION),
+    skill: z
+      .object({
+        name: z.literal("openpond-taskset-authoring"),
+        artifactVersion: IdSchema,
+        contentHash: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .strict(),
+    model: z
+      .object({
+        provider: IdSchema,
+        model: IdSchema,
+        reasoningEffort: z.enum(["low", "medium", "high"]),
+      })
+      .strict(),
+    limits: z
+      .object({
+        lookbackDays: z.number().int().positive().max(365),
+        maxConversations: z.number().int().positive().max(100),
+        maxMessagesPerConversation: z.number().int().positive().max(100),
+        maxEvidenceTokens: z.number().int().positive().max(1_000_000),
+        maxOutputTokens: z.number().int().positive().max(100_000),
+        maxDurationMs: z.number().int().positive().max(3_600_000),
+        maxCostUsd: z.number().nonnegative().max(100),
+      })
+      .strict(),
+    createdAt: TimestampSchema,
+  })
+  .strict();
+
+export const LocalContinuousLearningScheduleSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localSavedWorkSchedule.v1"),
+    id: IdSchema,
+    definitionId: IdSchema,
+    enabled: z.boolean(),
+    localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    timezone: IdSchema,
+    nextRunAt: TimestampSchema.nullable(),
+    lastRunAt: TimestampSchema.nullable(),
+    lastRunStatus: ContinuousLearningRunStatusSchema.nullable(),
+    latestResultSessionId: IdSchema.nullable(),
+    inputWatermark: WatermarkSchema.nullable(),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .strict();
+
+export const LocalContinuousLearningRunSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localSavedWorkRun.v1"),
+    id: IdSchema,
+    scheduleId: IdSchema,
+    definitionId: IdSchema,
+    trigger: z.enum(["schedule", "manual"]),
+    status: z.enum([
+      "queued",
+      "running",
+      "completed",
+      "no_recommendation",
+      "failed",
+      "cancelled",
+    ]),
+    scheduledFor: TimestampSchema,
+    sessionId: IdSchema.nullable(),
+    receipt: ContinuousLearningReceiptSchema.nullable(),
+    error: z.string().trim().min(1).max(4_000).nullable(),
+    startedAt: TimestampSchema,
+    completedAt: TimestampSchema.nullable(),
+  })
+  .strict();
+
+export const LocalContinuousLearningStateSchema = z
+  .object({
+    schemaVersion: z.literal("openpond.localContinuousLearningState.v1"),
+    id: IdSchema,
+    profileId: IdSchema,
+    scope: ContinuousLearningScopeSchema,
+    workspaceId: IdSchema.nullable(),
+    definitions: z.array(LocalContinuousLearningDefinitionSchema).min(1),
+    currentDefinitionId: IdSchema,
+    schedule: LocalContinuousLearningScheduleSchema,
+    runs: z.array(LocalContinuousLearningRunSchema).max(50),
+    onboardingDecision: z.enum(["unseen", "enabled", "dismissed"]),
+    createdAt: TimestampSchema,
+    updatedAt: TimestampSchema,
+  })
+  .strict()
+  .superRefine((state, context) => {
+    if (!state.definitions.some((item) => item.id === state.currentDefinitionId)) {
+      context.addIssue({
+        code: "custom",
+        message: "currentDefinitionId must reference an immutable definition",
+        path: ["currentDefinitionId"],
+      });
+    }
+    if (state.schedule.definitionId !== state.currentDefinitionId) {
+      context.addIssue({
+        code: "custom",
+        message: "schedule must reference the current definition",
+        path: ["schedule", "definitionId"],
+      });
+    }
+  });
+
+export const EnsureLocalContinuousLearningRequestSchema = z
+  .object({
+    profileId: IdSchema,
+    scope: ContinuousLearningScopeSchema.default("personal"),
+    workspaceId: IdSchema.nullable().optional(),
+    enabled: z.boolean().optional(),
+    localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    timezone: IdSchema.optional(),
+    onboardingDecision: z.enum(["unseen", "enabled", "dismissed"]).optional(),
+    model: z
+      .object({
+        provider: IdSchema,
+        model: IdSchema,
+        reasoningEffort: z.enum(["low", "medium", "high"]),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const PatchLocalContinuousLearningRequestSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    localTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    timezone: IdSchema.optional(),
+    onboardingDecision: z.enum(["unseen", "enabled", "dismissed"]).optional(),
+    model: z
+      .object({
+        provider: IdSchema,
+        model: IdSchema,
+        reasoningEffort: z.enum(["low", "medium", "high"]),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
+export const SetLocalConversationLearningConsentRequestSchema = z
+  .object({
+    status: z.enum(["granted", "revoked"]),
+    scope: ContinuousLearningScopeSchema.default("personal"),
+    workspaceId: IdSchema.nullable().optional(),
+  })
+  .strict();
+
+export type LocalConversationLearningConsent = z.infer<
+  typeof LocalConversationLearningConsentSchema
+>;
+export type LocalContinuousLearningDefinition = z.infer<
+  typeof LocalContinuousLearningDefinitionSchema
+>;
+export type LocalContinuousLearningSchedule = z.infer<
+  typeof LocalContinuousLearningScheduleSchema
+>;
+export type LocalContinuousLearningRun = z.infer<
+  typeof LocalContinuousLearningRunSchema
+>;
+export type LocalContinuousLearningState = z.infer<
+  typeof LocalContinuousLearningStateSchema
+>;
+export type EnsureLocalContinuousLearningRequest = z.infer<
+  typeof EnsureLocalContinuousLearningRequestSchema
+>;
+export type PatchLocalContinuousLearningRequest = z.infer<
+  typeof PatchLocalContinuousLearningRequestSchema
+>;
+export type SetLocalConversationLearningConsentRequest = z.infer<
+  typeof SetLocalConversationLearningConsentRequestSchema
 >;

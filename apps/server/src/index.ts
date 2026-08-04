@@ -122,7 +122,7 @@ import { createTaskCreatorService } from "./training/task-creator.js";
 import { authorTaskDesignWithModel } from "./training/task-authoring-model.js";
 import {
   loadTasksetAuthoringProfileSkill,
-  loadTasksetAuthoringSkillBundle,
+  loadTasksetAuthoringSkillArtifact,
   readTasksetAuthoringProfileSkill,
 } from "./training/task-authoring-skill.js";
 import {
@@ -132,6 +132,7 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
+import { createLocalContinuousLearningService } from "./training/local-continuous-learning.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
 import { waitForWorkReceiptSettlement } from "./openpond/work-runtime-service.js";
 import {
@@ -474,7 +475,8 @@ export async function createOpenPondServer(
       streamOpenPondHostedChatTurn,
     });
 
-  const tasksetAuthoringSkillText = await loadTasksetAuthoringSkillBundle();
+  const tasksetAuthoringSkillArtifact = await loadTasksetAuthoringSkillArtifact();
+  const tasksetAuthoringSkillText = tasksetAuthoringSkillArtifact.bundle;
   const taskCreatorService = createTaskCreatorService({
     store,
     tasksetRootDir: path.join(storeDir, "training", "tasksets"),
@@ -506,6 +508,9 @@ export async function createOpenPondServer(
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
+  let localContinuousLearningService: ReturnType<
+    typeof createLocalContinuousLearningService
+  > | null = null;
   const datasetArtifactService = createDatasetArtifactService({
     store,
     workerProjectDir: path.resolve(
@@ -883,6 +888,12 @@ export async function createOpenPondServer(
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
+    getContinuousLearningConversations: (session, args) => {
+      if (!localContinuousLearningService) {
+        throw new Error("Local continuous learning is still starting.");
+      }
+      return localContinuousLearningService.getConversations(session, args);
+    },
     readOpenPondProfileSkill: readProfileSkill,
     loadBuiltInOpenPondSkills: async () => [
       await loadTasksetAuthoringProfileSkill(),
@@ -1037,6 +1048,15 @@ export async function createOpenPondServer(
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
   } = turnRunner;
+  localContinuousLearningService = createLocalContinuousLearningService({
+    store,
+    skillArtifact: tasksetAuthoringSkillArtifact,
+    createSession,
+    sendTurn,
+    interruptSessionTurn,
+    isClosing: () => closing,
+    logger,
+  });
   const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({
     service: taskMinerService,
     loadProfileState: loadOpenPondProfileState,
@@ -1506,6 +1526,48 @@ export async function createOpenPondServer(
     return { runs: await localAgentScheduleLoop.listRuns(scheduleId, limit) };
   }
 
+  async function listLocalContinuousLearningPayload(): Promise<unknown> {
+    return { states: await localContinuousLearningService!.list() };
+  }
+
+  async function ensureLocalContinuousLearningPayload(
+    payload: unknown,
+  ): Promise<unknown> {
+    return { state: await localContinuousLearningService!.ensure(payload) };
+  }
+
+  async function patchLocalContinuousLearningPayload(
+    stateId: string,
+    payload: unknown,
+  ): Promise<unknown> {
+    return { state: await localContinuousLearningService!.patch(stateId, payload) };
+  }
+
+  async function runLocalContinuousLearningPayload(
+    stateId: string,
+  ): Promise<unknown> {
+    return { run: await localContinuousLearningService!.runNow(stateId) };
+  }
+
+  async function cancelLocalContinuousLearningRunPayload(
+    stateId: string,
+    runId: string,
+  ): Promise<unknown> {
+    return { run: await localContinuousLearningService!.cancelRun(stateId, runId) };
+  }
+
+  async function setLocalConversationLearningConsentPayload(
+    sessionId: string,
+    payload: unknown,
+  ): Promise<unknown> {
+    return {
+      session: await localContinuousLearningService!.setConversationConsent(
+        sessionId,
+        payload,
+      ),
+    };
+  }
+
   async function patchSessionPayload(
     sessionId: string,
     payload: unknown
@@ -1591,6 +1653,12 @@ export async function createOpenPondServer(
       patchLocalAgentSchedulePayload,
       runLocalAgentSchedulePayload,
       listLocalAgentScheduleRunsPayload,
+      listLocalContinuousLearningPayload,
+      ensureLocalContinuousLearningPayload,
+      patchLocalContinuousLearningPayload,
+      runLocalContinuousLearningPayload,
+      cancelLocalContinuousLearningRunPayload,
+      setLocalConversationLearningConsentPayload,
       codexHistoryThreadPayload,
       sendCodexHistoryTurnPayload,
       interruptCodexHistoryTurnPayload,
@@ -1735,8 +1803,8 @@ export async function createOpenPondServer(
   });
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
-  taskMinerBackgroundLoop.start();
   localAgentScheduleLoop.start();
+  localContinuousLearningService.start();
 
   const status: ServerStatus = {
     id: serverId,
@@ -1757,7 +1825,11 @@ export async function createOpenPondServer(
     markClosing: () => {
       closing = true;
     },
-    backgroundLoops: [taskMinerBackgroundLoop, localAgentScheduleLoop],
+    backgroundLoops: [
+      taskMinerBackgroundLoop,
+      localAgentScheduleLoop,
+      localContinuousLearningService,
+    ],
     browserControlQueue,
     closeEventSubscribers,
     terminalWebSockets,

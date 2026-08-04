@@ -41,6 +41,7 @@ export function createCapabilityCatalogRuntime(deps: {
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
   executeCrossSystemTool: TurnRunnerDependencies["executeCrossSystemTool"];
   loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
+  getContinuousLearningConversations: TurnRunnerDependencies["getContinuousLearningConversations"];
 }) {
   return function createNativeModelToolDefinitions(
     openPondActionCatalog: OpenPondActionCatalogEntry[],
@@ -69,6 +70,32 @@ export function createCapabilityCatalogRuntime(deps: {
         executeProfileAction: deps.executeProfileAction,
         executeCrossSystemTool: deps.executeCrossSystemTool,
         trainingHarness: options.trainingHarness,
+      });
+    }
+    if (deps.getContinuousLearningConversations) {
+      definitions.push({
+        name: "get_conversations",
+        description:
+          "Return the bounded, consented conversations configured for this continuous-learning Work item. This tool accepts no arguments and cannot materialize or train anything.",
+        parameters: {
+          type: "object",
+          additionalProperties: false,
+          properties: {},
+        },
+        enabled: ({ session }) => Boolean(session.metadata?.continuousLearning),
+        execute: async (context) => {
+          const result = await deps.getContinuousLearningConversations!(
+            context.session,
+            context.args,
+          );
+          return {
+            toolCallId: context.callId,
+            name: "get_conversations",
+            ok: true,
+            contentText: JSON.stringify(result),
+            data: result,
+          };
+        },
       });
     }
     if (!options.disableWorkflowDelegationTools) {
@@ -171,6 +198,15 @@ export function createCapabilityCatalogRuntime(deps: {
         })
       );
     }
-    return definitions;
+    return definitions.map((definition) => {
+      if (definition.name === "get_conversations") return definition;
+      const enabled = definition.enabled;
+      return {
+        ...definition,
+        enabled: (context) =>
+          !context.session.metadata?.continuousLearning
+          && (enabled?.(context) ?? true),
+      };
+    });
   };
 }

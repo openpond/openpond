@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 
 import {
   CONTINUOUS_LEARNING_RECEIPT_CONTRACT_VERSION,
@@ -48,6 +49,30 @@ const emptyExcludedCounts = {
 };
 
 describe("continuous-learning contracts", () => {
+  it("passes the shared recurrence, privacy, cancellation, and no-materialization fixtures", () => {
+    const fixture = JSON.parse(readFileSync(
+      new URL("../packages/contracts/fixtures/continuous-learning-v1.json", import.meta.url),
+      "utf8",
+    )) as { schemaVersion: string; cases: Array<Record<string, unknown>> };
+    expect(fixture.schemaVersion).toBe("openpond.continuousLearningFixtures.v1");
+    expect(fixture.cases.map((item) => item.id)).toEqual([
+      "recurrence-three-independent-sources",
+      "privacy-revoked-and-multi-participant",
+      "cancel-does-not-advance-watermark",
+      "no-recommendation-commits-reviewed-watermark",
+      "recommendation-never-materializes",
+    ]);
+    for (const item of fixture.cases) {
+      if (item.kind === "receipt") {
+        expect(item.materializationInvoked).toBe(false);
+        if (item.status === "cancelled") expect(item.outputWatermark).toBeNull();
+        if (item.status === "no_recommendation") {
+          expect(item.noRecommendationReason).toBe("insufficient_recurrence");
+          expect(item.outputWatermark).toBeTruthy();
+        }
+      }
+    }
+  });
   it("backs the authoring Work item with the dedicated recommendation-only tool", () => {
     expect(CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT).toContain(
       "Call get_conversations exactly once",

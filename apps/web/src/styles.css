@@ -14,6 +14,7 @@
 @import "./styles/chat/chat.css";
 @import "./styles/chat/conversation-surface.css";
 @import "./styles/chat/training-model-chat-handoff.css";
+@import "./styles/training/continuous-learning.css";
 @import "./styles/chat/activity.css";
 @import "./styles/chat/right-chat-panel.css";
 @import "./styles/chat/composer.css";

@@ -84,6 +84,7 @@ import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
+import { LocalConversationLearningConsentControl } from "../chat/LocalConversationLearningConsentControl";
 
 import {
   AppsView,
@@ -1579,6 +1580,19 @@ export function MainPane({
               }`}
               ref={composerStackRef}
             >
+              <LocalConversationLearningConsentControl
+                connection={connection}
+                session={selectedProfileSession}
+                onUpdated={(updated) => {
+                  if (!bootstrap) return;
+                  onPayload({
+                    ...bootstrap,
+                    sessions: bootstrap.sessions.map((session) =>
+                      session.id === updated.id ? updated : session
+                    ),
+                  });
+                }}
+              />
               {selectedTrainingCreation ? (
                 <Suspense fallback={null}>
                   <TrainingCreationPanel

@@ -679,6 +679,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeProfileAction,
     executeCrossSystemTool,
     loadOpenPondProfileStateForRef,
+    getContinuousLearningConversations: deps.getContinuousLearningConversations,
   });
 
   function createNativeModelToolDefinitions(

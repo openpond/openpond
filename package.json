@@ -57,6 +57,8 @@
     "baseline:optimization": "tsx scripts/capture-optimization-baseline.ts",
     "training:export-internal-grpo-qa": "tsx scripts/export-internal-grpo-qa-import.ts",
     "training:generate-schemas": "pnpm --dir packages/contracts run generate:training-schemas",
+    "skills:package-taskset-authoring": "node scripts/package-taskset-authoring-artifact.mjs",
+    "skills:check-taskset-authoring": "node scripts/package-taskset-authoring-artifact.mjs --check",
     "media:prepare": "node scripts/tutorials/prepare-public-videos.mjs",
     "media:pull": "node scripts/tutorials/pull-public-videos.mjs",
     "media:verify": "node scripts/tutorials/verify-public-media.mjs",
