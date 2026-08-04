@@ -52,14 +52,13 @@ const state = {
 } as unknown as TrainingStateResponse;
 
 function ModelsBrowserProof() {
-  const [activeTab, setActiveTab] = useState<LabPrimaryTab>("serving");
+  const activeTab: LabPrimaryTab = "serving";
   const [lastAction, setLastAction] = useState("none");
 
   return (
     <main style={{ height: "100vh" }}>
       <LabsView
         activeTab={activeTab}
-        onTabChange={setActiveTab}
         onCreateDataset={() => setLastAction("create-taskset")}
         onCreateModel={() => setLastAction("create-model")}
       >

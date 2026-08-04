@@ -27,7 +27,7 @@
 .labs-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
   min-width: 0;
   padding: 8px 28px 0;
