@@ -18,6 +18,7 @@
     "generate:training-schemas": "tsx scripts/generate-training-schemas.ts"
   },
   "dependencies": {
+    "@openpond/evals": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/connected-apps": "workspace:*",
     "zod": "^4.1.13"

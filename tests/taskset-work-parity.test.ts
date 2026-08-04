@@ -166,6 +166,21 @@ describe("interactive and automated Taskset Work parity", () => {
         passed: true,
         rewardEligible: true,
       });
+      expect(execution.portable).toMatchObject({
+        receipt: {
+          legacyAttemptRef: execution.attempt.id,
+          terminal: true,
+          failureClass: null,
+        },
+        evaluationResult: {
+          attemptCount: 1,
+          rewardEligibleCount: 1,
+          meanScore: 1,
+        },
+      });
+      expect(execution.portable.runManifest.harnessRelease.contentHash).toBe(
+        execution.portable.harnessRelease.contentHash,
+      );
       expect(interactive.actions.at(-1)).toBe("sandbox_stop");
       expect(automated.actions.at(-1)).toBe("sandbox_stop");
       expect(materialized.taskset.environment).toMatchObject({

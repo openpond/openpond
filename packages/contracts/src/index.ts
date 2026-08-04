@@ -51,3 +51,16 @@ export * from "./learning-signals.js";
 export * from "./harness-releases.js";
 export * from "./harness-actions.js";
 export * from "./training-platform.js";
+export {
+  AgentSnapshotSchema,
+  AttemptReceiptSchema,
+  GraderEvidenceSchema as PortableGraderEvidenceSchema,
+  HarnessReleaseSchema,
+  RunManifestSchema as PortableRunManifestSchema,
+  TasksetReleaseSchema,
+  type AgentSnapshot,
+  type AttemptReceipt,
+  type HarnessRelease,
+  type RunManifest as PortableRunManifest,
+  type TasksetRelease,
+} from "@openpond/evals";

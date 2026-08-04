@@ -24,6 +24,7 @@ import {
   resolveManagedAdapterUserAccess,
 } from "../openpond/hosted-api-access.js";
 import { ManagedRlLocalRolloutExecutor } from "./managed-rl-local-rollout-executor.js";
+import { supportsManagedRlHarness } from "./managed-rl-harness-registry.js";
 import {
   parseManagedJobDetail,
   persistManagedRunEvidence,
@@ -208,20 +209,9 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         const requiresHarness =
           taskset.capabilities.requiresState ||
           taskset.capabilities.requiresTools;
-        const benchmark = taskset.environment.metadata.benchmark;
-        const benchmarkId =
-          benchmark &&
-          typeof benchmark === "object" &&
-          !Array.isArray(benchmark) &&
-          typeof Reflect.get(benchmark, "id") === "string"
-            ? String(Reflect.get(benchmark, "id"))
-            : null;
         if (
           requiresHarness &&
-          !(
-            plan.runtime.placement === "local" &&
-            benchmarkId === "marketing-portfolio-v1"
-          )
+          !supportsManagedRlHarness(taskset, plan.runtime.placement)
         ) {
           issues.push({
             code: "managed_harness_unsupported",

@@ -6,6 +6,7 @@
   "main": "./dist/index.js",
   "dependencies": {
     "@openpond/cloud": "workspace:*",
+    "@openpond/evals": "workspace:*",
     "@openpond/codex-provider": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",

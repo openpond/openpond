@@ -8,6 +8,7 @@
   "references": [
     { "path": "../../packages/cloud" },
     { "path": "../../packages/contracts" },
+    { "path": "../../packages/evals/tsconfig.build.json" },
     { "path": "../../packages/codex-provider" },
     { "path": "../../packages/logging" },
     { "path": "../../packages/runtime" },
