@@ -16,6 +16,7 @@ const ENV_NAMES = [
   "OPENPOND_PUBLIC_API_URL",
   "OPENPOND_OPCHAT_API_URL",
   "OPENPOND_CHAT_API_URL",
+  "VERCEL_AUTOMATION_BYPASS_SECRET",
 ] as const;
 const originalEnv = Object.fromEntries(ENV_NAMES.map((name) => [name, process.env[name]]));
 
@@ -184,6 +185,26 @@ describe("hosted web search executor", () => {
         body: { query: "OpenPond Search", limit: 4 },
       },
     ]);
+  });
+
+  test("includes the Vercel bypass header for protected staging search", async () => {
+    process.env.VERCEL_AUTOMATION_BYPASS_SECRET = "staging-bypass";
+    let bypassHeader: string | null = null;
+    const execute = createHostedWebSearchExecutor({
+      endpoint: "https://api-new.staging-api.openpond.ai/v1/search",
+      fetchImpl: async (_input, init) => {
+        bypassHeader = new Headers(init?.headers).get(
+          "x-vercel-protection-bypass",
+        );
+        return new Response(JSON.stringify({ results: [] }), {
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+
+    await execute({ query: "OpenCode Reddit" });
+
+    expect(bypassHeader).toBe("staging-bypass");
   });
 
   test("reports hosted failures", async () => {

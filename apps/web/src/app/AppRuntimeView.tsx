@@ -288,6 +288,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     startCloudSetupUpload,
     changeWorkspaceTarget,
     sendPromptFromMainComposer,
+    startScheduledWorkChat,
     openSandboxWorkspace,
     openUrlInBrowserPanel,
     showBrowserPanel,
@@ -809,7 +810,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "team" &&
             view !== "community" &&
             view !== "labs" &&
-            view !== "profile" &&
+            view !== "scheduled" &&
+            view !== "outputs" &&
             activeExperience === "development",
         }}
         mainPane={{
@@ -1026,6 +1028,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setMentionedAppId,
           showToast,
           sendPrompt: sendPromptFromMainComposer,
+          onStartScheduledWorkChat: startScheduledWorkChat,
           stopTurn,
           syncWorkspaceLocally,
           refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,

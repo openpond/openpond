@@ -348,7 +348,6 @@ export function useAppPrimaryRuntime() {
     connection,
     preferences: bootstrap?.preferences,
     sidebarOpen,
-    diffPanelOpen,
     diffPanelExpanded,
     setBootstrap,
     setError,

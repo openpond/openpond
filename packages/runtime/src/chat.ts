@@ -318,10 +318,21 @@ function buildOpChatBody(options: {
   if (options.toolChoice !== undefined) {
     body.tool_choice = options.toolChoice;
   }
-  if (options.reasoningEffort) {
-    body.reasoning_effort = options.reasoningEffort;
-  }
+  Object.assign(body, opChatReasoningFields(options.reasoningEffort));
   return body;
+}
+
+export function opChatReasoningFields(
+  effort: HostedChatTurnInput["reasoningEffort"]
+): Record<string, unknown> {
+  if (!effort) return {};
+  if (effort === "low") {
+    return { thinking: { type: "disabled" } };
+  }
+  return {
+    thinking: { type: "enabled" },
+    reasoning_effort: effort === "xhigh" ? "max" : "high",
+  };
 }
 
 function opChatMessage(message: HostedChatMessage): Record<string, unknown> {

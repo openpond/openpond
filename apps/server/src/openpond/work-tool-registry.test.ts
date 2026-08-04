@@ -19,6 +19,22 @@ function statusResult(state: string, ok = true): WorkspaceToolResult {
 }
 
 describe("waitForWorkSandboxReady", () => {
+  test("emits chat-completions-compatible parameter schemas", () => {
+    const definitions = createWorkModelToolDefinitions({
+      executeWorkspaceTool: async () => ({
+        ok: true,
+        action: "sandbox_status",
+        output: "ok",
+      }),
+    });
+
+    for (const definition of definitions) {
+      expect(JSON.stringify(definition.parameters)).not.toMatch(
+        /"type":\s*\[/
+      );
+    }
+  });
+
   test("hides model-owned save and stop tools when lifecycle is automatic", () => {
     const definitions = createWorkModelToolDefinitions({
       automaticLifecycle: true,

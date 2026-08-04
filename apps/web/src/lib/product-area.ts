@@ -15,7 +15,8 @@ export function productAreaForAppView(
     return experience === "development" ? "development" : "chat";
   }
   if (view === "team" || view === "community") return "chat";
-  if (view === "apps" || view === "profile") return "development";
+  if (view === "scheduled" || view === "outputs") return "chat";
+  if (view === "apps") return "development";
   return experience === "development" ? "development" : "chat";
 }
 

@@ -12,8 +12,11 @@ export const GetStartedView = lazy(() =>
 export const LabsRoute = lazy(() =>
   import("../labs/LabsRoute").then((module) => ({ default: module.LabsRoute })),
 );
-export const ProfileView = lazy(() =>
-  import("../profile/ProfileView").then((module) => ({ default: module.ProfileView })),
+export const ScheduledWorkPage = lazy(() =>
+  import("../schedules/ScheduledWorkPage").then((module) => ({ default: module.ScheduledWorkPage })),
+);
+export const OutputsPage = lazy(() =>
+  import("../outputs/OutputsPage").then((module) => ({ default: module.OutputsPage })),
 );
 export const LabSkillSidebar = lazy(() =>
   import("../labs/LabSkillSidebar").then((module) => ({ default: module.LabSkillSidebar })),

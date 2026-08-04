@@ -38,6 +38,7 @@ export function createCapabilityCatalogRuntime(deps: {
   executeOpenPondCommand: TurnRunnerDependencies["executeOpenPondCommand"];
   executeWorkspaceTool: TurnRunnerDependencies["executeWorkspaceTool"];
   executeWebSearch: TurnRunnerDependencies["executeWebSearch"];
+  createScheduledWork: TurnRunnerDependencies["createScheduledWork"];
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
   executeCrossSystemTool: TurnRunnerDependencies["executeCrossSystemTool"];
   loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
@@ -147,6 +148,7 @@ export function createCapabilityCatalogRuntime(deps: {
         executeWorkspaceTool: deps.executeWorkspaceTool,
         inputs: options.workInputs,
         automaticLifecycle: true,
+        createScheduledWork: deps.createScheduledWork,
       })
     );
     definitions.push(

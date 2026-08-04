@@ -6,15 +6,15 @@ import type {
 } from "@openpond/contracts";
 import {
   Activity,
-  BookOpenText,
   Boxes,
   CalendarClock,
   ChartColumnStacked,
   Cloud,
+  FileText,
   Plug,
   SquarePen,
-  UserRound,
 } from "../icons";
+import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type { AppView } from "../../lib/app-models";
 import { newExperienceTitle } from "../../lib/experience-options";
@@ -138,35 +138,33 @@ export function SidebarNavigation({
           </button>
         </>
       ) : null}
-      {productArea === "development" ? (
+      {productArea === "chat" ? (
         <>
           <button
-            className={`nav-command ${view === "profile" ? "active" : ""}`}
-            aria-label="Profile"
+            className={`nav-command ${view === "scheduled" ? "active" : ""}`}
+            aria-label="Schedule"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
-              setView("profile");
+              setView("scheduled");
             }}
           >
-            <UserRound size={16} />
-            <span>Profile</span>
+            <CalendarClock size={16} />
+            <span>Schedule</span>
+          </button>
+          <button
+            className={`nav-command ${view === "outputs" ? "active" : ""}`}
+            aria-label="Outputs"
+            type="button"
+            onClick={() => {
+              clearWorkspaceSelection();
+              setView("outputs");
+            }}
+          >
+            <FileText size={16} />
+            <span>Outputs</span>
           </button>
         </>
-      ) : null}
-      {productArea === "chat" ? (
-        <button
-          className={`nav-command ${view === "profile" ? "active" : ""}`}
-          aria-label="Schedule"
-          type="button"
-          onClick={() => {
-            clearWorkspaceSelection();
-            setView("profile");
-          }}
-        >
-          <CalendarClock size={16} />
-          <span>Schedule</span>
-        </button>
       ) : null}
       {productArea === "development" || productArea === "chat" ? (
         <button
@@ -193,7 +191,7 @@ export function SidebarUtilityNavigation({
   setView,
   view,
 }: SidebarDestinationProps) {
-  function selectDocs() {
+  function selectWalkthroughs() {
     setSelectedAppId(null);
     setSelectedProjectId(null);
     setSelectedSessionId(null);
@@ -203,17 +201,10 @@ export function SidebarUtilityNavigation({
 
   return (
     <nav className="sidebar-utility-nav" aria-label="Resources">
-      <button
-        className={`sidebar-icon sidebar-docs-button ${
-          view === "get-started" ? "active" : ""
-        }`}
-        data-tooltip="Docs"
-        aria-label="Docs"
-        onClick={selectDocs}
-        type="button"
-      >
-        <BookOpenText size={17} />
-      </button>
+      <SidebarHelpMenu
+        onOpenWalkthroughs={selectWalkthroughs}
+        walkthroughsActive={view === "get-started"}
+      />
     </nav>
   );
 }

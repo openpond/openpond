@@ -84,6 +84,14 @@ export function Sidebar(props: SidebarProps) {
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}
 
+      {productArea === "chat" ? (
+        <LocalContinuousLearningSidebarNotice
+          connection={props.connection}
+          profileId={props.profile?.activeProfile ?? "default"}
+          signedIn={props.account?.state === "signed_in"}
+        />
+      ) : null}
+
       {productArea === "models" ? null : (
         <div className="sidebar-collaboration-sections">
           <SidebarCommunitySection

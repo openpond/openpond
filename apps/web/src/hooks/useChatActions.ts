@@ -150,6 +150,7 @@ type CodexHistoryTurnPayload = {
 type SendPromptOptions = {
   session?: Session | null;
   selectSession?: boolean;
+  experience?: Experience;
   onSessionCreated?: (session: Session) => void;
   onCodexHistoryOptimisticEvent?: (event: RuntimeEvent) => void;
   clearPrompt?: () => void;
@@ -633,7 +634,8 @@ export function useChatActions({
     const selectedSessionForTurn = explicitTurnContext
       ? options.session ?? null
       : selectedSession;
-    const experienceForTurn = selectedSessionForTurn?.experience ?? experience;
+    const experienceForTurn =
+      options.experience ?? selectedSessionForTurn?.experience ?? experience;
     const developmentTurn = experienceForTurn === "development";
     const selectedAppForTurn =
       explicitTurnContext || !developmentTurn ? null : selectedApp;

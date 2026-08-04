@@ -224,6 +224,10 @@
   padding: 11px;
 }
 
+.sidebar > .sidebar-learning-notice {
+  margin-bottom: 8px;
+}
+
 .sidebar-learning-notice > header {
   display: flex;
   align-items: center;
@@ -267,15 +271,62 @@
   color: var(--text);
 }
 
-.sidebar-docs-button.sidebar-icon {
+.sidebar-help-menu {
+  position: relative;
+}
+
+.sidebar-help-trigger.sidebar-icon {
   width: 38px;
   height: 38px;
   border-radius: 8px;
 }
 
-.sidebar-docs-button.active {
+.sidebar-help-trigger.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-help-popover {
+  position: absolute;
+  z-index: 60;
+  right: 0;
+  bottom: calc(100% + 7px);
+  display: grid;
+  width: 220px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(24, 24, 24, 0.98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  padding: 5px;
+}
+
+.sidebar-help-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.sidebar-help-item svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.sidebar-help-item:hover,
+.sidebar-help-item:focus-visible,
+.sidebar-help-item[aria-current="page"] {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .sidebar-collaboration-sections {

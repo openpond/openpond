@@ -1345,7 +1345,7 @@ async function requestSandboxPublicApiRoot(params: {
   apiKey: string;
   sandboxApiUrl: string;
   path: string;
-  method?: "GET" | "POST" | "DELETE";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
 }): Promise<Record<string, unknown>> {
   const response = await apiFetch(
@@ -1369,6 +1369,19 @@ async function requestSandboxPublicApiRoot(params: {
     throw new Error(error);
   }
   return payload;
+}
+
+export async function requestOpenPondPublicApi(params: {
+  path: string;
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
+  body?: Record<string, unknown>;
+}): Promise<Record<string, unknown>> {
+  const { apiKey, sandboxApiUrl } = await resolveSandboxClient();
+  return requestSandboxPublicApiRoot({
+    apiKey,
+    sandboxApiUrl,
+    ...params,
+  });
 }
 
 function sandboxAccountSummary(

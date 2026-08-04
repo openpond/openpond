@@ -128,7 +128,8 @@ export function mainPaneViewClass(view: AppView, showChatThread: boolean): strin
     view === "apps" ||
     view === "get-started" ||
     view === "labs" ||
-    view === "profile"
+    view === "outputs" ||
+    view === "scheduled"
   ) return "page-active";
   return showChatThread ? "chat-active" : "chat-start";
 }

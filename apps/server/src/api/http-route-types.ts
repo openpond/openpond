@@ -63,6 +63,18 @@ export type HttpRouteDeps = {
   extensionUpdateAllPayload: () => Promise<unknown>;
   extensionRemovePayload: (source: string) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
+  listWorkOutputsPayload: () => Promise<unknown>;
+  listHostedSavedWorkPayload: () => Promise<unknown>;
+  createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
+  updateHostedSavedWorkPayload: (
+    scheduleId: string,
+    payload: unknown
+  ) => Promise<unknown>;
+  deleteHostedSavedWorkPayload: (scheduleId: string) => Promise<unknown>;
+  runHostedSavedWorkPayload: (
+    scheduleId: string,
+    clientRequestId: string
+  ) => Promise<unknown>;
   usageSummaryPayload: (requestUrl: URL) => Promise<unknown>;
   usageRecordsPayload: (requestUrl: URL) => Promise<unknown>;
   trainingPayload: (

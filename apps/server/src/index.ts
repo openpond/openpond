@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
   CompactSessionRequestSchema,
+  CreateHostedSavedWorkRequestSchema,
   RunSessionCommandRequestSchema,
   normalizeSidebarFilePath,
   type Approval,
@@ -106,6 +107,13 @@ import {
   listSandboxIntegrationConnections,
   sandboxRequestPayload,
 } from "./openpond/sandboxes.js";
+import {
+  createHostedSavedWork,
+  deleteHostedSavedWork,
+  listHostedSavedWork,
+  runHostedSavedWork,
+  updateHostedSavedWork,
+} from "./openpond/saved-work.js";
 import { createRemoteAccessManager } from "./remote-access/tailscale.js";
 import { createVoiceTranscriptionService } from "./voice-transcription.js";
 import { createBrowserControlQueue } from "./openpond/browser-control-queue.js";
@@ -909,6 +917,7 @@ export async function createOpenPondServer(
     loadOpenPondExtensionCatalog: loadExtensionCatalog,
     readOpenPondExtensionSkill: readExtensionSkill,
     executeWebSearch: executeWebSearch ?? undefined,
+    createScheduledWork: createHostedSavedWork,
     executeConnectedAppTool,
     browserToolExecutor: browserControlQueue.executor,
     manageSidebarFile: async ({ session, action, path: requestedPath }) => {
@@ -1457,6 +1466,45 @@ export async function createOpenPondServer(
     });
   }
 
+  async function listWorkOutputsPayload(): Promise<unknown> {
+    return workOutputService.listWorkOutputs(await store.sessionShells());
+  }
+
+  async function listHostedSavedWorkPayload(): Promise<unknown> {
+    return listHostedSavedWork();
+  }
+
+  async function createHostedSavedWorkPayload(
+    payload: unknown
+  ): Promise<unknown> {
+    return createHostedSavedWork(
+      CreateHostedSavedWorkRequestSchema.parse(payload)
+    );
+  }
+
+  async function updateHostedSavedWorkPayload(
+    scheduleId: string,
+    payload: unknown
+  ): Promise<unknown> {
+    return updateHostedSavedWork(scheduleId, payload);
+  }
+
+  async function deleteHostedSavedWorkPayload(
+    scheduleId: string
+  ): Promise<unknown> {
+    return deleteHostedSavedWork(scheduleId);
+  }
+
+  async function runHostedSavedWorkPayload(
+    scheduleId: string,
+    clientRequestId: string
+  ): Promise<unknown> {
+    if (!clientRequestId.trim()) {
+      throw new Error("clientRequestId is required to run scheduled Work.");
+    }
+    return runHostedSavedWork(scheduleId, clientRequestId);
+  }
+
   async function usageSummaryRoutePayload(requestUrl: URL): Promise<unknown> {
     return usageSummaryPayload({ requestUrl, store });
   }
@@ -1643,6 +1691,12 @@ export async function createOpenPondServer(
       extensionUpdateAllPayload,
       extensionRemovePayload,
       eventPagePayload,
+      listWorkOutputsPayload,
+      listHostedSavedWorkPayload,
+      createHostedSavedWorkPayload,
+      updateHostedSavedWorkPayload,
+      deleteHostedSavedWorkPayload,
+      runHostedSavedWorkPayload,
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
       trainingPayload,

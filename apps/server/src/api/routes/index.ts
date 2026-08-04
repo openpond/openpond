@@ -11,21 +11,25 @@ import { handleLocalContinuousLearningRoutes } from "./local-continuous-learning
 import { handleOrganizationRoutes } from "./organization-routes.js";
 import { handleProjectCloudRoutes } from "./project-cloud-routes.js";
 import { handleSandboxRoutes } from "./sandbox-routes.js";
+import { handleSavedWorkRoutes } from "./saved-work-routes.js";
 import { handleSessionRoutes } from "./session-routes.js";
 import { handleSettingsRoutes } from "./settings-routes.js";
 import { handleUsageRoutes } from "./usage-routes.js";
 import { handleTeamChatRoutes } from "./team-chat-routes.js";
 import { handleTrainingRoutes } from "./training-routes.js";
 import { handleWorkspaceRoutes } from "./workspace-routes.js";
+import { handleWorkOutputRoutes } from "./work-output-routes.js";
 
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "events", handle: handleEventRoutes },
+  { id: "work-outputs", handle: handleWorkOutputRoutes },
   { id: "extensions", handle: handleExtensionRoutes },
   { id: "training", handle: handleTrainingRoutes },
   { id: "compute", handle: handleComputeRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },
   { id: "communities", handle: handleCommunityRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
+  { id: "saved-work", handle: handleSavedWorkRoutes },
   { id: "local-continuous-learning", handle: handleLocalContinuousLearningRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },

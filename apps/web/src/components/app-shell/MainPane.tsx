@@ -84,7 +84,6 @@ import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
-import { LocalConversationLearningConsentControl } from "../chat/LocalConversationLearningConsentControl";
 
 import {
   AppsView,
@@ -93,7 +92,8 @@ import {
   LabsRoute,
   LabSkillSidebar,
   NativeSkillSidebar,
-  ProfileView,
+  OutputsPage,
+  ScheduledWorkPage,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
@@ -229,6 +229,7 @@ export function MainPane({
   setMentionedAppId,
   showToast,
   sendPrompt,
+  onStartScheduledWorkChat,
   stopTurn,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
@@ -1420,18 +1421,19 @@ export function MainPane({
         <Suspense fallback={null}>
           <GetStartedView />
         </Suspense>
-      ) : view === "profile" ? (
+      ) : view === "scheduled" ? (
         <Suspense fallback={null}>
-          <ProfileView
-            catalogPresentation="select"
-            className="profile-page"
-            payload={bootstrap}
+          <ScheduledWorkPage
             connection={connection}
-            onPayload={onPayload}
-            onError={onError}
-            onToast={showToast}
-            onSkillCommand={openProfileSkillCommand}
+            detailExpanded={diffPanelExpanded}
+            onDetailResizeStart={onDiffPanelResizeStart}
+            onToggleDetailExpanded={onToggleDiffPanelExpanded}
+            onStartWorkChat={onStartScheduledWorkChat}
           />
+        </Suspense>
+      ) : view === "outputs" ? (
+        <Suspense fallback={null}>
+          <OutputsPage connection={connection} onViewChat={onOpenSession} />
         </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
@@ -1580,19 +1582,6 @@ export function MainPane({
               }`}
               ref={composerStackRef}
             >
-              <LocalConversationLearningConsentControl
-                connection={connection}
-                session={selectedProfileSession}
-                onUpdated={(updated) => {
-                  if (!bootstrap) return;
-                  onPayload({
-                    ...bootstrap,
-                    sessions: bootstrap.sessions.map((session) =>
-                      session.id === updated.id ? updated : session
-                    ),
-                  });
-                }}
-              />
               {selectedTrainingCreation ? (
                 <Suspense fallback={null}>
                   <TrainingCreationPanel

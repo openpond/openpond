@@ -423,6 +423,9 @@ export type TurnRunnerDependencies = {
     profileRef: OpenPondProfileRef | null;
   }) => Promise<ProfileSkillCommandResult | null>;
   executeWebSearch?: WebSearchExecutor;
+  createScheduledWork?: (
+    input: import("@openpond/contracts").CreateHostedSavedWorkRequest
+  ) => Promise<Record<string, unknown>>;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
   manageSidebarFile?: (input: {

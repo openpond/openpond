@@ -115,7 +115,7 @@ export function GetStartedView(props: GetStartedViewProps = {}) {
   return (
     <section
       className={`get-started-view ${playerOpen ? "course-player-open" : ""}`}
-      aria-label="Docs"
+      aria-label="Walkthroughs"
     >
       <div className="get-started-shell">
         <section

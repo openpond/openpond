@@ -31,6 +31,7 @@ export * from "./extensions.js";
 export * from "./create-pipeline.js";
 export * from "./usage.js";
 export * from "./local-agent-schedules.js";
+export * from "./saved-work.js";
 export * from "./team-chat.js";
 export * from "./community.js";
 export * from "./tasksets.js";

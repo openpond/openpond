@@ -27,6 +27,9 @@ import type {
   LocalAgentScheduleRunResponse,
   PatchLocalAgentScheduleRequest,
   LocalAgentScheduleRunNowRequest,
+  HostedSavedWorkResponse,
+  CreateHostedSavedWorkRequest,
+  UpdateHostedSavedWorkRequest,
   LocalContinuousLearningState,
   LocalContinuousLearningRun,
   EnsureLocalContinuousLearningRequest,
@@ -81,6 +84,7 @@ import type {
   WorkspaceLspTouchRequest,
   WorkspaceState,
   WorkspaceTemplateConfigView,
+  WorkOutputsResponse,
   TeamChatHostedAiThread,
   TeamChatAgentCatalogEntry,
   TeamChatAgentConversation,
@@ -556,6 +560,8 @@ export const api = {
       `/v1/events/page${query}`
     );
   },
+  workOutputs: (connection: ClientConnection) =>
+    apiFetch<WorkOutputsResponse>(connection, "/v1/work/outputs"),
   runSubagentLifecycleAction: (
     connection: ClientConnection,
     runId: string,
@@ -645,6 +651,45 @@ export const api = {
       connection,
       `/v1/compute/downloads/${encodeURIComponent(jobId)}/cancel`,
       { method: "POST", body: JSON.stringify({}) }
+    ),
+  hostedSavedWork: (connection: ClientConnection) =>
+    apiFetch<HostedSavedWorkResponse>(connection, "/v1/saved-work"),
+  createHostedSavedWork: (
+    connection: ClientConnection,
+    input: CreateHostedSavedWorkRequest
+  ) =>
+    apiFetch<Record<string, unknown>>(connection, "/v1/saved-work", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  updateHostedSavedWork: (
+    connection: ClientConnection,
+    scheduleId: string,
+    input: UpdateHostedSavedWorkRequest
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/saved-work/schedules/${encodeURIComponent(scheduleId)}`,
+      { method: "PATCH", body: JSON.stringify(input) }
+    ),
+  deleteHostedSavedWork: (
+    connection: ClientConnection,
+    scheduleId: string
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/saved-work/schedules/${encodeURIComponent(scheduleId)}`,
+      { method: "DELETE" }
+    ),
+  runHostedSavedWork: (
+    connection: ClientConnection,
+    scheduleId: string,
+    clientRequestId: string
+  ) =>
+    apiFetch<Record<string, unknown>>(
+      connection,
+      `/v1/saved-work/schedules/${encodeURIComponent(scheduleId)}/run`,
+      { method: "POST", body: JSON.stringify({ clientRequestId }) }
     ),
   localAgentSchedules: (
     connection: ClientConnection,

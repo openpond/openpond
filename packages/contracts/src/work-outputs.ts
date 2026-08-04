@@ -155,6 +155,10 @@ export const OutputRefSchema = z.discriminatedUnion("kind", [
   AgentPackageOutputRefSchema,
 ]);
 
+export const WorkOutputsResponseSchema = z.object({
+  outputs: z.array(FileOutputRefSchema),
+});
+
 export type FileOutputRef = z.infer<typeof FileOutputRefSchema>;
 export type LocalFileOutputRef = FileOutputRef & {
   location: z.infer<typeof LocalFileOutputLocationSchema>;
@@ -164,6 +168,7 @@ export type AgentPackageAction = z.infer<typeof AgentPackageActionSchema>;
 export type AgentPackageReceipt = z.infer<typeof AgentPackageReceiptSchema>;
 export type AgentPackageOutputRef = z.infer<typeof AgentPackageOutputRefSchema>;
 export type OutputRef = z.infer<typeof OutputRefSchema>;
+export type WorkOutputsResponse = z.infer<typeof WorkOutputsResponseSchema>;
 
 export const WORK_OUTPUT_MAX_BYTES = 10_000_000;
 export const WORK_AGENT_PACKAGE_MAX_SOURCE_BYTES = 6_000_000;

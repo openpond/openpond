@@ -251,38 +251,6 @@
   opacity: 0.5;
 }
 
-.chat-learning-consent {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  width: min(760px, calc(100% - 24px));
-  margin: 0 auto 8px;
-  padding: 9px 11px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel);
-}
-
-.chat-learning-consent > div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.chat-learning-consent strong {
-  font-size: 12px;
-}
-
-.chat-learning-consent span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.chat-learning-consent .chat-learning-consent-error {
-  color: var(--destructive, #df6b66);
-}
-
 @media (max-width: 720px) {
   .models-learning-banner {
     margin: 12px 14px 4px;
@@ -304,17 +272,6 @@
   .models-learning-run-row {
     align-items: stretch;
     flex-direction: column;
-  }
-}
-
-@media (max-width: 620px) {
-  .chat-learning-consent {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .chat-learning-consent button {
-    align-self: flex-start;
   }
 }
 

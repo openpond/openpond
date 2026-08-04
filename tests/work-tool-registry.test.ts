@@ -10,6 +10,51 @@ import type {
 import { createWorkModelToolDefinitions } from "../apps/server/src/openpond/work-tool-registry";
 
 describe("Work model tools", () => {
+  test("creates hosted Saved Work without starting sandbox compute", async () => {
+    const workspaceCalls: WorkspaceToolRequest[] = [];
+    const scheduleCalls: unknown[] = [];
+    const definitions = createWorkModelToolDefinitions({
+      executeWorkspaceTool: async (_sessionId, payload) => {
+        const request = payload as WorkspaceToolRequest;
+        workspaceCalls.push(request);
+        return { ok: true, action: request.action, output: "ok" };
+      },
+      createScheduledWork: async (input) => {
+        scheduleCalls.push(input);
+        return { scheduleId: "schedule_1", created: true };
+      },
+    });
+    const scheduleWork = definitions.find(
+      (definition) => definition.name === "schedule_work"
+    );
+    if (!scheduleWork) throw new Error("schedule_work missing");
+
+    const result = await scheduleWork.execute(
+      toolContext(workSession(), "call_schedule", {
+        name: "OpenCode complaint report",
+        prompt: "Research OpenCode complaints and create a report.",
+        recurrence: {
+          version: 1,
+          kind: "weekly",
+          timeZone: "America/New_York",
+          startDate: "2026-08-04",
+          localTime: "09:00",
+          weekdays: ["monday"],
+          end: { kind: "never" },
+        },
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(scheduleCalls).toEqual([
+      expect.objectContaining({
+        clientRequestId: expect.stringContaining(":call_schedule"),
+        name: "OpenCode complaint report",
+      }),
+    ]);
+    expect(workspaceCalls).toEqual([]);
+  });
+
   test("lazily creates exactly one projectless sandbox and reuses it within the turn", async () => {
     const calls: WorkspaceToolRequest[] = [];
     const definitions = createWorkModelToolDefinitions({
