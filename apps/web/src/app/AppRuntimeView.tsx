@@ -673,6 +673,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           teamThreads: teamChat.threads,
           ...communitySidebar,
           account,
+          connection,
           profile: bootstrap?.profile,
           pinnedCollapsed,
           cloudProjectsCollapsed,

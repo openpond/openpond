@@ -8,6 +8,7 @@ import {
   Activity,
   BookOpenText,
   Boxes,
+  CalendarClock,
   ChartColumnStacked,
   Cloud,
   Plug,
@@ -153,7 +154,21 @@ export function SidebarNavigation({
           </button>
         </>
       ) : null}
-      {productArea === "development" ? (
+      {productArea === "chat" ? (
+        <button
+          className={`nav-command ${view === "profile" ? "active" : ""}`}
+          aria-label="Schedule"
+          type="button"
+          onClick={() => {
+            clearWorkspaceSelection();
+            setView("profile");
+          }}
+        >
+          <CalendarClock size={16} />
+          <span>Schedule</span>
+        </button>
+      ) : null}
+      {productArea === "development" || productArea === "chat" ? (
         <button
           className={`nav-command ${view === "apps" ? "active" : ""}`}
           onClick={() => {

@@ -6,9 +6,31 @@ import type {
 
 import { api, type ClientConnection } from "../../api";
 import { AppDialog } from "../dialogs/AppDialog";
+import { X } from "../icons";
 
 const CONTINUOUS_LEARNING_DOCS_URL =
   "https://openpond.ai/docs/continuous-learning";
+const CONTINUOUS_LEARNING_CHANGED_EVENT =
+  "openpond:continuous-learning-changed";
+let pendingContinuousLearningRequest: {
+  connection: ClientConnection;
+  promise: ReturnType<typeof api.localContinuousLearning>;
+} | null = null;
+
+function loadLocalContinuousLearning(connection: ClientConnection) {
+  if (pendingContinuousLearningRequest?.connection === connection) {
+    return pendingContinuousLearningRequest.promise;
+  }
+  const request = api.localContinuousLearning(connection);
+  pendingContinuousLearningRequest = { connection, promise: request };
+  const clearPending = () => {
+    if (pendingContinuousLearningRequest?.promise === request) {
+      pendingContinuousLearningRequest = null;
+    }
+  };
+  void request.then(clearPending, clearPending);
+  return request;
+}
 
 export function LocalContinuousLearningBanner({
   connection,
@@ -21,110 +43,30 @@ export function LocalContinuousLearningBanner({
   signedIn: boolean;
   onOpenResult: (sessionId: string) => void;
 }) {
-  const [states, setStates] = useState<LocalContinuousLearningState[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const control = useLocalContinuousLearningControl({
+    connection,
+    profileId,
+  });
+  const {
+    activeRun,
+    busy,
+    currentDefinition,
+    enabled,
+    loaded,
+    setEnabled,
+    state,
+    update,
+  } = control;
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const state = useMemo(
-    () => states.find((item) => item.profileId === profileId) ?? null,
-    [profileId, states],
-  );
-  const refresh = useCallback(
-    async (ignore?: { value: boolean }) => {
-      if (!connection) {
-        setStates([]);
-        setLoaded(true);
-        return;
-      }
-      try {
-        const result = await api.localContinuousLearning(connection);
-        if (!ignore?.value) {
-          setStates(result.states);
-          setError(null);
-          setLoaded(true);
-        }
-      } catch (loadError) {
-        if (!ignore?.value) {
-          setError(
-            loadError instanceof Error ? loadError.message : String(loadError),
-          );
-          setLoaded(true);
-        }
-      }
-    },
-    [connection],
-  );
-
-  useEffect(() => {
-    const ignore = { value: false };
-    void refresh(ignore);
-    return () => {
-      ignore.value = true;
-    };
-  }, [refresh]);
-
-  const currentDefinition = state
-    ? state.definitions.find((item) => item.id === state.currentDefinitionId) ??
-      null
-    : null;
-  const activeRun =
-    state?.runs.find(
-      (run) => run.status === "running" || run.status === "queued",
-    ) ?? null;
-  const enabled = state?.schedule.enabled === true;
-
-  async function update(action: () => Promise<unknown>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-      await refresh();
-    } catch (actionError) {
-      setError(
-        actionError instanceof Error ? actionError.message : String(actionError),
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function setEnabled(nextEnabled: boolean) {
-    if (!connection) {
-      setError("Connect to the local OpenPond server first.");
-      return;
-    }
-    await update(() =>
-      state
-        ? api.patchLocalContinuousLearning(connection, state.id, {
-            enabled: nextEnabled,
-          })
-        : api.ensureLocalContinuousLearning(connection, {
-            profileId,
-            scope: "personal",
-            enabled: nextEnabled,
-            onboardingDecision: "enabled",
-          }),
-    );
-  }
 
   return (
     <>
-      <section className="models-learning-banner" aria-label="Continuous learning">
-        <div className="models-learning-copy">
+      <section
+        className="models-learning-banner"
+        aria-label="Continuous learning"
+      >
+        <div className="models-learning-header">
           <h2>Enable continuous learning</h2>
-          <p>
-            Periodically review eligible conversations and suggest repeated,
-            measurable work worth evaluating. OpenPond never creates training
-            runs or changes a Version without approval.
-          </p>
-          {error ? (
-            <span className="models-learning-error" role="status">
-              {error}
-            </span>
-          ) : null}
-        </div>
-        <div className="models-learning-actions">
           <div className="models-learning-control-row">
             <button
               className="models-learning-link"
@@ -145,6 +87,13 @@ export function LocalContinuousLearningBanner({
               <span />
             </button>
           </div>
+        </div>
+        <div className="models-learning-content-row">
+          <p>
+            Periodically review eligible conversations and suggest repeated,
+            measurable work worth evaluating; training and Version changes
+            always require approval.
+          </p>
           {enabled ? (
             <button
               className="models-learning-link"
@@ -181,6 +130,170 @@ export function LocalContinuousLearningBanner({
       ) : null}
     </>
   );
+}
+
+export function LocalContinuousLearningSidebarNotice({
+  connection,
+  profileId,
+  signedIn,
+}: {
+  connection: ClientConnection | null;
+  profileId: string;
+  signedIn: boolean;
+}) {
+  const { busy, enabled, loaded, setEnabled } =
+    useLocalContinuousLearningControl({ connection, profileId });
+  const storageKey = `openpond.continuous-learning-notice-dismissed.${profileId}`;
+  const [dismissed, setDismissed] = useState(true);
+
+  useEffect(() => {
+    setDismissed(window.localStorage.getItem(storageKey) === "true");
+  }, [storageKey]);
+
+  if (!loaded || enabled || dismissed) return null;
+
+  return (
+    <section
+      className="sidebar-learning-notice"
+      aria-label="Continuous learning beta"
+    >
+      <header>
+        <strong>Continuous learning (beta)</strong>
+        <div className="sidebar-learning-notice-actions">
+          <button
+            aria-checked={false}
+            aria-label="Enable continuous learning"
+            className="models-learning-switch"
+            disabled={!signedIn || !connection || busy}
+            onClick={() => void setEnabled(true)}
+            role="switch"
+            type="button"
+          >
+            <span />
+          </button>
+          <button
+            aria-label="Dismiss continuous learning"
+            className="sidebar-learning-notice-dismiss"
+            onClick={() => {
+              window.localStorage.setItem(storageKey, "true");
+              setDismissed(true);
+            }}
+            type="button"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      </header>
+      <p>Review eligible conversations for repeated work worth evaluating.</p>
+    </section>
+  );
+}
+
+function useLocalContinuousLearningControl({
+  connection,
+  profileId,
+}: {
+  connection: ClientConnection | null;
+  profileId: string;
+}) {
+  const [states, setStates] = useState<LocalContinuousLearningState[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const state = useMemo(
+    () => states.find((item) => item.profileId === profileId) ?? null,
+    [profileId, states],
+  );
+  const refresh = useCallback(
+    async (ignore?: { value: boolean }) => {
+      if (!connection) {
+        setStates([]);
+        setLoaded(true);
+        return;
+      }
+      try {
+        const result = await loadLocalContinuousLearning(connection);
+        if (!ignore?.value) {
+          setStates(result.states);
+          setLoaded(true);
+        }
+      } catch {
+        if (!ignore?.value) {
+          setLoaded(true);
+        }
+      }
+    },
+    [connection],
+  );
+
+  useEffect(() => {
+    const ignore = { value: false };
+    void refresh(ignore);
+    return () => {
+      ignore.value = true;
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const handleChanged = () => void refresh();
+    window.addEventListener(CONTINUOUS_LEARNING_CHANGED_EVENT, handleChanged);
+    return () =>
+      window.removeEventListener(
+        CONTINUOUS_LEARNING_CHANGED_EVENT,
+        handleChanged,
+      );
+  }, [refresh]);
+
+  const currentDefinition = state
+    ? state.definitions.find((item) => item.id === state.currentDefinitionId) ??
+      null
+    : null;
+  const activeRun =
+    state?.runs.find(
+      (run) => run.status === "running" || run.status === "queued",
+    ) ?? null;
+  const enabled = state?.schedule.enabled === true;
+
+  async function update(action: () => Promise<unknown>) {
+    setBusy(true);
+    try {
+      await action();
+      await refresh();
+      window.dispatchEvent(new Event(CONTINUOUS_LEARNING_CHANGED_EVENT));
+    } catch {
+      // The surrounding product remains usable when the local scheduler is unavailable.
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setEnabled(nextEnabled: boolean) {
+    if (!connection) {
+      return;
+    }
+    await update(() =>
+      state
+        ? api.patchLocalContinuousLearning(connection, state.id, {
+            enabled: nextEnabled,
+          })
+        : api.ensureLocalContinuousLearning(connection, {
+            profileId,
+            scope: "personal",
+            enabled: nextEnabled,
+            onboardingDecision: "enabled",
+          }),
+    );
+  }
+
+  return {
+    activeRun,
+    busy,
+    currentDefinition,
+    enabled,
+    loaded,
+    setEnabled,
+    state,
+    update,
+  };
 }
 
 function LocalContinuousLearningScheduleDialog({

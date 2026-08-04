@@ -80,6 +80,10 @@
   padding-bottom: 4px;
 }
 
+.labs-model-create-dialog {
+  overflow: visible;
+}
+
 .labs-model-create-field {
   display: grid;
   gap: 7px;
@@ -100,6 +104,13 @@
 
 .labs-model-create-select-row .dropdown-trigger {
   background: var(--bg);
+}
+
+.labs-model-create-select-row .dropdown-menu {
+  right: auto;
+  left: 0;
+  width: 100%;
+  min-width: 100%;
 }
 
 .labs-model-create-add {

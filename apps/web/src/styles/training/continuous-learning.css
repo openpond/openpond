@@ -1,8 +1,6 @@
 .models-learning-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
+  display: grid;
+  gap: 10px;
   margin: 18px 28px 4px;
   padding: 18px 20px;
   border: 1px solid var(--border);
@@ -11,30 +9,37 @@
   color: var(--text);
 }
 
-.models-learning-copy {
+.models-learning-header {
+  display: flex;
   min-width: 0;
-  max-width: 760px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
 }
 
-.models-learning-copy h2 {
+.models-learning-header h2 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
 }
 
-.models-learning-copy p {
-  margin: 8px 0 0;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
+.models-learning-content-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
 }
 
-.models-learning-actions {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 7px;
+.models-learning-content-row p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .models-learning-control-row {
@@ -280,13 +285,16 @@
 
 @media (max-width: 720px) {
   .models-learning-banner {
-    align-items: stretch;
-    flex-direction: column;
     margin: 12px 14px 4px;
   }
 
-  .models-learning-actions {
+  .models-learning-content-row {
     align-items: flex-start;
+  }
+
+  .models-learning-content-row p {
+    overflow: visible;
+    white-space: normal;
   }
 
   .models-learning-grid {

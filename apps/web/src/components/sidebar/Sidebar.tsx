@@ -11,6 +11,7 @@ import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
+import { LocalContinuousLearningSidebarNotice } from "../labs/LocalContinuousLearningBanner";
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -119,28 +120,37 @@ export function Sidebar(props: SidebarProps) {
         </div>
       )}
 
-      <div className="sidebar-footer-row">
-        <UserAuthFooter
-          account={props.account}
-          onOpenActivity={() => {
-            setSectionMenuOpen(null);
-            setSettingsSection("usage");
-            setView("settings");
-          }}
-          onOpenSettings={() => {
-            setSectionMenuOpen(null);
-            setSettingsSection("account");
-            setView("settings");
-          }}
-        />
-        <SidebarUtilityNavigation
-          setSectionMenuOpen={setSectionMenuOpen}
-          setSelectedAppId={setSelectedAppId}
-          setSelectedProjectId={setSelectedProjectId}
-          setSelectedSessionId={setSelectedSessionId}
-          setView={setView}
-          view={view}
-        />
+      <div className="sidebar-bottom-stack">
+        {productArea === "models" ? (
+          <LocalContinuousLearningSidebarNotice
+            connection={props.connection}
+            profileId={props.profile?.activeProfile ?? "default"}
+            signedIn={props.account?.state === "signed_in"}
+          />
+        ) : null}
+        <div className="sidebar-footer-row">
+          <UserAuthFooter
+            account={props.account}
+            onOpenActivity={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("usage");
+              setView("settings");
+            }}
+            onOpenSettings={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("account");
+              setView("settings");
+            }}
+          />
+          <SidebarUtilityNavigation
+            setSectionMenuOpen={setSectionMenuOpen}
+            setSelectedAppId={setSelectedAppId}
+            setSelectedProjectId={setSelectedProjectId}
+            setSelectedSessionId={setSelectedSessionId}
+            setView={setView}
+            view={view}
+          />
+        </div>
       </div>
       <div
         className="sidebar-resize-handle"

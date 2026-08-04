@@ -61,6 +61,7 @@ type UsageSettingsContentProps = {
   onProviderChange?: (provider: UsageProvider | "all") => void;
   onModelChange?: (model: string) => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  modelFocused?: boolean;
 };
 
 type UsageChartSeries = {
@@ -273,6 +274,7 @@ export function UsageSettingsSection({
       }
       onModelChange={modelFocused ? setModel : undefined}
       onOpenSourceSession={onOpenSourceSession}
+      modelFocused={modelFocused}
     />
   );
 }
@@ -296,6 +298,7 @@ export function UsageSettingsContent({
   onProviderChange,
   onModelChange,
   onOpenSourceSession,
+  modelFocused = false,
 }: UsageSettingsContentProps) {
   useErrorToast(error);
   const chart = useMemo(() => buildUsageChart(summary?.daily ?? []), [summary]);
@@ -321,8 +324,12 @@ export function UsageSettingsContent({
 
       <div className="usage-details-title">
         <div>
-          <h2>Detailed usage</h2>
-          <span>Inspect latency, routes, threads, workflows, and individual requests.</span>
+          <h2>{modelFocused ? "Model usage" : "Detailed usage"}</h2>
+          <span>
+            {modelFocused
+              ? "Inspect model requests, tokens, providers, and latency."
+              : "Inspect latency, routes, threads, workflows, and individual requests."}
+          </span>
         </div>
       </div>
 
@@ -419,48 +426,54 @@ export function UsageSettingsContent({
         columns={modelColumns}
       />
 
-      <UsageDataTable
-        title="Threads"
-        rows={summary?.threads ?? []}
-        rowKey={(row) => row.sessionId}
-        emptyLabel="No thread usage"
-        columns={threadTableColumns}
-      />
+      {!modelFocused ? (
+        <>
+          <UsageDataTable
+            title="Threads"
+            rows={summary?.threads ?? []}
+            rowKey={(row) => row.sessionId}
+            emptyLabel="No thread usage"
+            columns={threadTableColumns}
+          />
 
-      <UsageDataTable
-        title="Slash commands"
-        rows={summary?.commands ?? []}
-        rowKey={(row) => `${row.commandName}:${row.commandSource ?? "unknown"}`}
-        emptyLabel="No command usage"
-        columns={commandColumns}
-      />
+          <UsageDataTable
+            title="Slash commands"
+            rows={summary?.commands ?? []}
+            rowKey={(row) =>
+              `${row.commandName}:${row.commandSource ?? "unknown"}`
+            }
+            emptyLabel="No command usage"
+            columns={commandColumns}
+          />
 
-      <div className="usage-breakdown-grid">
-        <UsageDataTable
-          title="Routes"
-          rows={summary?.routes ?? []}
-          rowKey={(row) => row.route}
-          emptyLabel="No route usage"
-          columns={routeColumns}
-          compact
-        />
-        <UsageDataTable
-          title="Statuses"
-          rows={summary?.statuses ?? []}
-          rowKey={(row) => row.status}
-          emptyLabel="No status usage"
-          columns={statusColumns}
-          compact
-        />
-        <UsageDataTable
-          title="Sources"
-          rows={summary?.sources ?? []}
-          rowKey={(row) => row.source}
-          emptyLabel="No source usage"
-          columns={sourceColumns}
-          compact
-        />
-      </div>
+          <div className="usage-breakdown-grid">
+            <UsageDataTable
+              title="Routes"
+              rows={summary?.routes ?? []}
+              rowKey={(row) => row.route}
+              emptyLabel="No route usage"
+              columns={routeColumns}
+              compact
+            />
+            <UsageDataTable
+              title="Statuses"
+              rows={summary?.statuses ?? []}
+              rowKey={(row) => row.status}
+              emptyLabel="No status usage"
+              columns={statusColumns}
+              compact
+            />
+            <UsageDataTable
+              title="Sources"
+              rows={summary?.sources ?? []}
+              rowKey={(row) => row.source}
+              emptyLabel="No source usage"
+              columns={sourceColumns}
+              compact
+            />
+          </div>
+        </>
+      ) : null}
 
       <UsageDataTable
         title="Requests"

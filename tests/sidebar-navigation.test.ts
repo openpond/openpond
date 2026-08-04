@@ -110,20 +110,20 @@ describe("Sidebar navigation", () => {
     expect(models).not.toContain("Local profile changes are not committed");
   });
 
-  test("keeps Chat and Work inside Chat while Apps remains in Developer", () => {
+  test("keeps Chat and Work inside Chat with Schedule and Apps available", () => {
     const chat = renderSidebarNavigation("chat", "chat", "chat");
     const work = renderSidebarNavigation("chat", "work", "chat");
     const chatUtilities = renderSidebarUtilityNavigation("chat", "chat");
     const workUtilities = renderSidebarUtilityNavigation("chat", "work");
 
     expect(chat).toContain("New chat");
-    expect(chat).not.toContain("Profile");
+    expect(chat).toContain("Schedule");
     expect(chat).not.toContain("Models");
-    expect(chat).not.toContain("Apps");
+    expect(chat).toContain("Apps");
     expect(work).toContain("New task");
-    expect(work).not.toContain("Profile");
+    expect(work).toContain("Schedule");
     expect(work).not.toContain("Models");
-    expect(work).not.toContain("Apps");
+    expect(work).toContain("Apps");
     expect(chatUtilities).toContain('aria-label="Docs"');
     expect(chatUtilities).not.toContain("Apps");
     expect(workUtilities).toContain('aria-label="Docs"');
