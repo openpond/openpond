@@ -90,6 +90,14 @@ export default defineConfig({
           include: ["packages/sdk/test/**/*.test.ts"],
         },
       },
+      {
+        extends: true,
+        test: {
+          ...shared,
+          name: "evals",
+          include: ["packages/evals/test/**/*.test.ts"],
+        },
+      },
     ],
   },
 });

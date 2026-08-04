@@ -1,0 +1,18 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": false,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "declarationDir": "dist/types",
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.build.tsbuildinfo",
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["test/**/*.ts", "scripts/**/*.ts"]
+}

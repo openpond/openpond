@@ -22,7 +22,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@openpond/contracts": "workspace:*"
+    "@openpond/contracts": "workspace:*",
+    "@openpond/evals": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

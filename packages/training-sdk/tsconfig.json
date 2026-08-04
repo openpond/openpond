@@ -6,6 +6,6 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "references": [{ "path": "../contracts" }, { "path": "../taskset-sdk" }],
+  "references": [{ "path": "../evals/tsconfig.build.json" }, { "path": "../contracts" }, { "path": "../taskset-sdk" }],
   "include": ["src/**/*.ts"]
 }

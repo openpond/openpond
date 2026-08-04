@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*",
+    "@openpond/evals": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*"
   },
   "devDependencies": {

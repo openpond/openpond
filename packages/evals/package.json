@@ -1,0 +1,76 @@
+{
+  "name": "@openpond/evals",
+  "version": "0.1.0",
+  "description": "Portable evaluation, Harness, Taskset, grader, and receipt contracts for OpenPond",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CONTRACT.md",
+    "RELEASING.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./harness": {
+      "types": "./dist/types/harness.d.ts",
+      "import": "./dist/harness.js"
+    },
+    "./tasksets": {
+      "types": "./dist/types/tasksets.d.ts",
+      "import": "./dist/tasksets.js"
+    },
+    "./graders": {
+      "types": "./dist/types/graders.d.ts",
+      "import": "./dist/graders.js"
+    },
+    "./runs": {
+      "types": "./dist/types/runs.d.ts",
+      "import": "./dist/runs.js"
+    },
+    "./conformance": {
+      "types": "./dist/types/conformance.d.ts",
+      "import": "./dist/conformance.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpond/openpond.git",
+    "directory": "packages/evals"
+  },
+  "homepage": "https://github.com/openpond/openpond/tree/master/packages/evals#readme",
+  "bugs": {
+    "url": "https://github.com/openpond/openpond/issues"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project evals",
+    "check:api": "tsx scripts/check-public-package.ts",
+    "check:consumer": "tsx scripts/verify-packed-consumer.ts",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "tsx": "4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}

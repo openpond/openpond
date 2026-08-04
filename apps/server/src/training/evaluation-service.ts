@@ -1,4 +1,5 @@
 import path from "node:path";
+import { aggregateEvaluationReceipts } from "@openpond/evals";
 import {
   GraderAuditReportSchema,
   TasksetSchema,
@@ -22,6 +23,10 @@ import { buildTasksetReadiness } from "./readiness.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 import { gradeTasksetEvaluationAttempt } from "./task-evaluation-grade-runner.js";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
+import {
+  compileDesktopHarnessContext,
+  projectDesktopAttemptReceipt,
+} from "./portable-evals-adapter.js";
 import type {
   TasksetWorkAttemptRuntime,
   TasksetWorkModelStream,
@@ -109,12 +114,55 @@ export function createTaskEvaluationService(deps: {
       taskId: task.id,
       attempt,
     });
-    return {
+    const artifacts = await deps.store.listTaskAttemptArtifacts({
+      attemptId: attempt.id,
+    });
+    const portable = compileDesktopHarnessContext({
+      taskset,
+      selectedTask: task,
+      profile: deps.loadProfileState ? await deps.loadProfileState() : null,
+      model: input.model,
+    });
+    const receipt = projectDesktopAttemptReceipt({
+      manifest: portable.runManifest,
       attempt,
       grade: gradeResult,
-      artifacts: await deps.store.listTaskAttemptArtifacts({
-        attemptId: attempt.id,
-      }),
+      artifacts,
+    });
+    const persistedAttempt = TaskAttemptResultSchema.parse({
+      ...attempt,
+      metadata: {
+        ...attempt.metadata,
+        portableRunManifestRef: {
+          id: portable.runManifest.id,
+          contentHash: portable.runManifest.contentHash,
+        },
+        portableAttemptReceipt: receipt,
+      },
+    });
+    await deps.store.saveTaskAttempt(persistedAttempt);
+    const evaluationResult = aggregateEvaluationReceipts({
+      id: `evaluation-${receipt.id}`,
+      manifest: portable.runManifest,
+      receipts: [receipt],
+      metadata: {
+        sourceTasksetId: taskset.id,
+        sourceAttemptId: attempt.id,
+        sourceGradeId: gradeResult.id,
+      },
+    });
+    return {
+      attempt: persistedAttempt,
+      grade: gradeResult,
+      artifacts,
+      portable: {
+        agentSnapshot: portable.agentSnapshot,
+        harnessRelease: portable.harnessRelease,
+        tasksetRelease: portable.tasksetRelease,
+        runManifest: portable.runManifest,
+        receipt,
+        evaluationResult,
+      },
     };
   }
 

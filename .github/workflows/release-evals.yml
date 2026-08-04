@@ -1,0 +1,200 @@
+name: Release Evals
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "packages/evals/package.json"
+
+permissions:
+  contents: read
+  checks: read
+
+concurrency:
+  group: release-evals-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: Resolve Evals release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      should_publish: ${{ steps.release.outputs.should_publish }}
+      should_release: ${{ steps.release.outputs.should_release }}
+      already_published: ${{ steps.release.outputs.already_published }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - id: release
+        name: Resolve publish state
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/evals/package.json').version")"
+          package_name="$(node -p "require('./packages/evals/package.json').name")"
+          tag="evals-v${version}"
+          should_publish="true"
+          should_release="true"
+          already_published="false"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            if ! git cat-file -e "${GITHUB_SHA}^:packages/evals/package.json"; then
+              echo "The first @openpond/evals publication must be bootstrapped manually; see packages/evals/RELEASING.md."
+              should_publish="false"
+              should_release="false"
+            else
+              previous_manifest="$(git show "${GITHUB_SHA}^:packages/evals/package.json")"
+              previous_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).name)" <<<"${previous_manifest}")"
+              previous_version="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)" <<<"${previous_manifest}")"
+              if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then
+                echo "packages/evals/package.json changed without a version bump." >&2
+                exit 1
+              fi
+            fi
+          fi
+
+          if ! npm view "${package_name}" name >/dev/null 2>&1; then
+            echo "${package_name} does not exist yet. Complete the one-time npm bootstrap documented in packages/evals/RELEASING.md."
+            should_publish="false"
+            should_release="false"
+          elif npm view "${package_name}@${version}" version >/dev/null 2>&1; then
+            echo "${package_name}@${version} is already published; publication will be skipped."
+            should_publish="false"
+            already_published="true"
+            if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+              echo "${tag} already exists; release creation will also be skipped."
+              should_release="false"
+            fi
+          elif git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} exists but ${package_name}@${version} does not. Refusing an ambiguous release." >&2
+            exit 1
+          fi
+
+          {
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "should_publish=${should_publish}"
+            echo "should_release=${should_release}"
+            echo "already_published=${already_published}"
+          } >> "$GITHUB_OUTPUT"
+
+  ci_gate:
+    name: Require green CI
+    needs: meta
+    if: needs.meta.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for required CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            check_run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs" --jq '[.check_runs[] | select(.name == "Checks" and .app.slug == "github-actions")] | sort_by(.started_at) | last // {}')"
+            status="$(jq -r '.status // empty' <<<"${check_run}")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"${check_run}")"
+            url="$(jq -r '.html_url // empty' <<<"${check_run}")"
+            if [[ "${status}" == "completed" && "${conclusion}" == "success" ]]; then
+              echo "Required CI check passed: ${url}"
+              exit 0
+            fi
+            if [[ "${status}" == "completed" && -n "${conclusion}" ]]; then
+              echo "Required CI check concluded ${conclusion}: ${url}" >&2
+              exit 1
+            fi
+            echo "Waiting for required CI check on ${RELEASE_SHA} (attempt ${attempt}/60)."
+            sleep 10
+          done
+          echo "Timed out waiting for required Checks result on ${RELEASE_SHA}." >&2
+          exit 1
+
+  publish:
+    name: Publish @openpond/evals
+    needs: [meta, ci_gate]
+    if: needs.meta.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    environment: npm-production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+
+      - run: pnpm install --frozen-lockfile --strict-peer-dependencies=false
+      - run: pnpm run evals:check
+
+      - name: Publish through npm trusted publishing
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.18.0
+          npm publish ./packages/evals --access public --ignore-scripts
+
+      - name: Verify registry release and provenance
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..30}; do
+            published="$(npm view "@openpond/evals@${VERSION}" version 2>/dev/null || true)"
+            integrity="$(npm view "@openpond/evals@${VERSION}" dist.integrity 2>/dev/null || true)"
+            if [[ "${published}" == "${VERSION}" && "${integrity}" == sha512-* ]]; then
+              consumer_dir="$(mktemp -d)"
+              npm install --prefix "${consumer_dir}" --ignore-scripts --no-audit --no-fund "@openpond/evals@${VERSION}"
+              (cd "${consumer_dir}" && npm audit signatures)
+              echo "Verified @openpond/evals@${VERSION} with integrity ${integrity}."
+              exit 0
+            fi
+            echo "Waiting for npm registry propagation (attempt ${attempt}/30)."
+            sleep 10
+          done
+          echo "@openpond/evals@${VERSION} was not verifiable after publication." >&2
+          exit 1
+
+  github_release:
+    name: Create Evals tag and GitHub release
+    needs: [meta, publish]
+    if: >-
+      always() &&
+      needs.meta.outputs.should_release == 'true' &&
+      (needs.publish.result == 'success' ||
+      (needs.meta.outputs.already_published == 'true' && needs.publish.result == 'skipped'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Create Evals release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "OpenPond Evals v${VERSION}" \
+            --generate-notes

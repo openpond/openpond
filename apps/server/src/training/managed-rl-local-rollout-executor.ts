@@ -1,17 +1,15 @@
-import { createHash, randomUUID } from "node:crypto";
-import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import { withVercelProtectionBypass } from "@openpond/cloud";
 import type { OpenPondProfileState } from "@openpond/contracts";
 
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
+import "./marketing-portfolio-managed-rl-adapter.js";
 import {
-  parseManagedRlPolicyCompletion,
-  runMarketingPortfolioRollout,
-} from "./marketing-portfolio-rollout.js";
-import { verifyMarketingPortfolioRuntime } from "./marketing-portfolio-runtime-verifier.js";
-import { createProfileAgentHarnessRuntime } from "./profile-agent-harness-runtime.js";
+  resolveManagedRlHarnessAdapter,
+  type ManagedRlLocalRolloutClaim,
+} from "./managed-rl-harness-registry.js";
 
 export type ManagedRlLocalExecutorAccess = {
   apiBaseUrl: string;
@@ -19,38 +17,7 @@ export type ManagedRlLocalExecutorAccess = {
   teamId: string;
 };
 
-type LocalRolloutClaim = {
-  schemaVersion: "openpond.managedRlLocalRolloutClaim.v1";
-  executionKind: "rollout" | "evaluation";
-  executionId: string;
-  jobId: string;
-  groupId: string | null;
-  rolloutId: string | null;
-  deliveryId: string;
-  policyVersion: number;
-  task: {
-    id: string;
-    expectedText: string | null;
-  };
-  taskset: {
-    id: string;
-    revision: number;
-    contentHash: string;
-  };
-  harnessRelease: {
-    id: string;
-    contentHash: string;
-  };
-  reward:
-    | { kind: "exact_text_v1" }
-    | { kind: "local_harness_receipt_v1"; environmentId: string };
-  environmentSha256: string;
-  request: Record<string, unknown>;
-  policy: {
-    path: string;
-    token: string;
-  };
-};
+type LocalRolloutClaim = ManagedRlLocalRolloutClaim;
 
 type ClaimResponse = {
   jobState: string;
@@ -204,11 +171,6 @@ export class ManagedRlLocalRolloutExecutor {
     claim: LocalRolloutClaim,
     environmentId: string,
   ): Promise<Record<string, unknown>> {
-    if (environmentId !== "marketing-portfolio-v1") {
-      throw new Error(
-        `managed_rl_local_harness_unsupported:${environmentId}`,
-      );
-    }
     const taskset = await this.input.store.getTasksetRevision(
       claim.taskset.id,
       claim.taskset.revision,
@@ -217,100 +179,23 @@ export class ManagedRlLocalRolloutExecutor {
     if (!taskset) throw new Error("managed_rl_local_taskset_missing");
     const task = taskset.tasks.find((candidate) => candidate.id === claim.task.id);
     if (!task) throw new Error("managed_rl_local_task_missing");
+    const adapter = resolveManagedRlHarnessAdapter({ taskset, environmentId });
     const profile = await this.input.loadProfileState();
-    const verified = await verifyMarketingPortfolioRuntime({
-      taskset,
-      profile,
-    });
-    const runtime = createProfileAgentHarnessRuntime({
-      agentRoot: verified.agentRoot,
-      scorerModulePath: verified.scorerModulePath,
-      artifactRoot: path.join(
-        this.input.storeDir,
-        "training",
-        "managed-rl-local",
-        claim.jobId,
-        claim.executionId,
-      ),
-    });
-    const baseSeed =
-      typeof claim.request.seed === "number" &&
-      Number.isInteger(claim.request.seed)
-        ? claim.request.seed
-        : 0;
-    const rollout = await runMarketingPortfolioRollout({
+    return adapter.execute({
+      claim,
       taskset,
       task,
-      runtime,
-      signal: this.abortController.signal,
-      policy: {
-        complete: async ({
-          turnIndex,
-          messages,
-          tools,
-          requiredToolName,
-          signal,
-        }) => {
-          const policyResult = await this.policyRequest(
-            claim.policy.path,
-            claim.policy.token,
-            {
-              deliveryId: claim.deliveryId,
-              policyVersion: claim.policyVersion,
-              turnIndex,
-              messages,
-              tools,
-              toolChoice: managedRlNamedToolChoice(requiredToolName),
-              maxTokens: 1_024,
-              temperature: 0.8,
-              seed: baseSeed + turnIndex,
-              logprobs: true,
-              topLogprobs: 1,
-              returnTokenIds: true,
-            },
-            signal,
-          );
-          return {
-            ...parseManagedRlPolicyCompletion(policyResult),
-            policyResult,
-          };
-        },
-      },
-    });
-    const trainingSample = record(
-      rollout.policyResult.trainingSample,
-      "Managed RL training sample",
-    );
-    const modelRequestId = requiredString(
-      trainingSample.modelRequestId,
-      "Managed RL model request ID",
-    );
-    return {
-      status: "succeeded",
+      profile,
+      storeDir: this.input.storeDir,
       executorId: this.executorId,
-      environmentSha256: claim.environmentSha256,
-      policyResult: rollout.policyResult,
-      trace: {
-        schemaVersion: "openpond.managedRlLocalHarnessReceipt.v1",
-        jobId: claim.jobId,
-        executionKind: claim.executionKind,
-        executionId: claim.executionId,
-        deliveryId: claim.deliveryId,
-        groupId: claim.groupId,
-        taskId: task.id,
-        policyVersion: claim.policyVersion,
-        environmentSha256: claim.environmentSha256,
-        harnessReleaseSha256: claim.harnessRelease.contentHash,
-        tasksetSha256: claim.taskset.contentHash,
-        traceSha256: rollout.traceSha256,
-        trainingSampleSha256: managedRlSha256(trainingSample),
-        modelRequestId,
-        reward: rollout.reward,
-        components: rollout.components,
-        terminal: rollout.terminal,
-        toolSequence: rollout.toolSequence,
-      },
-    };
+      signal: this.abortController.signal,
+      policyRequest: (request, signal) => this.policyRequest(
+        claim.policy.path,
+        claim.policy.token,
+        request,
+        signal,
+      ),
+    });
   }
 
   private async completeWithRetry(
@@ -439,38 +324,6 @@ function normalizeText(value: string): string {
     .replace(/\s*```$/, "")
     .trim()
     .normalize("NFC");
-}
-
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalize);
-  if (value && typeof value === "object") {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, child]) => [key, canonicalize(child)]),
-    );
-  }
-  return value;
-}
-
-function managedRlSha256(value: unknown): string {
-  return createHash("sha256")
-    .update(JSON.stringify(canonicalize(value)))
-    .digest("hex");
-}
-
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(`${label} must be an object.`);
-  }
-  return value as Record<string, unknown>;
-}
-
-function requiredString(value: unknown, label: string): string {
-  if (typeof value !== "string" || !value.trim()) {
-    throw new Error(`${label} must be a non-empty string.`);
-  }
-  return value.trim();
 }
 
 function sanitizeError(error: unknown): string {

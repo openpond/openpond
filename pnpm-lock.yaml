@@ -23,6 +23,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:packages/contracts
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:packages/evals
       '@openpond/logging':
         specifier: workspace:*
         version: link:packages/logging
@@ -147,6 +150,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:../../packages/evals
       '@openpond/logging':
         specifier: workspace:*
         version: link:../../packages/logging
@@ -296,9 +302,31 @@ importers:
       '@openpond/connected-apps':
         specifier: workspace:*
         version: link:../connected-apps
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:../evals
       zod:
         specifier: ^4.1.13
         version: 4.4.3
+
+  packages/evals:
+    dependencies:
+      zod:
+        specifier: ^4.1.13
+        version: 4.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 24.13.3
+        version: 24.13.3
+      tsx:
+        specifier: 4.23.1
+        version: 4.23.1
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.10
+        version: 4.1.10(@edge-runtime/vm@3.2.0)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.10)(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/logging:
     devDependencies:
@@ -341,6 +369,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:../evals
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
@@ -373,6 +404,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@openpond/evals':
+        specifier: workspace:*
+        version: link:../evals
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../taskset-sdk
@@ -1449,6 +1483,7 @@ packages:
   cron-parser@5.6.2:
     resolution: {integrity: sha512-yJ/G1LVir6CnlkLI40CsampPLKl1SprGGlUagWtGJxewytRVYezv5xVyzzbT+Pvzx+VIRvZVF7/a0eEMTxdnTA==}
     engines: {node: '>=18'}
+    deprecated: 'Published tarball was built from a stale dist/ and is missing the fixes from #414 and #415 — its contents are effectively v5.6.1. Upgrade to v5.7.0.'
 
   cross-dirname@0.1.0:
     resolution: {integrity: sha512-+R08/oI0nl3vfPcqftZRpytksBXDzOUveBq/NBVx0sUp1axwzPQrKinNx5yd5sxPu8j1wIy8AfnVQ+5eFdha6Q==}
