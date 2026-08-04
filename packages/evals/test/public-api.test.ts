@@ -23,6 +23,7 @@ import {
 } from "../src/runs.js";
 import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
 import { contentHash, sha256 } from "../src/common.js";
+import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "../src/evidence/index.js";
 
 const artifact = {
   id: "artifact-trace",
@@ -165,6 +166,10 @@ describe("public package conformance", () => {
     expect(policy).not.toHaveProperty("privilegedContextRef");
     expect(trainingPolicyTaskViews(taskset).map((task) => task.id)).toEqual(["generic-tool-v1-train"]);
     expect(JSON.stringify(trainingPolicyTaskViews(taskset))).not.toContain("generic-tool-v1-expected");
+  });
+
+  it("exports the Work evidence conformance surface", () => {
+    expect(verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)).toBe(true);
   });
 });
 

@@ -50,7 +50,7 @@ import {
   threadDetailProjectionFromRow,
   type ThreadDetailProjection,
 } from "./store-codecs.js";
-import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";
+import { SqliteWorkEvidenceStore } from "./store-work-evidence.js";
 import {
   sessionRuntimeSummaries,
   sessionWithRuntimeSummary,
@@ -175,7 +175,7 @@ type RuntimeEventRecentWindow = {
   limit: number;
 };
 
-export class SqliteStore extends SqliteSidebarFileBookmarkStore {
+export class SqliteStore extends SqliteWorkEvidenceStore {
   async snapshot(): Promise<StoreData> {
     await this.ready;
     await this.writeQueue;

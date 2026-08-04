@@ -264,6 +264,33 @@ export class SqliteStoreCore {
     await this.exec(SQLITE_CREATE_SCHEMA_SQL);
   }
 
+  async createWorkEvidenceTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS work_evidence_receipts (
+        id TEXT PRIMARY KEY,
+        source_revision_hash TEXT NOT NULL UNIQUE,
+        source_session_id TEXT NOT NULL,
+        source_turn_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS work_evidence_source_idx
+        ON work_evidence_receipts(source_session_id, source_turn_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS work_feedback_receipts (
+        id TEXT PRIMARY KEY,
+        evidence_receipt_id TEXT NOT NULL,
+        output_revision_hash TEXT,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS work_feedback_evidence_idx
+        ON work_feedback_receipts(evidence_receipt_id, created_at ASC);
+      CREATE INDEX IF NOT EXISTS work_feedback_output_idx
+        ON work_feedback_receipts(output_revision_hash, created_at ASC);
+    `);
+  }
+
   async createSidebarFileBookmarkTables(): Promise<void> {
     await ensureSidebarFileBookmarkTables((sql) => this.exec(sql));
   }

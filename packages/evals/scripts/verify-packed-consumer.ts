@@ -26,6 +26,7 @@ import { validateTasksetRelease } from "@openpond/evals/tasksets";
 import { RunManifestSchema } from "@openpond/evals/runs";
 import { HarnessReleaseSchema } from "@openpond/evals/harness";
 import { gradeEvidence } from "@openpond/evals/graders";
+import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "@openpond/evals/evidence";
 
 const fixture = genericToolConformance;
 if (!validateTasksetRelease(fixture.taskset).valid) throw new Error("packed Taskset validation failed");
@@ -38,6 +39,7 @@ const grades = await gradeEvidence({
 });
 if (!grades[0]?.passed) throw new Error("packed deterministic grader failed");
 if (verifyAttemptReceipt({}) !== false) throw new Error("invalid receipt was accepted");
+if (!verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)) throw new Error("packed Work evidence validation failed");
 process.stdout.write("clean consumer verified\\n");
 `);
   await writeFile(path.join(temporary, "verify-types.mts"), `
@@ -46,7 +48,8 @@ import type { HarnessRuntime } from "@openpond/evals/harness";
 import type { GraderEvidence } from "@openpond/evals/graders";
 import type { RunManifest } from "@openpond/evals/runs";
 import type { TaskRecord } from "@openpond/evals/tasksets";
-void (null as unknown as AttemptReceipt | HarnessExecutor | TasksetRelease | HarnessRuntime | GraderEvidence | RunManifest | TaskRecord);
+import type { WorkEvidenceReceipt, WorkFeedbackReceipt, WorkProcessTrace } from "@openpond/evals/evidence";
+void (null as unknown as AttemptReceipt | HarnessExecutor | TasksetRelease | HarnessRuntime | GraderEvidence | RunManifest | TaskRecord | WorkEvidenceReceipt | WorkFeedbackReceipt | WorkProcessTrace);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], { cwd: temporary, stdio: "inherit" });
   execFileSync(path.resolve(root, "../../node_modules/.bin/tsc"), [
