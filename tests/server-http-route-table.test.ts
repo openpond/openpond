@@ -291,6 +291,72 @@ describe("server HTTP route table", () => {
     }
   });
 
+  test("dispatches authenticated Work evidence capture, feedback, retrieval, and eligibility", async () => {
+    const calls: RecordedCall[] = [];
+    const server = createServer(createHttpRequestHandler(routeTableDeps(calls)));
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address() as AddressInfo;
+    const origin = `http://127.0.0.1:${address.port}`;
+    try {
+      await expect(expectJsonRequest(
+        origin,
+        "POST",
+        "/v1/work/evidence/capture",
+        201,
+        { sessionId: "session-1", turnId: "turn-1", consent: { status: "granted" } },
+      )).resolves.toMatchObject({ name: "captureWorkEvidencePayload" });
+      await expect(expectJsonRequest(
+        origin,
+        "GET",
+        "/v1/work/evidence/work-evidence-1",
+        200,
+      )).resolves.toMatchObject({
+        name: "getWorkEvidencePayload",
+        args: ["work-evidence-1"],
+      });
+      await expect(expectJsonRequest(
+        origin,
+        "POST",
+        "/v1/work/evidence/work-evidence-1/feedback",
+        201,
+        { verdict: "accepted" },
+      )).resolves.toMatchObject({
+        name: "recordWorkEvidenceFeedbackPayload",
+        args: ["work-evidence-1", { verdict: "accepted" }],
+      });
+      await expect(expectJsonRequest(
+        origin,
+        "GET",
+        "/v1/work/evidence/work-evidence-1/feedback",
+        200,
+      )).resolves.toMatchObject({
+        name: "listWorkEvidenceFeedbackPayload",
+        args: ["work-evidence-1"],
+      });
+      await expect(expectJsonRequest(
+        origin,
+        "POST",
+        "/v1/work/evidence/work-evidence-1/eligibility",
+        200,
+        { policyState: "active" },
+      )).resolves.toMatchObject({
+        name: "classifyWorkEvidencePayload",
+        args: ["work-evidence-1", { policyState: "active" }],
+      });
+      expect(calls.map((call) => call.name)).toEqual([
+        "captureWorkEvidencePayload",
+        "getWorkEvidencePayload",
+        "recordWorkEvidenceFeedbackPayload",
+        "listWorkEvidenceFeedbackPayload",
+        "classifyWorkEvidencePayload",
+      ]);
+    } finally {
+      server.close();
+      await once(server, "close");
+    }
+  });
+
   test("preserves hosted community status, code, and recovery details", async () => {
     const deps = routeTableDeps([]);
     deps.communityPayload = async () => {

@@ -629,6 +629,13 @@
   background: rgba(201, 139, 42, 0.14);
 }
 
+.composer-local-work-guidance {
+  margin: 0 10px 7px;
+  color: #929292;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .composer-textarea-frame {
   display: block;
   width: 100%;

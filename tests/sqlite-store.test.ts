@@ -68,6 +68,42 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("migrates version 34 stores to immutable Work evidence tables", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.snapshot();
+      await initialStore.close();
+
+      const oldDb = openTestDatabase(storePath);
+      await run(oldDb, "DROP TABLE work_feedback_receipts");
+      await run(oldDb, "DROP TABLE work_evidence_receipts");
+      await run(oldDb, "PRAGMA user_version = 34");
+      await close(oldDb);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await migratedStore.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const tables = await all<{ name: string }>(
+          migratedDb,
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name IN ('work_evidence_receipts', 'work_feedback_receipts')
+           ORDER BY name`,
+        );
+        expect(tables.map((table) => table.name)).toEqual([
+          "work_evidence_receipts",
+          "work_feedback_receipts",
+        ]);
+      } finally {
+        await close(migratedDb);
+      }
+      expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+    });
+  });
+
   test("retires Goal and Insights storage while preserving parent-scoped subagents", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");

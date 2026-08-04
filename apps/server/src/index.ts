@@ -99,6 +99,7 @@ import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorde
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
 import { createWorkSandboxLifecycleService } from "./work/work-sandbox-lifecycle-service.js";
+import { createDesktopWorkEvidenceApi } from "./work/work-evidence-api.js";
 import { createWorkAgentPackageService } from "./work/work-agent-package-service.js";
 import { createWorkAgentSdkArchiveLoader } from "./work/work-agent-sdk-archive.js";
 import { createServerWorkspaceWorkflows } from "./workspace/server-workspace-workflows.js";
@@ -211,6 +212,7 @@ export async function createOpenPondServer(
   };
   const { token, tokenFile } = await ensureCapabilityToken(storeDir);
   const store = new SqliteStore(storeDir, { logger });
+  const workEvidenceApi = createDesktopWorkEvidenceApi({ store, storeDir });
   const startedAt = now();
   const serverId = randomUUID();
   const workOutputService = createWorkOutputService({
@@ -1692,6 +1694,11 @@ export async function createOpenPondServer(
       extensionRemovePayload,
       eventPagePayload,
       listWorkOutputsPayload,
+      captureWorkEvidencePayload: workEvidenceApi.capture,
+      getWorkEvidencePayload: workEvidenceApi.get,
+      recordWorkEvidenceFeedbackPayload: workEvidenceApi.recordFeedback,
+      listWorkEvidenceFeedbackPayload: workEvidenceApi.listFeedback,
+      classifyWorkEvidencePayload: workEvidenceApi.eligibility,
       listHostedSavedWorkPayload,
       createHostedSavedWorkPayload,
       updateHostedSavedWorkPayload,
