@@ -22,23 +22,26 @@ import {
   type WorkProcessStep,
   type WorkProcessTrace,
 } from "@openpond/evals/evidence";
+import { z } from "zod";
 
 export const DESKTOP_WORK_EVIDENCE_PROJECTOR_VERSION =
   "openpond.desktop-work-evidence-projector.v1" as const;
 export const DESKTOP_WORK_SANITATION_POLICY_VERSION =
   "openpond.desktop-work-sanitizer.v1" as const;
 
-export type DesktopWorkEvidenceConsent = {
-  schemaVersion: "openpond.desktopWorkEvidenceConsent.v1";
-  status: "granted";
-  scope: "work_process_and_artifacts";
-  grantedAt: string;
-  policyVersion: string;
-  ownershipScope: "personal" | "workspace";
-  workspaceId: string | null;
-  participantPolicy: "creator_only" | "all_participants";
-  expiresAt: string | null;
-};
+export const DesktopWorkEvidenceConsentSchema = z.object({
+  schemaVersion: z.literal("openpond.desktopWorkEvidenceConsent.v1"),
+  status: z.literal("granted"),
+  scope: z.literal("work_process_and_artifacts"),
+  grantedAt: z.string().datetime({ offset: true }),
+  policyVersion: z.string().trim().min(1).max(200),
+  ownershipScope: z.enum(["personal", "workspace"]),
+  workspaceId: z.string().trim().min(1).max(1_000).nullable(),
+  participantPolicy: z.enum(["creator_only", "all_participants"]),
+  expiresAt: z.string().datetime({ offset: true }).nullable(),
+}).strict();
+
+export type DesktopWorkEvidenceConsent = z.infer<typeof DesktopWorkEvidenceConsentSchema>;
 
 export type DesktopWorkEvidenceProjection = {
   sourceRevisionHash: string;

@@ -19,10 +19,12 @@ import { handleTeamChatRoutes } from "./team-chat-routes.js";
 import { handleTrainingRoutes } from "./training-routes.js";
 import { handleWorkspaceRoutes } from "./workspace-routes.js";
 import { handleWorkOutputRoutes } from "./work-output-routes.js";
+import { handleWorkEvidenceRoutes } from "./work-evidence-routes.js";
 
 export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "events", handle: handleEventRoutes },
   { id: "work-outputs", handle: handleWorkOutputRoutes },
+  { id: "work-evidence", handle: handleWorkEvidenceRoutes },
   { id: "extensions", handle: handleExtensionRoutes },
   { id: "training", handle: handleTrainingRoutes },
   { id: "compute", handle: handleComputeRoutes },

@@ -26,6 +26,7 @@ import {
   captureDesktopWorkEvidence,
   recordDesktopWorkFeedback,
 } from "./work-evidence-service.js";
+import { createDesktopWorkEvidenceApi } from "./work-evidence-api.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -161,6 +162,61 @@ describe("Desktop Work evidence service", () => {
     });
     expect(verifyWorkFeedbackReceipt(accepted.receipt)).toBe(true);
     await expect(store.listWorkFeedbackForEvidence(evidence.receipt)).resolves.toHaveLength(2);
+    await store.close();
+  });
+
+  test("exposes only portable evidence through the authenticated API service", async () => {
+    const storeDir = await temporaryStore();
+    const store = new SqliteStore(storeDir);
+    const session = workSession();
+    const turn = completedTurn();
+    await store.insertSessionAtFront(session);
+    await store.insertTurn(turn);
+    const output = await managedOutput(storeDir, turn);
+    for (const runtimeEvent of completedEvents(output)) await store.appendRuntimeEvent(runtimeEvent);
+    const api = createDesktopWorkEvidenceApi({
+      store,
+      storeDir,
+      now: () => "2026-08-04T12:05:00.000Z",
+    });
+
+    const captured = await api.capture({
+      sessionId: session.id,
+      turnId: turn.id,
+      consent: consent(),
+      agentSnapshot: {
+        id: "historical-agent-snapshot",
+        contentHash: contentHash("historical-agent-snapshot"),
+      },
+    });
+    expect(captured).not.toHaveProperty("artifacts");
+    expect(captured.evidence).not.toHaveProperty("artifacts");
+    const receipt = captured.evidence.receipt;
+    await expect(api.get(receipt.id)).resolves.toEqual(captured);
+
+    await api.recordFeedback(receipt.id, {
+      outputRevisionHash: receipt.outputRefs[0]!.contentHash,
+      verdict: "accepted",
+      reasonCodes: ["correct"],
+    });
+    await expect(api.listFeedback(receipt.id)).resolves.toMatchObject({
+      feedback: [{ receipt: { verdict: "accepted" } }],
+    });
+    await expect(api.eligibility(receipt.id, {
+      policyState: "active",
+      reconstructability: { input: true, environment: true, verifier: true },
+    })).resolves.toMatchObject({
+      eligibility: {
+        decisions: {
+          eval_candidate: { eligible: true },
+          demonstration_candidate: { eligible: true },
+          reward_candidate: {
+            eligible: false,
+            blockers: ["attempt_receipt_missing"],
+          },
+        },
+      },
+    });
     await store.close();
   });
 

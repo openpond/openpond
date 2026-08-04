@@ -64,6 +64,17 @@ export type HttpRouteDeps = {
   extensionRemovePayload: (source: string) => Promise<unknown>;
   eventPagePayload: (requestUrl: URL) => Promise<unknown>;
   listWorkOutputsPayload: () => Promise<unknown>;
+  captureWorkEvidencePayload: (payload: unknown) => Promise<unknown>;
+  getWorkEvidencePayload: (receiptId: string) => Promise<unknown>;
+  recordWorkEvidenceFeedbackPayload: (
+    receiptId: string,
+    payload: unknown
+  ) => Promise<unknown>;
+  listWorkEvidenceFeedbackPayload: (receiptId: string) => Promise<unknown>;
+  classifyWorkEvidencePayload: (
+    receiptId: string,
+    payload: unknown
+  ) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
   createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
   updateHostedSavedWorkPayload: (
