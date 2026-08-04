@@ -19,6 +19,7 @@ export { default as BookmarkX } from "lucide-react/dist/esm/icons/bookmark-x.js"
 export { default as BookOpenText } from "lucide-react/dist/esm/icons/book-open-text.js";
 export { default as Bot } from "lucide-react/dist/esm/icons/bot.js";
 export { default as Boxes } from "lucide-react/dist/esm/icons/boxes.js";
+export { default as CalendarClock } from "lucide-react/dist/esm/icons/calendar-clock.js";
 export { default as ChartColumnStacked } from "lucide-react/dist/esm/icons/chart-column-stacked.js";
 export { default as Check } from "lucide-react/dist/esm/icons/check.js";
 export { default as CheckCircle2 } from "lucide-react/dist/esm/icons/circle-check.js";
@@ -43,7 +44,10 @@ export { default as ExternalLink } from "lucide-react/dist/esm/icons/external-li
 export { default as Eye } from "lucide-react/dist/esm/icons/eye.js";
 export { default as EyeOff } from "lucide-react/dist/esm/icons/eye-off.js";
 export { default as File } from "lucide-react/dist/esm/icons/file.js";
+export { default as FileAudio } from "lucide-react/dist/esm/icons/file-audio.js";
+export { default as FileSpreadsheet } from "lucide-react/dist/esm/icons/file-spreadsheet.js";
 export { default as FileText } from "lucide-react/dist/esm/icons/file-text.js";
+export { default as FileVideo } from "lucide-react/dist/esm/icons/file-video.js";
 export { default as Folder } from "lucide-react/dist/esm/icons/folder.js";
 export { default as FolderGit2 } from "lucide-react/dist/esm/icons/folder-git-2.js";
 export { default as FolderOpen } from "lucide-react/dist/esm/icons/folder-open.js";
@@ -79,6 +83,7 @@ export { default as Pin } from "lucide-react/dist/esm/icons/pin.js";
 export { default as PinOff } from "lucide-react/dist/esm/icons/pin-off.js";
 export { default as Play } from "lucide-react/dist/esm/icons/play.js";
 export { default as Plug } from "lucide-react/dist/esm/icons/plug.js";
+export { default as Presentation } from "lucide-react/dist/esm/icons/presentation.js";
 export { default as Plus } from "lucide-react/dist/esm/icons/plus.js";
 export { default as Power } from "lucide-react/dist/esm/icons/power.js";
 export { default as RadioTower } from "lucide-react/dist/esm/icons/radio-tower.js";

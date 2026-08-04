@@ -48,6 +48,7 @@ import {
   trainingModelRunSyncKey,
 } from "./LabsRouteSections";
 import {
+  LAB_PRIMARY_TAB_CHANGE_EVENT,
   labPrimaryTabFromSearch,
   searchWithLabPrimaryTab,
 } from "./lab-primary-tab-state";
@@ -225,7 +226,11 @@ export function LabsRoute({
       setActiveTab(labPrimaryTabFromSearch(window.location.search));
     };
     window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    window.addEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPopState);
+    return () => {
+      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPopState);
+    };
   }, []);
   useEffect(() => {
     const search = searchWithLabPrimaryTab(window.location.search, activeTab);
@@ -234,6 +239,7 @@ export function LabsRoute({
       `${window.location.pathname}${window.location.search}${window.location.hash}`;
     if (nextUrl === currentUrl) return;
     window.history.replaceState(window.history.state, "", nextUrl);
+    window.dispatchEvent(new Event(LAB_PRIMARY_TAB_CHANGE_EVENT));
   }, [activeTab]);
   useEffect(() => {
     if (!modelRunSyncKey) return;
@@ -330,18 +336,6 @@ export function LabsRoute({
   ]);
   useEffect(() => () => onDetailOpenChange(null), [onDetailOpenChange]);
 
-  function changePrimaryTab(tab: LabPrimaryTab) {
-    setSelectedKey(null);
-    setSelectedDatasetId(null);
-    setActiveTab(tab);
-    const search = searchWithLabPrimaryTab(window.location.search, tab);
-    window.history.pushState(
-      window.history.state,
-      "",
-      `${window.location.pathname}${search}${window.location.hash}`,
-    );
-  }
-
   function useModel(modelId: string) {
     const workproduct = workproducts.find(
       (candidate) => candidate.kind === "model" && candidate.id === modelId,
@@ -431,7 +425,6 @@ export function LabsRoute({
     <LabsView
       activeTab={activeTab}
       showHeader={!training.launchRequest && !selected && !selectedDatasetId}
-      onTabChange={changePrimaryTab}
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
     >
@@ -573,6 +566,9 @@ export function LabsRoute({
       ) : (
         <LabModelsPage
           activeProfileId={profileId}
+          connection={profileView.connection}
+          signedIn={account?.state === "signed_in"}
+          onOpenResult={onOpenRunConversation}
           items={models}
           loading={training.training.loading && !models.length}
           runs={createImprove.runs}

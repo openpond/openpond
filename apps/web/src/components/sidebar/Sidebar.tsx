@@ -6,11 +6,12 @@ import {
 } from "./SidebarNavigation";
 import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import { SidebarSectionList } from "./SidebarSectionList";
-import { SidebarExperienceMenu } from "./SidebarExperienceMenu";
+import { SidebarProductMenu } from "./SidebarProductMenu";
 import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
+import { LocalContinuousLearningSidebarNotice } from "../labs/LocalContinuousLearningBanner";
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -18,7 +19,8 @@ export function Sidebar(props: SidebarProps) {
     arch,
     currentVersion,
     experience,
-    onExperienceChange,
+    productArea,
+    onProductAreaChange,
     onSidebarResizeStart,
     platform,
     setSectionMenuOpen,
@@ -50,9 +52,9 @@ export function Sidebar(props: SidebarProps) {
         >
           <PanelLeft size={16} />
         </button>
-        <SidebarExperienceMenu
-          value={experience}
-          onChange={onExperienceChange}
+        <SidebarProductMenu
+          value={productArea}
+          onChange={onProductAreaChange}
         />
         {availableUpdate && (
           <button
@@ -69,6 +71,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
 
       <SidebarNavigation
+        productArea={productArea}
         experience={experience}
         beginNewChat={beginNewChat}
         setSectionMenuOpen={setSectionMenuOpen}
@@ -79,64 +82,83 @@ export function Sidebar(props: SidebarProps) {
         view={view}
       />
 
-      <SidebarSectionList {...props} />
+      {productArea === "models" ? null : <SidebarSectionList {...props} />}
 
-      <div className="sidebar-collaboration-sections">
-        <SidebarCommunitySection
-          communities={props.communityItems}
-          channels={props.communityChannels}
-          loading={props.communityLoading}
-          error={props.communityError}
-          selectedCommunityId={props.selectedCommunityId}
-          selectedChannelId={props.selectedCommunityChannelId}
-          view={view}
-          onDiscover={props.discoverCommunities}
-          onSelectCommunity={props.selectCommunity}
-          onSelectChannel={props.selectCommunityChannel}
+      {productArea === "chat" ? (
+        <LocalContinuousLearningSidebarNotice
+          connection={props.connection}
+          profileId={props.profile?.activeProfile ?? "default"}
+          signedIn={props.account?.state === "signed_in"}
         />
-        <SidebarTeamSection
-          currentUserId={props.currentUserId}
-          enabled={props.teamChatEnabled}
-          loading={props.teamChatLoading ?? false}
-          members={props.teamMembers}
-          onOpen={() => {
-            setSelectedAppId(null);
-            setSelectedProjectId(null);
-            setSelectedSessionId(null);
-            setSectionMenuOpen(null);
-            setView("team");
-          }}
-          openTeamDm={props.openTeamDm}
-          organization={props.teamChatOrganization}
-          selectedTeamThreadId={props.selectedTeamThreadId}
-          selectTeamThread={props.selectTeamThread}
-          threads={props.teamThreads}
-          view={view}
-        />
-      </div>
+      ) : null}
 
-      <div className="sidebar-footer-row">
-        <UserAuthFooter
-          account={props.account}
-          onOpenActivity={() => {
-            setSectionMenuOpen(null);
-            setSettingsSection("usage");
-            setView("settings");
-          }}
-          onOpenSettings={() => {
-            setSectionMenuOpen(null);
-            setSettingsSection("account");
-            setView("settings");
-          }}
-        />
-        <SidebarUtilityNavigation
-          setSectionMenuOpen={setSectionMenuOpen}
-          setSelectedAppId={setSelectedAppId}
-          setSelectedProjectId={setSelectedProjectId}
-          setSelectedSessionId={setSelectedSessionId}
-          setView={setView}
-          view={view}
-        />
+      {productArea === "models" ? null : (
+        <div className="sidebar-collaboration-sections">
+          <SidebarCommunitySection
+            communities={props.communityItems}
+            channels={props.communityChannels}
+            loading={props.communityLoading}
+            error={props.communityError}
+            selectedCommunityId={props.selectedCommunityId}
+            selectedChannelId={props.selectedCommunityChannelId}
+            view={view}
+            onDiscover={props.discoverCommunities}
+            onSelectCommunity={props.selectCommunity}
+            onSelectChannel={props.selectCommunityChannel}
+          />
+          <SidebarTeamSection
+            currentUserId={props.currentUserId}
+            enabled={props.teamChatEnabled}
+            loading={props.teamChatLoading ?? false}
+            members={props.teamMembers}
+            onOpen={() => {
+              setSelectedAppId(null);
+              setSelectedProjectId(null);
+              setSelectedSessionId(null);
+              setSectionMenuOpen(null);
+              setView("team");
+            }}
+            openTeamDm={props.openTeamDm}
+            organization={props.teamChatOrganization}
+            selectedTeamThreadId={props.selectedTeamThreadId}
+            selectTeamThread={props.selectTeamThread}
+            threads={props.teamThreads}
+            view={view}
+          />
+        </div>
+      )}
+
+      <div className="sidebar-bottom-stack">
+        {productArea === "models" ? (
+          <LocalContinuousLearningSidebarNotice
+            connection={props.connection}
+            profileId={props.profile?.activeProfile ?? "default"}
+            signedIn={props.account?.state === "signed_in"}
+          />
+        ) : null}
+        <div className="sidebar-footer-row">
+          <UserAuthFooter
+            account={props.account}
+            onOpenActivity={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("usage");
+              setView("settings");
+            }}
+            onOpenSettings={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("account");
+              setView("settings");
+            }}
+          />
+          <SidebarUtilityNavigation
+            setSectionMenuOpen={setSectionMenuOpen}
+            setSelectedAppId={setSelectedAppId}
+            setSelectedProjectId={setSelectedProjectId}
+            setSelectedSessionId={setSelectedSessionId}
+            setView={setView}
+            view={view}
+          />
+        </div>
       </div>
       <div
         className="sidebar-resize-handle"

@@ -5,6 +5,7 @@ import {
   type Experience,
   OpenPondExtension,
   type OutputRef,
+  type ProductArea,
   SidebarFileBookmark,
   TerminalScope,
 } from "@openpond/contracts";
@@ -38,6 +39,10 @@ import { extensionSourceSelection } from "../components/settings/extension-sourc
 import { AppToastProvider } from "./AppToastContext";
 import { composerSkillsForProfile } from "../lib/profile-selection";
 import { buildExperienceHandoffMetadata } from "../lib/experience-handoff";
+import {
+  productAreaForAppView,
+  readLastChatTaskModeFromBrowser,
+} from "../lib/product-area";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
@@ -81,7 +86,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     diffPanelExpanded,
     rightPanelMode,
     activeExperience,
-    changeExperience,
     changeNewExperience,
     terminalOpen,
     settingsSection,
@@ -284,6 +288,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     startCloudSetupUpload,
     changeWorkspaceTarget,
     sendPromptFromMainComposer,
+    startScheduledWorkChat,
     openSandboxWorkspace,
     openUrlInBrowserPanel,
     showBrowserPanel,
@@ -531,6 +536,32 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setRightPanelMode,
     sidebarFileOpenRequest,
   ]);
+  const productArea = productAreaForAppView(view, activeExperience);
+  const changeProductArea = useCallback(
+    (nextProductArea: ProductArea) => {
+      setSectionMenuOpen(null);
+      setSelectedAppId(null);
+      setSelectedProjectId(null);
+      setSelectedSessionId(null);
+      if (nextProductArea === "models") {
+        setView("labs");
+        return;
+      }
+      if (nextProductArea === "development") {
+        changeNewExperience("development");
+        return;
+      }
+      changeNewExperience(readLastChatTaskModeFromBrowser());
+    },
+    [
+      changeNewExperience,
+      setSectionMenuOpen,
+      setSelectedAppId,
+      setSelectedProjectId,
+      setSelectedSessionId,
+      setView,
+    ]
+  );
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
@@ -627,8 +658,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         className={appShellClassName}
         style={appShellStyle}
         sidebar={{
+          productArea,
+          onProductAreaChange: changeProductArea,
           experience: activeExperience,
-          onExperienceChange: changeExperience,
           view,
           selectedAppId,
           selectedProjectId,
@@ -642,6 +674,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           teamThreads: teamChat.threads,
           ...communitySidebar,
           account,
+          connection,
           profile: bootstrap?.profile,
           pinnedCollapsed,
           cloudProjectsCollapsed,
@@ -777,7 +810,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "team" &&
             view !== "community" &&
             view !== "labs" &&
-            view !== "profile" &&
+            view !== "scheduled" &&
+            view !== "outputs" &&
             activeExperience === "development",
         }}
         mainPane={{
@@ -994,6 +1028,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setMentionedAppId,
           showToast,
           sendPrompt: sendPromptFromMainComposer,
+          onStartScheduledWorkChat: startScheduledWorkChat,
           stopTurn,
           syncWorkspaceLocally,
           refreshWorkspaceDiff: refreshVisibleWorkspaceDiff,

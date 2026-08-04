@@ -42,7 +42,8 @@ export type AppView =
   | "apps"
   | "get-started"
   | "labs"
-  | "profile"
+  | "outputs"
+  | "scheduled"
   | "settings";
 export type SettingsSection =
   | "account"

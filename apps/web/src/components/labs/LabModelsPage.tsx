@@ -8,6 +8,8 @@ import { Search } from "../icons";
 import { DropdownSelect } from "../DropdownSelect";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 import { ModelsTable, Pagination } from "./LabsRouteSections";
+import { LocalContinuousLearningBanner } from "./LocalContinuousLearningBanner";
+import type { ClientConnection } from "../../api";
 
 const PAGE_SIZE = 10;
 
@@ -19,6 +21,9 @@ export function LabModelsPage({
   state,
   onSelect,
   onUseModel,
+  connection,
+  signedIn,
+  onOpenResult,
 }: {
   activeProfileId: string;
   items: LabWorkproductSummary[];
@@ -27,6 +32,9 @@ export function LabModelsPage({
   state: TrainingStateResponse | null;
   onSelect: (key: string) => void;
   onUseModel: (modelId: string) => void;
+  connection: ClientConnection | null;
+  signedIn: boolean;
+  onOpenResult: (sessionId: string) => void;
 }) {
   const [profileId, setProfileId] = useState("all");
   const [query, setQuery] = useState("");
@@ -67,6 +75,12 @@ export function LabModelsPage({
 
   return (
     <div className="labs-flat-body labs-models-page">
+      <LocalContinuousLearningBanner
+        connection={connection}
+        profileId={activeProfileId}
+        signedIn={signedIn}
+        onOpenResult={onOpenResult}
+      />
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />

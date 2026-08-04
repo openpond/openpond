@@ -1,24 +1,40 @@
-import type { Experience } from "@openpond/contracts";
+import type { Experience, ProductArea } from "@openpond/contracts";
 
-export const EXPERIENCE_OPTIONS: ReadonlyArray<{
-  value: Experience;
+export type ChatTaskMode = Extract<Experience, "chat" | "work">;
+
+export const CHAT_TASK_MODE_OPTIONS: ReadonlyArray<{
+  value: ChatTaskMode;
+  label: string;
+}> = [
+  {
+    value: "chat",
+    label: "Chat",
+  },
+  {
+    value: "work",
+    label: "Work",
+  },
+];
+
+export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
+  value: ProductArea;
   label: string;
   description: string;
 }> = [
   {
     value: "chat",
     label: "Chat",
-    description: "Questions, explanations, brainstorming, and short drafts",
+    description: "Chat and complete tasks",
   },
   {
-    value: "work",
-    label: "Work",
-    description: "Multi-step tasks with reviewable results",
+    value: "models",
+    label: "Models",
+    description: "Evaluate, train, and serve models",
   },
   {
     value: "development",
     label: "Developer",
-    description: "Projects, code, and developer tools",
+    description: "Build apps and infrastructure",
   },
 ];
 

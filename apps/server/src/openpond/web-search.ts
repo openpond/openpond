@@ -1,4 +1,7 @@
-import { DEFAULT_OPENPOND_API_BASE_URL } from "@openpond/cloud";
+import {
+  DEFAULT_OPENPOND_API_BASE_URL,
+  withVercelProtectionBypass,
+} from "@openpond/cloud";
 import { loadOpenPondAccountContext, type RuntimeAccountContext } from "@openpond/runtime";
 
 export type WebSearchRequest = {
@@ -61,7 +64,7 @@ export function createHostedWebSearchExecutor(input: {
     }
     const response = await fetchImpl(endpoint, {
       method: "POST",
-      headers,
+      headers: withVercelProtectionBypass(endpoint, headers),
       body: JSON.stringify(body),
       signal: options?.signal,
     });

@@ -7,11 +7,12 @@ import {
   storedSessionExperience,
 } from "../apps/server/src/store/store-persistence";
 import {
-  SidebarExperienceMenu,
-} from "../apps/web/src/components/sidebar/SidebarExperienceMenu";
+  SidebarProductMenu,
+} from "../apps/web/src/components/sidebar/SidebarProductMenu";
 import { NewExperienceSwitcher } from "../apps/web/src/components/app-shell/NewExperienceSwitcher";
 import {
-  EXPERIENCE_OPTIONS,
+  CHAT_TASK_MODE_OPTIONS,
+  PRODUCT_AREA_OPTIONS,
   newExperienceTitle,
 } from "../apps/web/src/lib/experience-options";
 import {
@@ -19,8 +20,39 @@ import {
   WorkStarterPrompts,
 } from "../apps/web/src/components/app-shell/WorkStarterPrompts";
 import { sidebarSessionsForExperience } from "../apps/web/src/lib/experience-sessions";
+import {
+  chatTaskModeForExperience,
+  LAST_CHAT_TASK_MODE_STORAGE_KEY,
+  productAreaForAppView,
+  readLastChatTaskMode,
+  rememberLastChatTaskMode,
+} from "../apps/web/src/lib/product-area";
 
 describe("Work experience navigation", () => {
+  test("separates product areas from persisted conversation experience", () => {
+    expect(productAreaForAppView("chat", "chat")).toBe("chat");
+    expect(productAreaForAppView("chat", "work")).toBe("chat");
+    expect(productAreaForAppView("chat", "development")).toBe(
+      "development"
+    );
+    expect(productAreaForAppView("labs", "development")).toBe("models");
+    expect(chatTaskModeForExperience("development")).toBe("chat");
+  });
+
+  test("remembers only the last Chat or Work task mode", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    expect(readLastChatTaskMode(storage)).toBe("chat");
+    rememberLastChatTaskMode(storage, "work");
+    expect(readLastChatTaskMode(storage)).toBe("work");
+    rememberLastChatTaskMode(storage, "development");
+    expect(values.get(LAST_CHAT_TASK_MODE_STORAGE_KEY)).toBe("work");
+  });
+
   test("classifies only projectless pre-experience general chats as Chat", () => {
     const projectless = session({ experience: undefined });
     const projectBacked = session({
@@ -73,8 +105,8 @@ describe("Work experience navigation", () => {
 
   test("renders the wordmark trigger and truthful Work starter examples", () => {
     const menu = renderToStaticMarkup(
-      createElement(SidebarExperienceMenu, {
-        value: "work",
+      createElement(SidebarProductMenu, {
+        value: "chat",
         onChange: () => undefined,
       })
     );
@@ -86,28 +118,33 @@ describe("Work experience navigation", () => {
 
     const switcher = renderToStaticMarkup(
       createElement(NewExperienceSwitcher, {
-        value: "development",
+        value: "work",
         onChange: () => undefined,
       })
     );
 
-    expect(EXPERIENCE_OPTIONS.map((option) => option.label)).toEqual([
+    expect(PRODUCT_AREA_OPTIONS.map((option) => option.label)).toEqual([
+      "Chat",
+      "Models",
+      "Developer",
+    ]);
+    expect(CHAT_TASK_MODE_OPTIONS.map((option) => option.label)).toEqual([
       "Chat",
       "Work",
-      "Developer",
     ]);
     expect(newExperienceTitle("chat")).toBe("New chat");
     expect(newExperienceTitle("work")).toBe("New task");
     expect(newExperienceTitle("development")).toBe("New task");
     expect(menu).toContain("sidebar-experience-trigger");
     expect(menu).toContain(
-      '<span class="sidebar-experience-label">Work</span>'
+      '<span class="sidebar-experience-label">Chat</span>'
     );
-    expect(menu).toContain("OpenPond experience: Work");
+    expect(menu).toContain("OpenPond product: Chat");
     expect(menu).toContain('aria-haspopup="menu"');
     expect(switcher).toContain('role="radiogroup"');
-    expect(switcher).toContain('aria-label="Choose experience"');
-    expect(switcher).toContain('data-experience="development"');
+    expect(switcher).toContain('aria-label="Choose task mode"');
+    expect(switcher).not.toContain('data-experience="development"');
+    expect(switcher).toContain('data-experience="work"');
     expect(switcher).toContain('aria-checked="true"');
     expect(WORK_STARTER_PROMPTS).toHaveLength(4);
     for (const starter of WORK_STARTER_PROMPTS) {

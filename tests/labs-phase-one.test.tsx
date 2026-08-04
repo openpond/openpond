@@ -7,6 +7,7 @@ import {
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
+import { LocalContinuousLearningBanner } from "../apps/web/src/components/labs/LocalContinuousLearningBanner";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
   labPrimaryTabFromSearch,
@@ -79,11 +80,27 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
-  test("renders first-class Models, Tasksets, Serving, and Usage tabs", () => {
+  test("uses direct continuous-learning controls without onboarding popup copy", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LocalContinuousLearningBanner, {
+        connection: null,
+        profileId: "default",
+        signedIn: true,
+        onOpenResult: noop,
+      }),
+    );
+
+    expect(markup).toContain("Enable continuous learning");
+    expect(markup).toContain(">Docs<");
+    expect(markup).toContain('role="switch"');
+    expect(markup).not.toContain("Let Models learn from repeated work");
+    expect(markup).not.toContain("Enable nightly review");
+  });
+
+  test("keeps Models subpage navigation out of the page header", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
         activeTab: "models",
-        onTabChange: noop,
         onCreateDataset: noop,
         onCreateModel: noop,
         children: createElement("div", null, "Unified inventory"),
@@ -91,11 +108,9 @@ describe("Lab workspace", () => {
     );
 
     expect(markup).toContain('aria-label="Models"');
-    expect(markup).toContain('aria-label="Model sections"');
-    expect(markup).toContain(">Models<");
-    expect(markup).toContain(">Tasksets<");
-    expect(markup).toContain(">Serving<");
-    expect(markup).toContain(">Usage<");
+    expect(markup).not.toContain('aria-label="Model sections"');
+    expect(markup).not.toContain('role="tab"');
+    expect(markup).toContain(">New model<");
     expect(markup).not.toContain(">Profile<");
     expect(markup).not.toContain(">Home<");
     expect(markup).not.toContain(">Suggestions<");

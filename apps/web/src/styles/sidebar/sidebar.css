@@ -206,15 +206,127 @@
   min-width: 0;
 }
 
-.sidebar-docs-button.sidebar-icon {
+.sidebar-bottom-stack {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 8px;
+  margin-top: auto;
+  min-width: 0;
+}
+
+.sidebar-learning-notice {
+  display: grid;
+  gap: 8px;
+  margin: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 11px;
+}
+
+.sidebar > .sidebar-learning-notice {
+  margin-bottom: 8px;
+}
+
+.sidebar-learning-notice > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-learning-notice strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sidebar-learning-notice p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.sidebar-learning-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-learning-notice-dismiss {
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+}
+
+.sidebar-learning-notice-dismiss:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+}
+
+.sidebar-help-menu {
+  position: relative;
+}
+
+.sidebar-help-trigger.sidebar-icon {
   width: 38px;
   height: 38px;
   border-radius: 8px;
 }
 
-.sidebar-docs-button.active {
+.sidebar-help-trigger.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-help-popover {
+  position: absolute;
+  z-index: 60;
+  right: 0;
+  bottom: calc(100% + 7px);
+  display: grid;
+  width: 220px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(24, 24, 24, 0.98);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+  padding: 5px;
+}
+
+.sidebar-help-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+}
+
+.sidebar-help-item svg {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.sidebar-help-item:hover,
+.sidebar-help-item:focus-visible,
+.sidebar-help-item[aria-current="page"] {
+  outline: 0;
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .sidebar-collaboration-sections {
@@ -698,6 +810,17 @@
 .sidebar-row.nested.iconless.actions-4 {
   grid-template-columns: minmax(0, 1fr) 102px;
   padding-left: 10px;
+}
+
+/* Chat actions are hover controls, so they should overlay the title instead of
+   permanently shortening it while hidden. The meta cell still anchors the
+   controls and runtime status to the row's trailing edge. */
+.sidebar-row.sidebar-task-row {
+  grid-template-columns: 18px minmax(0, 1fr) 0;
+}
+
+.sidebar-row.sidebar-task-row.iconless {
+  grid-template-columns: minmax(0, 1fr) 0;
 }
 
 .sidebar-row.nested .row-label {
@@ -1395,6 +1518,9 @@ button.sidebar-project-location-row:disabled {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  padding: 1px 3px 1px 12px;
+  border-radius: 9px;
+  background: linear-gradient(90deg, transparent 0, var(--panel) 12px);
   opacity: 0;
   pointer-events: none;
   transform: translateY(-50%);

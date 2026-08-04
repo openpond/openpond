@@ -4,7 +4,11 @@ import type {
   WorkspaceToolRequest,
   WorkspaceToolResult,
 } from "@openpond/contracts";
-import { WORK_FORMAT_CAPABILITIES } from "@openpond/contracts";
+import {
+  CreateHostedSavedWorkRequestSchema,
+  WORK_FORMAT_CAPABILITIES,
+  type CreateHostedSavedWorkRequest,
+} from "@openpond/contracts";
 import type {
   ModelToolDefinition,
   ModelToolExecutionContext,
@@ -30,6 +34,9 @@ export function createWorkModelToolDefinitions(deps: {
   ) => Promise<WorkspaceToolResult>;
   inputs?: ReadonlyArray<WorkRuntimeInput>;
   automaticLifecycle?: boolean;
+  createScheduledWork?: (
+    input: CreateHostedSavedWorkRequest
+  ) => Promise<Record<string, unknown>>;
 }): ModelToolDefinition[] {
   const runtime = createWorkRuntimeService(deps);
 
@@ -63,6 +70,40 @@ export function createWorkModelToolDefinitions(deps: {
     };
 
   const definitions: ModelToolDefinition[] = [
+    ...(deps.createScheduledWork
+      ? [
+          {
+            name: "schedule_work",
+            description:
+              "Create durable recurring Work only when the user directly asks to schedule the current or another task and provides an exact cadence, local date/time, and timezone. Use the conversation context to preserve the task prompt. Ask only for missing scheduling details before calling this tool. The scheduled prompt must describe the work to perform when the schedule fires, not the scheduling request itself.",
+            parameters: savedWorkScheduleParameters(),
+            execute: async (context: ModelToolExecutionContext) => {
+              const input = CreateHostedSavedWorkRequestSchema.parse({
+                ...context.args,
+                clientRequestId: `${context.turnId}:${context.callId}`,
+                sourceTurnId: context.turnId,
+                modelId:
+                  context.provider === "openpond"
+                    ? context.model
+                    : "openpond-chat",
+              });
+              const data = await deps.createScheduledWork!(input);
+              return {
+                toolCallId: context.callId,
+                name: "schedule_work",
+                ok: true,
+                contentText: JSON.stringify({
+                  ok: true,
+                  action: "schedule_work",
+                  output: `Created scheduled Work: ${input.name}.`,
+                  data,
+                }),
+                data,
+              };
+            },
+          } satisfies ModelToolDefinition,
+        ]
+      : []),
     {
       name: "work_capabilities",
       description:
@@ -508,8 +549,8 @@ export function createWorkModelToolDefinitions(deps: {
                   enum: ["passed", "failed", "not_run"],
                 },
                 label: { type: "string", minLength: 1, maxLength: 240 },
-                detail: { type: ["string", "null"], maxLength: 4_000 },
-                ref: { type: ["string", "null"], maxLength: 4_096 },
+                detail: { type: "string", maxLength: 4_000 },
+                ref: { type: "string", maxLength: 4_096 },
               },
               required: ["kind", "status", "label"],
             },
@@ -565,8 +606,8 @@ export function createWorkModelToolDefinitions(deps: {
                   enum: ["passed", "failed", "not_run"],
                 },
                 label: { type: "string", minLength: 1, maxLength: 240 },
-                detail: { type: ["string", "null"], maxLength: 4_000 },
-                ref: { type: ["string", "null"], maxLength: 4_096 },
+                detail: { type: "string", maxLength: 4_000 },
+                ref: { type: "string", maxLength: 4_096 },
               },
               required: ["kind", "status", "label"],
             },
@@ -646,6 +687,71 @@ export function createWorkModelToolDefinitions(deps: {
           definition.name !== "work_stop"
       )
     : definitions;
+}
+
+function savedWorkScheduleParameters(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 180 },
+      prompt: { type: "string", minLength: 1, maxLength: 20_000 },
+      recurrence: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          version: { type: "integer", enum: [1] },
+          kind: {
+            type: "string",
+            enum: ["once", "daily", "weekdays", "weekly", "monthly"],
+          },
+          timeZone: { type: "string", minLength: 1, maxLength: 100 },
+          startDate: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+          localTime: { type: "string", pattern: "^\\d{2}:\\d{2}$" },
+          weekdays: {
+            type: "array",
+            minItems: 1,
+            maxItems: 7,
+            items: {
+              type: "string",
+              enum: [
+                "sunday",
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+              ],
+            },
+          },
+          dayOfMonth: { type: "integer", minimum: 1, maximum: 31 },
+          end: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              kind: {
+                type: "string",
+                enum: ["never", "on_date", "after_occurrences"],
+              },
+              date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+              occurrences: { type: "integer", minimum: 1, maximum: 100_000 },
+            },
+            required: ["kind"],
+          },
+        },
+        required: [
+          "version",
+          "kind",
+          "timeZone",
+          "startDate",
+          "localTime",
+          "end",
+        ],
+      },
+    },
+    required: ["name", "prompt", "recurrence"],
+  };
 }
 
 function workspaceToolResult(

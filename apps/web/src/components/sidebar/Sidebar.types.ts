@@ -10,6 +10,7 @@ import type {
   CommunityChannel,
   CommunitySummary,
   Experience,
+  ProductArea,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
@@ -23,10 +24,12 @@ import type { TerminalScopeSummary } from "../terminal/terminal-state";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { OpenPondOrganization } from "../../lib/organization-types";
+import type { ClientConnection } from "../../api";
 
 export type SidebarProps = {
+  productArea: ProductArea;
+  onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;
-  onExperienceChange: (experience: Experience) => void;
   view: AppView;
   selectedAppId: string | null;
   selectedProjectId: string | null;
@@ -45,6 +48,7 @@ export type SidebarProps = {
   selectedCommunityId: string | null;
   selectedCommunityChannelId: string | null;
   account: AccountState | null;
+  connection: ClientConnection | null;
   profile: BootstrapPayload["profile"] | null | undefined;
   pinnedCollapsed: boolean;
   cloudProjectsCollapsed: boolean;

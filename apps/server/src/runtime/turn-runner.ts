@@ -241,6 +241,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     readOpenPondExtensionSkill,
     executeProfileSkillCommand,
     executeWebSearch,
+    createScheduledWork,
     executeConnectedAppTool,
     browserToolExecutor,
     manageSidebarFile,
@@ -676,9 +677,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeOpenPondCommand,
     executeWorkspaceTool,
     executeWebSearch,
+    createScheduledWork,
     executeProfileAction,
     executeCrossSystemTool,
     loadOpenPondProfileStateForRef,
+    getContinuousLearningConversations: deps.getContinuousLearningConversations,
   });
 
   function createNativeModelToolDefinitions(

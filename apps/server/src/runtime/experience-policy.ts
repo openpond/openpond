@@ -22,6 +22,7 @@ const WORK_MODEL_TOOLS = new Set([
   "openpond_browser_snapshot",
   "openpond_browser_type",
   "profile_skill_read",
+  "schedule_work",
   "view_image",
   "web_fetch",
   "web_search",

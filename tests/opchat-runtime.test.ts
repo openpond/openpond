@@ -150,6 +150,7 @@ describe("OpenPond runtime OpChat routing", () => {
           messages: [{ role: "user", content: "hello" }],
           reasoning_effort: "high",
           stream: true,
+          thinking: { type: "enabled" },
         },
       },
     ]);

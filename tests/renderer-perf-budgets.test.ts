@@ -454,6 +454,9 @@ function sidebarProps(chatCount: number): SidebarProps {
     };
   });
   return {
+    productArea: "development",
+    onProductAreaChange: noop,
+    experience: "development",
     view: "chat",
     selectedAppId: null,
     selectedProjectId: null,

@@ -1,6 +1,6 @@
 import type { BootstrapPayload, LocalAgentSchedule } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
-import { useLocalAgentSchedules } from "../agents/LocalAgentSchedulesPanel";
+import { useLocalAgentSchedules } from "../../hooks/useLocalAgentSchedules";
 import { Bot, Pause, Play, RefreshCw, RotateCcw } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
 

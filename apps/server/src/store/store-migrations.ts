@@ -43,4 +43,8 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 33,
     run: (store) => store.retireGoalAndInsightsStorage(),
   },
+  {
+    version: 34,
+    run: (store) => store.createLocalContinuousLearningTables(),
+  },
 ];

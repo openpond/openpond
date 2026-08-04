@@ -7,25 +7,25 @@ export const WORK_STARTER_PROMPTS: ReadonlyArray<{
   icon: LucideIcon;
 }> = [
   {
-    label: "Turn notes into a polished report",
+    label: "Turn meeting notes into an executive report",
     prompt:
       "Turn my notes and attached source material into a polished report. Organize the key findings, identify missing information, and return a draft for my review.",
     icon: FileText,
   },
   {
-    label: "Analyze a spreadsheet",
+    label: "Find trends and anomalies in a spreadsheet",
     prompt:
       "Analyze the attached spreadsheet. Check the calculations, summarize the most important findings, flag anomalies or missing data, and create a reviewable results file.",
     icon: ChartColumnStacked,
   },
   {
-    label: "Research options and recommend one",
+    label: "Compare options and recommend the best fit",
     prompt:
       "Research the best options for this decision. Compare the most important criteria, cite the sources, flag uncertainty, and return a recommendation with next steps.",
     icon: Search,
   },
   {
-    label: "Create a presentation from source material",
+    label: "Build a presentation from source materials",
     prompt:
       "Create a concise presentation from my attached source material. Focus on the main themes and supporting evidence, separate findings from recommendations, and return a draft for my review.",
     icon: Lightbulb,

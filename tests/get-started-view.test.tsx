@@ -88,6 +88,7 @@ describe("GetStartedView", () => {
     const pageHtml = renderToStaticMarkup(
       createElement(GetStartedView, getStartedProps)
     );
+    expect(pageHtml).toContain('aria-label="Walkthroughs"');
     expect(pageHtml.match(/get-started-section-heading/g)).toHaveLength(3);
     expect(pageHtml).toContain(
       'id="get-started-start-here-title">Start here</h2>'

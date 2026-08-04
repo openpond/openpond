@@ -18,7 +18,6 @@ type UseLayoutPreferencesInput = {
   connection: ClientConnection | null;
   preferences: BootstrapPayload["preferences"] | undefined;
   sidebarOpen: boolean;
-  diffPanelOpen: boolean;
   diffPanelExpanded: boolean;
   setBootstrap: Dispatch<SetStateAction<BootstrapPayload | null>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -28,7 +27,6 @@ export function useLayoutPreferences({
   connection,
   preferences,
   sidebarOpen,
-  diffPanelOpen,
   diffPanelExpanded,
   setBootstrap,
   setError,
@@ -195,7 +193,7 @@ export function useLayoutPreferences({
 
   const startDiffPanelResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
-      if (!diffPanelOpen || diffPanelExpanded) return;
+      if (diffPanelExpanded) return;
       event.preventDefault();
       const startX = event.clientX;
       const startWidth = diffPanelWidth;
@@ -219,7 +217,7 @@ export function useLayoutPreferences({
       window.addEventListener("pointermove", onPointerMove);
       window.addEventListener("pointerup", onPointerUp, { once: true });
     },
-    [diffPanelExpanded, diffPanelOpen, diffPanelWidth, persistDiffPanelWidth]
+    [diffPanelExpanded, diffPanelWidth, persistDiffPanelWidth]
   );
 
   return {

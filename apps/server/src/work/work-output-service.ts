@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
   FileOutputRefSchema,
+  WorkOutputsResponseSchema,
   WORK_OUTPUT_CONTENT_TYPES,
   WORK_OUTPUT_MAX_BYTES,
   workFormatCapabilityForContentType,
@@ -244,6 +245,27 @@ export function createWorkOutputService(input: {
     }));
   }
 
+  async function listWorkOutputs(
+    sessions: Session[]
+  ): Promise<{ outputs: FileOutputRef[] }> {
+    const outputGroups = await Promise.all(
+      sessions
+        .filter((session) => session.experience === "work")
+        .map(async (session) =>
+          activeFileOutputRefs(
+            await input.runtimeEventsForSession(session.id)
+          )
+        )
+    );
+    return WorkOutputsResponseSchema.parse({
+      outputs: outputGroups
+        .flat()
+        .sort((left, right) =>
+          right.createdAt.localeCompare(left.createdAt)
+        ),
+    });
+  }
+
   async function resolveLocalOutput(request: {
     session: Session;
     outputId: string;
@@ -321,11 +343,38 @@ export function createWorkOutputService(input: {
   return {
     outputRoot,
     deleteWorkOutput,
+    listWorkOutputs,
     readWorkOutput,
     saveAllWorkOutputs,
     saveWorkOutput,
     workInputsForSession,
   };
+}
+
+function activeFileOutputRefs(events: RuntimeEvent[]): FileOutputRef[] {
+  const outputs = new Map<string, FileOutputRef>();
+  const deleted = new Set<string>();
+  for (const event of events) {
+    const refs = fileOutputRefs(event.data);
+    if (event.action === "work_output_delete" && event.status === "completed") {
+      for (const output of refs) {
+        const key = fileOutputRevisionKey(output);
+        deleted.add(key);
+        outputs.delete(key);
+      }
+      continue;
+    }
+    if (event.action === "work_output_read") continue;
+    for (const output of refs) {
+      const key = fileOutputRevisionKey(output);
+      if (!deleted.has(key)) outputs.set(key, output);
+    }
+  }
+  return [...outputs.values()];
+}
+
+function fileOutputRevisionKey(output: FileOutputRef): string {
+  return `${output.sourceTaskId}:${output.id}:${output.revision}`;
 }
 
 function validateWorkOutput(input: {

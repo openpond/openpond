@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import type { RuntimeEvent, Session } from "@openpond/contracts";
+import type { FileOutputRef, RuntimeEvent, Session } from "@openpond/contracts";
 import { createWorkOutputService } from "./work-output-service.js";
 
 const temporaryDirectories: string[] = [];
@@ -85,11 +85,44 @@ describe("Work output service automatic preservation", () => {
       }),
     ]);
   });
+
+  test("lists active output files across Work tasks newest first", async () => {
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-work-output-list-")
+    );
+    temporaryDirectories.push(storeDir);
+    const older = outputRef("task_1", "older", "Older.pdf", "2026-08-01T12:00:00.000Z");
+    const removed = outputRef("task_1", "removed", "Removed.pdf", "2026-08-02T12:00:00.000Z");
+    const newer = outputRef("task_2", "newer", "Newer.csv", "2026-08-03T12:00:00.000Z");
+    const eventsBySession: Record<string, RuntimeEvent[]> = {
+      task_1: [
+        outputEvent("created_older", older),
+        outputEvent("created_removed", removed),
+        outputEvent("deleted_removed", removed, "work_output_delete"),
+      ],
+      task_2: [outputEvent("created_newer", newer)],
+    };
+    const service = createWorkOutputService({
+      deviceId: "device_1",
+      storeDir,
+      runtimeEventsForSession: async (sessionId) => eventsBySession[sessionId] ?? [],
+    });
+
+    const result = await service.listWorkOutputs([
+      workSession("task_1"),
+      workSession("task_2"),
+    ]);
+
+    expect(result.outputs.map((output) => output.title)).toEqual([
+      "Newer.csv",
+      "Older.pdf",
+    ]);
+  });
 });
 
-function workSession(): Session {
+function workSession(id = "work_task_1"): Session {
   return {
-    id: "work_task_1",
+    id,
     experience: "work",
     provider: "openpond",
     modelRef: null,
@@ -109,5 +142,47 @@ function workSession(): Session {
     archived: false,
     order: 0,
     metadata: {},
+  };
+}
+
+function outputRef(
+  sourceTaskId: string,
+  id: string,
+  title: string,
+  createdAt: string
+): FileOutputRef {
+  return {
+    kind: "file",
+    id,
+    title,
+    contentType: title.endsWith(".csv") ? "text/csv" : "application/pdf",
+    sizeBytes: 100,
+    sha256: "a".repeat(64),
+    sourceTaskId,
+    sourceTurnId: `turn_${id}`,
+    revision: 1,
+    createdAt,
+    location: {
+      kind: "local",
+      path: `/managed/${sourceTaskId}/${title}`,
+      deviceId: "device_1",
+    },
+    validation: [],
+  };
+}
+
+function outputEvent(
+  id: string,
+  output: FileOutputRef,
+  action = "work_output_save"
+): RuntimeEvent {
+  return {
+    id,
+    timestamp: output.createdAt,
+    name: "workspace_action_result",
+    action,
+    status: "completed",
+    sessionId: output.sourceTaskId,
+    data: { outputRef: output },
   };
 }

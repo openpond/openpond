@@ -64,6 +64,28 @@ Use the installed Dataset Builder actions for design, materialization, and
 testing, following their schemas internally. Do not recite those schemas in the
 chat.
 
+## Reviewing consented conversations
+
+When `get_conversations` is available for conversation-backed authoring:
+
+1. Call `get_conversations` exactly once without arguments. Never supply or
+   infer an owner, Team, conversation list, source ID, watermark, or budget.
+2. Use only the conversations and source references returned by the tool.
+   Do not search conversation archives, connected apps, files, or the web for
+   additional evidence.
+3. Identify recurrence across the returned conversations and return at most
+   three recommendations. For each pattern, explain whether the
+   next step should be a Taskset, Skill, prompting, retrieval, or no action.
+4. Prefer retrieval or no action for changing knowledge, privacy-sensitive
+   evidence, weak recurrence, or low-verifiability patterns. A candidate needs
+   at least three independent occurrences before Taskset recommendation.
+5. Cite the returned source reference IDs without repeating unrestricted source
+   content. If the tool returns no conversations, write a concise no-recommendation
+   result using its reason.
+6. If the Work item asks only for suggestions, stop after the recommendation.
+   Do not materialize a Taskset, create a grader, start an Evaluation or
+   training Run, create a Model Version, deploy, bind, or request Work compute.
+
 Treat fixed synthetic smoke fixtures as diagnostics rather than evidence of a
 general capability. Historical assistant messages are candidate outcomes, not
 automatically approved demonstrations. Frozen evaluation tasks never become

@@ -410,6 +410,10 @@ export type TurnRunnerDependencies = {
   }) => Promise<ProfileSkillReadResult>;
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
+  getContinuousLearningConversations?: (
+    session: Session,
+    args: unknown
+  ) => Promise<import("@openpond/contracts").GetConversationsToolResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (
     name: string
@@ -419,6 +423,9 @@ export type TurnRunnerDependencies = {
     profileRef: OpenPondProfileRef | null;
   }) => Promise<ProfileSkillCommandResult | null>;
   executeWebSearch?: WebSearchExecutor;
+  createScheduledWork?: (
+    input: import("@openpond/contracts").CreateHostedSavedWorkRequest
+  ) => Promise<Record<string, unknown>>;
   executeConnectedAppTool?: ConnectedAppToolExecutor;
   browserToolExecutor?: BrowserHarnessToolExecutor;
   manageSidebarFile?: (input: {

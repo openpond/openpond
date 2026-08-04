@@ -80,6 +80,7 @@ import { useTeamChatIncomingToast } from "../hooks/useTeamChatIncomingToast";
 import { useCommunityController } from "../hooks/useCommunityController";
 import { useOpenPondOrganizations } from "../hooks/useOpenPondOrganizations";
 import { useConnectedAppStatusRows } from "../hooks/useConnectedAppStatusRows";
+import { rememberLastChatTaskModeInBrowser } from "../lib/product-area";
 import { api } from "../api";
 
 export function useAppPrimaryRuntime() {
@@ -347,7 +348,6 @@ export function useAppPrimaryRuntime() {
     connection,
     preferences: bootstrap?.preferences,
     sidebarOpen,
-    diffPanelOpen,
     diffPanelExpanded,
     setBootstrap,
     setError,
@@ -374,6 +374,9 @@ export function useAppPrimaryRuntime() {
     sessions,
   });
   const activeExperience = selectedSession?.experience ?? draftExperience;
+  useEffect(() => {
+    rememberLastChatTaskModeInBrowser(activeExperience);
+  }, [activeExperience]);
   const experienceSidebarSessions = useMemo(
     () => sidebarSessionsForExperience(sidebarSessions, activeExperience),
     [activeExperience, sidebarSessions]

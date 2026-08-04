@@ -92,7 +92,8 @@ import {
   LabsRoute,
   LabSkillSidebar,
   NativeSkillSidebar,
-  ProfileView,
+  OutputsPage,
+  ScheduledWorkPage,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
@@ -228,6 +229,7 @@ export function MainPane({
   setMentionedAppId,
   showToast,
   sendPrompt,
+  onStartScheduledWorkChat,
   stopTurn,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
@@ -1419,18 +1421,19 @@ export function MainPane({
         <Suspense fallback={null}>
           <GetStartedView />
         </Suspense>
-      ) : view === "profile" ? (
+      ) : view === "scheduled" ? (
         <Suspense fallback={null}>
-          <ProfileView
-            catalogPresentation="select"
-            className="profile-page"
-            payload={bootstrap}
+          <ScheduledWorkPage
             connection={connection}
-            onPayload={onPayload}
-            onError={onError}
-            onToast={showToast}
-            onSkillCommand={openProfileSkillCommand}
+            detailExpanded={diffPanelExpanded}
+            onDetailResizeStart={onDiffPanelResizeStart}
+            onToggleDetailExpanded={onToggleDiffPanelExpanded}
+            onStartWorkChat={onStartScheduledWorkChat}
           />
+        </Suspense>
+      ) : view === "outputs" ? (
+        <Suspense fallback={null}>
+          <OutputsPage connection={connection} onViewChat={onOpenSession} />
         </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
@@ -1689,10 +1692,12 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            <NewExperienceSwitcher
-              value={experience}
-              onChange={onNewExperienceChange}
-            />
+            {experience === "development" ? null : (
+              <NewExperienceSwitcher
+                value={experience}
+                onChange={onNewExperienceChange}
+              />
+            )}
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {experience === "work" ? (

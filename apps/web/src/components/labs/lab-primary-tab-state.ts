@@ -1,6 +1,7 @@
 import type { LabPrimaryTab } from "./LabsView";
 
 const LAB_TAB_QUERY_KEY = "modelsTab";
+export const LAB_PRIMARY_TAB_CHANGE_EVENT = "openpond:models-tab-change";
 const LAB_PRIMARY_TABS = new Set<LabPrimaryTab>([
   "models",
   "tasksets",
