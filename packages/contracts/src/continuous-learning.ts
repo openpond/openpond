@@ -14,7 +14,7 @@ export const MAX_REVIEW_CONVERSATION_MESSAGES = 16;
 export const CONTINUOUS_LEARNING_TEMPLATE_KEY =
   "openpond.continuous-learning-review.v1" as const;
 export const CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT_VERSION =
-  "openpond.continuous-learning-review-prompt.v1" as const;
+  "openpond.continuous-learning-review-prompt.v2" as const;
 export const CONTINUOUS_LEARNING_DEFAULT_POLICY_VERSION =
   "openpond.continuous-learning-policy.v1" as const;
 export const CONTINUOUS_LEARNING_DEFAULT_POLICY = {
@@ -38,10 +38,10 @@ export const CONTINUOUS_LEARNING_DEFAULT_POLICY = {
   },
 } as const;
 export const CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT = [
-  "Review the eligible conversations for recurring, verifiable opportunities to improve future model behavior.",
-  "Call get_conversations exactly once. Its scope is already configured for this Work item.",
-  "Use the OpenPond Taskset Authoring skill to review the returned conversations and recommend at most three next actions: Taskset, Skill, prompting, retrieval, or no action.",
-  "Cite only returned source reference IDs and do not request other conversation, file, browser, shell, connected-app, or workspace access.",
+  "Review the bounded Work-first evidence for recurring, verifiable opportunities to improve future model behavior.",
+  "Call get_conversations exactly once. Its Work and chat lanes, scope, consent, watermark, and budgets are already configured for this Work item.",
+  "Use verified Work as the strongest outcome evidence, successful Work next, failed Work only for discovery, and chat only as recurrence context. Recommend at most three next actions: Taskset, Skill, prompting, retrieval, or no action.",
+  "Cite only returned source reference IDs. Treat feedback as recommendation evidence, never as reward. Do not request other conversation, trace, file, browser, shell, connected-app, or workspace access.",
   "Write a concise human-readable recommendation, then append exactly one <openpond-continuous-learning-recommendation> JSON object </openpond-continuous-learning-recommendation>. The JSON must contain schemaVersion openpond.continuousLearningRecommendation.v1, the configured scope, recommendations, and noRecommendationReason. Each recommendation must contain candidateFingerprint, title, summary, rationale, proposedAction, and at least three returned sourceReferenceIds.",
   "Stop after writing the recommendation. Do not materialize a Taskset or start an Evaluation, training Run, Model Version, deployment, or binding.",
 ].join("\n\n");
@@ -286,13 +286,36 @@ export const ContinuousLearningReceiptSchema = z
         contentHash: z.string().trim().min(1).max(512),
       })
       .strict(),
-    evidenceContractVersion: z.literal(
-      GET_CONVERSATIONS_CONTRACT_VERSION,
-    ),
+    evidenceContractVersion: z.union([
+      z.literal(GET_CONVERSATIONS_CONTRACT_VERSION),
+      z.literal("openpond.learningEvidenceView.v1"),
+    ]),
     inputWatermark: WatermarkSchema.nullable(),
     outputWatermark: WatermarkSchema.nullable(),
     consideredSourceCount: z.number().int().nonnegative(),
     excludedCounts: ReviewConversationExcludedCountsSchema,
+    evidenceLaneCounts: z
+      .object({
+        work: z
+          .object({
+            considered: z.number().int().nonnegative(),
+            excluded: z.number().int().nonnegative(),
+            selected: z.number().int().nonnegative(),
+            revoked: z.number().int().nonnegative(),
+          })
+          .strict(),
+        chat: z
+          .object({
+            considered: z.number().int().nonnegative(),
+            excluded: z.number().int().nonnegative(),
+            selected: z.number().int().nonnegative(),
+            revoked: z.number().int().nonnegative(),
+          })
+          .strict(),
+      })
+      .strict()
+      .nullable()
+      .default(null),
     selectedSourceReferences: z
       .array(ReviewConversationSourceReferenceSchema)
       .max(

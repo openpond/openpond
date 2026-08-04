@@ -413,7 +413,7 @@ export type TurnRunnerDependencies = {
   getContinuousLearningConversations?: (
     session: Session,
     args: unknown
-  ) => Promise<import("@openpond/contracts").GetConversationsToolResult>;
+  ) => Promise<import("@openpond/contracts").GetLearningEvidenceToolResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (
     name: string

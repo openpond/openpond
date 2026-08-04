@@ -6,7 +6,9 @@ import {
   CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT,
   CONTINUOUS_LEARNING_SCOPE_OPTIONS,
   ContinuousLearningReceiptSchema,
+  GET_LEARNING_EVIDENCE_CONTRACT_VERSION,
   GET_CONVERSATIONS_CONTRACT_VERSION,
+  GetLearningEvidenceToolResultSchema,
   GetConversationsToolInputSchema,
   GetConversationsToolResultSchema,
   MAX_REVIEW_CONVERSATIONS,
@@ -80,6 +82,36 @@ describe("continuous-learning contracts", () => {
     expect(CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT).toContain(
       "Do not materialize a Taskset",
     );
+    expect(CONTINUOUS_LEARNING_RECOMMENDATION_PROMPT).toContain(
+      "verified Work as the strongest outcome evidence",
+    );
+  });
+
+  it("returns a versioned Work-first view from get_conversations", () => {
+    expect(
+      GetLearningEvidenceToolResultSchema.safeParse({
+        schemaVersion: GET_LEARNING_EVIDENCE_CONTRACT_VERSION,
+        scope: "personal",
+        inputWatermark: null,
+        proposedWatermark: "2026-08-04T12:00:00.000Z",
+        lanes: {
+          work: {
+            counts: { considered: 0, excluded: 0, selected: 0, revoked: 0 },
+            evidence: [],
+          },
+          chat: {
+            counts: { considered: 1, excluded: 0, selected: 1, revoked: 0 },
+            evidence: [
+              {
+                purpose: "recurrence_context",
+                conversation: conversation(1),
+              },
+            ],
+          },
+        },
+        emptyReason: null,
+      }).success,
+    ).toBe(true);
   });
 
   it("keeps full_team visible but outside the callable scope", () => {

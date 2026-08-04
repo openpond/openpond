@@ -112,6 +112,22 @@ export class SqliteWorkEvidenceStore extends SqliteSidebarFileBookmarkStore {
       : null;
   }
 
+  async listWorkEvidenceProjections(
+    limit = 100,
+  ): Promise<StoredWorkEvidenceProjection[]> {
+    await this.ready;
+    await this.writeQueue;
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 1_000);
+    const rows = await this.all<PayloadRow>(
+      `SELECT payload FROM work_evidence_receipts
+       ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [boundedLimit],
+    );
+    return rows.map((row) =>
+      StoredWorkEvidenceProjectionSchema.parse(JSON.parse(row.payload))
+    );
+  }
+
   async saveWorkFeedback(input: StoredWorkFeedback): Promise<StoredWorkFeedback> {
     const feedback = StoredWorkFeedbackSchema.parse(input);
     await this.ready;
