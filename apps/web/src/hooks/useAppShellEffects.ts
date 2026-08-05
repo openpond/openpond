@@ -15,6 +15,14 @@ export function shouldForceCloudWorkspaceProviderOpenPond(session: Session | nul
   );
 }
 
+export function sessionModelSelectionSyncKey(
+  session: Pick<Session, "id" | "provider" | "modelRef">,
+  providerSettings: ProviderSettings | null,
+): string {
+  const selection = modelSelectionForSession(session, providerSettings);
+  return `${session.id}\u0000${selection.provider}\u0000${selection.model}`;
+}
+
 export function useAppShellEffects({
   activeWorkspaceId,
   activeWorkspaceKind,
@@ -58,7 +66,7 @@ export function useAppShellEffects({
   setTerminalOpen: Dispatch<SetStateAction<boolean>>;
   toast: AppToast | null;
 }) {
-  const lastSyncedSessionIdRef = useRef<string | null>(null);
+  const lastSyncedModelSelectionRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!selectedAppId) return;
@@ -109,13 +117,14 @@ export function useAppShellEffects({
 
   useEffect(() => {
     if (!selectedSessionId) {
-      lastSyncedSessionIdRef.current = null;
+      lastSyncedModelSelectionRef.current = null;
       return;
     }
     if (!selectedSession || selectedSession.id !== selectedSessionId) return;
-    if (lastSyncedSessionIdRef.current === selectedSession.id) return;
+    const syncKey = sessionModelSelectionSyncKey(selectedSession, providerSettings);
+    if (lastSyncedModelSelectionRef.current === syncKey) return;
 
-    lastSyncedSessionIdRef.current = selectedSession.id;
+    lastSyncedModelSelectionRef.current = syncKey;
     const selection = modelSelectionForSession(selectedSession, providerSettings);
     setDraftProvider(selection.provider);
     setDraftModel(selection.model);

@@ -65,6 +65,89 @@ describe("codex history", () => {
     expect(parsed.events[2]?.output).toBe("thread loaded");
   });
 
+  test("keeps projected message and turn identities stable across tail windows", () => {
+    const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+    const sessionId = codexHistorySessionId(threadId);
+    const providerTurnId = "019fd07a-3194-7e60-95fd-1df9e6f4001e";
+    const sharedRecords = [
+      {
+        type: "response_item",
+        timestamp: "2026-05-29T00:03:00.000Z",
+        payload: {
+          type: "message",
+          id: "msg_stable_user",
+          role: "user",
+          internal_chat_message_metadata_passthrough: {
+            turn_id: providerTurnId,
+          },
+          content: [{ type: "input_text", text: "latest prompt" }],
+        },
+      },
+      {
+        type: "response_item",
+        timestamp: "2026-05-29T00:04:00.000Z",
+        payload: {
+          type: "message",
+          id: "msg_stable_assistant",
+          role: "assistant",
+          phase: "final_answer",
+          internal_chat_message_metadata_passthrough: {
+            turn_id: providerTurnId,
+          },
+          content: [{ type: "output_text", text: "latest response" }],
+        },
+      },
+    ];
+    const earlierRecords = [
+      {
+        type: "response_item",
+        timestamp: "2026-05-29T00:01:00.000Z",
+        payload: {
+          type: "message",
+          id: "msg_earlier_user",
+          role: "user",
+          content: [{ type: "input_text", text: "earlier prompt" }],
+        },
+      },
+      {
+        type: "response_item",
+        timestamp: "2026-05-29T00:02:00.000Z",
+        payload: {
+          type: "message",
+          id: "msg_earlier_assistant",
+          role: "assistant",
+          phase: "final_answer",
+          content: [{ type: "output_text", text: "earlier response" }],
+        },
+      },
+    ];
+    const parse = (records: Parameters<typeof parseCodexSessionRecords>[0]) =>
+      parseCodexSessionRecords(records, {
+        fallbackTimestamp: "2026-05-29T00:00:00.000Z",
+        sessionId,
+        threadId,
+      });
+
+    const full = parse([...earlierRecords, ...sharedRecords]);
+    const tail = parse(sharedRecords);
+    const sharedEvent = (events: typeof full.events, name: string) =>
+      events.find(
+        (event) =>
+          event.name === name &&
+          (event.output === "latest response" || event.args?.prompt === "latest prompt"),
+      );
+    const fullStarted = sharedEvent(full.events, "turn.started");
+    const tailStarted = sharedEvent(tail.events, "turn.started");
+    const fullAssistant = sharedEvent(full.events, "assistant.delta");
+    const tailAssistant = sharedEvent(tail.events, "assistant.delta");
+
+    expect(tailStarted?.id).toBe(fullStarted?.id);
+    expect(tailAssistant?.id).toBe(fullAssistant?.id);
+    expect(tailStarted?.turnId).toBe(fullStarted?.turnId);
+    expect(tailAssistant?.turnId).toBe(fullAssistant?.turnId);
+    expect(tailAssistant?.turnId).toContain(providerTurnId);
+  });
+
   test("hides Codex attachment context from visible user prompts", () => {
     const sessionId = codexHistorySessionId("019e7138-5da2-7671-8837-202a36e0fff1");
     const parsed = parseCodexSessionRecords(

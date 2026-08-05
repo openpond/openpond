@@ -818,6 +818,8 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .composer-inline-input[data-empty="true"]::before {

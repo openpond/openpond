@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 type IdentifiedMessage = { id: string };
 
@@ -24,18 +24,24 @@ export function useNewMessageIds(
   const snapshotRef = useRef({
     scopeKey,
     ids: new Set(messages.map((message) => message.id)),
+    initialized: messages.length > 0,
   });
+  const sameScope = snapshotRef.current.scopeKey === scopeKey;
   const newIds =
-    snapshotRef.current.scopeKey === scopeKey
+    sameScope && snapshotRef.current.initialized
       ? unseenMessageIds(messages, snapshotRef.current.ids)
       : new Set<string>();
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     snapshotRef.current = {
       scopeKey,
       ids: new Set(messages.map((message) => message.id)),
+      initialized:
+        sameScope && snapshotRef.current.initialized
+          ? true
+          : messages.length > 0,
     };
-  }, [messages, scopeKey]);
+  }, [messages, sameScope, scopeKey]);
 
   return newIds;
 }

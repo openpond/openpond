@@ -231,7 +231,8 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     kind === "command"
       ? { callId: activityCallId(item) ?? undefined }
       : {}),
-    ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
+    ...(kind && item.name === "command.output" ? { detail: commandOutputFromEvent(item) } : {}),
+    ...(kind === "command" ? { terminal: commandTerminalFromEvent(item) } : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
     ...(openSession ? { openSession } : {}),
@@ -246,11 +247,17 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   if (item.name === "tool.completed") {
     const existing = findMatchingCommandActivity(activities, item);
     if (!existing) return false;
+    const durationMs = elapsedMilliseconds(existing.timestamp, item.timestamp);
     existing.label = item.status === "failed" ? "Failed" : "Ran";
     existing.state = activity.state;
     existing.timestamp = item.timestamp;
     existing.artifacts = activity.artifacts;
-    const output = cleanCommandOutput(item.output ?? "");
+    existing.terminal = {
+      ...existing.terminal,
+      ...activity.terminal,
+      ...(durationMs !== null ? { durationMs } : {}),
+    };
+    const output = commandOutputFromEvent(item);
     if (output && output !== existing.content) existing.detail = appendCommandOutput(existing.detail, output);
     return true;
   }
@@ -258,10 +265,12 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   if (item.name === "command.output") {
     const existing = findMatchingCommandActivity(activities, item);
     if (!existing) return false;
-    const output = cleanCommandOutput(item.output ?? "");
+    const output = commandOutputFromEvent(item);
     if (output) existing.detail = appendCommandOutput(existing.detail, output);
+    existing.terminal = { ...existing.terminal, ...activity.terminal };
     existing.timestamp = item.timestamp;
-    if (existing.state !== "completed" && existing.state !== "failed") existing.state = "running";
+    if (activity.state === "failed") existing.state = "failed";
+    else if (existing.state !== "completed" && existing.state !== "failed") existing.state = "running";
     return true;
   }
 
@@ -598,11 +607,18 @@ function commandTextFromEvent(item: RuntimeEvent): string | null {
   const data = asRecord(item.data);
   const type = stringValue(data, ["type"]);
   const tool = stringValue(data, ["tool", "toolName", "tool_name", "name", "functionName", "function_name"]);
+  const result = asRecord(data?.result);
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const parsedOutputData = asRecord(parsedOutput?.data);
   const direct =
     stringValue(data, ["command", "cmd"]) ??
     stringValue(asRecord(data?.input), ["command", "cmd"]) ??
     stringValue(asRecord(data?.arguments), ["command", "cmd"]) ??
-    commandFromJsonString(stringValue(data, ["arguments", "args", "input"]));
+    stringValue(asRecord(data?.args), ["command", "cmd"]) ??
+    commandFromJsonString(stringValue(data, ["arguments", "args", "input"])) ??
+    stringValue(asRecord(item.args), ["command", "cmd"]) ??
+    stringValue(result, ["command", "cmd"]) ??
+    stringValue(parsedOutputData, ["command", "cmd"]);
   if (direct) return direct;
   if (
     item.name === "tool.started" &&
@@ -622,7 +638,15 @@ function commandFromJsonString(value: string | null): string | null {
 
 function activityCallId(item: RuntimeEvent): string | null {
   const data = asRecord(item.data);
-  return stringValue(data, ["callId", "call_id", "id", "itemId", "item_id"]);
+  return stringValue(data, [
+    "callId",
+    "call_id",
+    "toolCallId",
+    "tool_call_id",
+    "id",
+    "itemId",
+    "item_id",
+  ]);
 }
 
 function activityMeta(item: RuntimeEvent): string | null {
@@ -787,6 +811,8 @@ function shortId(value: string): string {
 function cleanCommandOutput(value: string): string {
   let output = value.replace(/\r\n/g, "\n").trim();
   if (!output) return "";
+  const commandResult = commandResultFromJson(output);
+  if (commandResult !== null) return commandResult;
   const marker = "\nOutput:\n";
   const markerIndex = output.indexOf(marker);
   if (markerIndex >= 0 && looksLikeCommandEnvelope(output.slice(0, markerIndex))) {
@@ -794,6 +820,61 @@ function cleanCommandOutput(value: string): string {
   }
   output = output.replace(/^Total output lines: \d+\n\n/, "");
   return output.trim();
+}
+
+function commandOutputFromEvent(item: RuntimeEvent): string {
+  const output = cleanCommandOutput(item.output ?? "");
+  if (output) return output;
+  const result = asRecord(asRecord(item.data)?.result);
+  if (!result) return "";
+  return commandResultOutput(result);
+}
+
+function commandTerminalFromEvent(item: RuntimeEvent): ActivityItem["terminal"] {
+  const data = asRecord(item.data);
+  const result = asRecord(data?.result);
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const parsedOutputData = asRecord(parsedOutput?.data);
+  const timing = asRecord(data?.workspaceToolTiming);
+  const exitCode = [result?.exitCode, parsedOutputData?.exitCode, data?.exitCode]
+    .find((value) => typeof value === "number");
+  const durationMs = timing?.durationMs;
+  return {
+    ...(typeof exitCode === "number" ? { exitCode } : {}),
+    ...(typeof durationMs === "number" ? { durationMs } : {}),
+  };
+}
+
+function elapsedMilliseconds(startedAt: string, completedAt: string): number | null {
+  const elapsed = Date.parse(completedAt) - Date.parse(startedAt);
+  return Number.isFinite(elapsed) && elapsed > 0 ? elapsed : null;
+}
+
+function commandResultFromJson(value: string): string | null {
+  const envelope = asRecord(parseMaybeJson(value));
+  const action = typeof envelope?.action === "string" ? envelope.action : "";
+  if (
+    !envelope ||
+    typeof envelope.ok !== "boolean" ||
+    !action ||
+    typeof envelope.output !== "string"
+  ) {
+    return null;
+  }
+  const data = asRecord(envelope.data);
+  if (!data) return typeof envelope.output === "string" ? envelope.output.trim() : "";
+  return commandResultOutput(data, stringValue(envelope, ["output"]));
+}
+
+function commandResultOutput(
+  result: Record<string, unknown>,
+  fallback: string | null = null,
+): string {
+  const stdout = stringValue(result, ["stdout"])?.replace(/\r\n/g, "\n").trimEnd() ?? "";
+  const stderr = stringValue(result, ["stderr"])?.replace(/\r\n/g, "\n").trimEnd() ?? "";
+  const streams = [stdout, stderr].filter(Boolean);
+  if (streams.length > 0) return streams.join("\n");
+  return fallback?.replace(/\r\n/g, "\n").trim() ?? "";
 }
 
 function looksLikeCommandEnvelope(header: string): boolean {

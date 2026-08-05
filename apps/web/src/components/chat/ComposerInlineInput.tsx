@@ -37,6 +37,16 @@ type ExtractedEditorState = {
   tokenPosition: number | null;
 };
 
+type ViewSelection = {
+  anchor: number;
+  focus: number;
+};
+
+type SelectionBoundary = {
+  node: Node;
+  offset: number;
+};
+
 function isInlineToken(node: Node): node is HTMLElement {
   return node instanceof HTMLElement && node.matches(INLINE_TOKEN_SELECTOR);
 }
@@ -118,12 +128,12 @@ function viewLength(node: Node): number {
   return length;
 }
 
-function selectionViewIndex(root: HTMLElement): number {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return viewLength(root);
-  const focusNode = selection.focusNode;
-  const focusOffset = selection.focusOffset;
-  if (!focusNode || !root.contains(focusNode)) return viewLength(root);
+function viewIndexForSelectionBoundary(
+  root: HTMLElement,
+  targetNode: Node | null,
+  targetOffset: number,
+): number | null {
+  if (!targetNode || (targetNode !== root && !root.contains(targetNode))) return null;
 
   let index = 0;
   let found = false;
@@ -132,9 +142,9 @@ function selectionViewIndex(root: HTMLElement): number {
     if (found) return;
     if (
       (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) &&
-      node.contains(focusNode)
+      (node === targetNode || node.contains(targetNode))
     ) {
-      if (node !== focusNode || focusOffset > 0) index += viewLength(node);
+      if (node !== targetNode || targetOffset > 0) index += viewLength(node);
       found = true;
       return;
     }
@@ -142,11 +152,11 @@ function selectionViewIndex(root: HTMLElement): number {
       index += viewLength(node);
       return;
     }
-    if (node === focusNode) {
+    if (node === targetNode) {
       if (node.nodeType === Node.TEXT_NODE) {
-        index += focusOffset;
+        index += targetOffset;
       } else {
-        const children = Array.from(node.childNodes).slice(0, focusOffset);
+        const children = Array.from(node.childNodes).slice(0, targetOffset);
         for (const child of children) index += viewLength(child);
       }
       found = true;
@@ -161,66 +171,84 @@ function selectionViewIndex(root: HTMLElement): number {
   }
 
   visit(root);
-  return index;
+  return found ? index : null;
 }
 
-function setSelectionByViewIndex(root: HTMLElement, viewIndex: number) {
+function selectionViewRange(root: HTMLElement): ViewSelection | null {
   const selection = window.getSelection();
-  if (!selection) return;
+  if (!selection || selection.rangeCount === 0) return null;
+  const anchor = viewIndexForSelectionBoundary(root, selection.anchorNode, selection.anchorOffset);
+  const focus = viewIndexForSelectionBoundary(root, selection.focusNode, selection.focusOffset);
+  if (anchor === null || focus === null) return null;
+  return { anchor, focus };
+}
 
-  const range = document.createRange();
+function selectionBoundaryByViewIndex(root: HTMLElement, viewIndex: number): SelectionBoundary {
   let remaining = Math.max(0, viewIndex);
 
-  function placeBefore(node: Node) {
-    range.setStartBefore(node);
-    range.collapse(true);
+  function boundaryBefore(node: Node): SelectionBoundary {
+    const parent = node.parentNode;
+    if (!parent) return { node: root, offset: 0 };
+    return { node: parent, offset: Array.prototype.indexOf.call(parent.childNodes, node) };
   }
 
-  function placeAfter(node: Node) {
-    range.setStartAfter(node);
-    range.collapse(true);
+  function boundaryAfter(node: Node): SelectionBoundary {
+    const before = boundaryBefore(node);
+    return { node: before.node, offset: before.offset + 1 };
   }
 
-  function visit(node: Node): boolean {
+  function visit(node: Node): SelectionBoundary | null {
     if (isInlineToken(node) || isInlineRepoLink(node) || isInlineConnectedAppMention(node)) {
       const length = viewLength(node);
-      if (remaining <= 0) {
-        placeBefore(node);
-        return true;
-      }
-      if (remaining <= length) {
-        placeAfter(node);
-        return true;
-      }
+      if (remaining <= 0) return boundaryBefore(node);
+      if (remaining <= length) return boundaryAfter(node);
       remaining -= length;
-      return false;
+      return null;
     }
 
     if (node.nodeType === Node.TEXT_NODE) {
       const length = node.textContent?.length ?? 0;
-      if (remaining <= length) {
-        range.setStart(node, remaining);
-        range.collapse(true);
-        return true;
-      }
+      if (remaining <= length) return { node, offset: remaining };
       remaining -= length;
-      return false;
+      return null;
     }
 
-    if (node instanceof HTMLBRElement) return false;
+    if (node instanceof HTMLBRElement) return null;
 
     for (const child of node.childNodes) {
-      if (visit(child)) return true;
+      const boundary = visit(child);
+      if (boundary) return boundary;
     }
-    return false;
+    return null;
   }
 
-  if (!visit(root)) {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
+  return visit(root) ?? { node: root, offset: root.childNodes.length };
+}
+
+function setSelectionByViewRange(root: HTMLElement, viewSelection: ViewSelection) {
+  const selection = window.getSelection();
+  if (!selection) return;
+
+  const anchor = selectionBoundaryByViewIndex(root, viewSelection.anchor);
+  const focus = selectionBoundaryByViewIndex(root, viewSelection.focus);
   selection.removeAllRanges();
+
+  if (typeof selection.setBaseAndExtent === "function") {
+    selection.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset);
+    return;
+  }
+
+  const range = document.createRange();
+  const startsAtAnchor = viewSelection.anchor <= viewSelection.focus;
+  const start = startsAtAnchor ? anchor : focus;
+  const end = startsAtAnchor ? focus : anchor;
+  range.setStart(start.node, start.offset);
+  range.setEnd(end.node, end.offset);
   selection.addRange(range);
+}
+
+function setSelectionByViewIndex(root: HTMLElement, viewIndex: number) {
+  setSelectionByViewRange(root, { anchor: viewIndex, focus: viewIndex });
 }
 
 function insertPlainText(text: string) {
@@ -462,7 +490,6 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   token,
 }, ref) {
   const rootRef = useRef<HTMLDivElement | null>(null);
-  const nextViewSelectionRef = useRef<number | null>(null);
   const tokenSignature = token ? `${token.key}:${tokenPosition(token, prompt) ?? 0}` : "none";
   const visualSignature = `${tokenSignature}|${inlineVisualSignature(prompt, tokenPosition(token, prompt), connectedAppMentions)}`;
   const previousVisualSignatureRef = useRef<string | null>(null);
@@ -476,7 +503,6 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       const root = rootRef.current;
       if (!root) return;
       const viewIndex = viewIndexFromPromptIndex(index, token, prompt, options?.afterToken);
-      nextViewSelectionRef.current = viewIndex;
       root.focus();
       setSelectionByViewIndex(root, viewIndex);
       resizeComposerTextarea(root);
@@ -497,22 +523,29 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       prompt === "" ||
       currentState.text !== prompt ||
       currentState.tokenPosition !== tokenPosition(token, prompt);
+    console.log("composer-selection-debug", {
+      currentState,
+      prompt,
+      shouldRebuild,
+      visualChanged,
+    });
     if (shouldRebuild) {
+      const selectionBeforeRebuild = document.activeElement === root
+        ? selectionViewRange(root)
+        : null;
       rebuildEditorDom(root, prompt, token, connectedAppMentions);
       root.dataset.empty = prompt.length === 0 && !token ? "true" : "false";
+      if (selectionBeforeRebuild) setSelectionByViewRange(root, selectionBeforeRebuild);
     }
     resizeComposerTextarea(root);
-    if (document.activeElement !== root || nextViewSelectionRef.current === null) return;
-    setSelectionByViewIndex(root, nextViewSelectionRef.current);
   }, [connectedAppMentions, prompt, token, visualSignature]);
 
   function syncFromDom() {
     const root = rootRef.current;
     if (!root) return;
-    const nextViewIndex = selectionViewIndex(root);
+    const nextViewIndex = selectionViewRange(root)?.focus ?? viewLength(root);
     const nextState = extractEditorState(root);
     const nextCursor = promptIndexFromViewIndex(nextViewIndex, token, nextState.text);
-    nextViewSelectionRef.current = nextViewIndex;
     root.dataset.empty = nextState.text.length === 0 && !token ? "true" : "false";
     onTokenPositionChange(nextState.tokenPosition);
     onCursorChange(nextCursor);
@@ -527,8 +560,7 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   function updateCursorFromSelection() {
     const root = rootRef.current;
     if (!root) return;
-    const nextViewIndex = selectionViewIndex(root);
-    nextViewSelectionRef.current = nextViewIndex;
+    const nextViewIndex = selectionViewRange(root)?.focus ?? viewLength(root);
     onCursorChange(promptIndexFromViewIndex(nextViewIndex, token, prompt));
   }
 

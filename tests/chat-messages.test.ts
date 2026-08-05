@@ -315,6 +315,7 @@ describe("chat message projection", () => {
         sessionId: "session_1",
         turnId: "turn_1",
         status: "started",
+        timestamp: "2026-05-16T00:00:00.000Z",
         output: "Research subagent started.",
         data: {
           childSessionId: "session_child",
@@ -1661,6 +1662,109 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Pushed changes");
   });
 
+  test("renders failed exec results as a compact terminal without transport JSON", () => {
+    const result = JSON.stringify({
+      ok: false,
+      action: "exec_command",
+      output: "Command exited with code 1.",
+      data: {
+        command: "./cli promote production",
+        cwd: "/repo",
+        exitCode: 1,
+        stdout: "Fetching origin/develop\nPromotion refused",
+        stderr: "",
+      },
+    });
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Promote production" },
+      }),
+      runtimeEvent({
+        id: "tool_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "exec_command",
+        status: "started",
+        data: {
+          toolCallId: "call_1",
+          tool: "exec_command",
+          arguments: JSON.stringify({ cmd: "./cli promote production" }),
+        },
+      }),
+      {
+        ...runtimeEvent({
+          id: "tool_completed",
+          name: "tool.completed",
+          turnId: "turn_1",
+          action: "exec_command",
+          status: "failed",
+          output: result,
+          data: {
+            toolCallId: "call_1",
+            tool: "exec_command",
+          },
+        }),
+        timestamp: "2026-05-16T00:00:01.000Z",
+      },
+    ]);
+
+    const activity = messages[1]?.activities?.[0];
+    expect(activity).toMatchObject({
+      content: "./cli promote production",
+      detail: "Fetching origin/develop\nPromotion refused",
+      state: "failed",
+      terminal: { exitCode: 1, durationMs: 1000 },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
+    expect(html).toContain("activity-command-terminal failed");
+    expect(html).toContain("Ran command in 1s");
+    expect(html).toContain("Shell");
+    expect(html).toContain("Exit code 1");
+    expect(html).toContain('class="shell-token command">./cli</span>');
+    expect(html).toContain('class="shell-token plain">promote</span>');
+    expect(html).toContain("Fetching origin/develop");
+    expect(html).not.toContain("&quot;action&quot;:&quot;exec_command&quot;");
+  });
+
+  test("unwraps sandbox command failure envelopes without inventing an exit code", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Run a sandbox command" },
+      }),
+      commandStarted("tool_started", "turn_1", "printf 'hello'"),
+      runtimeEvent({
+        id: "command_output",
+        name: "command.output",
+        turnId: "turn_1",
+        status: "failed",
+        output: JSON.stringify({
+          ok: false,
+          action: "work_environment",
+          output: "Work sandbox entered error during startup.",
+        }),
+        data: { toolCallId: "tool_started" },
+      }),
+    ]);
+
+    const activity = messages[1]?.activities?.[0];
+    expect(activity?.detail).toBe("Work sandbox entered error during startup.");
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
+    expect(html).toContain("Work sandbox entered error during startup.");
+    expect(html).toContain("<footer>Failed</footer>");
+    expect(html).not.toContain("&quot;action&quot;:&quot;work_environment&quot;");
+  });
+
   test("summarizes one command by activity instead of raw command text", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -1687,8 +1791,10 @@ describe("chat message projection", () => {
       })
     );
     expect(html).toContain("Working…");
+    expect(html).toContain("Running command");
+    expect(html).toContain("activity-command-terminal running");
     expect(html).not.toContain("Searched code");
-    expect(html).not.toContain("activityGroupSummary");
+    expect(html).toContain("activityGroupSummary");
   });
 
   test("merges workspace action results into the started activity row", () => {

@@ -21,6 +21,11 @@ import {
   type ResolvedConnectedAppContext,
 } from "./connected-app-context.js";
 import { buildPersonalizedSystemPrompt } from "./personalization.js";
+import { DEVELOPMENT_SYSTEM_CONTEXT } from "./development-system-context.js";
+import {
+  buildRepositoryInstructionContext,
+  resolveRepositoryInstructions,
+} from "./repository-instructions.js";
 import { event } from "../utils.js";
 import { experienceUsesWorkspaceToolProtocol } from "../runtime/experience-policy.js";
 
@@ -85,6 +90,10 @@ export type HostedTurnHelpers = {
 
 export function createHostedTurnHelpers(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
+  onRepositoryInstructionDiagnostic?: (
+    diagnostic: string,
+    session: Session,
+  ) => void;
 }): HostedTurnHelpers {
   const { appendRuntimeEvent } = deps;
 
@@ -122,6 +131,20 @@ export function createHostedTurnHelpers(deps: {
       ? requestedToolInstructionMode
       : "none";
     const isHybridSession = isHybridWorkspaceSession(session);
+    const developmentContext =
+      experience === "development" ? DEVELOPMENT_SYSTEM_CONTEXT : "";
+    let repositoryInstructionContext = "";
+    if (
+      experience === "development" &&
+      session.workspaceKind === "local_project"
+    ) {
+      const resolution = await resolveRepositoryInstructions(session.cwd);
+      for (const diagnostic of resolution?.diagnostics ?? []) {
+        deps.onRepositoryInstructionDiagnostic?.(diagnostic, session);
+      }
+      repositoryInstructionContext =
+        buildRepositoryInstructionContext(resolution);
+    }
     const workspaceContext =
       experience === "chat"
         ? buildChatExperienceContext()
@@ -171,8 +194,10 @@ export function createHostedTurnHelpers(deps: {
       personalizationSoul,
       [
         basePrompt,
+        developmentContext,
         toolProtocol,
         workspaceContext,
+        repositoryInstructionContext,
         capabilityIndexContext,
         connectedAppContext,
         actionCatalogContext,

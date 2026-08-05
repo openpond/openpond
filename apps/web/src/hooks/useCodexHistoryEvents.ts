@@ -1,4 +1,10 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../api";
 import type { CodexHistoryThreadPayload } from "../lib/codex-history-thread-cache";
@@ -24,29 +30,55 @@ export function useCodexHistoryEvents({
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
 }) {
-  const [codexHistoryEvents, setCodexHistoryEvents] = useState<RuntimeEvent[]>([]);
+  const [historyState, setHistoryState] = useState<{
+    events: RuntimeEvent[];
+    sessionId: string | null;
+  }>({ events: [], sessionId: null });
+  const historySessionId = isCodexHistorySessionId(selectedSessionId)
+    ? selectedSessionId
+    : null;
+  const codexHistoryEvents =
+    historySessionId && historyState.sessionId === historySessionId
+      ? historyState.events
+      : [];
+  const setCodexHistoryEvents = useCallback<
+    Dispatch<SetStateAction<RuntimeEvent[]>>
+  >(
+    (action) => {
+      setHistoryState((current) => {
+        if (!historySessionId) return { events: [], sessionId: null };
+        const currentEvents =
+          current.sessionId === historySessionId ? current.events : [];
+        const events =
+          typeof action === "function" ? action(currentEvents) : action;
+        return { events, sessionId: historySessionId };
+      });
+    },
+    [historySessionId],
+  );
 
   useEffect(() => {
-    if (!connection || !isCodexHistorySessionId(selectedSessionId)) {
-      setCodexHistoryEvents([]);
+    if (!connection || !historySessionId) {
+      setHistoryState((current) =>
+        current.sessionId === null && current.events.length === 0
+          ? current
+          : { events: [], sessionId: null },
+      );
       return undefined;
     }
 
-    const historySessionId = selectedSessionId;
-    if (!historySessionId) return undefined;
     setError((current) => (current === "Session not found" ? null : current));
     const locallyActive = selectedSessionLocallyActive;
 
     const applyPayload = (payload: CodexHistoryThreadPayload) => {
       const livePayload = codexHistoryPayloadWithLiveStatus(payload, locallyActive);
-      setCodexHistoryEvents(livePayload.events);
+      setHistoryState({ events: livePayload.events, sessionId: historySessionId });
       setError((current) => (current === "Session not found" ? null : current));
       setCodexHistorySessions((current) =>
         upsertSessionPreservingLocalSidebarStateAndRecency(current, livePayload.session),
       );
     };
 
-    setCodexHistoryEvents([]);
     return subscribeCodexHistoryLiveRefresh({
       connection,
       locallyActive,
@@ -59,7 +91,7 @@ export function useCodexHistoryEvents({
     });
   }, [
     connection,
-    selectedSessionId,
+    historySessionId,
     selectedSessionLocallyActive,
     selectedSessionStatus,
     setCodexHistorySessions,

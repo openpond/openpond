@@ -452,6 +452,12 @@ export async function createOpenPondServer(
     appendHostedContextUsage,
   } = createHostedTurnHelpers({
     appendRuntimeEvent,
+    onRepositoryInstructionDiagnostic: (diagnostic, session) => {
+      logger.warn("repository instruction file skipped", {
+        diagnostic,
+        sessionId: session.id,
+      });
+    },
   });
 
   async function localByokRuntimeState() {

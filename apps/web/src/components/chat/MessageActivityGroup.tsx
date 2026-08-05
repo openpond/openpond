@@ -1,4 +1,11 @@
-import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   ChevronDown,
   CircleAlert,
@@ -23,7 +30,6 @@ import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { ActivityItem, ChatMessage } from "../../lib/app-models";
 import {
   summarizeActivityGroup,
-  summarizeShellCommand,
   type ActivityGroupSummaryKind,
 } from "../../lib/chat-activity-summary";
 import {
@@ -53,12 +59,35 @@ export function ActivityGroup({
   onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
 }) {
-  const [toolsExpanded, setToolsExpanded] = useState(false);
+  const activities = message.activities ?? [];
+  const initialVisibleCommand = activities.some(
+    (activity) =>
+      activity.kind === "command" &&
+      (activity.state === "running" || activity.state === "failed")
+  );
+  const [toolsExpanded, setToolsExpanded] = useState(initialVisibleCommand);
   const [openImage, setOpenImage] = useState<
     ActivityItem["imagePreview"] | null
   >(null);
   const toolListId = useId();
-  const activities = message.activities ?? [];
+  const autoExpandedCommandRef = useRef<string | null>(null);
+  const runningCommandId =
+    [...activities]
+      .reverse()
+      .find(
+        (activity) =>
+          activity.kind === "command" && activity.state === "running"
+      )?.callId ?? null;
+  useEffect(() => {
+    if (
+      !runningCommandId ||
+      autoExpandedCommandRef.current === runningCommandId
+    ) {
+      return;
+    }
+    autoExpandedCommandRef.current = runningCommandId;
+    setToolsExpanded(true);
+  }, [runningCommandId]);
   const summary = useMemo(
     () => summarizeActivityGroup(activities),
     [activities]
@@ -198,7 +227,9 @@ function ActivityToolRow({
   onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
   onOpenSession?: (sessionId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(
+    activity.kind === "command" && activity.state !== "completed"
+  );
   const detailsId = useId();
   const imageSrc = useActivityImageUrl(
     activity.imagePreview ?? null,
@@ -221,24 +252,32 @@ function ActivityToolRow({
         className="activity-tool-summary"
         onClick={() => setExpanded((current) => !current)}
       >
+        {activity.kind === "command" ? (
+          <SquareTerminal aria-hidden className="activity-tool-kind-icon" size={12} />
+        ) : null}
+        <span>{activityToolRowLabel(activity)}</span>
         <ChevronDown
           className={`activity-tool-toggle ${expanded ? "expanded" : ""}`}
           size={13}
         />
-        <span>{activityToolRowLabel(activity)}</span>
       </button>
       {expanded ? (
         <div className="activity-tool-details" id={detailsId}>
-          {activity.content ? (
-            activity.kind === "command" ? (
-              <ShellCommandBlock command={activity.content} />
-            ) : isMultilineActivity(activity.content) ? (
+          {activity.kind === "command" && activity.content ? (
+            <CommandTerminal
+              command={activity.content}
+              exitCode={activity.terminal?.exitCode}
+              output={activity.detail}
+              state={activity.state}
+            />
+          ) : activity.content ? (
+            isMultilineActivity(activity.content) ? (
               <pre className="activity-detail-output">{activity.content}</pre>
             ) : (
               <code className="activity-tool-content">{activity.content}</code>
             )
           ) : null}
-          {activity.detail ? (
+          {activity.detail && activity.kind !== "command" ? (
             <pre className="activity-detail-output">
               {activity.detail.replace(/\r\n/g, "\n").trimEnd()}
             </pre>
@@ -616,21 +655,62 @@ function workTraceSummaryText(
 
 function activityToolRowLabel(activity: ActivityItem): string {
   if (activity.kind !== "command") return activity.label;
-  if (activity.state === "failed") return "Command failed";
+  if (activity.state === "running" || activity.state === "pending") {
+    return "Running command";
+  }
+  const duration = formatCommandDuration(activity.terminal?.durationMs);
+  return `Ran command${duration ? ` in ${duration}` : ""}`;
+}
+
+function CommandTerminal({
+  command,
+  exitCode,
+  output,
+  state,
+}: {
+  command: string;
+  exitCode?: number | null;
+  output?: string;
+  state: ActivityItem["state"];
+}) {
+  const terminalStatus =
+    state === "running" || state === "pending"
+      ? "Running…"
+      : exitCode != null
+        ? `Exit code ${exitCode}`
+        : state === "completed"
+          ? "Exit code 0"
+          : "Failed";
   return (
-    summarizeShellCommand(activity.content, activity.state) ??
-    (activity.state === "running" ? "Running command" : "Ran command")
+    <section
+      aria-label="Shell command output"
+      className={`activity-command-terminal ${state ?? "completed"}`}
+    >
+      <header>Shell</header>
+      <pre>
+        <code className="shell-command-code">
+          <span className="activity-command-prompt" aria-hidden>
+            $&nbsp;
+          </span>
+          {highlightShellCommand(command)}
+          {output ? (
+            <span className="activity-command-output">
+              {`\n${output.replace(/\r\n/g, "\n").trimEnd()}`}
+            </span>
+          ) : null}
+        </code>
+      </pre>
+      <footer>{terminalStatus}</footer>
+    </section>
   );
 }
 
-function ShellCommandBlock({ command }: { command: string }) {
-  return (
-    <pre className="activity-detail-output activity-tool-command">
-      <code className="shell-command-code">
-        {highlightShellCommand(command)}
-      </code>
-    </pre>
-  );
+function formatCommandDuration(durationMs: number | undefined): string | null {
+  if (durationMs == null || durationMs < 0) return null;
+  if (durationMs < 60_000) return `${Math.max(1, Math.round(durationMs / 1000))}s`;
+  const minutes = Math.floor(durationMs / 60_000);
+  const seconds = Math.round((durationMs % 60_000) / 1000);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 function highlightShellCommand(command: string) {

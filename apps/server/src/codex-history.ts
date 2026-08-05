@@ -87,6 +87,8 @@ type CodexRecord = {
   arguments?: string;
   call_id?: string;
   content?: unknown;
+  id?: string;
+  internal_chat_message_metadata_passthrough?: unknown;
   name?: string;
   output?: string;
   type?: string;
@@ -411,7 +413,23 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     }
   }
 
-  function activeTurnId(): string {
+  function providerRuntimeTurnId(providerTurnId: string): string {
+    return `${input.sessionId}_turn_${safeId(providerTurnId)}`;
+  }
+
+  function adoptProviderTurn(providerTurnId: string | null): void {
+    if (!providerTurnId) return;
+    const nextTurnId = providerRuntimeTurnId(providerTurnId);
+    if (currentTurnId === nextTurnId) return;
+    currentTurnId = nextTurnId;
+    currentTurnStarted = false;
+    currentTurnCompleted = false;
+    assistantIndex = 0;
+    toolIndex = 0;
+  }
+
+  function activeTurnId(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (currentTurnId) return currentTurnId;
     turnIndex += 1;
     currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -420,7 +438,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     return currentTurnId;
   }
 
-  function beginPromptTurn(): string {
+  function beginPromptTurn(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (!currentTurnId || currentTurnStarted || currentTurnCompleted) {
       turnIndex += 1;
       currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -431,7 +450,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     return currentTurnId;
   }
 
-  function beginLifecycleTurn(): string {
+  function beginLifecycleTurn(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (!currentTurnId || currentTurnCompleted) {
       turnIndex += 1;
       currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -474,9 +494,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   function completeLifecycleTurn(
     timestamp: string,
     name: "turn.completed" | "turn.interrupted",
-    output?: string
+    output?: string,
+    providerTurnId: string | null = null
   ): void {
-    const turnId = currentTurnId ?? activeTurnId();
+    const turnId = activeTurnId(providerTurnId);
     if (!currentTurnCompleted) {
       push(
         historyEvent({
@@ -552,25 +573,33 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         return;
       }
       if (type === "task_started") {
-        beginLifecycleTurn();
+        beginLifecycleTurn(stringValue(payload.turn_id));
         latestLifecycleStartAt = timestamp;
         return;
       }
       if (type === "task_complete") {
-        completeLifecycleTurn(timestamp, "turn.completed");
+        completeLifecycleTurn(
+          timestamp,
+          "turn.completed",
+          undefined,
+          stringValue(payload.turn_id)
+        );
         return;
       }
       if (type === "turn_aborted") {
         completeLifecycleTurn(
           timestamp,
           "turn.interrupted",
-          turnAbortMessage(payload)
+          turnAbortMessage(payload),
+          stringValue(payload.turn_id)
         );
         return;
       }
     }
     const responsePayload = responsePayloadFromCodexRecord(record, payload);
     if (!responsePayload) return;
+    const providerTurnId = providerTurnIdFromResponsePayload(responsePayload);
+    const providerItemId = stringValue(responsePayload.id);
 
     if (responsePayload.type === "message") {
       const role = stringValue(responsePayload.role);
@@ -578,6 +607,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       const content = textFromContent(rawContent);
       if (!content && !codexContentHasInputImage(rawContent)) return;
       if (role === "user") {
+        adoptProviderTurn(providerTurnId);
         const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
           content,
           timestamp
@@ -622,7 +652,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           return;
         }
         if (isCodexInjectedUserMessage(content)) return;
-        const turnId = beginPromptTurn();
+        const turnId = beginPromptTurn(providerTurnId);
         const userContent = visibleCodexUserContent(rawContent, {
           attachmentRootDir: input.attachmentRootDir,
           sessionId: input.sessionId,
@@ -634,7 +664,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         if (!firstPrompt) firstPrompt = userContent.prompt;
         push(
           historyEvent({
-            id: `${turnId}_started`,
+            id: providerItemId
+              ? `${input.sessionId}_${safeId(providerItemId)}_started`
+              : `${turnId}_started`,
             sessionId: input.sessionId,
             turnId,
             timestamp,
@@ -658,12 +690,14 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
 
       if (role === "assistant") {
         assistantIndex += 1;
-        const turnId = activeTurnId();
+        const turnId = activeTurnId(providerTurnId);
         const phase = stringValue(responsePayload.phase);
         const legacyFinalAnswer = record.type === "message";
         push(
           historyEvent({
-            id: `${turnId}_assistant_${assistantIndex}`,
+            id: providerItemId
+              ? `${input.sessionId}_${safeId(providerItemId)}_assistant`
+              : `${turnId}_assistant_${assistantIndex}`,
             sessionId: input.sessionId,
             turnId,
             timestamp,
@@ -682,7 +716,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           if (!currentTurnCompleted) {
             push(
               historyEvent({
-                id: `${turnId}_completed`,
+                id: providerItemId
+                  ? `${input.sessionId}_${safeId(providerItemId)}_completed`
+                  : `${turnId}_completed`,
                 sessionId: input.sessionId,
                 turnId,
                 timestamp,
@@ -704,7 +740,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
 
     if (responsePayload.type === "function_call") {
       toolIndex += 1;
-      const turnId = activeTurnId();
+      const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
@@ -715,7 +751,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       const command = commandFromToolCall(name, parsedArgs);
       push(
         historyEvent({
-          id: `${turnId}_tool_started_${toolIndex}_${callId}`,
+          id: providerItemId
+            ? `${input.sessionId}_${safeId(providerItemId)}_tool_started`
+            : `${turnId}_tool_started_${toolIndex}_${callId}`,
           sessionId: input.sessionId,
           turnId,
           timestamp,
@@ -740,7 +778,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
 
     if (responsePayload.type === "function_call_output") {
       toolIndex += 1;
-      const turnId = activeTurnId();
+      const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
@@ -750,7 +788,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       );
       push(
         historyEvent({
-          id: `${turnId}_tool_completed_${toolIndex}_${callId}`,
+          id: providerItemId
+            ? `${input.sessionId}_${safeId(providerItemId)}_tool_completed`
+            : `${turnId}_tool_completed_${toolIndex}_${callId}`,
           sessionId: input.sessionId,
           turnId,
           timestamp,
@@ -769,7 +809,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       if (output) {
         push(
           historyEvent({
-            id: `${turnId}_command_output_${toolIndex}_${callId}`,
+            id: providerItemId
+              ? `${input.sessionId}_${safeId(providerItemId)}_command_output`
+              : `${turnId}_command_output_${toolIndex}_${callId}`,
             sessionId: input.sessionId,
             turnId,
             timestamp,
@@ -1139,6 +1181,15 @@ function responsePayloadFromCodexRecord(
   if (record.type === "response_item") return payload;
   if (!isLegacyResponseItemType(record.type)) return null;
   return asRecord(record);
+}
+
+function providerTurnIdFromResponsePayload(
+  payload: Record<string, unknown>
+): string | null {
+  const metadata = asRecord(
+    payload.internal_chat_message_metadata_passthrough
+  );
+  return stringValue(metadata?.turn_id) ?? stringValue(payload.turn_id);
 }
 
 function isLegacyResponseItemType(type: string | undefined): boolean {

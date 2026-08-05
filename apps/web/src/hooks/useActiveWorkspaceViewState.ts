@@ -40,6 +40,20 @@ function firstPresentText(...values: Array<string | null | undefined>): string {
   return "";
 }
 
+export function activeChatProviderForWorkspace({
+  draftProvider,
+  hasSelectedCloudProject,
+  selectedSessionHybridWorkspace,
+}: {
+  draftProvider: ChatProvider;
+  hasSelectedCloudProject: boolean;
+  selectedSessionHybridWorkspace: boolean;
+}): ChatProvider {
+  return hasSelectedCloudProject && !selectedSessionHybridWorkspace
+    ? "openpond"
+    : draftProvider;
+}
+
 export const COMPOSER_PROJECT_ACTION_OPTIONS = [
   {
     value: "action:new-local-project",
@@ -137,7 +151,11 @@ export function useActiveWorkspaceViewState({
     selectedProject,
     bootstrap?.cloudProjects ?? [],
   );
-  const activeProvider = selectedCloudProject ? "openpond" : draftProvider;
+  const activeProvider = activeChatProviderForWorkspace({
+    draftProvider,
+    hasSelectedCloudProject: Boolean(selectedCloudProject),
+    selectedSessionHybridWorkspace,
+  });
   const activeModel =
     normalizeChatModel(activeProvider, draftModel, providerSettings);
   const appDefaults = normalizePreferences(bootstrap?.preferences);
