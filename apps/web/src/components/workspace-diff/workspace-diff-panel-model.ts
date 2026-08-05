@@ -17,6 +17,7 @@ export type WorkspaceDiffOpenFileRequest = {
   id: number;
   path: string;
   file?: WorkspaceDiffFile;
+  imageUrl?: string;
 };
 
 export type WorkspaceDiffSideChatTab = {

@@ -17,7 +17,6 @@ export function codexHistoryTextAttachmentMetadata(input: {
   mediaType: string;
   name: string;
   sessionId: string;
-  turnId: string;
 }): Pick<ChatAttachmentSummary, "filePreview" | "lineCount"> {
   if (
     !input.localPath ||
@@ -27,13 +26,17 @@ export function codexHistoryTextAttachmentMetadata(input: {
     return {};
   }
   const target = path.resolve(input.localPath);
-  const expectedDir = path.resolve(
+  const sessionDir = path.resolve(
     input.attachmentRootDir,
     safeChatAttachmentPathSegment(input.sessionId),
-    safeChatAttachmentPathSegment(input.turnId),
   );
-  if (!target.startsWith(`${expectedDir}${path.sep}`)) return {};
-  const storageName = path.relative(expectedDir, target).replaceAll("\\", "/");
+  if (!target.startsWith(`${sessionDir}${path.sep}`)) return {};
+  const [storedTurnId, ...storageParts] = path
+    .relative(sessionDir, target)
+    .replaceAll("\\", "/")
+    .split("/");
+  const storageName = storageParts.join("/");
+  if (!storedTurnId || !storageName) return {};
   try {
     const stat = statSync(target);
     if (!stat.isFile() || stat.size > CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES) {
@@ -42,7 +45,7 @@ export function codexHistoryTextAttachmentMetadata(input: {
     return {
       filePreview: {
         sessionId: input.sessionId,
-        turnId: input.turnId,
+        turnId: storedTurnId,
         attachmentId: input.attachmentId,
         storageName,
         contentType: input.mediaType,

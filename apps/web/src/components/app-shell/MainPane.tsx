@@ -1074,15 +1074,14 @@ export function MainPane({
   );
   const handleOpenAttachmentInSidebar = useCallback(
     async (attachment: ChatAttachmentSummary) => {
-      if (!connection || !attachment.filePreview) {
+      if (
+        !connection ||
+        (!attachment.filePreview && !attachment.imagePreview)
+      ) {
         showToast("File content is not available for this attachment.", "error");
         return;
       }
       try {
-        const payload = await api.chatAttachmentFile(
-          connection,
-          attachment.filePreview,
-        );
         const displayName =
           attachment.name.trim().replace(/[\\/]+/g, "-") || "attachment.txt";
         const attachmentId = attachment.id.replace(/[^a-zA-Z0-9._-]+/g, "-");
@@ -1093,10 +1092,29 @@ export function MainPane({
           additions: 0,
           deletions: 0,
           patch: "",
-          content: payload.content,
+          content: null,
         };
+        let imageUrl: string | undefined;
+        if (attachment.filePreview) {
+          const payload = await api.chatAttachmentFile(
+            connection,
+            attachment.filePreview,
+          );
+          file.content = payload.content;
+        } else if (attachment.imagePreview) {
+          const payload = await api.signChatAttachmentImageUrl(
+            connection,
+            attachment.imagePreview,
+          );
+          imageUrl = payload.url;
+        }
         onShowDiffPanel();
-        setOpenDiffFileRequest({ id: Date.now(), path, file });
+        setOpenDiffFileRequest({
+          id: Date.now(),
+          path,
+          file,
+          ...(imageUrl ? { imageUrl } : {}),
+        });
       } catch (error) {
         showToast(
           error instanceof Error

@@ -618,7 +618,8 @@ describe("codex history", () => {
       const sessionId = codexHistorySessionId(threadId);
       const turnId = `${sessionId}_turn_1`;
       const storageName = "Pasted text.txt";
-      const turnDir = path.join(attachmentRootDir, sessionId, turnId);
+      const storedTurnId = `${sessionId}_turn_13`;
+      const turnDir = path.join(attachmentRootDir, sessionId, storedTurnId);
       const localPath = path.join(turnDir, storageName);
       await mkdir(turnDir, { recursive: true });
       await writeFile(localPath, "Attachment body\n", { mode: 0o600 });
@@ -666,7 +667,7 @@ describe("codex history", () => {
           lineCount: 1,
           filePreview: {
             sessionId,
-            turnId,
+            turnId: storedTurnId,
             attachmentId: `${turnId}_attachment_1_1`,
             storageName,
             contentType: "text/plain",

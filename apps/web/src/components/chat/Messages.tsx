@@ -723,7 +723,9 @@ function MessageFileAttachment({
   onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
 }) {
   const [opening, setOpening] = useState(false);
-  const canOpen = Boolean(attachment.filePreview && onOpenAttachment);
+  const canOpen = Boolean(
+    (attachment.filePreview || attachment.imagePreview) && onOpenAttachment,
+  );
   const detail = opening
     ? "Opening"
     : attachment.lineCount !== undefined

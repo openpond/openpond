@@ -1672,7 +1672,6 @@ function parseCodexAttachmentContext(
       mediaType,
       name,
       sessionId: context.sessionId,
-      turnId: context.turnId,
     });
     attachments.push({
       id,

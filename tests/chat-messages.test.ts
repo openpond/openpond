@@ -804,6 +804,7 @@ describe("chat message projection", () => {
     expect(codexHtml).toContain("Can you inspect this bug screenshot?");
     expect(codexHtml).toContain("user-message-attachments compact");
     expect(codexHtml).toContain("Screenshot from 2026-07-02 13.49.59.png");
+    expect(codexHtml).toContain("Open attached file Screenshot from 2026-07-02 13.49.59.png");
     expect(codexHtml).toContain("notes.txt");
     expect(codexHtml).toContain("source.zip");
     expect(codexHtml).toContain("Open attached file notes.txt");
@@ -1995,5 +1996,4 @@ describe("chat message projection", () => {
       "Preserve failed and stopped sandbox"
     );
   });
-
 });

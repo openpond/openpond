@@ -344,6 +344,9 @@ function WorkspaceDiffPanelInner({
   const [providedFilePaths, setProvidedFilePaths] = useState<Set<string>>(
     () => new Set()
   );
+  const [providedImageUrlsByPath, setProvidedImageUrlsByPath] = useState<
+    Record<string, string>
+  >({});
   const [fileDrafts, setFileDrafts] = useState<Record<string, FileDraft>>({});
   const [expandedFileTreeFolders, setExpandedFileTreeFolders] = useState<Set<string>>(() => new Set());
   const [sandboxDiff, setSandboxDiff] = useState<WorkspaceDiffSummary | null>(null);
@@ -610,6 +613,7 @@ function WorkspaceDiffPanelInner({
       setSelectedPath(null);
       setLoadedFiles({});
       setProvidedFilePaths(new Set());
+      setProvidedImageUrlsByPath({});
       setFileDrafts({});
       setExpandedFileTreeFolders(new Set());
       setSandboxDiff(null);
@@ -637,7 +641,7 @@ function WorkspaceDiffPanelInner({
     if (!openFileRequest.file && !canOpenRequestedFile) return;
     lastOpenFileRequestIdRef.current = openFileRequest.id;
     if (openFileRequest.file) {
-      openProvidedFile(openFileRequest.file);
+      openProvidedFile(openFileRequest.file, openFileRequest.imageUrl);
       return;
     }
     openFile(openFileRequest.path);
@@ -843,6 +847,12 @@ function WorkspaceDiffPanelInner({
       delete next[normalizedPath];
       return next;
     });
+    setProvidedImageUrlsByPath((current) => {
+      if (!(normalizedPath in current)) return current;
+      const next = { ...current };
+      delete next[normalizedPath];
+      return next;
+    });
     setFileReloadRequest({ id: Date.now(), path: normalizedPath });
     if (!filesWithPreview) {
       setOpenFilePaths((current) => (current.includes(normalizedPath) ? current : [...current, normalizedPath]));
@@ -855,7 +865,7 @@ function WorkspaceDiffPanelInner({
     setSearchQuery("");
   }
 
-  function openProvidedFile(file: WorkspaceDiffFile) {
+  function openProvidedFile(file: WorkspaceDiffFile, imageUrl?: string) {
     const normalizedPath = normalizeWorkspaceDiffPath(file.path, workspaceRootPath);
     if (!normalizedPath) return;
     const normalizedFile = { ...file, path: normalizedPath };
@@ -864,6 +874,17 @@ function WorkspaceDiffPanelInner({
       const next = new Set(current);
       next.add(normalizedPath);
       return next;
+    });
+    setProvidedImageUrlsByPath((current) => {
+      if (!imageUrl) {
+        if (!(normalizedPath in current)) return current;
+        const next = { ...current };
+        delete next[normalizedPath];
+        return next;
+      }
+      return current[normalizedPath] === imageUrl
+        ? current
+        : { ...current, [normalizedPath]: imageUrl };
     });
     setFileReloadRequest(null);
     setFileError(null);
@@ -1135,6 +1156,12 @@ function WorkspaceDiffPanelInner({
         return next;
       });
     }
+    setProvidedImageUrlsByPath((current) => {
+      if (!(path in current)) return current;
+      const next = { ...current };
+      delete next[path];
+      return next;
+    });
     setProvidedFilePaths((current) => {
       if (!current.has(path)) return current;
       const next = new Set(current);
@@ -1219,11 +1246,39 @@ function WorkspaceDiffPanelInner({
         : workspaceInitialized
           ? initializedLocalEmptyMessage
           : "No local files to show";
-  const selectedImagePath = !sandboxMode && selectedPath && isWorkspaceImagePath(selectedPath) ? selectedPath : null;
-  const previewImagePreviewPath =
-    !sandboxMode && previewImagePath && isWorkspaceImagePath(previewImagePath) ? previewImagePath : null;
-  const selectedImageSrc = useWorkspaceImageUrl(connection, appId, selectedImagePath);
-  const previewImageSrc = useWorkspaceImageUrl(connection, appId, previewImagePreviewPath);
+  const selectedProvidedImageSrc = selectedPath
+    ? providedImageUrlsByPath[selectedPath] ?? null
+    : null;
+  const selectedWorkspaceImagePath =
+    !selectedProvidedImageSrc &&
+    !sandboxMode &&
+    selectedPath &&
+    isWorkspaceImagePath(selectedPath)
+      ? selectedPath
+      : null;
+  const previewProvidedImageSrc = previewImagePath
+    ? providedImageUrlsByPath[previewImagePath] ?? null
+    : null;
+  const previewWorkspaceImagePath =
+    !previewProvidedImageSrc &&
+    !sandboxMode &&
+    previewImagePath &&
+    isWorkspaceImagePath(previewImagePath)
+      ? previewImagePath
+      : null;
+  const selectedWorkspaceImageSrc = useWorkspaceImageUrl(
+    connection,
+    appId,
+    selectedWorkspaceImagePath,
+  );
+  const previewWorkspaceImageSrc = useWorkspaceImageUrl(
+    connection,
+    appId,
+    previewWorkspaceImagePath,
+  );
+  const selectedImageSrc =
+    selectedProvidedImageSrc ?? selectedWorkspaceImageSrc;
+  const previewImageSrc = previewProvidedImageSrc ?? previewWorkspaceImageSrc;
   const activeToolbarPath = visibleTab === "file" || (filesWithPreview && visibleTab === "files")
     ? selectedPath
     : null;
