@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { parseBlocks } from "../apps/web/src/components/chat/MarkdownBlocks";
+import {
+  parseBlocks,
+  renderableStreamingMarkdown,
+} from "../apps/web/src/components/chat/MarkdownBlocks";
 
 describe("chat Markdown blocks", () => {
   test("keeps loose ordered-list items in one list with source ordinals", () => {
@@ -35,5 +38,16 @@ describe("chat Markdown blocks", () => {
       { type: "heading", level: 1, content: "Main heading" },
       { type: "heading", level: 2, content: "Smaller heading" },
     ]);
+  });
+
+  test("holds incomplete block markers until their content starts", () => {
+    expect(renderableStreamingMarkdown("#", false)).toBe("");
+    expect(renderableStreamingMarkdown("Intro\n\n## ", false)).toBe(
+      "Intro\n\n"
+    );
+    expect(renderableStreamingMarkdown("# Heading", false)).toBe(
+      "# Heading"
+    );
+    expect(renderableStreamingMarkdown("#", true)).toBe("#");
   });
 });

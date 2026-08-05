@@ -122,6 +122,21 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   return blocks;
 }
 
+const INCOMPLETE_BLOCK_MARKER_PATTERN =
+  /^\s*(?:#{1,4}\s*|\d+[.)]\s*|[-*]\s*)$/;
+
+/** Avoids briefly rendering partial block syntax as prose during typewriter reveal. */
+export function renderableStreamingMarkdown(
+  content: string,
+  complete: boolean
+): string {
+  if (complete) return content;
+  const lineStart = content.lastIndexOf("\n") + 1;
+  return INCOMPLETE_BLOCK_MARKER_PATTERN.test(content.slice(lineStart))
+    ? content.slice(0, lineStart)
+    : content;
+}
+
 function isClosingFenceLine(line: string, minTicks: number): boolean {
   const fence = line.match(/^\s*(`{2,})\s*(?:[A-Za-z0-9_-]+)?\s*$/);
   return Boolean(fence && fence[1]!.length >= minTicks);

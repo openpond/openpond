@@ -1,5 +1,6 @@
 import type { ComponentProps } from "react";
 import { useSmoothStreamingText } from "../../hooks/useSmoothStreamingText";
+import { renderableStreamingMarkdown } from "./MarkdownBlocks";
 import { MarkdownText } from "./MarkdownText";
 
 type StreamingMarkdownTextProps = ComponentProps<typeof MarkdownText> & {
@@ -15,6 +16,10 @@ export function StreamingMarkdownText({
     content,
     animateInitialContent
   );
+  const renderedContent = renderableStreamingMarkdown(
+    visibleContent,
+    visibleContent.length === content.length
+  );
 
-  return <MarkdownText {...props} content={visibleContent} />;
+  return <MarkdownText {...props} content={renderedContent} />;
 }

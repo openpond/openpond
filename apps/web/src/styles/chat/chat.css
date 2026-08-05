@@ -812,6 +812,20 @@
   color: #767676;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .assistant-message-footer {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .message-row.assistant:hover .assistant-message-footer,
+  .message-row.assistant:focus-within .assistant-message-footer {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .message-copy-button {
   display: inline-grid;
   place-items: center;
