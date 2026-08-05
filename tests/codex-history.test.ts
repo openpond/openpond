@@ -599,16 +599,23 @@ describe("codex history", () => {
 
   test("projects Codex files-mentioned text attachments as sidebar previews", async () => {
     const sourceDir = await mkdtemp(path.join(os.tmpdir(), "openpond-codex-native-file-"));
+    const codexHome = path.join(sourceDir, "codex");
     const attachmentRootDir = await mkdtemp(path.join(os.tmpdir(), "openpond-chat-attachments-"));
-    const sourcePath = path.join(sourceDir, "Context.md");
-    const label = "Context.md";
+    const sourcePath = path.join(
+      codexHome,
+      "attachments",
+      "native-attachment-id",
+      "pasted-text.txt",
+    );
+    const label = "Back to Articles Training a coding agent using the OpenCode harness…";
     const content = "# Context\n\nOpen this from history.\n";
     const threadId = "019fd26a-49d5-76d0-aed9-431657ff8614";
     const sessionId = codexHistorySessionId(threadId);
     const turnId = `${sessionId}_turn_1`;
     const attachmentId = `${turnId}_native_file_1`;
-    const storageName = `${attachmentId}-Context.md`;
+    const storageName = `${attachmentId}-pasted-text.txt`;
     try {
+      await mkdir(path.dirname(sourcePath), { recursive: true });
       await writeFile(sourcePath, content, { mode: 0o600 });
       const parsed = parseCodexSessionRecords(
         [
@@ -623,7 +630,7 @@ describe("codex history", () => {
                   type: "input_text",
                   text:
                     "# Files mentioned by the user:\n\n" +
-                    `## ${label}:\n${sourcePath}\n\n` +
+                    `## ${label}: ${sourcePath}\n\n` +
                     "## My request for Codex:\nReview this context file.",
                 },
               ],
@@ -632,6 +639,7 @@ describe("codex history", () => {
         ],
         {
           attachmentRootDir,
+          codexHome,
           fallbackTimestamp: "2026-08-05T14:53:00.000Z",
           sessionId,
           threadId,
@@ -644,7 +652,7 @@ describe("codex history", () => {
         {
           id: attachmentId,
           name: label,
-          mediaType: "text/markdown",
+          mediaType: "text/plain",
           sizeBytes: Buffer.byteLength(content),
           kind: "text",
           lineCount: 3,
@@ -653,7 +661,7 @@ describe("codex history", () => {
             turnId,
             attachmentId,
             storageName,
-            contentType: "text/markdown",
+            contentType: "text/plain",
           },
         },
       ]);

@@ -46,7 +46,10 @@ const NATIVE_FILE_MEDIA_TYPES = new Map<string, string>([
   [".yml", "application/yaml"],
 ]);
 
-export function codexNativeFileMentions(text: string): CodexNativeFileMention[] {
+export function codexNativeFileMentions(
+  text: string,
+  codexHome: string,
+): CodexNativeFileMention[] {
   const filesHeader = /^\s*# Files mentioned by the user:\s*$/im.exec(text);
   if (!filesHeader) return [];
   const afterHeader = text.slice(filesHeader.index + filesHeader[0].length);
@@ -55,6 +58,7 @@ export function codexNativeFileMentions(text: string): CodexNativeFileMention[] 
   const mentions: CodexNativeFileMention[] = [];
   const seenPaths = new Set<string>();
   const mentionBlock = afterHeader.slice(0, requestHeader.index);
+  const attachmentRoot = path.resolve(codexHome, "attachments");
   for (const pattern of [
     NATIVE_FILE_MENTION_INLINE_PATTERN,
     NATIVE_FILE_MENTION_MULTILINE_PATTERN,
@@ -64,6 +68,7 @@ export function codexNativeFileMentions(text: string): CodexNativeFileMention[] 
       const localPath = match?.[2]?.trim();
       if (!label || !localPath) continue;
       const target = path.resolve(localPath);
+      if (!target.startsWith(`${attachmentRoot}${path.sep}`)) continue;
       if (seenPaths.has(target)) continue;
       seenPaths.add(target);
       mentions.push({ label, localPath: target });

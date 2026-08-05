@@ -126,6 +126,7 @@ type ParsedCodexSession = {
 
 type ParseCodexSessionInput = {
   attachmentRootDir?: string;
+  codexHome?: string;
   fallbackTimestamp: string;
   maxEvents?: number;
   sessionId: string;
@@ -186,6 +187,7 @@ export async function readCodexHistoryThreadPayload(
   const thread = await resolveCodexHistoryThread(sessionId, codexHome);
   const parseInput = {
     attachmentRootDir: options.attachmentRootDir,
+    codexHome,
     filePath: thread.filePath,
     fallbackTimestamp: thread.session.updatedAt,
     maxEvents: options.maxEvents ?? eventLimit(),
@@ -697,6 +699,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         const turnId = beginPromptTurn(providerTurnId);
         const userContent = visibleCodexUserContent(rawContent, {
           attachmentRootDir: input.attachmentRootDir,
+          codexHome: input.codexHome ?? codexHomePath(),
           sessionId: input.sessionId,
           turnId,
         });
@@ -1502,6 +1505,7 @@ type VisibleCodexUserContent = {
 };
 type VisibleCodexUserContentContext = {
   attachmentRootDir?: string;
+  codexHome: string;
   sessionId: string;
   turnId: string;
 };
@@ -1547,7 +1551,7 @@ function visibleCodexUserContent(
   const parts = codexUserContentParts(content);
   const attachments: ChatAttachmentSummary[] = [];
   let blockIndex = 0;
-  const nativeFileMentions = codexNativeFileMentions(parts.text);
+  const nativeFileMentions = codexNativeFileMentions(parts.text, context.codexHome);
   const imageReferences = mergeCodexNativeImageReferences(codexImageReferences(parts.text), nativeFileMentions);
   const prompt = visibleCodexPromptText(
     parts.text
