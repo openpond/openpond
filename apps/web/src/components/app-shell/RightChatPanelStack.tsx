@@ -9,6 +9,7 @@ import {
 import type {
   BootstrapPayload,
   ChatAttachment,
+  ChatAttachmentSummary,
   ChatProvider,
   CodexPersonalSkill,
   CodexPermissionMode,
@@ -75,6 +76,7 @@ export function RightChatPanelStack({
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
   onModelChange,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onOpenSession,
@@ -120,6 +122,7 @@ export function RightChatPanelStack({
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode, session?: Session | null) => void;
   onModelChange: (panelId: string, model: string) => void;
+  onOpenAttachmentInSidebar: (attachment: ChatAttachmentSummary) => Promise<void>;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
@@ -398,6 +401,7 @@ export function RightChatPanelStack({
             onCodexReasoningEffortChange={onCodexReasoningEffortChange}
             onOpenPondCommandAccessModeChange={(mode) => onOpenPondCommandAccessModeChange(mode, activePanel.session)}
             onModelChange={(model) => onModelChange(activePanel.id, model)}
+            onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
             onOpenSession={onOpenSession}

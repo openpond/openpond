@@ -8,8 +8,10 @@ import {
 } from "react";
 import type {
   ChatAttachment,
+  ChatAttachmentSummary,
   ChatProvider,
   SidebarFileBookmark,
+  WorkspaceDiffFile,
 } from "@openpond/contracts";
 import { api } from "../../api";
 import { normalizePreferences } from "../../lib/app-models";
@@ -65,7 +67,10 @@ import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
-import type { WorkspaceFileSourceSwitcher } from "../workspace-diff/workspace-diff-panel-model";
+import type {
+  WorkspaceDiffOpenFileRequest,
+  WorkspaceFileSourceSwitcher,
+} from "../workspace-diff/workspace-diff-panel-model";
 import { useLabCandidateReview } from "../../hooks/useLabCandidateReview";
 import { useLabAgentAuthoring } from "../../hooks/useLabAgentAuthoring";
 import {
@@ -261,10 +266,8 @@ export function MainPane({
 }: MainPaneProps) {
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
-  const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{
-    id: number;
-    path: string;
-  } | null>(null);
+  const [openDiffFileRequest, setOpenDiffFileRequest] =
+    useState<WorkspaceDiffOpenFileRequest | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
     useState<RightSidebarFileSource | null>(null);
   const [labSkillSource, setLabSkillSource] =
@@ -1069,6 +1072,42 @@ export function MainPane({
       workspaceRootPath,
     ]
   );
+  const handleOpenAttachmentInSidebar = useCallback(
+    async (attachment: ChatAttachmentSummary) => {
+      if (!connection || !attachment.filePreview) {
+        showToast("File content is not available for this attachment.", "error");
+        return;
+      }
+      try {
+        const payload = await api.chatAttachmentFile(
+          connection,
+          attachment.filePreview,
+        );
+        const displayName =
+          attachment.name.trim().replace(/[\\/]+/g, "-") || "attachment.txt";
+        const attachmentId = attachment.id.replace(/[^a-zA-Z0-9._-]+/g, "-");
+        const path = `Attachments/${attachmentId || "file"}/${displayName}`;
+        const file: WorkspaceDiffFile = {
+          path,
+          status: "",
+          additions: 0,
+          deletions: 0,
+          patch: "",
+          content: payload.content,
+        };
+        onShowDiffPanel();
+        setOpenDiffFileRequest({ id: Date.now(), path, file });
+      } catch (error) {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Could not open this attachment.",
+          "error",
+        );
+      }
+    },
+    [connection, onShowDiffPanel, showToast],
+  );
   const workspaceStatusLoading =
     workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
   const candidateSidebarId = labCandidateReview.selection
@@ -1249,6 +1288,7 @@ export function MainPane({
       onCodexReasoningEffortChange={changeCodexReasoningEffort}
       onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
       onModelChange={onRightChatModelChange}
+      onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
       onOpenSession={onOpenSession}
@@ -1564,6 +1604,7 @@ export function MainPane({
                 conversationKey={browserConversationId ?? "draft"}
                 creation={selectedTrainingCreation}
                 onOpenBrowserLink={handleOpenBrowserLink}
+                onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
                 onOpenFileInSidebar={handleOpenFileInSidebar}
                 onOpenProfileSettings={onOpenProfileSettings}
                 onContentMutation={handleChatContentMutation}

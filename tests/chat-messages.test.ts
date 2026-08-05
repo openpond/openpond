@@ -3,6 +3,7 @@ import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
+import { attachmentIconKind } from "../apps/web/src/components/chat/AttachmentTypeIcon";
 import {
   activityGroupSummary,
   buildChatMessages,
@@ -745,6 +746,21 @@ describe("chat message projection", () => {
               mediaType: "text/plain",
               sizeBytes: 128,
               kind: "text",
+              lineCount: 3,
+              filePreview: {
+                sessionId: "session_1",
+                turnId: "turn_1",
+                attachmentId: "attachment_2",
+                storageName: "notes.txt",
+                contentType: "text/plain",
+              },
+            },
+            {
+              id: "attachment_3",
+              name: "source.zip",
+              mediaType: "application/zip",
+              sizeBytes: 4096,
+              kind: "file",
             },
           ],
         },
@@ -773,11 +789,15 @@ describe("chat message projection", () => {
     expect(html).toContain("user-message-image-attachment");
     expect(html).toContain("Screenshot from 2026-07-02 13.49.59.png");
     expect(html).toContain("notes.txt");
+    expect(html).toContain("source.zip");
     expect(html).toContain("user-message-attachment");
-
+    expect(html).toContain("3 lines");
+    expect(html).not.toContain("128 B");
+    expect(html).not.toContain("44 KB");
     const codexHtml = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[0]!,
+        onOpenAttachmentInSidebar: async () => undefined,
         userAttachmentDisplay: "compact",
       })
     );
@@ -785,8 +805,29 @@ describe("chat message projection", () => {
     expect(codexHtml).toContain("user-message-attachments compact");
     expect(codexHtml).toContain("Screenshot from 2026-07-02 13.49.59.png");
     expect(codexHtml).toContain("notes.txt");
+    expect(codexHtml).toContain("source.zip");
+    expect(codexHtml).toContain("Open attached file notes.txt");
+    expect(codexHtml).toContain("user-message-attachment openable");
+    expect(codexHtml).toContain("3 lines");
+    expect(codexHtml).not.toContain("128 B");
+    expect(codexHtml).not.toContain("44 KB");
     expect(codexHtml).not.toContain("user-message-image-attachment");
     expect(codexHtml).not.toContain("has-image-attachments");
+  });
+
+  test("selects distinct icons for common attachment families", () => {
+    const iconKind = (name: string, mediaType: string, kind: "image" | "text" | "file" = "file") =>
+      attachmentIconKind({ name, mediaType, kind });
+
+    expect(iconKind("screen.png", "image/png", "image")).toBe("image");
+    expect(iconKind("component.tsx", "text/typescript", "text")).toBe("code");
+    expect(iconKind("report.pdf", "application/pdf")).toBe("document");
+    expect(iconKind("results.csv", "text/csv", "text")).toBe("spreadsheet");
+    expect(iconKind("source.zip", "application/zip")).toBe("archive");
+    expect(iconKind("recording.wav", "audio/wav")).toBe("audio");
+    expect(iconKind("demo.mp4", "video/mp4")).toBe("video");
+    expect(iconKind("brief.pptx", "application/octet-stream")).toBe("presentation");
+    expect(iconKind("artifact.bin", "application/octet-stream")).toBe("file");
   });
 
   test("renders OpenPond Chat markdown image output inline", () => {

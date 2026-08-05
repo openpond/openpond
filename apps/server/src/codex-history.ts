@@ -20,6 +20,7 @@ import {
   chatAttachmentImageContentType,
   safeChatAttachmentPathSegment,
 } from "./chat-attachments.js";
+import { codexHistoryTextAttachmentMetadata } from "./codex-history-attachments.js";
 import {
   loadCodexHistoryFileIndex,
   type CodexHistoryFile,
@@ -1664,6 +1665,15 @@ function parseCodexAttachmentContext(
       localPath,
       mediaType,
     });
+    const textAttachmentMetadata = codexHistoryTextAttachmentMetadata({
+      attachmentId: id,
+      attachmentRootDir: context.attachmentRootDir,
+      localPath,
+      mediaType,
+      name,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+    });
     attachments.push({
       id,
       name,
@@ -1671,6 +1681,7 @@ function parseCodexAttachmentContext(
       sizeBytes,
       kind,
       ...(imagePreview ? { imagePreview } : {}),
+      ...textAttachmentMetadata,
     });
   }
   return attachments;

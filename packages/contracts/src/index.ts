@@ -16,6 +16,7 @@ export * from "./approvals.js";
 export * from "./placeholders.js";
 export * from "./bootstrap.js";
 export * from "./requests.js";
+export * from "./chat-attachments.js";
 export * from "./workspace-tools.js";
 export * from "./work-outputs.js";
 export * from "./work-formats.js";

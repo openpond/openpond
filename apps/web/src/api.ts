@@ -1404,6 +1404,19 @@ export const api = {
         body: JSON.stringify(input),
       }
     ),
+  chatAttachmentFile: (
+    connection: ClientConnection,
+    input: NonNullable<ChatAttachmentSummary["filePreview"]>
+  ) =>
+    apiFetch<{
+      path: string;
+      contentType: string;
+      content: string;
+      sizeBytes: number;
+    }>(connection, "/v1/assets/chat-attachment-file", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   workspaceLspTouch: (
     connection: ClientConnection,
     appId: string,

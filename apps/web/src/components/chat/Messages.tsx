@@ -5,7 +5,6 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
-  FileText,
   Globe2,
   ImageIcon,
 } from "../icons";
@@ -34,6 +33,10 @@ import {
 import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
 import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
+import {
+  AttachmentTypeIcon,
+  formatAttachmentLineCount,
+} from "./AttachmentTypeIcon";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
@@ -47,6 +50,9 @@ type MessageRowProps = {
     href: string,
     options?: { explicitFile?: boolean; newTab?: boolean }
   ) => void;
+  onOpenAttachmentInSidebar?: (
+    attachment: ChatAttachmentSummary
+  ) => Promise<void>;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenProfileSettings?: () => void;
   onResolveUserQuestion?: (
@@ -68,6 +74,7 @@ export const MessageRow = memo(function MessageRow({
   connection = null,
   message,
   onOpenBrowserLink,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onResolveUserQuestion,
@@ -134,6 +141,7 @@ export const MessageRow = memo(function MessageRow({
               attachments={visibleAttachments}
               compact={compactAttachments}
               connection={connection}
+              onOpenAttachment={onOpenAttachmentInSidebar}
             />
           ) : null}
           {message.content ? (
@@ -301,6 +309,7 @@ function areMessageRowPropsEqual(
     previous.billingTeamId === next.billingTeamId &&
     previous.connection === next.connection &&
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
+    previous.onOpenAttachmentInSidebar === next.onOpenAttachmentInSidebar &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
     previous.onOpenProfileSettings === next.onOpenProfileSettings &&
     previous.onResolveUserQuestion === next.onResolveUserQuestion &&
@@ -634,11 +643,17 @@ function messageAttachmentsEqual(
       left.name !== right.name ||
       left.mediaType !== right.mediaType ||
       left.sizeBytes !== right.sizeBytes ||
+      left.lineCount !== right.lineCount ||
       left.imagePreview?.sessionId !== right.imagePreview?.sessionId ||
       left.imagePreview?.turnId !== right.imagePreview?.turnId ||
       left.imagePreview?.attachmentId !== right.imagePreview?.attachmentId ||
       left.imagePreview?.storageName !== right.imagePreview?.storageName ||
-      left.imagePreview?.contentType !== right.imagePreview?.contentType
+      left.imagePreview?.contentType !== right.imagePreview?.contentType ||
+      left.filePreview?.sessionId !== right.filePreview?.sessionId ||
+      left.filePreview?.turnId !== right.filePreview?.turnId ||
+      left.filePreview?.attachmentId !== right.filePreview?.attachmentId ||
+      left.filePreview?.storageName !== right.filePreview?.storageName ||
+      left.filePreview?.contentType !== right.filePreview?.contentType
     ) {
       return false;
     }
@@ -650,10 +665,12 @@ function MessageAttachments({
   attachments,
   compact,
   connection,
+  onOpenAttachment,
 }: {
   attachments: ChatAttachmentSummary[];
   compact: boolean;
   connection: ClientConnection | null;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
 }) {
   return (
     <div
@@ -666,6 +683,7 @@ function MessageAttachments({
           compact={compact}
           connection={connection}
           key={attachment.id}
+          onOpenAttachment={onOpenAttachment}
         />
       ))}
     </div>
@@ -676,10 +694,12 @@ function MessageAttachment({
   attachment,
   compact,
   connection,
+  onOpenAttachment,
 }: {
   attachment: ChatAttachmentSummary;
   compact: boolean;
   connection: ClientConnection | null;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
 }) {
   if (!compact && attachment.kind === "image" && attachment.imagePreview) {
     return (
@@ -687,13 +707,57 @@ function MessageAttachment({
     );
   }
 
-  const Icon = attachment.kind === "image" ? ImageIcon : FileText;
   return (
-    <span className="user-message-attachment" title={attachment.name}>
-      <Icon size={13} />
+    <MessageFileAttachment
+      attachment={attachment}
+      onOpenAttachment={onOpenAttachment}
+    />
+  );
+}
+
+function MessageFileAttachment({
+  attachment,
+  onOpenAttachment,
+}: {
+  attachment: ChatAttachmentSummary;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
+}) {
+  const [opening, setOpening] = useState(false);
+  const canOpen = Boolean(attachment.filePreview && onOpenAttachment);
+  const detail = opening
+    ? "Opening"
+    : attachment.lineCount !== undefined
+      ? formatAttachmentLineCount(attachment.lineCount)
+      : null;
+  const content = (
+    <>
+      <AttachmentTypeIcon attachment={attachment} size={13} />
       <span>{attachment.name}</span>
-      <small>{formatBytes(attachment.sizeBytes)}</small>
-    </span>
+      {detail ? <small>{detail}</small> : null}
+    </>
+  );
+  if (!canOpen) {
+    return (
+      <span className="user-message-attachment" title={attachment.name}>
+        {content}
+      </span>
+    );
+  }
+  return (
+    <button
+      aria-label={`Open attached file ${attachment.name}`}
+      className="user-message-attachment openable"
+      disabled={opening}
+      title={`Open ${attachment.name}`}
+      type="button"
+      onClick={() => {
+        if (!onOpenAttachment || opening) return;
+        setOpening(true);
+        void onOpenAttachment(attachment).finally(() => setOpening(false));
+      }}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -730,21 +794,9 @@ function MessageImageAttachment({
       </div>
       <figcaption>
         <span>{attachment.name}</span>
-        <small>{formatBytes(attachment.sizeBytes)}</small>
       </figcaption>
     </figure>
   );
-}
-
-function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  const units = ["KB", "MB", "GB"];
-  let amount = value / 1024;
-  for (const unit of units) {
-    if (amount < 1024) return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${unit}`;
-    amount /= 1024;
-  }
-  return `${amount.toFixed(0)} TB`;
 }
 
 export const ThinkingIndicator = memo(function ThinkingIndicator() {

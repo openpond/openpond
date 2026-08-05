@@ -54,6 +54,10 @@ export async function handleEventRoutes({ deps, request, requestUrl, response }:
     sendJson(response, 200, signedChatAttachmentImageUrlPayload(await readJson(request), requestUrl, token));
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/assets/chat-attachment-file") {
+    sendJson(response, 200, await deps.chatAttachmentFilePayload(await readJson(request)));
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/assets/local-image-url") {
     sendJson(response, 200, signedLocalImageUrlPayload(await readJson(request), requestUrl, token));
     return true;

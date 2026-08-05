@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type {
   BootstrapPayload,
   ChatAttachment,
+  ChatAttachmentSummary,
   ChatProvider,
   CodexPersonalSkill,
   CodexPermissionMode,
@@ -59,6 +60,7 @@ export function RightChatPane({
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
   onModelChange,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onOpenSession,
@@ -99,6 +101,7 @@ export function RightChatPane({
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode) => void;
   onModelChange: (model: string) => void;
+  onOpenAttachmentInSidebar: (attachment: ChatAttachmentSummary) => Promise<void>;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
@@ -247,6 +250,7 @@ export function RightChatPane({
             key={row.id}
             message={row.message}
             onOpenBrowserLink={handleOpenBrowserLink}
+            onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
             onResolveUserQuestion={handleResolveUserQuestion}

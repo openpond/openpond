@@ -30,6 +30,7 @@ export function MainChatThread({
   conversationKey,
   creation,
   onOpenBrowserLink,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onContentMutation,
@@ -50,6 +51,7 @@ export function MainChatThread({
   conversationKey: string;
   creation: TaskCreationSnapshot | null;
   onOpenBrowserLink: MessageRowProps["onOpenBrowserLink"];
+  onOpenAttachmentInSidebar: MessageRowProps["onOpenAttachmentInSidebar"];
   onOpenFileInSidebar: MessageRowProps["onOpenFileInSidebar"];
   onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
   onContentMutation: (element: HTMLElement) => void;
@@ -107,6 +109,7 @@ export function MainChatThread({
           }
           key={row.id}
           message={row.message}
+          onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
           onOpenFileInSidebar={onOpenFileInSidebar}
           onOpenBrowserLink={onOpenBrowserLink}
           onOpenProfileSettings={onOpenProfileSettings}

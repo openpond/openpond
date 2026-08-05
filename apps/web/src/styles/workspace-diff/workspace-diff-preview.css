@@ -223,7 +223,8 @@
 }
 
 .workspace-markdown-preview .markdown-message {
-  max-width: 820px;
+  width: 100%;
+  max-width: none;
 }
 
 .workspace-markdown-preview .markdown-heading {

@@ -609,6 +609,75 @@ describe("codex history", () => {
     ]);
   });
 
+  test("projects OpenPond-saved Codex text attachments as sidebar previews", async () => {
+    const attachmentRootDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-codex-history-text-attachment-")
+    );
+    try {
+      const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+      const sessionId = codexHistorySessionId(threadId);
+      const turnId = `${sessionId}_turn_1`;
+      const storageName = "Pasted text.txt";
+      const turnDir = path.join(attachmentRootDir, sessionId, turnId);
+      const localPath = path.join(turnDir, storageName);
+      await mkdir(turnDir, { recursive: true });
+      await writeFile(localPath, "Attachment body\n", { mode: 0o600 });
+
+      const parsed = parseCodexSessionRecords(
+        [
+          {
+            type: "response_item",
+            timestamp: "2026-07-02T19:40:00.000Z",
+            payload: {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "Review this\n\n" +
+                    "<attachments>\n" +
+                    "The user attached 1 file with this message.\n" +
+                    `1. ${storageName} (text/plain, 16 B, text). Saved locally at: ${localPath}\n` +
+                    "</attachments>",
+                },
+              ],
+            },
+          },
+        ],
+        {
+          attachmentRootDir,
+          fallbackTimestamp: "2026-07-02T19:39:00.000Z",
+          sessionId,
+          threadId,
+        }
+      );
+
+      const turnStarted = parsed.events.find(
+        (event) => event.name === "turn.started"
+      );
+      expect(turnStarted?.args?.attachments).toEqual([
+        {
+          id: `${turnId}_attachment_1_1`,
+          name: storageName,
+          mediaType: "text/plain",
+          sizeBytes: 16,
+          kind: "text",
+          lineCount: 1,
+          filePreview: {
+            sessionId,
+            turnId,
+            attachmentId: `${turnId}_attachment_1_1`,
+            storageName,
+            contentType: "text/plain",
+          },
+        },
+      ]);
+    } finally {
+      await rm(attachmentRootDir, { recursive: true, force: true });
+    }
+  });
+
   test("projects native Codex input images as user attachment previews", async () => {
     const attachmentRootDir = await mkdtemp(path.join(os.tmpdir(), "openpond-codex-history-input-image-"));
     try {

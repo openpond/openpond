@@ -93,6 +93,14 @@ export const ChatAttachmentImagePreviewSchema = z.object({
   contentType: z.string().trim().min(1).max(160),
 });
 
+export const ChatAttachmentFilePreviewSchema = z.object({
+  sessionId: z.string().trim().min(1).max(200),
+  turnId: z.string().trim().min(1).max(200),
+  attachmentId: z.string().trim().min(1).max(200),
+  storageName: z.string().trim().min(1).max(1_024),
+  contentType: z.string().trim().min(1).max(160),
+});
+
 export const ChatAttachmentSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1).max(240),
@@ -103,6 +111,12 @@ export const ChatAttachmentSchema = z.object({
     .nonnegative()
     .max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes),
   kind: ChatAttachmentKindSchema,
+  lineCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes + 1)
+    .optional(),
   relativePath: z.string().trim().min(1).max(1_024).optional(),
   text: z.string().max(CHAT_ATTACHMENT_LIMITS.maxTextChars).optional(),
   contentsBase64: z
@@ -118,6 +132,7 @@ export const ChatAttachmentSummarySchema = ChatAttachmentSchema.omit({
   contentsBase64: true,
 }).extend({
   imagePreview: ChatAttachmentImagePreviewSchema.optional(),
+  filePreview: ChatAttachmentFilePreviewSchema.optional(),
 });
 
 export type ChatAttachmentSummary = z.infer<typeof ChatAttachmentSummarySchema>;

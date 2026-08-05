@@ -1,10 +1,18 @@
 import { describe, expect, test } from "vitest";
+import { countTextLines } from "@openpond/contracts";
 import {
   COMPOSER_PASTED_TEXT_MIN_CHARS,
   createComposerPastedTextFile,
 } from "../apps/web/src/components/chat/ComposerAttachments";
 
 describe("composer pasted text attachments", () => {
+  test("counts logical text lines without a trailing phantom line", () => {
+    expect(countTextLines("")).toBe(0);
+    expect(countTextLines("one")).toBe(1);
+    expect(countTextLines("one\ntwo\n")).toBe(2);
+    expect(countTextLines("one\r\ntwo")).toBe(2);
+  });
+
   test("keeps shorter pasted text inline", () => {
     expect(
       createComposerPastedTextFile(
