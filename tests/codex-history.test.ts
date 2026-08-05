@@ -22,8 +22,19 @@ import {
   sidebarProjectIdForSession,
 } from "../apps/web/src/lib/sidebar-session-projects";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
+import { nextCodexHistoryTurnId } from "../apps/server/src/api/server-payload-helpers";
 
 describe("codex history", () => {
+  test("uses unique attachment staging directories across resumed turns", () => {
+    const sessionId = "codex_history_thread";
+    const first = nextCodexHistoryTurnId(sessionId);
+    const second = nextCodexHistoryTurnId(sessionId);
+
+    expect(first).toMatch(/^codex_history_thread_turn_attachment_/);
+    expect(second).toMatch(/^codex_history_thread_turn_attachment_/);
+    expect(first).not.toBe(second);
+  });
+
   test("projects Codex JSONL records into chat events", () => {
     const sessionId = codexHistorySessionId("019e7138-5da2-7671-8837-202a36e0fff1");
     const parsed = parseCodexSessionRecords(

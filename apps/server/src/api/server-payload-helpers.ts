@@ -1,8 +1,8 @@
+import { randomUUID } from "node:crypto";
 import {
   type CloudProject,
   type CloudProjectSourceType,
   type LocalProject,
-  type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
 import type { CodexAppServerClient } from "@openpond/codex-provider";
@@ -437,17 +437,8 @@ export function codexHistoryThreadReadOptions(requestUrl: URL | undefined): {
   };
 }
 
-export function nextCodexHistoryTurnId(events: RuntimeEvent[], sessionId: string): string {
-  const prefix = `${sessionId}_turn_`;
-  let maxTurnIndex = 0;
-  for (const event of events) {
-    const turnId = event.turnId;
-    if (!turnId?.startsWith(prefix)) continue;
-    const value = turnId.slice(prefix.length);
-    if (!/^\d+$/.test(value)) continue;
-    maxTurnIndex = Math.max(maxTurnIndex, Number.parseInt(value, 10));
-  }
-  return `${prefix}${maxTurnIndex + 1}`;
+export function nextCodexHistoryTurnId(sessionId: string): string {
+  return `${sessionId}_turn_attachment_${randomUUID()}`;
 }
 
 export function positiveIntegerParam(value: string | null): number | undefined {

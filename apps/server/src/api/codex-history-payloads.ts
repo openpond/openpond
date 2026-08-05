@@ -115,7 +115,7 @@ export function createCodexHistoryPayloads(input: {
     const threadId = current.session.codexThreadId;
     if (!threadId) throw new Error("Codex history session is missing its Codex thread id");
     const cwd = turnInput.cwd ?? current.session.cwd;
-    const turnId = nextCodexHistoryTurnId(current.events, current.session.id);
+    const turnId = nextCodexHistoryTurnId(current.session.id);
     const attachmentContexts = await materializeChatAttachments({
       attachmentRootDir: input.attachmentRootDir,
       sessionId: current.session.id,
