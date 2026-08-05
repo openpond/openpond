@@ -20,7 +20,13 @@ import {
   chatAttachmentImageContentType,
   safeChatAttachmentPathSegment,
 } from "./chat-attachments.js";
-import { codexHistoryTextAttachmentMetadata } from "./codex-history-attachments.js";
+import {
+  codexHistoryTextAttachmentMetadata,
+  type CodexImageReference,
+  codexNativeFileAttachments,
+  codexNativeFileMentions,
+  mergeCodexNativeImageReferences,
+} from "./codex-history-attachments.js";
 import {
   loadCodexHistoryFileIndex,
   type CodexHistoryFile,
@@ -1494,21 +1500,14 @@ type VisibleCodexUserContent = {
   prompt: string;
   attachments: ChatAttachmentSummary[];
 };
-
 type VisibleCodexUserContentContext = {
   attachmentRootDir?: string;
   sessionId: string;
   turnId: string;
 };
-
 type CodexUserContentParts = {
   text: string;
   inputImages: string[];
-};
-
-type CodexImageReference = {
-  label: string | null;
-  localPath: string | null;
 };
 
 const CODEX_ATTACHMENT_CONTEXT_PATTERN =
@@ -1548,7 +1547,8 @@ function visibleCodexUserContent(
   const parts = codexUserContentParts(content);
   const attachments: ChatAttachmentSummary[] = [];
   let blockIndex = 0;
-  const imageReferences = codexImageReferences(parts.text);
+  const nativeFileMentions = codexNativeFileMentions(parts.text);
+  const imageReferences = mergeCodexNativeImageReferences(codexImageReferences(parts.text), nativeFileMentions);
   const prompt = visibleCodexPromptText(
     parts.text
       .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
@@ -1561,6 +1561,16 @@ function visibleCodexUserContent(
       .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
       .replace(CODEX_IMAGE_CLOSE_TAG_PATTERN, "\n")
       .trim()
+  );
+
+  attachments.push(
+    ...codexNativeFileAttachments({
+      attachmentRootDir: context.attachmentRootDir,
+      mentions: nativeFileMentions,
+      offset: attachments.length,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+    }),
   );
 
   attachments.push(
@@ -1672,6 +1682,7 @@ function parseCodexAttachmentContext(
       mediaType,
       name,
       sessionId: context.sessionId,
+      sizeBytes,
     });
     attachments.push({
       id,

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -23,6 +23,7 @@ import {
 } from "../apps/web/src/lib/sidebar-session-projects";
 import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 import { nextCodexHistoryTurnId } from "../apps/server/src/api/server-payload-helpers";
+import { codexHistoryTextAttachmentMetadata } from "../apps/server/src/codex-history-attachments";
 
 describe("codex history", () => {
   test("uses unique attachment staging directories across resumed turns", () => {
@@ -33,6 +34,38 @@ describe("codex history", () => {
     expect(first).toMatch(/^codex_history_thread_turn_attachment_/);
     expect(second).toMatch(/^codex_history_thread_turn_attachment_/);
     expect(first).not.toBe(second);
+  });
+
+  test("does not open an overwritten legacy text attachment", async () => {
+    const attachmentRootDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-codex-history-overwritten-attachment-"),
+    );
+    const sessionId = "codex_history_thread";
+    const storedTurnId = `${sessionId}_turn_13`;
+    const localPath = path.join(
+      attachmentRootDir,
+      sessionId,
+      storedTurnId,
+      "Pasted text.txt",
+    );
+    try {
+      await mkdir(path.dirname(localPath), { recursive: true });
+      await writeFile(localPath, "newer attachment\n", { mode: 0o600 });
+
+      expect(
+        codexHistoryTextAttachmentMetadata({
+          attachmentId: "older-attachment",
+          attachmentRootDir,
+          localPath,
+          mediaType: "text/plain",
+          name: "Pasted text.txt",
+          sessionId,
+          sizeBytes: 25 * 1024,
+        }),
+      ).toEqual({});
+    } finally {
+      await rm(attachmentRootDir, { recursive: true, force: true });
+    }
   });
 
   test("projects Codex JSONL records into chat events", () => {
@@ -562,6 +595,75 @@ describe("codex history", () => {
     expect(JSON.stringify(turnStarted?.args)).not.toContain("Files mentioned");
     expect(JSON.stringify(turnStarted?.args)).not.toContain("My request for Codex");
     expect(turnStarted?.args?.prompt).not.toContain("</image>");
+  });
+
+  test("projects Codex files-mentioned text attachments as sidebar previews", async () => {
+    const sourceDir = await mkdtemp(path.join(os.tmpdir(), "openpond-codex-native-file-"));
+    const attachmentRootDir = await mkdtemp(path.join(os.tmpdir(), "openpond-chat-attachments-"));
+    const sourcePath = path.join(sourceDir, "Context.md");
+    const label = "Context.md";
+    const content = "# Context\n\nOpen this from history.\n";
+    const threadId = "019fd26a-49d5-76d0-aed9-431657ff8614";
+    const sessionId = codexHistorySessionId(threadId);
+    const turnId = `${sessionId}_turn_1`;
+    const attachmentId = `${turnId}_native_file_1`;
+    const storageName = `${attachmentId}-Context.md`;
+    try {
+      await writeFile(sourcePath, content, { mode: 0o600 });
+      const parsed = parseCodexSessionRecords(
+        [
+          {
+            type: "response_item",
+            timestamp: "2026-08-05T14:53:12.000Z",
+            payload: {
+              type: "message",
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text:
+                    "# Files mentioned by the user:\n\n" +
+                    `## ${label}:\n${sourcePath}\n\n` +
+                    "## My request for Codex:\nReview this context file.",
+                },
+              ],
+            },
+          },
+        ],
+        {
+          attachmentRootDir,
+          fallbackTimestamp: "2026-08-05T14:53:00.000Z",
+          sessionId,
+          threadId,
+        },
+      );
+
+      const turnStarted = parsed.events.find((event) => event.name === "turn.started");
+      expect(turnStarted?.args?.prompt).toBe("Review this context file.");
+      expect(turnStarted?.args?.attachments).toEqual([
+        {
+          id: attachmentId,
+          name: label,
+          mediaType: "text/markdown",
+          sizeBytes: Buffer.byteLength(content),
+          kind: "text",
+          lineCount: 3,
+          filePreview: {
+            sessionId,
+            turnId,
+            attachmentId,
+            storageName,
+            contentType: "text/markdown",
+          },
+        },
+      ]);
+      await expect(
+        readFile(path.join(attachmentRootDir, sessionId, turnId, storageName), "utf8"),
+      ).resolves.toBe(content);
+    } finally {
+      await rm(sourceDir, { recursive: true, force: true });
+      await rm(attachmentRootDir, { recursive: true, force: true });
+    }
   });
 
   test("projects OpenPond-saved Codex history image attachments as previews", () => {
