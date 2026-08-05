@@ -996,6 +996,7 @@ export function MainPane({
     chatTimelineRows,
     composerStackRef,
     goToUserMessage,
+    handleChatContentMutation,
     handleChatScroll,
     jumpToLatestChatMessage,
     showScrollToBottomButton,
@@ -1552,10 +1553,12 @@ export function MainPane({
                 billingOrganizationSlug={billingTarget.organizationSlug}
                 billingTeamId={billingTarget.teamId}
                 connection={connection}
+                conversationKey={browserConversationId ?? "draft"}
                 creation={selectedTrainingCreation}
                 onOpenBrowserLink={handleOpenBrowserLink}
                 onOpenFileInSidebar={handleOpenFileInSidebar}
                 onOpenProfileSettings={onOpenProfileSettings}
+                onContentMutation={handleChatContentMutation}
                 onResolveUserQuestion={async (_question, resolution) => {
                   const displayPrompt =
                     resolution.action === "answer"

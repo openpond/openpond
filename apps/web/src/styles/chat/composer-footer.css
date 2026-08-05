@@ -871,36 +871,83 @@
   display: grid;
   gap: 3px;
   width: max-content;
-  min-width: 202px;
-  max-width: min(270px, 78vw);
+  min-width: 224px;
+  max-width: min(300px, 78vw);
   max-height: min(430px, calc(100vh - 118px));
+  overflow: hidden;
+  border: 0;
+  border-radius: 16px;
+  background: #2b2b2b;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  padding: 8px;
+}
+
+.codex-model-menu-root,
+.codex-model-menu-effort {
+  display: grid;
+  gap: 3px;
+}
+
+.codex-model-menu .codex-model-submenu-heading {
+  display: flex;
+  grid-template-columns: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 5px;
+  width: 100%;
+  min-height: 34px;
+  padding: 2px 7px;
+  color: #e8e8e8;
+  font-size: 13px;
+}
+
+.codex-model-menu-divider {
+  height: 1px;
+  margin: 0 5px 4px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.codex-model-menu .codex-model-menu-row {
+  grid-template-columns: auto minmax(0, 1fr) 14px;
+  min-height: 36px;
+  font-size: 14px;
+}
+
+.codex-model-menu-row > .codex-model-menu-value {
+  color: #a8a8a8;
+  text-align: right;
+}
+
+.codex-model-menu-row > svg {
+  color: #9a9a9a;
+}
+
+.codex-model-menu-options {
+  display: grid;
+  gap: 3px;
+  min-height: 0;
   overflow: auto;
   scrollbar-color: rgba(255, 255, 255, 0.24) #1f1f1f;
   scrollbar-width: thin;
-  border: 0;
-  border-radius: 10px;
-  background: #1f1f1f;
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
-  padding: 6px;
 }
 
-.codex-model-menu::-webkit-scrollbar {
+.codex-model-menu-options::-webkit-scrollbar {
   width: 9px;
 }
 
-.codex-model-menu::-webkit-scrollbar-track,
-.codex-model-menu::-webkit-scrollbar-corner {
-  background: #1f1f1f;
+.codex-model-menu-options::-webkit-scrollbar-track,
+.codex-model-menu-options::-webkit-scrollbar-corner {
+  background: #2b2b2b;
 }
 
-.codex-model-menu::-webkit-scrollbar-thumb {
-  border: 2px solid #1f1f1f;
+.codex-model-menu-options::-webkit-scrollbar-thumb {
+  border: 2px solid #2b2b2b;
   border-radius: 999px;
   background: #5a5a5a;
   background-clip: padding-box;
 }
 
-.codex-model-menu::-webkit-scrollbar-thumb:hover {
+.codex-model-menu-options::-webkit-scrollbar-thumb:hover {
   background: #777;
   background-clip: padding-box;
 }
@@ -912,6 +959,12 @@
 
 .codex-model-menu-title {
   padding: 6px 7px 3px;
+  color: #8f8f8f;
+  font-size: 12px;
+}
+
+.codex-model-menu-empty {
+  padding: 10px 8px;
   color: #8f8f8f;
   font-size: 12px;
 }
@@ -936,6 +989,24 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.codex-model-menu .codex-model-menu-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.codex-model-menu .codex-model-menu-option-label > svg {
+  flex: 0 0 auto;
+}
+
+.codex-model-menu .codex-model-setup-action {
+  margin-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0 0 6px 6px;
+  padding-top: 7px;
 }
 
 .codex-model-menu button:hover,

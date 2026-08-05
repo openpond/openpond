@@ -111,16 +111,24 @@ export function MarkdownText({
           );
         }
         if (block.type === "list") {
-          const ListTag = block.ordered ? "ol" : "ul";
-          return (
-            <ListTag className="markdown-list" key={index}>
-              {block.items.map((item, itemIndex) => (
-                <li className={item.checked === null ? undefined : "markdown-task-list-item"} key={itemIndex}>
-                  {item.checked === null ? null : <MarkdownCheckbox checked={item.checked} />}
-                  <span>{renderInline(item.content, context)}</span>
-                </li>
-              ))}
-            </ListTag>
+          const items = block.items.map((item, itemIndex) => (
+            <li
+              className={item.checked === null ? undefined : "markdown-task-list-item"}
+              key={itemIndex}
+              value={block.ordered ? item.ordinal ?? undefined : undefined}
+            >
+              {item.checked === null ? null : <MarkdownCheckbox checked={item.checked} />}
+              <span>{renderInline(item.content, context)}</span>
+            </li>
+          ));
+          return block.ordered ? (
+            <ol className="markdown-list" key={index} start={block.start}>
+              {items}
+            </ol>
+          ) : (
+            <ul className="markdown-list" key={index}>
+              {items}
+            </ul>
           );
         }
         if (block.type === "heading") {

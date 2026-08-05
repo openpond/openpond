@@ -484,7 +484,7 @@ export function Composer({
         ];
     const setupProviderOption: DropdownOption = {
       value: "setup-provider",
-      label: "Setup new provider",
+      label: "New Model/Provider",
       icon: "plus",
       separatorBefore: true,
     };

@@ -24,6 +24,7 @@ import {
 import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
+import { StreamingMarkdownText } from "./StreamingMarkdownText";
 import {
   ActionRunCard,
   isProfileActionRun,
@@ -36,6 +37,7 @@ import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
+  animateInitialContent?: boolean;
   accountBaseUrl?: string | null;
   billingOrganizationSlug?: string | null;
   billingTeamId?: string | null;
@@ -58,6 +60,7 @@ type MessageRowProps = {
 
 export const MessageRow = memo(function MessageRow({
   activeWorkspaceAppId = null,
+  animateInitialContent = false,
   accountBaseUrl = null,
   billingOrganizationSlug = null,
   billingTeamId = null,
@@ -146,8 +149,9 @@ export const MessageRow = memo(function MessageRow({
     <article className="message-row assistant">
       {message.content ? (
         <div className="assistant-message">
-          <MarkdownText
+          <StreamingMarkdownText
             activeWorkspaceAppId={activeWorkspaceAppId}
+            animateInitialContent={animateInitialContent}
             connection={connection}
             content={message.content}
             onOpenBrowserLink={onOpenBrowserLink}
@@ -285,6 +289,7 @@ function areMessageRowPropsEqual(
 ): boolean {
   return (
     previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
+    previous.animateInitialContent === next.animateInitialContent &&
     previous.accountBaseUrl === next.accountBaseUrl &&
     previous.billingOrganizationSlug === next.billingOrganizationSlug &&
     previous.billingTeamId === next.billingTeamId &&

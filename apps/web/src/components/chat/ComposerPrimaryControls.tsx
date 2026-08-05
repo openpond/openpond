@@ -1,4 +1,4 @@
-import type { CSSProperties, RefObject } from "react";
+import { useMemo, type CSSProperties, type RefObject } from "react";
 import {
   ArrowUp,
   ArrowUpRight,
@@ -18,6 +18,8 @@ import type {
 import { DropdownSelect } from "../DropdownSelect";
 import {
   CODEX_PERMISSION_MODE_OPTIONS,
+  defaultModelForProvider,
+  modelOptionsForProvider,
   OPENPOND_COMMAND_ACCESS_MODE_OPTIONS,
   providerModelSupportsReasoning,
   type DropdownOption,
@@ -26,7 +28,7 @@ import type { ContextWindowStatus } from "../../lib/context-window";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { VoiceInputButton } from "../voice/VoiceInputButton";
-import { CodexModelReasoningMenu } from "./ComposerControls";
+import { ComposerModelMenu, type ComposerModelGroup } from "./ComposerControls";
 import {
   ComposerProfileTargetControl,
   type ComposerProfileTargetState,
@@ -34,6 +36,7 @@ import {
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
+  "local-adapter",
   "openai",
   "xai",
   "openrouter",
@@ -149,6 +152,28 @@ export function ComposerPrimaryControls({
     modelValue,
     providerSettings
   );
+  const modelGroups = useMemo(
+    () =>
+      composerModelGroups({
+        currentModelOptions: modelOptions,
+        currentProvider: provider,
+        providerOptions,
+        providerSettings,
+      }),
+    [modelOptions, provider, providerOptions, providerSettings],
+  );
+  const teamModelGroups = useMemo(
+    () => modelGroups.filter((group) => TEAM_CHAT_LOCAL_PROVIDER_IDS.has(group.provider)),
+    [modelGroups],
+  );
+  const changeModelSelection = (nextProvider: ChatProvider, nextModel: string) => {
+    if (nextProvider === provider) {
+      onModelChange(nextModel);
+      return;
+    }
+    onModelChange(nextModel);
+    onProviderChange(nextProvider);
+  };
   if (surface === "team") {
     return (
       <div className="composer-primary-controls team-chat-composer-controls">
@@ -185,46 +210,18 @@ export function ComposerPrimaryControls({
         </label>
         <div className="composer-spacer" />
         {teamUseModel ? (
-          <>
-            <DropdownSelect
-              compact
-              placement={dropdownPlacement}
-              label="Provider"
-              value={provider}
-              options={providerOptions.filter((option) =>
-                TEAM_CHAT_LOCAL_PROVIDER_IDS.has(option.value)
-              )}
-              disabled={busy}
-              onChange={(value) => {
-                if (value === "setup-provider") {
-                  onProviderSetupOpen?.();
-                  return;
-                }
-                onProviderChange(value as ChatProvider);
-              }}
-            />
-            {showModelReasoningMenu ? (
-              <CodexModelReasoningMenu
-                disabled={busy}
-                model={modelValue}
-                modelOptions={modelOptions}
-                placement={dropdownPlacement}
-                reasoningEffort={codexReasoningEffort}
-                onModelChange={onModelChange}
-                onReasoningEffortChange={onCodexReasoningEffortChange}
-              />
-            ) : modelOptions.length > 0 ? (
-              <DropdownSelect
-                compact
-                placement={dropdownPlacement}
-                label="Model"
-                value={modelValue}
-                options={modelOptions}
-                disabled={busy}
-                onChange={onModelChange}
-              />
-            ) : null}
-          </>
+          <ComposerModelMenu
+            disabled={busy}
+            model={modelValue}
+            modelGroups={teamModelGroups}
+            placement={dropdownPlacement}
+            provider={provider}
+            reasoningEffort={codexReasoningEffort}
+            showReasoning={showModelReasoningMenu}
+            onModelSelectionChange={changeModelSelection}
+            onProviderSetupOpen={onProviderSetupOpen}
+            onReasoningEffortChange={onCodexReasoningEffortChange}
+          />
         ) : null}
         <VoiceInputButton
           buttonClassName="composer-icon"
@@ -384,43 +381,18 @@ export function ComposerPrimaryControls({
           ) : null}
         </span>
       </span>
-      <DropdownSelect
-        compact
-        placement={dropdownPlacement}
-        label="Provider"
-        value={provider}
-        options={providerOptions}
+      <ComposerModelMenu
         disabled={busy}
-        onChange={(value) => {
-          if (value === "setup-provider") {
-            onProviderSetupOpen?.();
-            return;
-          }
-          onProviderChange(value as ChatProvider);
-        }}
+        model={modelValue}
+        modelGroups={modelGroups}
+        placement={dropdownPlacement}
+        provider={provider}
+        reasoningEffort={codexReasoningEffort}
+        showReasoning={showModelReasoningMenu}
+        onModelSelectionChange={changeModelSelection}
+        onProviderSetupOpen={onProviderSetupOpen}
+        onReasoningEffortChange={onCodexReasoningEffortChange}
       />
-      {showModelReasoningMenu && (
-        <CodexModelReasoningMenu
-          disabled={busy}
-          model={modelValue}
-          modelOptions={modelOptions}
-          placement={dropdownPlacement}
-          reasoningEffort={codexReasoningEffort}
-          onModelChange={onModelChange}
-          onReasoningEffortChange={onCodexReasoningEffortChange}
-        />
-      )}
-      {!showModelReasoningMenu && modelOptions.length > 0 && (
-        <DropdownSelect
-          compact
-          placement={dropdownPlacement}
-          label="Model"
-          value={modelValue}
-          options={modelOptions}
-          disabled={busy}
-          onChange={onModelChange}
-        />
-      )}
       <VoiceInputButton
         buttonClassName="composer-icon"
         connection={connection}
@@ -479,4 +451,32 @@ export function ComposerPrimaryControls({
       )}
     </div>
   );
+}
+
+function composerModelGroups({
+  currentModelOptions,
+  currentProvider,
+  providerOptions,
+  providerSettings,
+}: {
+  currentModelOptions: DropdownOption[];
+  currentProvider: ChatProvider;
+  providerOptions: DropdownOption[];
+  providerSettings?: ProviderSettings | null;
+}): ComposerModelGroup[] {
+  return providerOptions.flatMap((providerOption) => {
+    if (providerOption.value === "setup-provider") return [];
+    const nextProvider = providerOption.value as ChatProvider;
+    const options = nextProvider === currentProvider
+      ? currentModelOptions
+      : modelOptionsForProvider(nextProvider, providerSettings);
+    return options.length > 0
+      ? [{
+          provider: nextProvider,
+          label: providerOption.label,
+          defaultModel: defaultModelForProvider(nextProvider, providerSettings),
+          options,
+        }]
+      : [];
+  });
 }

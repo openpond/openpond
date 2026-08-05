@@ -1,13 +1,19 @@
 export type MarkdownListItem = {
   content: string;
   checked: boolean | null;
+  ordinal: number | null;
 };
 
 type MarkdownBlock =
   | { type: "paragraph"; content: string }
   | { type: "code"; content: string; language?: string }
   | { type: "heading"; level: 1 | 2 | 3 | 4; content: string }
-  | { type: "list"; ordered: boolean; items: MarkdownListItem[] }
+  | {
+      type: "list";
+      ordered: boolean;
+      start: number | undefined;
+      items: MarkdownListItem[];
+    }
   | { type: "table"; headers: string[]; rows: string[][] };
 
 export function parseBlocks(content: string): MarkdownBlock[] {
@@ -16,6 +22,7 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   let paragraph: string[] = [];
   let listItems: MarkdownListItem[] = [];
   let listOrdered = false;
+  let listStart: number | undefined;
   let codeLines: string[] | null = null;
   let codeLanguage: string | undefined;
   let codeFenceTicks = 0;
@@ -28,9 +35,15 @@ export function parseBlocks(content: string): MarkdownBlock[] {
 
   function flushList() {
     if (listItems.length === 0) return;
-    blocks.push({ type: "list", ordered: listOrdered, items: listItems });
+    blocks.push({
+      type: "list",
+      ordered: listOrdered,
+      start: listStart,
+      items: listItems,
+    });
     listItems = [];
     listOrdered = false;
+    listStart = undefined;
   }
 
   for (let index = 0; index < lines.length; index += 1) {
@@ -75,18 +88,26 @@ export function parseBlocks(content: string): MarkdownBlock[] {
       continue;
     }
 
-    const listMatch = line.match(/^\s*(?:([-*])|(\d+)[.)])\s+(.+)$/);
+    const listMatch = line.match(LIST_LINE_PATTERN);
     if (listMatch) {
       flushParagraph();
       const ordered = Boolean(listMatch[2]);
       if (listItems.length > 0 && ordered !== listOrdered) flushList();
       listOrdered = ordered;
-      listItems.push(parseListItem(listMatch[3]!.trim()));
+      const ordinal = listMatch[2] ? Number(listMatch[2]) : null;
+      if (listItems.length === 0) listStart = ordinal ?? undefined;
+      listItems.push(parseListItem(listMatch[3]!.trim(), ordinal));
       continue;
     }
 
     if (!line.trim()) {
       flushParagraph();
+      if (
+        listItems.length > 0 &&
+        nextListType(lines, index + 1) === listOrdered
+      ) {
+        continue;
+      }
       flushList();
       continue;
     }
@@ -119,12 +140,25 @@ function parseOpeningFenceLine(line: string): { language?: string; firstLine?: s
   };
 }
 
-function parseListItem(value: string): MarkdownListItem {
+const LIST_LINE_PATTERN = /^\s*(?:([-*])|(\d+)[.)])\s+(.+)$/;
+
+function nextListType(lines: string[], startIndex: number): boolean | null {
+  let index = startIndex;
+  while (index < lines.length && !lines[index]!.trim()) index += 1;
+  const match = (lines[index] ?? "").match(LIST_LINE_PATTERN);
+  return match ? Boolean(match[2]) : null;
+}
+
+function parseListItem(
+  value: string,
+  ordinal: number | null
+): MarkdownListItem {
   const taskMatch = /^\[([ xX])]\s*(.*)$/.exec(value);
-  if (!taskMatch) return { content: value, checked: null };
+  if (!taskMatch) return { content: value, checked: null, ordinal };
   return {
     content: taskMatch[2] ?? "",
     checked: taskMatch[1]?.toLowerCase() === "x",
+    ordinal,
   };
 }
 
