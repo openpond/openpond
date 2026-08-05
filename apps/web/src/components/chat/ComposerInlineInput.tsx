@@ -473,6 +473,8 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   disabled: boolean;
   onCursorChange: (index: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
+  onPasteFiles?: (files: File[]) => void;
+  onPasteTextAsAttachment?: (text: string) => boolean;
   onPromptChange: (value: string, cursorIndex: number) => void;
   onTokenPositionChange: (position: number | null) => void;
   placeholder: string;
@@ -483,6 +485,8 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   disabled,
   onCursorChange,
   onKeyDown,
+  onPasteFiles,
+  onPasteTextAsAttachment,
   onPromptChange,
   onTokenPositionChange,
   placeholder,
@@ -582,8 +586,14 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       onMouseUp={updateCursorFromSelection}
       onPaste={(event) => {
         event.preventDefault();
+        const files = Array.from(event.clipboardData.files);
+        if (files.length > 0 && onPasteFiles) {
+          onPasteFiles(files);
+          return;
+        }
         const text = event.clipboardData.getData("text/plain");
         if (!text) return;
+        if (onPasteTextAsAttachment?.(text)) return;
         insertPlainText(text);
         syncAfterProgrammaticInsert();
       }}

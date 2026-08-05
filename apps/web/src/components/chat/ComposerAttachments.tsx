@@ -23,6 +23,9 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 
+export const COMPOSER_PASTED_TEXT_MIN_CHARS = 2_000;
+const PASTED_TEXT_ATTACHMENT_NAME_PATTERN = /^Pasted text(?: (\d+))?\.txt$/;
+
 export type ComposerAttachmentDraft = {
   id: string;
   file: File;
@@ -33,6 +36,23 @@ export type ComposerAttachmentDraft = {
   relativePath?: string;
   previewUrl?: string;
 };
+
+export function createComposerPastedTextFile(
+  text: string,
+  existingAttachments: readonly Pick<ComposerAttachmentDraft, "name">[],
+): File | null {
+  if (text.length < COMPOSER_PASTED_TEXT_MIN_CHARS) return null;
+  const usedPasteNumbers = new Set<number>();
+  for (const attachment of existingAttachments) {
+    const match = PASTED_TEXT_ATTACHMENT_NAME_PATTERN.exec(attachment.name);
+    if (match) usedPasteNumbers.add(match[1] ? Number(match[1]) : 1);
+  }
+  let pasteNumber = 1;
+  while (usedPasteNumbers.has(pasteNumber)) pasteNumber += 1;
+  const name =
+    pasteNumber === 1 ? "Pasted text.txt" : `Pasted text ${pasteNumber}.txt`;
+  return new File([text], name, { type: "text/plain" });
+}
 
 export function ComposerAttachmentPreview({
   attachment,
