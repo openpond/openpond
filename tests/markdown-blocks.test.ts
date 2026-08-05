@@ -50,4 +50,20 @@ describe("chat Markdown blocks", () => {
     );
     expect(renderableStreamingMarkdown("#", true)).toBe("#");
   });
+
+  test("groups contiguous quote lines into a blockquote with quoted blanks", () => {
+    expect(
+      parseBlocks(
+        "> **2 suggested improvements**\n>\n> **Research reports are missing source links**\n> Recommended fix: Update the Work prompt\n\nAfterward.",
+      ),
+    ).toEqual([
+      {
+        type: "blockquote",
+        content:
+          "**2 suggested improvements**\n\n**Research reports are missing source links**\nRecommended fix: Update the Work prompt",
+      },
+      { type: "paragraph", content: "Afterward." },
+    ]);
+    expect(renderableStreamingMarkdown(">", false)).toBe("");
+  });
 });

@@ -21,6 +21,7 @@ import {
   buildSidebarProjectPathIndex,
   sidebarProjectIdForSession,
 } from "../apps/web/src/lib/sidebar-session-projects";
+import { buildChatMessages } from "../apps/web/src/lib/chat-messages";
 
 describe("codex history", () => {
   test("projects Codex JSONL records into chat events", () => {
@@ -63,6 +64,310 @@ describe("codex history", () => {
     ]);
     expect(parsed.events[1]?.args?.prompt).toBe("show this thread");
     expect(parsed.events[2]?.output).toBe("thread loaded");
+  });
+
+  test("hides standalone Codex git directives from assistant messages", () => {
+    const sessionId = codexHistorySessionId(
+      "019fd07d-8ef6-70d0-8362-6c789616db30"
+    );
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T05:55:17.000Z",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Publish the branch" }],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T05:56:00.000Z",
+          payload: {
+            type: "message",
+            role: "assistant",
+            phase: "final_answer",
+            content: [
+              {
+                type: "output_text",
+                text:
+                  "Published the branch.\n\n" +
+                  '::git-stage{cwd="/home/glu/Projects/all/openpond"}\n' +
+                  '::git-commit{cwd="/home/glu/Projects/all/openpond"}\n' +
+                  '::git-push{cwd="/home/glu/Projects/all/openpond" branch="feat/hosted-work-evidence"}',
+              },
+            ],
+          },
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-08-05T05:55:00.000Z",
+        sessionId,
+        threadId: "019fd07d-8ef6-70d0-8362-6c789616db30",
+      }
+    );
+
+    expect(parsed.events.map((event) => event.name)).toEqual([
+      "session.started",
+      "turn.started",
+      "assistant.delta",
+      "turn.completed",
+    ]);
+    expect(parsed.events[2]?.output).toBe("Published the branch.");
+    expect(JSON.stringify(parsed.events)).not.toContain("::git-");
+  });
+
+  test("keeps Codex git directive examples inside fenced code", () => {
+    const sessionId = codexHistorySessionId(
+      "019fd07d-8ef6-70d0-8362-6c789616db31"
+    );
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T05:55:17.000Z",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "Show the directive syntax" }],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T05:56:00.000Z",
+          payload: {
+            type: "message",
+            role: "assistant",
+            phase: "final_answer",
+            content: [
+              {
+                type: "output_text",
+                text:
+                  "```text\n" +
+                  '::git-stage{cwd="/example"}\n' +
+                  "```",
+              },
+            ],
+          },
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-08-05T05:55:00.000Z",
+        sessionId,
+        threadId: "019fd07d-8ef6-70d0-8362-6c789616db31",
+      }
+    );
+
+    expect(parsed.events[2]?.output).toBe(
+      '```text\n::git-stage{cwd="/example"}\n```'
+    );
+  });
+
+  test("preserves commentary boundaries around current Codex custom exec calls", () => {
+    const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+    const sessionId = codexHistorySessionId(threadId);
+    const providerTurnId = "019fd26a-e930-78d1-bfbd-384dfe8e19dc";
+    const turnMetadata = {
+      internal_chat_message_metadata_passthrough: {
+        turn_id: providerTurnId,
+      },
+    };
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:09.886Z",
+          payload: {
+            type: "message",
+            id: "msg_user",
+            role: "user",
+            ...turnMetadata,
+            content: [{ type: "input_text", text: "review the renderer" }],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:15.214Z",
+          payload: {
+            type: "message",
+            id: "msg_commentary_1",
+            role: "assistant",
+            phase: "commentary",
+            ...turnMetadata,
+            content: [{ type: "output_text", text: "I am reviewing the history adapter." }],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:15.869Z",
+          payload: {
+            type: "custom_tool_call",
+            id: "ctc_exec_1",
+            status: "completed",
+            call_id: "call_exec_1",
+            name: "exec",
+            input:
+              'const r = await tools.exec_command({"cmd":"sed -n \'1,80p\' apps/server/src/codex-history.ts","workdir":"/repo"}); text(r.output);',
+            ...turnMetadata,
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:16.030Z",
+          payload: {
+            type: "custom_tool_call_output",
+            id: "ctco_exec_1",
+            call_id: "call_exec_1",
+            output: [
+              { type: "input_text", text: "Script completed\nWall time 0.1 seconds\nOutput:\n" },
+              { type: "input_text", text: "import type { RuntimeEvent } from \"@openpond/contracts\";" },
+            ],
+            ...turnMetadata,
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:24.020Z",
+          payload: {
+            type: "message",
+            id: "msg_commentary_2",
+            role: "assistant",
+            phase: "commentary",
+            ...turnMetadata,
+            content: [{ type: "output_text", text: "The adapter is dropping custom calls." }],
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:25.639Z",
+          payload: {
+            type: "custom_tool_call",
+            id: "ctc_exec_2",
+            status: "completed",
+            call_id: "call_exec_2",
+            name: "exec",
+            input:
+              'const r = await tools.exec_command({cmd:"pnpm exec vitest run tests/codex-history.test.ts",workdir:"/repo"}); text(r.output);',
+            ...turnMetadata,
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:26.030Z",
+          payload: {
+            type: "custom_tool_call_output",
+            id: "ctco_exec_2",
+            call_id: "call_exec_2",
+            output: [{ type: "input_text", text: "Script completed\nTests passed" }],
+            ...turnMetadata,
+          },
+        },
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:54:27.000Z",
+          payload: {
+            type: "message",
+            id: "msg_final",
+            role: "assistant",
+            phase: "final_answer",
+            ...turnMetadata,
+            content: [{ type: "output_text", text: "The provider-specific fix is complete." }],
+          },
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-08-05T14:54:00.000Z",
+        sessionId,
+        threadId,
+      }
+    );
+
+    expect(parsed.events.map((event) => event.name)).toEqual([
+      "session.started",
+      "turn.started",
+      "assistant.delta",
+      "tool.started",
+      "tool.completed",
+      "command.output",
+      "assistant.delta",
+      "tool.started",
+      "tool.completed",
+      "command.output",
+      "assistant.delta",
+      "turn.completed",
+    ]);
+    expect(parsed.events[3]).toMatchObject({
+      action: "exec",
+      data: {
+        callId: "call_exec_1",
+        command: "sed -n '1,80p' apps/server/src/codex-history.ts",
+        tool: "exec",
+      },
+    });
+    expect(parsed.events[4]?.output).toContain("Script completed");
+
+    const messages = buildChatMessages(parsed.events);
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "activity_group",
+      "assistant",
+      "activity_group",
+      "assistant",
+    ]);
+    expect(messages.filter((message) => message.role === "assistant").map((message) => message.content)).toEqual([
+      "I am reviewing the history adapter.",
+      "The adapter is dropping custom calls.",
+      "The provider-specific fix is complete.",
+    ]);
+  });
+
+  test("keeps legacy Codex function-call records projected as tool activity", () => {
+    const threadId = "019e7138-5da2-7671-8837-202a36e0fff1";
+    const sessionId = codexHistorySessionId(threadId);
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "message",
+          timestamp: "2026-07-02T19:40:00.000Z",
+          role: "user",
+          content: [{ type: "input_text", text: "inspect status" }],
+        },
+        {
+          type: "function_call",
+          timestamp: "2026-07-02T19:40:01.000Z",
+          id: "legacy_call_item",
+          call_id: "legacy_call",
+          name: "exec_command",
+          arguments: JSON.stringify({ cmd: "git status --short" }),
+        },
+        {
+          type: "function_call_output",
+          timestamp: "2026-07-02T19:40:02.000Z",
+          id: "legacy_output_item",
+          call_id: "legacy_call",
+          output: " M apps/server/src/codex-history.ts",
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-07-02T19:39:00.000Z",
+        sessionId,
+        threadId,
+      }
+    );
+
+    expect(parsed.events.map((event) => event.name)).toEqual([
+      "session.started",
+      "turn.started",
+      "tool.started",
+      "tool.completed",
+      "command.output",
+    ]);
+    expect(parsed.events[2]).toMatchObject({
+      action: "exec_command",
+      data: { callId: "legacy_call", command: "git status --short" },
+    });
   });
 
   test("keeps projected message and turn identities stable across tail windows", () => {
@@ -191,6 +496,61 @@ describe("codex history", () => {
       },
     ]);
     expect(JSON.stringify(turnStarted?.args)).not.toContain("<attachments>");
+  });
+
+  test("hides the current Codex files-mentioned envelope from visible user prompts", () => {
+    const sessionId = codexHistorySessionId(
+      "019fd26a-49d5-76d0-aed9-431657ff8613"
+    );
+    const parsed = parseCodexSessionRecords(
+      [
+        {
+          type: "response_item",
+          timestamp: "2026-08-05T14:53:12.000Z",
+          payload: {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  "# Files mentioned by the user:\n\n" +
+                  "## Screenshot from 2026-08-05 10.53.12.png:\n" +
+                  "/home/glu/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.12.png\n\n" +
+                  "## Screenshot from 2026-08-05 10.53.06.png:\n" +
+                  "/home/glu/Pictures/Screenshots/Screenshot from 2026-08-05 10.53.06.png\n\n" +
+                  "## My request for Codex:\n" +
+                  "Compare this Codex task without changing other providers.",
+              },
+              {
+                type: "input_text",
+                text: '<image name=[Image #1] path="/tmp/screenshot.png">',
+              },
+              {
+                type: "input_image",
+                image_url: "data:image/png;base64,aGVsbG8=",
+              },
+              { type: "input_text", text: "</image>" },
+            ],
+          },
+        },
+      ],
+      {
+        fallbackTimestamp: "2026-08-05T14:53:00.000Z",
+        sessionId,
+        threadId: "019fd26a-49d5-76d0-aed9-431657ff8613",
+      },
+    );
+
+    const turnStarted = parsed.events.find(
+      (event) => event.name === "turn.started"
+    );
+    expect(turnStarted?.args?.prompt).toBe(
+      "Compare this Codex task without changing other providers.",
+    );
+    expect(JSON.stringify(turnStarted?.args)).not.toContain("Files mentioned");
+    expect(JSON.stringify(turnStarted?.args)).not.toContain("My request for Codex");
+    expect(turnStarted?.args?.prompt).not.toContain("</image>");
   });
 
   test("projects OpenPond-saved Codex history image attachments as previews", () => {

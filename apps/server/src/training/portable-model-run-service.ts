@@ -8,6 +8,7 @@ import {
   TrainingJobSchema,
   type TrainingApproval,
   type TrainingCatalog,
+  type TrainingJob,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
 } from "@openpond/contracts";
@@ -59,6 +60,10 @@ export function createPortableModelRunService(deps: {
   }): Promise<TrainingApproval>;
   prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
 }) {
+  const reconciliationIntervalMs = 5_000;
+  let reconciliationInFlight: Promise<void> | null = null;
+  let lastReconciledAt = 0;
+
   async function start(input: {
     modelRunId: string;
     maximumSpendUsd: number | null;
@@ -287,13 +292,29 @@ export function createPortableModelRunService(deps: {
     return job;
   }
 
-  function executionRef(job: Awaited<ReturnType<typeof execution>>) {
+  function executionRef(job: TrainingJob) {
     return TrainingExecutionRefSchema.safeParse(job.metadata.portableExecutionRef);
   }
 
   async function status(modelRunId: string) {
     const canonical = await deps.store.getModelRun(modelRunId);
-    if (canonical && ["succeeded", "failed", "cancelled"].includes(canonical.status)) {
+    const terminalStatus =
+      canonical?.status === "succeeded"
+      || canonical?.status === "failed"
+      || canonical?.status === "cancelled"
+        ? canonical.status
+        : null;
+    if (canonical && terminalStatus) {
+      const job = await execution(modelRunId);
+      if (["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) {
+        await deps.store.saveTrainingJob({
+          ...job,
+          status: terminalStatus,
+          completedAt: canonical.completedAt ?? canonical.updatedAt,
+          error: canonical.status === "failed" ? canonical.failure : null,
+          updatedAt: canonical.updatedAt,
+        });
+      }
       return portableStatusFromModelRun(canonical);
     }
     const job = await execution(modelRunId);
@@ -436,7 +457,38 @@ export function createPortableModelRunService(deps: {
     throw new Error("Training execution has no registered portable engine.");
   }
 
-  return { start, status, events, logs, artifacts, cancel };
+  function reconcileActive(options: { force?: boolean } = {}): Promise<void> {
+    if (reconciliationInFlight) return reconciliationInFlight;
+    if (!options.force && Date.now() - lastReconciledAt < reconciliationIntervalMs) {
+      return Promise.resolve();
+    }
+    const reconciliation = (async () => {
+      const jobs = await deps.store.listTrainingJobs();
+      const modelRunIds = [
+        ...new Set(
+          jobs
+            .filter((job) =>
+              ["queued", "starting", "running", "cancelling", "reconciling"].includes(
+                job.status,
+              ),
+            )
+            .filter((job) => executionRef(job).success)
+            .map((job) => job.metadata.modelRunId)
+            .filter((id): id is string => typeof id === "string" && id.length > 0),
+        ),
+      ];
+      for (let index = 0; index < modelRunIds.length; index += 4) {
+        await Promise.allSettled(modelRunIds.slice(index, index + 4).map((id) => status(id)));
+      }
+      lastReconciledAt = Date.now();
+    })().finally(() => {
+      if (reconciliationInFlight === reconciliation) reconciliationInFlight = null;
+    });
+    reconciliationInFlight = reconciliation;
+    return reconciliation;
+  }
+
+  return { start, status, events, logs, artifacts, cancel, reconcileActive };
 }
 
 function assertSubmittedManifest(

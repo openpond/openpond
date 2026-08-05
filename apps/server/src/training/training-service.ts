@@ -239,9 +239,23 @@ export function createTrainingService(deps: {
     approve,
     prepareModel: deps.prepareModel,
   });
+  void portableModelRuns.reconcileActive({ force: true });
+
+  async function activity(profileId?: string) {
+    await Promise.all([
+      fireworks.reconcile(),
+      fireworksServing.reconcile(),
+      portableModelRuns.reconcileActive(),
+    ]);
+    const [jobs, servingSessions] = await Promise.all([
+      deps.store.listTrainingJobs(),
+      fireworksServing.list(profileId),
+    ]);
+    return { jobs, servingSessions };
+  }
 
   async function state(profileId?: string) {
-    await Promise.all([fireworks.reconcile(), fireworksServing.reconcile()]);
+    const activeState = await activity(profileId);
     const [
       plans,
       bundles,
@@ -258,12 +272,12 @@ export function createTrainingService(deps: {
     ] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingBundles(),
-      deps.store.listTrainingJobs(),
+      Promise.resolve(activeState.jobs),
       deps.store.listTrainingArtifacts(),
       deps.store.listModelArtifactLineage(),
       deps.store.listRolloutTrajectoryReceipts(),
       deps.store.listModelBindings(),
-      fireworksServing.list(profileId),
+      Promise.resolve(activeState.servingSessions),
       destinations(),
       deps.computeInventory?.() ?? Promise.resolve(null),
       listTrainingDestinationSecretRefs(path.join(deps.storeDir, "secrets")),
@@ -370,6 +384,7 @@ export function createTrainingService(deps: {
     start,
     prepareStart,
     startPrepared,
+    activity,
     state,
     importExternal,
     exportBundle,

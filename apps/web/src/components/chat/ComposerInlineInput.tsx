@@ -523,12 +523,6 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
       prompt === "" ||
       currentState.text !== prompt ||
       currentState.tokenPosition !== tokenPosition(token, prompt);
-    console.log("composer-selection-debug", {
-      currentState,
-      prompt,
-      shouldRebuild,
-      visualChanged,
-    });
     if (shouldRebuild) {
       const selectionBeforeRebuild = document.activeElement === root
         ? selectionViewRange(root)

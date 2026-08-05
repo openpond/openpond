@@ -9,7 +9,10 @@ import {
 } from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
-import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
+import {
+  activityToolRowLabel,
+  subagentMessageNeedsCollapse,
+} from "../apps/web/src/components/chat/MessageActivityGroup";
 import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
@@ -365,7 +368,9 @@ describe("chat message projection", () => {
         onOpenSession: () => undefined,
       })
     );
-    expect(html).toContain("Working…");
+    expect(html).toContain(
+      "Searching for &quot;openpond_subagent_start&quot; in apps/server/src and tests"
+    );
     expect(html).not.toContain(
       "Subagent completed, read a file, and searched code"
     );
@@ -630,8 +635,13 @@ describe("chat message projection", () => {
     );
     expect(settledHtml).not.toContain("Working…");
     expect(settledHtml).not.toContain(" working");
-    expect(runningHtml).toContain("Working…");
+    expect(settledHtml).toContain('aria-expanded="false"');
+    expect(runningHtml).toContain(
+      "Listing files in apps/web/src/components/chat"
+    );
     expect(runningHtml).toContain(" working");
+    expect(runningHtml).toContain('aria-expanded="false"');
+    expect(runningHtml).not.toContain("Running command");
   });
 
   test("keeps completed reasoning hidden beneath a factual work summary", () => {
@@ -764,6 +774,17 @@ describe("chat message projection", () => {
     expect(html).toContain("Screenshot from 2026-07-02 13.49.59.png");
     expect(html).toContain("notes.txt");
     expect(html).toContain("user-message-attachment");
+
+    const codexHtml = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[0]!,
+        showUserAttachments: false,
+      })
+    );
+    expect(codexHtml).toContain("Can you inspect this bug screenshot?");
+    expect(codexHtml).not.toContain("user-message-attachments");
+    expect(codexHtml).not.toContain("Screenshot from 2026-07-02 13.49.59.png");
+    expect(codexHtml).not.toContain("notes.txt");
   });
 
   test("renders OpenPond Chat markdown image output inline", () => {
@@ -1543,8 +1564,7 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("Working…");
-    expect(html).not.toContain("X search");
+    expect(html).toContain("X search");
     expect(html).not.toContain("conn_should_not_render");
     expect(html).not.toContain("token_should_not_render");
 
@@ -1662,7 +1682,7 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Pushed changes");
   });
 
-  test("renders failed exec results as a compact terminal without transport JSON", () => {
+  test("keeps failed exec details collapsed without transport JSON", () => {
     const result = JSON.stringify({
       ok: false,
       action: "exec_command",
@@ -1722,13 +1742,11 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("activity-command-terminal failed");
-    expect(html).toContain("Ran command in 1s");
-    expect(html).toContain("Shell");
-    expect(html).toContain("Exit code 1");
-    expect(html).toContain('class="shell-token command">./cli</span>');
-    expect(html).toContain('class="shell-token plain">promote</span>');
-    expect(html).toContain("Fetching origin/develop");
+    expect(html).toContain("Command failed");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Ran command in 1s");
+    expect(html).not.toContain("activity-command-terminal");
+    expect(html).not.toContain("Fetching origin/develop");
     expect(html).not.toContain("&quot;action&quot;:&quot;exec_command&quot;");
   });
 
@@ -1760,8 +1778,8 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("Work sandbox entered error during startup.");
-    expect(html).toContain("<footer>Failed</footer>");
+    expect(html).not.toContain("Work sandbox entered error during startup.");
+    expect(html).not.toContain("activity-command-terminal");
     expect(html).not.toContain("&quot;action&quot;:&quot;work_environment&quot;");
   });
 
@@ -1790,11 +1808,48 @@ describe("chat message projection", () => {
         message: messages[1]!,
       })
     );
-    expect(html).toContain("Working…");
-    expect(html).toContain("Running command");
-    expect(html).toContain("activity-command-terminal running");
+    expect(html).toContain(
+      "Searching for &quot;activityGroupSummary&quot; in apps/web/src"
+    );
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Running command");
+    expect(html).not.toContain("activity-command-terminal");
     expect(html).not.toContain("Searched code");
-    expect(html).toContain("activityGroupSummary");
+  });
+
+  test("uses semantic command labels with duration for activity rows", () => {
+    expect(
+      activityToolRowLabel({
+        id: "read_command",
+        label: "Ran",
+        content: "sed -n '1,120p' app.ts",
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "completed",
+        terminal: { durationMs: 1_000 },
+      })
+    ).toBe("Read lines 1-120 of app.ts in 1s");
+    expect(
+      activityToolRowLabel({
+        id: "search_command",
+        label: "Running",
+        content: 'rg "activity-summary" apps/web/src',
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "running",
+      })
+    ).toBe('Searching for "activity-summary" in apps/web/src');
+    expect(
+      activityToolRowLabel({
+        id: "failed_command",
+        label: "Failed",
+        content: "pnpm test",
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "failed",
+        terminal: { durationMs: 1_000 },
+      })
+    ).toBe("Command failed in 1s");
   });
 
   test("merges workspace action results into the started activity row", () => {
@@ -1827,8 +1882,7 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[0]! })
     );
-    expect(html).toContain("Working…");
-    expect(html).not.toContain("Started sandbox");
+    expect(html).toContain("Started sandbox");
     expect(html).not.toContain("Starting sandbox");
   });
 

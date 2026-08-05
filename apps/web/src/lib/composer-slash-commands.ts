@@ -1,4 +1,4 @@
-import type { ChatProvider } from "@openpond/contracts";
+import type { ChatProvider, Experience } from "@openpond/contracts";
 
 export type ComposerSlashCommandId =
   | "agent"
@@ -71,6 +71,24 @@ export function composerSlashCommandsForProvider(
 ): ComposerSlashCommand[] {
   return COMPOSER_SLASH_COMMANDS.filter(
     (command) => command.id !== "goal" || provider === "codex",
+  );
+}
+
+export function composerSlashCommandAllowedInExperience(
+  command: Pick<ComposerSlashCommand, "id">,
+  experience: Experience,
+): boolean {
+  if (experience === "work") return command.id === "submit-issue";
+  if (experience === "chat") return command.id !== "sync-cloud";
+  return true;
+}
+
+export function composerSlashCommandsForExperience(
+  provider: ChatProvider,
+  experience: Experience,
+): ComposerSlashCommand[] {
+  return composerSlashCommandsForProvider(provider).filter((command) =>
+    composerSlashCommandAllowedInExperience(command, experience),
   );
 }
 

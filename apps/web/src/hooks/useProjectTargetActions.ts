@@ -89,7 +89,7 @@ export function useProjectTargetActions({
         return;
       }
       if (target === "none") {
-        appDispatch({ type: "beginNewChat", appId: null });
+        appDispatch({ type: "selectProject", projectId: null });
         setDiffPanelOpen(false);
         showToast("Started a chat without project files.", "info");
         return;

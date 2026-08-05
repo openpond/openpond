@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useId,
   useMemo,
   useRef,
@@ -30,6 +29,7 @@ import { useWorkspaceImageUrl } from "../../hooks/useWorkspaceImageUrl";
 import type { ActivityItem, ChatMessage } from "../../lib/app-models";
 import {
   summarizeActivityGroup,
+  summarizeShellCommand,
   type ActivityGroupSummaryKind,
 } from "../../lib/chat-activity-summary";
 import {
@@ -63,34 +63,11 @@ export function ActivityGroup({
   onOpenSession?: (sessionId: string) => void;
 }) {
   const activities = message.activities ?? [];
-  const initialVisibleCommand = activities.some(
-    (activity) =>
-      activity.kind === "command" &&
-      (activity.state === "running" || activity.state === "failed")
-  );
-  const [toolsExpanded, setToolsExpanded] = useState(initialVisibleCommand);
+  const [toolsExpanded, setToolsExpanded] = useState(false);
   const [openImage, setOpenImage] = useState<
     ActivityItem["imagePreview"] | null
   >(null);
   const toolListId = useId();
-  const autoExpandedCommandRef = useRef<string | null>(null);
-  const runningCommandId =
-    [...activities]
-      .reverse()
-      .find(
-        (activity) =>
-          activity.kind === "command" && activity.state === "running"
-      )?.callId ?? null;
-  useEffect(() => {
-    if (
-      !runningCommandId ||
-      autoExpandedCommandRef.current === runningCommandId
-    ) {
-      return;
-    }
-    autoExpandedCommandRef.current = runningCommandId;
-    setToolsExpanded(true);
-  }, [runningCommandId]);
   const summary = useMemo(
     () => summarizeActivityGroup(activities),
     [activities]
@@ -117,7 +94,8 @@ export function ActivityGroup({
   const summaryText = workTraceSummaryText(
     summary.text,
     message.traceState,
-    duration
+    duration,
+    activities
   );
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary =
@@ -230,9 +208,7 @@ function ActivityToolRow({
   onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
   onOpenSession?: (sessionId: string) => void;
 }) {
-  const [expanded, setExpanded] = useState(
-    activity.kind === "command" && activity.state !== "completed"
-  );
+  const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
   const imageSrc = useActivityImageUrl(
     activity.imagePreview ?? null,
@@ -635,9 +611,12 @@ function ActivitySummaryText({ summary }: { summary: string }) {
 function workTraceSummaryText(
   summary: string,
   traceState: ChatMessage["traceState"],
-  duration: string | null
+  duration: string | null,
+  activities: ActivityItem[]
 ): string {
-  if (traceState === "running") return "Working…";
+  if (traceState === "running") {
+    return latestWorkTraceActivitySummary(activities) || summary || "Working…";
+  }
   if (traceState === "failed") {
     return `${duration ? `Failed after ${duration}` : "Failed"}${
       summary ? ` · ${summary}` : ""
@@ -656,13 +635,45 @@ function workTraceSummaryText(
   return summary;
 }
 
-function activityToolRowLabel(activity: ActivityItem): string {
+function latestWorkTraceActivitySummary(
+  activities: ActivityItem[]
+): string | null {
+  let latestVisible: ActivityItem | null = null;
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const activity = activities[index]!;
+    if (activity.kind === "reasoning") continue;
+    latestVisible ??= activity;
+    if (activity.state === "running" || activity.state === "pending") {
+      return activitySummaryText(activity);
+    }
+  }
+  return latestVisible ? activitySummaryText(latestVisible) : null;
+}
+
+function activitySummaryText(activity: ActivityItem): string | null {
+  if (activity.kind === "command") {
+    if (activity.state === "failed") return "Command failed";
+    return (
+      summarizeShellCommand(activity.content, activity.state) ??
+      (activity.state === "running" || activity.state === "pending"
+        ? "Running command"
+        : "Ran command")
+    );
+  }
+  return activity.label.trim() || null;
+}
+
+export function activityToolRowLabel(activity: ActivityItem): string {
   if (activity.kind !== "command") return activity.label;
   if (activity.state === "running" || activity.state === "pending") {
-    return "Running command";
+    return activitySummaryText(activity) ?? "Running command";
   }
   const duration = formatCommandDuration(activity.terminal?.durationMs);
-  return `Ran command${duration ? ` in ${duration}` : ""}`;
+  if (activity.state === "failed") {
+    return `Command failed${duration ? ` in ${duration}` : ""}`;
+  }
+  const summary = activitySummaryText(activity) ?? "Ran command";
+  return `${summary}${duration ? ` in ${duration}` : ""}`;
 }
 
 function CommandTerminal({

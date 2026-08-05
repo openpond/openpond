@@ -28,21 +28,27 @@ describe("app state composer drafts", () => {
     expect(state.prompt).toBe("session one draft");
   });
 
-  test("does not carry session drafts into project or app composers", () => {
+  test("carries the active draft across project changes while app drafts stay scoped", () => {
     let state: AppState = initialAppState;
 
     state = appReducer(state, { type: "selectSession", sessionId: "session_1" });
     state = appReducer(state, { type: "field", key: "prompt", value: "session draft" });
     state = appReducer(state, { type: "selectProject", projectId: "local:project_1" });
-    expect(state.prompt).toBe("");
+    expect(state.prompt).toBe("session draft");
 
     state = appReducer(state, { type: "field", key: "prompt", value: "project draft" });
+    state = appReducer(state, { type: "selectProject", projectId: "local:project_2" });
+    expect(state.prompt).toBe("project draft");
+
+    state = appReducer(state, { type: "selectProject", projectId: null });
+    expect(state.prompt).toBe("project draft");
+
     state = appReducer(state, { type: "selectApp", appId: "app_1" });
     expect(state.prompt).toBe("");
 
     state = appReducer(state, { type: "field", key: "prompt", value: "app draft" });
     state = appReducer(state, { type: "selectProject", projectId: "local:project_1" });
-    expect(state.prompt).toBe("project draft");
+    expect(state.prompt).toBe("app draft");
 
     state = appReducer(state, { type: "selectApp", appId: "app_1" });
     expect(state.prompt).toBe("app draft");

@@ -6,6 +6,7 @@ export type MarkdownListItem = {
 
 type MarkdownBlock =
   | { type: "paragraph"; content: string }
+  | { type: "blockquote"; content: string }
   | { type: "code"; content: string; language?: string }
   | { type: "heading"; level: 1 | 2 | 3 | 4; content: string }
   | {
@@ -20,6 +21,7 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const blocks: MarkdownBlock[] = [];
   let paragraph: string[] = [];
+  let blockquoteLines: string[] = [];
   let listItems: MarkdownListItem[] = [];
   let listOrdered = false;
   let listStart: number | undefined;
@@ -31,6 +33,12 @@ export function parseBlocks(content: string): MarkdownBlock[] {
     if (paragraph.length === 0) return;
     blocks.push({ type: "paragraph", content: paragraph.join("\n").trim() });
     paragraph = [];
+  }
+
+  function flushBlockquote() {
+    if (blockquoteLines.length === 0) return;
+    blocks.push({ type: "blockquote", content: blockquoteLines.join("\n") });
+    blockquoteLines = [];
   }
 
   function flushList() {
@@ -59,6 +67,15 @@ export function parseBlocks(content: string): MarkdownBlock[] {
       codeLines.push(line);
       continue;
     }
+
+    const blockquoteMatch = line.match(/^\s*>\s?(.*)$/);
+    if (blockquoteMatch) {
+      flushParagraph();
+      flushList();
+      blockquoteLines.push(blockquoteMatch[1] ?? "");
+      continue;
+    }
+    flushBlockquote();
 
     const fence = parseOpeningFenceLine(line);
     if (fence) {
@@ -117,13 +134,14 @@ export function parseBlocks(content: string): MarkdownBlock[] {
   }
 
   if (codeLines) blocks.push({ type: "code", content: codeLines.join("\n"), language: codeLanguage });
+  flushBlockquote();
   flushParagraph();
   flushList();
   return blocks;
 }
 
 const INCOMPLETE_BLOCK_MARKER_PATTERN =
-  /^\s*(?:#{1,4}\s*|\d+[.)]\s*|[-*]\s*)$/;
+  /^\s*(?:#{1,4}\s*|>\s*|\d+[.)]\s*|[-*]\s*)$/;
 
 /** Avoids briefly rendering partial block syntax as prose during typewriter reveal. */
 export function renderableStreamingMarkdown(

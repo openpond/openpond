@@ -36,7 +36,7 @@ import { composerActionCatalogLabel } from "../../lib/composer-action-catalog";
 import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
   COMPOSER_SLASH_COMMANDS,
-  composerSlashCommandsForProvider,
+  composerSlashCommandsForExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -326,12 +326,7 @@ export function Composer({
     [actionCatalog, selectedActionId]
   );
   const availableSlashCommands = useMemo(() => {
-    const commands = composerSlashCommandsForProvider(provider);
-    if (experience === "development") return commands;
-    if (experience === "work") {
-      return commands.filter((command) => command.id === "submit-issue");
-    }
-    return [];
+    return composerSlashCommandsForExperience(provider, experience);
   }, [experience, provider]);
   const availableProfileSkills = useMemo(
     () =>

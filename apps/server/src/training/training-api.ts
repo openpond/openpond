@@ -42,6 +42,7 @@ import {
 } from "./create-improve-taskset-lineage.js";
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
+import { projectTrainingActivity } from "./training-activity.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -65,6 +66,7 @@ export function createTrainingApi(deps: {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
+    if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "portable_catalog") {
       return deps.training.portableCatalog(
         requestUrl?.searchParams.get("query") ?? "",
@@ -462,6 +464,16 @@ export function createTrainingApi(deps: {
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
+    const activity = projectTrainingActivity({
+      profileId,
+      state: {
+        jobs: execution.jobs,
+        creations,
+        minerRuns,
+        datasetImports,
+        servingSessions: execution.servingSessions,
+      },
+    });
     return {
       schemaVersion: "openpond.trainingState.v1",
       profileId,
@@ -480,8 +492,28 @@ export function createTrainingApi(deps: {
       modelRuns,
       modelTasksets,
       ...execution,
+      activityRevision: activity.revision,
       generatedAt: new Date().toISOString(),
     };
+  }
+
+  async function activity(profileId: string) {
+    const [creations, datasetImports, minerRuns, execution] = await Promise.all([
+      deps.store.listTaskCreationSnapshots(profileId),
+      deps.store.listDatasetImportJobs(profileId),
+      deps.store.listTaskMinerRuns(profileId),
+      deps.training.activity(profileId),
+    ]);
+    return projectTrainingActivity({
+      profileId,
+      state: {
+        jobs: execution.jobs,
+        creations,
+        minerRuns,
+        datasetImports,
+        servingSessions: execution.servingSessions,
+      },
+    });
   }
 
   async function datasetCatalog(profileId: string) {

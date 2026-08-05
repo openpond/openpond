@@ -55,6 +55,7 @@ type MessageRowProps = {
   ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
+  showUserAttachments?: boolean;
   workspaceRootPath?: string | null;
 };
 
@@ -72,6 +73,7 @@ export const MessageRow = memo(function MessageRow({
   onResolveUserQuestion,
   onOpenSession,
   showFooter = false,
+  showUserAttachments = true,
   workspaceRootPath = null,
 }: MessageRowProps) {
   if (message.role === "status_divider") {
@@ -113,9 +115,12 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "user") {
-    const hasAttachments = Boolean(message.attachments?.length);
+    const visibleAttachments = showUserAttachments
+      ? message.attachments ?? []
+      : [];
+    const hasAttachments = visibleAttachments.length > 0;
     const hasImageAttachments = Boolean(
-      message.attachments?.some((attachment) => attachment.kind === "image")
+      visibleAttachments.some((attachment) => attachment.kind === "image")
     );
     return (
       <article className="message-row user">
@@ -124,9 +129,9 @@ export const MessageRow = memo(function MessageRow({
             hasImageAttachments ? "has-image-attachments" : ""
           }`}
         >
-          {message.attachments?.length ? (
+          {visibleAttachments.length ? (
             <MessageAttachments
-              attachments={message.attachments}
+              attachments={visibleAttachments}
               connection={connection}
             />
           ) : null}
@@ -300,6 +305,7 @@ function areMessageRowPropsEqual(
     previous.onResolveUserQuestion === next.onResolveUserQuestion &&
     previous.onOpenSession === next.onOpenSession &&
     previous.showFooter === next.showFooter &&
+    previous.showUserAttachments === next.showUserAttachments &&
     previous.workspaceRootPath === next.workspaceRootPath &&
     chatMessageShallowEqual(previous.message, next.message)
   );

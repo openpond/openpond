@@ -61,6 +61,11 @@ export type CodexHistoryThreadPayload = {
   events: RuntimeEvent[];
 };
 
+export type CodexHistoryThreadRevision = {
+  revision: string;
+  thread: CodexHistoryThread;
+};
+
 type SessionMetadata = {
   id: string | null;
   cwd: string | null;
@@ -88,9 +93,10 @@ type CodexRecord = {
   call_id?: string;
   content?: unknown;
   id?: string;
+  input?: unknown;
   internal_chat_message_metadata_passthrough?: unknown;
   name?: string;
-  output?: string;
+  output?: unknown;
   type?: string;
   role?: string;
   phase?: string;
@@ -170,20 +176,8 @@ export async function readCodexHistoryThreadPayload(
     tailBytes?: number;
   } = {}
 ): Promise<CodexHistoryThreadPayload> {
-  const threadId = codexHistoryThreadIdFromSessionId(sessionId);
-  if (!threadId) throw new Error("Codex history session not found");
   const codexHome = options.codexHome ?? codexHomePath();
-  const cacheKey = threadLookupCacheKey(codexHome, threadId);
-  let thread = threadLookupCache.get(cacheKey);
-  if (!thread || !existsSync(thread.filePath)) {
-    const threads = await loadCodexHistoryThreads({
-      codexHome,
-      includeThreadId: threadId,
-      metadataLimit: 1,
-    });
-    thread = threads.find((candidate) => candidate.threadId === threadId);
-  }
-  if (!thread) throw new Error("Codex history session not found");
+  const thread = await resolveCodexHistoryThread(sessionId, codexHome);
   const parseInput = {
     attachmentRootDir: options.attachmentRootDir,
     filePath: thread.filePath,
@@ -215,6 +209,41 @@ export async function readCodexHistoryThreadPayload(
     },
     events: parsed.events,
   };
+}
+
+export async function readCodexHistoryThreadRevision(
+  sessionId: string,
+  options: { codexHome?: string } = {},
+): Promise<CodexHistoryThreadRevision> {
+  const thread = await resolveCodexHistoryThread(
+    sessionId,
+    options.codexHome ?? codexHomePath(),
+  );
+  const stats = statSync(thread.filePath);
+  return {
+    revision: `${stats.size}:${stats.mtimeMs}`,
+    thread,
+  };
+}
+
+async function resolveCodexHistoryThread(
+  sessionId: string,
+  codexHome: string,
+): Promise<CodexHistoryThread> {
+  const threadId = codexHistoryThreadIdFromSessionId(sessionId);
+  if (!threadId) throw new Error("Codex history session not found");
+  const cacheKey = threadLookupCacheKey(codexHome, threadId);
+  let thread = threadLookupCache.get(cacheKey);
+  if (!thread || !existsSync(thread.filePath)) {
+    const threads = await loadCodexHistoryThreads({
+      codexHome,
+      includeThreadId: threadId,
+      metadataLimit: 1,
+    });
+    thread = threads.find((candidate) => candidate.threadId === threadId);
+  }
+  if (!thread) throw new Error("Codex history session not found");
+  return thread;
 }
 
 export async function loadCodexHistoryThreads(
@@ -345,8 +374,11 @@ export async function readCodexHistorySearchText(
     const role = stringValue(responsePayload.role);
     if (role !== "user" && role !== "assistant") return;
     const text = textFromContent(responsePayload.content).trim();
-    if (!text || (role === "user" && codexControlMessage(text))) return;
-    messages.push(text);
+    const visibleText =
+      role === "assistant" ? visibleCodexAssistantContent(text) : text;
+    if (!visibleText || (role === "user" && codexControlMessage(visibleText)))
+      return;
+    messages.push(visibleText);
   });
   return messages.join("\n");
 }
@@ -402,6 +434,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   let latestLifecycleStartAt: string | null = null;
   let latestFinalAt: string | null = null;
   let latestRecordAt: string | null = null;
+  const toolCallsByCallId = new Map<
+    string,
+    { command: string | null; name: string }
+  >();
 
   function push(event: RuntimeEvent): void {
     events.push(event);
@@ -689,28 +725,31 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       }
 
       if (role === "assistant") {
-        assistantIndex += 1;
         const turnId = activeTurnId(providerTurnId);
         const phase = stringValue(responsePayload.phase);
         const legacyFinalAnswer = record.type === "message";
-        push(
-          historyEvent({
-            id: providerItemId
-              ? `${input.sessionId}_${safeId(providerItemId)}_assistant`
-              : `${turnId}_assistant_${assistantIndex}`,
-            sessionId: input.sessionId,
-            turnId,
-            timestamp,
-            name: "assistant.delta",
-            source: "provider",
-            output: truncateText(content, ASSISTANT_MAX_LENGTH),
-            data: {
-              source: CODEX_HISTORY_EVENT_SOURCE,
-              codexThreadId: input.threadId,
-              ...(phase ? { phase } : {}),
-            },
-          })
-        );
+        const visibleContent = visibleCodexAssistantContent(content);
+        if (visibleContent) {
+          assistantIndex += 1;
+          push(
+            historyEvent({
+              id: providerItemId
+                ? `${input.sessionId}_${safeId(providerItemId)}_assistant`
+                : `${turnId}_assistant_${assistantIndex}`,
+              sessionId: input.sessionId,
+              turnId,
+              timestamp,
+              name: "assistant.delta",
+              source: "provider",
+              output: truncateText(visibleContent, ASSISTANT_MAX_LENGTH),
+              data: {
+                source: CODEX_HISTORY_EVENT_SOURCE,
+                codexThreadId: input.threadId,
+                ...(phase ? { phase } : {}),
+              },
+            })
+          );
+        }
         if (phase === "final_answer" || legacyFinalAnswer) {
           latestFinalAt = timestamp;
           if (!currentTurnCompleted) {
@@ -738,17 +777,23 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       return;
     }
 
-    if (responsePayload.type === "function_call") {
+    if (isCodexToolCall(responsePayload.type)) {
       toolIndex += 1;
       const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
       const name = stringValue(responsePayload.name) ?? "tool";
-      const parsedArgs = parseMaybeJson(
-        stringValue(responsePayload.arguments) ?? ""
-      );
-      const command = commandFromToolCall(name, parsedArgs);
+      const rawArguments = codexToolCallArguments(responsePayload);
+      const parsedArgs =
+        responsePayload.type === "custom_tool_call"
+          ? rawArguments
+          : parseMaybeJson(rawArguments);
+      const command =
+        responsePayload.type === "custom_tool_call"
+          ? commandFromCustomToolCall(name, rawArguments)
+          : commandFromToolCall(name, parsedArgs);
+      toolCallsByCallId.set(callId, { command, name });
       push(
         historyEvent({
           id: providerItemId
@@ -761,29 +806,29 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           source: "provider",
           action: name,
           status: "started",
-          output: command,
+          output: command ?? name,
           data: {
             source: CODEX_HISTORY_EVENT_SOURCE,
             codexThreadId: input.threadId,
             callId,
             tool: name,
-            arguments:
-              parsedArgs ?? stringValue(responsePayload.arguments) ?? "",
-            command,
+            arguments: parsedArgs ?? rawArguments,
+            ...(command ? { command } : {}),
           },
         })
       );
       return;
     }
 
-    if (responsePayload.type === "function_call_output") {
+    if (isCodexToolCallOutput(responsePayload.type)) {
       toolIndex += 1;
       const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
+      const toolCall = toolCallsByCallId.get(callId);
       const output = truncateText(
-        stringValue(responsePayload.output) ?? "",
+        codexToolCallOutput(responsePayload),
         TOOL_OUTPUT_MAX_LENGTH
       );
       push(
@@ -796,17 +841,20 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           timestamp,
           name: "tool.completed",
           source: "provider",
-          action: "function_call_output",
+          action:
+            toolCall?.name ?? stringValue(responsePayload.type) ?? "tool",
           status: "completed",
           output,
           data: {
             source: CODEX_HISTORY_EVENT_SOURCE,
             codexThreadId: input.threadId,
             callId,
+            ...(toolCall?.name ? { tool: toolCall.name } : {}),
+            ...(toolCall?.command ? { command: toolCall.command } : {}),
           },
         })
       );
-      if (output) {
+      if (output && toolCall?.command) {
         push(
           historyEvent({
             id: providerItemId
@@ -822,10 +870,12 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
               source: CODEX_HISTORY_EVENT_SOURCE,
               codexThreadId: input.threadId,
               callId,
+              command: toolCall.command,
             },
           })
         );
       }
+      toolCallsByCallId.delete(callId);
     }
   }
 
@@ -1054,9 +1104,9 @@ async function statusForCodexHistoryFile(
       }
     }
     if (
-      responsePayload.type === "function_call_output" &&
-      /Process running with session ID/i.test(
-        stringValue(responsePayload.output) ?? ""
+      isCodexToolCallOutput(responsePayload.type) &&
+      /(?:Process running with session ID|Script running with cell ID)/i.test(
+        codexToolCallOutput(responsePayload)
       )
     ) {
       hasRunningMarker = true;
@@ -1171,6 +1221,46 @@ function commandFromToolCall(name: string, args: unknown): string {
     stringValue(record?.command) ??
     stringValue(record?.tool) ??
     name
+  );
+}
+
+function commandFromCustomToolCall(name: string, input: string): string | null {
+  if (name !== "exec") return null;
+  const commands = Array.from(
+    input.matchAll(/(?:"cmd"|\bcmd)\s*:\s*("(?:\\.|[^"\\])*")/g),
+    (match) => {
+      try {
+        const parsed = JSON.parse(match[1] ?? "");
+        return typeof parsed === "string" && parsed.trim() ? parsed.trim() : null;
+      } catch {
+        return null;
+      }
+    }
+  ).filter((command): command is string => Boolean(command));
+  if (commands.length === 1) return commands[0]!;
+  if (commands.length === 0 && /\btools\.apply_patch\s*\(/.test(input)) {
+    return "apply_patch";
+  }
+  return null;
+}
+
+function codexToolCallArguments(payload: Record<string, unknown>): string {
+  return (
+    stringValue(payload.arguments) ?? stringValue(payload.input) ?? ""
+  );
+}
+
+function codexToolCallOutput(payload: Record<string, unknown>): string {
+  return stringValue(payload.output) ?? textFromContent(payload.output);
+}
+
+function isCodexToolCall(type: unknown): boolean {
+  return type === "function_call" || type === "custom_tool_call";
+}
+
+function isCodexToolCallOutput(type: unknown): boolean {
+  return (
+    type === "function_call_output" || type === "custom_tool_call_output"
   );
 }
 
@@ -1427,7 +1517,29 @@ const CODEX_ATTACHMENT_LINE_PATTERN =
   /^\s*\d+\.\s+(.+)\s+\(([^,]+),\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB),\s*(image|text|file)\)\.(?:\s+Saved locally at:\s*(.+))?\s*$/i;
 const CODEX_IMAGE_TAG_PATTERN =
   /<image\s+name=(?:\[([^\]]*)\]|"([^"]*)"|'([^']*)'|([^\s>]+))\s+path="([^"]+)"\s*>/g;
+const CODEX_IMAGE_CLOSE_TAG_PATTERN = /<\/image>/gi;
+const CODEX_FILES_MENTIONED_HEADER_PATTERN =
+  /^\s*# Files mentioned by the user:\s*$/im;
+const CODEX_USER_REQUEST_HEADER_PATTERN =
+  /^\s*## My request for Codex:\s*$/im;
+const CODEX_GIT_DIRECTIVE_PATTERN =
+  /^\s*::git-(?:stage|commit|create-branch|push|create-pr)\{[^\r\n]*\}\s*$/;
 const DATA_IMAGE_URL_PATTERN = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\s]+)$/;
+
+function visibleCodexAssistantContent(value: string): string {
+  let fenceMarker: "`" | "~" | null = null;
+  const visibleLines = value.split(/\r?\n/).filter((line) => {
+    const fence = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      const marker = fence[0] as "`" | "~";
+      if (fenceMarker === null) fenceMarker = marker;
+      else if (fenceMarker === marker) fenceMarker = null;
+      return true;
+    }
+    return fenceMarker !== null || !CODEX_GIT_DIRECTIVE_PATTERN.test(line);
+  });
+  return visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
 function visibleCodexUserContent(
   content: unknown,
@@ -1437,16 +1549,19 @@ function visibleCodexUserContent(
   const attachments: ChatAttachmentSummary[] = [];
   let blockIndex = 0;
   const imageReferences = codexImageReferences(parts.text);
-  const prompt = parts.text
-    .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
-      attachments.push(
-        ...parseCodexAttachmentContext(body, context, blockIndex)
-      );
-      blockIndex += 1;
-      return "\n";
-    })
-    .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
-    .trim();
+  const prompt = visibleCodexPromptText(
+    parts.text
+      .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
+        attachments.push(
+          ...parseCodexAttachmentContext(body, context, blockIndex)
+        );
+        blockIndex += 1;
+        return "\n";
+      })
+      .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
+      .replace(CODEX_IMAGE_CLOSE_TAG_PATTERN, "\n")
+      .trim()
+  );
 
   attachments.push(
     ...codexInputImageAttachments(
@@ -1474,6 +1589,19 @@ function visibleCodexUserContent(
         : parts.text.trim()),
     attachments,
   };
+}
+
+function visibleCodexPromptText(value: string): string {
+  const filesHeader = CODEX_FILES_MENTIONED_HEADER_PATTERN.exec(value);
+  if (!filesHeader) return value;
+  const afterFilesHeader = value.slice(
+    filesHeader.index + filesHeader[0].length
+  );
+  const requestHeader = CODEX_USER_REQUEST_HEADER_PATTERN.exec(afterFilesHeader);
+  if (!requestHeader) return value;
+  return afterFilesHeader
+    .slice(requestHeader.index + requestHeader[0].length)
+    .trim();
 }
 
 function codexUserContentParts(content: unknown): CodexUserContentParts {

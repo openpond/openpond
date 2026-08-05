@@ -24,10 +24,14 @@ import type {
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
-import { normalizeChatFilePath } from "../../lib/chat-file-links";
+import {
+  normalizeChatFilePath,
+  resolveChatWorkspaceRootPath,
+} from "../../lib/chat-file-links";
 import { absoluteLocalVideoPath } from "../../lib/local-video";
 import { shouldShowThinkingIndicator } from "../../lib/chat-timeline-rows";
 import {
+  composerSlashCommandAllowedInExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -401,6 +405,7 @@ export function MainPane({
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
+    if (experience === "chat") return selectedProfileActionCatalog;
     if (experience !== "development") return [];
     const byId = new Map(
       actionCatalog
@@ -837,12 +842,13 @@ export function MainPane({
           ? { command: selectedCommand.id, args: promptForSubmit.trim() }
           : parseComposerSlashCommandPrompt(promptForSubmit);
         if (command) {
-          const commandAllowed =
-            experience === "development" ||
-            (experience === "work" && command.command === "submit-issue");
+          const commandAllowed = composerSlashCommandAllowedInExperience(
+            { id: command.command },
+            experience,
+          );
           if (!commandAllowed) {
             showToast(
-              `/${command.command} is only available in Development.`,
+              `/${command.command} isn't available in ${experience}.`,
               "info"
             );
             return false;
@@ -1025,10 +1031,12 @@ export function MainPane({
     },
     [browserConversationId, onShowBrowserPanel]
   );
-  const workspaceRootPath =
-    workspaceTarget.value === "local"
-      ? workspaceState?.repoPath ?? workspaceTarget.detail
-      : workspaceState?.repoPath ?? null;
+  const workspaceRootPath = resolveChatWorkspaceRootPath({
+    projectTargetDetail: projectTarget.detail,
+    projectTargetValue: projectTarget.value,
+    workspaceRepoPath: workspaceState?.repoPath,
+    workspaceTargetValue: workspaceTarget.value,
+  });
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
       const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
@@ -1575,6 +1583,7 @@ export function MainPane({
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
                 preparingInitialScroll={chatThreadPreparingInitialScroll}
                 rows={chatTimelineRows}
+                showUserAttachments={activeProvider !== "codex"}
                 threadRef={chatThreadRef}
                 workspaceRootPath={workspaceRootPath}
               />
@@ -1622,13 +1631,9 @@ export function MainPane({
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={experience === "development" ? mentionApps : []}
-                connectedAppMentions={
-                  experience === "work" ? connectedAppMentions : []
-                }
+                connectedAppMentions={connectedAppMentions}
                 profileSkills={
-                  experience === "chat"
-                    ? []
-                    : activeProvider === "codex"
+                  activeProvider === "codex"
                     ? bootstrap?.codexPersonalSkills ?? []
                     : selectedProfileSkills
                 }
@@ -1732,13 +1737,9 @@ export function MainPane({
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={experience === "development" ? mentionApps : []}
-                connectedAppMentions={
-                  experience === "work" ? connectedAppMentions : []
-                }
+                connectedAppMentions={connectedAppMentions}
                 profileSkills={
-                  experience === "chat"
-                    ? []
-                    : activeProvider === "codex"
+                  activeProvider === "codex"
                     ? bootstrap?.codexPersonalSkills ?? []
                     : selectedProfileSkills
                 }

@@ -9,7 +9,10 @@ import {
   formatPromptWithAttachmentContext,
   materializeChatAttachments,
 } from "../chat-attachments.js";
-import { readCodexHistoryThreadPayload } from "../codex-history.js";
+import {
+  readCodexHistoryThreadPayload,
+  readCodexHistoryThreadRevision,
+} from "../codex-history.js";
 import {
   applyCodexHistorySidebarPreference,
   loadCodexHistorySidebarPreferences,
@@ -44,6 +47,17 @@ export function createCodexHistoryPayloads(input: {
   }
 
   async function threadPayload(sessionId: string, requestUrl?: URL): Promise<unknown> {
+    const incremental = requestUrl?.searchParams.get("incremental") === "1";
+    const requestedRevision = requestUrl?.searchParams.get("revision") ?? null;
+    const revisionBeforeRead = incremental
+      ? (await readCodexHistoryThreadRevision(sessionId)).revision
+      : null;
+    const liveRevisionBeforeRead = revisionBeforeRead
+      ? `${revisionBeforeRead}:${turnIsActive(sessionId) ? "active" : "idle"}`
+      : null;
+    if (requestedRevision && requestedRevision === liveRevisionBeforeRead) {
+      return { unchanged: true, revision: liveRevisionBeforeRead };
+    }
     const [payload, preferences] = await Promise.all([
       readCodexHistoryThreadPayload(sessionId, {
         ...codexHistoryThreadReadOptions(requestUrl),
@@ -52,9 +66,26 @@ export function createCodexHistoryPayloads(input: {
       loadCodexHistorySidebarPreferences(input.store),
     ]);
     const session = applyCodexHistorySidebarPreference(payload.session, preferences);
-    return {
+    const resolvedPayload = {
       ...payload,
       session: codexHistorySessionWithLiveStatus(session, turnIsActive(sessionId)),
+    };
+    if (!incremental) return resolvedPayload;
+    const revisionAfterRead = (await readCodexHistoryThreadRevision(sessionId)).revision;
+    const liveRevisionAfterRead = `${revisionAfterRead}:${turnIsActive(sessionId) ? "active" : "idle"}`;
+    const afterEventId = requestUrl?.searchParams.get("afterEventId") ?? null;
+    const afterIndex = afterEventId
+      ? resolvedPayload.events.findIndex((event) => event.id === afterEventId)
+      : -1;
+    const reset = Boolean(afterEventId && afterIndex < 0);
+    return {
+      unchanged: false,
+      revision: liveRevisionAfterRead,
+      reset,
+      session: resolvedPayload.session,
+      events: afterEventId && afterIndex >= 0
+        ? resolvedPayload.events.slice(afterIndex + 1)
+        : resolvedPayload.events,
     };
   }
 

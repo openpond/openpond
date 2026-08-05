@@ -19,7 +19,10 @@ import {
   type ComposerCommandMenuSection,
 } from "../apps/web/src/components/chat/ComposerCommandMenu";
 import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
-import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
+import {
+  COMPOSER_SLASH_COMMANDS,
+  composerSlashCommandsForExperience,
+} from "../apps/web/src/lib/composer-slash-commands";
 import { buildOpenPondAgentSlashCommand } from "../apps/web/src/lib/openpond-action-run";
 import { openPondActionProjectTarget } from "../apps/web/src/lib/openpond-action-project";
 import {
@@ -930,6 +933,70 @@ describe("composer slash behavior", () => {
     const mentionMarkup = renderComposer("@");
     expect(mentionMarkup).toContain("Release Reviewer");
     expect(mentionMarkup).toContain("$release-notes");
+  });
+
+  test("chat exposes supported slash commands and profile skills", () => {
+    const markup = renderToStaticMarkup(
+      createElement(Composer, {
+        experience: "chat",
+        mode: "start",
+        prompt: "/",
+        mentionApps: [],
+        profileSkills: [{
+          name: "release-notes",
+          description: "Draft release notes from the current changes.",
+          path: "skills/release-notes/SKILL.md",
+          enabled: true,
+          validationStatus: "valid",
+        }],
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        busy: false,
+        running: false,
+        connection: null,
+        provider: "openpond",
+        model: "openpond-chat",
+        projectTarget,
+        actionCatalog: [],
+        workspaceTarget,
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    expect(markup).toContain("/agent Author Agent");
+    expect(markup).toContain("/skill Manage skills");
+    expect(markup).toContain("$release-notes");
+  });
+
+  test("keeps slash command policy consistent across experiences", () => {
+    expect(
+      composerSlashCommandsForExperience("openpond", "chat").map(
+        (command) => command.id,
+      ),
+    ).toEqual(["agent", "skill", "submit-issue", "train"]);
+    expect(
+      composerSlashCommandsForExperience("codex", "development").map(
+        (command) => command.id,
+      ),
+    ).toEqual(["agent", "skill", "goal", "submit-issue", "train", "sync-cloud"]);
+    expect(
+      composerSlashCommandsForExperience("openpond", "work").map(
+        (command) => command.id,
+      ),
+    ).toEqual(["submit-issue"]);
   });
 
   test("regular chat composer shows generated profile chat actions by metadata agent name in the slash menu", () => {

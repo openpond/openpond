@@ -15,6 +15,10 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     sendJson(response, 200, await deps.trainingPayload("state", {}, requestUrl));
     return true;
   }
+  if (request.method === "GET" && requestUrl.pathname === "/v1/training/activity") {
+    sendJson(response, 200, await deps.trainingPayload("activity", {}, requestUrl));
+    return true;
+  }
   if (
     request.method === "GET"
     && requestUrl.pathname === "/v1/training/catalog"

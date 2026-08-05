@@ -137,6 +137,7 @@ export function createCodexHistoryLiveRefreshCoordinator(
     try {
       const payload = await request;
       if (entry.disposed) return;
+      if (payload === entry.latestPayload) return;
       entry.latestPayload = payload;
       for (const subscriber of entry.subscribers.values()) subscriber.onPayload(payload);
     } catch (error) {

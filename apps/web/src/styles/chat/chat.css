@@ -397,6 +397,19 @@
   white-space: pre-wrap;
 }
 
+.markdown-blockquote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border-left: 3px solid color-mix(in srgb, var(--muted) 55%, transparent);
+  padding: 1px 0 1px 14px;
+  color: var(--muted-strong);
+}
+
+.markdown-blockquote .markdown-heading {
+  color: var(--text);
+}
+
 .markdown-heading {
   margin: 4px 0 0;
   color: #ffffff;

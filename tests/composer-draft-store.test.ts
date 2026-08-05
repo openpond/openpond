@@ -36,6 +36,20 @@ describe("composer draft store", () => {
     expect(store.getSnapshot()).toBe("session draft");
   });
 
+  test("carries the active draft when the development project changes", () => {
+    const store = createComposerDraftStore();
+    store.set("keep these instructions");
+
+    store.applyAppAction({ type: "selectProject", projectId: "local:project_1" });
+    expect(store.getSnapshot()).toBe("keep these instructions");
+
+    store.applyAppAction({ type: "selectProject", projectId: "local:project_2" });
+    expect(store.getSnapshot()).toBe("keep these instructions");
+
+    store.applyAppAction({ type: "selectProject", projectId: null });
+    expect(store.getSnapshot()).toBe("keep these instructions");
+  });
+
   test("publishes only real text or selection changes", () => {
     const store = createComposerDraftStore();
     let notifications = 0;

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
 import { normalizeChatFilePath } from "../../lib/chat-file-links";
@@ -90,85 +96,7 @@ export function MarkdownText({
 
   return (
     <div className="markdown-message">
-      {blocks.map((block, index) => {
-        if (block.type === "code") {
-          const fileReferenceLines = fileReferenceCodeBlockLines(block.content, workspaceRootPath);
-          if (fileReferenceLines) {
-            return (
-              <div className="markdown-file-reference-block" key={index}>
-                {fileReferenceLines.map((line, lineIndex) => (
-                  <div className="markdown-file-reference-line" key={lineIndex}>
-                    {renderInline(line, context)}
-                  </div>
-                ))}
-              </div>
-            );
-          }
-          return (
-            <pre className="markdown-code-block" key={index}>
-              <code>{block.content}</code>
-            </pre>
-          );
-        }
-        if (block.type === "list") {
-          const items = block.items.map((item, itemIndex) => (
-            <li
-              className={item.checked === null ? undefined : "markdown-task-list-item"}
-              key={itemIndex}
-              value={block.ordered ? item.ordinal ?? undefined : undefined}
-            >
-              {item.checked === null ? null : <MarkdownCheckbox checked={item.checked} />}
-              <span>{renderInline(item.content, context)}</span>
-            </li>
-          ));
-          return block.ordered ? (
-            <ol className="markdown-list" key={index} start={block.start}>
-              {items}
-            </ol>
-          ) : (
-            <ul className="markdown-list" key={index}>
-              {items}
-            </ul>
-          );
-        }
-        if (block.type === "heading") {
-          const HeadingTag = block.level === 1 ? "h1" : block.level === 2 ? "h2" : block.level === 3 ? "h3" : "h4";
-          return (
-            <HeadingTag className="markdown-heading" key={index}>
-              {renderInline(block.content, context)}
-            </HeadingTag>
-          );
-        }
-        if (block.type === "table") {
-          return (
-            <div className="markdown-table-wrap" key={index}>
-              <table className="markdown-table">
-                <thead>
-                  <tr>
-                    {block.headers.map((header, headerIndex) => (
-                      <th key={headerIndex}>{renderInline(header, context)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {block.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>
-                      {block.headers.map((_, cellIndex) => (
-                        <td key={cellIndex}>{renderInline(row[cellIndex] ?? "", context)}</td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
-        return (
-          <p className="markdown-paragraph" key={index}>
-            {renderInline(block.content, context)}
-          </p>
-        );
-      })}
+      {renderMarkdownBlocks(blocks, context, workspaceRootPath)}
       {hoverImage && (
         <MarkdownImageHoverPreview preview={hoverImage} />
       )}
@@ -188,6 +116,122 @@ export function MarkdownText({
       />
     </div>
   );
+}
+
+function renderMarkdownBlocks(
+  blocks: ReturnType<typeof parseBlocks>,
+  context: MarkdownContext,
+  workspaceRootPath: string | null,
+  keyPrefix = "block",
+): ReactNode[] {
+  return blocks.map((block, index) => {
+    const key = `${keyPrefix}-${index}`;
+    if (block.type === "blockquote") {
+      return (
+        <blockquote className="markdown-blockquote" key={key}>
+          {renderMarkdownBlocks(
+            parseBlocks(block.content),
+            context,
+            workspaceRootPath,
+            `${key}-quote`,
+          )}
+        </blockquote>
+      );
+    }
+    if (block.type === "code") {
+      const fileReferenceLines = fileReferenceCodeBlockLines(
+        block.content,
+        workspaceRootPath,
+      );
+      if (fileReferenceLines) {
+        return (
+          <div className="markdown-file-reference-block" key={key}>
+            {fileReferenceLines.map((line, lineIndex) => (
+              <div className="markdown-file-reference-line" key={lineIndex}>
+                {renderInline(line, context)}
+              </div>
+            ))}
+          </div>
+        );
+      }
+      return (
+        <pre className="markdown-code-block" key={key}>
+          <code>{block.content}</code>
+        </pre>
+      );
+    }
+    if (block.type === "list") {
+      const items = block.items.map((item, itemIndex) => (
+        <li
+          className={
+            item.checked === null ? undefined : "markdown-task-list-item"
+          }
+          key={itemIndex}
+          value={block.ordered ? item.ordinal ?? undefined : undefined}
+        >
+          {item.checked === null ? null : (
+            <MarkdownCheckbox checked={item.checked} />
+          )}
+          <span>{renderInline(item.content, context)}</span>
+        </li>
+      ));
+      return block.ordered ? (
+        <ol className="markdown-list" key={key} start={block.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul className="markdown-list" key={key}>
+          {items}
+        </ul>
+      );
+    }
+    if (block.type === "heading") {
+      const HeadingTag =
+        block.level === 1
+          ? "h1"
+          : block.level === 2
+            ? "h2"
+            : block.level === 3
+              ? "h3"
+              : "h4";
+      return (
+        <HeadingTag className="markdown-heading" key={key}>
+          {renderInline(block.content, context)}
+        </HeadingTag>
+      );
+    }
+    if (block.type === "table") {
+      return (
+        <div className="markdown-table-wrap" key={key}>
+          <table className="markdown-table">
+            <thead>
+              <tr>
+                {block.headers.map((header, headerIndex) => (
+                  <th key={headerIndex}>{renderInline(header, context)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {block.headers.map((_, cellIndex) => (
+                    <td key={cellIndex}>
+                      {renderInline(row[cellIndex] ?? "", context)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    return (
+      <p className="markdown-paragraph" key={key}>
+        {renderInline(block.content, context)}
+      </p>
+    );
+  });
 }
 
 function fileReferenceCodeBlockLines(content: string, workspaceRootPath: string | null): string[] | null {

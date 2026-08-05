@@ -115,6 +115,52 @@ describe("composer project actions", () => {
       "cloud-environment",
     ]);
   });
+
+  test("changes to no project without starting a fresh draft", () => {
+    const actions: AppAction[] = [];
+    let changeProjectTarget: ((target: string) => void) | null = null;
+
+    function Harness() {
+      changeProjectTarget = useProjectTargetActions({
+        addProjectFolder: () => undefined,
+        addProjectFolderPath: async () => undefined,
+        appDispatch: (action) => actions.push(action),
+        busy: false,
+        cloudProjectById: new Map(),
+        createCloudProjectFromScratch: async () => undefined,
+        createProjectFromScratch: async () => undefined,
+        expandProject: () => undefined,
+        localProjectById: new Map(),
+        newProjectBusy: false,
+        newProjectMode: "local",
+        newProjectName: "",
+        newProjectPath: "",
+        onCreateCloudEnvironment: () => undefined,
+        onNewCloudProject: () => undefined,
+        onNewLocalProject: () => undefined,
+        onUseExistingFolderPath: () => undefined,
+        projectTargetValue: "local:project_1",
+        setDiffPanelOpen: noopSetter<boolean>(),
+        setDraftModel: noopSetter<string>(),
+        setDraftProvider: noopSetter<ChatProvider>(),
+        setError: noopSetter<string | null>(),
+        setNewProjectBusy: noopSetter<boolean>(),
+        setNewProjectDialogOpen: noopSetter<boolean>(),
+        setNewProjectName: noopSetter<string>(),
+        setNewProjectPath: noopSetter<string>(),
+        showToast: () => undefined,
+        workspaceBusy: false,
+      }).changeProjectTarget;
+      return null;
+    }
+
+    renderToStaticMarkup(createElement(Harness));
+    if (!changeProjectTarget) throw new Error("Project target harness failed");
+
+    changeProjectTarget("none");
+
+    expect(actions).toEqual([{ type: "selectProject", projectId: null }]);
+  });
 });
 
 function noopSetter<T>(): Dispatch<SetStateAction<T>> {

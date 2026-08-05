@@ -39,12 +39,22 @@ export function createComposerDraftStore(
     if (value) drafts.set(key, value);
     else drafts.delete(key);
   };
-  const select = (patch: Partial<PromptSelection>, clear = false) => {
+  const select = (
+    patch: Partial<PromptSelection>,
+    options: { clear?: boolean; preserveCurrentDraft?: boolean } = {},
+  ) => {
+    const currentValue = value;
     saveCurrent();
     selection = { ...selection, ...patch };
     const key = draftKey(selection);
-    if (clear) drafts.delete(key);
-    publish(clear ? "" : (drafts.get(key) ?? ""));
+    if (options.clear) drafts.delete(key);
+    if (options.preserveCurrentDraft) {
+      if (currentValue) drafts.set(key, currentValue);
+      else drafts.delete(key);
+      publish(currentValue);
+      return;
+    }
+    publish(options.clear ? "" : (drafts.get(key) ?? ""));
   };
 
   const store: ComposerDraftStore = {
@@ -94,7 +104,10 @@ export function createComposerDraftStore(
         return;
       }
       if (action.type === "selectProject") {
-        select({ selectedAppId: null, selectedProjectId: action.projectId, selectedSessionId: null });
+        select(
+          { selectedAppId: null, selectedProjectId: action.projectId, selectedSessionId: null },
+          { preserveCurrentDraft: true },
+        );
         return;
       }
       if (action.type === "selectSession") {
@@ -107,7 +120,10 @@ export function createComposerDraftStore(
         return;
       }
       if (action.type === "beginNewChat") {
-        select({ selectedSessionId: null, selectedAppId: action.appId, selectedProjectId: null }, true);
+        select(
+          { selectedSessionId: null, selectedAppId: action.appId, selectedProjectId: null },
+          { clear: true },
+        );
       }
     },
   };

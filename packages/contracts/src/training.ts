@@ -854,6 +854,21 @@ export const TrainingCredentialRefSchema = z.object({
   updatedAt: TimestampSchema.nullable(),
 });
 
+export const TrainingActivityResponseSchema = z.object({
+  schemaVersion: z.literal("openpond.trainingActivity.v1"),
+  profileId: IdSchema,
+  active: z.boolean(),
+  activeCounts: z.object({
+    jobs: z.number().int().nonnegative(),
+    creations: z.number().int().nonnegative(),
+    minerRuns: z.number().int().nonnegative(),
+    datasetImports: z.number().int().nonnegative(),
+    servingSessions: z.number().int().nonnegative(),
+  }),
+  revision: HashSchema,
+  generatedAt: TimestampSchema,
+});
+
 export const TrainingStateResponseSchema = z.object({
   schemaVersion: z.literal("openpond.trainingState.v1"),
   profileId: IdSchema,
@@ -882,6 +897,7 @@ export const TrainingStateResponseSchema = z.object({
   destinations: z.array(TrainingDestinationCapabilitiesSchema),
   baseModelCandidates: z.array(BaseModelCandidateSchema).default([]),
   credentialRefs: z.array(TrainingCredentialRefSchema),
+  activityRevision: HashSchema.optional(),
   generatedAt: TimestampSchema,
 });
 
@@ -959,3 +975,4 @@ export type FireworksModelServingSession = z.infer<
   typeof FireworksModelServingSessionSchema
 >;
 export type TrainingStateResponse = z.infer<typeof TrainingStateResponseSchema>;
+export type TrainingActivityResponse = z.infer<typeof TrainingActivityResponseSchema>;

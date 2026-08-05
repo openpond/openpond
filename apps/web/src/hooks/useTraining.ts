@@ -39,6 +39,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const refreshInFlightRef = useRef<Promise<TrainingStateResponse | null> | null>(null);
+  const activityRevisionRef = useRef<string | null>(null);
 
   const refresh = useCallback((): Promise<TrainingStateResponse | null> => {
     if (!connection) return Promise.resolve(null);
@@ -46,6 +47,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     setLoading(true);
     const request = api.trainingState(connection, profileId)
       .then((next) => {
+        activityRevisionRef.current = next.activityRevision ?? null;
         setPayload(next);
         setError(null);
         return next;
@@ -78,31 +80,47 @@ export function useTraining(input: { connection: ClientConnection | null; profil
   }, [connection, refresh]);
 
   useEffect(() => {
+    activityRevisionRef.current = null;
     if (!connection) { setPayload(null); return; }
     void refresh();
   }, [connection, profileId, refresh]);
 
-  const hasActiveJob = payload?.jobs.some((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) ?? false;
-  const hasActiveMinerRun = payload?.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)) ?? false;
-  const hasActiveDatasetImport = payload?.datasetImports.some((job) =>
-    ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)) ?? false;
-  const hasActiveServingSession = payload?.servingSessions.some((session) =>
-    ["starting", "ready", "stopping"].includes(session.state)) ?? false;
+  const hasActiveWork = payload
+    ? [
+        payload.jobs.some((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)),
+        payload.creations.some((creation) => ["planning", "materializing", "validating"].includes(creation.state)),
+        payload.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)),
+        payload.datasetImports.some((job) => ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)),
+        payload.servingSessions.some((session) => ["starting", "ready", "stopping"].includes(session.state)),
+      ].some(Boolean)
+    : false;
   useEffect(() => {
     if (!connection) return undefined;
     let active = true;
     let timer: number | null = null;
-    const delay = hasActiveJob || hasActiveMinerRun || hasActiveDatasetImport || hasActiveServingSession ? 500 : 30_000;
+    const initialDelay = hasActiveWork ? 500 : 30_000;
     const poll = async () => {
-      await refresh();
-      if (active) timer = window.setTimeout(() => void poll(), delay);
+      let nextDelay = initialDelay;
+      try {
+        const activity = await api.trainingActivity(connection, profileId);
+        nextDelay = activity.active ? 500 : 30_000;
+        if (
+          activityRevisionRef.current === null
+          || activityRevisionRef.current !== activity.revision
+        ) {
+          await refresh();
+        }
+      } catch (caught) {
+        setError(message(caught));
+      }
+      if (active) timer = window.setTimeout(() => void poll(), nextDelay);
     };
-    timer = window.setTimeout(() => void poll(), delay);
+    timer = window.setTimeout(() => void poll(), initialDelay);
     return () => {
       active = false;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [connection, hasActiveDatasetImport, hasActiveJob, hasActiveMinerRun, hasActiveServingSession, refresh]);
+  }, [connection, hasActiveWork, profileId, refresh]);
 
   const actions = useMemo(() => ({
     saveModelProject: (project: ModelProject) =>

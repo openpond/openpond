@@ -238,4 +238,18 @@ describe("markdown checkbox rendering", () => {
     expect(markup).toContain('</code></pre><p class="markdown-paragraph">After the code block.</p>');
     expect(markup).not.toContain("``ts");
   });
+
+  test("renders GitHub-style blockquotes with inline markdown", () => {
+    const markup = renderMarkdown(
+      "> **2 suggested improvements**\n>\n> **Research reports are missing source links**\n> Recommended fix: `Review prompt change`",
+    );
+
+    expect(markup).toContain('<blockquote class="markdown-blockquote">');
+    expect(markup).toContain("<strong>2 suggested improvements</strong>");
+    expect(markup).toContain(
+      "<strong>Research reports are missing source links</strong>",
+    );
+    expect(markup).toContain("<code>Review prompt change</code>");
+    expect(markup).not.toContain("&gt;");
+  });
 });
