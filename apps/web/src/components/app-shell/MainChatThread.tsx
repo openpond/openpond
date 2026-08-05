@@ -38,7 +38,7 @@ export function MainChatThread({
   onScroll,
   preparingInitialScroll,
   rows,
-  showUserAttachments,
+  userAttachmentDisplay,
   threadRef,
   workspaceRootPath,
 }: {
@@ -58,7 +58,7 @@ export function MainChatThread({
   onScroll: (event: UIEvent<HTMLElement>) => void;
   preparingInitialScroll: boolean;
   rows: ReturnType<typeof buildChatTimelineRows>;
-  showUserAttachments: boolean;
+  userAttachmentDisplay: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
   threadRef: RefObject<HTMLElement | null>;
   workspaceRootPath: string | null;
 }) {
@@ -112,7 +112,7 @@ export function MainChatThread({
           onOpenProfileSettings={onOpenProfileSettings}
           onResolveUserQuestion={onResolveUserQuestion}
           onOpenSession={onOpenSession}
-          showUserAttachments={showUserAttachments}
+          userAttachmentDisplay={userAttachmentDisplay}
           workspaceRootPath={workspaceRootPath}
           showFooter={row.showFooter}
         />

@@ -55,7 +55,7 @@ type MessageRowProps = {
   ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
-  showUserAttachments?: boolean;
+  userAttachmentDisplay?: "full" | "compact";
   workspaceRootPath?: string | null;
 };
 
@@ -73,7 +73,7 @@ export const MessageRow = memo(function MessageRow({
   onResolveUserQuestion,
   onOpenSession,
   showFooter = false,
-  showUserAttachments = true,
+  userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
   if (message.role === "status_divider") {
@@ -115,12 +115,12 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "user") {
-    const visibleAttachments = showUserAttachments
-      ? message.attachments ?? []
-      : [];
+    const visibleAttachments = message.attachments ?? [];
+    const compactAttachments = userAttachmentDisplay === "compact";
     const hasAttachments = visibleAttachments.length > 0;
     const hasImageAttachments = Boolean(
-      visibleAttachments.some((attachment) => attachment.kind === "image")
+      !compactAttachments &&
+        visibleAttachments.some((attachment) => attachment.kind === "image")
     );
     return (
       <article className="message-row user">
@@ -132,6 +132,7 @@ export const MessageRow = memo(function MessageRow({
           {visibleAttachments.length ? (
             <MessageAttachments
               attachments={visibleAttachments}
+              compact={compactAttachments}
               connection={connection}
             />
           ) : null}
@@ -305,7 +306,7 @@ function areMessageRowPropsEqual(
     previous.onResolveUserQuestion === next.onResolveUserQuestion &&
     previous.onOpenSession === next.onOpenSession &&
     previous.showFooter === next.showFooter &&
-    previous.showUserAttachments === next.showUserAttachments &&
+    previous.userAttachmentDisplay === next.userAttachmentDisplay &&
     previous.workspaceRootPath === next.workspaceRootPath &&
     chatMessageShallowEqual(previous.message, next.message)
   );
@@ -647,16 +648,22 @@ function messageAttachmentsEqual(
 
 function MessageAttachments({
   attachments,
+  compact,
   connection,
 }: {
   attachments: ChatAttachmentSummary[];
+  compact: boolean;
   connection: ClientConnection | null;
 }) {
   return (
-    <div className="user-message-attachments" aria-label="Attached files">
+    <div
+      className={`user-message-attachments${compact ? " compact" : ""}`}
+      aria-label="Attached files"
+    >
       {attachments.map((attachment) => (
         <MessageAttachment
           attachment={attachment}
+          compact={compact}
           connection={connection}
           key={attachment.id}
         />
@@ -667,12 +674,14 @@ function MessageAttachments({
 
 function MessageAttachment({
   attachment,
+  compact,
   connection,
 }: {
   attachment: ChatAttachmentSummary;
+  compact: boolean;
   connection: ClientConnection | null;
 }) {
-  if (attachment.kind === "image" && attachment.imagePreview) {
+  if (!compact && attachment.kind === "image" && attachment.imagePreview) {
     return (
       <MessageImageAttachment attachment={attachment} connection={connection} />
     );

@@ -251,7 +251,9 @@ export function RightChatPane({
             onOpenProfileSettings={onOpenProfileSettings}
             onResolveUserQuestion={handleResolveUserQuestion}
             onOpenSession={onOpenSession}
-            showUserAttachments={panel.provider !== "codex"}
+            userAttachmentDisplay={
+              panel.provider === "codex" ? "compact" : "full"
+            }
             workspaceRootPath={panel.workspaceRootPath}
             showFooter={row.showFooter}
           />

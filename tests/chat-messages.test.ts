@@ -778,13 +778,15 @@ describe("chat message projection", () => {
     const codexHtml = renderToStaticMarkup(
       createElement(MessageRow, {
         message: messages[0]!,
-        showUserAttachments: false,
+        userAttachmentDisplay: "compact",
       })
     );
     expect(codexHtml).toContain("Can you inspect this bug screenshot?");
-    expect(codexHtml).not.toContain("user-message-attachments");
-    expect(codexHtml).not.toContain("Screenshot from 2026-07-02 13.49.59.png");
-    expect(codexHtml).not.toContain("notes.txt");
+    expect(codexHtml).toContain("user-message-attachments compact");
+    expect(codexHtml).toContain("Screenshot from 2026-07-02 13.49.59.png");
+    expect(codexHtml).toContain("notes.txt");
+    expect(codexHtml).not.toContain("user-message-image-attachment");
+    expect(codexHtml).not.toContain("has-image-attachments");
   });
 
   test("renders OpenPond Chat markdown image output inline", () => {

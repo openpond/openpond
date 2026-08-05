@@ -1583,7 +1583,9 @@ export function MainPane({
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
                 preparingInitialScroll={chatThreadPreparingInitialScroll}
                 rows={chatTimelineRows}
-                showUserAttachments={activeProvider !== "codex"}
+                userAttachmentDisplay={
+                  activeProvider === "codex" ? "compact" : "full"
+                }
                 threadRef={chatThreadRef}
                 workspaceRootPath={workspaceRootPath}
               />
