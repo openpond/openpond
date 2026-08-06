@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
 import type { HarnessWorkspace, OpenPondProfileSkill } from "@openpond/contracts";
-import { sha256 } from "@openpond/evals";
+import { sha256 } from "@openpond/harness";
 
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 import type { ProfileSkillRuntime } from "../runtime/hosted-turn/native-tools-runtime.js";
@@ -17,6 +17,7 @@ import {
 export type SelectedLocalHarnessRuntime = {
   workspace: HarnessWorkspace;
   release: LocalHarnessReleaseRecord;
+  instructionContext: string;
   skillRuntime: ProfileSkillRuntime;
 };
 
@@ -50,6 +51,12 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     throw new Error("Harness release does not belong to the requested workspace.");
   }
   const sourceRoot = path.join(release.bundlePath, "source");
+  const instructions = await Promise.all(
+    release.agentSnapshot.instructions.map(async (asset) => ({
+      path: asset.path,
+      content: await readVerifiedAsset(sourceRoot, asset.path, asset.contentHash),
+    })),
+  );
   const skills: OpenPondProfileSkill[] = [];
   const readers = new Map<string, () => Promise<ProfileSkillReadResult>>();
 
@@ -111,7 +118,15 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
         }
       : null,
   };
-  return { workspace, release, skillRuntime };
+  const instructionContext = instructions
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .map(({ path: instructionPath, content }) => [
+      `Harness instruction (${instructionPath}):`,
+      content.trim(),
+    ].join("\n"))
+    .filter((content) => content.trim().length > 0)
+    .join("\n\n");
+  return { workspace, release, instructionContext, skillRuntime };
 }
 
 async function readVerifiedAsset(

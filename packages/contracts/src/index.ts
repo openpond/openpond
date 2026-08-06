@@ -40,8 +40,6 @@ export * from "./dataset-sources.js";
 export * from "./dataset-artifacts.js";
 export * from "./dataset-imports.js";
 export * from "./task-mining.js";
-export * from "./continuous-learning.js";
-export * from "./learning-evidence.js";
 export * from "./training.js";
 export * from "./model-lifecycle.js";
 export * from "./training-benchmark.js";
@@ -56,17 +54,21 @@ export * from "./harness-workspaces.js";
 export * from "./harness-workspace-transitions.js";
 export * from "./harness-sources.js";
 export * from "./harness-improvements.js";
+export * from "./harness-history.js";
+export * from "./harness-memory.js";
 export * from "./training-platform.js";
 export {
   AgentSnapshotSchema,
+  HarnessReleaseSchema,
+  type AgentSnapshot,
+  type HarnessRelease,
+} from "@openpond/harness";
+export {
   AttemptReceiptSchema,
   GraderEvidenceSchema as PortableGraderEvidenceSchema,
-  HarnessReleaseSchema,
   RunManifestSchema as PortableRunManifestSchema,
   TasksetReleaseSchema,
-  type AgentSnapshot,
   type AttemptReceipt,
-  type HarnessRelease,
   type RunManifest as PortableRunManifest,
   type TasksetRelease,
 } from "@openpond/evals";

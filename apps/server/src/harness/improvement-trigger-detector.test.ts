@@ -80,7 +80,39 @@ describe("Harness improvement trigger detector", () => {
     expect(result.trigger.decision).toBe("no_action");
   });
 
-  test("routes a recovered missing dependency deterministically", () => {
+  test("does not treat internal workspace cleanup as recovery", () => {
+    const result = detect([
+      toolEvent({
+        id: "failed-environment",
+        sequence: 1,
+        status: "failed",
+        action: "work_environment",
+        output: "Work sandbox entered error during startup.",
+      }),
+      {
+        id: "sandbox-stop-result",
+        sequence: 2,
+        sessionId: "session-a",
+        turnId: "turn-a",
+        name: "workspace_action_result",
+        timestamp: AT,
+        source: "server",
+        action: "sandbox_stop",
+        status: "completed",
+        output: "Stopped sandbox.",
+      },
+    ]);
+
+    expect(result.observations).toHaveLength(1);
+    expect(result.observations[0]).toMatchObject({
+      kind: "tool_failure",
+      state: "open",
+      tool: { name: "work_environment" },
+    });
+    expect(result.trigger.decision).toBe("no_action");
+  });
+
+  test("queues the Refiner for a recovered missing dependency so it can choose the correct layer", () => {
     const result = detect([
       toolEvent({
         id: "failed-a",
@@ -104,9 +136,9 @@ describe("Harness improvement trigger detector", () => {
       "recovery",
     ]);
     expect(result.trigger).toMatchObject({
-      decision: "route_deterministically",
-      deterministicRoute: "runtime",
-      estimatedMaxCostUsd: 0,
+      decision: "queue_refiner",
+      deterministicRoute: null,
+      estimatedMaxCostUsd: 0.01,
     });
   });
 
@@ -179,6 +211,73 @@ describe("Harness improvement trigger detector", () => {
     expect(result.trigger.suggestedRoutes).toEqual(["runtime", "skill"]);
   });
 
+  test("records recovery through a different fallback tool", () => {
+    const result = detect([
+      toolEvent({
+        id: "failed-fetch",
+        sequence: 1,
+        status: "failed",
+        output: "Research limit reached",
+        action: "web_fetch",
+      }),
+      toolEvent({
+        id: "connected-app-result",
+        sequence: 2,
+        status: "completed",
+        action: "connected_app_search",
+      }),
+    ]);
+    expect(result.observations.map((item) => item.kind)).toEqual([
+      "tool_failure",
+      "recovery",
+    ]);
+    expect(result.observations.at(-1)?.summary).toMatch(
+      /connected_app_search recovered after web_fetch failed/i,
+    );
+    expect(result.trigger.decision).toBe("queue_refiner");
+  });
+
+  test.each([
+    "Hey, you messed this up; do this instead.",
+    "Here is another detail for the work.",
+  ])("reviews every completed user turn without classifying its wording: %s", (prompt) => {
+    const userTurn: RuntimeEvent = {
+      id: "turn-started-user-evidence",
+      sequence: 1,
+      sessionId: "session-a",
+      turnId: "turn-a",
+      name: "turn.started",
+      timestamp: AT,
+      source: "server",
+      status: "started",
+      args: { prompt },
+    };
+    const result = detectHarnessImprovementAtBoundary({
+      runRef: "run-a",
+      turnId: "turn-a",
+      harnessRelease,
+      overlay: null,
+      events: [userTurn],
+      boundary: boundary("turn_completed"),
+    });
+    expect(result.observations).toHaveLength(1);
+    expect(result.observations[0]).toMatchObject({
+      kind: "user_turn",
+      deterministicClass: null,
+    });
+    expect(result.trigger.decision).toBe("queue_refiner");
+    expect(result.trigger.suggestedRoutes).toEqual([
+      "runtime",
+      "memory",
+      "prompt",
+      "skill",
+      "agent",
+      "product",
+      "taskset",
+      "training",
+    ]);
+  });
+
   test("deduplicates equivalent routed evidence and treats terminal failure as actionable", () => {
     const terminal = detect(
       [toolEvent({ id: "failed-a", sequence: 1, status: "failed", output: "Unexpected failure" })],
@@ -198,5 +297,38 @@ describe("Harness improvement trigger detector", () => {
     });
     expect(duplicate.trigger.decision).toBe("no_action");
     expect(duplicate.trigger.reason).toMatch(/already routed/i);
+  });
+
+  test("coalesces an end-of-turn review after an earlier recovered batch queued one", () => {
+    const result = detectHarnessImprovementAtBoundary({
+      runRef: "run-a",
+      turnId: "turn-a",
+      harnessRelease,
+      overlay: null,
+      events: [
+        {
+          id: "turn-started",
+          sequence: 1,
+          sessionId: "session-a",
+          turnId: "turn-a",
+          name: "turn.started",
+          timestamp: AT,
+          source: "chat_action",
+          status: "started",
+          args: { prompt: "Make the report." },
+        },
+      ],
+      boundary: boundary("turn_completed"),
+      turnReviewAlreadyQueued: true,
+    });
+
+    expect(result.observations).toEqual([
+      expect.objectContaining({ kind: "user_turn" }),
+    ]);
+    expect(result.trigger).toMatchObject({
+      decision: "no_action",
+      estimatedMaxCostUsd: 0,
+    });
+    expect(result.trigger.reason).toMatch(/already has a queued/i);
   });
 });

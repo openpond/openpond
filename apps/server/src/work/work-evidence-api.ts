@@ -1,4 +1,4 @@
-import { ImmutableReleaseRefSchema } from "@openpond/evals";
+import { ImmutableReleaseRefSchema } from "@openpond/harness";
 import {
   EvidenceArtifactRefSchema,
   WorkEvidencePolicyStateSchema,

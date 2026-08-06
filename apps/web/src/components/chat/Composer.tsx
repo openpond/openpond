@@ -54,6 +54,7 @@ import {
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import {
+  ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
   ComposerProfileTargetControl,
   WorkspaceActionControl,
@@ -311,14 +312,15 @@ export function Composer({
     surface === "team"
       ? "Message team"
       : mode === "start"
-      ? experience === "work"
-        ? "What should we work on?"
-        : experience === "chat"
+      ? experience === "chat"
         ? "Ask anything"
-        : "What should we build?"
+        : "What should we work on?"
       : "Ask for follow-up changes";
   const showLocalWorkGuidance =
     experience === "work" && surface === "chat" && isDesktopShell();
+  const repositoryWork =
+    experience === "development" ||
+    (experience === "work" && projectTarget.value !== "none");
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   // Composer controls sit against the lower edge of the input surface. Opening
   // upward keeps provider/model/permission menus inside the viewport instead
@@ -343,7 +345,7 @@ export function Composer({
   }, [experience, provider]);
   const availableProfileSkills = useMemo(
     () =>
-      experience === "development"
+      repositoryWork
         ? profileSkills
         : profileSkills.filter(
             (skill) => !DEVELOPMENT_ONLY_PROFILE_SKILLS.has(skill.name)
@@ -471,11 +473,11 @@ export function Composer({
       enabledOnly: true,
     }).map((option) => ({ ...option, description: undefined }));
     const experienceOptions =
-      experience === "development"
+      repositoryWork
         ? options
         : options.filter((option) => option.value !== "codex");
     const scopedOptions =
-      workspaceTarget.value === "cloud" && experience === "development"
+      workspaceTarget.value === "cloud" && repositoryWork
         ? experienceOptions.filter((option) => option.value === "openpond")
         : experienceOptions;
     const withCurrent = scopedOptions.some(
@@ -497,7 +499,7 @@ export function Composer({
       separatorBefore: true,
     };
     return [...withCurrent, setupProviderOption];
-  }, [experience, provider, providerSettings, workspaceTarget.value]);
+  }, [provider, providerSettings, repositoryWork, workspaceTarget.value]);
   const modelOptions = useMemo(
     () => modelOptionsForProvider(provider, providerSettings),
     [provider, providerSettings]
@@ -729,7 +731,6 @@ export function Composer({
     () => filteredAddMenuSections.flatMap((section) => section.items),
     [filteredAddMenuSections]
   );
-
   useEffect(() => {
     if (!addMenuOpen) return;
     setAddMenuIndex((current) => (current < addMenuItems.length ? current : 0));
@@ -739,7 +740,7 @@ export function Composer({
   const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
-  const showWorkspaceFooterControls = projectTarget.value !== "none";
+  const showWorkspaceFooterControls = experience === "work" || projectTarget.value !== "none";
   const steerDrafts = composerSteerDraftsForScope(
     steerDraftsByScope,
     submissionScopeKey,
@@ -1652,6 +1653,7 @@ export function Composer({
           ) : null}
         </div>
       )}
+      {!showProjectFooter && experience === "work" && <ComposerPinnedWorkspaceContext project={projectTarget} workspace={workspaceTarget} />}
       {createImproveRuntime ? (
         <Suspense fallback={null}>
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
@@ -1688,8 +1690,8 @@ export function Composer({
       )}
       {showLocalWorkGuidance ? (
         <p className="composer-local-work-guidance">
-          Work uses your local AI and Openpond Sandboxes, schedules are local.
-          Use Work mode on the web app for cloud based Work
+          Work can run against a Local project or a Hosted sandbox. Choose the
+          execution target below before starting a new task.
         </p>
       ) : null}
       <div className="composer-input-shell" ref={inputShellRef}>
@@ -1950,7 +1952,7 @@ export function Composer({
           modelValue={modelValue}
           modelOptions={modelOptions}
           openPondCommandAccessMode={openPondCommandAccessMode}
-          showCommandAccess={experience === "development"}
+          showCommandAccess={repositoryWork}
           profileTarget={showProjectFooter ? null : profileTarget}
           onCodexPermissionModeChange={onCodexPermissionModeChange}
           onCodexReasoningEffortChange={onCodexReasoningEffortChange}

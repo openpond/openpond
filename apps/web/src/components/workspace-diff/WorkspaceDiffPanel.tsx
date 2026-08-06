@@ -104,7 +104,7 @@ export function WorkspaceDiffPanel({
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
-  onOpenBrowser: () => void;
+  onOpenBrowser?: () => void;
   onOpenBrowserUrl: (href: string, options?: { newTab?: boolean }) => void;
   onViewStateChange?: (state: WorkspaceDiffPanelViewState) => void;
   onCloseSideChat?: (panelId: string) => void;
@@ -309,7 +309,7 @@ function WorkspaceDiffPanelInner({
   onRefresh: (options?: WorkspaceDiffRefreshOptions) => Promise<void> | void;
   onResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleExpanded: () => void;
-  onOpenBrowser: () => void;
+  onOpenBrowser?: () => void;
   onViewStateChange?: (state: WorkspaceDiffPanelViewState) => void;
   onCloseSideChat?: (panelId: string) => void;
   onOpenSideChat?: () => void;
@@ -1452,11 +1452,11 @@ function WorkspaceDiffPanelInner({
         onCloseSideChat={onCloseSideChat}
         onCloseSearch={() => setSearchOpen(false)}
         onOpenFile={openFile}
-        onOpenBrowser={() => {
+        onOpenBrowser={onOpenBrowser ? () => {
           setAddMenuOpen(false);
           setSearchOpen(false);
           onOpenBrowser();
-        }}
+        } : undefined}
         onOpenSearch={() => {
           setAddMenuOpen(false);
           setSearchOpen(true);

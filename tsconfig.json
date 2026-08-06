@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/harness/tsconfig.build.json" },
     { "path": "packages/evals/tsconfig.build.json" },
     { "path": "packages/cloud" },
     { "path": "packages/connected-apps" },

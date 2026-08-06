@@ -5,6 +5,6 @@
     "rootDir": "src",
     "outDir": "dist"
   },
-  "references": [{ "path": "../evals/tsconfig.build.json" }, { "path": "../cloud" }, { "path": "../connected-apps" }],
+  "references": [{ "path": "../harness/tsconfig.build.json" }, { "path": "../evals/tsconfig.build.json" }, { "path": "../cloud" }, { "path": "../connected-apps" }],
   "include": ["src/**/*.ts"]
 }

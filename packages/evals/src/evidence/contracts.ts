@@ -3,13 +3,13 @@ import { z } from "zod";
 import {
   ImmutableArtifactRefSchema,
   ImmutableReleaseRefSchema,
+  ModelRefSchema,
   ReleaseHashSchema,
   ReleaseIdSchema,
   ReleaseTimestampSchema,
   contentHash,
   type ImmutableArtifactRef,
-} from "../common.js";
-import { ModelRefSchema } from "../runs.js";
+} from "@openpond/harness";
 
 export const WORK_EVIDENCE_SCHEMA_VERSION = "openpond.workEvidenceReceipt.v1" as const;
 export const WORK_PROCESS_TRACE_SCHEMA_VERSION = "openpond.workProcessTrace.v1" as const;

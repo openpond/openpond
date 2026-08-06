@@ -8,22 +8,22 @@ type ChatTaskModeStorage = Pick<Storage, "getItem" | "setItem">;
 
 export function productAreaForAppView(
   view: AppView,
-  experience: Experience
+  _experience: Experience
 ): ProductArea {
   if (view === "labs") return "models";
   if (view === "chat") {
-    return experience === "development" ? "development" : "chat";
+    return "chat";
   }
   if (view === "team" || view === "community") return "chat";
   if (view === "scheduled" || view === "outputs") return "chat";
-  if (view === "apps") return "development";
-  return experience === "development" ? "development" : "chat";
+  if (view === "apps") return "chat";
+  return "chat";
 }
 
 export function chatTaskModeForExperience(
   experience: Experience
 ): ChatTaskMode {
-  return experience === "work" ? "work" : "chat";
+  return experience === "chat" ? "chat" : "work";
 }
 
 export function readLastChatTaskMode(
@@ -51,9 +51,11 @@ export function rememberLastChatTaskMode(
   storage: Pick<ChatTaskModeStorage, "setItem">,
   experience: Experience
 ): void {
-  if (experience === "development") return;
   try {
-    storage.setItem(LAST_CHAT_TASK_MODE_STORAGE_KEY, experience);
+    storage.setItem(
+      LAST_CHAT_TASK_MODE_STORAGE_KEY,
+      experience === "chat" ? "chat" : "work",
+    );
   } catch {
     // Browser storage can be unavailable in restricted contexts.
   }

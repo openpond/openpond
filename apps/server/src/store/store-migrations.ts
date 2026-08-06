@@ -45,7 +45,7 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   },
   {
     version: 34,
-    run: (store) => store.createLocalContinuousLearningTables(),
+    run: async () => undefined,
   },
   {
     version: 35,
@@ -57,6 +57,14 @@ export const SQLITE_MIGRATIONS: Migration[] = [
   },
   {
     version: 37,
+    run: (store) => store.createHarnessWorkspaceTables(),
+  },
+  {
+    version: 38,
+    run: (store) => store.createHarnessWorkspaceTables(),
+  },
+  {
+    version: 39,
     run: (store) => store.createHarnessWorkspaceTables(),
   },
 ];

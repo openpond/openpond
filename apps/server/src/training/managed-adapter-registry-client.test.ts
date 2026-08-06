@@ -27,7 +27,7 @@ describe("managed adapter registry client", () => {
           ],
           lifecycle: { policyOwner: "sandbox" },
         }),
-      ) as typeof fetch,
+      ) as unknown as typeof fetch,
       resolveRegistryAccess: async (teamId) => ({
         apiBaseUrl: "https://api.test",
         token: "opk_user",
@@ -92,7 +92,7 @@ describe("managed adapter registry client", () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
       readFileImpl: (async (path: string) =>
         path.endsWith("config") ? Buffer.from("{}") : Buffer.from([1, 2, 3])) as never,
       resolveRegistryAccess: async (teamId) => ({
@@ -156,7 +156,7 @@ describe("managed adapter registry client", () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
       env: {
         VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
       },
@@ -212,7 +212,7 @@ describe("managed adapter registry client", () => {
   test("fails before network access when account resolution changes the requested team", async () => {
     const fetchImpl = vi.fn();
     const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
       resolveRegistryAccess: async () => ({
         apiBaseUrl: "https://api.test",
         token: "opk_user",
@@ -253,7 +253,7 @@ describe("managed adapter registry client", () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
       readFileImpl: readFileImpl as never,
       resolveRegistryAccess: async () => ({
         apiBaseUrl: "https://api.test",
@@ -291,7 +291,7 @@ describe("managed adapter registry client", () => {
       });
     });
     const client = createManagedAdapterRegistryClient({
-      fetchImpl: fetchImpl as typeof fetch,
+      fetchImpl: fetchImpl as unknown as typeof fetch,
       env: {
         VERCEL_AUTOMATION_BYPASS_SECRET: "staging-bypass",
       },

@@ -49,7 +49,7 @@ describe("SettingsNavigation", () => {
     expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Harness"));
   });
 
-  test("starts the Harness section with Profiles and native Skills", () => {
+  test("starts the Harness section with release history and native Skills", () => {
     const markup = renderToStaticMarkup(
       createElement(SettingsNavigation, {
         section: "skills",
@@ -59,9 +59,9 @@ describe("SettingsNavigation", () => {
     );
 
     expect(markup.indexOf("Harness")).toBeLessThan(markup.indexOf("Profiles"));
-    expect(markup.indexOf("Profiles")).toBeLessThan(markup.indexOf("Skills"));
+    expect(markup.indexOf("Skills")).toBeLessThan(markup.indexOf("Legacy Profiles"));
     expect(markup).not.toContain("Goals");
-    expect(markup).toContain("Profiles");
+    expect(markup).toContain("Legacy Profiles");
     expect(markup).toContain('class="settings-nav-item active"');
   });
 

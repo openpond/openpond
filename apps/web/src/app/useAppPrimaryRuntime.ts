@@ -597,7 +597,10 @@ export function useAppPrimaryRuntime() {
     expandProject,
     linkedProjectByAppId,
     requestComposerFocus: requestMainComposerFocus,
-    onBeginNewChat: () => setDraftSubagentDelegationMode(null),
+    onBeginNewChat: () => {
+      setDraftSubagentDelegationMode(null);
+      setDraftExperience((current) => current === "development" ? "work" : current);
+    },
     setMentionedAppId,
   });
   const selectLocalProjectForTrainingChat = useCallback(
@@ -706,7 +709,11 @@ export function useAppPrimaryRuntime() {
       setDraftExperience(experience);
       const nextSession =
         [...experienceSidebarSessions]
-          .filter((session) => session.experience === experience)
+          .filter((session) =>
+            experience === "work"
+              ? session.experience === "work" || session.experience === "development"
+              : session.experience === experience
+          )
           .sort((left, right) =>
             right.updatedAt.localeCompare(left.updatedAt)
           )[0] ??
@@ -720,15 +727,15 @@ export function useAppPrimaryRuntime() {
         appDispatch({
           type: "selectSession",
           sessionId: nextSession.id,
-          appId: experience === "development" ? nextSession.appId : null,
+          appId: experience !== "chat" ? nextSession.appId : null,
           projectId:
-            experience === "development"
+            experience !== "chat"
               ? sidebarProjectIdBySessionId[nextSession.id] ?? null
               : null,
         });
       } else {
         appDispatch({ type: "beginNewChat", appId: null });
-        if (experience !== "development" && activeProvider === "codex") {
+        if (experience === "chat" && activeProvider === "codex") {
           const provider =
             providerOptionsFromSettings(bootstrap?.providers, {
               enabledOnly: true,
@@ -741,7 +748,7 @@ export function useAppPrimaryRuntime() {
           );
         }
       }
-      if (experience !== "development") {
+      if (experience === "chat") {
         setTerminalOpen(false);
         setDiffPanelExpanded(false);
         setRightPanelMode("home");
@@ -772,7 +779,7 @@ export function useAppPrimaryRuntime() {
         appDispatch({ type: "beginNewChat", appId: null });
         if (draft) composerDraftStore.set(draft);
       }
-      if (experience !== "development" && activeProvider === "codex") {
+      if (experience === "chat" && activeProvider === "codex") {
         const provider =
           providerOptionsFromSettings(bootstrap?.providers, {
             enabledOnly: true,
@@ -784,7 +791,7 @@ export function useAppPrimaryRuntime() {
             DEFAULT_CHAT_MODEL
         );
       }
-      if (experience !== "development") {
+      if (experience === "chat") {
         setTerminalOpen(false);
         setDiffPanelExpanded(false);
         setRightPanelMode("home");
@@ -996,7 +1003,7 @@ export function useAppPrimaryRuntime() {
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
   const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<
-    "hybrid" | null
+    WorkspaceTargetValue | null
   >(null);
   const [pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget] =
     useState<{
@@ -1019,7 +1026,7 @@ export function useAppPrimaryRuntime() {
   });
   useEffect(() => {
     setPendingWorkspaceTarget(null);
-  }, [selectedCloudProject?.id, selectedProject?.id, selectedSession?.id]);
+  }, [selectedSession?.id]);
   return {
     composerDraftStore,
     appDispatch,

@@ -21,6 +21,7 @@
   "dependencies": {
     "@openpond/contracts": "workspace:*",
     "@openpond/evals": "workspace:*",
+    "@openpond/harness": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*"
   },
   "devDependencies": {

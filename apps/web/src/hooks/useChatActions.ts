@@ -83,6 +83,7 @@ import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 import {
   isCloudWorkspaceKind,
   isHybridWorkspaceSession,
+  localWorkspaceSessionMetadata,
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
 import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
@@ -637,19 +638,32 @@ export function useChatActions({
       : selectedSession;
     const experienceForTurn =
       options.experience ?? selectedSessionForTurn?.experience ?? experience;
-    const developmentTurn = experienceForTurn === "development";
+    const repositoryWorkTurn =
+      experienceForTurn === "development" ||
+      (experienceForTurn === "work" && (
+        selectedSessionForTurn?.workspaceKind === "local_project" ||
+        Boolean(selectedSessionForTurn?.localProjectId) ||
+        Boolean(selectedSessionForTurn?.cloudProjectId) ||
+        (!explicitTurnContext && Boolean(
+          selectedProject ||
+            selectedCloudProject ||
+            selectedApp ||
+            workspaceTarget === "hybrid" ||
+            workspaceTarget === "local"
+        ))
+      ));
     const selectedAppForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedApp;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedApp;
     const selectedProjectForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedProject;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedProject;
     const selectedCloudProjectForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedCloudProject;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedCloudProject;
     const selectedProjectLinkedOpenPondAppForTurn =
-      explicitTurnContext || !developmentTurn
+      explicitTurnContext || !repositoryWorkTurn
         ? null
         : selectedProjectLinkedOpenPondApp;
     const hybridTargetForTurn =
-      !explicitTurnContext && developmentTurn && workspaceTarget === "hybrid";
+      !explicitTurnContext && repositoryWorkTurn && workspaceTarget === "hybrid";
     const shouldSelectSession = options.selectSession ?? true;
     const turnChatMessages = options.chatMessages ?? chatMessages;
     const mentionedAppIdForTurn =
@@ -668,7 +682,7 @@ export function useChatActions({
       selectedAction ?? actionMentionResolution?.action ?? null;
     const actionPromptForRun = actionMentionResolution?.prompt || value;
     const directCommandForTurn =
-      developmentTurn && !selectedActionForTurn
+      repositoryWorkTurn && !selectedActionForTurn
         ? parseComposerDirectCommandPrompt(value)
         : null;
     const parsedSlashCommandForTurn =
@@ -697,8 +711,8 @@ export function useChatActions({
     let turnSessionId: string | null = null;
     let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
-      if (!developmentTurn && providerForTurn === "codex") {
-        throw new Error("The Codex provider is available in Development.");
+      if (!repositoryWorkTurn && providerForTurn === "codex") {
+        throw new Error("The Codex provider requires repository-aware Work.");
       }
       if (disallowedExperienceSlashCommand) {
         throw new Error(
@@ -1092,9 +1106,16 @@ export function useChatActions({
                   cloudProject?.id ?? confirmedCloudProject?.id ?? null,
                 cloudTeamId:
                   cloudProject?.teamId ?? confirmedCloudProject?.teamId ?? null,
-                cwd: selectedProjectForTurn
-                  ? selectedProjectForTurn.workspacePath
-                  : null,
+                ...(!cloudProject &&
+                !selectedProjectForTurn &&
+                !selectedAppForTurn &&
+                workspaceTarget === "local"
+                  ? { metadata: localWorkspaceSessionMetadata() }
+                  : {
+                      cwd: selectedProjectForTurn
+                        ? selectedProjectForTurn.workspacePath
+                        : null,
+                    }),
                 title: value.slice(0, 64),
               }
         );
@@ -1115,7 +1136,7 @@ export function useChatActions({
         }
       }
       if (
-        session.experience === "development" &&
+        sessionUsesRepositoryWork(session) &&
         isCloudWorkspaceKind(session.workspaceKind) &&
         session.provider !== "openpond" &&
         !isHybridWorkspaceSession(session)
@@ -1125,7 +1146,7 @@ export function useChatActions({
         );
       }
       if (
-        session.experience === "development" &&
+        sessionUsesRepositoryWork(session) &&
         isCloudWorkspaceKind(session.workspaceKind) &&
         ensureCloudSessionReady
       ) {
@@ -1459,3 +1480,14 @@ export function useChatActions({
 }
 
 export { resolveMentionedChatApp } from "../lib/chat-app-mentions";
+
+function sessionUsesRepositoryWork(session: Session): boolean {
+  return session.experience === "development" || (
+    session.experience === "work" && (
+      session.workspaceKind === "local_project" ||
+      Boolean(session.localProjectId) ||
+      Boolean(session.cloudProjectId) ||
+      session.metadata?.workspaceTarget === "local"
+    )
+  );
+}

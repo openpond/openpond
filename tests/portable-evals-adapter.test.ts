@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { contentHash, verifyAttemptReceipt } from "../packages/evals/src/index.js";
+import { verifyAttemptReceipt } from "../packages/evals/src/index.js";
+import { contentHash } from "../packages/harness/src/index.js";
 import { GradeResultSchema, TaskAttemptArtifactSchema, emptyOpenPondProfileState } from "../packages/contracts/src/index.js";
 import { compileDesktopHarnessContext, projectDesktopAttemptReceipt } from "../apps/server/src/training/portable-evals-adapter.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures.js";

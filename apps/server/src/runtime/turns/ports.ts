@@ -416,22 +416,20 @@ export type TurnRunnerDependencies = {
   loadSelectedHarnessRuntime?: (session: Session) => Promise<{
     workspace: import("@openpond/contracts").HarnessWorkspace;
     release: {
-      harnessRelease: import("@openpond/evals").HarnessRelease;
+      harnessRelease: import("@openpond/harness").HarnessRelease;
     };
+    instructionContext: string;
     skillRuntime: import("../hosted-turn/native-tools-runtime.js").ProfileSkillRuntime;
   } | null>;
   ensureHarnessRunOverlay?: (input: {
     runId: string;
     workspace: import("@openpond/contracts").HarnessWorkspace;
-    harnessRelease: import("@openpond/evals").ImmutableReleaseRef;
+    harnessRelease: import("@openpond/harness").ImmutableReleaseRef;
     admittedAt: string;
   }) => Promise<import("@openpond/contracts").HarnessRunOverlay>;
+  harnessModelTools?: import("../../openpond/model-tool-registry.js").ModelToolDefinition[];
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
-  getContinuousLearningConversations?: (
-    session: Session,
-    args: unknown
-  ) => Promise<import("@openpond/contracts").GetLearningEvidenceToolResult>;
   loadOpenPondExtensionCatalog?: () => Promise<OpenPondExtensionCatalog>;
   readOpenPondExtensionSkill?: (
     name: string

@@ -21,7 +21,7 @@ import {
   type ResolvedConnectedAppContext,
 } from "./connected-app-context.js";
 import { buildPersonalizedSystemPrompt } from "./personalization.js";
-import { DEVELOPMENT_SYSTEM_CONTEXT } from "./development-system-context.js";
+import { REPOSITORY_WORK_SYSTEM_CONTEXT } from "./repository-work-system-context.js";
 import {
   buildRepositoryInstructionContext,
   resolveRepositoryInstructions,
@@ -127,15 +127,16 @@ export function createHostedTurnHelpers(deps: {
     const experience = session.experience ?? DEFAULT_SESSION_EXPERIENCE;
     const requestedToolInstructionMode =
       options.toolInstructionMode ?? "full_text_fallback";
-    const toolInstructionMode = experienceUsesWorkspaceToolProtocol(experience)
+    const policySession = { ...session, experience };
+    const toolInstructionMode = experienceUsesWorkspaceToolProtocol(policySession)
       ? requestedToolInstructionMode
       : "none";
     const isHybridSession = isHybridWorkspaceSession(session);
-    const developmentContext =
-      experience === "development" ? DEVELOPMENT_SYSTEM_CONTEXT : "";
+    const repositoryWork = experienceUsesWorkspaceToolProtocol(policySession);
+    const developmentContext = repositoryWork ? REPOSITORY_WORK_SYSTEM_CONTEXT : "";
     let repositoryInstructionContext = "";
     if (
-      experience === "development" &&
+      repositoryWork &&
       session.workspaceKind === "local_project"
     ) {
       const resolution = await resolveRepositoryInstructions(session.cwd);
@@ -148,7 +149,7 @@ export function createHostedTurnHelpers(deps: {
     const workspaceContext =
       experience === "chat"
         ? buildChatExperienceContext()
-        : experience === "work"
+        : experience === "work" && !repositoryWork
         ? buildWorkExperienceContext(session)
         : session.workspaceKind === "local_project"
         ? (await looksLikeSandboxTemplateRepo(session.cwd))
@@ -215,24 +216,14 @@ export function createHostedTurnHelpers(deps: {
     text: string
   ): Promise<void> {
     if (!text) return;
-    const continuousLearning = Boolean(session.metadata?.continuousLearning);
-    const visibleText = continuousLearning
-      ? text.replace(
-          /<openpond-continuous-learning-recommendation>[\s\S]*?<\/openpond-continuous-learning-recommendation>/g,
-          "",
-        ).trim()
-      : text;
     const assistantEvent = event({
         sessionId: session.id,
         turnId,
         name: "assistant.delta",
         source: "provider",
         appId: session.appId,
-        output: visibleText,
+        output: text,
       });
-    if (continuousLearning) {
-      assistantEvent.data = { continuousLearningRawAssistantText: text };
-    }
     await appendRuntimeEvent(assistantEvent);
   }
 
@@ -482,7 +473,7 @@ function buildWorkExperienceContext(session: Session): string {
     "- If Agent preparation, validation, evals, or package saving fails, report that blocker plainly. Do not substitute a generic file output or claim that an Agent package was completed.",
     "- When an approved connected write or deployment already created the durable result elsewhere, call work_register_external_output with its stable provider id or URL instead of copying it through the sandbox.",
     "- Connected writes, sharing, and publication require explicit user intent and provider readback. Otherwise create a reviewable local draft.",
-    "- Repository, git, interactive terminal, source-promotion, and deployment capabilities belong to Development and are not available here.",
+    "- Repository, git, interactive terminal, source-promotion, and deployment capabilities require repository-aware Work and are not available in this projectless run.",
   ].join("\n");
 }
 

@@ -13,4 +13,4 @@ export type ProductArea = z.infer<typeof ProductAreaSchema>;
  * surface. Callers creating new user-facing sessions should always send an
  * explicit experience.
  */
-export const DEFAULT_SESSION_EXPERIENCE: Experience = "development";
+export const DEFAULT_SESSION_EXPERIENCE: Experience = "work";

@@ -5,21 +5,13 @@ import {
   ImmutableArtifactRefSchema,
   ImmutableReleaseRefSchema,
   MetadataSchema,
+  ModelRefSchema,
   ReleaseHashSchema,
   ReleaseIdSchema,
   ReleaseTimestampSchema,
   assertContentHash,
   contentHash,
-} from "./common.js";
-
-export const ModelRefSchema = z.object({
-  provider: ReleaseIdSchema,
-  model: ReleaseIdSchema,
-  revision: z.string().trim().min(1).max(500).nullable().default(null),
-  artifactHash: ReleaseHashSchema.nullable().default(null),
-  tokenizerRevision: z.string().trim().min(1).max(500).nullable().default(null),
-  chatTemplateHash: ReleaseHashSchema.nullable().default(null),
-}).strict();
+} from "@openpond/harness";
 
 export const RuntimeTargetBindingSchema = z.object({
   adapterId: ReleaseIdSchema,
@@ -200,7 +192,7 @@ export function rewardEligibleReceipts(receipts: AttemptReceipt[]): AttemptRecei
   );
 }
 
-export type ModelRef = z.infer<typeof ModelRefSchema>;
+export type { ModelRef } from "@openpond/harness";
 export type RuntimeTargetBinding = z.infer<typeof RuntimeTargetBindingSchema>;
 export type RunLimits = z.infer<typeof RunLimitsSchema>;
 export type RunManifest = z.infer<typeof RunManifestSchema>;

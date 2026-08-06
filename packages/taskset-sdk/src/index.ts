@@ -7,13 +7,15 @@ export * from "./materialize.js";
 export * from "./validation.js";
 export {
   AgentSnapshotSchema,
-  AttemptReceiptSchema,
   HarnessReleaseSchema,
+  createAgentSnapshot,
+  createHarnessRelease,
+} from "@openpond/harness";
+export {
+  AttemptReceiptSchema,
   RunManifestSchema as PortableRunManifestSchema,
   TasksetReleaseSchema,
-  createAgentSnapshot,
   createAttemptReceipt,
-  createHarnessRelease,
   createRunManifest as createPortableRunManifest,
   validateTasksetRelease,
   verifyAttemptReceipt,

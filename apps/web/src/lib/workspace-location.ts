@@ -37,6 +37,26 @@ export function hybridWorkspaceSessionMetadata(
   };
 }
 
+export function localWorkspaceSessionMetadata(
+  metadata: Record<string, unknown> | null | undefined = {},
+): Record<string, unknown> {
+  return {
+    ...metadata,
+    workspaceTarget: "local",
+  };
+}
+
+export function isManagedLocalWorkSession(session: Session | null | undefined): boolean {
+  return Boolean(
+    session?.experience === "work" &&
+      !session.workspaceKind &&
+      !session.localProjectId &&
+      !session.cloudProjectId &&
+      session.metadata?.workspaceTarget === "local" &&
+      session.cwd,
+  );
+}
+
 export function isHybridWorkspaceSession(session: Session | null | undefined): boolean {
   return session?.metadata?.workspaceTarget === "hybrid";
 }

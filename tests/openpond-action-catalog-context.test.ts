@@ -31,7 +31,12 @@ describe("OpenPond action catalog context", () => {
     const prompt = await helpers.hostedSystemPrompt(
       "Base hosted prompt.",
       "",
-      session,
+      {
+        ...session,
+        experience: "work",
+        localProjectId: "local_project_1",
+        cloudProjectId: "cloud_project_1",
+      },
       {
         openPondActionCatalog: [
           {
@@ -73,7 +78,12 @@ describe("OpenPond action catalog context", () => {
     const prompt = await helpers.hostedSystemPrompt(
       "Base hosted prompt.",
       "",
-      session,
+      {
+        ...session,
+        experience: "work",
+        localProjectId: "local_project_1",
+        cloudProjectId: "cloud_project_1",
+      },
       {
         toolInstructionMode: "resource_text_fallback",
         actionCatalogInstructionMode: "native_tool",

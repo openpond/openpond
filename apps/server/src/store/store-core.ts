@@ -485,28 +485,6 @@ export class SqliteStoreCore {
     `);
   }
 
-  async createLocalContinuousLearningTables(): Promise<void> {
-    await this.exec(`
-      CREATE TABLE IF NOT EXISTS local_continuous_learning_states (
-        id TEXT PRIMARY KEY,
-        profile_id TEXT NOT NULL,
-        scope TEXT NOT NULL,
-        workspace_id TEXT,
-        enabled INTEGER NOT NULL,
-        next_run_at TEXT,
-        payload TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE UNIQUE INDEX IF NOT EXISTS local_continuous_learning_scope_idx
-        ON local_continuous_learning_states(profile_id, scope, COALESCE(workspace_id, ''));
-
-      CREATE INDEX IF NOT EXISTS local_continuous_learning_due_idx
-        ON local_continuous_learning_states(enabled, next_run_at);
-    `);
-  }
-
   async retireGoalAndInsightsStorage(): Promise<void> {
     await retireGoalAndInsightsStorageState({
       all: (sql, params) => this.all(sql, params),

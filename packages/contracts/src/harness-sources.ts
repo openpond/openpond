@@ -1,8 +1,9 @@
 import {
+  CapabilityRequirementSchema,
   GraderInterfaceContractSchema,
   LifecycleContractSchema,
   ToolDeclarationSchema,
-} from "@openpond/evals";
+} from "@openpond/harness";
 import { z } from "zod";
 
 import { ReleaseIdSchema } from "./release-core.js";
@@ -59,17 +60,7 @@ export const HarnessSourceManifestSchema = z
     name: z.string().trim().min(1).max(240),
     files: z.array(HarnessSourceFileSchema).min(2).max(100_000),
     toolDeclarations: z.array(ToolDeclarationSchema).max(200),
-    capabilityRequirements: z
-      .array(
-        z
-          .object({
-            id: ReleaseIdSchema,
-            required: z.boolean(),
-            scopes: z.array(z.string().trim().min(1).max(500)).max(100),
-          })
-          .strict(),
-      )
-      .max(200),
+    capabilityRequirements: z.array(CapabilityRequirementSchema).max(200),
     lifecycle: LifecycleContractSchema,
     graderInterface: GraderInterfaceContractSchema,
     runtimeProtocol: z.string().trim().min(1).max(500),

@@ -10,8 +10,16 @@ import {
   connectedAppToolActivityContent,
   connectedAppToolActivityLabel,
 } from "./connected-app-provider-activity";
+import {
+  codexControlMessage,
+  isCodexGoalContextEvent,
+} from "./codex-control-messages";
 
 export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-summary";
+export {
+  codexControlMessage,
+  isCodexGoalContextEvent,
+} from "./codex-control-messages";
 
 export function appendActivityMessage(messages: ChatMessage[], item: RuntimeEvent): void {
   const activity = activityFromEvent(item);
@@ -181,6 +189,82 @@ export function appendCompactionStatus(messages: ChatMessage[], item: RuntimeEve
     }
   }
 
+  messages.push(next);
+}
+
+export function appendHarnessRefinementStatus(
+  messages: ChatMessage[],
+  item: RuntimeEvent,
+): void {
+  const data = asRecord(item.data);
+  const outcome = asRecord(data?.outcome);
+  const outcomeRouted = outcome?.routed === true;
+  const outcomeRoute = stringValue(outcome, ["route"]);
+  const workspaceAdvance = stringValue(data, ["workspaceAdvance"]);
+  const hasProposal = Boolean(asRecord(data?.proposal));
+  const failed = item.name === "harness.refiner.failed" || item.status === "failed";
+  const completed = item.name === "harness.refiner.completed";
+  if (!failed && !completed) return;
+  if (
+    completed &&
+    outcome?.decision === "no_action" &&
+    !outcomeRouted &&
+    !hasProposal &&
+    !workspaceAdvance
+  ) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const candidate = messages[index];
+      if (
+        candidate?.role === "status_divider" &&
+        candidate.statusKind === "harness_refinement" &&
+        candidate.turnId === item.turnId
+      ) {
+        messages.splice(index, 1);
+      }
+    }
+    return;
+  }
+  const content = failed
+    ? `Harness review failed${item.output || item.error ? `: ${item.output ?? item.error}` : ""}`
+    : completed && workspaceAdvance === "advanced"
+      ? "Harness updated for future Work"
+      : completed && workspaceAdvance === "retained"
+        ? "Harness change saved for review"
+        : completed && hasProposal && /\bapplied\b/i.test(item.output ?? "")
+        ? "Harness context updated for future Work"
+        : completed && hasProposal
+          ? "Harness suggestion saved"
+          : completed && outcomeRouted
+            ? `Harness recommendation routed${outcomeRoute ? ` to ${outcomeRoute}` : ""}`
+          : completed
+              ? "Harness review completed"
+              : "Reviewing a reusable recovery";
+  const next: ChatMessage = {
+    id: item.id,
+    role: "status_divider",
+    content,
+    timestamp: item.timestamp,
+    turnId: item.turnId,
+    statusKind: "harness_refinement",
+    statusState: failed ? "failed" : completed ? "completed" : "running",
+    statusTone: failed
+      ? "danger"
+      : completed && workspaceAdvance === "advanced"
+        ? "success"
+        : "info",
+  };
+  const active = findLast(
+    messages,
+    (candidate) =>
+      candidate.role === "status_divider" &&
+      candidate.statusKind === "harness_refinement" &&
+      candidate.statusState === "running" &&
+      candidate.turnId === item.turnId,
+  );
+  if (active) {
+    Object.assign(active, next);
+    return;
+  }
   messages.push(next);
 }
 
@@ -895,32 +979,4 @@ function appendCommandOutput(existing: string | undefined, next: string): string
   if (next.includes(current)) return next;
   const separator = current.endsWith("\n") || next.startsWith("\n") ? "" : "\n";
   return `${current}${separator}${next}`;
-}
-
-type CodexControlMessage = {
-  kind: "goal_context" | "turn_aborted";
-  text: string;
-};
-
-export function codexControlMessage(content: string): CodexControlMessage | null {
-  const trimmed = content.trim();
-  const match = /^<(goal_context|turn_aborted)>\s*([\s\S]*?)\s*<\/\1>$/.exec(trimmed);
-  if (match) {
-    const kind = match[1] as CodexControlMessage["kind"];
-    return {
-      kind,
-      text: match[2]?.trim() || defaultCodexControlText(kind),
-    };
-  }
-  if (trimmed === "<turn_aborted>") return { kind: "turn_aborted", text: defaultCodexControlText("turn_aborted") };
-  if (trimmed === "<goal_context>") return { kind: "goal_context", text: defaultCodexControlText("goal_context") };
-  return null;
-}
-
-function defaultCodexControlText(kind: CodexControlMessage["kind"]): string {
-  return kind === "turn_aborted" ? "The previous turn was interrupted." : "Goal context updated.";
-}
-
-export function isCodexGoalContextEvent(item: RuntimeEvent): boolean {
-  return item.name === "diagnostic" && asRecord(item.data)?.kind === "goal_context";
 }

@@ -6,8 +6,8 @@ import { handleCommunityRoutes } from "./community-routes.js";
 import { handleDesktopBrowserRoutes } from "./desktop-browser-routes.js";
 import { handleEventRoutes } from "./event-routes.js";
 import { handleExtensionRoutes } from "./extension-routes.js";
+import { handleHarnessRoutes } from "./harness-routes.js";
 import { handleLocalAgentScheduleRoutes } from "./local-agent-schedule-routes.js";
-import { handleLocalContinuousLearningRoutes } from "./local-continuous-learning-routes.js";
 import { handleOrganizationRoutes } from "./organization-routes.js";
 import { handleProjectCloudRoutes } from "./project-cloud-routes.js";
 import { handleSandboxRoutes } from "./sandbox-routes.js";
@@ -26,13 +26,13 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "work-outputs", handle: handleWorkOutputRoutes },
   { id: "work-evidence", handle: handleWorkEvidenceRoutes },
   { id: "extensions", handle: handleExtensionRoutes },
+  { id: "harness", handle: handleHarnessRoutes },
   { id: "training", handle: handleTrainingRoutes },
   { id: "compute", handle: handleComputeRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },
   { id: "communities", handle: handleCommunityRoutes },
   { id: "local-agent-schedules", handle: handleLocalAgentScheduleRoutes },
   { id: "saved-work", handle: handleSavedWorkRoutes },
-  { id: "local-continuous-learning", handle: handleLocalContinuousLearningRoutes },
   { id: "usage", handle: handleUsageRoutes },
   { id: "core", handle: handleCoreRoutes },
   { id: "desktop-browser", handle: handleDesktopBrowserRoutes },

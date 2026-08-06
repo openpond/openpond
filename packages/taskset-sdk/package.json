@@ -23,7 +23,8 @@
   },
   "dependencies": {
     "@openpond/contracts": "workspace:*",
-    "@openpond/evals": "workspace:*"
+    "@openpond/evals": "workspace:*",
+    "@openpond/harness": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

@@ -45,7 +45,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     label: "Harness",
     items: [
-      { section: "profile", label: "Profiles", Icon: Bot },
+      { section: "harness", label: "Harness", Icon: Workflow },
       { section: "skills", label: "Skills", Icon: FileText },
       { section: "context", label: "Context", Icon: BookOpenText },
       { section: "training", label: "Training", Icon: Workflow },
@@ -54,6 +54,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   },
   {
     items: [
+      { section: "profile", label: "Legacy Profiles", Icon: Bot },
       { section: "editor", label: "Editor", Icon: Code2 },
       { section: "remote", label: "Remote", Icon: RadioTower },
       { section: "personalization", label: "Personalization", Icon: SquarePen },

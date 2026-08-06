@@ -7,6 +7,7 @@
   "dependencies": {
     "@openpond/cloud": "workspace:*",
     "@openpond/evals": "workspace:*",
+    "@openpond/harness": "workspace:*",
     "@openpond/codex-provider": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/logging": "workspace:*",

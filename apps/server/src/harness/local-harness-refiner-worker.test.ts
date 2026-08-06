@@ -7,7 +7,7 @@ import {
   createRefinementTriggerDecision,
   TurnSchema,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -17,6 +17,7 @@ import {
   localHarnessWorkspacePaths,
 } from "./local-harness-workspace-service.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
+import { reviewLocalHarnessProposalFromSettings } from "./local-harness-history.js";
 import { rollbackLocalHarnessWorkspaceRelease } from "./local-harness-refiner.js";
 import { ensureLocalHarnessRunOverlay } from "./local-harness-run-overlay.js";
 
@@ -170,7 +171,11 @@ describe("local Harness Refiner worker", () => {
     const paths = localHarnessWorkspacePaths(current.directory, current.workspace.id);
     const target = path.join(paths.source, "instructions", "system.md");
     const before = await fs.readFile(target, "utf8");
-    const replacement = `${before.trimEnd()}\n\nWhen a harmless command fails because of malformed syntax, correct only that command and continue from the current checkpoint.\n`;
+    const anchor = before.trimEnd().split("\n").at(-1)!;
+    const replacement = before.replace(
+      anchor,
+      `${anchor}\n\nWhen a harmless command fails because of malformed syntax, correct only that command and continue from the current checkpoint.`,
+    );
     let calls = 0;
 
     const result = await runLocalHarnessRefinerWorker({
@@ -190,9 +195,12 @@ describe("local Harness Refiner worker", () => {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
+            operation: "update",
             target: "instructions/system.md",
             summary: "Recover from a malformed command without restarting completed work.",
-            replacementContent: replacement,
+            createContent: null,
+            find: anchor,
+            replace: `${anchor}\n\nWhen a harmless command fails because of malformed syntax, correct only that command and continue from the current checkpoint.`,
             expectedOutcome: "Equivalent tasks avoid restarting after one corrected command.",
             reason: "The trace contains a successful recovery that is safe to encode as a textual instruction.",
           }),
@@ -202,7 +210,20 @@ describe("local Harness Refiner worker", () => {
 
     expect(calls).toBe(1);
     expect(result.outcome.decision).toBe("proposed");
-    expect(result.validations.map((validation) => validation.status)).toEqual(["passed"]);
+    expect(result.validations.map((validation) => validation.status)).toEqual([
+      "passed",
+      "passed",
+      "passed",
+    ]);
+    expect(result.validations.at(-1)).toMatchObject({
+      kind: "component_activation",
+      status: "passed",
+      metadata: {
+        targetRuntime: "desktop_work",
+        beforeEffectiveRuntimeHash: expect.any(String),
+        afterEffectiveRuntimeHash: expect.any(String),
+      },
+    });
     expect(result.advanceReceipt?.decision).toBe("advanced");
     expect(result.overlay.status).toBe("frozen");
     expect(result.overlay.revision).toBe(1);
@@ -269,5 +290,284 @@ describe("local Harness Refiner worker", () => {
     expect(
       (await current.store.getHarnessWorkspace(current.workspace.id))?.currentChannel,
     ).toEqual(current.workspace.currentChannel);
+  });
+
+  it("retains an Agent proposal when Desktop Work cannot activate the source", async () => {
+    const current = await fixture("run-inactive-agent");
+
+    const result = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      stream: async function* () {
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            decision: "propose",
+            route: "agent",
+            operation: "create",
+            target: "agents/recovery-guide/agent.ts",
+            summary: "Create a reusable recovery Agent.",
+            createContent: "export const agent = { name: 'recovery-guide' };\n",
+            find: null,
+            replace: null,
+            expectedOutcome: "Future Desktop Work turns execute the recovery Agent.",
+            reason: "The fixture verifies runtime activation fails closed.",
+          }),
+        };
+      },
+    });
+
+    expect(result.outcome.decision).toBe("proposed");
+    expect(result.validations.map((validation) => [validation.kind, validation.status])).toEqual([
+      ["observed_recovery", "passed"],
+      ["package", "passed"],
+      ["component_activation", "failed"],
+    ]);
+    expect(result.validations.at(-1)).toMatchObject({
+      summary: expect.stringContaining("does not compile or execute released Agent source"),
+      metadata: {
+        targetRuntime: "desktop_work",
+        beforeEffectiveRuntimeHash: expect.any(String),
+        afterEffectiveRuntimeHash: expect.any(String),
+        inactiveAgentRefs: [
+          expect.objectContaining({ path: "agents/recovery-guide/agent.ts" }),
+        ],
+      },
+    });
+    expect(result.advanceReceipt?.decision).toBe("retained");
+    expect(result.workspace.currentChannel).toEqual(current.workspace.currentChannel);
+  });
+
+  it("pins memory update revisions and applies the next revision atomically", async () => {
+    const current = await fixture("run-memory-update");
+    const first = await current.store.writeHarnessMemory({
+      workspaceId: current.workspace.id,
+      key: "brief-style",
+      content: "Use short paragraphs.",
+      expectedRevision: null,
+      sourceRunId: null,
+      sourceProposal: null,
+      createdAt: NOW,
+    });
+
+    const result = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      stream: async function* () {
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            decision: "propose",
+            route: "memory",
+            operation: "update",
+            target: "memory/brief-style",
+            summary: "Keep briefs concise.",
+            createContent: null,
+            find: "Use short paragraphs.",
+            replace: "Use exactly three concise bullets when explicitly requested.",
+            expectedOutcome: "Future requested briefs use the corrected style.",
+            reason: "The user explicitly requested durable brief behavior.",
+          }),
+        };
+      },
+    });
+
+    expect(result.proposal?.metadata.expectedMemory).toEqual({
+      key: "brief-style",
+      revision: first.revision,
+      contentHash: first.contentHash,
+      status: "active",
+    });
+    expect(result.validations.map((validation) => ({
+      kind: validation.kind,
+      status: validation.status,
+      summary: validation.summary,
+    }))).toEqual([
+      expect.objectContaining({ kind: "observed_recovery", status: "passed" }),
+      expect.objectContaining({ kind: "memory", status: "passed" }),
+    ]);
+    expect(await current.store.getHarnessMemory(current.workspace.id, "brief-style")).toMatchObject({
+      revision: 2,
+      content: "Use exactly three concise bullets when explicitly requested.",
+      status: "active",
+    });
+  });
+
+  it("requires review for memory deletion and rejects a stale deletion", async () => {
+    const current = await fixture("run-memory-delete-conflict");
+    const first = await current.store.writeHarnessMemory({
+      workspaceId: current.workspace.id,
+      key: "obsolete-style",
+      content: "Use the obsolete style.",
+      expectedRevision: null,
+      sourceRunId: null,
+      sourceProposal: null,
+      createdAt: NOW,
+    });
+    const result = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      stream: async function* () {
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            decision: "propose",
+            route: "memory",
+            operation: "delete",
+            target: "memory/obsolete-style",
+            summary: "Remove the obsolete style.",
+            createContent: null,
+            find: null,
+            replace: null,
+            expectedOutcome: "Future searches do not return the obsolete style.",
+            reason: "The user explicitly requested removal.",
+          }),
+        };
+      },
+    });
+    if (!result.proposal) throw new Error("Expected a retained memory proposal.");
+    expect(result.validations.map((validation) => ({
+      kind: validation.kind,
+      status: validation.status,
+      summary: validation.summary,
+    }))).toEqual([
+      expect.objectContaining({ kind: "memory", status: "passed" }),
+    ]);
+    expect(result.outcome.reason).toContain("requires explicit review");
+    expect(await current.store.getHarnessMemory(current.workspace.id, "obsolete-style")).toMatchObject({
+      revision: 1,
+      status: "active",
+    });
+
+    await current.store.writeHarnessMemory({
+      workspaceId: current.workspace.id,
+      key: "obsolete-style",
+      content: "A newer value wins.",
+      expectedRevision: first.revision,
+      sourceRunId: null,
+      sourceProposal: null,
+      createdAt: "2026-08-05T20:03:00.000Z",
+    });
+    await expect(reviewLocalHarnessProposalFromSettings({
+      store: current.store,
+      storeDir: current.directory,
+      request: {
+        workspaceId: current.workspace.id,
+        proposal: { id: result.proposal.id, contentHash: result.proposal.contentHash },
+        decision: "approve",
+      },
+    })).rejects.toThrow(/changed concurrently/i);
+    expect(await current.store.getHarnessMemory(current.workspace.id, "obsolete-style")).toMatchObject({
+      revision: 2,
+      content: "A newer value wins.",
+      status: "active",
+    });
+  });
+
+  it("deletes a pinned memory revision only after explicit review", async () => {
+    const current = await fixture("run-memory-delete");
+    const first = await current.store.writeHarnessMemory({
+      workspaceId: current.workspace.id,
+      key: "temporary-style",
+      content: "Use this only during the temporary audit.",
+      expectedRevision: null,
+      sourceRunId: null,
+      sourceProposal: null,
+      createdAt: NOW,
+    });
+    const result = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      stream: async function* () {
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            decision: "propose",
+            route: "memory",
+            operation: "delete",
+            target: "memory/temporary-style",
+            summary: "Remove the temporary audit style.",
+            createContent: null,
+            find: null,
+            replace: null,
+            expectedOutcome: "Future searches do not return the temporary audit style.",
+            reason: "The temporary audit is complete.",
+          }),
+        };
+      },
+    });
+    if (!result.proposal) throw new Error("Expected a retained memory proposal.");
+    expect(result.proposal.metadata.expectedMemory).toEqual({
+      key: "temporary-style",
+      revision: first.revision,
+      contentHash: first.contentHash,
+      status: "active",
+    });
+    expect(result.outcome.reason).toContain("requires explicit review");
+
+    const review = await reviewLocalHarnessProposalFromSettings({
+      store: current.store,
+      storeDir: current.directory,
+      request: {
+        workspaceId: current.workspace.id,
+        proposal: { id: result.proposal.id, contentHash: result.proposal.contentHash },
+        decision: "approve",
+      },
+    });
+
+    expect(review.receipt.decision).toBe("applied");
+    expect(await current.store.listHarnessMemories(current.workspace.id)).toEqual([]);
+    expect(await current.store.getHarnessMemory(current.workspace.id, "temporary-style")).toMatchObject({
+      revision: 2,
+      content: "",
+      status: "deleted",
+    });
+  });
+
+  it("rejects an ambiguous update patch before freezing the run overlay", async () => {
+    const current = await fixture("run-ambiguous-patch");
+
+    await expect(
+      runLocalHarnessRefinerWorker({
+        store: current.store,
+        storeDir: current.directory,
+        trigger: current.trigger,
+        signal: new AbortController().signal,
+        now: () => LATER,
+        stream: async function* () {
+          yield {
+            text: JSON.stringify({
+              schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+              decision: "propose",
+              route: "prompt",
+              operation: "update",
+              target: "instructions/system.md",
+              summary: "Attempt an ambiguous patch.",
+              createContent: null,
+              find: "\n",
+              replace: "\n\n",
+              expectedOutcome: "The exact intended location changes once.",
+              reason: "This fixture verifies deterministic patch materialization.",
+            }),
+          };
+        },
+      }),
+    ).rejects.toThrow(/must occur exactly once/i);
+
+    expect(await current.store.getHarnessRunOverlay(current.trigger.runRef)).toEqual(
+      current.overlay,
+    );
   });
 });

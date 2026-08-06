@@ -182,6 +182,49 @@ describe("session store patches", () => {
     }
   });
 
+  test("assigns projectless Local Work an app-managed workspace", async () => {
+    const storeDir = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-session-local-work-")
+    );
+    const store = new SqliteStore(storeDir);
+    const requestedSessionIds: string[] = [];
+
+    try {
+      const { createSession } = createSessionStore({
+        store,
+        defaultSessionCwd: () => "/unsafe/process-cwd",
+        createManagedLocalWorkCwd: async (sessionId) => {
+          requestedSessionIds.push(sessionId);
+          return path.join(storeDir, "work", "tasks", sessionId);
+        },
+        appendRuntimeEvent: async (_event: RuntimeEvent) => undefined,
+      });
+
+      const local = await createSession({
+        experience: "work",
+        provider: "openpond",
+        metadata: { workspaceTarget: "local" },
+        title: "Local task",
+      });
+      const hosted = await createSession({
+        experience: "work",
+        provider: "openpond",
+        cwd: null,
+        title: "Hosted task",
+      });
+
+      expect(requestedSessionIds).toEqual([local.id]);
+      expect(local.cwd).toBe(path.join(storeDir, "work", "tasks", local.id));
+      expect(local.workspaceKind).toBeUndefined();
+      expect(local.localProjectId).toBeNull();
+      expect(local.metadata).toEqual({ workspaceTarget: "local" });
+      expect(hosted.cwd).toBeNull();
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
+
   test("persists session metadata through create and patch", async () => {
     const storeDir = await mkdtemp(
       path.join(os.tmpdir(), "openpond-session-store-")

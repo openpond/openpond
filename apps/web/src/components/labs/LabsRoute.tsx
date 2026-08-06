@@ -566,9 +566,6 @@ export function LabsRoute({
       ) : (
         <LabModelsPage
           activeProfileId={profileId}
-          connection={profileView.connection}
-          signedIn={account?.state === "signed_in"}
-          onOpenResult={onOpenRunConversation}
           items={models}
           loading={training.training.loading && !models.length}
           runs={createImprove.runs}

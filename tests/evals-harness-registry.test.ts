@@ -31,9 +31,9 @@ describe("managed RL Harness registry", () => {
 
   it("keeps benchmark and scorer identifiers out of generic package/runtime modules", async () => {
     const files = [
-      "packages/evals/src/common.ts",
+      "packages/harness/src/common.ts",
+      "packages/harness/src/harness.ts",
       "packages/evals/src/graders.ts",
-      "packages/evals/src/harness.ts",
       "packages/evals/src/runs.ts",
       "packages/evals/src/tasksets.ts",
       "apps/server/src/training/managed-rl-local-rollout-executor.ts",

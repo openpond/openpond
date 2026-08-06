@@ -1,24 +1,23 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
 import {
   HarnessSourceManifestSchema,
-  ImprovementObservationSchema,
   RefinementTriggerDecisionSchema,
   createHarnessImprovementProposal,
   createHarnessRefinerOutcome,
   createImprovementApplyReceipt,
   createImprovementRouteDecision,
   type HarnessAdvanceReceipt,
+  type HarnessChangeEffect,
   type HarnessImprovementProposal,
+  type HarnessOverlayEdit,
   type HarnessRefinerOutcome,
   type HarnessRunOverlay,
+  type HarnessSourceManifest,
   type HarnessTargetedValidationReceipt,
   type HarnessWorkspace,
   type ImprovementObservation,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -30,8 +29,27 @@ import {
   applyLocalHarnessRefinerProposal,
   validateLocalHarnessRefinerProposal,
 } from "./local-harness-refiner.js";
-
-const MAX_REFINER_SOURCE_BYTES = 60_000;
+import {
+  loadBoundedRefinerContext,
+  loadExactObservations,
+  readBoundedRefinerSource,
+} from "./local-harness-refiner-context.js";
+import {
+  boundedObservationEvidence,
+  boundedTriggerEvidence,
+  expectedMemoryRevision,
+  findProposal,
+  findProposalByTrigger,
+  findProposalValidations,
+  findRefinerOutcome,
+  memoryKeyFromTarget,
+  overlayRef,
+  proposalEvidence,
+  sameOverlayRef,
+  sameWorkspaceRevision,
+  stableId,
+  uniqueEventRefs,
+} from "./local-harness-refiner-worker-support.js";
 
 export type LocalHarnessRefinerWorkerResult = {
   outcome: HarnessRefinerOutcome;
@@ -86,18 +104,7 @@ export async function runLocalHarnessRefinerWorker(input: {
   }
 
   const observations = await loadExactObservations(input.store, workspace.id, trigger);
-  if (!sameWorkspaceRevision(workspace, overlay)) {
-    return persistNoAction({
-      store: input.store,
-      workspace,
-      overlay,
-      trigger,
-      observations,
-      reason:
-        "The Personal Harness advanced after this run began. Keep this evidence run-local until an explicit rebase or merge can validate it against the current release.",
-      now: input.now,
-    });
-  }
+  const rebasedOntoCurrent = !sameWorkspaceRevision(workspace, overlay);
   if (overlay.status !== "active") {
     const resumed = await findProposalByTrigger(input.store, workspace.id, trigger);
     if (resumed && sameOverlayRef(overlay, resumed.overlay)) {
@@ -121,21 +128,45 @@ export async function runLocalHarnessRefinerWorker(input: {
     });
   }
 
+  const effectiveReleaseRef = rebasedOntoCurrent
+    ? workspace.currentChannel.release
+    : overlay.baseHarnessRelease;
+  if (!effectiveReleaseRef) {
+    throw new Error("Queued Refiner trigger references a Harness workspace without a current release.");
+  }
   const release = await input.store.getHarnessReleaseRecord(
-    overlay.baseHarnessRelease.contentHash,
+    effectiveReleaseRef.contentHash,
   );
   if (
     !release ||
-    release.harnessRelease.id !== overlay.baseHarnessRelease.id ||
+    release.harnessRelease.id !== effectiveReleaseRef.id ||
     release.workspaceId !== workspace.id
   ) {
-    throw new Error("Queued Refiner trigger references an unavailable base Harness release.");
+    throw new Error("Queued Refiner trigger references an unavailable effective Harness release.");
   }
-  const sourceFiles = await readBoundedRefinerSource(
+  const source = await readBoundedRefinerSource(
     release.bundlePath,
-    loadedSkillNamesFromTrigger(trigger),
+    trigger,
   );
-  if (sourceFiles.length === 0) {
+  const memorySource = (await input.store.listHarnessMemories(workspace.id))
+    .slice(0, 100)
+    .map((entry) => ({
+      path: `memory/${entry.key}`,
+      kind: "memory" as const,
+      content: entry.content,
+      loaded: true,
+    }));
+  source.catalog.push(...memorySource.map(({ path, kind, loaded }) => ({ path, kind, loaded })));
+  source.files.push(...memorySource);
+  const boundedContext = await loadBoundedRefinerContext(
+    input.store,
+    trigger,
+    observations,
+  );
+  if (
+    observations.every((observation) => observation.kind === "user_turn") &&
+    boundedContext.task.previousAssistantOutput === null
+  ) {
     return persistNoAction({
       store: input.store,
       workspace,
@@ -143,22 +174,18 @@ export async function runLocalHarnessRefinerWorker(input: {
       trigger,
       observations,
       reason:
-        "The evidence turn loaded no editable Skill and this immutable Harness release exposes no general instruction target.",
+        "The initial user turn has no prior result to improve and contains no execution evidence.",
       now: input.now,
     });
   }
-  const boundedContext = await loadBoundedRefinerContext(
-    input.store,
-    trigger,
-    observations,
-  );
   const decision = await authorLocalHarnessRefinementWithModel({
     evidence: {
       trigger: boundedTriggerEvidence(trigger),
       observations: observations.map(boundedObservationEvidence),
       task: boundedContext.task,
       eventExcerpts: boundedContext.eventExcerpts,
-      sourceFiles,
+      sourceFiles: source.files,
+      sourceCatalog: source.catalog,
     },
     stream: input.stream,
     signal: input.signal,
@@ -174,23 +201,32 @@ export async function runLocalHarnessRefinerWorker(input: {
       now: input.now,
     });
   }
-  assertSafeDecision(decision, sourceFiles);
+  if (decision.decision === "route") {
+    return persistExternalRoute({
+      store: input.store,
+      workspace,
+      overlay,
+      trigger,
+      observations,
+      decision,
+      now: input.now,
+    });
+  }
+  assertSafeDecision(decision, source.catalog, source.files);
+  const materializedContent = materializeDecisionContent(decision, source.files);
+  const expectedMemory = decision.route === "memory"
+    ? await input.store.getHarnessMemory(workspace.id, memoryKeyFromTarget(decision.target))
+    : null;
 
   const timestamp = (input.now ?? (() => new Date().toISOString()))();
-  const edit = {
-    id: stableId("overlay-edit", {
-      trigger: trigger.contentHash,
-      target: decision.target,
-      content: decision.replacementContent,
-    }),
-    route: decision.route,
-    operation: "update" as const,
-    target: decision.target,
-    summary: decision.summary,
-    content: decision.replacementContent,
-    contentHash: contentHash(decision.replacementContent),
-    effects: ["text_instruction" as const],
-  };
+  const effects = classifyProposalEffects(decision);
+  const edits = buildProposalEdits({
+    trigger,
+    decision,
+    materializedContent,
+    manifest: source.manifest,
+    effects,
+  });
   const proposalId = stableId("proposal", trigger.contentHash);
   const validationId = stableId("targeted-check", {
     trigger: trigger.contentHash,
@@ -201,34 +237,57 @@ export async function runLocalHarnessRefinerWorker(input: {
   const atomic = await input.store.freezeHarnessRunOverlayWithProposalAtomically({
     runId: trigger.runRef,
     expectedRevision: overlay.revision,
-    edits: [edit],
+    edits,
     updatedAt: timestamp,
     buildProposal: (frozenOverlay) =>
       createHarnessImprovementProposal({
         schemaVersion: "openpond.harnessImprovementProposal.v1",
         id: proposalId,
         overlay: overlayRef(frozenOverlay),
-        baseHarnessRelease: frozenOverlay.baseHarnessRelease,
-        expectedWorkspace: frozenOverlay.workspace,
+        baseHarnessRelease: {
+          id: release.harnessRelease.id,
+          contentHash: release.harnessRelease.contentHash,
+        },
+        expectedWorkspace: {
+          workspaceId: workspace.id,
+          revision: workspace.revision,
+          sourceRevision: workspace.sourceRevision,
+          channelRevision: workspace.currentChannel.revision,
+        },
         requestedScope: "personal",
         route: decision.route,
-        risk: "low",
-        effects: ["text_instruction"],
+        risk: decision.operation === "delete" || effects.some(
+          (effect) => !["text_instruction", "memory", "dependency_selection"].includes(effect),
+        )
+          ? "review"
+          : "low",
+        effects,
         evidence,
-        edits: [edit],
-        validationPlan: [
-          {
-            id: validationId,
-            kind: decision.route === "skill" ? "skill" : "prompt",
-            description: `Compile and validate the updated ${decision.route} file ${decision.target}.`,
-            required: true,
-          },
-        ],
+        edits,
+        validationPlan: proposalValidationPlan({
+          decision,
+          evidence,
+          validationId,
+          effects,
+        }),
         expectedOutcome: decision.expectedOutcome,
         createdAt: timestamp,
         metadata: {
           trigger: { id: trigger.id, contentHash: trigger.contentHash },
           reason: decision.reason,
+          generatedManifestEditId:
+            edits.find((candidate) => candidate.target === "harness.json")?.id ?? null,
+          rebasedFromHarnessRelease: rebasedOntoCurrent
+            ? overlay.baseHarnessRelease
+            : null,
+          expectedMemory: decision.route === "memory"
+            ? {
+                key: memoryKeyFromTarget(decision.target),
+                revision: expectedMemory?.revision ?? null,
+                contentHash: expectedMemory?.contentHash ?? null,
+                status: expectedMemory?.status ?? null,
+              }
+            : null,
         },
       }),
   });
@@ -240,82 +299,6 @@ export async function runLocalHarnessRefinerWorker(input: {
     proposal: atomic.proposal,
     observations,
   });
-}
-
-async function loadBoundedRefinerContext(
-  store: SqliteStore,
-  trigger: RefinementTriggerDecision,
-  observations: ImprovementObservation[],
-): Promise<{
-  task: { prompt: string | null };
-  eventExcerpts: Array<Record<string, unknown>>;
-}> {
-  const [turn, events] = await Promise.all([
-    store.getTurn(trigger.turnId),
-    store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
-  ]);
-  const eventRefs = new Map(
-    observations.flatMap((observation) =>
-      observation.eventRefs.map((reference) => [reference.id, reference] as const),
-    ),
-  );
-  const exactEvents = events.filter((runtimeEvent) => eventRefs.has(runtimeEvent.id));
-  for (const [eventId, reference] of eventRefs) {
-    const runtimeEvent = exactEvents.find((candidate) => candidate.id === eventId);
-    if (!runtimeEvent || contentHash(runtimeEvent) !== reference.contentHash) {
-      throw new Error(`Refiner runtime event ${eventId} is unavailable or hash-mismatched.`);
-    }
-  }
-  return {
-    task: {
-      prompt: turn?.prompt
-        ? redactAndBoundRefinerText(turn.prompt, 8_000)
-        : null,
-    },
-    eventExcerpts: exactEvents
-      .slice(0, trigger.policy.maxEvidenceEvents)
-      .map((runtimeEvent) => {
-        const data = asRecord(runtimeEvent.data);
-        const result = asRecord(data.result);
-        return {
-          id: runtimeEvent.id,
-          name: runtimeEvent.name,
-          action: runtimeEvent.action ?? null,
-          status: runtimeEvent.status ?? null,
-          error: textField(runtimeEvent.error, 2_000),
-          output: textField(result.output, 2_000) ??
-            textField(runtimeEvent.output, 2_000),
-          exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
-          timedOut: result.timedOut === true,
-          stderr: textField(result.stderr, 3_000),
-          stdout: textField(result.stdout, 3_000),
-        };
-      }),
-  };
-}
-
-function textField(value: unknown, maxLength: number): string | null {
-  return typeof value === "string"
-    ? redactAndBoundRefinerText(value, maxLength)
-    : null;
-}
-
-function redactAndBoundRefinerText(value: string, maxLength: number): string {
-  const redacted = value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(
-      /\b(api[_-]?key|access[_-]?token|auth(?:orization)?|password|secret)(\s*[:=]\s*)([^\s,;]+)/gi,
-      "$1$2[redacted]",
-    );
-  return redacted.length <= maxLength
-    ? redacted
-    : `${redacted.slice(0, maxLength)}\n[truncated]`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }
 
 async function finishPersistedProposal(input: {
@@ -349,6 +332,9 @@ async function finishPersistedProposal(input: {
       );
     }
   }
+  if (input.proposal.route === "memory") {
+    return finishMemoryProposal({ ...input, validations, timestamp });
+  }
   const advanced = await applyLocalHarnessRefinerProposal({
     store: input.store,
     storeDir: input.storeDir,
@@ -379,8 +365,10 @@ async function finishPersistedProposal(input: {
     id: stableId("apply", input.proposal.contentHash),
     proposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
     beforeOverlay: input.trigger.overlay!,
-    afterOverlay: overlayRef(input.overlay),
-    decision: "applied",
+    afterOverlay: advanced.receipt.decision === "advanced"
+      ? overlayRef(input.overlay)
+      : null,
+    decision: advanced.receipt.decision === "advanced" ? "applied" : "retained",
     boundary: input.trigger.boundary,
     validationRefs: validations.map((validation) => ({
       id: validation.id,
@@ -429,6 +417,91 @@ async function finishPersistedProposal(input: {
   };
 }
 
+async function finishMemoryProposal(input: {
+  store: SqliteStore;
+  workspace: HarnessWorkspace;
+  overlay: HarnessRunOverlay;
+  trigger: RefinementTriggerDecision;
+  proposal: HarnessImprovementProposal;
+  observations: ImprovementObservation[];
+  validations: HarnessTargetedValidationReceipt[];
+  timestamp: string;
+}): Promise<LocalHarnessRefinerWorkerResult> {
+  const requiredPassed = input.proposal.validationPlan
+    .filter((plan) => plan.required)
+    .every((plan) => input.validations.some(
+      (validation) => validation.validationId === plan.id && validation.status === "passed",
+    ));
+  const edit = input.proposal.edits.find((candidate) => candidate.route === "memory");
+  if (!edit) throw new Error("Memory proposal has no memory edit.");
+  const expectedMemory = expectedMemoryRevision(input.proposal, edit.target);
+  const canApply = requiredPassed && edit.operation !== "delete";
+  if (canApply) {
+    await input.store.writeHarnessMemory({
+      workspaceId: input.workspace.id,
+      key: memoryKeyFromTarget(edit.target),
+      content: edit.content,
+      expectedRevision: expectedMemory.revision,
+      sourceRunId: input.trigger.runRef,
+      sourceProposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
+      createdAt: input.timestamp,
+    });
+  }
+  const reason = canApply
+    ? "Validated low-risk Personal memory applied at the safe turn boundary."
+    : edit.operation === "delete"
+      ? "Memory deletion requires explicit review."
+      : "Required memory validation did not pass.";
+  const route = createImprovementRouteDecision({
+    schemaVersion: "openpond.improvementRouteDecision.v1",
+    id: stableId("route", input.trigger.contentHash),
+    trigger: { id: input.trigger.id, contentHash: input.trigger.contentHash },
+    route: "memory",
+    authority: "refiner_model",
+    automatic: canApply,
+    reason,
+    createdAt: input.timestamp,
+    metadata: { proposalId: input.proposal.id },
+  });
+  await input.store.saveHarnessImprovementArtifact(input.workspace.id, "route_decision", route);
+  const applyReceipt = createImprovementApplyReceipt({
+    schemaVersion: "openpond.improvementApplyReceipt.v1",
+    id: stableId("apply", input.proposal.contentHash),
+    proposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
+    beforeOverlay: input.trigger.overlay!,
+    afterOverlay: canApply ? overlayRef(input.overlay) : null,
+    decision: canApply ? "applied" : "retained",
+    boundary: input.trigger.boundary,
+    validationRefs: input.validations.map((validation) => ({ id: validation.id, contentHash: validation.contentHash })),
+    outcomeEvidenceRefs: uniqueEventRefs(input.observations),
+    rollbackOf: null,
+    createdAt: input.timestamp,
+    metadata: { externalState: "harness_memory" },
+  });
+  await input.store.saveHarnessImprovementArtifact(input.workspace.id, "apply_receipt", applyReceipt);
+  const outcome = createHarnessRefinerOutcome({
+    schemaVersion: "openpond.harnessRefinerOutcome.v1",
+    id: stableId("refiner-outcome", input.trigger.contentHash),
+    trigger: { id: input.trigger.id, contentHash: input.trigger.contentHash },
+    decision: "proposed",
+    proposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
+    reason,
+    evidenceRefs: input.trigger.observations,
+    estimatedCostUsd: input.trigger.estimatedMaxCostUsd,
+    createdAt: input.timestamp,
+    metadata: { validationStatuses: input.validations.map((validation) => validation.status) },
+  });
+  await input.store.saveHarnessImprovementArtifact(input.workspace.id, "refiner_outcome", outcome);
+  return {
+    outcome,
+    overlay: input.overlay,
+    proposal: input.proposal,
+    validations: input.validations,
+    workspace: input.workspace,
+    advanceReceipt: null,
+  };
+}
+
 async function persistNoAction(input: {
   store: SqliteStore;
   workspace: HarnessWorkspace;
@@ -436,6 +509,7 @@ async function persistNoAction(input: {
   trigger: RefinementTriggerDecision;
   observations: ImprovementObservation[];
   reason: string;
+  metadata?: Record<string, unknown>;
   now?: () => string;
 }): Promise<LocalHarnessRefinerWorkerResult> {
   const timestamp = (input.now ?? (() => new Date().toISOString()))();
@@ -449,7 +523,7 @@ async function persistNoAction(input: {
     evidenceRefs: input.trigger.observations,
     estimatedCostUsd: input.trigger.estimatedMaxCostUsd,
     createdAt: timestamp,
-    metadata: {},
+    metadata: input.metadata ?? {},
   });
   await input.store.saveHarnessImprovementArtifact(
     input.workspace.id,
@@ -466,258 +540,353 @@ async function persistNoAction(input: {
   };
 }
 
-async function loadExactObservations(
-  store: SqliteStore,
-  workspaceId: string,
-  trigger: RefinementTriggerDecision,
-): Promise<ImprovementObservation[]> {
-  const available = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "observation",
-    1_000,
-  );
-  const byHash = new Map(
-    available.map((artifact) => {
-      const observation = ImprovementObservationSchema.parse(artifact);
-      return [observation.contentHash, observation] as const;
-    }),
-  );
-  return trigger.observations.map((reference) => {
-    const observation = byHash.get(reference.contentHash);
-    if (!observation || observation.id !== reference.id) {
-      throw new Error(`Refiner observation ${reference.id} is unavailable or hash-mismatched.`);
-    }
-    return observation;
+async function persistExternalRoute(input: {
+  store: SqliteStore;
+  workspace: HarnessWorkspace;
+  overlay: HarnessRunOverlay;
+  trigger: RefinementTriggerDecision;
+  observations: ImprovementObservation[];
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "route" }>;
+  now?: () => string;
+}): Promise<LocalHarnessRefinerWorkerResult> {
+  const timestamp = (input.now ?? (() => new Date().toISOString()))();
+  const route = createImprovementRouteDecision({
+    schemaVersion: "openpond.improvementRouteDecision.v1",
+    id: stableId("route", input.trigger.contentHash),
+    trigger: { id: input.trigger.id, contentHash: input.trigger.contentHash },
+    route: input.decision.route,
+    authority: "refiner_model",
+    automatic: false,
+    reason: input.decision.reason,
+    createdAt: timestamp,
+    metadata: {
+      summary: input.decision.summary,
+      expectedOutcome: input.decision.expectedOutcome,
+    },
   });
-}
-
-async function readBoundedRefinerSource(
-  bundlePath: string,
-  loadedSkillNames: ReadonlySet<string>,
-) {
-  const sourceRoot = path.resolve(bundlePath, "source");
-  const manifest = HarnessSourceManifestSchema.parse(
-    JSON.parse(await fs.readFile(path.join(sourceRoot, "harness.json"), "utf8")),
+  await input.store.saveHarnessImprovementArtifact(
+    input.workspace.id,
+    "route_decision",
+    route,
   );
-  let remaining = MAX_REFINER_SOURCE_BYTES;
-  const result: Array<{
-    path: string;
-    kind: "instruction" | "skill";
-    content: string;
-  }> = [];
-  for (const file of manifest.files) {
-    if (
-      (file.kind !== "instruction" && file.kind !== "skill") ||
-      file.visibility !== "policy" ||
-      !["text/markdown", "text/plain"].includes(file.mediaType)
-    ) {
-      continue;
-    }
-    if (file.kind === "skill" && !loadedSkillNames.has(skillNameFromPath(file.path))) {
-      continue;
-    }
-    const target = containedSourcePath(sourceRoot, file.path);
-    const stats = await fs.lstat(target);
-    if (!stats.isFile() || stats.isSymbolicLink()) continue;
-    const bytes = await fs.readFile(target);
-    if (bytes.byteLength > remaining) continue;
-    result.push({ path: file.path, kind: file.kind, content: bytes.toString("utf8") });
-    remaining -= bytes.byteLength;
-  }
-  return result;
-}
-
-function loadedSkillNamesFromTrigger(
-  trigger: RefinementTriggerDecision,
-): ReadonlySet<string> {
-  const names = trigger.metadata.loadedSkillNames;
-  if (!Array.isArray(names)) return new Set();
-  return new Set(
-    names.filter((name): name is string => typeof name === "string" && name.trim().length > 0),
-  );
-}
-
-function skillNameFromPath(sourcePath: string): string {
-  const match = /^skills\/([^/]+)\/SKILL\.md$/.exec(sourcePath.replaceAll("\\", "/"));
-  return match?.[1] ?? "";
+  return persistNoAction({
+    store: input.store,
+    workspace: input.workspace,
+    overlay: input.overlay,
+    trigger: input.trigger,
+    observations: input.observations,
+    reason: `Routed to ${input.decision.route}: ${input.decision.summary}`,
+    metadata: {
+      routed: true,
+      route: input.decision.route,
+      routeDecision: { id: route.id, contentHash: route.contentHash },
+      expectedOutcome: input.decision.expectedOutcome,
+    },
+    now: () => timestamp,
+  });
 }
 
 function assertSafeDecision(
   decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
-  sourceFiles: Array<{ path: string; kind: "instruction" | "skill"; content: string }>,
+  sourceCatalog: Array<{
+    path: string;
+    kind: "memory" | "instruction" | "skill" | "agent";
+    loaded: boolean;
+  }>,
+  sourceFiles: Array<{
+    path: string;
+    kind: "memory" | "instruction" | "skill" | "agent";
+    content: string;
+    loaded: boolean;
+  }>,
 ): void {
-  const target = sourceFiles.find((file) => file.path === decision.target);
-  if (!target) throw new Error(`Refiner targeted an unlisted source file: ${decision.target}.`);
-  const expectedKind = decision.route === "skill" ? "skill" : "instruction";
-  if (target.kind !== expectedKind) {
-    throw new Error(`Refiner route ${decision.route} cannot update ${target.kind} file ${target.path}.`);
+  const expectedKind = decision.route === "memory"
+    ? "memory"
+    : decision.route === "skill"
+    ? "skill"
+    : decision.route === "agent"
+      ? "agent"
+      : "instruction";
+  const target = sourceCatalog.find((file) => file.path === decision.target);
+  if (decision.operation === "create") {
+    if (target) throw new Error(`Refiner create target already exists: ${decision.target}.`);
+    if (!safeCreatedComponentPath(decision.route, decision.target)) {
+      throw new Error(`Refiner create target is not a safe ${decision.route} component path: ${decision.target}.`);
+    }
+    return;
   }
-  if (target.content === decision.replacementContent) {
+  if (!target) throw new Error(`Refiner targeted an unlisted source file: ${decision.target}.`);
+  if (target.kind !== expectedKind) {
+    throw new Error(`Refiner route ${decision.route} cannot ${decision.operation} ${target.kind} file ${target.path}.`);
+  }
+  const loaded = sourceFiles.find((file) => file.path === decision.target);
+  if (decision.operation === "update" && !loaded) {
+    throw new Error(`Refiner update target ${decision.target} exceeded the bounded source budget.`);
+  }
+}
+
+function materializeDecisionContent(
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+  sourceFiles: Array<{
+    path: string;
+    kind: "memory" | "instruction" | "skill" | "agent";
+    content: string;
+    loaded: boolean;
+  }>,
+): string | null {
+  if (decision.operation === "delete") return null;
+  if (decision.operation === "create") {
+    if (decision.createContent === null) {
+      throw new Error("Refiner create proposal is missing bounded component content.");
+    }
+    return decision.createContent;
+  }
+  const loaded = sourceFiles.find((file) => file.path === decision.target);
+  if (!loaded) {
+    throw new Error(`Refiner update target ${decision.target} exceeded the bounded source budget.`);
+  }
+  if (decision.find === null || decision.replace === null) {
+    throw new Error("Refiner update proposal is missing its exact find/replace edit.");
+  }
+  const occurrences = loaded.content.split(decision.find).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `Refiner update find text must occur exactly once in ${decision.target}; found ${occurrences}.`,
+    );
+  }
+  const materialized = loaded.content.replace(decision.find, decision.replace);
+  if (materialized === loaded.content) {
     throw new Error("Refiner proposal does not change the selected source file.");
   }
+  return materialized;
 }
 
-function boundedTriggerEvidence(trigger: RefinementTriggerDecision): Record<string, unknown> {
-  return {
-    id: trigger.id,
-    runRef: trigger.runRef,
-    turnId: trigger.turnId,
-    reason: trigger.reason,
-    suggestedRoutes: trigger.suggestedRoutes,
-    boundary: trigger.boundary,
+function safeCreatedComponentPath(
+  route: "memory" | "prompt" | "skill" | "agent",
+  target: string,
+): boolean {
+  const normalized = target.replaceAll("\\", "/");
+  if (route === "memory") {
+    return /^memory\/[a-z0-9][a-z0-9-]{0,119}$/.test(normalized);
+  }
+  if (route === "prompt") {
+    return /^instructions\/refinements\/[a-z0-9][a-z0-9-]*\.md$/.test(normalized);
+  }
+  if (route === "skill") {
+    return /^skills\/[a-z0-9][a-z0-9-]*\/SKILL\.md$/.test(normalized);
+  }
+  return /^agents\/[a-z0-9][a-z0-9-]*\/agent\.ts$/.test(normalized);
+}
+
+function buildProposalEdits(input: {
+  trigger: RefinementTriggerDecision;
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>;
+  materializedContent: string | null;
+  manifest: HarnessSourceManifest;
+  effects: HarnessChangeEffect[];
+}): HarnessOverlayEdit[] {
+  const { decision } = input;
+  const primary: HarnessOverlayEdit = {
+    id: stableId("overlay-edit", {
+      trigger: input.trigger.contentHash,
+      operation: decision.operation,
+      target: decision.target,
+      content: input.materializedContent,
+    }),
+    route: decision.route,
+    operation: decision.operation,
+    target: decision.target,
+    summary: decision.summary,
+    content: input.materializedContent,
+    contentHash: input.materializedContent === null
+      ? null
+      : contentHash(input.materializedContent),
+    effects: input.effects,
   };
-}
+  if (decision.route === "memory") return [primary];
+  if (decision.operation === "update") return [primary];
 
-function boundedObservationEvidence(observation: ImprovementObservation): Record<string, unknown> {
-  return {
-    id: observation.id,
-    kind: observation.kind,
-    state: observation.state,
-    tool: observation.tool?.name ?? null,
-    deterministicClass: observation.deterministicClass,
-    summary: observation.summary,
-  };
-}
-
-function proposalEvidence(observations: ImprovementObservation[]) {
-  const byId = new Map<string, ReturnType<typeof observationEvidence>>();
-  for (const observation of observations) {
-    for (const event of observation.eventRefs) {
-      const evidence = observationEvidence(observation, event);
-      byId.set(`${evidence.kind}:${evidence.id}`, evidence);
+  const existing = input.manifest.files.find((file) => file.path === decision.target);
+  const removedIds = new Set<string>();
+  const relatedDeletes: HarnessOverlayEdit[] = [];
+  let files = input.manifest.files;
+  if (decision.operation === "create") {
+    const kind = decision.route === "skill"
+      ? "skill"
+      : decision.route === "agent"
+        ? "agent"
+        : "instruction";
+    files = [
+      ...files,
+      {
+        id: stableId(kind, decision.target),
+        kind,
+        path: decision.target,
+        parentId: null,
+        mediaType: decision.route === "agent" ? "text/javascript" : "text/markdown",
+        visibility: "policy" as const,
+        portability: "portable" as const,
+      },
+    ];
+  } else {
+    if (!existing) throw new Error(`Refiner delete target is not declared: ${decision.target}.`);
+    removedIds.add(existing.id);
+    for (const file of input.manifest.files) {
+      if (file.parentId !== existing.id) continue;
+      removedIds.add(file.id);
+      relatedDeletes.push({
+        id: stableId("overlay-edit", {
+          trigger: input.trigger.contentHash,
+          operation: "delete",
+          target: file.path,
+        }),
+        route: decision.route,
+        operation: "delete",
+        target: file.path,
+        summary: `Remove resource ${file.path} with ${decision.target}.`,
+        content: null,
+        contentHash: null,
+        effects: input.effects,
+      });
     }
+    files = files.filter((file) => !removedIds.has(file.id));
   }
-  return [...byId.values()];
-}
 
-function observationEvidence(
-  observation: ImprovementObservation,
-  event: ImprovementObservation["eventRefs"][number],
-) {
-  const kind = observation.kind === "recovery"
-    ? "recovery"
-    : observation.kind === "validation"
-      ? "validation"
-      : observation.kind === "user_correction"
-        ? "user_correction"
-        : "tool_event";
-  return { kind: kind as "recovery" | "validation" | "user_correction" | "tool_event", id: event.id, contentHash: event.contentHash };
-}
-
-function uniqueEventRefs(observations: ImprovementObservation[]) {
-  const byId = new Map<string, ImprovementObservation["eventRefs"][number]>();
-  for (const observation of observations) {
-    for (const event of observation.eventRefs) byId.set(event.id, event);
-  }
-  return [...byId.values()];
-}
-
-async function findRefinerOutcome(
-  store: SqliteStore,
-  workspaceId: string,
-  trigger: RefinementTriggerDecision,
-): Promise<HarnessRefinerOutcome | null> {
-  const outcomes = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "refiner_outcome",
-    1_000,
-  );
-  return (outcomes as HarnessRefinerOutcome[]).find(
-    (outcome) =>
-      outcome.trigger.id === trigger.id &&
-      outcome.trigger.contentHash === trigger.contentHash,
-  ) ?? null;
-}
-
-async function findProposal(
-  store: SqliteStore,
-  workspaceId: string,
-  proposalId: string,
-): Promise<HarnessImprovementProposal | null> {
-  const proposals = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "proposal",
-    1_000,
-  );
-  return (proposals as HarnessImprovementProposal[]).find(
-    (proposal) => proposal.id === proposalId,
-  ) ?? null;
-}
-
-async function findProposalByTrigger(
-  store: SqliteStore,
-  workspaceId: string,
-  trigger: RefinementTriggerDecision,
-): Promise<HarnessImprovementProposal | null> {
-  const proposal = await findProposal(
-    store,
-    workspaceId,
-    stableId("proposal", trigger.contentHash),
-  );
-  const metadataTrigger = proposal?.metadata.trigger as
-    | { id?: unknown; contentHash?: unknown }
-    | undefined;
-  return metadataTrigger?.id === trigger.id &&
-    metadataTrigger.contentHash === trigger.contentHash
-    ? proposal
-    : null;
-}
-
-async function findProposalValidations(
-  store: SqliteStore,
-  workspaceId: string,
-  proposal: HarnessImprovementProposal,
-): Promise<HarnessTargetedValidationReceipt[]> {
-  const validations = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "targeted_validation",
-    1_000,
-  );
-  return (validations as HarnessTargetedValidationReceipt[]).filter(
-    (validation) =>
-      validation.proposal.id === proposal.id &&
-      validation.proposal.contentHash === proposal.contentHash,
-  );
-}
-
-function sameOverlayRef(
-  overlay: HarnessRunOverlay,
-  reference: { id: string; revision: number; contentHash: string },
-): boolean {
-  return overlay.id === reference.id &&
-    overlay.revision === reference.revision &&
-    overlay.contentHash === reference.contentHash;
-}
-
-function overlayRef(overlay: HarnessRunOverlay) {
-  return {
-    id: overlay.id,
-    revision: overlay.revision,
-    contentHash: overlay.contentHash,
+  const reconciled = HarnessSourceManifestSchema.parse({
+    ...input.manifest,
+    files,
+  });
+  const manifestContent = `${JSON.stringify(reconciled, null, 2)}\n`;
+  const manifestEdit: HarnessOverlayEdit = {
+    id: stableId("overlay-edit", {
+      trigger: input.trigger.contentHash,
+      operation: "update",
+      target: "harness.json",
+      content: manifestContent,
+    }),
+    route: decision.route,
+    operation: "update",
+    target: "harness.json",
+    summary: `${decision.operation === "create" ? "Register" : "Remove"} Harness component ${decision.target}.`,
+    content: manifestContent,
+    contentHash: contentHash(manifestContent),
+    effects: input.effects,
   };
+  return [primary, ...relatedDeletes, manifestEdit];
 }
 
-function sameWorkspaceRevision(
-  workspace: HarnessWorkspace,
-  overlay: HarnessRunOverlay,
-): boolean {
-  return workspace.revision === overlay.workspace.revision &&
-    workspace.sourceRevision === overlay.workspace.sourceRevision &&
-    workspace.currentChannel.revision === overlay.workspace.channelRevision &&
-    workspace.currentChannel.release?.id === overlay.baseHarnessRelease.id &&
-    workspace.currentChannel.release.contentHash ===
-      overlay.baseHarnessRelease.contentHash;
-}
+function classifyProposalEffects(
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+): HarnessChangeEffect[] {
+  if (decision.route === "agent") return ["executable_code"];
+  if (decision.route === "memory") return ["memory"];
 
-function containedSourcePath(root: string, relativePath: string): string {
-  const target = path.resolve(root, ...relativePath.replaceAll("\\", "/").split("/"));
-  const relative = path.relative(root, target);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error(`Harness source path escapes its immutable bundle: ${relativePath}`);
+  const text = [
+    decision.summary,
+    decision.expectedOutcome,
+    decision.createContent ?? "",
+    decision.find ?? "",
+    decision.replace ?? "",
+  ].join("\n");
+  const effects = new Set<HarnessChangeEffect>(["text_instruction"]);
+  if (/\b(?:margin|markup|revenue|profit|pricing|invoice|quote|job premium|per[- ]truck cost|cost estimate|estimate cost)\b|(?:\$|usd\s*)\d/i.test(text)) {
+    effects.add("financial_logic");
   }
-  return target;
+  if (/\b(?:business rule|decision rule|eligibility|approval threshold|pricing policy|per[- ]truck governor)\b/i.test(text)) {
+    effects.add("business_logic");
+  }
+  if (/\b(?:permission|access control|credential|secret handling|authorization scope|allowlist)\b/i.test(text)) {
+    effects.add("permission");
+  }
+  if (/\bconnected app\b/i.test(text)) effects.add("connected_app");
+  if (/\b(?:publish|publication)\b/i.test(text)) effects.add("publication");
+  if (/\bdeploy(?:ment|ed|ing)?\b/i.test(text)) effects.add("deployment");
+  if (/\b(?:train(?:ing)?|fine[- ]tun(?:e|ing)|reinforcement learning|\brl\b)\b/i.test(text)) {
+    effects.add("training");
+  }
+  if (/\b(?:model binding|serving model|model selection)\b/i.test(text)) {
+    effects.add("model_binding");
+  }
+  if (/\b(?:team-wide|global harness|all users)\b/i.test(text)) {
+    effects.add("team_or_global");
+  }
+  return [...effects];
 }
 
-function stableId(prefix: string, value: unknown): string {
-  return `${prefix}-${contentHash(value).slice(0, 24)}`;
+function proposalValidationPlan(input: {
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>;
+  evidence: ReturnType<typeof proposalEvidence>;
+  validationId: string;
+  effects: HarnessChangeEffect[];
+}) {
+  const plans: Array<{
+    id: string;
+    kind:
+      | "observed_recovery"
+      | "memory"
+      | "prompt"
+      | "skill"
+      | "package"
+      | "component_activation"
+      | "business_formula"
+      | "targeted_evaluation";
+    description: string;
+    required: boolean;
+  }> = [];
+  if (
+    input.decision.operation !== "delete" &&
+    input.evidence.some((item) => item.kind === "recovery")
+  ) {
+    plans.push({
+      id: `${input.validationId}-observed-recovery`,
+      kind: "observed_recovery",
+      description: "Verify that the proposal is grounded in the recorded successful recovery.",
+      required: true,
+    });
+  }
+  plans.push({
+    id: `${input.validationId}-component`,
+    kind: input.decision.route === "memory"
+      ? "memory"
+      : input.decision.route === "skill"
+      ? "skill"
+      : input.decision.route === "agent"
+        ? "package"
+        : "prompt",
+    description: `Compile and validate the ${input.decision.operation} ${input.decision.route} component ${input.decision.target}.`,
+    required: true,
+  });
+  if (input.decision.route !== "memory") {
+    plans.push({
+      id: `${input.validationId}-activation`,
+      kind: "component_activation",
+      description: `Prove the ${input.decision.route} edit is present in the effective Desktop Work runtime surface.`,
+      required: true,
+    });
+  }
+  if (input.effects.some((effect) => ["business_logic", "financial_logic"].includes(effect))) {
+    plans.push({
+      id: `${input.validationId}-business-formula`,
+      kind: "business_formula",
+      description: "Verify business or financial logic against an approved deterministic fixture before release.",
+      required: true,
+    });
+  }
+  if (input.effects.some((effect) => [
+    "permission",
+    "connected_app",
+    "publication",
+    "deployment",
+    "training",
+    "model_binding",
+    "team_or_global",
+  ].includes(effect))) {
+    plans.push({
+      id: `${input.validationId}-targeted-evaluation`,
+      kind: "targeted_evaluation",
+      description: "Run an authority-preserving targeted Evaluation before this sensitive change can release.",
+      required: true,
+    });
+  }
+  return plans;
 }

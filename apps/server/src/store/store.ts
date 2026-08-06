@@ -11,7 +11,6 @@ import type {
   LocalAgentSchedule,
   LocalAgentScheduleRun,
   LocalAgentScheduleRunStatus,
-  LocalContinuousLearningState,
   ModelUsageRecord,
   ModelUsageStatus,
   ModelUsageVisibility,
@@ -196,75 +195,6 @@ export class SqliteStore extends SqliteWorkEvidenceStore {
         runtimeBySessionId.get(session.id)
       );
     });
-  }
-
-  async listLocalContinuousLearningStates(): Promise<LocalContinuousLearningState[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(
-      "SELECT payload FROM local_continuous_learning_states ORDER BY updated_at DESC",
-    );
-    return rows.map((row) => JSON.parse(row.payload) as LocalContinuousLearningState);
-  }
-
-  async listDueLocalContinuousLearningStates(
-    nowIso: string,
-    limit = 10,
-  ): Promise<LocalContinuousLearningState[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(
-      `SELECT payload FROM local_continuous_learning_states
-       WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ?
-       ORDER BY next_run_at ASC LIMIT ?`,
-      [nowIso, Math.max(1, Math.min(50, Math.trunc(limit)))],
-    );
-    return rows.map((row) => JSON.parse(row.payload) as LocalContinuousLearningState);
-  }
-
-  async getLocalContinuousLearningState(
-    id: string,
-  ): Promise<LocalContinuousLearningState | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<PayloadRow>(
-      "SELECT payload FROM local_continuous_learning_states WHERE id = ?",
-      [id],
-    );
-    return row ? JSON.parse(row.payload) as LocalContinuousLearningState : null;
-  }
-
-  async upsertLocalContinuousLearningState(
-    state: LocalContinuousLearningState,
-  ): Promise<LocalContinuousLearningState> {
-    await this.ready;
-    const write = this.writeQueue.then(() => this.run(
-      `INSERT INTO local_continuous_learning_states (
-         id, profile_id, scope, workspace_id, enabled, next_run_at, payload, created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         profile_id = excluded.profile_id,
-         scope = excluded.scope,
-         workspace_id = excluded.workspace_id,
-         enabled = excluded.enabled,
-         next_run_at = excluded.next_run_at,
-         payload = excluded.payload,
-         updated_at = excluded.updated_at`,
-      [
-        state.id,
-        state.profileId,
-        state.scope,
-        state.workspaceId,
-        state.schedule.enabled ? 1 : 0,
-        state.schedule.nextRunAt,
-        JSON.stringify(state),
-        state.createdAt,
-        state.updatedAt,
-      ],
-    ));
-    this.writeQueue = write.then(() => undefined, () => undefined);
-    await write;
-    return (await this.getLocalContinuousLearningState(state.id)) ?? state;
   }
 
   async getSession(sessionId: string): Promise<Session | null> {

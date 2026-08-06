@@ -20,7 +20,7 @@ import {
   type AgentSnapshot,
   type HarnessRelease,
   type ImmutableAssetRef,
-} from "@openpond/evals";
+} from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import {

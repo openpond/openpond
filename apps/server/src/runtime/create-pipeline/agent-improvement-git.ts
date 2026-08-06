@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, realpath, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -79,7 +79,11 @@ export async function prepareAgentImprovementWorkspace(input: {
     ["rev-parse", "--show-toplevel"],
     "Profile source is not a Git repository."
   );
-  if (path.resolve(repoPath) !== path.resolve(input.target.repoPath)) {
+  const [canonicalRepoPath, canonicalTargetRepoPath] = await Promise.all([
+    realpath(repoPath),
+    realpath(input.target.repoPath),
+  ]);
+  if (canonicalRepoPath !== canonicalTargetRepoPath) {
     throw new Error(
       "Profile repo path does not match the Git repository root."
     );

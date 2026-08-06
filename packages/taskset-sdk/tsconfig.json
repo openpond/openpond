@@ -6,6 +6,6 @@
     "outDir": "dist",
     "types": ["node"]
   },
-  "references": [{ "path": "../evals/tsconfig.build.json" }, { "path": "../contracts" }],
+  "references": [{ "path": "../harness/tsconfig.build.json" }, { "path": "../evals/tsconfig.build.json" }, { "path": "../contracts" }],
   "include": ["src/**/*.ts"]
 }

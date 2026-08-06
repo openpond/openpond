@@ -4,10 +4,10 @@ export function sidebarSessionsForExperience(
   sessions: Session[],
   experience: Experience
 ): Session[] {
-  if (experience === "development") {
-    return sessions.filter((session) => session.experience === "development");
+  if (experience === "chat") {
+    return sessions.filter((session) => session.experience === "chat");
   }
-  return sessions.filter(
-    (session) => session.experience === "chat" || session.experience === "work"
+  return sessions.filter((session) =>
+    session.experience === "work" || session.experience === "development"
   );
 }

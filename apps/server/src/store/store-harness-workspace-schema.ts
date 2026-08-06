@@ -31,6 +31,13 @@ export async function createHarnessWorkspaceTables(
     CREATE INDEX IF NOT EXISTS harness_workspace_selections_workspace_idx
       ON harness_workspace_selections(workspace_id);
 
+    CREATE TABLE IF NOT EXISTS harness_workspace_settings (
+      workspace_id TEXT PRIMARY KEY,
+      background_review_enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
     CREATE TABLE IF NOT EXISTS harness_release_records (
       content_hash TEXT PRIMARY KEY,
       id TEXT NOT NULL,
@@ -90,5 +97,19 @@ export async function createHarnessWorkspaceTables(
 
     CREATE INDEX IF NOT EXISTS harness_run_overlays_workspace_updated_idx
       ON harness_run_overlays(workspace_id, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS harness_memory_revisions (
+      workspace_id TEXT NOT NULL,
+      key TEXT NOT NULL,
+      revision INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(workspace_id, key, revision),
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS harness_memory_revisions_workspace_created_idx
+      ON harness_memory_revisions(workspace_id, created_at DESC);
   `);
 }

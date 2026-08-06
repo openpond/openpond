@@ -10,7 +10,7 @@ export function createServerShutdown(input: {
   serverId: string;
   logger: ShutdownLogger;
   markClosing(): void;
-  backgroundLoops: ReadonlyArray<{ stop(): void }>;
+  backgroundLoops: ReadonlyArray<{ stop(): unknown | Promise<unknown> }>;
   browserControlQueue: { close(): void };
   closeEventSubscribers(): Promise<void>;
   terminalWebSockets: { close(): void };
@@ -24,9 +24,9 @@ export function createServerShutdown(input: {
   lifecycle.register({
     id: "admission-and-background-loops",
     phase: 0,
-    close: () => {
+    close: async () => {
       input.markClosing();
-      for (const loop of input.backgroundLoops) loop.stop();
+      await Promise.all(input.backgroundLoops.map((loop) => loop.stop()));
     },
   });
   lifecycle.register({

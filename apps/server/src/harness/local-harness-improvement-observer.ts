@@ -1,4 +1,5 @@
 import type {
+  HarnessRefinerOutcome,
   ImprovementSafeBoundaryKind,
   RefinementTriggerDecision,
   Session,
@@ -23,6 +24,8 @@ export async function recordLocalHarnessImprovementBoundary(input: {
   if (!snapshot) return null;
   const workspace = await input.store.getHarnessWorkspace(snapshot.workspaceId);
   if (!workspace || workspace.location !== "local") return null;
+  const backgroundReview = await input.store.getHarnessBackgroundReviewSettings(workspace.id);
+  if (!backgroundReview.enabled) return null;
 
   const events = (await input.store.runtimeEventsForSession(input.session.id, {
     limit: 1_000,
@@ -42,8 +45,23 @@ export async function recordLocalHarnessImprovementBoundary(input: {
       artifact.schemaVersion === "openpond.refinementTriggerDecision.v1" &&
       artifact.runRef === input.session.id,
   );
+  const outcomes = (
+    await input.store.listHarnessImprovementArtifacts(
+      workspace.id,
+      "refiner_outcome",
+      1_000,
+    )
+  ).filter(
+    (artifact): artifact is HarnessRefinerOutcome =>
+      artifact.schemaVersion === "openpond.harnessRefinerOutcome.v1",
+  );
+  const completedTriggerRefs = new Set(
+    outcomes.map((outcome) => `${outcome.trigger.id}:${outcome.trigger.contentHash}`),
+  );
   const pendingPlanCount = priorTriggers.filter(
-    (trigger) => trigger.decision === "queue_refiner",
+    (trigger) =>
+      trigger.decision === "queue_refiner" &&
+      !completedTriggerRefs.has(`${trigger.id}:${trigger.contentHash}`),
   ).length;
   const latestActionable = priorTriggers.find(
     (trigger) => trigger.decision !== "no_action",
@@ -82,6 +100,10 @@ export async function recordLocalHarnessImprovementBoundary(input: {
         ? [data.skillName.trim()]
         : [];
     }),
+    turnReviewAlreadyQueued: priorTriggers.some(
+      (trigger) =>
+        trigger.turnId === input.turn.id && trigger.decision === "queue_refiner",
+    ),
   });
   for (const observation of detection.observations) {
     await input.store.saveHarnessImprovementArtifact(

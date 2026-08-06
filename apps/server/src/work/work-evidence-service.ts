@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { contentHash, sha256, type ImmutableReleaseRef } from "@openpond/evals";
+import { contentHash, sha256, type ImmutableReleaseRef } from "@openpond/harness";
 import {
   createWorkFeedbackReceipt,
   workEvidenceReceiptRef,

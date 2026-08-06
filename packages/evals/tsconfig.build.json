@@ -14,5 +14,6 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["test/**/*.ts", "scripts/**/*.ts"]
+  "exclude": ["test/**/*.ts", "scripts/**/*.ts"],
+  "references": [{ "path": "../harness/tsconfig.build.json" }]
 }

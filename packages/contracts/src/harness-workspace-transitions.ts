@@ -55,7 +55,16 @@ export function classifyHarnessAutoAdvanceAuthority(input: {
   if (proposal.edits.some((edit) => edit.operation === "delete")) {
     return { eligible: false, reason: "Delete edits require review." };
   }
+  const generatedManifestEditId = typeof proposal.metadata.generatedManifestEditId === "string"
+    ? proposal.metadata.generatedManifestEditId
+    : null;
   const structurallyRestricted = proposal.edits
+    .filter((edit) => !(
+      edit.target.replaceAll("\\", "/").toLowerCase() === "harness.json" &&
+      edit.id === generatedManifestEditId &&
+      edit.operation === "update" &&
+      ["prompt", "skill"].includes(proposal.route)
+    ))
     .map((edit) => edit.target.replaceAll("\\", "/").toLowerCase())
     .filter((target) =>
       target === "harness.json" ||
@@ -263,6 +272,89 @@ export function rollbackHarnessWorkspace(input: {
       decision: "rolled_back",
       reason: "Current channel rolled back atomically to an immutable release.",
       rollbackOf: input.rollbackOf,
+    }),
+  };
+}
+
+export function advanceReviewedHarnessWorkspace(input: {
+  receiptId: string;
+  workspace: HarnessWorkspace;
+  proposal: HarnessImprovementProposal;
+  validations: HarnessTargetedValidationReceipt[];
+  nextRelease: ImmutableReleaseRef;
+  nextSourceRevision: string;
+  reviewer: string;
+  now: string;
+}): HarnessWorkspaceAdvanceResult {
+  const workspace = HarnessWorkspaceSchema.parse(input.workspace);
+  const proposal = HarnessImprovementProposalSchema.parse(input.proposal);
+  const validations = input.validations.map((receipt) =>
+    HarnessTargetedValidationReceiptSchema.parse(receipt),
+  );
+  const common = {
+    schemaVersion: "openpond.harnessAdvanceReceipt.v1" as const,
+    id: input.receiptId,
+    workspaceId: workspace.id,
+    ownerScope: workspace.ownerScope,
+    proposal: { id: proposal.id, contentHash: proposal.contentHash },
+    expectedWorkspaceRevision: proposal.expectedWorkspace.revision,
+    observedWorkspaceRevision: workspace.revision,
+    previousChannelRevision: workspace.currentChannel.revision,
+    previousRelease: workspace.currentChannel.release,
+    validationReceipts: validations.map((receipt) => ({
+      id: receipt.id,
+      contentHash: receipt.contentHash,
+    })),
+    rollbackOf: null,
+    createdAt: input.now,
+    metadata: { authority: "human_review", reviewer: input.reviewer },
+  };
+  const conflictReason = workspaceConflictReason(workspace, proposal);
+  if (conflictReason) {
+    return {
+      workspace,
+      receipt: createHarnessAdvanceReceipt({
+        ...common,
+        nextChannelRevision: workspace.currentChannel.revision,
+        nextRelease: null,
+        decision: "conflict",
+        reason: conflictReason,
+      }),
+    };
+  }
+  const validationReason = failedValidationReason(proposal, validations);
+  if (validationReason) {
+    return {
+      workspace,
+      receipt: createHarnessAdvanceReceipt({
+        ...common,
+        nextChannelRevision: workspace.currentChannel.revision,
+        nextRelease: null,
+        decision: "retained",
+        reason: validationReason,
+      }),
+    };
+  }
+  const nextWorkspace = HarnessWorkspaceSchema.parse({
+    ...workspace,
+    sourceRevision: input.nextSourceRevision,
+    revision: workspace.revision + 1,
+    dirty: false,
+    currentChannel: {
+      ...workspace.currentChannel,
+      release: input.nextRelease,
+      revision: workspace.currentChannel.revision + 1,
+    },
+    updatedAt: input.now,
+  });
+  return {
+    workspace: nextWorkspace,
+    receipt: createHarnessAdvanceReceipt({
+      ...common,
+      nextChannelRevision: nextWorkspace.currentChannel.revision,
+      nextRelease: input.nextRelease,
+      decision: "advanced",
+      reason: `Validated proposal approved by ${input.reviewer} and advanced atomically.`,
     }),
   };
 }

@@ -17,6 +17,7 @@ import { event, now } from "../utils.js";
 export function createSessionStore(deps: {
   store: SqliteStore;
   defaultSessionCwd: (appId?: string | null) => string;
+  createManagedLocalWorkCwd?: (sessionId: string) => Promise<string>;
   loadAppPreferences?: () => Promise<AppPreferences>;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
   loadLastUsedProfile?: () => Promise<Session["currentProfile"]>;
@@ -24,6 +25,7 @@ export function createSessionStore(deps: {
   const {
     store,
     defaultSessionCwd,
+    createManagedLocalWorkCwd,
     loadAppPreferences,
     appendRuntimeEvent,
     loadLastUsedProfile,
@@ -32,6 +34,7 @@ export function createSessionStore(deps: {
   async function createSession(payload: unknown): Promise<Session> {
     const input = CreateSessionRequestSchema.parse(payload);
     const createdAt = now();
+    const sessionId = randomUUID();
     const sessionCount = await store.sessionCount();
     const workspaceKind =
       input.workspaceKind ?? (input.appId ? "sandbox_app" : undefined);
@@ -46,8 +49,22 @@ export function createSessionStore(deps: {
         : loadLastUsedProfile
         ? await loadLastUsedProfile()
         : null;
+    const managedLocalWork =
+      input.experience === "work" &&
+      !workspaceKind &&
+      !input.appId &&
+      !input.localProjectId &&
+      !input.cloudProjectId &&
+      input.metadata?.workspaceTarget === "local";
+    const cwd = managedLocalWork
+      ? createManagedLocalWorkCwd
+        ? await createManagedLocalWorkCwd(sessionId)
+        : defaultSessionCwd(null)
+      : input.cwd === undefined
+        ? defaultSessionCwd(input.appId)
+        : input.cwd;
     const session: Session = {
-      id: randomUUID(),
+      id: sessionId,
       experience: input.experience ?? DEFAULT_SESSION_EXPERIENCE,
       provider: input.provider,
       modelRef: input.modelRef ?? null,
@@ -70,7 +87,7 @@ export function createSessionStore(deps: {
       cloudTeamId: input.cloudTeamId ?? null,
       currentProfile,
       ...(input.metadata ? { metadata: input.metadata } : {}),
-      cwd: input.cwd === undefined ? defaultSessionCwd(input.appId) : input.cwd,
+      cwd,
       codexThreadId: null,
       createdAt,
       updatedAt: createdAt,

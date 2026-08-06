@@ -1,8 +1,13 @@
 # Portable contract map
 
-`@openpond/evals` owns the portable wire formats and pure protocol logic. Host
-applications own persistence, provider sessions, secret leases, connected-app
-authorization, model streaming, artifact bytes, and runtime processes.
+`@openpond/harness` owns immutable Harness identities, workspaces,
+improvements, traces, tools, model identities, and shared hashing.
+`@openpond/evals` owns Tasksets, graders, evaluation runs and receipts,
+execution orchestration, conformance fixtures, and Work-evidence eligibility.
+Evals depends on Harness and re-exports it for compatibility; Harness never
+depends on Evals. Host applications own persistence, provider sessions, secret
+leases, connected-app authorization, model streaming, artifact bytes, and
+runtime processes.
 
 | Existing object | Portable object | Migration rule |
 | --- | --- | --- |

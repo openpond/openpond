@@ -1,4 +1,4 @@
-import { canonicalJson, contentHash } from "../common.js";
+import { canonicalJson, contentHash } from "@openpond/harness";
 import {
   createWorkEvidenceReceipt,
   createWorkFeedbackReceipt,

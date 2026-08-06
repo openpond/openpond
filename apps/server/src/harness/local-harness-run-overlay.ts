@@ -3,7 +3,7 @@ import {
   type HarnessRunOverlay,
   type HarnessWorkspace,
 } from "@openpond/contracts";
-import { contentHash, type ImmutableReleaseRef } from "@openpond/evals";
+import { contentHash, type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import {

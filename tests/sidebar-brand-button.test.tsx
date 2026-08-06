@@ -26,7 +26,6 @@ describe("Sidebar experience wordmark", () => {
     expect(PRODUCT_AREA_OPTIONS.map((option) => option.value)).toEqual([
       "chat",
       "models",
-      "development",
     ]);
   });
 

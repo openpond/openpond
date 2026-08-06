@@ -42,7 +42,7 @@ type LocalAgentSchedulerLogger = {
 
 export type LocalAgentScheduleLoop = {
   start: () => void;
-  stop: () => void;
+  stop: () => Promise<void>;
   syncNow: () => Promise<LocalAgentSchedulesResponse>;
   list: (input?: {
     localProjectId?: string | null;
@@ -108,6 +108,7 @@ export function createLocalAgentScheduleLoop(options: {
   const runningScheduleIds = new Set<string>();
   let interval: ReturnType<typeof setInterval> | null = null;
   let tickRunning = false;
+  let activeTick: Promise<void> | null = null;
   let lastSyncAt: string | null = null;
   let lastReconcileAtMs = 0;
   let nextTickAtMs: number | null = null;
@@ -232,6 +233,15 @@ export function createLocalAgentScheduleLoop(options: {
     } finally {
       tickRunning = false;
     }
+  }
+
+  function runTrackedTick(forceReconcile = false): Promise<void> {
+    if (activeTick) return activeTick;
+    const operation = runTick(forceReconcile).finally(() => {
+      if (activeTick === operation) activeTick = null;
+    });
+    activeTick = operation;
+    return operation;
   }
 
   async function enqueueRun(
@@ -398,7 +408,8 @@ export function createLocalAgentScheduleLoop(options: {
   return {
     start() {
       if (interval || options.isClosing()) return;
-      void runTick(true).catch((error) => {
+      void runTrackedTick(true).catch((error) => {
+        if (options.isClosing()) return;
         options.logger?.warn("local agent schedule startup sync failed", {
           error: errorText(error),
         });
@@ -406,7 +417,7 @@ export function createLocalAgentScheduleLoop(options: {
       nextTickAtMs = Date.now() + tickMs;
       interval = setInterval(() => {
         nextTickAtMs = Date.now() + tickMs;
-        void runTick().catch((error) => {
+        void runTrackedTick().catch((error) => {
           if (options.isClosing()) return;
           options.logger?.warn("local agent schedule tick failed", {
             error: errorText(error),
@@ -415,15 +426,17 @@ export function createLocalAgentScheduleLoop(options: {
       }, tickMs);
       interval.unref?.();
     },
-    stop() {
+    async stop() {
       if (interval) {
         clearInterval(interval);
         interval = null;
       }
       nextTickAtMs = null;
+      await activeTick?.catch(() => undefined);
     },
     async syncNow() {
-      await runTick(true);
+      if (activeTick) await activeTick;
+      await runTrackedTick(true);
       return list();
     },
     list,

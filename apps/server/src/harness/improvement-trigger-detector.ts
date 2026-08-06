@@ -8,12 +8,12 @@ import {
   type RefinementTriggerPolicy,
   type RuntimeEvent,
 } from "@openpond/contracts";
-import { contentHash, type ImmutableReleaseRef } from "@openpond/evals";
+import { contentHash, type ImmutableReleaseRef } from "@openpond/harness";
 
 export const DEFAULT_REFINEMENT_TRIGGER_POLICY: RefinementTriggerPolicy = {
   schemaVersion: "openpond.refinementTriggerPolicy.v1",
   maxEstimatedCostUsd: 0.05,
-  cooldownMs: 60_000,
+  cooldownMs: 0,
   maxPendingPlans: 2,
   maxEvidenceEvents: 20,
   maxProposalEdits: 4,
@@ -28,6 +28,7 @@ export type HarnessImprovementDetection = {
 type NormalizedToolOutcome = {
   event: RuntimeEvent;
   action: string;
+  args: Record<string, unknown>;
   invocationKey: string;
   failed: boolean;
   deterministicClass: string | null;
@@ -46,6 +47,7 @@ export function detectHarnessImprovementAtBoundary(input: {
   cooldownUntil?: string | null;
   estimatedRefinerCostUsd?: number;
   loadedSkillNames?: readonly string[];
+  turnReviewAlreadyQueued?: boolean;
 }): HarnessImprovementDetection {
   const policy = input.policy ?? DEFAULT_REFINEMENT_TRIGGER_POLICY;
   const outcomes = normalizeToolOutcomes(input.events);
@@ -59,7 +61,9 @@ export function detectHarnessImprovementAtBoundary(input: {
       deterministicClass: observation.deterministicClass,
       tool: observation.tool,
       state: observation.state,
+      eventRefs: observation.eventRefs,
     })),
+    turnId: input.turnId,
   });
   const base = {
     schemaVersion: "openpond.refinementTriggerDecision.v1" as const,
@@ -103,7 +107,21 @@ export function detectHarnessImprovementAtBoundary(input: {
         suggestedRoutes: [],
         reason: observations.some((observation) => observation.state === "open")
           ? "A tool failure is still open; wait for recovery or a terminal turn boundary."
-          : "The completed tool batch contains no reusable detour or correction.",
+          : "The completed boundary contains no new reviewable turn or reusable detour.",
+        estimatedMaxCostUsd: 0,
+      }),
+    };
+  }
+
+  if (input.turnReviewAlreadyQueued) {
+    return {
+      observations,
+      trigger: createRefinementTriggerDecision({
+        ...base,
+        decision: "no_action",
+        deterministicRoute: null,
+        suggestedRoutes: [],
+        reason: "This turn already has a queued background Harness review.",
         estimatedMaxCostUsd: 0,
       }),
     };
@@ -151,21 +169,6 @@ export function detectHarnessImprovementAtBoundary(input: {
     };
   }
 
-  const deterministicRoute = deterministicRouteFor(actionable);
-  if (deterministicRoute) {
-    return {
-      observations,
-      trigger: createRefinementTriggerDecision({
-        ...base,
-        decision: "route_deterministically",
-        deterministicRoute,
-        suggestedRoutes: [deterministicRoute],
-        reason: "The recovered failure has a deterministic runtime classification.",
-        estimatedMaxCostUsd: 0,
-      }),
-    };
-  }
-
   const estimatedMaxCostUsd = input.estimatedRefinerCostUsd ?? 0.01;
   if (estimatedMaxCostUsd > policy.maxEstimatedCostUsd) {
     return {
@@ -188,7 +191,9 @@ export function detectHarnessImprovementAtBoundary(input: {
       decision: "queue_refiner",
       deterministicRoute: null,
       suggestedRoutes: suggestedRoutesFor(actionable),
-      reason: "A recovered detour may contain a reusable Harness improvement.",
+      reason: actionable.some((observation) => observation.kind === "user_turn")
+        ? "A completed user turn is ready for bounded background Harness review."
+        : "A recovered detour may contain a reusable Harness improvement.",
       estimatedMaxCostUsd,
     }),
   };
@@ -201,13 +206,51 @@ function collectObservations(input: {
   overlay: HarnessOverlaySnapshotRef | null;
   outcomes: NormalizedToolOutcome[];
   boundary: ImprovementSafeBoundary;
+  events: readonly RuntimeEvent[];
 }): ImprovementObservation[] {
   const observations: ImprovementObservation[] = [];
-  const latestFailureByAction = new Map<string, NormalizedToolOutcome>();
+  const openFailures: NormalizedToolOutcome[] = [];
   const seenFailureKeys = new Set<string>();
   const recoveredFailureKeys = new Set<string>();
 
+  const userTurnEvent = input.boundary.kind === "turn_completed"
+    ? latestUserTurnEvent(input.events)
+    : null;
+  if (userTurnEvent) {
+    observations.push(
+      observationForEvents({
+        input,
+        kind: "user_turn",
+        state: "terminal",
+        events: [userTurnEvent],
+        deterministicClass: null,
+        summary: "The completed user turn is available for bounded background review.",
+      }),
+    );
+  }
+
   for (const outcome of input.outcomes) {
+    if (outcome.action === "refine_request" && !outcome.failed) {
+      const suggestedRoute = typeof outcome.args.suggestedRoute === "string"
+        ? outcome.args.suggestedRoute
+        : null;
+      const requestedSummary = typeof outcome.args.summary === "string"
+        ? outcome.args.summary.trim()
+        : "The agent explicitly requested bounded refinement.";
+      observations.push(
+        observationFor({
+          input,
+          kind: "reusable_success",
+          state: "terminal",
+          outcomes: [outcome],
+          deterministicClass: suggestedRoute
+            ? `refine_requested_${suggestedRoute}`
+            : "refine_requested",
+          summary: requestedSummary.slice(0, 100_000),
+        }),
+      );
+      continue;
+    }
     if (outcome.failed) {
       const failureKey = contentHash({
         action: outcome.action,
@@ -229,11 +272,18 @@ function collectObservations(input: {
         );
         seenFailureKeys.add(failureKey);
       }
-      latestFailureByAction.set(outcome.action, outcome);
+      openFailures.push(outcome);
       continue;
     }
 
-    const priorFailure = latestFailureByAction.get(outcome.action);
+    const sameActionIndex = findLastIndex(
+      openFailures,
+      (candidate) => candidate.action === outcome.action,
+    );
+    const priorFailureIndex = sameActionIndex >= 0
+      ? sameActionIndex
+      : openFailures.length - 1;
+    const priorFailure = openFailures[priorFailureIndex];
     if (!priorFailure) continue;
     const failureKey = contentHash({
       action: priorFailure.action,
@@ -264,16 +314,18 @@ function collectObservations(input: {
       });
     }
 
-    observations.push(
-      observationFor({
-        input,
-        kind: "retry",
-        state: "recovered",
-        outcomes: [priorFailure, outcome],
-        deterministicClass: priorFailure.deterministicClass,
-        summary: `Tool ${outcome.action} was retried after a failure.`,
-      }),
-    );
+    if (priorFailure.action === outcome.action) {
+      observations.push(
+        observationFor({
+          input,
+          kind: "retry",
+          state: "recovered",
+          outcomes: [priorFailure, outcome],
+          deterministicClass: priorFailure.deterministicClass,
+          summary: `Tool ${outcome.action} was retried after a failure.`,
+        }),
+      );
+    }
     observations.push(
       observationFor({
         input,
@@ -281,11 +333,13 @@ function collectObservations(input: {
         state: "recovered",
         outcomes: [priorFailure, outcome],
         deterministicClass: recoveredClass(priorFailure.deterministicClass),
-        summary: `Tool ${outcome.action} recovered within the same run.`,
+        summary: priorFailure.action === outcome.action
+          ? `Tool ${outcome.action} recovered within the same run.`
+          : `Tool ${outcome.action} recovered after ${priorFailure.action} failed.`,
       }),
     );
     recoveredFailureKeys.add(failureKey);
-    latestFailureByAction.delete(outcome.action);
+    openFailures.splice(priorFailureIndex, 1);
   }
 
   const recovered = observations.filter((observation) => observation.kind === "recovery");
@@ -307,6 +361,68 @@ function collectObservations(input: {
     );
   }
   return observations;
+}
+
+function observationForEvents(input: {
+  input: {
+    runRef: string;
+    turnId: string;
+    harnessRelease: ImmutableReleaseRef;
+    overlay: HarnessOverlaySnapshotRef | null;
+    boundary: ImprovementSafeBoundary;
+  };
+  kind: ImprovementObservation["kind"];
+  state: ImprovementObservation["state"];
+  events: RuntimeEvent[];
+  deterministicClass: string | null;
+  summary: string;
+}): ImprovementObservation {
+  const eventRefs = input.events.map((event) => ({
+    id: event.id,
+    sequence: event.sequence ?? null,
+    contentHash: contentHash(event),
+  }));
+  return createImprovementObservation({
+    schemaVersion: "openpond.improvementObservation.v1",
+    id: stableId("improvement-observation", {
+      runRef: input.input.runRef,
+      kind: input.kind,
+      state: input.state,
+      deterministicClass: input.deterministicClass,
+      summary: input.summary,
+      eventRefs,
+      boundary: input.input.boundary,
+    }),
+    runRef: input.input.runRef,
+    turnId: input.input.turnId,
+    harnessRelease: input.input.harnessRelease,
+    overlay: input.input.overlay,
+    eventRefs,
+    kind: input.kind,
+    state: input.state,
+    tool: null,
+    deterministicClass: input.deterministicClass,
+    summary: input.summary,
+    createdAt: input.input.boundary.occurredAt,
+    metadata: {},
+  });
+}
+
+function latestUserTurnEvent(events: readonly RuntimeEvent[]): RuntimeEvent | null {
+  return [...events]
+    .sort(compareEvents)
+    .reverse()
+    .find((event) => event.name === "turn.started") ?? null;
+}
+
+function findLastIndex<T>(
+  values: readonly T[],
+  predicate: (value: T) => boolean,
+): number {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index]!)) return index;
+  }
+  return -1;
 }
 
 function observationFor(input: {
@@ -366,15 +482,17 @@ function normalizeToolOutcomes(events: readonly RuntimeEvent[]): NormalizedToolO
       if (callId) startedByCallId.set(callId, event);
       continue;
     }
-    if (event.name !== "tool.completed" && event.name !== "workspace_action_result") {
-      continue;
-    }
+    // Workspace action results are implementation details nested beneath a
+    // provider tool call. Treating cleanup/status actions as independent tool
+    // successes can falsely mark the parent tool failure as recovered.
+    if (event.name !== "tool.completed") continue;
     const action = toolAction(event);
     const started = callId ? startedByCallId.get(callId) : undefined;
     const failed = toolEventFailed(event);
     outcomes.push({
       event,
       action,
+      args: asRecord(started?.args ?? event.args),
       invocationKey: contentHash({
         action,
         args: started?.args ?? event.args ?? {},
@@ -450,28 +568,51 @@ function isActionableObservation(observation: ImprovementObservation): boolean {
   return (
     observation.kind === "recovery" ||
     observation.kind === "completion_detour" ||
-    observation.kind === "user_correction" ||
+    observation.kind === "user_turn" ||
+    observation.kind === "reusable_success" ||
     (observation.kind === "validation" && observation.state === "terminal") ||
     (observation.kind === "tool_failure" && observation.state === "terminal")
   );
 }
 
-function deterministicRouteFor(
-  observations: readonly ImprovementObservation[],
-): "runtime" | null {
-  const deterministic = observations.some((observation) =>
-    [
-      "recovered_dependency_missing",
-      "recovered_invalid_tool_arguments",
-      "recovered_missing_file_or_resource",
-    ].includes(observation.deterministicClass ?? ""),
-  );
-  return deterministic ? "runtime" : null;
-}
-
 function suggestedRoutesFor(
   observations: readonly ImprovementObservation[],
-): Array<"runtime" | "prompt" | "skill" | "product"> {
+): Array<
+  | "runtime"
+  | "memory"
+  | "prompt"
+  | "skill"
+  | "agent"
+  | "product"
+  | "taskset"
+  | "training"
+> {
+  const explicitlySuggested = observations
+    .map((observation) => /^refine_requested_(runtime|memory|prompt|skill|agent|product|taskset|training)$/.exec(
+      observation.deterministicClass ?? "",
+    )?.[1])
+    .find((route): route is
+      | "runtime"
+      | "memory"
+      | "prompt"
+      | "skill"
+      | "agent"
+      | "product"
+      | "taskset"
+      | "training" => Boolean(route));
+  if (explicitlySuggested) return [explicitlySuggested];
+  if (observations.some((observation) => observation.kind === "user_turn")) {
+    return [
+      "runtime",
+      "memory",
+      "prompt",
+      "skill",
+      "agent",
+      "product",
+      "taskset",
+      "training",
+    ];
+  }
   if (
     observations.some((observation) =>
       ["tool_budget_exhausted", "recovered_tool_budget_exhausted"].includes(

@@ -12,6 +12,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createBackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
 import { SqliteStore } from "../store/store.js";
+import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import { createLocalHarnessImprovementRuntime } from "./local-harness-improvement-runtime.js";
 import { ensureLocalHarnessRunOverlay } from "./local-harness-run-overlay.js";
 import { loadSelectedLocalHarnessRuntime } from "./local-harness-skill-runtime.js";
@@ -81,6 +82,7 @@ describe("Local Harness refinement acceptance", () => {
     const queue = createBackgroundWorkerQueue({
       queueId: "local-harness-refinement-acceptance",
     });
+    let refinerModelCalls = 0;
     const processBoundary = createLocalHarnessImprovementRuntime({
       store,
       storeDir: directory,
@@ -89,17 +91,40 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      streamOpenPondHostedChatTurn: async function* () {
-        const replacement = `${initialInstructions.trimEnd()}\n\n${SAFE_COMMAND_GUIDANCE}\n`;
+      streamOpenPondHostedChatTurn: async function* ({
+        messages,
+        maxTokens,
+        reasoningEffort,
+      }) {
+        refinerModelCalls += 1;
+        expect(maxTokens).toBe(800);
+        expect(reasoningEffort).toBe("low");
+        const evidence = messages.at(-1)?.content ?? "";
+        if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
+          yield {
+            type: "text_delta" as const,
+            text: JSON.stringify({
+              schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+              decision: "no_action",
+              reason: "The completed turn succeeded with the existing safe converter guidance.",
+            }),
+            raw: { fixture: "refinement-acceptance" },
+          };
+          return;
+        }
+        const anchor = initialInstructions.trimEnd().split("\n").at(-1)!;
         yield {
           type: "text_delta" as const,
           text: JSON.stringify({
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
+            operation: "update",
             target: "instructions/system.md",
             summary: "Avoid the recovered legacy converter detour.",
-            replacementContent: replacement,
+            createContent: null,
+            find: anchor,
+            replace: `${anchor}\n\n${SAFE_COMMAND_GUIDANCE}`,
             expectedOutcome:
               "The next equivalent report task uses the safe converter without the failed legacy attempt.",
             reason:
@@ -116,6 +141,7 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
+    expect(refinerModelCalls).toBe(1);
 
     expect(queue.receipts()).toEqual([
       expect.objectContaining({ status: "completed" }),
@@ -126,7 +152,15 @@ describe("Local Harness refinement acceptance", () => {
         expect.objectContaining({
           name: "harness.refiner.completed",
           status: "completed",
-          data: expect.objectContaining({ workspaceAdvance: "advanced" }),
+          data: expect.objectContaining({
+            workspaceAdvance: "advanced",
+            timing: expect.objectContaining({
+              queueWaitMs: expect.any(Number),
+              modelDurationMs: expect.any(Number),
+              materializationDurationMs: expect.any(Number),
+              totalJobDurationMs: expect.any(Number),
+            }),
+          }),
         }),
       ]),
     );
@@ -162,10 +196,11 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
+    expect(refinerModelCalls).toBe(1);
 
     const secondEvents = await store.runtimeEventsForSession(second.session.id);
     expect(secondEvents.some((event) => event.status === "failed")).toBe(false);
-    expect(queue.receipts()).toHaveLength(1);
+    expect(queue.receipts()).toHaveLength(2);
     const secondTriggers = (
       await store.listHarnessImprovementArtifacts(
         improvedRuntime.workspace.id,
@@ -177,8 +212,58 @@ describe("Local Harness refinement acceptance", () => {
         artifact.runRef === second.session.id,
     );
     expect(secondTriggers).toEqual([
-      expect.objectContaining({ decision: "no_action", estimatedMaxCostUsd: 0 }),
+      expect.objectContaining({ decision: "queue_refiner" }),
     ]);
+    const secondOutcomes = (
+      await store.listHarnessImprovementArtifacts(
+        improvedRuntime.workspace.id,
+        "refiner_outcome",
+      )
+    ).filter(
+      (artifact) =>
+        artifact.schemaVersion === "openpond.harnessRefinerOutcome.v1" &&
+        artifact.trigger.id === secondTriggers[0]?.id,
+    );
+    expect(secondOutcomes).toEqual([
+      expect.objectContaining({ decision: "no_action" }),
+    ]);
+
+    const recovered = await admitRun({
+      store,
+      runtime: improvedRuntime,
+      runId: "refinement-acceptance-restart",
+      admittedAt: AFTER,
+    });
+    await executeScriptedConverterTask({
+      store,
+      sessionId: recovered.session.id,
+      turnId: recovered.turn.id,
+      instructions: improvedInstructions,
+      occurredAt: AFTER,
+    });
+    await recordLocalHarnessImprovementBoundary({
+      store,
+      session: recovered.session,
+      turn: recovered.turn,
+      boundaryKind: "turn_completed",
+    });
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(1);
+    await queue.drain();
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(0);
+    const recoveredEvents = await store.runtimeEventsForSession(recovered.session.id);
+    expect(recoveredEvents).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        name: "harness.refiner.queued",
+        data: expect.objectContaining({ recoveredAfterRestart: true }),
+      }),
+      expect.objectContaining({
+        name: "harness.refiner.completed",
+        status: "completed",
+        data: expect.objectContaining({ recoveredAfterRestart: true }),
+      }),
+    ]));
   });
 });
 
@@ -240,6 +325,16 @@ async function admitRun(input: {
   });
   await input.store.insertSessionAtFront(session);
   await input.store.insertTurn(turn);
+  await input.store.appendRuntimeEvent({
+    id: `event-turn-started-${turn.id}`,
+    sessionId: session.id,
+    turnId: turn.id,
+    name: "turn.started",
+    timestamp: input.admittedAt,
+    source: "chat_action",
+    status: "started",
+    args: { prompt: turn.prompt },
+  });
   return { session, turn };
 }
 

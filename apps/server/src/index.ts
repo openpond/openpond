@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
 import {
   CompactSessionRequestSchema,
   CreateHostedSavedWorkRequestSchema,
@@ -56,6 +57,10 @@ import {
   loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
+import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
+import {
+  createLocalHarnessSettingsRoutePayloads,
+} from "./harness/local-harness-history.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -150,7 +155,6 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
-import { createLocalContinuousLearningService } from "./training/local-continuous-learning.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
 import { waitForWorkReceiptSettlement } from "./openpond/work-runtime-service.js";
 import {
@@ -410,6 +414,11 @@ export async function createOpenPondServer(
   } = createSessionStore({
     store,
     defaultSessionCwd,
+    createManagedLocalWorkCwd: async (sessionId) => {
+      const workspacePath = path.join(storeDir, "work", "tasks", sessionId);
+      await fs.mkdir(workspacePath, { recursive: true, mode: 0o700 });
+      return workspacePath;
+    },
     loadAppPreferences,
     appendRuntimeEvent,
     loadLastUsedProfile: async () =>
@@ -549,9 +558,6 @@ export async function createOpenPondServer(
     store,
     addSessionSource: (input) => taskCreatorService.addSessionSource(input),
   });
-  let localContinuousLearningService: ReturnType<
-    typeof createLocalContinuousLearningService
-  > | null = null;
   const datasetArtifactService = createDatasetArtifactService({
     store,
     workerProjectDir: path.resolve(
@@ -798,6 +804,7 @@ export async function createOpenPondServer(
       appendRuntimeEvent,
       upsertModelUsageRecord: safeUpsertModelUsageRecord,
     });
+  await processLocalHarnessImprovementBoundary.reconcilePending();
 
   const turnRunner = createTurnRunner({
     attachmentRootDir,
@@ -806,6 +813,7 @@ export async function createOpenPondServer(
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
+    harnessModelTools: createLocalHarnessModelToolDefinitions({ store }),
     processHarnessImprovementBoundary: processLocalHarnessImprovementBoundary,
     resolveCreateImproveTaskset: (
       tasksetId: string,
@@ -946,12 +954,6 @@ export async function createOpenPondServer(
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
-    getContinuousLearningConversations: (session, args) => {
-      if (!localContinuousLearningService) {
-        throw new Error("Local continuous learning is still starting.");
-      }
-      return localContinuousLearningService.getConversations(session, args);
-    },
     readOpenPondProfileSkill: readProfileSkill,
     loadBuiltInOpenPondSkills: async () => [
       await loadTasksetAuthoringProfileSkill(),
@@ -1107,15 +1109,6 @@ export async function createOpenPondServer(
     resolveSubagentPatchApplyApproval,
     runSubagentLifecycleAction,
   } = turnRunner;
-  localContinuousLearningService = createLocalContinuousLearningService({
-    store,
-    skillArtifact: tasksetAuthoringSkillArtifact,
-    createSession,
-    sendTurn,
-    interruptSessionTurn,
-    isClosing: () => closing,
-    logger,
-  });
   const taskMinerBackgroundLoop = createTaskMinerBackgroundLoop({
     service: taskMinerService,
     loadProfileState: loadOpenPondProfileState,
@@ -1624,48 +1617,6 @@ export async function createOpenPondServer(
     return { runs: await localAgentScheduleLoop.listRuns(scheduleId, limit) };
   }
 
-  async function listLocalContinuousLearningPayload(): Promise<unknown> {
-    return { states: await localContinuousLearningService!.list() };
-  }
-
-  async function ensureLocalContinuousLearningPayload(
-    payload: unknown,
-  ): Promise<unknown> {
-    return { state: await localContinuousLearningService!.ensure(payload) };
-  }
-
-  async function patchLocalContinuousLearningPayload(
-    stateId: string,
-    payload: unknown,
-  ): Promise<unknown> {
-    return { state: await localContinuousLearningService!.patch(stateId, payload) };
-  }
-
-  async function runLocalContinuousLearningPayload(
-    stateId: string,
-  ): Promise<unknown> {
-    return { run: await localContinuousLearningService!.runNow(stateId) };
-  }
-
-  async function cancelLocalContinuousLearningRunPayload(
-    stateId: string,
-    runId: string,
-  ): Promise<unknown> {
-    return { run: await localContinuousLearningService!.cancelRun(stateId, runId) };
-  }
-
-  async function setLocalConversationLearningConsentPayload(
-    sessionId: string,
-    payload: unknown,
-  ): Promise<unknown> {
-    return {
-      session: await localContinuousLearningService!.setConversationConsent(
-        sessionId,
-        payload,
-      ),
-    };
-  }
-
   async function patchSessionPayload(
     sessionId: string,
     payload: unknown
@@ -1710,6 +1661,8 @@ export async function createOpenPondServer(
     throw new Error(result.error);
   }
 
+  const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
+
   const remoteAccess = createRemoteAccessManager({
     getActualPort: () => actualPort,
     logger,
@@ -1747,6 +1700,7 @@ export async function createOpenPondServer(
       recordWorkEvidenceFeedbackPayload: workEvidenceApi.recordFeedback,
       listWorkEvidenceFeedbackPayload: workEvidenceApi.listFeedback,
       classifyWorkEvidencePayload: workEvidenceApi.eligibility,
+      ...harnessSettingsRoutes,
       listHostedSavedWorkPayload,
       createHostedSavedWorkPayload,
       updateHostedSavedWorkPayload,
@@ -1762,12 +1716,6 @@ export async function createOpenPondServer(
       patchLocalAgentSchedulePayload,
       runLocalAgentSchedulePayload,
       listLocalAgentScheduleRunsPayload,
-      listLocalContinuousLearningPayload,
-      ensureLocalContinuousLearningPayload,
-      patchLocalContinuousLearningPayload,
-      runLocalContinuousLearningPayload,
-      cancelLocalContinuousLearningRunPayload,
-      setLocalConversationLearningConsentPayload,
       codexHistoryThreadPayload,
       sendCodexHistoryTurnPayload,
       interruptCodexHistoryTurnPayload,
@@ -1913,7 +1861,6 @@ export async function createOpenPondServer(
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
   localAgentScheduleLoop.start();
-  localContinuousLearningService.start();
 
   const status: ServerStatus = {
     id: serverId,
@@ -1937,7 +1884,6 @@ export async function createOpenPondServer(
     backgroundLoops: [
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
-      localContinuousLearningService,
     ],
     browserControlQueue,
     closeEventSubscribers,

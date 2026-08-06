@@ -1,1 +1,1 @@
-export * from "@openpond/evals/harness-improvements";
+export * from "@openpond/harness/harness-improvements";

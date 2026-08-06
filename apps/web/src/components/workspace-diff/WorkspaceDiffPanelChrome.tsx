@@ -83,7 +83,7 @@ export function WorkspaceDiffTabs({
   onCloseSideChat?: (panelId: string) => void;
   onCloseSearch: () => void;
   onOpenFile: (path: string) => void;
-  onOpenBrowser: () => void;
+  onOpenBrowser?: () => void;
   onOpenSearch: () => void;
   onOpenSideChat?: () => void;
   onSearchQueryChange: (value: string) => void;
@@ -304,11 +304,13 @@ export function WorkspaceDiffTabs({
                 <span>Open file</span>
                 <kbd>Ctrl+P</kbd>
               </button>
-              <button type="button" role="menuitem" onClick={onOpenBrowser}>
-                <Globe2 size={14} />
-                <span>Browser</span>
-                <kbd>Ctrl+I</kbd>
-              </button>
+              {onOpenBrowser ? (
+                <button type="button" role="menuitem" onClick={onOpenBrowser}>
+                  <Globe2 size={14} />
+                  <span>Browser</span>
+                  <kbd>Ctrl+I</kbd>
+                </button>
+              ) : null}
             </div>
           )}
           {searchOpen && (

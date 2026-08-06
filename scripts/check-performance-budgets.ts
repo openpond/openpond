@@ -9,6 +9,12 @@ import { promisify } from "node:util";
 import { isolatedOpenPondEnvironment } from "./isolated-openpond-environment";
 
 const execFileAsync = promisify(execFile);
+const TEMP_DIRECTORY_REMOVE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 8,
+  retryDelay: 100,
+} as const;
 
 export type BudgetWarning = {
   id: string;
@@ -296,8 +302,11 @@ export async function measureServerStartup(input: {
     clearTimeout(timer);
     child.kill("SIGTERM");
     if (child.exitCode === null) await once(child, "exit").catch(() => undefined);
-    await fs.rm(appHome, { recursive: true, force: true });
-    await fs.rm(codexHome, { recursive: true, force: true });
+    // Status discovery can finish just before Codex closes its SQLite sidecars.
+    // Let Node retry transient ENOTEMPTY/EBUSY cleanup races so a successful
+    // performance probe is not replaced by a temporary-directory error.
+    await fs.rm(appHome, TEMP_DIRECTORY_REMOVE_OPTIONS);
+    await fs.rm(codexHome, TEMP_DIRECTORY_REMOVE_OPTIONS);
   }
 }
 
@@ -344,7 +353,7 @@ export async function collectServerRouteMetrics(input: {
       eventPage,
     };
   } finally {
-    await fs.rm(repoDir, { recursive: true, force: true });
+    await fs.rm(repoDir, TEMP_DIRECTORY_REMOVE_OPTIONS);
   }
 }
 

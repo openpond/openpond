@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { contentHash, ReleaseHashSchema } from "../common.js";
+import { contentHash, ReleaseHashSchema } from "@openpond/harness";
 import { AttemptReceiptSchema, verifyAttemptReceipt, type AttemptReceipt } from "../runs.js";
 import {
   WORK_EVIDENCE_ELIGIBILITY_SCHEMA_VERSION,

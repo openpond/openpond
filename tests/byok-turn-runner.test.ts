@@ -201,7 +201,7 @@ describe("BYOK turn runner dispatch", () => {
         modelRef: { providerId: "openrouter", modelId: "test/model" },
       })
     ).rejects.toThrow(
-      "/goal is only available in Development with the Codex provider."
+      "/goal is only available in repository-aware Work with the Codex provider."
     );
     expect(harness.streamInputs).toHaveLength(0);
   });
