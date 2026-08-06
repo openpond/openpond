@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   createImprovementObservation,
   createRefinementTriggerDecision,
+  TurnSchema,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/evals";
 import { afterEach, describe, expect, it } from "vitest";
@@ -61,10 +62,42 @@ async function fixture(runId: string) {
     },
     admittedAt: NOW,
   });
-  const eventRef = {
+  await store.insertTurn(TurnSchema.parse({
+    id: `turn-${runId}`,
+    sessionId: runId,
+    providerTurnId: null,
+    prompt: "Recover one malformed command without restarting the completed work. password=fixture-secret",
+    startedAt: NOW,
+    completedAt: NOW,
+    status: "completed",
+    error: null,
+  }));
+  await store.appendRuntimeEvent({
     id: `event-${runId}`,
-    sequence: 2,
-    contentHash: contentHash({ runId, event: "recovered command failure" }),
+    sessionId: runId,
+    turnId: `turn-${runId}`,
+    name: "tool.completed",
+    timestamp: NOW,
+    source: "provider",
+    action: "exec_command",
+    status: "failed",
+    output: "Command exited with code 1.",
+    data: {
+      result: {
+        exitCode: 1,
+        timedOut: false,
+        stderr: "Error: malformed syntax; access_token=fixture-token",
+      },
+    },
+  });
+  const runtimeEvent = (await store.runtimeEventsForSession(runId)).find(
+    (candidate) => candidate.id === `event-${runId}`,
+  );
+  if (!runtimeEvent) throw new Error("Refiner fixture runtime event was not stored.");
+  const eventRef = {
+    id: runtimeEvent.id,
+    sequence: runtimeEvent.sequence ?? null,
+    contentHash: contentHash(runtimeEvent),
   };
   const observation = createImprovementObservation({
     schemaVersion: "openpond.improvementObservation.v1",
@@ -146,8 +179,12 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
+      stream: async function* ({ messages }) {
         calls += 1;
+        expect(messages.at(-1)?.content).toContain("password=[redacted]");
+        expect(messages.at(-1)?.content).toContain("access_token=[redacted]");
+        expect(messages.at(-1)?.content).not.toContain("fixture-secret");
+        expect(messages.at(-1)?.content).not.toContain("fixture-token");
         yield {
           text: JSON.stringify({
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",

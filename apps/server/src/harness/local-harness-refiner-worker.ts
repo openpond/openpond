@@ -147,10 +147,17 @@ export async function runLocalHarnessRefinerWorker(input: {
       now: input.now,
     });
   }
+  const boundedContext = await loadBoundedRefinerContext(
+    input.store,
+    trigger,
+    observations,
+  );
   const decision = await authorLocalHarnessRefinementWithModel({
     evidence: {
       trigger: boundedTriggerEvidence(trigger),
       observations: observations.map(boundedObservationEvidence),
+      task: boundedContext.task,
+      eventExcerpts: boundedContext.eventExcerpts,
       sourceFiles,
     },
     stream: input.stream,
@@ -233,6 +240,82 @@ export async function runLocalHarnessRefinerWorker(input: {
     proposal: atomic.proposal,
     observations,
   });
+}
+
+async function loadBoundedRefinerContext(
+  store: SqliteStore,
+  trigger: RefinementTriggerDecision,
+  observations: ImprovementObservation[],
+): Promise<{
+  task: { prompt: string | null };
+  eventExcerpts: Array<Record<string, unknown>>;
+}> {
+  const [turn, events] = await Promise.all([
+    store.getTurn(trigger.turnId),
+    store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
+  ]);
+  const eventRefs = new Map(
+    observations.flatMap((observation) =>
+      observation.eventRefs.map((reference) => [reference.id, reference] as const),
+    ),
+  );
+  const exactEvents = events.filter((runtimeEvent) => eventRefs.has(runtimeEvent.id));
+  for (const [eventId, reference] of eventRefs) {
+    const runtimeEvent = exactEvents.find((candidate) => candidate.id === eventId);
+    if (!runtimeEvent || contentHash(runtimeEvent) !== reference.contentHash) {
+      throw new Error(`Refiner runtime event ${eventId} is unavailable or hash-mismatched.`);
+    }
+  }
+  return {
+    task: {
+      prompt: turn?.prompt
+        ? redactAndBoundRefinerText(turn.prompt, 8_000)
+        : null,
+    },
+    eventExcerpts: exactEvents
+      .slice(0, trigger.policy.maxEvidenceEvents)
+      .map((runtimeEvent) => {
+        const data = asRecord(runtimeEvent.data);
+        const result = asRecord(data.result);
+        return {
+          id: runtimeEvent.id,
+          name: runtimeEvent.name,
+          action: runtimeEvent.action ?? null,
+          status: runtimeEvent.status ?? null,
+          error: textField(runtimeEvent.error, 2_000),
+          output: textField(result.output, 2_000) ??
+            textField(runtimeEvent.output, 2_000),
+          exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
+          timedOut: result.timedOut === true,
+          stderr: textField(result.stderr, 3_000),
+          stdout: textField(result.stdout, 3_000),
+        };
+      }),
+  };
+}
+
+function textField(value: unknown, maxLength: number): string | null {
+  return typeof value === "string"
+    ? redactAndBoundRefinerText(value, maxLength)
+    : null;
+}
+
+function redactAndBoundRefinerText(value: string, maxLength: number): string {
+  const redacted = value
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(
+      /\b(api[_-]?key|access[_-]?token|auth(?:orization)?|password|secret)(\s*[:=]\s*)([^\s,;]+)/gi,
+      "$1$2[redacted]",
+    );
+  return redacted.length <= maxLength
+    ? redacted
+    : `${redacted.slice(0, maxLength)}\n[truncated]`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 async function finishPersistedProposal(input: {
