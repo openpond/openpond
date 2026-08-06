@@ -135,6 +135,18 @@ export async function runLocalHarnessRefinerWorker(input: {
     release.bundlePath,
     loadedSkillNamesFromTrigger(trigger),
   );
+  if (sourceFiles.length === 0) {
+    return persistNoAction({
+      store: input.store,
+      workspace,
+      overlay,
+      trigger,
+      observations,
+      reason:
+        "The evidence turn loaded no editable Skill and this immutable Harness release exposes no general instruction target.",
+      now: input.now,
+    });
+  }
   const decision = await authorLocalHarnessRefinementWithModel({
     evidence: {
       trigger: boundedTriggerEvidence(trigger),
@@ -428,9 +440,6 @@ async function readBoundedRefinerSource(
     if (bytes.byteLength > remaining) continue;
     result.push({ path: file.path, kind: file.kind, content: bytes.toString("utf8") });
     remaining -= bytes.byteLength;
-  }
-  if (result.length === 0) {
-    throw new Error("The immutable Harness release has no bounded textual instruction or Skill source for refinement.");
   }
   return result;
 }

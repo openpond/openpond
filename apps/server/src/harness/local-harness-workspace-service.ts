@@ -425,6 +425,22 @@ async function writeImportedProfileSource(
   };
 
   await fs.mkdir(sourceDir, { recursive: true });
+  const instructionTarget = "instructions/system.md";
+  await fs.mkdir(path.join(sourceDir, "instructions"), { recursive: true });
+  await fs.writeFile(
+    path.join(sourceDir, ...instructionTarget.split("/")),
+    `# ${name}\n\nKeep reusable, provider-neutral execution guidance for this Harness here.\n`,
+    { flag: "wx" },
+  );
+  addDeclaration({
+    id: "instruction-system",
+    kind: "instruction",
+    path: instructionTarget,
+    parentId: null,
+    mediaType: "text/markdown",
+    visibility: "policy",
+    portability: "portable",
+  });
   for (const skill of profile.skills.filter((candidate) => candidate.enabled)) {
     if (skill.validationStatus !== "valid") {
       throw new Error(`Cannot import invalid Profile Skill ${skill.name}: ${skill.validationMessages.join(" ")}`);

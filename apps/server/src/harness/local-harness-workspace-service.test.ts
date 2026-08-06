@@ -617,6 +617,13 @@ describe("local Harness workspace service", () => {
     });
     expect(imported.release.agentSnapshot.skills).toHaveLength(1);
     expect(imported.release.agentSnapshot.agents).toHaveLength(1);
+    expect(imported.release.harnessRelease.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "instructions/system.md",
+        }),
+      ]),
+    );
     expect(imported.release.harnessRelease.files.some((file) => file.path.includes("legacy"))).toBe(false);
     expect(imported.release.harnessRelease.metadata).toMatchObject({
       sourceLayout: "openpond.harnessSourceManifest.v1",
