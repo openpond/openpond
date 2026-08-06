@@ -1,7 +1,7 @@
 # Releasing `@openpond/evals`
 
 The package version is independent from OpenPond application and schema
-versions. Version `0.3.0` is the current Harness-first release and supports
+versions. Version `0.3.0` is the next Harness-first release and supports
 these initial schema literals:
 
 - `openpond.agentSnapshot.v2`
