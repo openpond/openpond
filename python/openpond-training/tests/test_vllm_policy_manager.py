@@ -63,7 +63,7 @@ class VllmPolicyManagerTest(unittest.TestCase):
             self.assertEqual(receipt["servedPolicyVersion"], 1)
             self.assertEqual(receipt["servedAlias"], "openpond-policy-v1")
             self.assertTrue(receipt["verified"])
-            self.assertEqual(calls[0][2]["lora_path"], str(adapter))
+            self.assertEqual(calls[0][2]["lora_path"], str(adapter.resolve()))
             self.assertTrue(calls[-1][2]["return_token_ids"])
 
     def test_rejects_adapter_hash_mismatch_before_vllm_request(self) -> None:
