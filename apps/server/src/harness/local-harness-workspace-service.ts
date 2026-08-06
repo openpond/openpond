@@ -85,6 +85,38 @@ export async function importProfileIntoLocalHarnessWorkspace(input: {
   });
 }
 
+export async function forkLocalHarnessWorkspaceFromRelease(input: {
+  store: SqliteStore;
+  storeDir: string;
+  id: string;
+  ownerId: string;
+  name: string;
+  sourceRelease: { id: string; contentHash: string };
+  now?: () => string;
+}): Promise<{ workspace: HarnessWorkspace; release: LocalHarnessReleaseRecord }> {
+  const source = await input.store.getHarnessReleaseRecord(
+    input.sourceRelease.contentHash,
+  );
+  if (
+    !source ||
+    source.harnessRelease.id !== input.sourceRelease.id
+  ) {
+    throw new Error("Harness workspace fork source release is unavailable.");
+  }
+  return createLocalHarnessWorkspaceFromInitializer({
+    ...input,
+    initializeSource: async (sourceDir) => {
+      await fs.cp(path.join(source.bundlePath, "source"), sourceDir, {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+        verbatimSymlinks: false,
+      });
+      await ensureHarnessInstructionSurface(sourceDir, input.name);
+    },
+  });
+}
+
 async function createLocalHarnessWorkspaceFromInitializer(input: {
   store: SqliteStore;
   storeDir: string;
@@ -353,15 +385,6 @@ async function writeDefaultHarnessSource(sourceDir: string, name: string): Promi
     name,
     files: [
       {
-        id: "default-instructions",
-        kind: "instruction",
-        path: "instructions/system.md",
-        parentId: null,
-        mediaType: "text/markdown",
-        visibility: "policy",
-        portability: "portable",
-      },
-      {
         id: "dependency-lock",
         kind: "dependency_lock",
         path: "dependency-lock.json",
@@ -398,11 +421,11 @@ async function writeDefaultHarnessSource(sourceDir: string, name: string): Promi
     runtimeProtocol: "openpond.agent-runtime.v1",
     metadata: {},
   });
-  await fs.mkdir(path.join(sourceDir, "instructions"), { recursive: true });
-  await fs.writeFile(path.join(sourceDir, "instructions", "system.md"), `# ${name}\n`, { flag: "wx" });
+  await fs.mkdir(sourceDir, { recursive: true });
   await fs.writeFile(path.join(sourceDir, "dependency-lock.json"), canonicalJson({ dependencies: {} }), { flag: "wx" });
   await fs.writeFile(path.join(sourceDir, "program.json"), canonicalJson({ runtimeProtocol: "openpond.agent-runtime.v1" }), { flag: "wx" });
   await fs.writeFile(path.join(sourceDir, HARNESS_SOURCE_MANIFEST), canonicalJson(manifest), { flag: "wx" });
+  await ensureHarnessInstructionSurface(sourceDir, name);
 }
 
 async function writeImportedProfileSource(
@@ -425,22 +448,6 @@ async function writeImportedProfileSource(
   };
 
   await fs.mkdir(sourceDir, { recursive: true });
-  const instructionTarget = "instructions/system.md";
-  await fs.mkdir(path.join(sourceDir, "instructions"), { recursive: true });
-  await fs.writeFile(
-    path.join(sourceDir, ...instructionTarget.split("/")),
-    `# ${name}\n\nKeep reusable, provider-neutral execution guidance for this Harness here.\n`,
-    { flag: "wx" },
-  );
-  addDeclaration({
-    id: "instruction-system",
-    kind: "instruction",
-    path: instructionTarget,
-    parentId: null,
-    mediaType: "text/markdown",
-    visibility: "policy",
-    portability: "portable",
-  });
   for (const skill of profile.skills.filter((candidate) => candidate.enabled)) {
     if (skill.validationStatus !== "valid") {
       throw new Error(`Cannot import invalid Profile Skill ${skill.name}: ${skill.validationMessages.join(" ")}`);
@@ -573,6 +580,46 @@ async function writeImportedProfileSource(
     canonicalJson(manifest),
     { flag: "wx" },
   );
+  await ensureHarnessInstructionSurface(sourceDir, name);
+}
+
+async function ensureHarnessInstructionSurface(
+  sourceDir: string,
+  name: string,
+): Promise<void> {
+  const manifestPath = path.join(sourceDir, HARNESS_SOURCE_MANIFEST);
+  const manifest = HarnessSourceManifestSchema.parse(
+    JSON.parse(await fs.readFile(manifestPath, "utf8")),
+  );
+  if (manifest.files.some((file) => file.kind === "instruction")) return;
+  const instructionTarget = "instructions/system.md";
+  await fs.mkdir(path.join(sourceDir, "instructions"), { recursive: true });
+  await fs.writeFile(
+    path.join(sourceDir, ...instructionTarget.split("/")),
+    `# ${name}\n\nKeep reusable, provider-neutral execution guidance for this Harness here.\n`,
+    { flag: "wx" },
+  );
+  const ids = new Set(manifest.files.map((file) => file.id));
+  const id = ids.has("instruction-system")
+    ? `instruction-system-${contentHash(instructionTarget).slice(0, 8)}`
+    : "instruction-system";
+  const normalized = HarnessSourceManifestSchema.parse({
+    ...manifest,
+    name,
+    files: [
+      ...manifest.files,
+      {
+        id,
+        kind: "instruction",
+        path: instructionTarget,
+        parentId: null,
+        mediaType: "text/markdown",
+        visibility: "policy",
+        portability: "portable",
+      },
+    ],
+  });
+  await fs.writeFile(manifestPath, canonicalJson(normalized), { flag: "w" });
 }
 
 async function importedDependencyLock(profile: OpenPondProfileState): Promise<

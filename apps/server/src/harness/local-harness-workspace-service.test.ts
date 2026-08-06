@@ -19,6 +19,7 @@ import {
   compileAndRegisterLocalHarnessRelease,
   compileLocalHarnessSource,
   createLocalHarnessWorkspace,
+  forkLocalHarnessWorkspaceFromRelease,
   importProfileIntoLocalHarnessWorkspace,
   localHarnessWorkspacePaths,
   materializeLocalHarnessRelease,
@@ -88,6 +89,32 @@ describe("local Harness workspace service", () => {
     });
     expect(compiledAgain.sourceRevision).toBe(workspace.sourceRevision);
     expect(compiledAgain.harnessRelease.contentHash).toBe(release.harnessRelease.contentHash);
+  });
+
+  it("forks an immutable Harness release into a native mutable workspace", async () => {
+    const { directory, store, release } = await fixture();
+    const forked = await forkLocalHarnessWorkspaceFromRelease({
+      store,
+      storeDir: directory,
+      id: "personal-fork",
+      ownerId: "desktop-personal",
+      name: "Forked Personal Harness",
+      sourceRelease: {
+        id: release.harnessRelease.id,
+        contentHash: release.harnessRelease.contentHash,
+      },
+      now: () => LATER,
+    });
+
+    expect(forked.workspace.id).toBe("personal-fork");
+    expect(forked.release.harnessRelease.files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "instructions/system.md" }),
+      ]),
+    );
+    expect(await store.getHarnessReleaseRecord(release.harnessRelease.contentHash)).toEqual(
+      release,
+    );
   });
 
   it("persists structured observations and a deterministic trigger at a tool boundary", async () => {
