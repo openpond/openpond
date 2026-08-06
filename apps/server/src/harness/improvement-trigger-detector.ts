@@ -331,7 +331,11 @@ function observationFor(input: {
     id: stableId("improvement-observation", {
       runRef: input.input.runRef,
       kind: input.kind,
+      state: input.state,
+      deterministicClass: input.deterministicClass,
+      summary: input.summary,
       eventRefs,
+      boundary: input.input.boundary,
     }),
     runRef: input.input.runRef,
     turnId: input.input.turnId,

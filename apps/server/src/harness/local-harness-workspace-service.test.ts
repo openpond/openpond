@@ -143,6 +143,21 @@ describe("local Harness workspace service", () => {
       error: "ModuleNotFoundError: No module named 'docx'",
       data: { toolCallId: "call-one" },
     });
+
+    const openDetection = await recordLocalHarnessImprovementBoundary({
+      store,
+      session,
+      turn,
+      boundaryKind: "completed_tool_batch",
+      now: () => NOW,
+    });
+    expect(openDetection?.observations).toHaveLength(1);
+    expect(openDetection?.observations[0]).toMatchObject({
+      kind: "tool_failure",
+      state: "open",
+    });
+    expect(openDetection?.trigger.decision).toBe("no_action");
+
     await store.appendRuntimeEvent({
       id: "tool-recovered",
       sessionId: session.id,
@@ -169,12 +184,12 @@ describe("local Harness workspace service", () => {
     });
     expect(
       await store.listHarnessImprovementArtifacts(workspace.id, "observation"),
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     const triggers = await store.listHarnessImprovementArtifacts(
       workspace.id,
       "trigger_decision",
     );
-    expect(triggers).toHaveLength(1);
+    expect(triggers).toHaveLength(2);
     expect(triggers[0]).toMatchObject({
       schemaVersion: "openpond.refinementTriggerDecision.v1",
       turnId: turn.id,
