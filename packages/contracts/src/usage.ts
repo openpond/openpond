@@ -19,6 +19,7 @@ export const ModelUsageRequestKindSchema = z.enum([
   "tool_loop",
   "slash_command",
   "create_improve_planner",
+  "harness_refiner",
   "context_compaction",
   "subagent",
   "codex_context",

@@ -196,6 +196,7 @@ function modelUsageVisibility(
   if (
     requestKind === "context_compaction" ||
     requestKind === "create_improve_planner" ||
+    requestKind === "harness_refiner" ||
     requestKind === "subagent" ||
     requestKind === "codex_context"
   ) {
@@ -237,6 +238,7 @@ function usageSurface(
   requestKind: ModelUsageRequestKind,
 ): ModelUsageAttribution["surface"] {
   if (requestKind === "create_improve_planner") return "create_improve";
+  if (requestKind === "harness_refiner") return "system";
   if (requestKind === "context_compaction") return "compaction";
   if (requestKind === "subagent") return "chat";
   return "chat";
@@ -248,6 +250,7 @@ function usageWorkflowKind(
   commandName: string | null,
 ): ModelUsageAttribution["workflowKind"] {
   if (requestKind === "create_improve_planner") return "planner";
+  if (requestKind === "harness_refiner") return "other";
   if (requestKind === "context_compaction") return "summary";
   if (requestKind === "subagent") return "subagent";
   if (commandName || requestKind === "slash_command") return "slash_command";

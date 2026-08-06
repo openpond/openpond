@@ -923,6 +923,7 @@ function requestKindLabel(kind: string): string {
   if (kind === "tool_loop") return "Tool loop";
   if (kind === "slash_command") return "Slash command";
   if (kind === "create_improve_planner") return "Create/Improve planner";
+  if (kind === "harness_refiner") return "Harness Refiner";
   if (kind === "context_compaction") return "Compaction";
   if (kind === "subagent") return "Subagent";
   if (kind === "codex_context") return "Codex context";

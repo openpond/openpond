@@ -494,6 +494,106 @@ export class SqliteHarnessWorkspaceStore extends SqliteSidebarFileBookmarkStore 
     });
   }
 
+  async freezeHarnessRunOverlayWithProposalAtomically(input: {
+    runId: string;
+    expectedRevision: number;
+    edits: HarnessRunOverlay["edits"];
+    updatedAt: string;
+    buildProposal: (frozenOverlay: HarnessRunOverlay) => HarnessImprovementProposal;
+  }): Promise<{ overlay: HarnessRunOverlay; proposal: HarnessImprovementProposal }> {
+    await this.ready;
+    let result: {
+      overlay: HarnessRunOverlay;
+      proposal: HarnessImprovementProposal;
+    } | null = null;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const current = await this.readHarnessRunOverlay(input.runId);
+        if (!current) throw new Error(`Harness run overlay ${input.runId} does not exist.`);
+        if (current.revision !== input.expectedRevision) {
+          throw new Error(
+            `Harness run overlay revision conflict: expected ${input.expectedRevision}, current ${current.revision}.`,
+          );
+        }
+        if (current.status !== "active") {
+          throw new Error("Only an active Harness run overlay can accept a Refiner proposal.");
+        }
+        const duplicateEditIds = input.edits
+          .map((edit) => edit.id)
+          .filter((id, index, ids) => ids.indexOf(id) !== index);
+        if (duplicateEditIds.length > 0) {
+          throw new Error(`Harness overlay edit ids must be unique: ${duplicateEditIds.join(", ")}.`);
+        }
+        const existingEditIds = new Set(current.edits.map((edit) => edit.id));
+        const reused = input.edits.find((edit) => existingEditIds.has(edit.id));
+        if (reused) throw new Error(`Harness overlay edit id already exists: ${reused.id}.`);
+
+        const { contentHash: _contentHash, ...content } = current;
+        const overlay = createHarnessRunOverlay({
+          ...content,
+          revision: current.revision + 1,
+          status: "frozen",
+          edits: [...current.edits, ...input.edits],
+          updatedAt: input.updatedAt,
+        });
+        const proposal = HarnessImprovementProposalSchema.parse(
+          input.buildProposal(overlay),
+        );
+        if (
+          proposal.overlay.id !== overlay.id ||
+          proposal.overlay.revision !== overlay.revision ||
+          proposal.overlay.contentHash !== overlay.contentHash
+        ) {
+          throw new Error("Refiner proposal is not bound to the atomically frozen overlay.");
+        }
+        if (
+          proposal.baseHarnessRelease.id !== overlay.baseHarnessRelease.id ||
+          proposal.baseHarnessRelease.contentHash !==
+            overlay.baseHarnessRelease.contentHash
+        ) {
+          throw new Error("Refiner proposal base release differs from the run overlay.");
+        }
+        if (JSON.stringify(proposal.edits) !== JSON.stringify(input.edits)) {
+          throw new Error("Refiner proposal edits differ from the atomically applied edits.");
+        }
+
+        await this.run(
+          `UPDATE harness_run_overlays SET
+             revision = ?, status = ?, payload = ?, updated_at = ?
+           WHERE run_id = ? AND revision = ?`,
+          [
+            overlay.revision,
+            overlay.status,
+            JSON.stringify(overlay),
+            overlay.updatedAt,
+            current.runId,
+            current.revision,
+          ],
+        );
+        await this.insertHarnessImprovementArtifact(
+          current.workspace.workspaceId,
+          "run_overlay",
+          overlay,
+        );
+        await this.insertHarnessImprovementArtifact(
+          current.workspace.workspaceId,
+          "proposal",
+          proposal,
+        );
+        await this.exec("COMMIT");
+        result = { overlay, proposal };
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    if (!result) throw new Error("Atomic Harness Refiner proposal did not produce a result.");
+    return result;
+  }
+
   async advanceHarnessWorkspaceAtomically(input: {
     receiptId: string;
     workspaceId: string;

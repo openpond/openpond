@@ -55,7 +55,7 @@ import {
   ensureLocalHarnessRunOverlay,
   loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
-import { recordLocalHarnessImprovementBoundary } from "./harness/local-harness-improvement-observer.js";
+import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -789,6 +789,16 @@ export async function createOpenPondServer(
     updateSession,
   });
 
+  const processLocalHarnessImprovementBoundary =
+    createLocalHarnessImprovementRuntime({
+      store,
+      storeDir,
+      queue: workQueues.turnFollowUp,
+      streamOpenPondHostedChatTurn,
+      appendRuntimeEvent,
+      upsertModelUsageRecord: safeUpsertModelUsageRecord,
+    });
+
   const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
@@ -796,9 +806,7 @@ export async function createOpenPondServer(
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
-    processHarnessImprovementBoundary: async (input) => {
-      await recordLocalHarnessImprovementBoundary({ store, ...input });
-    },
+    processHarnessImprovementBoundary: processLocalHarnessImprovementBoundary,
     resolveCreateImproveTaskset: (
       tasksetId: string,
       revision: number,

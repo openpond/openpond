@@ -7,12 +7,14 @@ import {
   HarnessRunOverlaySchema,
   HarnessTargetedValidationReceiptSchema,
   classifyHarnessAutoAdvanceAuthority,
+  createHarnessTargetedValidationReceipt,
   type HarnessAdvanceReceipt,
   type HarnessImprovementProposal,
   type HarnessRunOverlay,
   type HarnessTargetedValidationReceipt,
   type HarnessWorkspace,
 } from "@openpond/contracts";
+import { parseProfileSkillMarkdown } from "@openpond/cloud";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -148,6 +150,120 @@ export async function applyLocalHarnessRefinerProposal(input: {
   }
 }
 
+export async function validateLocalHarnessRefinerProposal(input: {
+  storeDir: string;
+  workspace: HarnessWorkspace;
+  proposal: HarnessImprovementProposal;
+  now?: () => string;
+}): Promise<HarnessTargetedValidationReceipt[]> {
+  const proposal = HarnessImprovementProposalSchema.parse(input.proposal);
+  if (proposal.expectedWorkspace.workspaceId !== input.workspace.id) {
+    throw new Error("Refiner proposal targets a different Harness workspace.");
+  }
+  const paths = localHarnessWorkspacePaths(input.storeDir, input.workspace.id);
+  const candidateSource = path.join(paths.root, `.validation-candidate-${randomUUID()}`);
+  await fs.cp(paths.source, candidateSource, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    verbatimSymlinks: false,
+  });
+  const timestamp = (input.now ?? (() => new Date().toISOString()))();
+  try {
+    await applyOverlayEdits(candidateSource, proposal);
+    const compiled = await compileLocalHarnessSource({
+      workspaceId: input.workspace.id,
+      sourceDir: candidateSource,
+    });
+    const declarations = new Map(
+      compiled.manifest.files.map((file) => [file.path, file] as const),
+    );
+    const editByTarget = new Map(proposal.edits.map((edit) => [edit.target, edit] as const));
+    return Promise.all(proposal.validationPlan.map(async (plan) => {
+      let status: HarnessTargetedValidationReceipt["status"] = "passed";
+      let summary = "The candidate Harness source compiles and preserves its manifest contract.";
+      try {
+        if (plan.kind === "prompt") {
+          const edits = proposal.edits.filter((edit) =>
+            declarations.get(edit.target)?.kind === "instruction",
+          );
+          if (edits.length === 0) {
+            throw new Error("Prompt validation requires an instruction-file edit.");
+          }
+          summary = `Validated ${edits.length} textual instruction edit(s) and compiled candidate ${compiled.harnessRelease.id}.`;
+        } else if (plan.kind === "skill") {
+          const edits = proposal.edits.filter((edit) =>
+            declarations.get(edit.target)?.kind === "skill",
+          );
+          if (edits.length === 0) {
+            throw new Error("Skill validation requires a declared Skill-file edit.");
+          }
+          for (const edit of edits) {
+            const content = editByTarget.get(edit.target)?.content;
+            if (!content) throw new Error(`Skill edit ${edit.target} has no content.`);
+            const parsed = parseProfileSkillMarkdown(content);
+            if (!parsed.name || !parsed.description || parsed.messages.length > 0) {
+              throw new Error(`Skill ${edit.target} is invalid: ${parsed.messages.join(" ")}`);
+            }
+          }
+          summary = `Validated ${edits.length} Skill edit(s), Skill frontmatter, and compiled candidate ${compiled.harnessRelease.id}.`;
+        } else if (plan.kind === "dependency" || plan.kind === "package") {
+          const dependency = compiled.manifest.files.find(
+            (file) => file.kind === "dependency_lock",
+          );
+          if (!dependency) throw new Error("Candidate Harness has no dependency lock.");
+          JSON.parse(
+            await fs.readFile(containedPath(candidateSource, dependency.path), "utf8"),
+          );
+          summary = `Validated dependency lock ${dependency.path} and compiled candidate ${compiled.harnessRelease.id}.`;
+        } else {
+          status = "blocked";
+          summary = `Local targeted validation does not yet own ${plan.kind}; it requires its dedicated validator.`;
+        }
+      } catch (error) {
+        status = "failed";
+        summary = error instanceof Error ? error.message : String(error);
+      }
+      return createHarnessTargetedValidationReceipt({
+        schemaVersion: "openpond.harnessTargetedValidationReceipt.v1",
+        id: `validation-${proposal.id}-${plan.id}`,
+        proposal: { id: proposal.id, contentHash: proposal.contentHash },
+        validationId: plan.id,
+        kind: plan.kind,
+        status,
+        summary,
+        evidenceRefs: proposal.evidence,
+        createdAt: timestamp,
+        metadata: {
+          candidateHarnessRelease: {
+            id: compiled.harnessRelease.id,
+            contentHash: compiled.harnessRelease.contentHash,
+          },
+          sourceRevision: compiled.sourceRevision,
+        },
+      });
+    }));
+  } catch (error) {
+    const summary = error instanceof Error ? error.message : String(error);
+    return proposal.validationPlan.map((plan) =>
+      createHarnessTargetedValidationReceipt({
+        schemaVersion: "openpond.harnessTargetedValidationReceipt.v1",
+        id: `validation-${proposal.id}-${plan.id}`,
+        proposal: { id: proposal.id, contentHash: proposal.contentHash },
+        validationId: plan.id,
+        kind: plan.kind,
+        status: "failed",
+        summary,
+        evidenceRefs: proposal.evidence,
+        createdAt: timestamp,
+        metadata: {},
+      }),
+    );
+  } finally {
+    await fs.rm(candidateSource, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function recoverLocalHarnessSourceSwap(input: {
   store: SqliteStore;
   storeDir: string;
@@ -190,7 +306,7 @@ export async function recoverLocalHarnessSourceSwap(input: {
   throw new Error("Harness source-swap recovery cannot reconcile filesystem and workspace revisions.");
 }
 
-async function applyOverlayEdits(
+export async function applyOverlayEdits(
   sourceRoot: string,
   proposal: HarnessImprovementProposal,
 ): Promise<void> {
