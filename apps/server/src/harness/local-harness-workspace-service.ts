@@ -565,7 +565,7 @@ async function importedDependencyLock(profile: OpenPondProfileState): Promise<
 > {
   const repoPath = profile.repoPath ? path.resolve(profile.repoPath) : null;
   if (repoPath) {
-    for (const name of ["pnpm-lock.yaml", "package-lock.json", "yarn.lock", "bun.lock", "bun.lockb"]) {
+    for (const name of ["pnpm-lock.yaml", "package-lock.json", "yarn.lock"]) {
       const sourcePath = path.join(repoPath, name);
       const stats = await fs.lstat(sourcePath).catch(() => null);
       if (stats?.isFile() && !stats.isSymbolicLink()) return { name, sourcePath };
