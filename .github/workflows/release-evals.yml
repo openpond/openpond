@@ -155,17 +155,24 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          consumer_dir="$(mktemp -d)"
+          trap 'rm -rf "${consumer_dir}"' EXIT
+          installed="false"
           for attempt in {1..30}; do
             published="$(npm view "@openpond/evals@${VERSION}" version 2>/dev/null || true)"
             integrity="$(npm view "@openpond/evals@${VERSION}" dist.integrity 2>/dev/null || true)"
             if [[ "${published}" == "${VERSION}" && "${integrity}" == sha512-* ]]; then
-              consumer_dir="$(mktemp -d)"
-              npm install --prefix "${consumer_dir}" --ignore-scripts --no-audit --no-fund "@openpond/evals@${VERSION}"
-              (cd "${consumer_dir}" && npm audit signatures)
-              echo "Verified @openpond/evals@${VERSION} with integrity ${integrity}."
-              exit 0
+              if [[ "${installed}" != "true" ]]; then
+                if npm install --prefix "${consumer_dir}" --ignore-scripts --no-audit --no-fund "@openpond/evals@${VERSION}"; then
+                  installed="true"
+                fi
+              fi
+              if [[ "${installed}" == "true" ]] && (cd "${consumer_dir}" && npm audit signatures); then
+                echo "Verified @openpond/evals@${VERSION} with integrity ${integrity}."
+                exit 0
+              fi
             fi
-            echo "Waiting for npm registry propagation (attempt ${attempt}/30)."
+            echo "Waiting for npm package and attestation propagation (attempt ${attempt}/30)."
             sleep 10
           done
           echo "@openpond/evals@${VERSION} was not verifiable after publication." >&2
