@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import type { OpenPondProfileState, Taskset } from "@openpond/contracts";
+import type { Taskset } from "@openpond/contracts";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 
 const AGENT_ID = "marketing-portfolio-manager";
@@ -12,20 +12,8 @@ const ACTION_IDS = [
 
 export async function verifyMarketingPortfolioRuntime(input: {
   taskset: Taskset;
-  profile: OpenPondProfileState;
+  harnessRoot: string;
 }) {
-  if (
-    input.profile.mode !== "local" ||
-    !input.profile.sourcePath ||
-    !input.profile.activeProfile
-  ) {
-    throw new Error(
-      "Marketing portfolio rollouts require the pinned local Profile source.",
-    );
-  }
-  if (!input.taskset.profileRelease) {
-    throw new Error("Marketing portfolio Taskset does not pin a Profile release.");
-  }
   const benchmark = object(
     input.taskset.environment.metadata.benchmark,
     "marketing benchmark metadata",
@@ -36,27 +24,21 @@ export async function verifyMarketingPortfolioRuntime(input: {
   const scorer = object(benchmark.scorer, "marketing benchmark scorer");
   const relativeAgentPath = requiredString(
     scorer.profileRelativeAgentPath,
-    "marketing Profile Agent path",
+    "marketing Harness Agent path",
   );
-  const profileAgent = input.profile.agents.find(
-    (candidate) => candidate.id === AGENT_ID,
-  );
-  if (!profileAgent?.path || profileAgent.path !== relativeAgentPath) {
-    throw new Error("The active Profile no longer resolves the pinned Agent.");
-  }
-  const profileRoot = path.resolve(input.profile.sourcePath);
+  const profileRoot = path.resolve(input.harnessRoot);
   const agentRoot = path.resolve(profileRoot, relativeAgentPath);
   const relative = path.relative(profileRoot, agentRoot);
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Pinned marketing Agent source escapes the active Profile.");
+    throw new Error("Pinned marketing Agent source escapes the Harness bundle.");
   }
   const manifestPath = path.join(agentRoot, ".openpond", "agent-manifest.json");
   const manifestBytes = await readFile(manifestPath);
   const manifest = object(
     JSON.parse(manifestBytes.toString("utf8")),
-    "Profile Agent manifest",
+    "Harness Agent manifest",
   );
-  const project = object(manifest.project, "Profile Agent project");
+  const project = object(manifest.project, "Harness Agent project");
   if (
     project.name !== AGENT_ID ||
     project.useCase !== "cmo-budget-allocation-benchmark"
@@ -114,24 +96,6 @@ export async function verifyMarketingPortfolioRuntime(input: {
     ) {
       throw new Error(`Pinned Agent action ${binding.actionId} drifted.`);
     }
-  }
-  const profileReleaseHash = contentHash({
-    profileId: input.profile.activeProfile,
-    sourceCommit: input.profile.git?.head ?? null,
-    agentRelease,
-    actions: bindings.map((binding) => ({
-      actionId: binding.actionId,
-      implementationHash: binding.implementationHash,
-      schemaHash: binding.actionSchemaHash,
-    })),
-  });
-  if (
-    input.taskset.profileRelease.id !==
-      `profile_${input.profile.activeProfile.replaceAll("-", "_")}` ||
-    input.taskset.profileRelease.revision !== input.taskset.revision ||
-    input.taskset.profileRelease.contentHash !== profileReleaseHash
-  ) {
-    throw new Error("Pinned Profile release no longer matches the Taskset.");
   }
   const scorerModule = requiredString(scorer.module, "marketing scorer module");
   const scorerModulePath = path.resolve(agentRoot, scorerModule);
@@ -194,7 +158,7 @@ async function regularFiles(root: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(root, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) {
-      throw new Error("Profile Agent releases cannot contain symlinks.");
+      throw new Error("Harness Agent releases cannot contain symlinks.");
     }
     const target = path.join(root, entry.name);
     if (entry.isDirectory()) {

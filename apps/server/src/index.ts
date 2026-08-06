@@ -47,6 +47,15 @@ import {
 import { loadPersonalizationSettings } from "./openpond/personalization.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { SqliteStore } from "./store/store.js";
+import {
+  ensureSelectedLocalHarnessWorkspace,
+  resolveSelectedLocalHarnessRelease,
+} from "./harness/local-harness-selection.js";
+import {
+  ensureLocalHarnessRunOverlay,
+  loadLocalHarnessRuntimeForAgentRun,
+} from "./harness/local-harness-run-overlay.js";
+import { recordLocalHarnessImprovementBoundary } from "./harness/local-harness-improvement-observer.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -212,6 +221,22 @@ export async function createOpenPondServer(
   };
   const { token, tokenFile } = await ensureCapabilityToken(storeDir);
   const store = new SqliteStore(storeDir, { logger });
+  await ensureSelectedLocalHarnessWorkspace({
+    store,
+    storeDir,
+    loadProfileState: loadOpenPondProfileState,
+    now,
+  }).catch((error) => {
+    logger.warn("local Harness workspace initialization failed; temporary Profile adapter remains active", {
+      error,
+    });
+  });
+  const resolveReleasedHarness = async () => {
+    const release = await resolveSelectedLocalHarnessRelease(store);
+    return release
+      ? { agentSnapshot: release.agentSnapshot, harnessRelease: release.harnessRelease }
+      : null;
+  };
   const workEvidenceApi = createDesktopWorkEvidenceApi({ store, storeDir });
   const startedAt = now();
   const serverId = randomUUID();
@@ -563,6 +588,7 @@ export async function createOpenPondServer(
     modelText: trainingModelText,
     modelStream: trainingModelStream,
     workRuntime: tasksetWorkRuntime,
+    resolveReleasedHarness,
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
     modelJudge: async ({ grader, task, attempt }) => {
@@ -663,6 +689,7 @@ export async function createOpenPondServer(
       return resolveManagedAdapterUserAccess({ teamId });
     },
     loadProfileState: loadOpenPondProfileState,
+    resolveReleasedHarness,
     resolveApprovalActor: async () => {
       const account = (await bootstrapPayload()).account;
       if (account.state !== "signed_in") return null;
@@ -765,6 +792,13 @@ export async function createOpenPondServer(
   const turnRunner = createTurnRunner({
     attachmentRootDir,
     store,
+    loadSelectedHarnessRuntime: (session) =>
+      loadLocalHarnessRuntimeForAgentRun(store, session.id),
+    ensureHarnessRunOverlay: (input) =>
+      ensureLocalHarnessRunOverlay({ store, ...input }),
+    processHarnessImprovementBoundary: async (input) => {
+      await recordLocalHarnessImprovementBoundary({ store, ...input });
+    },
     resolveCreateImproveTaskset: (
       tasksetId: string,
       revision: number,

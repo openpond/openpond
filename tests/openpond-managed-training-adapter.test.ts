@@ -158,6 +158,14 @@ describe("OpenPond Managed training adapter", () => {
         },
         openpondRelease: "0.0.38",
         workerProtocol: "openpond.managedRlWorker.v2",
+        harnessRelease: {
+          id: "harness-release-fixture",
+          contentHash: sha256("harness-release-fixture"),
+        },
+        tasksetRelease: {
+          id: "taskset-release-fixture",
+          contentHash: sha256(taskset.contentHash),
+        },
       });
       await publishRunGraph({
         storeDir: directory,

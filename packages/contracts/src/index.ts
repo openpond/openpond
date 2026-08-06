@@ -52,6 +52,10 @@ export * from "./release-core.js";
 export * from "./learning-signals.js";
 export * from "./harness-releases.js";
 export * from "./harness-actions.js";
+export * from "./harness-workspaces.js";
+export * from "./harness-workspace-transitions.js";
+export * from "./harness-sources.js";
+export * from "./harness-improvements.js";
 export * from "./training-platform.js";
 export {
   AgentSnapshotSchema,

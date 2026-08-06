@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 import { withVercelProtectionBypass } from "@openpond/cloud";
-import type { OpenPondProfileState } from "@openpond/contracts";
 
 import { hostedApiAuthHeaders } from "../openpond/hosted-api-access.js";
 import type { SqliteStore } from "../store/store.js";
@@ -46,7 +45,7 @@ export class ManagedRlLocalRolloutExecutor {
       env?: Record<string, string | undefined>;
       store: SqliteStore;
       storeDir: string;
-      loadProfileState: () => Promise<OpenPondProfileState>;
+      harnessRoot: string;
     },
   ) {
     this.executorId = input.executorId ?? `openpond-desktop:${randomUUID()}`;
@@ -180,12 +179,11 @@ export class ManagedRlLocalRolloutExecutor {
     const task = taskset.tasks.find((candidate) => candidate.id === claim.task.id);
     if (!task) throw new Error("managed_rl_local_task_missing");
     const adapter = resolveManagedRlHarnessAdapter({ taskset, environmentId });
-    const profile = await this.input.loadProfileState();
     return adapter.execute({
       claim,
       taskset,
       task,
-      profile,
+      harnessRoot: this.input.harnessRoot,
       storeDir: this.input.storeDir,
       executorId: this.executorId,
       signal: this.abortController.signal,

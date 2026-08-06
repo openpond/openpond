@@ -37,6 +37,7 @@ import {
   TrainingTimestampSchema as TimestampSchema,
 } from "./training-schema-primitives.js";
 import { RolloutTrajectoryReceiptSchema } from "./training-trajectories.js";
+import { ImmutableReleaseRefSchema } from "./release-core.js";
 export * from "./training-managed-adapter.js";
 export * from "./training-trajectories.js";
 export {
@@ -404,6 +405,8 @@ export const ModelRunDraftSchema = z.object({
       contentHash: HashSchema,
     })
     .nullable(),
+  harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
+  tasksetRelease: ImmutableReleaseRefSchema.nullable().optional(),
   datasetCreationId: IdSchema.nullable(),
   buildIntent: DatasetBuildIntentSchema.nullable(),
   buildSpecification: DatasetBuildSpecificationSchema.nullable(),
@@ -423,6 +426,7 @@ export const TrainingPlanSchema = z.object({
   modelId: IdSchema,
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
+  harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   recipe: TrainingRecipeSchema,
   environmentPlacement: z.enum([
@@ -506,6 +510,7 @@ export const TrainingApprovalSchema = z.object({
   id: IdSchema,
   planId: IdSchema,
   bundleHash: HashSchema,
+  harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   modelId: IdSchema,
   method: TrainingMethodSchema,

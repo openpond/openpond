@@ -223,6 +223,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendWorkspaceDiffEvent,
     workspaceDiffBaseline,
     appendRuntimeEvent,
+    processHarnessImprovementBoundary,
     executeWorkspaceTool,
     forkSandboxForSubagent,
     cleanupSandboxForSubagent,
@@ -237,6 +238,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     loadOpenPondProfileStateForRef,
     loadOpenPondProfileLibrary,
     readOpenPondProfileSkill,
+    loadSelectedHarnessRuntime,
+    ensureHarnessRunOverlay,
     loadOpenPondExtensionCatalog,
     readOpenPondExtensionSkill,
     executeProfileSkillCommand,
@@ -278,6 +281,29 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       : null,
     appendRuntimeEvent,
   });
+  async function processHarnessImprovementBoundarySafely(input: {
+    session: Session;
+    turn: Turn;
+    boundaryKind: import("@openpond/contracts").ImprovementSafeBoundaryKind;
+  }): Promise<void> {
+    if (!processHarnessImprovementBoundary || !input.turn.harnessSnapshot) return;
+    try {
+      await processHarnessImprovementBoundary(input);
+    } catch (error) {
+      await appendRuntimeEvent(
+        event({
+          sessionId: input.session.id,
+          turnId: input.turn.id,
+          name: "diagnostic",
+          source: "server",
+          appId: input.session.appId,
+          status: "failed",
+          output: error instanceof Error ? error.message : String(error),
+          data: { phase: "harness_improvement_boundary" },
+        }),
+      ).catch(() => undefined);
+    }
+  }
 
   async function getStoredTurn(turnId: string): Promise<Turn | null> {
     return store.getTurn(turnId);
@@ -476,6 +502,8 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
+    processHarnessImprovementBoundary:
+      processHarnessImprovementBoundarySafely,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
     executeNativeToolCalls,
     readProfileSkillForModel,
@@ -786,6 +814,24 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       : loadOpenPondProfileState
       ? await loadOpenPondProfileState()
       : null;
+    // Resolve the movable current channel exactly once at turn admission. All
+    // later Skill reads use this immutable bundle even if another Work advances
+    // the channel while this turn is running.
+    const selectedHarness = loadSelectedHarnessRuntime
+      ? await loadSelectedHarnessRuntime(session)
+      : null;
+    const admittedHarnessOverlay =
+      selectedHarness && ensureHarnessRunOverlay
+        ? await ensureHarnessRunOverlay({
+            runId: session.id,
+            workspace: selectedHarness.workspace,
+            harnessRelease: {
+              id: selectedHarness.release.harnessRelease.id,
+              contentHash: selectedHarness.release.harnessRelease.contentHash,
+            },
+            admittedAt: now(),
+          })
+        : null;
     let subagentContinuation = await prepareSubagentContinuationTurn({
       session,
       request: input,
@@ -898,6 +944,27 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                 .digest("hex"),
             }
           : null,
+      harnessSnapshot: selectedHarness
+        ? {
+            schemaVersion: "openpond.harnessTurnSnapshot.v1",
+            workspaceId: selectedHarness.workspace.id,
+            workspaceRevision: selectedHarness.workspace.revision,
+            sourceRevision: selectedHarness.workspace.sourceRevision,
+            channelName: selectedHarness.workspace.currentChannel.name,
+            channelRevision: selectedHarness.workspace.currentChannel.revision,
+            harnessRelease: {
+              id: selectedHarness.release.harnessRelease.id,
+              contentHash: selectedHarness.release.harnessRelease.contentHash,
+            },
+            overlay: admittedHarnessOverlay
+              ? {
+                  id: admittedHarnessOverlay.id,
+                  revision: admittedHarnessOverlay.revision,
+                  contentHash: admittedHarnessOverlay.contentHash,
+                }
+              : null,
+          }
+        : null,
     };
     await insertStoredTurn(turn);
     const initialCwd =
@@ -1108,7 +1175,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throwIfInterrupted(controller.signal);
       const personalizationSoul = await loadPersonalizationSoul();
       const shouldLoadProfileSkills =
-        experienceAllowsProfileSkills(session.experience) &&
+        (selectedHarness !== null || experienceAllowsProfileSkills(session.experience)) &&
         (session.provider === "openpond" ||
           isOpenAiCompatibleProviderId(session.provider));
       if (authoringRoute && !shouldLoadProfileSkills) {
@@ -1119,10 +1186,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         );
       }
       const profileSkillRuntime: ProfileSkillRuntime = shouldLoadProfileSkills
-        ? await loadProfileSkillRuntime({
+          ? await loadProfileSkillRuntime({
             session,
             turnId: turn.id,
             profile: selectedProfile,
+            harnessRuntime: selectedHarness?.skillRuntime ?? null,
           })
         : { profileSourcePath: null, skills: [], readSkill: null };
       const loadedProfileSkills = shouldLoadProfileSkills
@@ -1253,7 +1321,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             status: "completed",
           })
         );
-        return completeTurn(sessionId, turn.id, providerTurnId);
+        const completed = await completeTurn(sessionId, turn.id, providerTurnId);
+        await processHarnessImprovementBoundarySafely({
+          session,
+          turn: completed,
+          boundaryKind: "turn_completed",
+        });
+        return completed;
       }
 
       if (isOpenAiCompatibleProviderId(session.provider)) {
@@ -1449,7 +1523,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           })
         );
         await persistGeneratedCrossSystemAttempt({ completedAt: now() });
-        return completeTurn(sessionId, turn.id, providerTurnId);
+        const completed = await completeTurn(sessionId, turn.id, providerTurnId);
+        await processHarnessImprovementBoundarySafely({
+          session,
+          turn: completed,
+          boundaryKind: "turn_completed",
+        });
+        return completed;
       }
 
       if (session.provider !== "codex")
@@ -1503,7 +1583,13 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       await appendWorkspaceDiffEvent(session, turn.id, {
         baseline: initialWorkspaceDiff,
       });
-      return completeTurn(sessionId, turn.id, providerTurn.turnId);
+      const completed = await completeTurn(sessionId, turn.id, providerTurn.turnId);
+      await processHarnessImprovementBoundarySafely({
+        session,
+        turn: completed,
+        boundaryKind: "turn_completed",
+      });
+      return completed;
     } catch (error) {
       const interrupted =
         controller.signal.aborted || (await turnWasInterrupted(turn.id));
@@ -1548,6 +1634,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         }).catch(() => undefined);
       }
       const failed = await failTurn(session, turn.id, message);
+      await processHarnessImprovementBoundarySafely({
+        session,
+        turn: failed,
+        boundaryKind: "turn_completed",
+      });
       await persistGeneratedCrossSystemAttempt({
         completedAt: failed.completedAt ?? now(),
         terminalFailure: {

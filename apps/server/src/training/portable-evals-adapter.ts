@@ -1,5 +1,7 @@
 import {
   AttemptReceiptSchema,
+  AgentSnapshotSchema,
+  HarnessReleaseSchema,
   TasksetReleaseSchema,
   canonicalJson,
   contentHash,
@@ -41,108 +43,40 @@ export function compileDesktopHarnessContext(input: {
   taskset: Taskset;
   selectedTask?: TaskDataRecord;
   profile?: OpenPondProfileState | null;
+  releasedHarness?: Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> | null;
   model: ChatModelRef;
   now?: () => string;
 }): DesktopHarnessContext {
-  const tools = portableTools(input.taskset);
-  const profileRelease = input.taskset.profileRelease
-    ? { id: input.taskset.profileRelease.id, contentHash: hash(input.taskset.profileRelease.contentHash) }
-    : null;
-  const skills = portableSkills(input.profile);
-  const agents = portableAgents(input.taskset);
-  const dependencyLock = asset({
-    id: "desktop-dependency-lock",
-    path: ".openpond/harness/dependency-lock.json",
-    hashInput: {
-      profileHead: input.profile?.git?.head ?? null,
-      profileRelease,
-      tools,
-      skills: skills.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
-      agents: agents.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
-    },
-    mediaType: "application/json",
-    visibility: "policy",
-  });
-  const portabilityBlockers = [...input.taskset.capabilities.portabilityBlockers];
-  const agentSnapshot = createAgentSnapshot({
-    schemaVersion: "openpond.agentSnapshot.v1",
-    id: `agent-snapshot-${contentHash([input.taskset.profileId, profileRelease, tools, dependencyLock.contentHash]).slice(0, 24)}`,
-    profileRelease,
-    instructions: [],
-    skills,
-    agents,
-    toolDeclarations: tools,
-    capabilityRequirements: capabilityRequirements(input.taskset),
-    dependencyLock,
-    portability: {
-      portable: input.taskset.capabilities.exportable && portabilityBlockers.length === 0,
-      blockers: portabilityBlockers,
-      localOnlyAssetRefs: input.taskset.capabilities.exportable ? [] : agents.map((item) => item.id),
-      hostPrivateAssetRefs: [],
-    },
-    metadata: {
-      sourceProfileId: input.taskset.profileId,
-      sourceTasksetHash: input.taskset.contentHash,
-    },
-  });
+  const tasksetTools = portableTools(input.taskset);
+  const { agentSnapshot, harnessRelease } = input.releasedHarness
+    ? {
+        agentSnapshot: AgentSnapshotSchema.parse(input.releasedHarness.agentSnapshot),
+        harnessRelease: HarnessReleaseSchema.parse(input.releasedHarness.harnessRelease),
+      }
+    : compileTemporaryProfileHarness(input.taskset, input.profile);
+  if (
+    harnessRelease.agentSnapshot.id !== agentSnapshot.id ||
+    harnessRelease.agentSnapshot.contentHash !== agentSnapshot.contentHash
+  ) {
+    throw new Error("Released Harness does not bind the supplied Agent snapshot.");
+  }
   const environment = portableEnvironment(input.taskset);
-  const program = asset({
-    id: "desktop-harness-program",
-    path: ".openpond/harness/program.json",
-    hashInput: {
-      environment,
-      actionBindings: input.taskset.environment.actionBindings ?? [],
-      adapterId: runtimeAdapterId(input.taskset),
-    },
-    mediaType: "application/json",
-    visibility: "policy",
-  });
-  const harnessRelease = createHarnessRelease({
-    schemaVersion: "openpond.harnessRelease.v1",
-    id: `harness-${contentHash([agentSnapshot.contentHash, program.contentHash, environment, tools]).slice(0, 24)}`,
-    agentSnapshot: { id: agentSnapshot.id, contentHash: agentSnapshot.contentHash },
-    program,
-    environment,
-    tools,
-    lifecycle: {
-      create: true,
-      reset: true,
-      step: true,
-      collect: true,
-      destroy: true,
-      resetScope: "attempt",
-    },
-    graderInterface: {
-      visibleEvidence: ["output", "runtime_events", "artifacts"],
-      privilegedEvidence: input.taskset.graders.some((grader) => grader.privileged)
-        ? ["expected_output", "private_verifier"]
-        : [],
-      privateVerifierIsolation: input.taskset.capabilities.requiresPrivilegedGrading,
-    },
+  const sourceTasks = input.taskset.tasks.length
+    ? input.taskset.tasks
+    : input.selectedTask ? [input.selectedTask] : [];
+  if (!sourceTasks.length) throw new Error("A portable Taskset release requires at least one resolved task.");
+  const tasksetContent = {
+    schemaVersion: "openpond.tasksetRelease.v2" as const,
+    id: `taskset-release-${input.taskset.id}-r${input.taskset.revision}`,
+    revision: input.taskset.revision,
     policy: {
       policyVisibleFields: input.taskset.policy.policyVisibleFields,
       privilegedFields: input.taskset.policy.privilegedFields,
       hiddenGraderRefs: input.taskset.policy.hiddenGraderRefs,
       connectedAppScopes: input.taskset.policy.connectedAppScopes,
     },
-    files: [...skills, ...agents],
-    metadata: {
-      runtimeAdapterId: runtimeAdapterId(input.taskset),
-      sourceTasksetHash: input.taskset.contentHash,
-    },
-  });
-  const sourceTasks = input.taskset.tasks.length
-    ? input.taskset.tasks
-    : input.selectedTask ? [input.selectedTask] : [];
-  if (!sourceTasks.length) throw new Error("A portable Taskset release requires at least one resolved task.");
-  const tasksetContent = {
-    schemaVersion: "openpond.tasksetRelease.v1" as const,
-    id: `taskset-release-${input.taskset.id}-r${input.taskset.revision}`,
-    revision: input.taskset.revision,
-    harnessRelease: { id: harnessRelease.id, contentHash: harnessRelease.contentHash },
-    policy: harnessRelease.policy,
     environment,
-    tools,
+    tools: tasksetTools,
     capabilities: portableCapabilities(input.taskset),
     tasks: sourceTasks.map((task) => ({
       id: task.id,
@@ -190,7 +124,7 @@ export function compileDesktopHarnessContext(input: {
       adapterId: runtimeAdapterId(input.taskset),
       placement: "local",
       runtimeVersion: "desktop-v1",
-      capabilityReceipt: contentHash({ environment, tools, capabilities: input.taskset.capabilities }),
+      capabilityReceipt: contentHash({ environment, tools: tasksetTools, capabilities: input.taskset.capabilities }),
     },
     limits: {
       maxTurns: 128,
@@ -206,6 +140,83 @@ export function compileDesktopHarnessContext(input: {
     },
   });
   return { agentSnapshot, harnessRelease, tasksetRelease, runManifest };
+}
+
+function compileTemporaryProfileHarness(
+  taskset: Taskset,
+  profile: OpenPondProfileState | null | undefined,
+): Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> {
+  // Temporary migration adapter only. Harness workspaces supply an already
+  // compiled immutable release and bypass every Profile read in this function.
+  const harnessTools: ToolDeclaration[] = [];
+  const sourceRelease = taskset.profileRelease
+    ? { id: taskset.profileRelease.id, contentHash: hash(taskset.profileRelease.contentHash) }
+    : profile?.git?.head
+      ? { id: `source-${segment(profile.git.head)}`, contentHash: hash(profile.git.head) }
+      : null;
+  const skills = portableSkills(profile);
+  const agents = portableAgents(profile);
+  const dependencyLock = asset({
+    id: "desktop-dependency-lock",
+    path: ".openpond/harness/dependency-lock.json",
+    hashInput: {
+      profileHead: profile?.git?.head ?? null,
+      sourceRelease,
+      tools: harnessTools,
+      skills: skills.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
+      agents: agents.map(({ id, contentHash: assetHash }) => ({ id, contentHash: assetHash })),
+    },
+    mediaType: "application/json",
+    visibility: "policy",
+  });
+  const agentSnapshot = createAgentSnapshot({
+    schemaVersion: "openpond.agentSnapshot.v2",
+    id: `agent-snapshot-${contentHash([sourceRelease, harnessTools, dependencyLock.contentHash]).slice(0, 24)}`,
+    sourceRelease,
+    instructions: [],
+    skills,
+    agents,
+    toolDeclarations: harnessTools,
+    capabilityRequirements: [],
+    dependencyLock,
+    portability: {
+      portable: true,
+      blockers: [],
+      localOnlyAssetRefs: [],
+      hostPrivateAssetRefs: [],
+    },
+    metadata: { sourceReleaseId: sourceRelease?.id ?? null },
+  });
+  const program = asset({
+    id: "desktop-harness-program",
+    path: ".openpond/harness/program.json",
+    hashInput: { program: "openpond.desktop-agent-loop.v1" },
+    mediaType: "application/json",
+    visibility: "policy",
+  });
+  const harnessRelease = createHarnessRelease({
+    schemaVersion: "openpond.harnessRelease.v2",
+    id: `harness-${contentHash([agentSnapshot.contentHash, program.contentHash, harnessTools]).slice(0, 24)}`,
+    agentSnapshot: { id: agentSnapshot.id, contentHash: agentSnapshot.contentHash },
+    program,
+    tools: harnessTools,
+    lifecycle: {
+      create: true,
+      reset: true,
+      step: true,
+      collect: true,
+      destroy: true,
+      resetScope: "attempt",
+    },
+    graderInterface: {
+      visibleEvidence: ["output", "runtime_events", "artifacts"],
+      privilegedEvidence: ["expected_output", "private_verifier"],
+      privateVerifierIsolation: true,
+    },
+    files: [...skills, ...agents],
+    metadata: { runtimeProtocol: "openpond.desktop-agent-loop.v1" },
+  });
+  return { agentSnapshot, harnessRelease };
 }
 
 export function projectDesktopAttemptReceipt(input: {
@@ -341,10 +352,10 @@ function portableSkills(profile?: OpenPondProfileState | null): ImmutableAssetRe
   }));
 }
 
-function portableAgents(taskset: Taskset): ImmutableAssetRef[] {
+function portableAgents(profile?: OpenPondProfileState | null): ImmutableAssetRef[] {
   const releases = new Map<string, string>();
-  for (const binding of taskset.environment.actionBindings ?? []) {
-    releases.set(binding.agentRelease.id, binding.agentRelease.contentHash);
+  for (const agent of profile?.agents ?? []) {
+    if (agent.enabled) releases.set(agent.id, contentHash({ name: agent.name, path: agent.path }));
   }
   return [...releases].map(([id, releaseHash]) => ({
     id: `agent-${segment(id)}`,

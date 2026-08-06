@@ -63,6 +63,10 @@ export function createTaskEvaluationService(deps: {
   modelStream?: TasksetWorkModelStream;
   workRuntime?: TasksetWorkAttemptRuntime;
   validateWorkRequiredOutput?: TasksetWorkRequiredOutputValidator;
+  resolveReleasedHarness?: () => Promise<{
+    agentSnapshot: import("@openpond/evals").AgentSnapshot;
+    harnessRelease: import("@openpond/evals").HarnessRelease;
+  } | null>;
 }) {
   async function execute(input: {
     tasksetId: string;
@@ -88,6 +92,19 @@ export function createTaskEvaluationService(deps: {
     }
     const taskset = await requireTaskset(input.tasksetId);
     const task = await findTask(taskset, input.taskId);
+    // Resolve the complete portable graph before the first model or tool step.
+    // Profile source may change while an Evaluation is running, but the
+    // attempt, grade, and receipt must remain bound to the release selected at
+    // admission time.
+    const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
+    const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
+    const portable = compileDesktopHarnessContext({
+      taskset,
+      selectedTask: task,
+      profile,
+      releasedHarness,
+      model: input.model,
+    });
     const attempt = await runPostTrainingEvaluationAttempt({
       store: deps.store,
       storeDir: deps.storeDir,
@@ -116,12 +133,6 @@ export function createTaskEvaluationService(deps: {
     });
     const artifacts = await deps.store.listTaskAttemptArtifacts({
       attemptId: attempt.id,
-    });
-    const portable = compileDesktopHarnessContext({
-      taskset,
-      selectedTask: task,
-      profile: deps.loadProfileState ? await deps.loadProfileState() : null,
-      model: input.model,
     });
     const receipt = projectDesktopAttemptReceipt({
       manifest: portable.runManifest,

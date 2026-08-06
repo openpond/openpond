@@ -9,15 +9,18 @@ import {
 import { gradeEvidence } from "../src/graders.js";
 import {
   executeRuntimeProtocol,
+  createHarnessRelease,
   type HarnessRuntime,
   type ModelAction,
 } from "../src/harness.js";
+import { createVerifiedHarnessCompatibilityReceipt } from "../src/compatibility.js";
 import { validateTasksetRelease } from "../src/tasksets.js";
 import { verifyAttemptReceipt } from "../src/runs.js";
 import {
   aggregateEvaluationReceipts,
   assertComparableRunManifests,
   createAttemptReceipt,
+  createHarnessCompatibilityReceipt,
   createRunManifest,
   rewardEligibleReceipts,
 } from "../src/runs.js";
@@ -157,6 +160,81 @@ describe("public package conformance", () => {
     const result = aggregateEvaluationReceipts({ id: "candidate-eval", manifest: candidate, receipts: [receipt] });
     expect(result).toMatchObject({ attemptCount: 1, rewardEligibleCount: 1, meanScore: 1 });
     expect(rewardEligibleReceipts([receipt])).toEqual([receipt]);
+  });
+
+  it("requires an explicit compatibility receipt when the Harness changes", () => {
+    const base = genericToolConformance.manifest;
+    const { contentHash: _baseHash, ...baseContent } = base;
+    const candidate = createRunManifest({
+      ...baseContent,
+      id: "generic-tool-v1-compatible-harness-run",
+      harnessRelease: { id: "generic-tool-v1-harness-v2", contentHash: contentHash("harness-v2") },
+    });
+    expect(() => assertComparableRunManifests(base, candidate)).toThrow(/compatibility receipt/);
+    const compatibility = createHarnessCompatibilityReceipt({
+      schemaVersion: "openpond.harnessCompatibility.v1",
+      id: "generic-tool-v1-harness-compatibility",
+      baseHarnessRelease: base.harnessRelease,
+      candidateHarnessRelease: candidate.harnessRelease,
+      tasksetRelease: base.tasksetRelease,
+      environmentHash: contentHash(genericToolConformance.taskset.environment),
+      toolContractHash: contentHash(genericToolConformance.taskset.tools),
+      policyHash: contentHash(genericToolConformance.taskset.policy),
+      graderInterfaceHash: contentHash(genericToolConformance.harness.graderInterface),
+      metadata: { reason: "same task environment and grader contract" },
+    });
+    expect(() => assertComparableRunManifests(base, candidate, compatibility)).not.toThrow();
+  });
+
+  it("derives compatibility evidence from immutable releases and rejects contract drift", () => {
+    const base = genericToolConformance.harness;
+    const { contentHash: _baseHash, ...baseContent } = base;
+    const candidate = createHarnessRelease({
+      ...baseContent,
+      id: "generic-tool-v1-harness-candidate",
+      agentSnapshot: {
+        id: "generic-tool-v1-agent-candidate",
+        contentHash: contentHash("generic-tool-v1-agent-candidate"),
+      },
+    });
+    const compatibility = createVerifiedHarnessCompatibilityReceipt({
+      id: "generic-tool-v1-verified-compatibility",
+      baseHarnessRelease: base,
+      candidateHarnessRelease: candidate,
+      tasksetRelease: genericToolConformance.taskset,
+      metadata: { reason: "Harness behavior changed without execution-contract drift." },
+    });
+    expect(compatibility).toMatchObject({
+      baseHarnessRelease: {
+        id: base.id,
+        contentHash: base.contentHash,
+      },
+      candidateHarnessRelease: {
+        id: candidate.id,
+        contentHash: candidate.contentHash,
+      },
+      tasksetRelease: {
+        id: genericToolConformance.taskset.id,
+        contentHash: genericToolConformance.taskset.contentHash,
+      },
+      environmentHash: contentHash(genericToolConformance.taskset.environment),
+      toolContractHash: contentHash(genericToolConformance.taskset.tools),
+      policyHash: contentHash(genericToolConformance.taskset.policy),
+    });
+
+    const drifted = createHarnessRelease({
+      ...baseContent,
+      id: "generic-tool-v1-harness-tool-drift",
+      tools: [],
+    });
+    expect(() =>
+      createVerifiedHarnessCompatibilityReceipt({
+        id: "generic-tool-v1-invalid-compatibility",
+        baseHarnessRelease: base,
+        candidateHarnessRelease: drifted,
+        tasksetRelease: genericToolConformance.taskset,
+      })
+    ).toThrow(/tool contract changed/);
   });
 
   it("keeps frozen tasks and privileged grader state out of policy/training views", () => {

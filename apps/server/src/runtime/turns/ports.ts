@@ -342,6 +342,11 @@ export type TurnRunnerDependencies = {
   appendWorkspaceDiffEvent: SessionWorkspaceResolver["appendWorkspaceDiffEvent"];
   workspaceDiffBaseline: SessionWorkspaceResolver["workspaceDiffBaseline"];
   appendRuntimeEvent: TurnEventSink["appendRuntimeEvent"];
+  processHarnessImprovementBoundary?: (input: {
+    session: Session;
+    turn: Turn;
+    boundaryKind: import("@openpond/contracts").ImprovementSafeBoundaryKind;
+  }) => Promise<void>;
   executeWorkspaceTool: WorkspaceToolExecutorPort["executeWorkspaceTool"];
   forkSandboxForSubagent?: SubagentWorkspacePort["forkSandboxForSubagent"];
   cleanupSandboxForSubagent?: SubagentWorkspacePort["cleanupSandboxForSubagent"];
@@ -408,6 +413,19 @@ export type TurnRunnerDependencies = {
     profileSourcePath: string;
     name: string;
   }) => Promise<ProfileSkillReadResult>;
+  loadSelectedHarnessRuntime?: (session: Session) => Promise<{
+    workspace: import("@openpond/contracts").HarnessWorkspace;
+    release: {
+      harnessRelease: import("@openpond/evals").HarnessRelease;
+    };
+    skillRuntime: import("../hosted-turn/native-tools-runtime.js").ProfileSkillRuntime;
+  } | null>;
+  ensureHarnessRunOverlay?: (input: {
+    runId: string;
+    workspace: import("@openpond/contracts").HarnessWorkspace;
+    harnessRelease: import("@openpond/evals").ImmutableReleaseRef;
+    admittedAt: string;
+  }) => Promise<import("@openpond/contracts").HarnessRunOverlay>;
   loadBuiltInOpenPondSkills?: () => Promise<OpenPondProfileSkill[]>;
   readBuiltInOpenPondSkill?: (name: string) => Promise<ProfileSkillReadResult>;
   getContinuousLearningConversations?: (

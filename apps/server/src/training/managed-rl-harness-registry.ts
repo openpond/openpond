@@ -1,4 +1,4 @@
-import type { OpenPondProfileState, TaskDataRecord, Taskset } from "@openpond/contracts";
+import type { TaskDataRecord, Taskset } from "@openpond/contracts";
 
 export type ManagedRlLocalRolloutClaim = {
   schemaVersion: "openpond.managedRlLocalRolloutClaim.v1";
@@ -22,7 +22,7 @@ export type ManagedRlHarnessExecutionInput = {
   claim: ManagedRlLocalRolloutClaim;
   taskset: Taskset;
   task: TaskDataRecord;
-  profile: OpenPondProfileState;
+  harnessRoot: string;
   storeDir: string;
   executorId: string;
   signal: AbortSignal;

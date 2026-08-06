@@ -32,7 +32,7 @@ export const marketingPortfolioManagedRlAdapter = {
 registerManagedRlHarnessAdapter(marketingPortfolioManagedRlAdapter);
 
 export async function executeMarketingPortfolioManagedRl(input: ManagedRlHarnessExecutionInput): Promise<Record<string, unknown>> {
-  const verified = await verifyMarketingPortfolioRuntime({ taskset: input.taskset, profile: input.profile });
+  const verified = await verifyMarketingPortfolioRuntime({ taskset: input.taskset, harnessRoot: input.harnessRoot });
   const runtime = createProfileAgentHarnessRuntime({
     agentRoot: verified.agentRoot,
     scorerModulePath: verified.scorerModulePath,

@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { access, cp, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
   type ComputeInventory,
@@ -31,6 +31,7 @@ import { isInside } from "./training-service-helpers.js";
 import { createDestinationTrainingEngineRegistry } from "./destination-training-engine-adapter.js";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
+import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
 import { createPortableTrainingServiceSupport } from "./portable-training-service-support.js";
 import { createTrainingArtifactExportService } from "./training-artifact-export-service.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
@@ -80,6 +81,10 @@ export function createTrainingService(deps: {
   }>;
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
   loadProfileState?: () => Promise<OpenPondProfileState>;
+  resolveReleasedHarness?: () => Promise<{
+    agentSnapshot: import("@openpond/evals").AgentSnapshot;
+    harnessRelease: import("@openpond/evals").HarnessRelease;
+  } | null>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();
   const {
@@ -163,7 +168,6 @@ export function createTrainingService(deps: {
     store: deps.store,
     storeDir: deps.storeDir,
     resolveManagedAccess: deps.resolveManagedTrainingAccess,
-    loadProfileState: deps.loadProfileState,
     catalog: () => portableCatalog(),
   });
   deps.registerPortableAdapters?.(portableAdapters);
@@ -238,6 +242,36 @@ export function createTrainingService(deps: {
     prepareStart,
     approve,
     prepareModel: deps.prepareModel,
+    resolveReleasedHarness: async ({ taskset, modelRun }) => {
+      const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
+      const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
+      const context = compileDesktopHarnessContext({
+        taskset,
+        profile,
+        releasedHarness,
+        model: {
+          providerId: "openpond",
+          modelId: modelRun.baseModel!.modelId,
+        },
+      });
+      if (profile?.sourcePath) {
+        await materializeHarnessSource({
+          sourcePath: profile.sourcePath,
+          storeDir: deps.storeDir,
+          harnessHash: context.harnessRelease.contentHash,
+        });
+      }
+      return {
+        harnessRelease: {
+          id: context.harnessRelease.id,
+          contentHash: context.harnessRelease.contentHash,
+        },
+        tasksetRelease: {
+          id: context.tasksetRelease.id,
+          contentHash: context.tasksetRelease.contentHash,
+        },
+      };
+    },
   });
   void portableModelRuns.reconcileActive({ force: true });
 
@@ -407,4 +441,39 @@ export function createTrainingService(deps: {
     close,
   };
 
+}
+
+async function materializeHarnessSource(input: {
+  sourcePath: string;
+  storeDir: string;
+  harnessHash: string;
+}): Promise<void> {
+  const root = path.join(
+    input.storeDir,
+    "training",
+    "harnesses",
+    input.harnessHash,
+    "source",
+  );
+  try {
+    await access(root);
+    return;
+  } catch {
+    // Materialize once per immutable Harness hash.
+  }
+  await mkdir(path.dirname(root), { recursive: true });
+  const temporary = `${root}.materializing-${process.pid}`;
+  await rm(temporary, { recursive: true, force: true });
+  try {
+    await cp(path.resolve(input.sourcePath), temporary, {
+      recursive: true,
+      force: false,
+      errorOnExist: true,
+    });
+    await rename(temporary, root).catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+    });
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 }

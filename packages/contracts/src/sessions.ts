@@ -16,6 +16,7 @@ import {
   OpenPondTurnProfileSnapshotSchema,
 } from "./profile-ref.js";
 import { DEFAULT_SESSION_EXPERIENCE, ExperienceSchema } from "./experiences.js";
+import { HarnessTurnSnapshotSchema } from "./harness-workspaces.js";
 
 export const SystemSessionKindSchema = z.enum(["openpond.lab"]);
 
@@ -73,6 +74,7 @@ export const TurnSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional().default({}),
   createImproveRun: CreateImproveRunSchema.nullable().optional().default(null),
   profileSnapshot: OpenPondTurnProfileSnapshotSchema.nullable().optional(),
+  harnessSnapshot: HarnessTurnSnapshotSchema.nullable().optional(),
 });
 
 export type Turn = z.infer<typeof TurnSchema>;

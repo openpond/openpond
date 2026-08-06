@@ -8,7 +8,6 @@ import {
   TrainingExecutionStatusSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
-  type OpenPondProfileState,
   type ResolvedTrainingPlan,
   type TrainingArtifacts,
   type TrainingExecutionRef,
@@ -59,6 +58,9 @@ type ManagedJob = {
   createdAt: string;
   updatedAt: string;
   inputBundle?: {
+    harnessRelease?: {
+      contentHash?: string;
+    };
     harnessRunManifest?: {
       runtimeTarget?: {
         placement?: string;
@@ -84,7 +86,6 @@ export type OpenPondManagedTrainingAdapterDependencies = {
   resolveAccess?: (teamId?: string) => Promise<Access>;
   readFileImpl?: typeof readFile;
   env?: Record<string, string | undefined>;
-  loadProfileState?: () => Promise<OpenPondProfileState>;
 };
 
 export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
@@ -347,7 +348,7 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       createdAt: dateString(response.job.createdAt),
     };
     if (plan.runtime.placement === "local") {
-      this.ensureLocalExecutor(ref, access);
+      this.ensureLocalExecutor(ref, access, plan.manifest.harnessRelease.contentHash);
     }
     return ref;
   }
@@ -371,7 +372,15 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     const placement =
       detail.job.inputBundle?.harnessRunManifest?.runtimeTarget?.placement;
     if (placement === "local") {
-      this.ensureLocalExecutor(ref, await this.resolveBoundAccess(ref.tenantId));
+      const localJob = await this.dependencies.store.getTrainingJob(ref.runId);
+      const storedHarnessHash = localJob?.metadata.harnessReleaseHash;
+      this.ensureLocalExecutor(
+        ref,
+        await this.resolveBoundAccess(ref.tenantId),
+        detail.job.inputBundle?.harnessRelease?.contentHash
+          ?? detail.job.inputBundle?.harnessRunManifest?.harnessRelease?.contentHash
+          ?? (typeof storedHarnessHash === "string" ? storedHarnessHash : undefined),
+      );
     }
     if (
       ["completed", "cancelled", "budget_exhausted", "failed"].includes(
@@ -526,8 +535,15 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     return access;
   }
 
-  private ensureLocalExecutor(ref: TrainingExecutionRef, access: Access): void {
+  private ensureLocalExecutor(
+    ref: TrainingExecutionRef,
+    access: Access,
+    harnessReleaseHash?: string,
+  ): void {
     if (this.localExecutors.has(ref.runId)) return;
+    if (!harnessReleaseHash) {
+      throw new Error("Managed local rollout is missing its Harness release hash.");
+    }
     const executor = new ManagedRlLocalRolloutExecutor({
       runId: ref.runId,
       access,
@@ -535,11 +551,13 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
       env: this.dependencies.env,
       store: this.dependencies.store,
       storeDir: this.dependencies.storeDir,
-      loadProfileState:
-        this.dependencies.loadProfileState ??
-        (async () => {
-          throw new Error("OpenPond local Profile state is unavailable.");
-        }),
+      harnessRoot: path.join(
+        this.dependencies.storeDir,
+        "training",
+        "harnesses",
+        harnessReleaseHash,
+        "source",
+      ),
     });
     this.localExecutors.set(ref.runId, executor);
     executor.start();
