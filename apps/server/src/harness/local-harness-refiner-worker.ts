@@ -131,7 +131,10 @@ export async function runLocalHarnessRefinerWorker(input: {
   ) {
     throw new Error("Queued Refiner trigger references an unavailable base Harness release.");
   }
-  const sourceFiles = await readBoundedRefinerSource(release.bundlePath);
+  const sourceFiles = await readBoundedRefinerSource(
+    release.bundlePath,
+    loadedSkillNamesFromTrigger(trigger),
+  );
   const decision = await authorLocalHarnessRefinementWithModel({
     evidence: {
       trigger: boundedTriggerEvidence(trigger),
@@ -393,7 +396,10 @@ async function loadExactObservations(
   });
 }
 
-async function readBoundedRefinerSource(bundlePath: string) {
+async function readBoundedRefinerSource(
+  bundlePath: string,
+  loadedSkillNames: ReadonlySet<string>,
+) {
   const sourceRoot = path.resolve(bundlePath, "source");
   const manifest = HarnessSourceManifestSchema.parse(
     JSON.parse(await fs.readFile(path.join(sourceRoot, "harness.json"), "utf8")),
@@ -412,6 +418,9 @@ async function readBoundedRefinerSource(bundlePath: string) {
     ) {
       continue;
     }
+    if (file.kind === "skill" && !loadedSkillNames.has(skillNameFromPath(file.path))) {
+      continue;
+    }
     const target = containedSourcePath(sourceRoot, file.path);
     const stats = await fs.lstat(target);
     if (!stats.isFile() || stats.isSymbolicLink()) continue;
@@ -424,6 +433,21 @@ async function readBoundedRefinerSource(bundlePath: string) {
     throw new Error("The immutable Harness release has no bounded textual instruction or Skill source for refinement.");
   }
   return result;
+}
+
+function loadedSkillNamesFromTrigger(
+  trigger: RefinementTriggerDecision,
+): ReadonlySet<string> {
+  const names = trigger.metadata.loadedSkillNames;
+  if (!Array.isArray(names)) return new Set();
+  return new Set(
+    names.filter((name): name is string => typeof name === "string" && name.trim().length > 0),
+  );
+}
+
+function skillNameFromPath(sourcePath: string): string {
+  const match = /^skills\/([^/]+)\/SKILL\.md$/.exec(sourcePath.replaceAll("\\", "/"));
+  return match?.[1] ?? "";
 }
 
 function assertSafeDecision(

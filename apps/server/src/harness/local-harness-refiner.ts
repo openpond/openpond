@@ -150,6 +150,99 @@ export async function applyLocalHarnessRefinerProposal(input: {
   }
 }
 
+export async function rollbackLocalHarnessWorkspaceRelease(input: {
+  store: SqliteStore;
+  storeDir: string;
+  workspaceId: string;
+  targetRelease: { id: string; contentHash: string };
+  rollbackOf: { id: string; contentHash: string };
+  receiptId: string;
+  now?: () => string;
+}): Promise<{ workspace: HarnessWorkspace; receipt: HarnessAdvanceReceipt }> {
+  const workspace = await input.store.getHarnessWorkspace(input.workspaceId);
+  if (!workspace || workspace.location !== "local") {
+    throw new Error(`Local Harness workspace ${input.workspaceId} does not exist.`);
+  }
+  if (
+    workspace.currentChannel.release?.id !== input.rollbackOf.id ||
+    workspace.currentChannel.release.contentHash !== input.rollbackOf.contentHash
+  ) {
+    throw new Error("Harness rollback source is no longer the current release.");
+  }
+  const target = await input.store.getHarnessReleaseRecord(input.targetRelease.contentHash);
+  if (
+    !target ||
+    target.workspaceId !== workspace.id ||
+    target.harnessRelease.id !== input.targetRelease.id
+  ) {
+    throw new Error("Harness rollback target is unavailable in this workspace.");
+  }
+  const paths = localHarnessWorkspacePaths(input.storeDir, workspace.id);
+  const current = await compileLocalHarnessSource({
+    workspaceId: workspace.id,
+    sourceDir: paths.source,
+  });
+  if (current.sourceRevision !== workspace.sourceRevision) {
+    throw new Error("Harness source changed before rollback.");
+  }
+  const candidateSource = path.join(paths.root, `.source-rollback-${randomUUID()}`);
+  await fs.cp(path.join(target.bundlePath, "source"), candidateSource, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
+    verbatimSymlinks: false,
+  });
+  try {
+    const candidate = await compileLocalHarnessSource({
+      workspaceId: workspace.id,
+      sourceDir: candidateSource,
+    });
+    if (candidate.sourceRevision !== target.sourceRevision) {
+      throw new Error("Harness rollback bundle does not reproduce its registered source revision.");
+    }
+    const timestamp = (input.now ?? (() => new Date().toISOString()))();
+    const backupSource = path.join(paths.root, `.source-backup-${randomUUID()}`);
+    const journalPath = path.join(paths.root, "source-swap.json");
+    await writeSwapJournal(journalPath, {
+      schemaVersion: "openpond.localHarnessSourceSwap.v1",
+      workspaceId: workspace.id,
+      expectedWorkspaceRevision: workspace.revision,
+      previousSourceRevision: workspace.sourceRevision,
+      nextSourceRevision: target.sourceRevision,
+      backupSource,
+      candidateSource,
+      createdAt: timestamp,
+    });
+    await fs.rename(paths.source, backupSource);
+    await fs.rename(candidateSource, paths.source);
+    try {
+      const result = await input.store.rollbackHarnessWorkspaceAtomically({
+        receiptId: input.receiptId,
+        workspaceId: workspace.id,
+        expectedWorkspaceRevision: workspace.revision,
+        expectedChannelRevision: workspace.currentChannel.revision,
+        targetRelease: input.targetRelease,
+        targetSourceRevision: target.sourceRevision,
+        rollbackOf: input.rollbackOf,
+        now: timestamp,
+      });
+      if (result.receipt.decision !== "rolled_back") {
+        await restoreSource(paths.source, backupSource);
+      } else {
+        await fs.rm(backupSource, { recursive: true, force: true });
+      }
+      await fs.rm(journalPath, { force: true });
+      return result;
+    } catch (error) {
+      await restoreSource(paths.source, backupSource).catch(() => undefined);
+      await fs.rm(journalPath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  } finally {
+    await fs.rm(candidateSource, { recursive: true, force: true }).catch(() => undefined);
+  }
+}
+
 export async function validateLocalHarnessRefinerProposal(input: {
   storeDir: string;
   workspace: HarnessWorkspace;

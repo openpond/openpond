@@ -71,6 +71,17 @@ export async function recordLocalHarnessImprovementBoundary(input: {
       priorTriggers.map((trigger) => trigger.deduplicationKey),
     ),
     cooldownUntil,
+    loadedSkillNames: events.flatMap((runtimeEvent) => {
+      if (runtimeEvent.name !== "skill.loaded" || runtimeEvent.status !== "completed") {
+        return [];
+      }
+      const data = runtimeEvent.data && typeof runtimeEvent.data === "object"
+        ? runtimeEvent.data as Record<string, unknown>
+        : {};
+      return typeof data.skillName === "string" && data.skillName.trim()
+        ? [data.skillName.trim()]
+        : [];
+    }),
   });
   for (const observation of detection.observations) {
     await input.store.saveHarnessImprovementArtifact(

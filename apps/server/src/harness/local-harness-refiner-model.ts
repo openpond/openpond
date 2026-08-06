@@ -104,6 +104,7 @@ function refinerMessages(evidence: LocalHarnessRefinerEvidence): HostedChatMessa
         "Use only the supplied trigger, observations, and exact immutable Harness source excerpts.",
         "Return no_action when the evidence is one-off, ambiguous, already handled by the runtime, or would require executable code, dependencies, permissions, financial/business logic, publication, Team scope, Evaluation, or training.",
         "A proposal may update exactly one existing file from sourceFiles. Never create, delete, rename, or target an unlisted file.",
+        "A Skill appears in sourceFiles only when that exact Skill was loaded during the evidence turn. Never infer or update an unrelated Skill.",
         "Use route=prompt only for a kind=instruction target and route=skill only for a kind=skill target.",
         "Preserve all unrelated source content. replacementContent must be the complete replacement file, not a patch.",
         "Keep changes small, specific, provider-neutral, and grounded in the recovered failure.",

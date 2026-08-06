@@ -45,6 +45,7 @@ export function detectHarnessImprovementAtBoundary(input: {
   priorDeduplicationKeys?: ReadonlySet<string>;
   cooldownUntil?: string | null;
   estimatedRefinerCostUsd?: number;
+  loadedSkillNames?: readonly string[];
 }): HarnessImprovementDetection {
   const policy = input.policy ?? DEFAULT_REFINEMENT_TRIGGER_POLICY;
   const outcomes = normalizeToolOutcomes(input.events);
@@ -86,7 +87,9 @@ export function detectHarnessImprovementAtBoundary(input: {
     boundary: input.boundary,
     cooldownUntil: input.cooldownUntil ?? null,
     createdAt: input.boundary.occurredAt,
-    metadata: {},
+    metadata: {
+      loadedSkillNames: [...new Set(input.loadedSkillNames ?? [])].sort(),
+    },
   };
 
   if (actionable.length === 0) {

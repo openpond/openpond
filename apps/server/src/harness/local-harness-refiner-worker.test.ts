@@ -16,6 +16,7 @@ import {
   localHarnessWorkspacePaths,
 } from "./local-harness-workspace-service.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
+import { rollbackLocalHarnessWorkspaceRelease } from "./local-harness-refiner.js";
 import { ensureLocalHarnessRunOverlay } from "./local-harness-run-overlay.js";
 
 const NOW = "2026-08-05T20:00:00.000Z";
@@ -186,6 +187,21 @@ describe("local Harness Refiner worker", () => {
     expect(freshOverlay.baseHarnessRelease).not.toEqual(
       current.overlay.baseHarnessRelease,
     );
+
+    const rolledBack = await rollbackLocalHarnessWorkspaceRelease({
+      store: current.store,
+      storeDir: current.directory,
+      workspaceId: current.workspace.id,
+      targetRelease: current.overlay.baseHarnessRelease,
+      rollbackOf: result.workspace.currentChannel.release!,
+      receiptId: "rollback-refiner-fixture",
+      now: () => "2026-08-05T20:02:00.000Z",
+    });
+    expect(rolledBack.receipt.decision).toBe("rolled_back");
+    expect(rolledBack.workspace.currentChannel.release).toEqual(
+      current.overlay.baseHarnessRelease,
+    );
+    expect(await fs.readFile(target, "utf8")).toBe(before);
   });
 
   it("persists a bounded no-action outcome without changing the overlay or Harness", async () => {
