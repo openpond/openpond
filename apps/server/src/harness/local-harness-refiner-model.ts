@@ -111,6 +111,8 @@ function refinerMessages(evidence: LocalHarnessRefinerEvidence): HostedChatMessa
         "Use route=prompt only for a kind=instruction target and route=skill only for a kind=skill target.",
         "Preserve all unrelated source content. replacementContent must be the complete replacement file, not a patch.",
         "Keep changes small, specific, provider-neutral, and grounded in the recovered failure.",
+        "One completed recovery is enough for a low-risk Personal Harness proposal when the exact failure and successful recovery are both visible; do not require cross-run recurrence at this stage.",
+        "A textual preflight or fallback instruction may be appropriate when it avoids a known missing dependency without installing anything or encoding a machine-specific path.",
         "Do not copy transient paths, secrets, tokens, raw user data, or conversation-specific facts into the Harness.",
         "Return JSON only matching one of these forms:",
         JSON.stringify(z.toJSONSchema(LocalHarnessRefinerDecisionSchema), null, 2),

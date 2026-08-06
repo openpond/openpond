@@ -17,6 +17,7 @@ import {
   type HarnessWorkspace,
   type ImprovementObservation,
   type RefinementTriggerDecision,
+  type RuntimeEvent,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/evals";
 
@@ -266,22 +267,30 @@ async function loadBoundedRefinerContext(
       throw new Error(`Refiner runtime event ${eventId} is unavailable or hash-mismatched.`);
     }
   }
+  const evidenceEvents = selectRefinerEvidenceWindow({
+    events,
+    exactEvents,
+    turnId: trigger.turnId,
+    boundarySequence: trigger.boundary.eventSequence,
+    limit: trigger.policy.maxEvidenceEvents,
+  });
   return {
     task: {
       prompt: turn?.prompt
         ? redactAndBoundRefinerText(turn.prompt, 8_000)
         : null,
     },
-    eventExcerpts: exactEvents
-      .slice(0, trigger.policy.maxEvidenceEvents)
+    eventExcerpts: evidenceEvents
       .map((runtimeEvent) => {
         const data = asRecord(runtimeEvent.data);
         const result = asRecord(data.result);
         return {
           id: runtimeEvent.id,
           name: runtimeEvent.name,
-          action: runtimeEvent.action ?? null,
+          action: runtimeEvent.action ??
+            (typeof data.tool === "string" ? data.tool : null),
           status: runtimeEvent.status ?? null,
+          command: textField(result.command, 3_000),
           error: textField(runtimeEvent.error, 2_000),
           output: textField(result.output, 2_000) ??
             textField(runtimeEvent.output, 2_000),
@@ -292,6 +301,65 @@ async function loadBoundedRefinerContext(
         };
       }),
   };
+}
+
+function selectRefinerEvidenceWindow(input: {
+  events: readonly RuntimeEvent[];
+  exactEvents: readonly RuntimeEvent[];
+  turnId: string;
+  boundarySequence: number;
+  limit: number;
+}): RuntimeEvent[] {
+  const orderedExact = [...input.exactEvents].sort(compareRuntimeEvents);
+  const firstEvidenceSequence = orderedExact.reduce<number | null>(
+    (first, runtimeEvent) => {
+      if (runtimeEvent.sequence === undefined) return first;
+      return first === null
+        ? runtimeEvent.sequence
+        : Math.min(first, runtimeEvent.sequence);
+    },
+    null,
+  );
+  const candidates = input.events
+    .filter((runtimeEvent) =>
+      runtimeEvent.turnId === input.turnId &&
+      isRefinerEvidenceEvent(runtimeEvent) &&
+      (firstEvidenceSequence === null ||
+        runtimeEvent.sequence === undefined ||
+        runtimeEvent.sequence >= firstEvidenceSequence) &&
+      (runtimeEvent.sequence === undefined ||
+        runtimeEvent.sequence <= input.boundarySequence)
+    )
+    .sort(compareRuntimeEvents);
+  if (candidates.length <= input.limit) return candidates;
+
+  const exactIds = new Set(orderedExact.map((runtimeEvent) => runtimeEvent.id));
+  const retainedExact = orderedExact.slice(0, input.limit);
+  const remaining = input.limit - retainedExact.length;
+  if (remaining <= 0) return retainedExact;
+  const tail = candidates
+    .filter((runtimeEvent) => !exactIds.has(runtimeEvent.id))
+    .slice(-remaining);
+  return [...retainedExact, ...tail].sort(compareRuntimeEvents);
+}
+
+function isRefinerEvidenceEvent(
+  runtimeEvent: RuntimeEvent,
+): boolean {
+  return [
+    "tool.completed",
+    "workspace_action_result",
+    "skill.loaded",
+    "validation.completed",
+  ].includes(runtimeEvent.name);
+}
+
+function compareRuntimeEvents(
+  left: RuntimeEvent,
+  right: RuntimeEvent,
+): number {
+  return (left.sequence ?? Number.MAX_SAFE_INTEGER) -
+    (right.sequence ?? Number.MAX_SAFE_INTEGER);
 }
 
 function textField(value: unknown, maxLength: number): string | null {
