@@ -54,6 +54,7 @@ import {
 import { insertVoiceTranscript } from "../../lib/voice-text";
 import { isDesktopShell } from "../app-shell/WindowControls";
 import {
+  ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
   ComposerProfileTargetControl,
   WorkspaceActionControl,
@@ -730,7 +731,6 @@ export function Composer({
     () => filteredAddMenuSections.flatMap((section) => section.items),
     [filteredAddMenuSections]
   );
-
   useEffect(() => {
     if (!addMenuOpen) return;
     setAddMenuIndex((current) => (current < addMenuItems.length ? current : 0));
@@ -740,7 +740,7 @@ export function Composer({
   const activeGoalRuntime = showGoalRuntime && goalRuntime?.tone === "active";
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
-  const showWorkspaceFooterControls = projectTarget.value !== "none";
+  const showWorkspaceFooterControls = experience === "work" || projectTarget.value !== "none";
   const steerDrafts = composerSteerDraftsForScope(
     steerDraftsByScope,
     submissionScopeKey,
@@ -1653,6 +1653,7 @@ export function Composer({
           ) : null}
         </div>
       )}
+      {!showProjectFooter && experience === "work" && <ComposerPinnedWorkspaceContext project={projectTarget} workspace={workspaceTarget} />}
       {createImproveRuntime ? (
         <Suspense fallback={null}>
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />

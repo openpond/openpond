@@ -1,7 +1,7 @@
 {
   "name": "@openpond/evals",
-  "version": "0.3.0",
-  "description": "Portable evaluation, Work evidence, Harness, Taskset, grader, and receipt contracts for OpenPond",
+  "version": "0.3.1",
+  "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -79,7 +79,11 @@
   "dependencies": {
     "zod": "^4.1.13"
   },
+  "peerDependencies": {
+    "@openpond/harness": "^0.1.0"
+  },
   "devDependencies": {
+    "@openpond/harness": "workspace:*",
     "@types/node": "24.13.3",
     "tsx": "4.23.1",
     "typescript": "^5.9.3",

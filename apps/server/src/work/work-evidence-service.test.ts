@@ -8,7 +8,7 @@ import {
   type Session,
   type Turn,
 } from "@openpond/contracts";
-import { contentHash, sha256 } from "@openpond/evals";
+import { contentHash, sha256 } from "@openpond/harness";
 import {
   classifyWorkEvidence,
   verifyWorkEvidenceReceipt,

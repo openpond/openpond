@@ -1,8 +1,8 @@
-import { assertContentHash, contentHash } from "./common.js";
+import { assertContentHash, contentHash } from "@openpond/harness";
 import {
   HarnessReleaseSchema,
   type HarnessRelease,
-} from "./harness.js";
+} from "@openpond/harness";
 import {
   createHarnessCompatibilityReceipt,
   type HarnessCompatibilityReceipt,

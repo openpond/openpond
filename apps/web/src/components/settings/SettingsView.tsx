@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import "../../styles/settings/settings-layout.css";
 import "../../styles/settings/settings-forms.css";
 import "../../styles/settings/settings-lists.css";
@@ -36,6 +45,10 @@ import { TrainingSettingsSection } from "./TrainingSettingsSection";
 import { ComputeSettingsSection } from "./ComputeSettingsSection";
 import { DatasetStorageSettingsSection } from "./DatasetStorageSettingsSection";
 import { HarnessHistorySettingsSection } from "./HarnessHistorySettingsSection";
+import {
+  HarnessReleaseDiffSidebar,
+  type HarnessReleaseDiffSelection,
+} from "./HarnessReleaseDiffSidebar";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
 import { useDiagnosticsSettings } from "./useDiagnosticsSettings";
@@ -46,6 +59,7 @@ import { useRemoteAccessSettings } from "./useRemoteAccessSettings";
 import { useComputeSettings } from "./useComputeSettings";
 import { useDatasetStorageSettings } from "./useDatasetStorageSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
+import { PanelRight } from "../icons";
 import type { SkillSourceDocument } from "../app-shell/skill-source-document";
 
 const UsageSettingsSection = lazy(() =>
@@ -69,6 +83,11 @@ export function SettingsView({
   teamChatThreads,
   onTeamChatNotificationModeChange,
   onTeamChatThreadMuteChange,
+  diffPanelWidth,
+  diffPanelResizing,
+  diffPanelExpanded,
+  onDiffPanelResizeStart,
+  onDiffPanelExpandedChange,
   initialSection = "account",
 }: {
   payload: BootstrapPayload | null;
@@ -87,9 +106,16 @@ export function SettingsView({
   teamChatThreads: TeamChatThread[];
   onTeamChatNotificationModeChange: (mode: TeamChatNotificationMode) => void;
   onTeamChatThreadMuteChange: (threadId: string, muted: boolean) => Promise<boolean>;
+  diffPanelWidth: number;
+  diffPanelResizing: boolean;
+  diffPanelExpanded: boolean;
+  onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onDiffPanelExpandedChange: (expanded: boolean) => void;
   initialSection?: SettingsSection;
 }) {
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  const [harnessDiffSelection, setHarnessDiffSelection] = useState<HarnessReleaseDiffSelection | null>(null);
+  const [harnessDiffOpen, setHarnessDiffOpen] = useState(false);
   const codex = payload?.codex ?? null;
   const preferences = useMemo(() => normalizePreferences(payload?.preferences), [payload?.preferences]);
   const personalization = payload?.personalization ?? EMPTY_PERSONALIZATION;
@@ -187,14 +213,18 @@ export function SettingsView({
     (nextSection: SettingsSection) => {
       if (nextSection === section) return;
       if (!confirmSubagentsNavigation()) return;
+      setHarnessDiffOpen(false);
+      onDiffPanelExpandedChange(false);
       setSection(nextSection);
     },
-    [confirmSubagentsNavigation, section],
+    [confirmSubagentsNavigation, onDiffPanelExpandedChange, section],
   );
   const goBack = useCallback(() => {
     if (!confirmSubagentsNavigation()) return;
+    setHarnessDiffOpen(false);
+    onDiffPanelExpandedChange(false);
     onBack();
-  }, [confirmSubagentsNavigation, onBack]);
+  }, [confirmSubagentsNavigation, onBack, onDiffPanelExpandedChange]);
 
   useEffect(() => {
     setSection(initialSection);
@@ -210,10 +240,31 @@ export function SettingsView({
     return () => window.removeEventListener("beforeunload", warnBeforeUnload);
   }, [defaultsSettings.subagentsDirty, section]);
 
+  const settingsStyle = {
+    "--diff-panel-width": `${diffPanelWidth}px`,
+  } as CSSProperties;
+  const harnessSidebarVisible = section === "harness" && harnessDiffOpen && harnessDiffSelection;
+
   return (
-    <div className={`settings-shell ${isMac ? "platform-macos" : ""}`}>
+    <div
+      className={`settings-shell ${isMac ? "platform-macos" : ""} ${harnessSidebarVisible ? "harness-diff-open" : ""} ${diffPanelExpanded ? "harness-diff-expanded" : ""} ${diffPanelResizing ? "diff-panel-resizing" : ""}`}
+      style={settingsStyle}
+    >
       <div className="settings-drag-region" aria-hidden="true" />
       <div className="settings-window-controls">
+        {section === "harness" ? (
+          <button
+            type="button"
+            className={`topbar-diff-button ${harnessSidebarVisible ? "active" : ""}`}
+            title={`${harnessSidebarVisible ? "Hide" : "Show"} sidebar`}
+            aria-label={`${harnessSidebarVisible ? "Hide" : "Show"} sidebar`}
+            aria-pressed={Boolean(harnessSidebarVisible)}
+            disabled={!harnessDiffSelection}
+            onClick={() => setHarnessDiffOpen((open) => !open)}
+          >
+            <PanelRight size={16} />
+          </button>
+        ) : null}
         <WindowControls platform={connection?.platform} />
       </div>
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
@@ -242,7 +293,12 @@ export function SettingsView({
             connection={connection}
             enabled={section === "harness"}
             onError={onError}
+            onDefaultReleaseDiff={setHarnessDiffSelection}
             onOpenSourceSession={onOpenSourceSession}
+            onOpenReleaseDiff={(selection) => {
+              setHarnessDiffSelection(selection);
+              setHarnessDiffOpen(true);
+            }}
             onToast={onToast}
           />
         ) : section === "profile" ? (
@@ -332,6 +388,15 @@ export function SettingsView({
           <DiagnosticsSettingsSection diagnostics={savedDiagnostics} {...diagnosticsSettings} />
         )}
       </main>
+      {section === "harness" && connection && harnessSidebarVisible ? (
+        <HarnessReleaseDiffSidebar
+          connection={connection}
+          expanded={diffPanelExpanded}
+          onResizeStart={onDiffPanelResizeStart}
+          onToggleExpanded={() => onDiffPanelExpandedChange(!diffPanelExpanded)}
+          selection={harnessSidebarVisible}
+        />
+      ) : null}
     </div>
   );
 }

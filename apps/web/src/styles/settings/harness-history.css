@@ -68,7 +68,8 @@
 .harness-release-row strong { color: #f2f2f2; font-size: 13px; font-weight: 600; }
 .harness-release-row span { color: #929292; font-size: 11px; }
 .harness-inline-actions,
-.harness-review-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.harness-review-actions,
+.harness-history-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 
 .harness-current-pill,
 .harness-status,
@@ -149,6 +150,114 @@
 .harness-route-card time { margin-left: auto; }
 .harness-empty { color: #989898; font-size: 12px; line-height: 1.5; }
 
+.harness-release-diff-sidebar {
+  z-index: 3;
+  grid-template-rows: 41px 42px minmax(0, 1fr);
+}
+
+.harness-release-diff-sidebar .workspace-diff-topbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.harness-release-diff-meta {
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  color: #9b9b9b;
+  font-size: 11px;
+}
+
+.harness-release-diff-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harness-release-diff-meta code {
+  flex: 0 0 auto;
+  color: #c6c6c6;
+  font-size: 10px;
+}
+
+.harness-release-diff-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.harness-release-diff-body > .workspace-file-preview,
+.harness-release-diff-body > .workspace-diff-preview {
+  height: 100%;
+}
+
+.harness-release-diff-files {
+  height: 100%;
+  overflow: auto;
+}
+
+.harness-release-diff-summary {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 0 14px;
+  color: #a8a8a8;
+  font-size: 11px;
+}
+
+.harness-release-diff-summary > span:first-child {
+  margin-right: auto;
+}
+
+.harness-release-diff-file {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+  background: transparent;
+  color: #d1d1d1;
+  padding: 0 14px;
+  text-align: left;
+  font-size: 11px;
+}
+
+.harness-release-diff-file:hover,
+.harness-release-diff-file:focus-visible {
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.harness-release-diff-file > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harness-release-diff-file small {
+  font-size: 10px;
+}
+
+.harness-release-diff-status {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #aaa;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.harness-release-diff-status.added { color: #9ed3b1; }
+.harness-release-diff-status.deleted { color: #e8a0a0; }
+.harness-release-diff-status.modified { color: #d8c18c; }
+
 @media (max-width: 900px) {
   .harness-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -159,4 +268,15 @@
   .harness-section-heading { align-items: start; flex-direction: column; }
   .harness-validation-list > div { grid-template-columns: auto minmax(0, 1fr); }
   .harness-validation-list > div > span:last-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 980px) {
+  .settings-shell.harness-diff-open > .workspace-diff-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    display: grid;
+    width: 100%;
+    border-left: 0;
+  }
 }

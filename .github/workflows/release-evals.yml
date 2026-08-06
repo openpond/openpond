@@ -38,6 +38,7 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./packages/evals/package.json').version")"
           package_name="$(node -p "require('./packages/evals/package.json').name")"
+          harness_range="$(node -p "require('./packages/evals/package.json').peerDependencies['@openpond/harness']")"
           tag="evals-v${version}"
           should_publish="true"
           should_release="true"
@@ -57,6 +58,12 @@ jobs:
                 exit 1
               fi
             fi
+          fi
+
+          if ! npm view "@openpond/harness@${harness_range}" version >/dev/null 2>&1; then
+            echo "@openpond/harness@${harness_range} is not published yet; defer this Evals release until the Harness bootstrap completes."
+            should_publish="false"
+            should_release="false"
           fi
 
           if ! npm view "${package_name}" name >/dev/null 2>&1; then

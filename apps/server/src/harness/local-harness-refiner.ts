@@ -16,12 +16,14 @@ import {
   type HarnessWorkspace,
 } from "@openpond/contracts";
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
+import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import {
   compileLocalHarnessSource,
   localHarnessWorkspacePaths,
   materializeLocalHarnessRelease,
+  type CompiledLocalHarnessSource,
 } from "./local-harness-workspace-service.js";
 
 export async function applyLocalHarnessRefinerProposal(input: {
@@ -39,6 +41,29 @@ export async function applyLocalHarnessRefinerProposal(input: {
   const validations = input.validations.map((receipt) =>
     HarnessTargetedValidationReceiptSchema.parse(receipt),
   );
+  const behavioralAgentEdits = proposal.route === "agent"
+    ? proposal.edits.filter(
+        (edit) => edit.target !== "harness.json" && edit.operation !== "delete",
+      )
+    : [];
+  if (behavioralAgentEdits.length > 0) {
+    const activationPlan = proposal.validationPlan.find(
+      (plan) => plan.kind === "component_activation" && plan.required,
+    );
+    if (!activationPlan) {
+      throw new Error(
+        "Desktop Work Agent proposals require component-activation validation before review.",
+      );
+    }
+    const activation = validations.find(
+      (receipt) => receipt.validationId === activationPlan.id,
+    );
+    if (activation?.status === "passed") {
+      throw new Error(
+        "Desktop Work cannot accept a passed Agent activation receipt until an Agent source executor exists.",
+      );
+    }
+  }
   if (
     proposal.overlay.id !== overlay.id ||
     proposal.overlay.revision !== overlay.revision ||
@@ -273,6 +298,15 @@ export async function validateLocalHarnessRefinerProposal(input: {
     return validateMemoryProposal({ proposal, now: input.now });
   }
   const paths = localHarnessWorkspacePaths(input.storeDir, input.workspace.id);
+  const beforeCompiled = await compileLocalHarnessSource({
+    workspaceId: input.workspace.id,
+    sourceDir: paths.source,
+  });
+  if (beforeCompiled.sourceRevision !== proposal.expectedWorkspace.sourceRevision) {
+    throw new Error(
+      "Refiner proposal source revision no longer matches the Local Harness workspace.",
+    );
+  }
   const candidateSource = path.join(paths.root, `.validation-candidate-${randomUUID()}`);
   await fs.cp(paths.source, candidateSource, {
     recursive: true,
@@ -291,6 +325,8 @@ export async function validateLocalHarnessRefinerProposal(input: {
       compiled.manifest.files.map((file) => [file.path, file] as const),
     );
     const editByTarget = new Map(proposal.edits.map((edit) => [edit.target, edit] as const));
+    const beforeRuntimeSurface = desktopWorkRuntimeSurface(beforeCompiled);
+    const candidateRuntimeSurface = desktopWorkRuntimeSurface(compiled);
     return Promise.all(proposal.validationPlan.map(async (plan) => {
       let status: HarnessTargetedValidationReceipt["status"] = "passed";
       let summary = "The candidate Harness source compiles and preserves its manifest contract.";
@@ -371,6 +407,39 @@ export async function validateLocalHarnessRefinerProposal(input: {
           summary = agentEdits.length > 0
             ? `Syntax-checked ${agentEdits.length} Agent source edit(s) and compiled candidate ${compiled.harnessRelease.id}.`
             : `Compiled candidate package ${compiled.harnessRelease.id} and preserved the Harness source manifest contract.`;
+        } else if (plan.kind === "component_activation") {
+          const componentEdits = proposal.edits.filter((edit) => edit.target !== "harness.json");
+          if (componentEdits.length === 0) {
+            throw new Error("Component activation requires a concrete Harness component edit.");
+          }
+          if (proposal.route === "agent") {
+            const behavioralEdits = componentEdits.filter((edit) => edit.operation !== "delete");
+            if (behavioralEdits.length > 0) {
+              throw new Error(
+                "Desktop Work does not compile or execute released Agent source; use an active instruction or standalone Skill, or add an Agent executor before release.",
+              );
+            }
+            summary = `Confirmed ${componentEdits.length} deleted Agent component(s) were inactive in Desktop Work.`;
+          } else {
+            if (!["prompt", "skill"].includes(proposal.route)) {
+              throw new Error(`Desktop Work has no activation policy for ${proposal.route} proposals.`);
+            }
+            const expectedKind = proposal.route === "prompt" ? "instruction" : "skill";
+            for (const edit of componentEdits) {
+              const active = candidateRuntimeSurface.components.find(
+                (component) => component.path === edit.target && component.kind === expectedKind,
+              );
+              if (edit.operation === "delete" ? active : !active) {
+                throw new Error(
+                  `${expectedKind} ${edit.target} is not reflected in the candidate Desktop Work runtime surface.`,
+                );
+              }
+            }
+            if (beforeRuntimeSurface.contentHash === candidateRuntimeSurface.contentHash) {
+              throw new Error("The candidate does not change the effective Desktop Work runtime surface.");
+            }
+            summary = `Activated ${componentEdits.length} ${expectedKind} edit(s) in the candidate Desktop Work runtime surface.`;
+          }
         } else if (plan.kind === "business_formula") {
           status = "blocked";
           summary = "Business or financial logic is retained for review until an approved deterministic fixture supplies inputs and expected outputs.";
@@ -404,6 +473,15 @@ export async function validateLocalHarnessRefinerProposal(input: {
             contentHash: compiled.harnessRelease.contentHash,
           },
           sourceRevision: compiled.sourceRevision,
+          ...(plan.kind === "component_activation"
+            ? {
+                targetRuntime: "desktop_work",
+                beforeEffectiveRuntimeHash: beforeRuntimeSurface.contentHash,
+                afterEffectiveRuntimeHash: candidateRuntimeSurface.contentHash,
+                activatedComponentRefs: candidateRuntimeSurface.components,
+                inactiveAgentRefs: candidateRuntimeSurface.inactiveAgents,
+              }
+            : {}),
         },
       });
     }));
@@ -428,6 +506,42 @@ export async function validateLocalHarnessRefinerProposal(input: {
   }
 }
 
+function desktopWorkRuntimeSurface(
+  compiled: CompiledLocalHarnessSource,
+): {
+  contentHash: string;
+  components: Array<{
+    kind: "instruction" | "skill";
+    path: string;
+    contentHash: string;
+  }>;
+  inactiveAgents: Array<{ path: string; contentHash: string }>;
+} {
+  const components = [
+    ...compiled.agentSnapshot.instructions.map((asset) => ({
+      kind: "instruction" as const,
+      path: asset.path,
+      contentHash: asset.contentHash,
+    })),
+    ...compiled.agentSnapshot.skills.map((asset) => ({
+      kind: "skill" as const,
+      path: asset.path,
+      contentHash: asset.contentHash,
+    })),
+  ].sort((left, right) => left.path.localeCompare(right.path));
+  const inactiveAgents = compiled.agentSnapshot.agents
+    .map((asset) => ({ path: asset.path, contentHash: asset.contentHash }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    contentHash: contentHash({
+      schemaVersion: "openpond.desktopWorkHarnessSurface.v1",
+      components,
+    }),
+    components,
+    inactiveAgents,
+  };
+}
+
 function validateMemoryProposal(input: {
   proposal: HarnessImprovementProposal;
   now?: () => string;
@@ -446,6 +560,48 @@ function validateMemoryProposal(input: {
       } else if (plan.kind === "memory") {
         if (!edit || !/^memory\/[a-z0-9][a-z0-9-]{0,119}$/.test(edit.target)) {
           throw new Error("Memory proposal requires one safe memory/<slug> target.");
+        }
+        const expected = input.proposal.metadata.expectedMemory;
+        if (!expected || typeof expected !== "object" || Array.isArray(expected)) {
+          throw new Error("Memory proposal requires an expected revision snapshot.");
+        }
+        const expectedRecord = expected as Record<string, unknown>;
+        if (expectedRecord.key !== memoryKeyFromTarget(edit.target)) {
+          throw new Error("Memory proposal expected revision targets a different key.");
+        }
+        if (
+          expectedRecord.revision !== null &&
+          (!Number.isInteger(expectedRecord.revision) || Number(expectedRecord.revision) < 1)
+        ) {
+          throw new Error("Memory proposal expected revision is invalid.");
+        }
+        if (
+          expectedRecord.contentHash !== null &&
+          typeof expectedRecord.contentHash !== "string"
+        ) {
+          throw new Error("Memory proposal expected content hash is invalid.");
+        }
+        if (
+          expectedRecord.status !== null &&
+          expectedRecord.status !== "active" &&
+          expectedRecord.status !== "deleted"
+        ) {
+          throw new Error("Memory proposal expected status is invalid.");
+        }
+        if (
+          expectedRecord.revision === null &&
+          (expectedRecord.contentHash !== null || expectedRecord.status !== null)
+        ) {
+          throw new Error("New memory snapshot must not claim existing content or status.");
+        }
+        if (
+          expectedRecord.revision !== null &&
+          (typeof expectedRecord.contentHash !== "string" || expectedRecord.status === null)
+        ) {
+          throw new Error("Existing memory snapshot requires its content hash and status.");
+        }
+        if (edit.operation === "delete" && expectedRecord.status !== "active") {
+          throw new Error("Memory deletion requires an active expected revision.");
         }
         if (edit.operation !== "delete") {
           if (!edit.content?.trim() || edit.content.length > 24_000) {
@@ -476,6 +632,13 @@ function validateMemoryProposal(input: {
       metadata: { externalState: "harness_memory" },
     });
   });
+}
+
+function memoryKeyFromTarget(target: string): string {
+  const normalized = target.replaceAll("\\", "/");
+  const match = /^memory\/([a-z0-9][a-z0-9-]{0,119})$/.exec(normalized);
+  if (!match) throw new Error(`Invalid Harness memory target: ${target}.`);
+  return match[1];
 }
 
 export async function recoverLocalHarnessSourceSwap(input: {

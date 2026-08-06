@@ -1,8 +1,10 @@
 # `@openpond/evals`
 
-Portable OpenPond contracts and reference helpers for immutable Agent snapshots,
-Harness releases, Taskset releases, run manifests, attempt receipts, observational
-Work evidence, deterministic graders, and conformance fixtures.
+Portable evaluation contracts and pure helpers for Tasksets, graders, run
+manifests, attempt and evaluation receipts, execution adapters, conformance
+fixtures, and Work-evidence eligibility. The package depends on
+[`@openpond/harness`](../harness/README.md) and re-exports its portable Harness
+contracts for compatibility with existing `@openpond/evals` consumers.
 
 ```ts
 import {
@@ -21,9 +23,9 @@ import {
 ```
 
 Subpath exports are available at `/harness`, `/tasksets`, `/graders`, `/runs`,
-`/conformance`, and `/evidence`. The package is a protocol library, not a hosted client. It
-does not execute OpenPond Desktop or Sandbox sessions, resolve credentials, or
-persist artifacts.
+`/conformance`, and `/evidence`. The package is an evaluation protocol library,
+not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
+resolve credentials, or persist artifacts.
 
 ## Work evidence
 

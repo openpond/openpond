@@ -583,6 +583,11 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             teamChatThreads: teamChat.threads,
             onTeamChatNotificationModeChange: teamChat.setNotificationMode,
             onTeamChatThreadMuteChange: teamChat.setThreadMuted,
+            diffPanelWidth,
+            diffPanelResizing,
+            diffPanelExpanded,
+            onDiffPanelResizeStart: startDiffPanelResize,
+            onDiffPanelExpandedChange: setDiffPanelExpanded,
             onBack: () => {
               setView("chat");
               setSidebarOpen(true);

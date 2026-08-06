@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { ImmutableReleaseRefSchema, ReleaseHashSchema } from "../common.js";
+import { ImmutableReleaseRefSchema, ReleaseHashSchema } from "@openpond/harness";
 import {
   EvidenceArtifactRefSchema,
   WorkEvidenceReceiptSchema,

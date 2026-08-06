@@ -31,6 +31,13 @@ export async function createHarnessWorkspaceTables(
     CREATE INDEX IF NOT EXISTS harness_workspace_selections_workspace_idx
       ON harness_workspace_selections(workspace_id);
 
+    CREATE TABLE IF NOT EXISTS harness_workspace_settings (
+      workspace_id TEXT PRIMARY KEY,
+      background_review_enabled INTEGER NOT NULL DEFAULT 1,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
     CREATE TABLE IF NOT EXISTS harness_release_records (
       content_hash TEXT PRIMARY KEY,
       id TEXT NOT NULL,

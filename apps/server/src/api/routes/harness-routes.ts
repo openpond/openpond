@@ -11,6 +11,14 @@ export async function handleHarnessRoutes({
     sendJson(response, 200, await deps.harnessHistoryPayload());
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/harness/background-review") {
+    sendJson(response, 200, await deps.updateHarnessBackgroundReviewPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/harness/diff") {
+    sendJson(response, 200, await deps.harnessDiffPayload(await readJson(request)));
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/harness/rollback") {
     sendJson(response, 200, await deps.rollbackHarnessPayload(await readJson(request)));
     return true;

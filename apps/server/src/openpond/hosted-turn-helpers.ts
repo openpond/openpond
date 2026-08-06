@@ -216,24 +216,14 @@ export function createHostedTurnHelpers(deps: {
     text: string
   ): Promise<void> {
     if (!text) return;
-    const continuousLearning = Boolean(session.metadata?.continuousLearning);
-    const visibleText = continuousLearning
-      ? text.replace(
-          /<openpond-continuous-learning-recommendation>[\s\S]*?<\/openpond-continuous-learning-recommendation>/g,
-          "",
-        ).trim()
-      : text;
     const assistantEvent = event({
         sessionId: session.id,
         turnId,
         name: "assistant.delta",
         source: "provider",
         appId: session.appId,
-        output: visibleText,
+        output: text,
       });
-    if (continuousLearning) {
-      assistantEvent.data = { continuousLearningRawAssistantText: text };
-    }
     await appendRuntimeEvent(assistantEvent);
   }
 

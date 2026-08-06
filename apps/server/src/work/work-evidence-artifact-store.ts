@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { link, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { canonicalJson, contentHash, sha256 } from "@openpond/evals";
+import { canonicalJson, contentHash, sha256 } from "@openpond/harness";
 import { evidenceArtifactRef, type EvidenceArtifactRef } from "@openpond/evals/evidence";
 
 import type { LocalWorkEvidenceArtifact } from "../store/store-work-evidence.js";

@@ -11,7 +11,7 @@ import {
   TurnSchema,
   emptyOpenPondProfileState,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -29,6 +29,7 @@ import {
   loadSelectedLocalHarnessSkillRuntime,
 } from "./local-harness-skill-runtime.js";
 import { applyLocalHarnessRefinerProposal } from "./local-harness-refiner.js";
+import { localHarnessReleaseDiffPayload } from "./local-harness-history.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import {
   ensureLocalHarnessRunOverlay,
@@ -89,6 +90,73 @@ describe("local Harness workspace service", () => {
     });
     expect(compiledAgain.sourceRevision).toBe(workspace.sourceRevision);
     expect(compiledAgain.harnessRelease.contentHash).toBe(release.harnessRelease.contentHash);
+
+    const rematerialized = await materializeLocalHarnessRelease({
+      storeDir: directory,
+      workspaceId: workspace.id,
+      compiled: compiledAgain,
+      createdAt: LATER,
+    });
+    await expect(store.saveHarnessReleaseRecord(rematerialized)).resolves.toEqual(
+      rematerialized,
+    );
+    expect(
+      (await store.getHarnessReleaseRecord(release.harnessRelease.contentHash))
+        ?.createdAt,
+    ).toBe(NOW);
+  });
+
+  it("builds a bounded source diff between immutable Harness releases", async () => {
+    const { directory, store, workspace, release: base } = await fixture();
+    const paths = localHarnessWorkspacePaths(directory, workspace.id);
+    const instructionPath = path.join(paths.source, "instructions", "system.md");
+    const previous = await fs.readFile(instructionPath, "utf8");
+    const next = `${previous.trimEnd()}\n\nPrefer the bundled document runtime for DOCX work.\n`;
+    await fs.writeFile(instructionPath, next);
+    const candidate = await compileAndRegisterLocalHarnessRelease({
+      store,
+      storeDir: directory,
+      workspaceId: workspace.id,
+      now: () => LATER,
+    });
+
+    const diff = await localHarnessReleaseDiffPayload({
+      store,
+      storeDir: directory,
+      request: {
+        workspaceId: workspace.id,
+        baseRelease: {
+          id: base.harnessRelease.id,
+          contentHash: base.harnessRelease.contentHash,
+        },
+        targetRelease: {
+          id: candidate.release.harnessRelease.id,
+          contentHash: candidate.release.harnessRelease.contentHash,
+        },
+      },
+    });
+
+    expect(diff).toMatchObject({
+      baseRelease: {
+        id: base.harnessRelease.id,
+        contentHash: base.harnessRelease.contentHash,
+      },
+      targetRelease: {
+        id: candidate.release.harnessRelease.id,
+        contentHash: candidate.release.harnessRelease.contentHash,
+      },
+      filesChanged: 1,
+    });
+    expect(diff.additions).toBeGreaterThan(0);
+    expect(diff.files).toEqual([
+      expect.objectContaining({
+        path: "instructions/system.md",
+        status: "modified",
+        content: null,
+      }),
+    ]);
+    expect(diff.files[0]?.patch).toContain("diff --git a/instructions/system.md b/instructions/system.md");
+    expect(diff.files[0]?.patch).toContain("+Prefer the bundled document runtime for DOCX work.");
   });
 
   it("forks an immutable Harness release into a native mutable workspace", async () => {
@@ -169,6 +237,31 @@ describe("local Harness workspace service", () => {
       output: "ModuleNotFoundError: No module named 'docx'",
       error: "ModuleNotFoundError: No module named 'docx'",
       data: { toolCallId: "call-one" },
+    });
+
+    expect(await store.getHarnessBackgroundReviewSettings(workspace.id)).toEqual({
+      enabled: true,
+      updatedAt: null,
+    });
+    await store.setHarnessBackgroundReviewSettings({
+      workspaceId: workspace.id,
+      enabled: false,
+      updatedAt: NOW,
+    });
+    expect(await recordLocalHarnessImprovementBoundary({
+      store,
+      session,
+      turn,
+      boundaryKind: "completed_tool_batch",
+      now: () => NOW,
+    })).toBeNull();
+    expect(
+      await store.listHarnessImprovementArtifacts(workspace.id, "observation"),
+    ).toEqual([]);
+    await store.setHarnessBackgroundReviewSettings({
+      workspaceId: workspace.id,
+      enabled: true,
+      updatedAt: LATER,
     });
 
     const openDetection = await recordLocalHarnessImprovementBoundary({

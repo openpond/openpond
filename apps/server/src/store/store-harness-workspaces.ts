@@ -3,80 +3,76 @@ import {
   advanceReviewedHarnessWorkspace,
   createHarnessRunOverlay,
   HarnessAdvanceReceiptSchema,
-  ImprovementApplyReceiptSchema,
-  HarnessRefinerOutcomeSchema,
-  ImprovementObservationSchema,
-  ImprovementRouteDecisionSchema,
   HarnessImprovementProposalSchema,
-  HarnessOverlayMergeReceiptSchema,
   HarnessRunOverlaySchema,
-  HarnessTargetedValidationReceiptSchema,
   HarnessWorkspaceSchema,
   RefinementTriggerDecisionSchema,
   rollbackHarnessWorkspace,
   type HarnessAdvanceReceipt,
   type HarnessImprovementProposal,
-  type HarnessOverlayMergeReceipt,
   type HarnessRunOverlay,
   type HarnessTargetedValidationReceipt,
   type HarnessWorkspace,
-  type ImprovementApplyReceipt,
-  type HarnessRefinerOutcome,
-  type ImprovementObservation,
-  type ImprovementRouteDecision,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
-import {
-  type ImmutableReleaseRef,
-} from "@openpond/evals";
+import { type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
 import { SqliteHarnessMemoryStore } from "./store-harness-memory.js";
+import { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 import {
-  LocalHarnessReleaseRecordSchema,
-  type LocalHarnessReleaseRecord,
-} from "./store-harness-release-record.js";
+  HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS,
+  harnessWorkspaceParams,
+  immutableHarnessReleaseRecord,
+  type HarnessImprovementArtifact,
+  type HarnessImprovementArtifactKind,
+} from "./store-harness-workspace-artifacts.js";
 
-export {
-  LocalHarnessReleaseRecordSchema,
-  type LocalHarnessReleaseRecord,
-} from "./store-harness-release-record.js";
+export { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 
-type HarnessImprovementArtifact =
-  | HarnessRunOverlay
-  | HarnessImprovementProposal
-  | HarnessTargetedValidationReceipt
-  | HarnessOverlayMergeReceipt
-  | ImprovementObservation
-  | RefinementTriggerDecision
-  | ImprovementRouteDecision
-  | ImprovementApplyReceipt
-  | HarnessRefinerOutcome;
+export type { HarnessImprovementArtifactKind } from "./store-harness-workspace-artifacts.js";
 
-export type HarnessImprovementArtifactKind =
-  | "run_overlay"
-  | "proposal"
-  | "targeted_validation"
-  | "merge_receipt"
-  | "observation"
-  | "trigger_decision"
-  | "route_decision"
-  | "apply_receipt"
-  | "refiner_outcome";
-
-const ARTIFACT_SCHEMAS = {
-  run_overlay: HarnessRunOverlaySchema,
-  proposal: HarnessImprovementProposalSchema,
-  targeted_validation: HarnessTargetedValidationReceiptSchema,
-  merge_receipt: HarnessOverlayMergeReceiptSchema,
-  observation: ImprovementObservationSchema,
-  trigger_decision: RefinementTriggerDecisionSchema,
-  route_decision: ImprovementRouteDecisionSchema,
-  apply_receipt: ImprovementApplyReceiptSchema,
-  refiner_outcome: HarnessRefinerOutcomeSchema,
-} as const;
+export type HarnessBackgroundReviewSettings = { enabled: boolean; updatedAt: string | null };
 
 export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
+  async getHarnessBackgroundReviewSettings(
+    workspaceId: string,
+  ): Promise<HarnessBackgroundReviewSettings> {
+    await this.ready;
+    await this.writeQueue;
+    const row = await this.get<{ background_review_enabled: number; updated_at: string }>(
+      `SELECT background_review_enabled, updated_at
+       FROM harness_workspace_settings WHERE workspace_id = ?`,
+      [workspaceId],
+    );
+    return row
+      ? { enabled: row.background_review_enabled === 1, updatedAt: row.updated_at }
+      : { enabled: true, updatedAt: null };
+  }
+
+  async setHarnessBackgroundReviewSettings(input: {
+    workspaceId: string;
+    enabled: boolean;
+    updatedAt: string;
+  }): Promise<HarnessBackgroundReviewSettings> {
+    await this.ready;
+    const write = this.writeQueue.then(async () => {
+      await this.requireHarnessWorkspace(input.workspaceId);
+      await this.run(
+        `INSERT INTO harness_workspace_settings (
+           workspace_id, background_review_enabled, updated_at
+         ) VALUES (?, ?, ?)
+         ON CONFLICT(workspace_id) DO UPDATE SET
+           background_review_enabled = excluded.background_review_enabled,
+           updated_at = excluded.updated_at`,
+        [input.workspaceId, input.enabled ? 1 : 0, input.updatedAt],
+      );
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return { enabled: input.enabled, updatedAt: input.updatedAt };
+  }
+
   async createHarnessWorkspace(input: HarnessWorkspace): Promise<HarnessWorkspace> {
     const workspace = HarnessWorkspaceSchema.parse(input);
     await this.ready;
@@ -86,7 +82,7 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
            id, owner_kind, owner_id, location, revision, source_revision,
            channel_revision, current_release_hash, payload, created_at, updated_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        workspaceParams(workspace),
+        harnessWorkspaceParams(workspace),
       ),
     );
     this.writeQueue = write.catch(() => undefined);
@@ -117,7 +113,7 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
              id, owner_kind, owner_id, location, revision, source_revision,
              channel_revision, current_release_hash, payload, created_at, updated_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          workspaceParams(workspace),
+          harnessWorkspaceParams(workspace),
         );
         await this.run(
           `INSERT INTO harness_release_records (
@@ -282,7 +278,11 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
         ],
       );
       const existing = await this.readHarnessReleaseRecord(record.harnessRelease.contentHash);
-      if (!existing || JSON.stringify(existing) !== JSON.stringify(record)) {
+      if (
+        !existing ||
+        JSON.stringify(immutableHarnessReleaseRecord(existing)) !==
+          JSON.stringify(immutableHarnessReleaseRecord(record))
+      ) {
         throw new Error("An immutable Harness release hash already has different registry content.");
       }
     });
@@ -313,7 +313,9 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
     kind: HarnessImprovementArtifactKind,
     input: HarnessImprovementArtifact,
   ): Promise<HarnessImprovementArtifact> {
-    const artifact = ARTIFACT_SCHEMAS[kind].parse(input) as HarnessImprovementArtifact;
+    const artifact = HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS[kind].parse(
+      input,
+    ) as HarnessImprovementArtifact;
     await this.ready;
     const write = this.writeQueue.then(async () => {
       if (!(await this.readHarnessWorkspace(workspaceId))) {
@@ -341,8 +343,36 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
       [workspaceId, kind, boundedLimit],
     );
     return rows.map((row) =>
-      ARTIFACT_SCHEMAS[kind].parse(JSON.parse(row.payload)) as HarnessImprovementArtifact,
+      HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS[kind].parse(
+        JSON.parse(row.payload),
+      ) as HarnessImprovementArtifact,
     );
+  }
+
+  async listPendingHarnessRefinerTriggers(): Promise<Array<{
+    workspaceId: string;
+    trigger: RefinementTriggerDecision;
+  }>> {
+    await this.ready;
+    await this.writeQueue;
+    const rows = await this.all<PayloadRow & { workspace_id: string }>(
+      `SELECT trigger.workspace_id, trigger.payload
+       FROM harness_improvement_artifacts AS trigger
+       WHERE trigger.kind = 'trigger_decision'
+         AND json_extract(trigger.payload, '$.decision') = 'queue_refiner'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM harness_improvement_artifacts AS outcome
+           WHERE outcome.kind = 'refiner_outcome'
+             AND json_extract(outcome.payload, '$.trigger.id') = json_extract(trigger.payload, '$.id')
+             AND json_extract(outcome.payload, '$.trigger.contentHash') = json_extract(trigger.payload, '$.contentHash')
+         )
+       ORDER BY trigger.created_at ASC, trigger.id ASC`,
+    );
+    return rows.map((row) => ({
+      workspaceId: row.workspace_id,
+      trigger: RefinementTriggerDecisionSchema.parse(JSON.parse(row.payload)),
+    }));
   }
 
   async createHarnessRunOverlay(input: HarnessRunOverlay): Promise<HarnessRunOverlay> {
@@ -966,20 +996,4 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
       ],
     );
   }
-}
-
-function workspaceParams(workspace: HarnessWorkspace): unknown[] {
-  return [
-    workspace.id,
-    workspace.ownerScope.kind,
-    workspace.ownerScope.id,
-    workspace.location,
-    workspace.revision,
-    workspace.sourceRevision,
-    workspace.currentChannel.revision,
-    workspace.currentChannel.release?.contentHash ?? null,
-    JSON.stringify(workspace),
-    workspace.createdAt,
-    workspace.updatedAt,
-  ];
 }

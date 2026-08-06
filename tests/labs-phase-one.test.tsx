@@ -7,7 +7,6 @@ import {
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
-import { LocalContinuousLearningBanner } from "../apps/web/src/components/labs/LocalContinuousLearningBanner";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
   labPrimaryTabFromSearch,
@@ -80,23 +79,6 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
-  test("uses direct continuous-learning controls without onboarding popup copy", () => {
-    const markup = renderToStaticMarkup(
-      createElement(LocalContinuousLearningBanner, {
-        connection: null,
-        profileId: "default",
-        signedIn: true,
-        onOpenResult: noop,
-      }),
-    );
-
-    expect(markup).toContain("Enable continuous learning");
-    expect(markup).toContain(">Docs<");
-    expect(markup).toContain('role="switch"');
-    expect(markup).not.toContain("Let Models learn from repeated work");
-    expect(markup).not.toContain("Enable nightly review");
-  });
-
   test("keeps Models subpage navigation out of the page header", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {

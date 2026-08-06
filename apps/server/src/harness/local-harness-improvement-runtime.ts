@@ -2,6 +2,7 @@ import {
   DEFAULT_OPENPOND_CHAT_MODEL,
   createImprovementRouteDecision,
   type ModelUsageRecord,
+  type RefinementTriggerDecision,
   type RuntimeEvent,
   type Session,
   type Turn,
@@ -16,6 +17,24 @@ import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
+import {
+  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+  DEFAULT_REFINER_TIMEOUT_MS,
+} from "./local-harness-refiner-model.js";
+
+type LocalHarnessImprovementBoundary = {
+  session: Session;
+  turn: Turn;
+  boundaryKind: Parameters<
+    typeof recordLocalHarnessImprovementBoundary
+  >[0]["boundaryKind"];
+};
+
+export type LocalHarnessImprovementRuntime = ((
+  boundary: LocalHarnessImprovementBoundary,
+) => Promise<void>) & {
+  reconcilePending: () => Promise<number>;
+};
 
 export function createLocalHarnessImprovementRuntime(input: {
   store: SqliteStore;
@@ -27,13 +46,9 @@ export function createLocalHarnessImprovementRuntime(input: {
 }) {
   const jobs = new Set<string>();
 
-  return async function processLocalHarnessImprovementBoundary(boundary: {
-    session: Session;
-    turn: Turn;
-    boundaryKind: Parameters<
-      typeof recordLocalHarnessImprovementBoundary
-    >[0]["boundaryKind"];
-  }): Promise<void> {
+  const processLocalHarnessImprovementBoundary = (async function (
+    boundary: LocalHarnessImprovementBoundary,
+  ): Promise<void> {
     const detection = await recordLocalHarnessImprovementBoundary({
       store: input.store,
       ...boundary,
@@ -59,9 +74,21 @@ export function createLocalHarnessImprovementRuntime(input: {
       );
       return;
     }
-    if (trigger.decision !== "queue_refiner" || jobs.has(trigger.contentHash)) return;
+    if (trigger.decision !== "queue_refiner") return;
+    await enqueueTrigger(boundary, trigger, false);
+  }) as LocalHarnessImprovementRuntime;
 
+  async function enqueueTrigger(
+    boundary: { session: Session; turn: Turn },
+    trigger: RefinementTriggerDecision,
+    recoveredAfterRestart: boolean,
+  ): Promise<void> {
+    if (trigger.decision !== "queue_refiner") {
+      throw new Error("Only queued Harness Refiner triggers can be enqueued.");
+    }
+    if (jobs.has(trigger.contentHash)) return;
     jobs.add(trigger.contentHash);
+    const queuedAtMs = Date.now();
     try {
       await input.appendRuntimeEvent(
         event({
@@ -72,7 +99,12 @@ export function createLocalHarnessImprovementRuntime(input: {
           appId: boundary.session.appId,
           status: "pending",
           output: trigger.reason,
-          data: { triggerId: trigger.id },
+          data: {
+            triggerId: trigger.id,
+            timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
+            maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+            recoveredAfterRestart,
+          },
         }),
       );
     } catch (error) {
@@ -88,10 +120,14 @@ export function createLocalHarnessImprovementRuntime(input: {
           sessionId: boundary.session.id,
           turnId: boundary.turn.id,
           triggerId: trigger.id,
+          recoveredAfterRestart,
         },
       },
       async () => {
         let requestOrdinal = 0;
+        const jobStartedAtMs = Date.now();
+        let modelStartedAtMs: number | null = null;
+        let modelCompletedAtMs: number | null = null;
         try {
           await input.appendRuntimeEvent(
             event({
@@ -101,7 +137,13 @@ export function createLocalHarnessImprovementRuntime(input: {
               source: "server",
               appId: boundary.session.appId,
               status: "started",
-              data: { triggerId: trigger.id },
+              data: {
+                triggerId: trigger.id,
+                queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
+                timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
+                maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+                recoveredAfterRestart,
+              },
             }),
           );
           const result = await runLocalHarnessRefinerWorker({
@@ -110,6 +152,7 @@ export function createLocalHarnessImprovementRuntime(input: {
             trigger,
             signal: new AbortController().signal,
             stream: async function* ({ messages, signal }) {
+              if (modelStartedAtMs === null) modelStartedAtMs = Date.now();
               const ordinal = requestOrdinal++;
               const requestId = `harness-refiner:${trigger.id}:${ordinal}`;
               const recorder = await startProviderRequestUsageRecorder({
@@ -127,6 +170,8 @@ export function createLocalHarnessImprovementRuntime(input: {
                   model: DEFAULT_OPENPOND_CHAT_MODEL,
                   messages,
                   requestId,
+                  reasoningEffort: "low",
+                  maxTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
                   signal,
                 })) {
                   if (delta.type === "text_delta" && delta.text) {
@@ -139,12 +184,15 @@ export function createLocalHarnessImprovementRuntime(input: {
                   }
                 }
                 await recorder.complete();
+                modelCompletedAtMs = Date.now();
               } catch (error) {
+                modelCompletedAtMs = Date.now();
                 await recorder.fail(error, signal.aborted ? "interrupted" : "failed");
                 throw error;
               }
             },
           });
+          const completedAtMs = Date.now();
           await input.appendRuntimeEvent(
             event({
               sessionId: boundary.session.id,
@@ -155,20 +203,38 @@ export function createLocalHarnessImprovementRuntime(input: {
               status: "completed",
               output: result.outcome.reason,
               data: {
+                recoveredAfterRestart,
                 trigger: { id: trigger.id, contentHash: trigger.contentHash },
                 outcome: {
                   id: result.outcome.id,
                   contentHash: result.outcome.contentHash,
                   decision: result.outcome.decision,
+                  routed: result.outcome.metadata.routed === true,
+                  route: typeof result.outcome.metadata.route === "string"
+                    ? result.outcome.metadata.route
+                    : null,
                 },
                 proposal: result.proposal
                   ? { id: result.proposal.id, contentHash: result.proposal.contentHash }
                   : null,
                 workspaceAdvance: result.advanceReceipt?.decision ?? null,
+                timing: {
+                  queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
+                  modelDurationMs:
+                    modelStartedAtMs === null || modelCompletedAtMs === null
+                      ? null
+                      : Math.max(0, modelCompletedAtMs - modelStartedAtMs),
+                  materializationDurationMs:
+                    modelCompletedAtMs === null
+                      ? null
+                      : Math.max(0, completedAtMs - modelCompletedAtMs),
+                  totalJobDurationMs: Math.max(0, completedAtMs - jobStartedAtMs),
+                },
               },
             }),
           );
         } catch (error) {
+          const failedAtMs = Date.now();
           await input.appendRuntimeEvent(
             event({
               sessionId: boundary.session.id,
@@ -178,7 +244,18 @@ export function createLocalHarnessImprovementRuntime(input: {
               appId: boundary.session.appId,
               status: "failed",
               output: error instanceof Error ? error.message : String(error),
-              data: { triggerId: trigger.id },
+              data: {
+                triggerId: trigger.id,
+                recoveredAfterRestart,
+                timing: {
+                  queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
+                  modelDurationMs:
+                    modelStartedAtMs === null || modelCompletedAtMs === null
+                      ? null
+                      : Math.max(0, modelCompletedAtMs - modelStartedAtMs),
+                  totalJobDurationMs: Math.max(0, failedAtMs - jobStartedAtMs),
+                },
+              },
             }),
           ).catch(() => undefined);
           throw error;
@@ -187,5 +264,29 @@ export function createLocalHarnessImprovementRuntime(input: {
         }
       },
     );
+  }
+
+  processLocalHarnessImprovementBoundary.reconcilePending = async (): Promise<number> => {
+    const pending = await input.store.listPendingHarnessRefinerTriggers();
+    for (const { workspaceId, trigger } of pending) {
+      const [session, turn] = await Promise.all([
+        input.store.getSession(trigger.runRef),
+        input.store.getTurn(trigger.turnId),
+      ]);
+      if (!session || !turn || turn.sessionId !== session.id) {
+        throw new Error(
+          `Pending Harness Refiner trigger ${trigger.id} references an unavailable session or turn.`,
+        );
+      }
+      if (turn.harnessSnapshot?.workspaceId !== workspaceId) {
+        throw new Error(
+          `Pending Harness Refiner trigger ${trigger.id} no longer matches its Harness workspace.`,
+        );
+      }
+      await enqueueTrigger({ session, turn }, trigger, true);
+    }
+    return pending.length;
   };
+
+  return processLocalHarnessImprovementBoundary;
 }

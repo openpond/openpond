@@ -1,1 +1,1 @@
-export { canonicalJson } from "@openpond/evals";
+export { canonicalJson } from "@openpond/harness";

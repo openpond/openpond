@@ -11,7 +11,6 @@ import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
-import { LocalContinuousLearningSidebarNotice } from "../labs/LocalContinuousLearningBanner";
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -84,14 +83,6 @@ export function Sidebar(props: SidebarProps) {
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}
 
-      {productArea === "chat" ? (
-        <LocalContinuousLearningSidebarNotice
-          connection={props.connection}
-          profileId={props.profile?.activeProfile ?? "default"}
-          signedIn={props.account?.state === "signed_in"}
-        />
-      ) : null}
-
       {productArea === "models" ? null : (
         <div className="sidebar-collaboration-sections">
           <SidebarCommunitySection
@@ -129,13 +120,6 @@ export function Sidebar(props: SidebarProps) {
       )}
 
       <div className="sidebar-bottom-stack">
-        {productArea === "models" ? (
-          <LocalContinuousLearningSidebarNotice
-            connection={props.connection}
-            profileId={props.profile?.activeProfile ?? "default"}
-            signedIn={props.account?.state === "signed_in"}
-          />
-        ) : null}
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}

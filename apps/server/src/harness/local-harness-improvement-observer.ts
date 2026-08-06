@@ -24,18 +24,12 @@ export async function recordLocalHarnessImprovementBoundary(input: {
   if (!snapshot) return null;
   const workspace = await input.store.getHarnessWorkspace(snapshot.workspaceId);
   if (!workspace || workspace.location !== "local") return null;
+  const backgroundReview = await input.store.getHarnessBackgroundReviewSettings(workspace.id);
+  if (!backgroundReview.enabled) return null;
 
   const events = (await input.store.runtimeEventsForSession(input.session.id, {
     limit: 1_000,
   })).filter((runtimeEvent) => runtimeEvent.turnId === input.turn.id);
-  const priorCompletedTurnExists = (
-    await input.store.turnsForSession(input.session.id, 1_000)
-  ).some(
-    (turn) =>
-      turn.id !== input.turn.id &&
-      turn.status === "completed" &&
-      turn.startedAt < input.turn.startedAt,
-  );
   const eventSequence = events.reduce(
     (latest, runtimeEvent) => Math.max(latest, runtimeEvent.sequence ?? 0),
     0,
@@ -106,7 +100,10 @@ export async function recordLocalHarnessImprovementBoundary(input: {
         ? [data.skillName.trim()]
         : [];
     }),
-    priorCompletedTurnExists,
+    turnReviewAlreadyQueued: priorTriggers.some(
+      (trigger) =>
+        trigger.turnId === input.turn.id && trigger.decision === "queue_refiner",
+    ),
   });
   for (const observation of detection.observations) {
     await input.store.saveHarnessImprovementArtifact(

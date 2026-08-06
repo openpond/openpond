@@ -1,8 +1,13 @@
+import path from "node:path";
+
 import {
+  type HarnessBackgroundReviewRequest,
+  type HarnessBackgroundReviewResponse,
   createImprovementApplyReceipt,
   type HarnessAdvanceReceipt,
   HarnessHistoryChange,
   HarnessHistoryPayload,
+  HarnessHistoryReleaseRef,
   HarnessHistoryPendingReview,
   HarnessHistoryRoute,
   HarnessImprovementProposal,
@@ -11,15 +16,20 @@ import {
   HarnessRollbackResponse,
   HarnessProposalReviewRequest,
   HarnessProposalReviewResponse,
+  HarnessReleaseDiffPayload,
+  HarnessReleaseDiffRequest,
   HarnessRunOverlay,
   HarnessTargetedValidationReceipt,
   ImprovementApplyReceipt,
   ImprovementRouteDecision,
   RefinementTriggerDecision,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
+import type { LocalHarnessReleaseRecord } from "../store/store-harness-release-record.js";
+import { truncatePatch } from "../workspace-tools/workspace-tool-common.js";
+import { runWorkspaceCommand } from "../workspace/workspaces.js";
 import {
   DESKTOP_PERSONAL_HARNESS_OWNER_ID,
 } from "./local-harness-selection.js";
@@ -33,17 +43,66 @@ export function createLocalHarnessSettingsRoutePayloads(input: {
   storeDir: string;
 }) {
   return {
-    harnessHistoryRoutePayload: () => localHarnessHistoryPayload(input.store),
-    rollbackHarnessRoutePayload: (payload: unknown) =>
+    harnessHistoryPayload: () => localHarnessHistoryPayload(input.store),
+    updateHarnessBackgroundReviewPayload: (payload: unknown) =>
+      updateLocalHarnessBackgroundReviewFromSettings({
+        store: input.store,
+        request: parseHarnessBackgroundReviewRequest(payload),
+      }),
+    harnessDiffPayload: (payload: unknown) =>
+      localHarnessReleaseDiffPayload({
+        ...input,
+        request: parseHarnessReleaseDiffRequest(payload),
+      }),
+    rollbackHarnessPayload: (payload: unknown) =>
       rollbackLocalHarnessFromSettings({
         ...input,
         request: parseHarnessRollbackRequest(payload),
       }),
-    reviewHarnessProposalRoutePayload: (payload: unknown) =>
+    reviewHarnessProposalPayload: (payload: unknown) =>
       reviewLocalHarnessProposalFromSettings({
         ...input,
         request: parseHarnessProposalReviewRequest(payload),
       }),
+  };
+}
+
+function parseHarnessBackgroundReviewRequest(payload: unknown): HarnessBackgroundReviewRequest {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Harness background review requires a workspace and enabled state.");
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.workspaceId !== "string" || typeof record.enabled !== "boolean") {
+    throw new Error("Harness background review requires a workspace and enabled state.");
+  }
+  return { workspaceId: record.workspaceId, enabled: record.enabled };
+}
+
+function parseHarnessReleaseRef(value: unknown, label: string): HarnessHistoryReleaseRef {
+  if (!value || typeof value !== "object") {
+    throw new Error(`${label} requires an id and content hash.`);
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.id !== "string" || typeof record.contentHash !== "string") {
+    throw new Error(`${label} requires an id and content hash.`);
+  }
+  return { id: record.id, contentHash: record.contentHash };
+}
+
+function parseHarnessReleaseDiffRequest(payload: unknown): HarnessReleaseDiffRequest {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Harness release diff requires a workspace and target release.");
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.workspaceId !== "string") {
+    throw new Error("Harness release diff requires a workspace and target release.");
+  }
+  return {
+    workspaceId: record.workspaceId,
+    baseRelease: record.baseRelease === null
+      ? null
+      : parseHarnessReleaseRef(record.baseRelease, "Harness base release"),
+    targetRelease: parseHarnessReleaseRef(record.targetRelease, "Harness target release"),
   };
 }
 
@@ -105,6 +164,7 @@ export async function localHarnessHistoryPayload(
   if (!workspace) {
     return {
       workspace: null,
+      backgroundReview: { enabled: true, updatedAt: null },
       releases: [],
       changes: [],
       routes: [],
@@ -114,6 +174,7 @@ export async function localHarnessHistoryPayload(
   }
 
   const [
+    backgroundReview,
     releaseRecords,
     receipts,
     proposals,
@@ -123,6 +184,7 @@ export async function localHarnessHistoryPayload(
     outcomes,
     triggers,
   ] = await Promise.all([
+    store.getHarnessBackgroundReviewSettings(workspace.id),
     store.listHarnessReleaseRecords(workspace.id),
     store.listHarnessAdvanceReceipts(workspace.id),
     store.listHarnessImprovementArtifacts(workspace.id, "proposal", 1_000),
@@ -236,6 +298,7 @@ export async function localHarnessHistoryPayload(
 
   return {
     workspace,
+    backgroundReview,
     releases: releaseRecords.map((record) => ({
       id: record.harnessRelease.id,
       contentHash: record.harnessRelease.contentHash,
@@ -254,6 +317,153 @@ export async function localHarnessHistoryPayload(
     routes,
     pendingReviews,
     memories: await store.listHarnessMemories(workspace.id),
+  };
+}
+
+export async function updateLocalHarnessBackgroundReviewFromSettings(input: {
+  store: SqliteStore;
+  request: HarnessBackgroundReviewRequest;
+}): Promise<HarnessBackgroundReviewResponse> {
+  const workspace = await input.store.getHarnessWorkspace(input.request.workspaceId);
+  if (!workspace || workspace.ownerScope.kind !== "personal" || workspace.location !== "local") {
+    throw new Error("Background review settings require the selected Personal Local Harness.");
+  }
+  await input.store.setHarnessBackgroundReviewSettings({
+    workspaceId: workspace.id,
+    enabled: input.request.enabled,
+    updatedAt: new Date().toISOString(),
+  });
+  return { history: await localHarnessHistoryPayload(input.store) };
+}
+
+async function requireHarnessReleaseRecord(input: {
+  store: SqliteStore;
+  workspaceId: string;
+  release: HarnessHistoryReleaseRef;
+  label: string;
+}): Promise<LocalHarnessReleaseRecord> {
+  const record = await input.store.getHarnessReleaseRecord(input.release.contentHash);
+  if (
+    !record ||
+    record.workspaceId !== input.workspaceId ||
+    record.harnessRelease.id !== input.release.id ||
+    record.harnessRelease.contentHash !== input.release.contentHash
+  ) {
+    throw new Error(`${input.label} is unavailable or hash-mismatched.`);
+  }
+  return record;
+}
+
+function releaseSourcePath(record: LocalHarnessReleaseRecord, filePath: string): string {
+  const sourceRoot = path.resolve(record.bundlePath, "source");
+  const target = path.resolve(sourceRoot, ...filePath.split("/"));
+  if (target !== sourceRoot && !target.startsWith(`${sourceRoot}${path.sep}`)) {
+    throw new Error(`Harness release contains an unsafe file path: ${filePath}.`);
+  }
+  return target;
+}
+
+function normalizeHarnessPatch(input: {
+  patch: string;
+  filePath: string;
+  baseExists: boolean;
+  targetExists: boolean;
+}): string {
+  return input.patch
+    .split("\n")
+    .map((line) => {
+      if (line.startsWith("diff --git ")) {
+        return `diff --git a/${input.filePath} b/${input.filePath}`;
+      }
+      if (line.startsWith("--- ")) {
+        return input.baseExists ? `--- a/${input.filePath}` : "--- /dev/null";
+      }
+      if (line.startsWith("+++ ")) {
+        return input.targetExists ? `+++ b/${input.filePath}` : "+++ /dev/null";
+      }
+      return line;
+    })
+    .join("\n");
+}
+
+function countHarnessPatchLines(patch: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  for (const line of patch.split("\n")) {
+    if (line.startsWith("+++") || line.startsWith("---")) continue;
+    if (line.startsWith("+")) additions += 1;
+    if (line.startsWith("-")) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
+export async function localHarnessReleaseDiffPayload(input: {
+  store: SqliteStore;
+  storeDir: string;
+  request: HarnessReleaseDiffRequest;
+}): Promise<HarnessReleaseDiffPayload> {
+  const workspace = await input.store.getHarnessWorkspace(input.request.workspaceId);
+  if (!workspace || workspace.ownerScope.kind !== "personal") {
+    throw new Error("Harness release diff requires the selected Personal workspace.");
+  }
+  const target = await requireHarnessReleaseRecord({
+    store: input.store,
+    workspaceId: workspace.id,
+    release: input.request.targetRelease,
+    label: "Harness target release",
+  });
+  const base = input.request.baseRelease
+    ? await requireHarnessReleaseRecord({
+        store: input.store,
+        workspaceId: workspace.id,
+        release: input.request.baseRelease,
+        label: "Harness base release",
+      })
+    : null;
+  const baseFiles = new Set(base?.harnessRelease.files.map((file) => file.path) ?? []);
+  const targetFiles = new Set(target.harnessRelease.files.map((file) => file.path));
+  const filePaths = [...new Set([...baseFiles, ...targetFiles])]
+    .sort((left, right) => left.localeCompare(right));
+  const files: HarnessReleaseDiffPayload["files"] = [];
+
+  for (const filePath of filePaths) {
+    const baseExists = baseFiles.has(filePath);
+    const targetExists = targetFiles.has(filePath);
+    const oldPath = base && baseExists ? releaseSourcePath(base, filePath) : "/dev/null";
+    const newPath = targetExists ? releaseSourcePath(target, filePath) : "/dev/null";
+    const result = await runWorkspaceCommand(
+      "git",
+      ["diff", "--no-index", "--no-ext-diff", "--unified=80", "--", oldPath, newPath],
+      input.storeDir,
+    );
+    if (result.code !== 0 && result.code !== 1) {
+      throw new Error(result.stderr.trim() || result.stdout.trim() || `Unable to diff ${filePath}.`);
+    }
+    if (result.code === 0) continue;
+    const patch = truncatePatch(normalizeHarnessPatch({
+      patch: result.stdout || result.stderr,
+      filePath,
+      baseExists,
+      targetExists,
+    }));
+    const counts = countHarnessPatchLines(patch);
+    files.push({
+      path: filePath,
+      status: baseExists ? targetExists ? "modified" : "deleted" : "added",
+      additions: counts.additions,
+      deletions: counts.deletions,
+      patch,
+      content: null,
+    });
+  }
+
+  return {
+    baseRelease: input.request.baseRelease,
+    targetRelease: input.request.targetRelease,
+    filesChanged: files.length,
+    additions: files.reduce((sum, file) => sum + file.additions, 0),
+    deletions: files.reduce((sum, file) => sum + file.deletions, 0),
+    files,
   };
 }
 
@@ -373,12 +583,11 @@ export async function reviewLocalHarnessProposalFromSettings(input: {
     const edit = proposal.edits.find((candidate) => candidate.route === "memory");
     if (!edit) throw new Error("The memory proposal has no memory edit.");
     const key = memoryKeyFromTarget(edit.target);
-    const existing = await input.store.getHarnessMemory(workspace.id, key);
     await input.store.writeHarnessMemory({
       workspaceId: workspace.id,
       key,
       content: edit.content,
-      expectedRevision: edit.operation === "create" ? null : existing?.revision ?? null,
+      expectedRevision: expectedMemoryRevision(proposal, key),
       sourceRunId: null,
       sourceProposal: { id: proposal.id, contentHash: proposal.contentHash },
       createdAt: timestamp,
@@ -445,4 +654,23 @@ function memoryKeyFromTarget(target: string): string {
   const match = /^memory\/([a-z0-9][a-z0-9-]{0,119})$/.exec(target.replaceAll("\\", "/"));
   if (!match) throw new Error(`Invalid Harness memory target: ${target}.`);
   return match[1];
+}
+
+function expectedMemoryRevision(
+  proposal: HarnessImprovementProposal,
+  key: string,
+): number | null {
+  const expected = proposal.metadata.expectedMemory;
+  if (!expected || typeof expected !== "object" || Array.isArray(expected)) {
+    throw new Error("Memory proposal is missing its expected revision snapshot.");
+  }
+  const record = expected as Record<string, unknown>;
+  if (record.key !== key) {
+    throw new Error("Memory proposal expected revision targets a different key.");
+  }
+  if (record.revision === null) return null;
+  if (!Number.isInteger(record.revision) || Number(record.revision) < 1) {
+    throw new Error("Memory proposal expected revision is invalid.");
+  }
+  return Number(record.revision);
 }

@@ -64,8 +64,8 @@ export function createTaskEvaluationService(deps: {
   workRuntime?: TasksetWorkAttemptRuntime;
   validateWorkRequiredOutput?: TasksetWorkRequiredOutputValidator;
   resolveReleasedHarness?: () => Promise<{
-    agentSnapshot: import("@openpond/evals").AgentSnapshot;
-    harnessRelease: import("@openpond/evals").HarnessRelease;
+    agentSnapshot: import("@openpond/harness").AgentSnapshot;
+    harnessRelease: import("@openpond/harness").HarnessRelease;
   } | null>;
 }) {
   async function execute(input: {

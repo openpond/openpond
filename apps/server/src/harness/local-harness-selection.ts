@@ -1,5 +1,5 @@
 import type { OpenPondProfileState } from "@openpond/contracts";
-import { assertContentHash } from "@openpond/evals";
+import { assertContentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import type { LocalHarnessReleaseRecord } from "../store/store-harness-workspaces.js";

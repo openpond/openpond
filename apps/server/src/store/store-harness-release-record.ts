@@ -3,7 +3,7 @@ import {
   HarnessReleaseSchema,
   type AgentSnapshot,
   type HarnessRelease,
-} from "@openpond/evals";
+} from "@openpond/harness";
 import { z } from "zod";
 
 export const LocalHarnessReleaseRecordSchema = z

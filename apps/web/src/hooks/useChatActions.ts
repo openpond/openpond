@@ -83,6 +83,7 @@ import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 import {
   isCloudWorkspaceKind,
   isHybridWorkspaceSession,
+  localWorkspaceSessionMetadata,
   type WorkspaceTargetValue,
 } from "../lib/workspace-location";
 import { confirmedLinkedCloudProject } from "../lib/cloud-link-trust";
@@ -644,7 +645,11 @@ export function useChatActions({
         Boolean(selectedSessionForTurn?.localProjectId) ||
         Boolean(selectedSessionForTurn?.cloudProjectId) ||
         (!explicitTurnContext && Boolean(
-          selectedProject || selectedCloudProject || selectedApp || workspaceTarget === "hybrid"
+          selectedProject ||
+            selectedCloudProject ||
+            selectedApp ||
+            workspaceTarget === "hybrid" ||
+            workspaceTarget === "local"
         ))
       ));
     const selectedAppForTurn =
@@ -1101,9 +1106,16 @@ export function useChatActions({
                   cloudProject?.id ?? confirmedCloudProject?.id ?? null,
                 cloudTeamId:
                   cloudProject?.teamId ?? confirmedCloudProject?.teamId ?? null,
-                cwd: selectedProjectForTurn
-                  ? selectedProjectForTurn.workspacePath
-                  : null,
+                ...(!cloudProject &&
+                !selectedProjectForTurn &&
+                !selectedAppForTurn &&
+                workspaceTarget === "local"
+                  ? { metadata: localWorkspaceSessionMetadata() }
+                  : {
+                      cwd: selectedProjectForTurn
+                        ? selectedProjectForTurn.workspacePath
+                        : null,
+                    }),
                 title: value.slice(0, 64),
               }
         );
@@ -1474,7 +1486,8 @@ function sessionUsesRepositoryWork(session: Session): boolean {
     session.experience === "work" && (
       session.workspaceKind === "local_project" ||
       Boolean(session.localProjectId) ||
-      Boolean(session.cloudProjectId)
+      Boolean(session.cloudProjectId) ||
+      session.metadata?.workspaceTarget === "local"
     )
   );
 }

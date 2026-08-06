@@ -506,6 +506,34 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
   });
   const changeWorkspaceTarget = useCallback(
     async (target: WorkspaceTargetValue) => {
+      if (activeExperience === "work" && !selectedSession) {
+        if (target === "local") {
+          setPendingWorkspaceTarget("local");
+          showToast(
+            selectedProject
+              ? `Next task will use the local ${selectedProject.name} checkout.`
+              : "Next task will use an app-managed local workspace.",
+            "info"
+          );
+          return;
+        }
+        if (target === "cloud" && !selectedProject && !selectedCloudProject) {
+          if (accountPending) {
+            showToast(
+              "Checking OpenPond account. Try again in a moment.",
+              "info"
+            );
+            return;
+          }
+          if (accountSignedOut) {
+            showToast("Add an OpenPond account before using Hosted.", "error");
+            return;
+          }
+          setPendingWorkspaceTarget("cloud");
+          showToast("Next task will use Hosted without a Project.", "info");
+          return;
+        }
+      }
       if (target === "hybrid") {
         const linkedCloudProjectId =
           selectedCloudProject?.id ??
@@ -598,6 +626,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     [
       accountPending,
       accountSignedOut,
+      activeExperience,
       bootstrap?.providers,
       changeWorkspaceTargetBase,
       connection,
@@ -613,6 +642,7 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       selectedProject?.name,
       selectedProject?.workspacePath,
       selectedSession,
+      setPendingWorkspaceTarget,
       setSessions,
       showToast,
     ]

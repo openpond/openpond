@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 
-import { contentHash, createAttemptReceipt, type AttemptReceipt } from "@openpond/evals";
+import { createAttemptReceipt, type AttemptReceipt } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import type { Taskset } from "@openpond/contracts";
 
 import { parseManagedRlPolicyCompletion, runMarketingPortfolioRollout } from "./marketing-portfolio-rollout.js";

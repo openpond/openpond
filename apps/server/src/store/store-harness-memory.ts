@@ -2,7 +2,7 @@ import {
   type HarnessMemoryEntry,
   type HarnessMemoryWrite,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
 import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";

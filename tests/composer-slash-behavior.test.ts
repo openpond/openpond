@@ -748,9 +748,10 @@ describe("composer slash behavior", () => {
     expect(markup).not.toMatch(/class="workspace-action-trigger[^"]*"[^>]* disabled=""/);
   });
 
-  test("composer footer prompts for a project before showing workspace actions", () => {
+  test("Work composer keeps Project and execution target independent", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
+        experience: "work",
         mode: "start",
         prompt: "",
         mentionApps: [],
@@ -773,7 +774,7 @@ describe("composer slash behavior", () => {
             },
           ],
         },
-        workspaceTarget,
+        workspaceTarget: { ...workspaceTarget, uploadAction: null },
         codexPermissionMode: "default",
         codexReasoningEffort: "medium",
         onProviderChange: noop,
@@ -791,9 +792,70 @@ describe("composer slash behavior", () => {
     );
 
     expect(markup).toContain("Select Project");
-    expect(markup).not.toContain('aria-label="Working in"');
+    expect(markup).toContain('aria-label="Working in"');
+    expect(markup).toContain("Local checkout");
     expect(markup).not.toContain('aria-label="Upload/sync to cloud"');
     expect(markup).not.toContain("workspace-upload-trigger");
+  });
+
+  test("active Work composer keeps pinned Project and execution context visible", () => {
+    const markup = renderToStaticMarkup(
+      createElement(Composer, {
+        experience: "work",
+        mode: "dock",
+        prompt: "",
+        mentionApps: [],
+        selectedMentionAppId: null,
+        contextWindowStatus,
+        goalRuntime: null,
+        busy: false,
+        running: false,
+        showProjectFooter: false,
+        connection: null,
+        provider: "openpond",
+        model: "openpond-chat",
+        projectTarget: {
+          value: "none",
+          label: "No project",
+          detail: "General chat",
+          busy: false,
+          options: [
+            {
+              value: "none",
+              label: "Don't work in a project",
+              detail: "General chat without project files",
+              kind: "none",
+            },
+          ],
+        },
+        actionCatalog: [],
+        workspaceTarget: {
+          ...workspaceTarget,
+          value: "local",
+          label: "Local",
+          detail: "App-managed local task workspace",
+          uploadAction: null,
+        },
+        codexPermissionMode: "default",
+        codexReasoningEffort: "medium",
+        onProviderChange: noop,
+        onProjectTargetChange: noop,
+        onWorkspaceTargetChange: noop,
+        onModelChange: noop,
+        onCodexPermissionModeChange: noop,
+        onCodexReasoningEffortChange: noop,
+        onPromptChange: noop,
+        onMentionAppSelect: noop,
+        showToast: noop,
+        onSubmit: async () => true,
+        onStop: noop,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Task context"');
+    expect(markup).toContain('aria-label="Project: No Project"');
+    expect(markup).toContain('aria-label="Execution: Local"');
+    expect(markup).not.toContain('aria-label="Working in"');
   });
 
   test("working target trigger renders the hybrid target", () => {

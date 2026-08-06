@@ -17,7 +17,7 @@ import {
   type ImprovementObservation,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import {
@@ -34,6 +34,22 @@ import {
   loadExactObservations,
   readBoundedRefinerSource,
 } from "./local-harness-refiner-context.js";
+import {
+  boundedObservationEvidence,
+  boundedTriggerEvidence,
+  expectedMemoryRevision,
+  findProposal,
+  findProposalByTrigger,
+  findProposalValidations,
+  findRefinerOutcome,
+  memoryKeyFromTarget,
+  overlayRef,
+  proposalEvidence,
+  sameOverlayRef,
+  sameWorkspaceRevision,
+  stableId,
+  uniqueEventRefs,
+} from "./local-harness-refiner-worker-support.js";
 
 export type LocalHarnessRefinerWorkerResult = {
   outcome: HarnessRefinerOutcome;
@@ -147,6 +163,21 @@ export async function runLocalHarnessRefinerWorker(input: {
     trigger,
     observations,
   );
+  if (
+    observations.every((observation) => observation.kind === "user_turn") &&
+    boundedContext.task.previousAssistantOutput === null
+  ) {
+    return persistNoAction({
+      store: input.store,
+      workspace,
+      overlay,
+      trigger,
+      observations,
+      reason:
+        "The initial user turn has no prior result to improve and contains no execution evidence.",
+      now: input.now,
+    });
+  }
   const decision = await authorLocalHarnessRefinementWithModel({
     evidence: {
       trigger: boundedTriggerEvidence(trigger),
@@ -182,12 +213,17 @@ export async function runLocalHarnessRefinerWorker(input: {
     });
   }
   assertSafeDecision(decision, source.catalog, source.files);
+  const materializedContent = materializeDecisionContent(decision, source.files);
+  const expectedMemory = decision.route === "memory"
+    ? await input.store.getHarnessMemory(workspace.id, memoryKeyFromTarget(decision.target))
+    : null;
 
   const timestamp = (input.now ?? (() => new Date().toISOString()))();
   const effects = classifyProposalEffects(decision);
   const edits = buildProposalEdits({
     trigger,
     decision,
+    materializedContent,
     manifest: source.manifest,
     effects,
   });
@@ -243,6 +279,14 @@ export async function runLocalHarnessRefinerWorker(input: {
             edits.find((candidate) => candidate.target === "harness.json")?.id ?? null,
           rebasedFromHarnessRelease: rebasedOntoCurrent
             ? overlay.baseHarnessRelease
+            : null,
+          expectedMemory: decision.route === "memory"
+            ? {
+                key: memoryKeyFromTarget(decision.target),
+                revision: expectedMemory?.revision ?? null,
+                contentHash: expectedMemory?.contentHash ?? null,
+                status: expectedMemory?.status ?? null,
+              }
             : null,
         },
       }),
@@ -390,17 +434,14 @@ async function finishMemoryProposal(input: {
     ));
   const edit = input.proposal.edits.find((candidate) => candidate.route === "memory");
   if (!edit) throw new Error("Memory proposal has no memory edit.");
-  const existing = await input.store.getHarnessMemory(
-    input.workspace.id,
-    memoryKeyFromTarget(edit.target),
-  );
+  const expectedMemory = expectedMemoryRevision(input.proposal, edit.target);
   const canApply = requiredPassed && edit.operation !== "delete";
   if (canApply) {
     await input.store.writeHarnessMemory({
       workspaceId: input.workspace.id,
       key: memoryKeyFromTarget(edit.target),
       content: edit.content,
-      expectedRevision: edit.operation === "create" ? null : existing?.revision ?? null,
+      expectedRevision: expectedMemory.revision,
       sourceRunId: input.trigger.runRef,
       sourceProposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
       createdAt: input.timestamp,
@@ -537,6 +578,7 @@ async function persistExternalRoute(input: {
     reason: `Routed to ${input.decision.route}: ${input.decision.summary}`,
     metadata: {
       routed: true,
+      route: input.decision.route,
       routeDecision: { id: route.id, contentHash: route.contentHash },
       expectedOutcome: input.decision.expectedOutcome,
     },
@@ -581,9 +623,42 @@ function assertSafeDecision(
   if (decision.operation === "update" && !loaded) {
     throw new Error(`Refiner update target ${decision.target} exceeded the bounded source budget.`);
   }
-  if (decision.operation === "update" && loaded?.content === decision.replacementContent) {
+}
+
+function materializeDecisionContent(
+  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+  sourceFiles: Array<{
+    path: string;
+    kind: "memory" | "instruction" | "skill" | "agent";
+    content: string;
+    loaded: boolean;
+  }>,
+): string | null {
+  if (decision.operation === "delete") return null;
+  if (decision.operation === "create") {
+    if (decision.createContent === null) {
+      throw new Error("Refiner create proposal is missing bounded component content.");
+    }
+    return decision.createContent;
+  }
+  const loaded = sourceFiles.find((file) => file.path === decision.target);
+  if (!loaded) {
+    throw new Error(`Refiner update target ${decision.target} exceeded the bounded source budget.`);
+  }
+  if (decision.find === null || decision.replace === null) {
+    throw new Error("Refiner update proposal is missing its exact find/replace edit.");
+  }
+  const occurrences = loaded.content.split(decision.find).length - 1;
+  if (occurrences !== 1) {
+    throw new Error(
+      `Refiner update find text must occur exactly once in ${decision.target}; found ${occurrences}.`,
+    );
+  }
+  const materialized = loaded.content.replace(decision.find, decision.replace);
+  if (materialized === loaded.content) {
     throw new Error("Refiner proposal does not change the selected source file.");
   }
+  return materialized;
 }
 
 function safeCreatedComponentPath(
@@ -606,6 +681,7 @@ function safeCreatedComponentPath(
 function buildProposalEdits(input: {
   trigger: RefinementTriggerDecision;
   decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>;
+  materializedContent: string | null;
   manifest: HarnessSourceManifest;
   effects: HarnessChangeEffect[];
 }): HarnessOverlayEdit[] {
@@ -615,16 +691,16 @@ function buildProposalEdits(input: {
       trigger: input.trigger.contentHash,
       operation: decision.operation,
       target: decision.target,
-      content: decision.replacementContent,
+      content: input.materializedContent,
     }),
     route: decision.route,
     operation: decision.operation,
     target: decision.target,
     summary: decision.summary,
-    content: decision.replacementContent,
-    contentHash: decision.replacementContent === null
+    content: input.materializedContent,
+    contentHash: input.materializedContent === null
       ? null
-      : contentHash(decision.replacementContent),
+      : contentHash(input.materializedContent),
     effects: input.effects,
   };
   if (decision.route === "memory") return [primary];
@@ -708,7 +784,9 @@ function classifyProposalEffects(
   const text = [
     decision.summary,
     decision.expectedOutcome,
-    decision.replacementContent ?? "",
+    decision.createContent ?? "",
+    decision.find ?? "",
+    decision.replace ?? "",
   ].join("\n");
   const effects = new Set<HarnessChangeEffect>(["text_instruction"]);
   if (/\b(?:margin|markup|revenue|profit|pricing|invoice|quote|job premium|per[- ]truck cost|cost estimate|estimate cost)\b|(?:\$|usd\s*)\d/i.test(text)) {
@@ -749,6 +827,7 @@ function proposalValidationPlan(input: {
       | "prompt"
       | "skill"
       | "package"
+      | "component_activation"
       | "business_formula"
       | "targeted_evaluation";
     description: string;
@@ -777,6 +856,14 @@ function proposalValidationPlan(input: {
     description: `Compile and validate the ${input.decision.operation} ${input.decision.route} component ${input.decision.target}.`,
     required: true,
   });
+  if (input.decision.route !== "memory") {
+    plans.push({
+      id: `${input.validationId}-activation`,
+      kind: "component_activation",
+      description: `Prove the ${input.decision.route} edit is present in the effective Desktop Work runtime surface.`,
+      required: true,
+    });
+  }
   if (input.effects.some((effect) => ["business_logic", "financial_logic"].includes(effect))) {
     plans.push({
       id: `${input.validationId}-business-formula`,
@@ -802,166 +889,4 @@ function proposalValidationPlan(input: {
     });
   }
   return plans;
-}
-
-function memoryKeyFromTarget(target: string): string {
-  const match = /^memory\/([a-z0-9][a-z0-9-]{0,119})$/.exec(target.replaceAll("\\", "/"));
-  if (!match) throw new Error(`Invalid Harness memory target: ${target}.`);
-  return match[1];
-}
-
-function boundedTriggerEvidence(trigger: RefinementTriggerDecision): Record<string, unknown> {
-  return {
-    id: trigger.id,
-    runRef: trigger.runRef,
-    turnId: trigger.turnId,
-    reason: trigger.reason,
-    suggestedRoutes: trigger.suggestedRoutes,
-    boundary: trigger.boundary,
-  };
-}
-
-function boundedObservationEvidence(observation: ImprovementObservation): Record<string, unknown> {
-  return {
-    id: observation.id,
-    kind: observation.kind,
-    state: observation.state,
-    tool: observation.tool?.name ?? null,
-    deterministicClass: observation.deterministicClass,
-    summary: observation.summary,
-  };
-}
-
-function proposalEvidence(observations: ImprovementObservation[]) {
-  const byId = new Map<string, ReturnType<typeof observationEvidence>>();
-  for (const observation of observations) {
-    for (const event of observation.eventRefs) {
-      const evidence = observationEvidence(observation, event);
-      byId.set(`${evidence.kind}:${evidence.id}`, evidence);
-    }
-  }
-  return [...byId.values()];
-}
-
-function observationEvidence(
-  observation: ImprovementObservation,
-  event: ImprovementObservation["eventRefs"][number],
-) {
-  const kind = observation.kind === "recovery"
-    ? "recovery"
-    : observation.kind === "validation"
-      ? "validation"
-      : observation.kind === "user_correction"
-        ? "user_correction"
-        : "tool_event";
-  return { kind: kind as "recovery" | "validation" | "user_correction" | "tool_event", id: event.id, contentHash: event.contentHash };
-}
-
-function uniqueEventRefs(observations: ImprovementObservation[]) {
-  const byId = new Map<string, ImprovementObservation["eventRefs"][number]>();
-  for (const observation of observations) {
-    for (const event of observation.eventRefs) byId.set(event.id, event);
-  }
-  return [...byId.values()];
-}
-
-async function findRefinerOutcome(
-  store: SqliteStore,
-  workspaceId: string,
-  trigger: RefinementTriggerDecision,
-): Promise<HarnessRefinerOutcome | null> {
-  const outcomes = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "refiner_outcome",
-    1_000,
-  );
-  return (outcomes as HarnessRefinerOutcome[]).find(
-    (outcome) =>
-      outcome.trigger.id === trigger.id &&
-      outcome.trigger.contentHash === trigger.contentHash,
-  ) ?? null;
-}
-
-async function findProposal(
-  store: SqliteStore,
-  workspaceId: string,
-  proposalId: string,
-): Promise<HarnessImprovementProposal | null> {
-  const proposals = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "proposal",
-    1_000,
-  );
-  return (proposals as HarnessImprovementProposal[]).find(
-    (proposal) => proposal.id === proposalId,
-  ) ?? null;
-}
-
-async function findProposalByTrigger(
-  store: SqliteStore,
-  workspaceId: string,
-  trigger: RefinementTriggerDecision,
-): Promise<HarnessImprovementProposal | null> {
-  const proposal = await findProposal(
-    store,
-    workspaceId,
-    stableId("proposal", trigger.contentHash),
-  );
-  const metadataTrigger = proposal?.metadata.trigger as
-    | { id?: unknown; contentHash?: unknown }
-    | undefined;
-  return metadataTrigger?.id === trigger.id &&
-    metadataTrigger.contentHash === trigger.contentHash
-    ? proposal
-    : null;
-}
-
-async function findProposalValidations(
-  store: SqliteStore,
-  workspaceId: string,
-  proposal: HarnessImprovementProposal,
-): Promise<HarnessTargetedValidationReceipt[]> {
-  const validations = await store.listHarnessImprovementArtifacts(
-    workspaceId,
-    "targeted_validation",
-    1_000,
-  );
-  return (validations as HarnessTargetedValidationReceipt[]).filter(
-    (validation) =>
-      validation.proposal.id === proposal.id &&
-      validation.proposal.contentHash === proposal.contentHash,
-  );
-}
-
-function sameOverlayRef(
-  overlay: HarnessRunOverlay,
-  reference: { id: string; revision: number; contentHash: string },
-): boolean {
-  return overlay.id === reference.id &&
-    overlay.revision === reference.revision &&
-    overlay.contentHash === reference.contentHash;
-}
-
-function overlayRef(overlay: HarnessRunOverlay) {
-  return {
-    id: overlay.id,
-    revision: overlay.revision,
-    contentHash: overlay.contentHash,
-  };
-}
-
-function sameWorkspaceRevision(
-  workspace: HarnessWorkspace,
-  overlay: HarnessRunOverlay,
-): boolean {
-  return workspace.revision === overlay.workspace.revision &&
-    workspace.sourceRevision === overlay.workspace.sourceRevision &&
-    workspace.currentChannel.revision === overlay.workspace.channelRevision &&
-    workspace.currentChannel.release?.id === overlay.baseHarnessRelease.id &&
-    workspace.currentChannel.release.contentHash ===
-      overlay.baseHarnessRelease.contentHash;
-}
-
-function stableId(prefix: string, value: unknown): string {
-  return `${prefix}-${contentHash(value).slice(0, 24)}`;
 }

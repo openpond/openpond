@@ -10,7 +10,7 @@ import {
   canonicalJson,
   contentHash,
   type ImmutableReleaseRef,
-} from "@openpond/evals";
+} from "@openpond/harness";
 import {
   createWorkEvidenceReceipt,
   createWorkProcessTrace,

@@ -30,6 +30,7 @@ import {
   type WorkspaceLocation,
   type WorkspaceTargetOptionState,
   type WorkspaceTargetState,
+  type WorkspaceTargetValue,
 } from "../lib/workspace-location";
 
 function firstPresentText(...values: Array<string | null | undefined>): string {
@@ -292,7 +293,7 @@ export function useWorkspaceTargetState({
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
   selectedSession: Session | null;
-  pendingWorkspaceTarget: "hybrid" | null;
+  pendingWorkspaceTarget: WorkspaceTargetValue | null;
   workspaceStates: Record<string, WorkspaceState>;
   workspaceBusy: boolean;
 }) {
@@ -368,11 +369,15 @@ export function useWorkspaceTargetState({
     () => {
       const localOption = {
         value: "local" as const,
-        label: "Local checkout",
-        detail: "Use files on this machine. Best for fast chat and local edits.",
-        stateNote: localStateNote,
-        disabled: !selectedProject && activeWorkspaceLocation !== "local",
-        disabledReason: "No linked local workspace.",
+        label: selectedProject ? "Local checkout" : "Local",
+        detail: selectedProject
+          ? "Use the selected checkout on this machine."
+          : "Use an app-managed task workspace on this machine.",
+        stateNote: selectedProject
+          ? localStateNote
+          : "App-managed local task workspace",
+        disabled: false,
+        disabledReason: null,
       };
       const hybridOption = {
         value: "hybrid" as const,
@@ -386,13 +391,18 @@ export function useWorkspaceTargetState({
       };
       const cloudOption = {
         value: "cloud" as const,
-        label: "Cloud workspace",
-        detail: "Chat inside the hosted sandbox. Best for cloud-only files, dependencies, or handoff.",
-        stateNote: cloudStateNote,
-        disabled: accountPending || accountSignedOut || !cloudSetupAvailable,
+        label: "Hosted",
+        detail: "Run with hosted compute, with or without a Project.",
+        stateNote:
+          selectedProject || selectedCloudProject
+            ? cloudStateNote
+            : "Projectless hosted task",
+        disabled: accountPending || accountSignedOut,
         disabledReason: accountSignedOut
           ? "Add an OpenPond account before using Cloud."
-          : "Select a Project before Cloud coding.",
+          : accountPending
+            ? "Checking OpenPond account."
+            : null,
       };
       const uploadOption = {
         value: "upload_cloud" as const,
@@ -408,7 +418,11 @@ export function useWorkspaceTargetState({
       const actionOption = actionTarget === "local" ? localOption : cloudOption;
       let selectedOption: WorkspaceTargetOptionState =
         activeWorkspaceLocation === "cloud" ? cloudOption : localOption;
-      if (isHybridWorkspaceSession(selectedSession) || pendingWorkspaceTarget === "hybrid") {
+      if (pendingWorkspaceTarget === "cloud") {
+        selectedOption = cloudOption;
+      } else if (pendingWorkspaceTarget === "local") {
+        selectedOption = localOption;
+      } else if (isHybridWorkspaceSession(selectedSession) || pendingWorkspaceTarget === "hybrid") {
         selectedOption = hybridOption;
       }
       return {
@@ -420,12 +434,12 @@ export function useWorkspaceTargetState({
           ...actionOption,
           label:
             actionTarget === "cloud"
-              ? "Cloud workspace"
+              ? "Hosted"
               : selectedProject
                 ? "Local checkout"
                 : "Check out locally",
         },
-        uploadAction: uploadOption,
+        uploadAction: selectedProject ? uploadOption : null,
         options: [localOption, hybridOption, cloudOption],
       };
     },

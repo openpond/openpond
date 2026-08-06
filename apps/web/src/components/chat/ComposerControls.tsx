@@ -455,6 +455,33 @@ export function WorkspaceActionControl({
   );
 }
 
+export function ComposerPinnedWorkspaceContext({
+  project,
+  workspace,
+}: {
+  project: ComposerProjectTargetState;
+  workspace: WorkspaceTargetState;
+}) {
+  const projectOption = project.options.find(
+    (option) => option.value === project.value,
+  );
+  const projectKind = projectOption?.kind ?? "none";
+  const projectLabel = project.value === "none" ? "No Project" : project.label;
+
+  return (
+    <div className="composer-footer composer-pinned-context" role="group" aria-label="Task context">
+      <span className="composer-context-chip" aria-label={`Project: ${projectLabel}`}>
+        <ProjectTargetIcon kind={projectKind} size={14} />
+        <span>{projectLabel}</span>
+      </span>
+      <span className="composer-context-chip" aria-label={`Execution: ${workspace.label}`}>
+        <WorkspaceTargetIcon value={workspace.value} size={14} />
+        <span>{workspace.label}</span>
+      </span>
+    </div>
+  );
+}
+
 export function workspaceTargetOptionStatusText(
   option: Pick<WorkspaceTargetOptionState, "disabled" | "disabledReason" | "stateNote">,
 ): string | null {

@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { parseProfileSkillMarkdown } from "@openpond/cloud";
 import type { HarnessWorkspace, OpenPondProfileSkill } from "@openpond/contracts";
-import { sha256 } from "@openpond/evals";
+import { sha256 } from "@openpond/harness";
 
 import type { ProfileSkillReadResult } from "../openpond/model-tool-registry.js";
 import type { ProfileSkillRuntime } from "../runtime/hosted-turn/native-tools-runtime.js";

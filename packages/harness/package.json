@@ -1,0 +1,76 @@
+{
+  "name": "@openpond/harness",
+  "version": "0.1.0",
+  "description": "Portable immutable Harness releases, workspaces, improvements, traces, tools, and model identities for OpenPond",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/types/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "CONTRACT.md",
+    "RELEASING.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./harness": {
+      "types": "./dist/types/harness.d.ts",
+      "import": "./dist/harness.js"
+    },
+    "./harness-improvements": {
+      "types": "./dist/types/harness-improvements.d.ts",
+      "import": "./dist/harness-improvements.js"
+    },
+    "./harness-workspaces": {
+      "types": "./dist/types/harness-workspaces.d.ts",
+      "import": "./dist/harness-workspaces.js"
+    },
+    "./models": {
+      "types": "./dist/types/models.d.ts",
+      "import": "./dist/models.js"
+    },
+    "./tools": {
+      "types": "./dist/types/tools.d.ts",
+      "import": "./dist/tools.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpond/openpond.git",
+    "directory": "packages/harness"
+  },
+  "homepage": "https://github.com/openpond/openpond/tree/master/packages/harness#readme",
+  "bugs": {
+    "url": "https://github.com/openpond/openpond/issues"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
+  "scripts": {
+    "build": "tsx scripts/build.ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project harness",
+    "check:api": "tsx scripts/check-public-package.ts",
+    "check:consumer": "tsx scripts/verify-packed-consumer.ts",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run check:api && pnpm run check:consumer && npm pack --dry-run"
+  },
+  "dependencies": {
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "tsx": "4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { contentHash } from "@openpond/harness";
+
 import {
   WorkEvidenceReceiptSchema,
   WorkProcessTraceSchema,
@@ -15,7 +17,6 @@ import {
   verifyWorkProcessTrace,
   workEvidenceConformance,
 } from "../src/evidence/index.js";
-import { contentHash } from "../src/common.js";
 import { createAttemptReceipt } from "../src/runs.js";
 
 describe("portable Work evidence contracts", () => {

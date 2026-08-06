@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { FailureClassSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash } from "./common.js";
+import { FailureClassSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash } from "@openpond/harness";
 import type { DeterministicGraderSpec, GraderSpec, TaskRecord } from "./tasksets.js";
 
 export const GraderEvidenceContentSchema = z.object({

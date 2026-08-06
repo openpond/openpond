@@ -82,8 +82,8 @@ export function createTrainingService(deps: {
   searchTrainingModels?: (query: string) => Promise<RegistryModelSearchResult[]>;
   loadProfileState?: () => Promise<OpenPondProfileState>;
   resolveReleasedHarness?: () => Promise<{
-    agentSnapshot: import("@openpond/evals").AgentSnapshot;
-    harnessRelease: import("@openpond/evals").HarnessRelease;
+    agentSnapshot: import("@openpond/harness").AgentSnapshot;
+    harnessRelease: import("@openpond/harness").HarnessRelease;
   } | null>;
 } & ManagedModelBindingCallbacks) {
   const registry = new TrainingDestinationRegistry();

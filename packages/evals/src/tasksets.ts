@@ -1,13 +1,15 @@
 import { z } from "zod";
 
 import {
+  CapabilityRequirementSchema,
   ImmutableAssetRefSchema,
   MetadataSchema,
   ReleaseHashSchema,
   ReleaseIdSchema,
+  ToolDeclarationSchema,
   assertContentHash,
   contentHash,
-} from "./common.js";
+} from "@openpond/harness";
 
 export const TaskSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
 export const PolicyBoundarySchema = z.object({
@@ -15,22 +17,6 @@ export const PolicyBoundarySchema = z.object({
   privilegedFields: z.array(ReleaseIdSchema).max(1_000).default([]),
   hiddenGraderRefs: z.array(ReleaseIdSchema).max(1_000).default([]),
   connectedAppScopes: z.array(ReleaseIdSchema).max(100).default([]),
-}).strict();
-
-export const ToolDeclarationSchema = z.object({
-  name: z.string().trim().min(1).max(64).regex(/^[a-zA-Z][a-zA-Z0-9_-]*$/),
-  description: z.string().trim().min(1).max(2_000),
-  inputSchema: z.record(z.string(), z.unknown()),
-  inputSchemaHash: ReleaseHashSchema,
-  sideEffect: z.enum(["read", "write"]),
-  timeoutMs: z.number().int().positive().max(3_600_000),
-}).strict();
-
-export const CapabilityRequirementSchema = z.object({
-  id: ReleaseIdSchema,
-  required: z.boolean(),
-  scopes: z.array(z.string().trim().min(1).max(500)).max(100).default([]),
-  portability: z.enum(["portable", "host_adapter", "local_only", "hosted_only"]),
 }).strict();
 
 export const EnvironmentContractSchema = z.object({
@@ -195,10 +181,15 @@ export function trainingPolicyTaskViews(taskset: TasksetRelease): ReturnType<typ
     .map(policyTaskView);
 }
 
-export type ToolDeclaration = z.infer<typeof ToolDeclarationSchema>;
-export type CapabilityRequirement = z.infer<typeof CapabilityRequirementSchema>;
 export type EnvironmentContract = z.infer<typeof EnvironmentContractSchema>;
 export type GraderSpec = z.infer<typeof GraderSpecSchema>;
 export type DeterministicGraderSpec = z.infer<typeof DeterministicGraderSpecSchema>;
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
 export type TasksetRelease = z.infer<typeof TasksetReleaseSchema>;
+
+export {
+  CapabilityRequirementSchema,
+  ToolDeclarationSchema,
+  type CapabilityRequirement,
+  type ToolDeclaration,
+} from "@openpond/harness";

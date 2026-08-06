@@ -238,14 +238,15 @@ export function experienceAllowsAuthoring(
 }
 
 export function sessionUsesRepositoryWork(
-  session: Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">,
+  session: Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId" | "metadata">,
 ): boolean {
   return session.experience === "development" || (
     session.experience === "work" &&
     (
       session.workspaceKind === "local_project" ||
       Boolean(session.localProjectId) ||
-      Boolean(session.cloudProjectId)
+      Boolean(session.cloudProjectId) ||
+      session.metadata?.workspaceTarget === "local"
     )
   );
 }

@@ -8,7 +8,7 @@ import {
   type RefinementTriggerDecision,
   type RuntimeEvent,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 
@@ -19,13 +19,23 @@ export async function loadBoundedRefinerContext(
   trigger: RefinementTriggerDecision,
   observations: ImprovementObservation[],
 ): Promise<{
-  task: { prompt: string | null };
+  task: {
+    prompt: string | null;
+    assistantOutput: string | null;
+    previousAssistantOutput: string | null;
+  };
   eventExcerpts: Array<Record<string, unknown>>;
 }> {
-  const [turn, events] = await Promise.all([
+  const [turn, events, turns] = await Promise.all([
     store.getTurn(trigger.turnId),
     store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
+    store.turnsForSession(trigger.runRef, 1_000),
   ]);
+  const orderedTurns = [...turns].sort((left, right) =>
+    left.startedAt.localeCompare(right.startedAt),
+  );
+  const turnIndex = orderedTurns.findIndex((candidate) => candidate.id === trigger.turnId);
+  const previousTurn = turnIndex > 0 ? orderedTurns[turnIndex - 1] : null;
   const eventRefs = new Map(
     observations.flatMap((observation) =>
       observation.eventRefs.map((reference) => [reference.id, reference] as const),
@@ -50,6 +60,10 @@ export async function loadBoundedRefinerContext(
       prompt: turn?.prompt
         ? redactAndBoundRefinerText(turn.prompt, 8_000)
         : null,
+      assistantOutput: assistantOutputForTurn(events, trigger.turnId),
+      previousAssistantOutput: previousTurn
+        ? assistantOutputForTurn(events, previousTurn.id)
+        : null,
     },
     eventExcerpts: evidenceEvents.map((runtimeEvent) => {
       const data = asRecord(runtimeEvent.data);
@@ -70,6 +84,22 @@ export async function loadBoundedRefinerContext(
       };
     }),
   };
+}
+
+function assistantOutputForTurn(
+  events: readonly RuntimeEvent[],
+  turnId: string,
+): string | null {
+  const output = events
+    .filter((runtimeEvent) =>
+      runtimeEvent.turnId === turnId &&
+      runtimeEvent.name === "assistant.delta" &&
+      typeof runtimeEvent.output === "string",
+    )
+    .sort(compareRuntimeEvents)
+    .map((runtimeEvent) => runtimeEvent.output)
+    .join("");
+  return output ? redactAndBoundRefinerText(output, 8_000) : null;
 }
 
 export async function loadExactObservations(

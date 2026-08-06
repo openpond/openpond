@@ -11,6 +11,12 @@ import type {
   RefinementTriggerDecision,
 } from "./harness-improvements.js";
 import type { HarnessMemoryEntry } from "./harness-memory.js";
+import type { WorkspaceDiffFile } from "./workspaces.js";
+
+export type HarnessHistoryReleaseRef = {
+  id: string;
+  contentHash: string;
+};
 
 export type HarnessHistoryReleaseSummary = {
   id: string;
@@ -53,11 +59,39 @@ export type HarnessHistoryPendingReview = {
 
 export type HarnessHistoryPayload = {
   workspace: HarnessWorkspace | null;
+  backgroundReview: {
+    enabled: boolean;
+    updatedAt: string | null;
+  };
   releases: HarnessHistoryReleaseSummary[];
   changes: HarnessHistoryChange[];
   routes: HarnessHistoryRoute[];
   pendingReviews: HarnessHistoryPendingReview[];
   memories: HarnessMemoryEntry[];
+};
+
+export type HarnessBackgroundReviewRequest = {
+  workspaceId: string;
+  enabled: boolean;
+};
+
+export type HarnessBackgroundReviewResponse = {
+  history: HarnessHistoryPayload;
+};
+
+export type HarnessReleaseDiffRequest = {
+  workspaceId: string;
+  baseRelease: HarnessHistoryReleaseRef | null;
+  targetRelease: HarnessHistoryReleaseRef;
+};
+
+export type HarnessReleaseDiffPayload = {
+  baseRelease: HarnessHistoryReleaseRef | null;
+  targetRelease: HarnessHistoryReleaseRef;
+  filesChanged: number;
+  additions: number;
+  deletions: number;
+  files: WorkspaceDiffFile[];
 };
 
 export type HarnessRollbackRequest = {

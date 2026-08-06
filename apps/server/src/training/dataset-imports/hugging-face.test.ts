@@ -127,7 +127,7 @@ describe("Hugging Face Dataset adapter", () => {
 
     const inspection = await inspectHuggingFaceDataset(
       normalizeHuggingFaceDatasetLocator("org/dataset"),
-      request as typeof fetch,
+      request as unknown as typeof fetch,
     );
 
     expect(inspection).toMatchObject({
@@ -189,7 +189,7 @@ describe("Hugging Face Dataset adapter", () => {
 
     await expect(inspectHuggingFaceDataset(
       normalizeHuggingFaceDatasetLocator("org/dataset"),
-      request as typeof fetch,
+      request as unknown as typeof fetch,
     )).rejects.toThrow("metadata exceeded its byte limit");
     expect(request).toHaveBeenCalledTimes(1);
   });

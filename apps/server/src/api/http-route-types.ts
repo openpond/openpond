@@ -76,6 +76,8 @@ export type HttpRouteDeps = {
     payload: unknown
   ) => Promise<unknown>;
   harnessHistoryPayload: () => Promise<unknown>;
+  updateHarnessBackgroundReviewPayload: (payload: unknown) => Promise<unknown>;
+  harnessDiffPayload: (payload: unknown) => Promise<unknown>;
   rollbackHarnessPayload: (payload: unknown) => Promise<unknown>;
   reviewHarnessProposalPayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
@@ -114,21 +116,6 @@ export type HttpRouteDeps = {
   listLocalAgentScheduleRunsPayload: (
     scheduleId: string,
     payload?: unknown
-  ) => Promise<unknown>;
-  listLocalContinuousLearningPayload: () => Promise<unknown>;
-  ensureLocalContinuousLearningPayload: (payload: unknown) => Promise<unknown>;
-  patchLocalContinuousLearningPayload: (
-    stateId: string,
-    payload: unknown
-  ) => Promise<unknown>;
-  runLocalContinuousLearningPayload: (stateId: string) => Promise<unknown>;
-  cancelLocalContinuousLearningRunPayload: (
-    stateId: string,
-    runId: string
-  ) => Promise<unknown>;
-  setLocalConversationLearningConsentPayload: (
-    sessionId: string,
-    payload: unknown
   ) => Promise<unknown>;
   loadMoreOpenPondAppsPayload: (requestUrl: URL) => Promise<unknown>;
   workspaceTemplateConfigPayload: (appId: string) => Promise<unknown>;

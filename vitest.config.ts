@@ -94,6 +94,14 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
+          name: "harness",
+          include: ["packages/harness/test/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
           name: "evals",
           include: ["packages/evals/test/**/*.test.ts"],
         },

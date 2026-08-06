@@ -86,24 +86,18 @@ describe("community UI", () => {
     expect(html).not.toContain("Join or feature a community to pin it here");
   });
 
-  test("places the Chat continuous-learning notice above Communities and Team Chat", async () => {
+  test("keeps the retired continuous-learning promotion out of the sidebar", async () => {
     const [sidebar, sectionList, sidebarCss] = await Promise.all([
       readFile("apps/web/src/components/sidebar/Sidebar.tsx", "utf8"),
       readFile("apps/web/src/components/sidebar/SidebarSectionList.tsx", "utf8"),
       readFile("apps/web/src/styles/sidebar/sidebar.css", "utf8"),
     ]);
-    const chatNoticeGuard = sidebar.indexOf('productArea === "chat"');
-    const chatNotice = sidebar.indexOf(
-      "<LocalContinuousLearningSidebarNotice",
-      chatNoticeGuard,
-    );
     const community = sidebar.indexOf("<SidebarCommunitySection");
     const teamChat = sidebar.indexOf("<SidebarTeamSection");
     const utilities = sidebar.indexOf("<SidebarUtilityNavigation");
 
-    expect(chatNoticeGuard).toBeGreaterThan(-1);
-    expect(chatNotice).toBeGreaterThan(chatNoticeGuard);
-    expect(community).toBeGreaterThan(chatNotice);
+    expect(sidebar).not.toContain("LocalContinuousLearningSidebarNotice");
+    expect(community).toBeGreaterThan(-1);
     expect(teamChat).toBeGreaterThan(community);
     expect(utilities).toBeGreaterThan(teamChat);
     expect(sectionList).not.toContain("<SidebarCommunitySection");

@@ -9,11 +9,14 @@ import type {
 
 import { api, type ClientConnection } from "../../api";
 import { Check, RefreshCw, RotateCcw, X } from "../icons";
+import type { HarnessReleaseDiffSelection } from "./HarnessReleaseDiffSidebar";
 
 type Props = {
   connection: ClientConnection | null;
   enabled: boolean;
   onError: (message: string | null) => void;
+  onDefaultReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
+  onOpenReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenSourceSession?: (sessionId: string) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
@@ -27,11 +30,30 @@ function shortHash(value: string | null | undefined): string {
   return value ? value.slice(0, 10) : "none";
 }
 
+function releaseDiffSelection(
+  workspaceId: string,
+  baseRelease: HarnessHistoryReleaseSummary | null,
+  targetRelease: HarnessHistoryReleaseSummary,
+): HarnessReleaseDiffSelection {
+  return {
+    workspaceId,
+    baseRelease: baseRelease
+      ? { id: baseRelease.id, contentHash: baseRelease.contentHash }
+      : null,
+    targetRelease: { id: targetRelease.id, contentHash: targetRelease.contentHash },
+    title: targetRelease.current
+      ? "Current Harness release"
+      : `Harness release ${shortHash(targetRelease.contentHash)}`,
+  };
+}
+
 function HistoryChangeCard({
   change,
+  onOpenDiff,
   onOpenSourceSession,
 }: {
   change: HarnessHistoryChange;
+  onOpenDiff?: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
 }) {
   const sourceSession = change.trigger?.runRef ?? null;
@@ -60,14 +82,23 @@ function HistoryChangeCard({
 
       <p>{change.receipt.reason}</p>
 
-      {sourceSession && onOpenSourceSession ? (
-        <button
-          className="settings-secondary compact"
-          onClick={() => onOpenSourceSession(sourceSession)}
-          type="button"
-        >
-          Open source conversation
-        </button>
+      {onOpenDiff || (sourceSession && onOpenSourceSession) ? (
+        <div className="harness-history-actions">
+          {onOpenDiff ? (
+            <button className="settings-secondary compact" onClick={onOpenDiff} type="button">
+              View release diff
+            </button>
+          ) : null}
+          {sourceSession && onOpenSourceSession ? (
+            <button
+              className="settings-secondary compact"
+              onClick={() => onOpenSourceSession(sourceSession)}
+              type="button"
+            >
+              Open source conversation
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {proposal ? (
@@ -180,12 +211,19 @@ function PendingReviewCard({
 }
 
 function ReleaseRow({
+  baseRelease,
   release,
   busy,
+  onOpenDiff,
   onRollback,
 }: {
+  baseRelease: HarnessHistoryReleaseSummary | null;
   release: HarnessHistoryReleaseSummary;
   busy: boolean;
+  onOpenDiff: (
+    baseRelease: HarnessHistoryReleaseSummary | null,
+    targetRelease: HarnessHistoryReleaseSummary,
+  ) => void;
   onRollback: (release: HarnessHistoryReleaseSummary) => void;
 }) {
   const [confirming, setConfirming] = useState(false);
@@ -195,26 +233,44 @@ function ReleaseRow({
         <strong>{release.current ? "Current release" : release.id}</strong>
         <span>{shortHash(release.contentHash)} · {release.files.length} files · {formatDate(release.createdAt)}</span>
       </div>
-      {release.current ? (
-        <span className="harness-current-pill">current</span>
-      ) : confirming ? (
+      {confirming ? (
         <div className="harness-inline-actions">
           <button className="settings-secondary compact" disabled={busy} onClick={() => setConfirming(false)} type="button">
             <X size={13} /> Cancel
           </button>
-          <button className="settings-primary compact" disabled={busy} onClick={() => onRollback(release)} type="button">
+          <button
+            className="settings-primary compact"
+            disabled={busy}
+            onClick={() => {
+              setConfirming(false);
+              onRollback(release);
+            }}
+            type="button"
+          >
             <RotateCcw size={13} /> Confirm rollback
           </button>
         </div>
       ) : (
-        <button
-          className="settings-secondary compact"
-          disabled={busy}
-          onClick={() => setConfirming(true)}
-          type="button"
-        >
-          <RotateCcw size={13} /> Roll back
-        </button>
+        <div className="harness-inline-actions">
+          {release.current ? <span className="harness-current-pill">current</span> : null}
+          <button
+            className="settings-secondary compact"
+            onClick={() => onOpenDiff(baseRelease, release)}
+            type="button"
+          >
+            View changes
+          </button>
+          {!release.current ? (
+            <button
+              className="settings-secondary compact"
+              disabled={busy}
+              onClick={() => setConfirming(true)}
+              type="button"
+            >
+              <RotateCcw size={13} /> Roll back
+            </button>
+          ) : null}
+        </div>
       )}
     </div>
   );
@@ -224,6 +280,8 @@ export function HarnessHistorySettingsSection({
   connection,
   enabled,
   onError,
+  onDefaultReleaseDiff,
+  onOpenReleaseDiff,
   onOpenSourceSession,
   onToast,
 }: Props) {
@@ -231,19 +289,30 @@ export function HarnessHistorySettingsSection({
   const [loading, setLoading] = useState(false);
   const [rollbackHash, setRollbackHash] = useState<string | null>(null);
   const [reviewingProposalId, setReviewingProposalId] = useState<string | null>(null);
+  const [savingBackgroundReview, setSavingBackgroundReview] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!connection) return;
     setLoading(true);
     try {
-      setHistory(await api.harnessHistory(connection));
+      const payload = await api.harnessHistory(connection);
+      setHistory(payload);
+      const currentIndex = payload.releases.findIndex((release) => release.current);
+      const currentRelease = currentIndex >= 0 ? payload.releases[currentIndex] : null;
+      if (payload.workspace && currentRelease) {
+        onDefaultReleaseDiff(releaseDiffSelection(
+          payload.workspace.id,
+          payload.releases[currentIndex + 1] ?? null,
+          currentRelease,
+        ));
+      }
       onError(null);
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
     }
-  }, [connection, onError]);
+  }, [connection, onDefaultReleaseDiff, onError]);
 
   useEffect(() => {
     if (enabled) void refresh();
@@ -253,6 +322,45 @@ export function HarnessHistorySettingsSection({
     () => history?.releases.find((release) => release.current) ?? null,
     [history],
   );
+
+  const setBackgroundReviewEnabled = useCallback(async (nextEnabled: boolean) => {
+    if (!connection || !history?.workspace) return;
+    setSavingBackgroundReview(true);
+    try {
+      const response = await api.updateHarnessBackgroundReview(connection, {
+        workspaceId: history.workspace.id,
+        enabled: nextEnabled,
+      });
+      setHistory(response.history);
+      onError(null);
+      onToast?.(
+        nextEnabled ? "Harness background review enabled." : "Harness background review disabled.",
+        "info",
+      );
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingBackgroundReview(false);
+    }
+  }, [connection, history?.workspace, onError, onToast]);
+
+  const openReleaseDiff = useCallback((
+    baseRelease: HarnessHistoryReleaseSummary | null,
+    targetRelease: HarnessHistoryReleaseSummary,
+  ) => {
+    if (!history?.workspace) return;
+    onOpenReleaseDiff(releaseDiffSelection(history.workspace.id, baseRelease, targetRelease));
+  }, [history?.workspace, onOpenReleaseDiff]);
+
+  const openChangeDiff = useCallback((change: HarnessHistoryChange) => {
+    if (!history?.workspace || !change.receipt.nextRelease) return;
+    onOpenReleaseDiff({
+      workspaceId: history.workspace.id,
+      baseRelease: change.receipt.previousRelease,
+      targetRelease: change.receipt.nextRelease,
+      title: change.proposal?.expectedOutcome ?? change.receipt.reason,
+    });
+  }, [history?.workspace, onOpenReleaseDiff]);
 
   const rollback = useCallback(async (release: HarnessHistoryReleaseSummary) => {
     if (!connection || !history?.workspace) return;
@@ -323,11 +431,31 @@ export function HarnessHistorySettingsSection({
           </section>
 
           <section className="account-list">
+            <div className="account-list-row">
+              <div className="account-list-copy">
+                <strong>Background review</strong>
+                <span>Review completed Local Work turns for reusable Harness improvements. Turning this off stops new reviews; already queued work may finish.</span>
+              </div>
+              <label className="provider-toggle" aria-label="Harness background review enabled">
+                <input
+                  checked={history.backgroundReview.enabled}
+                  disabled={savingBackgroundReview}
+                  onChange={(event) => void setBackgroundReviewEnabled(event.target.checked)}
+                  type="checkbox"
+                />
+                <span aria-hidden="true" />
+              </label>
+            </div>
+          </section>
+
+          <section className="account-list">
             <div className="account-list-heading"><span>Releases</span><small>New runs use current; active runs stay pinned.</small></div>
-            {history.releases.map((release) => (
+            {history.releases.map((release, index) => (
               <ReleaseRow
+                baseRelease={history.releases[index + 1] ?? null}
                 busy={rollbackHash !== null}
                 key={`${release.id}:${release.contentHash}`}
+                onOpenDiff={openReleaseDiff}
                 onRollback={rollback}
                 release={release}
               />
@@ -358,6 +486,7 @@ export function HarnessHistorySettingsSection({
               <HistoryChangeCard
                 change={change}
                 key={`${change.receipt.id}:${change.receipt.contentHash}`}
+                onOpenDiff={change.receipt.nextRelease ? () => openChangeDiff(change) : undefined}
                 onOpenSourceSession={onOpenSourceSession}
               />
             )) : <div className="harness-empty">No Harness changes have been applied.</div>}

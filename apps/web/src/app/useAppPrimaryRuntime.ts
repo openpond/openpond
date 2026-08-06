@@ -1003,7 +1003,7 @@ export function useAppPrimaryRuntime() {
     Boolean(selectedProject?.sandboxTemplate?.detected) &&
     !selectedProject?.linkedOpenPondApp?.appId;
   const [pendingWorkspaceTarget, setPendingWorkspaceTarget] = useState<
-    "hybrid" | null
+    WorkspaceTargetValue | null
   >(null);
   const [pendingSidebarWorkspaceTarget, setPendingSidebarWorkspaceTarget] =
     useState<{
@@ -1026,7 +1026,7 @@ export function useAppPrimaryRuntime() {
   });
   useEffect(() => {
     setPendingWorkspaceTarget(null);
-  }, [selectedCloudProject?.id, selectedProject?.id, selectedSession?.id]);
+  }, [selectedSession?.id]);
   return {
     composerDraftStore,
     appDispatch,

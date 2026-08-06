@@ -1,55 +1,20 @@
 # Releasing `@openpond/evals`
 
-The package version is independent from OpenPond application and schema
-versions. Version `0.3.0` is the next Harness-first release and supports
-these initial schema literals:
+`@openpond/evals` is the public evaluation package for OpenPond Harnesses. It
+depends on `@openpond/harness` and also re-exports Harness contracts to preserve
+the existing root and Harness subpath API.
 
-- `openpond.agentSnapshot.v2`
-- `openpond.harnessRelease.v2`
-- `openpond.tasksetRelease.v2`
-- `openpond.runManifest.v1`
-- `openpond.attemptReceipt.v1`
-- `openpond.harnessTrace.v1`
-- `openpond.harnessCompatibility.v1`
-- `openpond.graderEvidence.v1`
-- `openpond.evaluationResult.v1`
-
-The package also carries the Work evidence schemas introduced in `0.2.0`:
-
-- `openpond.workEvidenceReceipt.v1`
-- `openpond.workProcessTrace.v1`
-- `openpond.workFeedbackReceipt.v1`
-- `openpond.workEvidenceEligibility.v1`
-
-## Trusted publishing
-
-The package already exists on npm and the `npm-production` environment is
-configured for trusted publishing through `release-evals.yml`. Do not run a
-manual `npm publish` or repeat the original bootstrap. The workflow uses its own
-pinned npm version for trusted publication and provenance.
-
-To inspect an already-published version:
+Version `0.3.1` is the first split-package release. Publish
+`@openpond/harness@0.1.0` before publishing this version so npm can satisfy the
+required Harness peer.
 
 ```bash
 pnpm evals:check
-npm trust list @openpond/evals
-npm view @openpond/evals version dist.integrity dist.attestations
-```
-
-## Later releases
-
-For releases that do not already carry an intentional version bump, merge
-feature work without changing the package version. When the intended package
-changes are on `master`, prepare a separate release from a clean current
-`master` checkout:
-
-```bash
 pnpm release:evals:patch
 # or release:evals:minor / release:evals:major
 ```
 
-The release helper creates an Evals-only release PR and updates the package
-version and lockfile. Merging it triggers trusted publishing with provenance,
-registry verification, and a package-specific tag. Record the registry
-integrity/provenance evidence and merge commit in the release notes after
-publication.
+Merging a later release PR triggers `release-evals.yml`, trusted npm
+publishing, registry verification, provenance verification, and the
+package-specific tag. The prepared `0.3.1` release may be dispatched manually
+after the first Harness publication.

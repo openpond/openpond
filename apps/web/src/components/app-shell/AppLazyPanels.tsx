@@ -40,6 +40,11 @@ export function AppSettingsRoute({
   teamChatThreads,
   onTeamChatNotificationModeChange,
   onTeamChatThreadMuteChange,
+  diffPanelWidth,
+  diffPanelResizing,
+  diffPanelExpanded,
+  onDiffPanelResizeStart,
+  onDiffPanelExpandedChange,
 }: Parameters<typeof SettingsView>[0]) {
   return (
     <Suspense fallback={null}>
@@ -61,6 +66,11 @@ export function AppSettingsRoute({
         teamChatThreads={teamChatThreads}
         onTeamChatNotificationModeChange={onTeamChatNotificationModeChange}
         onTeamChatThreadMuteChange={onTeamChatThreadMuteChange}
+        diffPanelWidth={diffPanelWidth}
+        diffPanelResizing={diffPanelResizing}
+        diffPanelExpanded={diffPanelExpanded}
+        onDiffPanelResizeStart={onDiffPanelResizeStart}
+        onDiffPanelExpandedChange={onDiffPanelExpandedChange}
       />
     </Suspense>
   );

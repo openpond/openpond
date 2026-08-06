@@ -86,6 +86,16 @@ describe("experience capability policy", () => {
     ).toBeNull();
     expect(
       workspaceToolExperienceBlocker({
+        session: {
+          experience: "work",
+          metadata: { workspaceTarget: "local" },
+        },
+        action: "sandbox_exec",
+        args: { command: "pwd" },
+      })
+    ).toBeNull();
+    expect(
+      workspaceToolExperienceBlocker({
         session: { experience: "development" },
         action: "sandbox_git_status",
       })
