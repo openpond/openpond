@@ -396,7 +396,21 @@ function toolEventFailed(event: RuntimeEvent): boolean {
 }
 
 function classifyToolFailure(event: RuntimeEvent): string {
-  const text = `${event.error ?? ""}\n${event.output ?? ""}\n${safeJson(event.data)}`.toLowerCase();
+  const data = asRecord(event.data);
+  const result = asRecord(data.result);
+  if (result.timedOut === true) return "timeout";
+  if (typeof result.exitCode === "number" && result.exitCode !== 0) {
+    return "command_exit_nonzero";
+  }
+  const structuredStatus = String(data.status ?? result.status ?? "").toLowerCase();
+  if (["timed_out", "timeout"].includes(structuredStatus)) return "timeout";
+  const text = [
+    event.error,
+    event.output,
+    result.error,
+    result.stderr,
+    result.stdout,
+  ].filter((value): value is string => typeof value === "string").join("\n").toLowerCase();
   if (
     text.includes("modulenotfounderror") ||
     text.includes("module_not_found") ||
@@ -411,7 +425,7 @@ function classifyToolFailure(event: RuntimeEvent): string {
   if (text.includes("permission denied") || text.includes("forbidden") || text.includes("unauthorized")) {
     return "permission_denied";
   }
-  if (text.includes("timed out") || text.includes("timeout")) return "timeout";
+  if (/\btimed out\b|\btimeout\b/.test(text)) return "timeout";
   if (
     text.includes("invalid argument") ||
     text.includes("invalid_request") ||
@@ -497,14 +511,6 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? "";
-  } catch {
-    return "";
-  }
 }
 
 function compareEvents(left: RuntimeEvent, right: RuntimeEvent): number {

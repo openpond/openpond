@@ -23,6 +23,7 @@ function toolEvent(input: {
   action?: string;
   callId?: string;
   args?: Record<string, unknown>;
+  data?: Record<string, unknown>;
 }): RuntimeEvent {
   return {
     id: input.id,
@@ -37,7 +38,7 @@ function toolEvent(input: {
     output: input.output,
     error: input.status === "failed" ? input.output : undefined,
     args: input.args,
-    data: { toolCallId: input.callId ?? input.id },
+    data: { toolCallId: input.callId ?? input.id, ...input.data },
   };
 }
 
@@ -118,6 +119,29 @@ describe("Harness improvement trigger detector", () => {
     expect(result.trigger.suggestedRoutes).toEqual(["runtime", "skill", "prompt"]);
     expect(result.trigger.estimatedMaxCostUsd).toBeLessThanOrEqual(
       DEFAULT_REFINEMENT_TRIGGER_POLICY.maxEstimatedCostUsd,
+    );
+  });
+
+  test("does not classify a nonzero command as a timeout from timeout configuration fields", () => {
+    const result = detect([
+      toolEvent({
+        id: "failed-a",
+        sequence: 1,
+        status: "failed",
+        output: JSON.stringify({ timeoutSeconds: 30, timedOut: false }),
+        data: {
+          result: {
+            exitCode: 1,
+            timedOut: false,
+            timeoutSeconds: 30,
+            stderr: "Error: RECOVERABLE_COMMAND_SYNTAX",
+          },
+        },
+      }),
+      toolEvent({ id: "done-a", sequence: 2, status: "completed" }),
+    ]);
+    expect(result.observations[0]?.deterministicClass).toBe(
+      "command_exit_nonzero",
     );
   });
 
