@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Portable evaluation, Work evidence, Harness, Taskset, grader, and receipt contracts for OpenPond",
   "license": "MIT",
   "type": "module",
