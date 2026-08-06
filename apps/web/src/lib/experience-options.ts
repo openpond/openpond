@@ -31,11 +31,6 @@ export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
     label: "Models",
     description: "Evaluate, train, and serve models",
   },
-  {
-    value: "development",
-    label: "Developer",
-    description: "Build apps and infrastructure",
-  },
 ];
 
 export function newExperienceTitle(experience: Experience): string {

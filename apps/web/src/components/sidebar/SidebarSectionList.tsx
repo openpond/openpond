@@ -74,7 +74,7 @@ export function SidebarSectionList({
   commitTaskDrop,
   commitTaskPreviewDrop,
   dockSessionRight,
-  experience = "development",
+  experience = "work",
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   localProjectRows,
   previewTaskDrop,
@@ -249,7 +249,7 @@ export function SidebarSectionList({
   }
 
   function projectLabelForSession(session: Session): string | null {
-    if (experience !== "development") return null;
+    if (experience === "chat") return null;
     const projectId = sidebarProjectIdBySessionId[session.id];
     if (projectId) {
       return (
@@ -428,7 +428,7 @@ export function SidebarSectionList({
       <SidebarSection
         label={taskSectionLabel}
         className={`sidebar-task-section${
-          experience === "development" ? " development" : ""
+          experience !== "chat" ? " development" : ""
         }`}
         titleAccessory={
           experience !== "chat" ? (

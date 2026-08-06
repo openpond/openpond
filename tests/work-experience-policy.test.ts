@@ -65,7 +65,7 @@ describe("experience capability policy", () => {
     );
   });
 
-  test("rejects workspace access in Chat and developer actions in Work", () => {
+  test("rejects workspace access in Chat and gates repository actions by Work target", () => {
     expect(
       workspaceToolExperienceBlocker({
         session: { experience: "chat" },
@@ -77,7 +77,13 @@ describe("experience capability policy", () => {
         session: { experience: "work" },
         action: "sandbox_git_status",
       })
-    ).toContain("Development capability");
+    ).toContain("repository-aware Work");
+    expect(
+      workspaceToolExperienceBlocker({
+        session: { experience: "work", workspaceKind: "local_project" },
+        action: "sandbox_git_status",
+      })
+    ).toBeNull();
     expect(
       workspaceToolExperienceBlocker({
         session: { experience: "development" },

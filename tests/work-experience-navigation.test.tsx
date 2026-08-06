@@ -32,11 +32,9 @@ describe("Work experience navigation", () => {
   test("separates product areas from persisted conversation experience", () => {
     expect(productAreaForAppView("chat", "chat")).toBe("chat");
     expect(productAreaForAppView("chat", "work")).toBe("chat");
-    expect(productAreaForAppView("chat", "development")).toBe(
-      "development"
-    );
+    expect(productAreaForAppView("chat", "development")).toBe("chat");
     expect(productAreaForAppView("labs", "development")).toBe("models");
-    expect(chatTaskModeForExperience("development")).toBe("chat");
+    expect(chatTaskModeForExperience("development")).toBe("work");
   });
 
   test("remembers only the last Chat or Work task mode", () => {
@@ -78,7 +76,7 @@ describe("Work experience navigation", () => {
     ).toBe("development");
   });
 
-  test("shares projectless Chat and Work recents while separating Development", () => {
+  test("keeps Chat recents separate while Work includes historical Development", () => {
     const chat = session({ id: "chat", experience: "chat" });
     const work = session({ id: "work", experience: "work" });
     const development = session({
@@ -92,15 +90,15 @@ describe("Work experience navigation", () => {
 
     expect(
       sidebarSessionsForExperience(sessions, "chat").map((item) => item.id)
-    ).toEqual(["chat", "work"]);
+    ).toEqual(["chat"]);
     expect(
       sidebarSessionsForExperience(sessions, "work").map((item) => item.id)
-    ).toEqual(["chat", "work"]);
+    ).toEqual(["work", "development"]);
     expect(
       sidebarSessionsForExperience(sessions, "development").map(
         (item) => item.id
       )
-    ).toEqual(["development"]);
+    ).toEqual(["work", "development"]);
   });
 
   test("renders the wordmark trigger and truthful Work starter examples", () => {
@@ -126,7 +124,6 @@ describe("Work experience navigation", () => {
     expect(PRODUCT_AREA_OPTIONS.map((option) => option.label)).toEqual([
       "Chat",
       "Models",
-      "Developer",
     ]);
     expect(CHAT_TASK_MODE_OPTIONS.map((option) => option.label)).toEqual([
       "Chat",

@@ -190,6 +190,7 @@ describe("local Harness Refiner worker", () => {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
+            operation: "update",
             target: "instructions/system.md",
             summary: "Recover from a malformed command without restarting completed work.",
             replacementContent: replacement,
@@ -202,7 +203,7 @@ describe("local Harness Refiner worker", () => {
 
     expect(calls).toBe(1);
     expect(result.outcome.decision).toBe("proposed");
-    expect(result.validations.map((validation) => validation.status)).toEqual(["passed"]);
+    expect(result.validations.map((validation) => validation.status)).toEqual(["passed", "passed"]);
     expect(result.advanceReceipt?.decision).toBe("advanced");
     expect(result.overlay.status).toBe("frozen");
     expect(result.overlay.revision).toBe(1);

@@ -337,7 +337,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       if (!connection) throw new Error("OpenPond is not connected.");
       let provider = activeProvider;
       let model = activeModel;
-      if (input.target !== "development" && provider === "codex") {
+      if (provider === "codex") {
         provider =
           providerOptionsFromSettings(bootstrap?.providers, {
             enabledOnly: true,
@@ -545,10 +545,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       setSelectedSessionId(null);
       if (nextProductArea === "models") {
         setView("labs");
-        return;
-      }
-      if (nextProductArea === "development") {
-        changeNewExperience("development");
         return;
       }
       changeNewExperience(readLastChatTaskModeFromBrowser());
@@ -812,7 +808,18 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "labs" &&
             view !== "scheduled" &&
             view !== "outputs" &&
-            activeExperience === "development",
+            (
+              activeExperience === "development" ||
+              (
+                activeExperience === "work" &&
+                Boolean(
+                  selectedProject ||
+                  selectedSession?.localProjectId ||
+                  selectedSession?.cloudProjectId ||
+                  selectedSession?.workspaceKind === "local_project"
+                )
+              )
+            ),
         }}
         mainPane={{
           experience: activeExperience,

@@ -97,6 +97,7 @@ describe("Local Harness refinement acceptance", () => {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
+            operation: "update",
             target: "instructions/system.md",
             summary: "Avoid the recovered legacy converter detour.",
             replacementContent: replacement,

@@ -184,6 +184,60 @@ export function appendCompactionStatus(messages: ChatMessage[], item: RuntimeEve
   messages.push(next);
 }
 
+export function appendHarnessRefinementStatus(
+  messages: ChatMessage[],
+  item: RuntimeEvent,
+): void {
+  const data = asRecord(item.data);
+  const outcome = asRecord(data?.outcome);
+  const workspaceAdvance = stringValue(data, ["workspaceAdvance"]);
+  const hasProposal = Boolean(asRecord(data?.proposal));
+  const failed = item.name === "harness.refiner.failed" || item.status === "failed";
+  const completed = item.name === "harness.refiner.completed";
+  const content = failed
+    ? `Harness review failed${item.output || item.error ? `: ${item.output ?? item.error}` : ""}`
+    : completed && workspaceAdvance === "advanced"
+      ? "Harness updated for future Work"
+      : completed && workspaceAdvance === "retained"
+        ? "Harness change saved for review"
+        : completed && hasProposal && /\bapplied\b/i.test(item.output ?? "")
+          ? "Harness context updated for future Work"
+        : completed && hasProposal
+          ? "Harness suggestion saved"
+          : completed && outcome?.decision === "no_action"
+            ? "Harness review found no reusable change"
+            : completed
+              ? "Harness review completed"
+              : "Reviewing a reusable recovery";
+  const next: ChatMessage = {
+    id: item.id,
+    role: "status_divider",
+    content,
+    timestamp: item.timestamp,
+    turnId: item.turnId,
+    statusKind: "harness_refinement",
+    statusState: failed ? "failed" : completed ? "completed" : "running",
+    statusTone: failed
+      ? "danger"
+      : completed && workspaceAdvance === "advanced"
+        ? "success"
+        : "info",
+  };
+  const active = findLast(
+    messages,
+    (candidate) =>
+      candidate.role === "status_divider" &&
+      candidate.statusKind === "harness_refinement" &&
+      candidate.statusState === "running" &&
+      candidate.turnId === item.turnId,
+  );
+  if (active) {
+    Object.assign(active, next);
+    return;
+  }
+  messages.push(next);
+}
+
 function compactionStatusText(item: RuntimeEvent): string {
   const reason = compactionReason(item);
   if (item.name === "session.compaction.started") return reason === "auto" ? "Auto compacting context" : "Compacting context";

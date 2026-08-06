@@ -247,10 +247,14 @@ export const ImprovementRouteDecisionContentSchema = z
         path: ["automatic"],
       });
     }
-    if (decision.route === "training" && decision.authority !== "training_system") {
+    if (
+      decision.route === "training" &&
+      decision.automatic &&
+      decision.authority !== "training_system"
+    ) {
       context.addIssue({
         code: "custom",
-        message: "training routes require training-system authority",
+        message: "automatic training routes require training-system authority",
         path: ["authority"],
       });
     }

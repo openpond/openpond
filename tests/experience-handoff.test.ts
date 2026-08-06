@@ -42,7 +42,7 @@ describe("experience handoffs", () => {
     });
   });
 
-  test("requires an explicit Development destination before source mutation", () => {
+  test("requires an explicit repository destination before Work source mutation", () => {
     const output = {
       id: "output_1",
       revision: 3,
@@ -51,14 +51,14 @@ describe("experience handoffs", () => {
     expect(outputHandoffPrompt(output, "chat")).toBe(
       'Continue from the attached Work output "survey-report.pdf" (revision 3).'
     );
-    expect(outputHandoffPrompt(output, "development")).toContain(
+    expect(outputHandoffPrompt(output, "work")).toContain(
       "Choose a Project or repository before making source changes"
     );
     expect(
       buildExperienceHandoffMetadata({
         sourceTaskId: "task_work",
         sourceExperience: "work",
-        targetExperience: "development",
+        targetExperience: "work",
         output: { id: output.id, revision: output.revision },
         createdAt: "2026-07-28T12:00:00.000Z",
       }).checkoutMutation

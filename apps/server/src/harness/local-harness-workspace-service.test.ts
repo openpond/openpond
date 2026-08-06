@@ -117,7 +117,7 @@ describe("local Harness workspace service", () => {
     );
   });
 
-  it("persists structured observations and a deterministic trigger at a tool boundary", async () => {
+  it("persists structured observations and queues semantic routing at a tool boundary", async () => {
     const { store, workspace, release } = await fixture();
     const session = SessionSchema.parse({
       id: "session-observer",
@@ -206,8 +206,8 @@ describe("local Harness workspace service", () => {
       now: () => LATER,
     });
     expect(detection?.trigger).toMatchObject({
-      decision: "route_deterministically",
-      deterministicRoute: "runtime",
+      decision: "queue_refiner",
+      deterministicRoute: null,
     });
     expect(
       await store.listHarnessImprovementArtifacts(workspace.id, "observation"),

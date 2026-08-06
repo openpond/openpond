@@ -37,8 +37,8 @@ type SidebarDestinationProps = {
 };
 
 export function SidebarNavigation({
-  experience = "development",
-  productArea = "development",
+  experience = "work",
+  productArea = "chat",
   beginNewChat,
   setSectionMenuOpen,
   setSelectedAppId,

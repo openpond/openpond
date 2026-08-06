@@ -75,6 +75,9 @@ export type HttpRouteDeps = {
     receiptId: string,
     payload: unknown
   ) => Promise<unknown>;
+  harnessHistoryPayload: () => Promise<unknown>;
+  rollbackHarnessPayload: (payload: unknown) => Promise<unknown>;
+  reviewHarnessProposalPayload: (payload: unknown) => Promise<unknown>;
   listHostedSavedWorkPayload: () => Promise<unknown>;
   createHostedSavedWorkPayload: (payload: unknown) => Promise<unknown>;
   updateHostedSavedWorkPayload: (

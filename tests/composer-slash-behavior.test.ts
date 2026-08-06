@@ -544,7 +544,7 @@ describe("composer slash behavior", () => {
 
       const guidanceIndex = markup.indexOf("composer-local-work-guidance");
       expect(markup).toContain(
-        "Work uses your local AI and Openpond Sandboxes, schedules are local. Use Work mode on the web app for cloud based Work",
+        "Work can run against a Local project or a Hosted sandbox. Choose the execution target below before starting a new task.",
       );
       expect(guidanceIndex).toBeGreaterThan(-1);
       expect(guidanceIndex).toBeLessThan(markup.indexOf("composer-input-shell"));

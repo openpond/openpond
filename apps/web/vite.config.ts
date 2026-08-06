@@ -1,8 +1,7 @@
-import { rmSync } from "node:fs";
+import { globSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import publicVideoManifest from "./src/lib/public-video-manifest.json";
 
 const openPondServerUrl = process.env.VITE_OPENPOND_SERVER_URL;
 const openPondWebPort = Number.parseInt(process.env.OPENPOND_WEB_PORT ?? "17876", 10);
@@ -16,8 +15,12 @@ function excludeLocalVideosFromProduction(): Plugin {
       outputRoot = resolve(config.root, config.build.outDir);
     },
     closeBundle() {
-      for (const video of publicVideoManifest.videos) {
-        rmSync(resolve(outputRoot, video.localPath), { force: true });
+      // Local development may have downloaded public videos that are ignored
+      // by Git. Production and CLI distributions resolve video URLs through
+      // the content-addressed public manifest, so no local MP4 belongs in a
+      // deterministic package even when it is not yet listed in that manifest.
+      for (const relativePath of globSync("**/*.mp4", { cwd: outputRoot })) {
+        rmSync(resolve(outputRoot, relativePath), { force: true });
       }
     },
   };

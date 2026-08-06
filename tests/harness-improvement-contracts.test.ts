@@ -139,7 +139,7 @@ describe("Harness improvement contracts", () => {
     ).toThrow(/require a route/i);
   });
 
-  test("keeps training routes under training-system authority", () => {
+  test("keeps automatic training under training-system authority while allowing recommendations", () => {
     const trigger = { id: "trigger-a", contentHash: HASH_A };
     expect(() =>
       createImprovementRouteDecision({
@@ -148,12 +148,26 @@ describe("Harness improvement contracts", () => {
         trigger,
         route: "training",
         authority: "refiner_model",
-        automatic: false,
+        automatic: true,
         reason: "A model gap may remain.",
         createdAt: CREATED_AT,
         metadata: {},
       }),
-    ).toThrow(/training-system authority/i);
+    ).toThrow(/automatic training routes require training-system authority/i);
+
+    const recommendation = createImprovementRouteDecision({
+      schemaVersion: "openpond.improvementRouteDecision.v1",
+      id: "route-recommendation",
+      trigger,
+      route: "training",
+      authority: "refiner_model",
+      automatic: false,
+      reason: "A model gap may remain.",
+      createdAt: CREATED_AT,
+      metadata: {},
+    });
+    expect(recommendation.route).toBe("training");
+    expect(recommendation.automatic).toBe(false);
 
     const decision = createImprovementRouteDecision({
       schemaVersion: "openpond.improvementRouteDecision.v1",

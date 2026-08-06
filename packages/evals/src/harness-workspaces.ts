@@ -194,6 +194,7 @@ export const HarnessValidationPlanItemSchema = z
       "business_formula",
       "targeted_evaluation",
       "observed_recovery",
+      "memory",
     ]),
     description: BoundedTextSchema,
     required: z.boolean(),

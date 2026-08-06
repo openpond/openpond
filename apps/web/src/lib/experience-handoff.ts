@@ -60,10 +60,10 @@ export function exactExchangeHandoffPrompt(
 
 export function outputHandoffPrompt(
   output: Pick<OutputRef, "revision" | "title">,
-  target: Extract<Experience, "chat" | "development">
+  target: Extract<Experience, "chat" | "work">
 ): string {
   const base = `Continue from the attached Work output "${output.title}" (revision ${output.revision}).`;
-  return target === "development"
+  return target === "work"
     ? `${base} Choose a Project or repository before making source changes; do not mutate a checkout until I choose it.`
     : base;
 }

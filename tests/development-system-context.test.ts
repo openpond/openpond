@@ -86,7 +86,7 @@ describe("Development repository instructions", () => {
     ]);
   });
 
-  test("adds persistence, destructive-action safety, and AGENTS.md only to local Development prompts", async () => {
+  test("adds persistence, destructive-action safety, and AGENTS.md to repository-aware Work", async () => {
     const repositoryRoot = await createGitRepository();
     await writeFile(
       path.join(repositoryRoot, "AGENTS.md"),
@@ -127,7 +127,7 @@ describe("Development repository instructions", () => {
       { toolInstructionMode: "none" },
     );
 
-    expect(developmentPrompt).toContain("Development experience:");
+    expect(developmentPrompt).toContain("Repository-aware Work:");
     expect(developmentPrompt).toContain(
       "If a command or tool fails, inspect the result, correct the approach, and retry when safe.",
     );
@@ -137,14 +137,12 @@ describe("Development repository instructions", () => {
     expect(developmentPrompt).toContain(
       "Use ./cli --staging changes --run for staging.",
     );
-    expect(chatPrompt).not.toContain("Development experience:");
+    expect(chatPrompt).not.toContain("Repository-aware Work:");
     expect(chatPrompt).not.toContain(
       "Use ./cli --staging changes --run for staging.",
     );
-    expect(workPrompt).not.toContain("Development experience:");
-    expect(workPrompt).not.toContain(
-      "Use ./cli --staging changes --run for staging.",
-    );
+    expect(workPrompt).toContain("Repository-aware Work:");
+    expect(workPrompt).toContain("Use ./cli --staging changes --run for staging.");
   });
 });
 

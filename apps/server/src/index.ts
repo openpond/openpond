@@ -56,6 +56,10 @@ import {
   loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
+import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
+import {
+  createLocalHarnessSettingsRoutePayloads,
+} from "./harness/local-harness-history.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -806,6 +810,7 @@ export async function createOpenPondServer(
       loadLocalHarnessRuntimeForAgentRun(store, session.id),
     ensureHarnessRunOverlay: (input) =>
       ensureLocalHarnessRunOverlay({ store, ...input }),
+    harnessModelTools: createLocalHarnessModelToolDefinitions({ store }),
     processHarnessImprovementBoundary: processLocalHarnessImprovementBoundary,
     resolveCreateImproveTaskset: (
       tasksetId: string,
@@ -1710,6 +1715,12 @@ export async function createOpenPondServer(
     throw new Error(result.error);
   }
 
+  const {
+    harnessHistoryRoutePayload,
+    rollbackHarnessRoutePayload,
+    reviewHarnessProposalRoutePayload,
+  } = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
+
   const remoteAccess = createRemoteAccessManager({
     getActualPort: () => actualPort,
     logger,
@@ -1747,6 +1758,9 @@ export async function createOpenPondServer(
       recordWorkEvidenceFeedbackPayload: workEvidenceApi.recordFeedback,
       listWorkEvidenceFeedbackPayload: workEvidenceApi.listFeedback,
       classifyWorkEvidencePayload: workEvidenceApi.eligibility,
+      harnessHistoryPayload: harnessHistoryRoutePayload,
+      rollbackHarnessPayload: rollbackHarnessRoutePayload,
+      reviewHarnessProposalPayload: reviewHarnessProposalRoutePayload,
       listHostedSavedWorkPayload,
       createHostedSavedWorkPayload,
       updateHostedSavedWorkPayload,

@@ -59,4 +59,8 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 37,
     run: (store) => store.createHarnessWorkspaceTables(),
   },
+  {
+    version: 38,
+    run: (store) => store.createHarnessWorkspaceTables(),
+  },
 ];

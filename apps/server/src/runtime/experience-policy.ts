@@ -13,7 +13,11 @@ const WORK_MODEL_TOOLS = new Set([
   "connected_app_search",
   "connected_app_skill_read",
   "connected_app_write",
+  "harness_inspect",
+  "context_read",
   "manage_sidebar_file",
+  "memory_inspect",
+  "memory_search",
   "openpond_browser_click",
   "openpond_browser_key",
   "openpond_browser_move_cursor",
@@ -21,8 +25,17 @@ const WORK_MODEL_TOOLS = new Set([
   "openpond_browser_scroll",
   "openpond_browser_snapshot",
   "openpond_browser_type",
+  "openpond_subagent_cancel",
+  "openpond_subagent_followup",
+  "openpond_subagent_join",
+  "openpond_subagent_send_message",
+  "openpond_subagent_start",
+  "openpond_subagent_status",
   "profile_skill_read",
+  "refine_request",
+  "refine_status",
   "schedule_work",
+  "skill_inspect",
   "view_image",
   "web_fetch",
   "web_search",
@@ -66,9 +79,12 @@ export function modelToolAllowedForExperience(
 }
 
 export function filterModelToolsForExperience(
-  session: Pick<Session, "experience">,
+  session: Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">,
   definitions: ModelToolDefinition[]
 ): ModelToolDefinition[] {
+  if (sessionUsesRepositoryWork(session)) {
+    return definitions.filter((definition) => !definition.name.startsWith("work_"));
+  }
   return definitions.filter((definition) =>
     modelToolAllowedForExperience(session.experience, definition.name)
   );
@@ -84,10 +100,11 @@ export function workspaceToolAllowedForExperience(
 }
 
 export function workspaceToolExperienceBlocker(input: {
-  session: Pick<Session, "experience">;
+  session: Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">;
   action: WorkspaceToolRequest["action"];
   args?: Record<string, unknown>;
 }): string | null {
+  if (sessionUsesRepositoryWork(input.session)) return null;
   if (
     workspaceToolAllowedForExperience(input.session.experience, input.action)
   ) {
@@ -95,9 +112,9 @@ export function workspaceToolExperienceBlocker(input: {
     return workWorkspaceRequestBlocker(input.action, input.args ?? {});
   }
   if (input.session.experience === "chat") {
-    return "Chat does not have workspace compute. Start a Work or Development task to use workspace tools.";
+    return "Chat does not have workspace compute. Start Work to use Local or Hosted workspace tools.";
   }
-  return `${input.action} is a Development capability and is not available in Work.`;
+  return `${input.action} requires repository-aware Work and is not available in this projectless Work run.`;
 }
 
 function workWorkspaceRequestBlocker(
@@ -197,9 +214,11 @@ function workPathBlocker(
 }
 
 export function experienceUsesWorkspaceToolProtocol(
-  experience: Experience
+  experience: Experience | Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">
 ): boolean {
-  return experience === "development";
+  return typeof experience === "string"
+    ? experience === "development"
+    : sessionUsesRepositoryWork(experience);
 }
 
 export function experienceAllowsConnectedApps(experience: Experience): boolean {
@@ -210,6 +229,23 @@ export function experienceAllowsProfileSkills(experience: Experience): boolean {
   return experience !== "chat";
 }
 
-export function experienceAllowsAuthoring(experience: Experience): boolean {
-  return experience === "development";
+export function experienceAllowsAuthoring(
+  experience: Experience | Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">,
+): boolean {
+  return typeof experience === "string"
+    ? experience === "development"
+    : sessionUsesRepositoryWork(experience);
+}
+
+export function sessionUsesRepositoryWork(
+  session: Pick<Session, "experience" | "workspaceKind" | "localProjectId" | "cloudProjectId">,
+): boolean {
+  return session.experience === "development" || (
+    session.experience === "work" &&
+    (
+      session.workspaceKind === "local_project" ||
+      Boolean(session.localProjectId) ||
+      Boolean(session.cloudProjectId)
+    )
+  );
 }

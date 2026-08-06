@@ -13,6 +13,7 @@ import { appendActionRunMessage, actionRunSummaryFromEvent } from "./chat-action
 import {
   appendActivityMessage,
   appendCompactionStatus,
+  appendHarnessRefinementStatus,
   appendInterruptionStatus,
   codexControlMessage,
   completeActivityGroup,
@@ -197,6 +198,11 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
     if (isCompactionEvent(item)) {
       appendCompactionStatus(messages, item);
+      continue;
+    }
+
+    if (item.name.startsWith("harness.refiner.")) {
+      appendHarnessRefinementStatus(messages, item);
       continue;
     }
 

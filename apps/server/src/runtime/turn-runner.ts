@@ -95,6 +95,7 @@ import {
   experienceAllowsAuthoring,
   experienceAllowsConnectedApps,
   experienceAllowsProfileSkills,
+  sessionUsesRepositoryWork,
 } from "./experience-policy.js";
 
 export * from "./turns/public-api.js";
@@ -731,13 +732,16 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       }>;
     } = {}
   ) {
-    return capabilityCatalogDefinitions(
+    return [
+      ...capabilityCatalogDefinitions(
       openPondActionCatalog,
       runtimeEvents,
       profileSkillRuntime,
       connectedApps,
       options
-    );
+      ),
+      ...(deps.harnessModelTools ?? []),
+    ];
   }
   async function sendTurn(sessionId: string, payload: unknown): Promise<Turn> {
     const finish = turnRunnerLifecycle.beginSendTurn();
@@ -788,15 +792,15 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       input.modelRef?.providerId ??
       session.modelRef?.providerId ??
       session.provider;
-    if (requestedProvider === "codex" && session.experience !== "development") {
-      throw new Error("The Codex provider is available in Development.");
+    if (requestedProvider === "codex" && !sessionUsesRepositoryWork(session)) {
+      throw new Error("The Codex provider requires repository-aware Work.");
     }
     if (
       /^\/goal(?:\s|$)/i.test(input.prompt.trimStart()) &&
-      (requestedProvider !== "codex" || session.experience !== "development")
+      (requestedProvider !== "codex" || !sessionUsesRepositoryWork(session))
     ) {
       throw new Error(
-        "/goal is only available in Development with the Codex provider."
+        "/goal is only available in repository-aware Work with the Codex provider."
       );
     }
     const selectedProfileRef =
@@ -864,9 +868,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       : null;
     const authoringRoute =
       authoringCommandRoute(input.prompt) ?? legacyAgentAuthoringRoute;
-    if (authoringRoute && !experienceAllowsAuthoring(session.experience)) {
+    if (authoringRoute && !experienceAllowsAuthoring(session)) {
       throw new Error(
-        "Agent and Skill authoring are available in Development."
+        "Agent and Skill authoring are available in repository-aware Work."
       );
     }
     const activeCreateImproveRun = legacyAgentAuthoringRoute
@@ -1152,7 +1156,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       }
       const initialWorkspaceDiff = await workspaceDiffBaseline(session);
       const mentionedApps =
-        session.experience === "development"
+        sessionUsesRepositoryWork(session)
           ? await resolveMentionedAppsForTurn(
               input.mentionedAppIds,
               findOpenPondApp
@@ -1205,10 +1209,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             signal: controller.signal,
           })
         : [];
-      const extraSystemContext = subagentSystemContextForSession(
-        session,
-        subagentDelegation
-      );
+      const extraSystemContext = [
+        selectedHarness?.instructionContext ?? null,
+        subagentSystemContextForSession(session, subagentDelegation),
+      ].filter(Boolean).join("\n\n");
       if (session.provider === "openpond") {
         const providerTurnId = `openpond-${turn.id}`;
         const model =
@@ -1224,7 +1228,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           {
             mentionedApps,
             openPondActionCatalog:
-              session.experience === "development"
+              sessionUsesRepositoryWork(session)
                 ? input.openPondActionCatalog
                 : [],
             openPondProfileSkills: profileSkillRuntime.skills,
@@ -1241,7 +1245,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               profileSkillRuntime
             ),
             browserControlAvailable:
-              session.experience === "development" &&
+              sessionUsesRepositoryWork(session) &&
               browserControlAvailable(session),
             extraSystemContext,
           }
@@ -1278,7 +1282,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           mentionedApps,
           connectedApps,
           openPondActionCatalog:
-            session.experience === "development"
+            sessionUsesRepositoryWork(session)
               ? input.openPondActionCatalog ?? []
               : [],
           profileSkillRuntime,
@@ -1383,7 +1387,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                 {
                   mentionedApps,
                   openPondActionCatalog:
-                    session.experience === "development"
+                    sessionUsesRepositoryWork(session)
                       ? input.openPondActionCatalog
                       : [],
                   openPondProfileSkills: profileSkillRuntime.skills,
@@ -1401,7 +1405,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                       profileSkillRuntime
                     ),
                   browserControlAvailable:
-                    session.experience === "development" &&
+                    sessionUsesRepositoryWork(session) &&
                     browserControlAvailable(session),
                   extraSystemContext,
                 }
@@ -1470,7 +1474,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           mentionedApps,
           connectedApps,
           openPondActionCatalog:
-            session.experience === "development"
+            sessionUsesRepositoryWork(session)
               ? input.openPondActionCatalog ?? []
               : [],
           profileSkillRuntime,
@@ -1556,7 +1560,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       throwIfInterrupted(controller.signal);
       const providerTurn = await runtime.client.startTurn({
         threadId: runtime.threadId,
-        prompt: providerPrompt,
+        prompt: codexPromptWithHarnessContext(providerPrompt, extraSystemContext),
         cwd: turnCwd ?? session.cwd,
         model: codexModel,
         approvalPolicy: turnPermissions.approvalPolicy,
@@ -1618,11 +1622,17 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         }
       }
       if (interrupted) {
-        return interruptTurn(
+        const paused = await interruptTurn(
           session,
           turn.id,
           activeTurn.interruptionReason ?? "Stopped by user"
         );
+        await processHarnessImprovementBoundarySafely({
+          session,
+          turn: paused,
+          boundaryKind: "turn_paused",
+        });
+        return paused;
       }
       const message = error instanceof Error ? error.message : String(error);
       if (activeCreateImproveRun) {
@@ -1678,6 +1688,22 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     recoverPendingSubagentCompletions: recoverPendingCompletions,
     cleanupExpiredRetainedSubagentWorkspace,
   };
+}
+
+function codexPromptWithHarnessContext(
+  userPrompt: string,
+  harnessContext: string,
+): string {
+  if (!harnessContext.trim()) return userPrompt;
+  return [
+    "<openpond_trusted_runtime_context>",
+    harnessContext,
+    "</openpond_trusted_runtime_context>",
+    "",
+    "<user_request>",
+    userPrompt,
+    "</user_request>",
+  ].join("\n");
 }
 
 function localModelSystemPrompt(

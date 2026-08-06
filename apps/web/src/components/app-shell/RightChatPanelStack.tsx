@@ -28,7 +28,6 @@ import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { ComposerProjectTargetState, ComposerSubmitOptions } from "../chat/Composer";
-import type { ComposerProfileTargetState } from "../chat/ComposerControls";
 import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import { FolderOpen, MessageSquare, Plus, X } from "../icons";
@@ -38,7 +37,6 @@ import {
   isOpenPondProfileAction,
 } from "../../lib/openpond-action-run";
 import {
-  composerProfileTargetForLibrary,
   composerSkillsForProfile,
   profileStateForRef,
 } from "../../lib/profile-selection";
@@ -174,8 +172,6 @@ export function RightChatPanelStack({
         ...buildOpenPondProfileActionCatalog(activeProfileState),
       ]
     : actionCatalog;
-  const profileTarget: ComposerProfileTargetState | null =
-    composerProfileTargetForLibrary(profileLibrary, activeProfileRef);
 
   useEffect(() => {
     const previousPanelIds = previousPanelIdsRef.current;
@@ -384,7 +380,7 @@ export function RightChatPanelStack({
             mentionApps={mentionApps}
             codexPersonalSkills={codexPersonalSkills}
             profileSkills={activeProfileSkills}
-            profileTarget={activePanel.provider === "codex" ? null : profileTarget}
+            profileTarget={null}
             panel={activePanel}
             initialScrollState={{
               scrollTop: activePanel.scrollTop,

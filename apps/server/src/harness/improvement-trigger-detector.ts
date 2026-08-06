@@ -28,6 +28,7 @@ export type HarnessImprovementDetection = {
 type NormalizedToolOutcome = {
   event: RuntimeEvent;
   action: string;
+  args: Record<string, unknown>;
   invocationKey: string;
   failed: boolean;
   deterministicClass: string | null;
@@ -46,6 +47,7 @@ export function detectHarnessImprovementAtBoundary(input: {
   cooldownUntil?: string | null;
   estimatedRefinerCostUsd?: number;
   loadedSkillNames?: readonly string[];
+  priorCompletedTurnExists?: boolean;
 }): HarnessImprovementDetection {
   const policy = input.policy ?? DEFAULT_REFINEMENT_TRIGGER_POLICY;
   const outcomes = normalizeToolOutcomes(input.events);
@@ -151,21 +153,6 @@ export function detectHarnessImprovementAtBoundary(input: {
     };
   }
 
-  const deterministicRoute = deterministicRouteFor(actionable);
-  if (deterministicRoute) {
-    return {
-      observations,
-      trigger: createRefinementTriggerDecision({
-        ...base,
-        decision: "route_deterministically",
-        deterministicRoute,
-        suggestedRoutes: [deterministicRoute],
-        reason: "The recovered failure has a deterministic runtime classification.",
-        estimatedMaxCostUsd: 0,
-      }),
-    };
-  }
-
   const estimatedMaxCostUsd = input.estimatedRefinerCostUsd ?? 0.01;
   if (estimatedMaxCostUsd > policy.maxEstimatedCostUsd) {
     return {
@@ -201,13 +188,52 @@ function collectObservations(input: {
   overlay: HarnessOverlaySnapshotRef | null;
   outcomes: NormalizedToolOutcome[];
   boundary: ImprovementSafeBoundary;
+  events: readonly RuntimeEvent[];
+  priorCompletedTurnExists?: boolean;
 }): ImprovementObservation[] {
   const observations: ImprovementObservation[] = [];
-  const latestFailureByAction = new Map<string, NormalizedToolOutcome>();
+  const openFailures: NormalizedToolOutcome[] = [];
   const seenFailureKeys = new Set<string>();
   const recoveredFailureKeys = new Set<string>();
 
+  const correctionEvent = input.priorCompletedTurnExists
+    ? latestUserCorrectionEvent(input.events)
+    : null;
+  if (correctionEvent) {
+    observations.push(
+      observationForEvents({
+        input,
+        kind: "user_correction",
+        state: "terminal",
+        events: [correctionEvent.event],
+        deterministicClass: "explicit_user_correction",
+        summary: correctionEvent.summary,
+      }),
+    );
+  }
+
   for (const outcome of input.outcomes) {
+    if (outcome.action === "refine_request" && !outcome.failed) {
+      const suggestedRoute = typeof outcome.args.suggestedRoute === "string"
+        ? outcome.args.suggestedRoute
+        : null;
+      const requestedSummary = typeof outcome.args.summary === "string"
+        ? outcome.args.summary.trim()
+        : "The agent explicitly requested bounded refinement.";
+      observations.push(
+        observationFor({
+          input,
+          kind: "reusable_success",
+          state: "terminal",
+          outcomes: [outcome],
+          deterministicClass: suggestedRoute
+            ? `refine_requested_${suggestedRoute}`
+            : "refine_requested",
+          summary: requestedSummary.slice(0, 100_000),
+        }),
+      );
+      continue;
+    }
     if (outcome.failed) {
       const failureKey = contentHash({
         action: outcome.action,
@@ -229,11 +255,18 @@ function collectObservations(input: {
         );
         seenFailureKeys.add(failureKey);
       }
-      latestFailureByAction.set(outcome.action, outcome);
+      openFailures.push(outcome);
       continue;
     }
 
-    const priorFailure = latestFailureByAction.get(outcome.action);
+    const sameActionIndex = findLastIndex(
+      openFailures,
+      (candidate) => candidate.action === outcome.action,
+    );
+    const priorFailureIndex = sameActionIndex >= 0
+      ? sameActionIndex
+      : openFailures.length - 1;
+    const priorFailure = openFailures[priorFailureIndex];
     if (!priorFailure) continue;
     const failureKey = contentHash({
       action: priorFailure.action,
@@ -264,16 +297,18 @@ function collectObservations(input: {
       });
     }
 
-    observations.push(
-      observationFor({
-        input,
-        kind: "retry",
-        state: "recovered",
-        outcomes: [priorFailure, outcome],
-        deterministicClass: priorFailure.deterministicClass,
-        summary: `Tool ${outcome.action} was retried after a failure.`,
-      }),
-    );
+    if (priorFailure.action === outcome.action) {
+      observations.push(
+        observationFor({
+          input,
+          kind: "retry",
+          state: "recovered",
+          outcomes: [priorFailure, outcome],
+          deterministicClass: priorFailure.deterministicClass,
+          summary: `Tool ${outcome.action} was retried after a failure.`,
+        }),
+      );
+    }
     observations.push(
       observationFor({
         input,
@@ -281,11 +316,13 @@ function collectObservations(input: {
         state: "recovered",
         outcomes: [priorFailure, outcome],
         deterministicClass: recoveredClass(priorFailure.deterministicClass),
-        summary: `Tool ${outcome.action} recovered within the same run.`,
+        summary: priorFailure.action === outcome.action
+          ? `Tool ${outcome.action} recovered within the same run.`
+          : `Tool ${outcome.action} recovered after ${priorFailure.action} failed.`,
       }),
     );
     recoveredFailureKeys.add(failureKey);
-    latestFailureByAction.delete(outcome.action);
+    openFailures.splice(priorFailureIndex, 1);
   }
 
   const recovered = observations.filter((observation) => observation.kind === "recovery");
@@ -307,6 +344,84 @@ function collectObservations(input: {
     );
   }
   return observations;
+}
+
+function observationForEvents(input: {
+  input: {
+    runRef: string;
+    turnId: string;
+    harnessRelease: ImmutableReleaseRef;
+    overlay: HarnessOverlaySnapshotRef | null;
+    boundary: ImprovementSafeBoundary;
+  };
+  kind: ImprovementObservation["kind"];
+  state: ImprovementObservation["state"];
+  events: RuntimeEvent[];
+  deterministicClass: string | null;
+  summary: string;
+}): ImprovementObservation {
+  const eventRefs = input.events.map((event) => ({
+    id: event.id,
+    sequence: event.sequence ?? null,
+    contentHash: contentHash(event),
+  }));
+  return createImprovementObservation({
+    schemaVersion: "openpond.improvementObservation.v1",
+    id: stableId("improvement-observation", {
+      runRef: input.input.runRef,
+      kind: input.kind,
+      state: input.state,
+      deterministicClass: input.deterministicClass,
+      summary: input.summary,
+      eventRefs,
+      boundary: input.input.boundary,
+    }),
+    runRef: input.input.runRef,
+    turnId: input.input.turnId,
+    harnessRelease: input.input.harnessRelease,
+    overlay: input.input.overlay,
+    eventRefs,
+    kind: input.kind,
+    state: input.state,
+    tool: null,
+    deterministicClass: input.deterministicClass,
+    summary: input.summary,
+    createdAt: input.input.boundary.occurredAt,
+    metadata: {},
+  });
+}
+
+function latestUserCorrectionEvent(
+  events: readonly RuntimeEvent[],
+): { event: RuntimeEvent; summary: string } | null {
+  const started = [...events]
+    .sort(compareEvents)
+    .reverse()
+    .find((event) => event.name === "turn.started");
+  const prompt = typeof started?.args?.prompt === "string"
+    ? started.args.prompt.trim()
+    : "";
+  if (!started || !prompt || !looksLikeUserCorrection(prompt)) return null;
+  return {
+    event: started,
+    summary: `The user explicitly corrected the preceding result: ${prompt.slice(0, 2_000)}`,
+  };
+}
+
+function looksLikeUserCorrection(prompt: string): boolean {
+  return /^(?:wait\b|no[,.:;!\s]|actually\b|correction\b|that(?:'s| is) (?:wrong|incorrect|not right)|you (?:missed|forgot|didn['’]t|did not)|fix (?:that|this)|redo\b|try again\b)|\b(?:this is wrong|that is wrong|not what i asked|doesn['’]t match|does not match)\b/i.test(
+    prompt.trim(),
+  );
+}
+
+function findLastIndex<T>(
+  values: readonly T[],
+  predicate: (value: T) => boolean,
+): number {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if (predicate(values[index]!)) return index;
+  }
+  return -1;
 }
 
 function observationFor(input: {
@@ -375,6 +490,7 @@ function normalizeToolOutcomes(events: readonly RuntimeEvent[]): NormalizedToolO
     outcomes.push({
       event,
       action,
+      args: asRecord(started?.args ?? event.args),
       invocationKey: contentHash({
         action,
         args: started?.args ?? event.args ?? {},
@@ -451,27 +567,38 @@ function isActionableObservation(observation: ImprovementObservation): boolean {
     observation.kind === "recovery" ||
     observation.kind === "completion_detour" ||
     observation.kind === "user_correction" ||
+    observation.kind === "reusable_success" ||
     (observation.kind === "validation" && observation.state === "terminal") ||
     (observation.kind === "tool_failure" && observation.state === "terminal")
   );
 }
 
-function deterministicRouteFor(
-  observations: readonly ImprovementObservation[],
-): "runtime" | null {
-  const deterministic = observations.some((observation) =>
-    [
-      "recovered_dependency_missing",
-      "recovered_invalid_tool_arguments",
-      "recovered_missing_file_or_resource",
-    ].includes(observation.deterministicClass ?? ""),
-  );
-  return deterministic ? "runtime" : null;
-}
-
 function suggestedRoutesFor(
   observations: readonly ImprovementObservation[],
-): Array<"runtime" | "prompt" | "skill" | "product"> {
+): Array<
+  | "runtime"
+  | "memory"
+  | "prompt"
+  | "skill"
+  | "agent"
+  | "product"
+  | "taskset"
+  | "training"
+> {
+  const explicitlySuggested = observations
+    .map((observation) => /^refine_requested_(runtime|memory|prompt|skill|agent|product|taskset|training)$/.exec(
+      observation.deterministicClass ?? "",
+    )?.[1])
+    .find((route): route is
+      | "runtime"
+      | "memory"
+      | "prompt"
+      | "skill"
+      | "agent"
+      | "product"
+      | "taskset"
+      | "training" => Boolean(route));
+  if (explicitlySuggested) return [explicitlySuggested];
   if (
     observations.some((observation) =>
       ["tool_budget_exhausted", "recovered_tool_budget_exhausted"].includes(

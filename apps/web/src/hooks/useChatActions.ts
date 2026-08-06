@@ -637,19 +637,28 @@ export function useChatActions({
       : selectedSession;
     const experienceForTurn =
       options.experience ?? selectedSessionForTurn?.experience ?? experience;
-    const developmentTurn = experienceForTurn === "development";
+    const repositoryWorkTurn =
+      experienceForTurn === "development" ||
+      (experienceForTurn === "work" && (
+        selectedSessionForTurn?.workspaceKind === "local_project" ||
+        Boolean(selectedSessionForTurn?.localProjectId) ||
+        Boolean(selectedSessionForTurn?.cloudProjectId) ||
+        (!explicitTurnContext && Boolean(
+          selectedProject || selectedCloudProject || selectedApp || workspaceTarget === "hybrid"
+        ))
+      ));
     const selectedAppForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedApp;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedApp;
     const selectedProjectForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedProject;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedProject;
     const selectedCloudProjectForTurn =
-      explicitTurnContext || !developmentTurn ? null : selectedCloudProject;
+      explicitTurnContext || !repositoryWorkTurn ? null : selectedCloudProject;
     const selectedProjectLinkedOpenPondAppForTurn =
-      explicitTurnContext || !developmentTurn
+      explicitTurnContext || !repositoryWorkTurn
         ? null
         : selectedProjectLinkedOpenPondApp;
     const hybridTargetForTurn =
-      !explicitTurnContext && developmentTurn && workspaceTarget === "hybrid";
+      !explicitTurnContext && repositoryWorkTurn && workspaceTarget === "hybrid";
     const shouldSelectSession = options.selectSession ?? true;
     const turnChatMessages = options.chatMessages ?? chatMessages;
     const mentionedAppIdForTurn =
@@ -668,7 +677,7 @@ export function useChatActions({
       selectedAction ?? actionMentionResolution?.action ?? null;
     const actionPromptForRun = actionMentionResolution?.prompt || value;
     const directCommandForTurn =
-      developmentTurn && !selectedActionForTurn
+      repositoryWorkTurn && !selectedActionForTurn
         ? parseComposerDirectCommandPrompt(value)
         : null;
     const parsedSlashCommandForTurn =
@@ -697,8 +706,8 @@ export function useChatActions({
     let turnSessionId: string | null = null;
     let pendingUserMessage: PendingChatUserMessage | null = null;
     try {
-      if (!developmentTurn && providerForTurn === "codex") {
-        throw new Error("The Codex provider is available in Development.");
+      if (!repositoryWorkTurn && providerForTurn === "codex") {
+        throw new Error("The Codex provider requires repository-aware Work.");
       }
       if (disallowedExperienceSlashCommand) {
         throw new Error(
@@ -1115,7 +1124,7 @@ export function useChatActions({
         }
       }
       if (
-        session.experience === "development" &&
+        sessionUsesRepositoryWork(session) &&
         isCloudWorkspaceKind(session.workspaceKind) &&
         session.provider !== "openpond" &&
         !isHybridWorkspaceSession(session)
@@ -1125,7 +1134,7 @@ export function useChatActions({
         );
       }
       if (
-        session.experience === "development" &&
+        sessionUsesRepositoryWork(session) &&
         isCloudWorkspaceKind(session.workspaceKind) &&
         ensureCloudSessionReady
       ) {
@@ -1459,3 +1468,13 @@ export function useChatActions({
 }
 
 export { resolveMentionedChatApp } from "../lib/chat-app-mentions";
+
+function sessionUsesRepositoryWork(session: Session): boolean {
+  return session.experience === "development" || (
+    session.experience === "work" && (
+      session.workspaceKind === "local_project" ||
+      Boolean(session.localProjectId) ||
+      Boolean(session.cloudProjectId)
+    )
+  );
+}

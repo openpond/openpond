@@ -53,7 +53,6 @@ import {
 import { isCloudWorkspaceKind } from "../../lib/workspace-location";
 import { skillPromptForComposer } from "../../lib/profile-skill-composer";
 import {
-  composerProfileTargetForLibrary,
   composerSkillsForProfile,
   openPondProfileRefFromKey,
   profileStateForRef,
@@ -315,12 +314,6 @@ export function MainPane({
     () => buildOpenPondProfileActionCatalog(selectedProfileState),
     [selectedProfileState]
   );
-  const composerProfileTarget = useMemo(() => {
-    return composerProfileTargetForLibrary(
-      bootstrap?.profileLibrary,
-      selectedProfileRef
-    );
-  }, [bootstrap?.profileLibrary, selectedProfileRef]);
   const changeComposerProfile = useCallback(
     async (
       value: string,
@@ -407,9 +400,12 @@ export function MainPane({
       cancelled = true;
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
+  const repositoryWork =
+    experience === "development" ||
+    (experience === "work" && projectTarget.value !== "none");
   const composerActionCatalog = useMemo(() => {
     if (experience === "chat") return selectedProfileActionCatalog;
-    if (experience !== "development") return [];
+    if (!repositoryWork) return [];
     const byId = new Map(
       actionCatalog
         .filter((action) => !isOpenPondProfileAction(action))
@@ -423,6 +419,7 @@ export function MainPane({
   }, [
     actionCatalog,
     experience,
+    repositoryWork,
     profileActionCatalogOverride,
     selectedProfileActionCatalog,
   ]);
@@ -730,7 +727,7 @@ export function MainPane({
     rightPanelMode === "home";
   const showRightHomePanel = shouldShowRightSidebarHomePanel({
     supportedView:
-      (view === "chat" && experience === "development") || view === "labs",
+      (view === "chat" && repositoryWork) || view === "labs",
     open: diffPanelOpen,
     hasContentPanel:
       showDiffPanel ||
@@ -1691,7 +1688,7 @@ export function MainPane({
                 attachmentRequest={composerAttachmentRequest}
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
-                mentionApps={experience === "development" ? mentionApps : []}
+                mentionApps={repositoryWork ? mentionApps : []}
                 connectedAppMentions={connectedAppMentions}
                 profileSkills={
                   activeProvider === "codex"
@@ -1700,12 +1697,12 @@ export function MainPane({
                 }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={experience === "development" ? goalRuntime : null}
+                goalRuntime={experience !== "chat" ? goalRuntime : null}
                 subagentRuntime={
-                  experience === "development" ? subagentRuntime : null
+                  experience !== "chat" ? subagentRuntime : null
                 }
                 createImproveRuntime={
-                  experience === "development" ? createImproveRuntime : null
+                  repositoryWork ? createImproveRuntime : null
                 }
                 busy={turnRunning}
                 running={turnRunning}
@@ -1722,11 +1719,7 @@ export function MainPane({
                 provider={activeProvider}
                 model={activeModel}
                 projectTarget={projectTarget}
-                profileTarget={
-                  experience === "development" && activeProvider !== "codex"
-                    ? composerProfileTarget
-                    : null
-                }
+                profileTarget={null}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}
@@ -1761,12 +1754,10 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            {experience === "development" ? null : (
-              <NewExperienceSwitcher
-                value={experience}
-                onChange={onNewExperienceChange}
-              />
-            )}
+            <NewExperienceSwitcher
+              value={experience === "chat" ? "chat" : "work"}
+              onChange={onNewExperienceChange}
+            />
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {experience === "work" ? (
@@ -1797,7 +1788,7 @@ export function MainPane({
                 mode="start"
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
-                mentionApps={experience === "development" ? mentionApps : []}
+                mentionApps={repositoryWork ? mentionApps : []}
                 connectedAppMentions={connectedAppMentions}
                 profileSkills={
                   activeProvider === "codex"
@@ -1806,12 +1797,12 @@ export function MainPane({
                 }
                 selectedMentionAppId={selectedMentionAppId}
                 contextWindowStatus={contextWindowStatus}
-                goalRuntime={experience === "development" ? goalRuntime : null}
+                goalRuntime={experience !== "chat" ? goalRuntime : null}
                 subagentRuntime={
-                  experience === "development" ? subagentRuntime : null
+                  experience !== "chat" ? subagentRuntime : null
                 }
                 createImproveRuntime={
-                  experience === "development" ? createImproveRuntime : null
+                  repositoryWork ? createImproveRuntime : null
                 }
                 busy={turnRunning}
                 running={turnRunning}
@@ -1826,13 +1817,9 @@ export function MainPane({
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
                 model={activeModel}
-                showProjectFooter={experience === "development"}
+                showProjectFooter={experience !== "chat"}
                 projectTarget={projectTarget}
-                profileTarget={
-                  experience === "development" && activeProvider !== "codex"
-                    ? composerProfileTarget
-                    : null
-                }
+                profileTarget={null}
                 actionCatalog={composerActionCatalog}
                 requestedAction={requestedComposerAction}
                 workspaceTarget={workspaceTarget}

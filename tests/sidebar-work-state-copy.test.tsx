@@ -161,7 +161,7 @@ describe("sidebar task list controls", () => {
     );
 
     expect(workMarkup).toContain(">Refine sidebar<");
-    expect(workMarkup).not.toContain(">Active workspace<");
+    expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
     expect(workMarkup).not.toContain("<time");
   });

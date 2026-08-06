@@ -57,7 +57,7 @@ export function WorkSidebarPanel({
   onToggleExpanded: () => void;
   onUseOutput: (file: File) => void;
   onHandoffOutput: (
-    target: Extract<Experience, "chat" | "development">,
+    target: Extract<Experience, "chat" | "work">,
     output: OutputRef,
     file: File | null
   ) => Promise<void>;
@@ -150,7 +150,7 @@ export function WorkSidebarPanel({
   }
 
   async function handoffOutput(
-    target: Extract<Experience, "chat" | "development">,
+    target: Extract<Experience, "chat" | "work">,
     output: OutputRef
   ) {
     const file = output.kind === "file" ? await loadLocalOutput(output) : null;
@@ -529,10 +529,10 @@ export function WorkSidebarPanel({
                         type="button"
                         disabled={busyOutputId === outputRevisionKey(output)}
                         onClick={() =>
-                          void handoffOutput("development", output)
+                          void handoffOutput("work", output)
                         }
                       >
-                        Continue in Development
+                        Continue in repository Work
                       </button>
                     </div>
                   </article>

@@ -5,6 +5,7 @@ import "../../styles/settings/settings-lists.css";
 import "../../styles/settings/remote-access.css";
 import "../../styles/settings/compute-settings.css";
 import "../../styles/settings/notifications-settings.css";
+import "../../styles/settings/harness-history.css";
 import type {
   BootstrapPayload,
   OpenPondExtension,
@@ -34,6 +35,7 @@ import { SkillsSettingsSection } from "./SkillsSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
 import { ComputeSettingsSection } from "./ComputeSettingsSection";
 import { DatasetStorageSettingsSection } from "./DatasetStorageSettingsSection";
+import { HarnessHistorySettingsSection } from "./HarnessHistorySettingsSection";
 import { useAccountSettings } from "./useAccountSettings";
 import { useDefaultsSettings } from "./useDefaultsSettings";
 import { useDiagnosticsSettings } from "./useDiagnosticsSettings";
@@ -215,7 +217,7 @@ export function SettingsView({
         <WindowControls platform={connection?.platform} />
       </div>
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
-      <main className={`settings-content ${section === "profile" ? "settings-content-wide" : ""}`}>
+      <main className={`settings-content ${section === "profile" || section === "harness" ? "settings-content-wide" : ""}`}>
         {section === "account" ? (
           <AccountSettingsSection
             payload={payload}
@@ -234,6 +236,14 @@ export function SettingsView({
             threads={teamChatThreads}
             onModeChange={onTeamChatNotificationModeChange}
             onThreadMuteChange={onTeamChatThreadMuteChange}
+          />
+        ) : section === "harness" ? (
+          <HarnessHistorySettingsSection
+            connection={connection}
+            enabled={section === "harness"}
+            onError={onError}
+            onOpenSourceSession={onOpenSourceSession}
+            onToast={onToast}
           />
         ) : section === "profile" ? (
           <ProfileSettingsSection

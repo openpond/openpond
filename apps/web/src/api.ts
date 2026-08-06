@@ -29,6 +29,11 @@ import type {
   PatchLocalAgentScheduleRequest,
   LocalAgentScheduleRunNowRequest,
   HostedSavedWorkResponse,
+  HarnessHistoryPayload,
+  HarnessProposalReviewRequest,
+  HarnessProposalReviewResponse,
+  HarnessRollbackRequest,
+  HarnessRollbackResponse,
   CreateHostedSavedWorkRequest,
   UpdateHostedSavedWorkRequest,
   LocalContinuousLearningState,
@@ -563,6 +568,22 @@ export const api = {
   },
   workOutputs: (connection: ClientConnection) =>
     apiFetch<WorkOutputsResponse>(connection, "/v1/work/outputs"),
+  harnessHistory: (connection: ClientConnection) =>
+    apiFetch<HarnessHistoryPayload>(connection, "/v1/harness"),
+  rollbackHarness: (
+    connection: ClientConnection,
+    input: HarnessRollbackRequest,
+  ) => apiFetch<HarnessRollbackResponse>(connection, "/v1/harness/rollback", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  reviewHarnessProposal: (
+    connection: ClientConnection,
+    input: HarnessProposalReviewRequest,
+  ) => apiFetch<HarnessProposalReviewResponse>(connection, "/v1/harness/review", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
   runSubagentLifecycleAction: (
     connection: ClientConnection,
     runId: string,

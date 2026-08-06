@@ -48,6 +48,7 @@ export type AppView =
 export type SettingsSection =
   | "account"
   | "notifications"
+  | "harness"
   | "profile"
   | "skills"
   | "defaults"
@@ -185,7 +186,7 @@ export type ChatMessage = {
   traceCompletedAt?: string;
   sources?: ChatSource[];
   changeSummary?: WorkspaceDiffSummary;
-  statusKind?: "compaction" | "interruption";
+  statusKind?: "compaction" | "interruption" | "harness_refinement";
   statusState?: "running" | "completed" | "failed";
   statusTone?: "info" | "success" | "danger";
   actionRun?: ActionRunSummary;

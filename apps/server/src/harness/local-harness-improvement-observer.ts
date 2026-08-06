@@ -1,4 +1,5 @@
 import type {
+  HarnessRefinerOutcome,
   ImprovementSafeBoundaryKind,
   RefinementTriggerDecision,
   Session,
@@ -27,6 +28,14 @@ export async function recordLocalHarnessImprovementBoundary(input: {
   const events = (await input.store.runtimeEventsForSession(input.session.id, {
     limit: 1_000,
   })).filter((runtimeEvent) => runtimeEvent.turnId === input.turn.id);
+  const priorCompletedTurnExists = (
+    await input.store.turnsForSession(input.session.id, 1_000)
+  ).some(
+    (turn) =>
+      turn.id !== input.turn.id &&
+      turn.status === "completed" &&
+      turn.startedAt < input.turn.startedAt,
+  );
   const eventSequence = events.reduce(
     (latest, runtimeEvent) => Math.max(latest, runtimeEvent.sequence ?? 0),
     0,
@@ -42,8 +51,23 @@ export async function recordLocalHarnessImprovementBoundary(input: {
       artifact.schemaVersion === "openpond.refinementTriggerDecision.v1" &&
       artifact.runRef === input.session.id,
   );
+  const outcomes = (
+    await input.store.listHarnessImprovementArtifacts(
+      workspace.id,
+      "refiner_outcome",
+      1_000,
+    )
+  ).filter(
+    (artifact): artifact is HarnessRefinerOutcome =>
+      artifact.schemaVersion === "openpond.harnessRefinerOutcome.v1",
+  );
+  const completedTriggerRefs = new Set(
+    outcomes.map((outcome) => `${outcome.trigger.id}:${outcome.trigger.contentHash}`),
+  );
   const pendingPlanCount = priorTriggers.filter(
-    (trigger) => trigger.decision === "queue_refiner",
+    (trigger) =>
+      trigger.decision === "queue_refiner" &&
+      !completedTriggerRefs.has(`${trigger.id}:${trigger.contentHash}`),
   ).length;
   const latestActionable = priorTriggers.find(
     (trigger) => trigger.decision !== "no_action",
@@ -82,6 +106,7 @@ export async function recordLocalHarnessImprovementBoundary(input: {
         ? [data.skillName.trim()]
         : [];
     }),
+    priorCompletedTurnExists,
   });
   for (const observation of detection.observations) {
     await input.store.saveHarnessImprovementArtifact(

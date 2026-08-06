@@ -1,5 +1,6 @@
 import {
   advanceHarnessWorkspace,
+  advanceReviewedHarnessWorkspace,
   createHarnessRunOverlay,
   HarnessAdvanceReceiptSchema,
   ImprovementApplyReceiptSchema,
@@ -26,40 +27,20 @@ import {
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
 import {
-  AgentSnapshotSchema,
-  HarnessReleaseSchema,
-  type AgentSnapshot,
-  type HarnessRelease,
   type ImmutableReleaseRef,
 } from "@openpond/evals";
-import { z } from "zod";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";
+import { SqliteHarnessMemoryStore } from "./store-harness-memory.js";
+import {
+  LocalHarnessReleaseRecordSchema,
+  type LocalHarnessReleaseRecord,
+} from "./store-harness-release-record.js";
 
-export const LocalHarnessReleaseRecordSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.localHarnessReleaseRecord.v1"),
-    workspaceId: z.string().trim().min(1).max(240),
-    sourceRevision: z.string().trim().min(1).max(500),
-    agentSnapshot: AgentSnapshotSchema,
-    harnessRelease: HarnessReleaseSchema,
-    bundlePath: z.string().trim().min(1).max(8_192),
-    createdAt: z.string().datetime({ offset: true }),
-  })
-  .strict()
-  .superRefine((record, context) => {
-    if (
-      record.harnessRelease.agentSnapshot.id !== record.agentSnapshot.id ||
-      record.harnessRelease.agentSnapshot.contentHash !== record.agentSnapshot.contentHash
-    ) {
-      context.addIssue({
-        code: "custom",
-        message: "Harness release must bind the stored Agent snapshot",
-        path: ["harnessRelease", "agentSnapshot"],
-      });
-    }
-  });
+export {
+  LocalHarnessReleaseRecordSchema,
+  type LocalHarnessReleaseRecord,
+} from "./store-harness-release-record.js";
 
 type HarnessImprovementArtifact =
   | HarnessRunOverlay
@@ -95,7 +76,7 @@ const ARTIFACT_SCHEMAS = {
   refiner_outcome: HarnessRefinerOutcomeSchema,
 } as const;
 
-export class SqliteHarnessWorkspaceStore extends SqliteSidebarFileBookmarkStore {
+export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
   async createHarnessWorkspace(input: HarnessWorkspace): Promise<HarnessWorkspace> {
     const workspace = HarnessWorkspaceSchema.parse(input);
     await this.ready;
@@ -689,6 +670,47 @@ export class SqliteHarnessWorkspaceStore extends SqliteSidebarFileBookmarkStore 
     return result;
   }
 
+  async advanceReviewedHarnessWorkspaceAtomically(input: {
+    receiptId: string;
+    workspaceId: string;
+    proposal: HarnessImprovementProposal;
+    validations: HarnessTargetedValidationReceipt[];
+    nextRelease: ImmutableReleaseRef;
+    nextSourceRevision: string;
+    reviewer: string;
+    now: string;
+  }): Promise<{ workspace: HarnessWorkspace; receipt: HarnessAdvanceReceipt }> {
+    await this.ready;
+    let result: { workspace: HarnessWorkspace; receipt: HarnessAdvanceReceipt } | null = null;
+    const write = this.writeQueue.then(async () => {
+      await this.exec("BEGIN IMMEDIATE");
+      try {
+        const existing = await this.readHarnessAdvanceReceipt(input.receiptId);
+        if (existing) {
+          result = { workspace: await this.requireHarnessWorkspace(input.workspaceId), receipt: existing };
+          await this.exec("COMMIT");
+          return;
+        }
+        const workspace = await this.requireHarnessWorkspace(input.workspaceId);
+        const release = await this.readHarnessReleaseRecord(input.nextRelease.contentHash);
+        if (!release || release.harnessRelease.id !== input.nextRelease.id || release.workspaceId !== input.workspaceId) {
+          throw new Error("Reviewed Harness release is not present in this workspace registry.");
+        }
+        result = advanceReviewedHarnessWorkspace({ ...input, workspace });
+        if (result.receipt.decision === "advanced") await this.updateHarnessWorkspace(result.workspace);
+        await this.insertHarnessAdvanceReceipt(result.receipt);
+        await this.exec("COMMIT");
+      } catch (error) {
+        await this.exec("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    if (!result) throw new Error("Reviewed Harness advancement did not produce a result.");
+    return result;
+  }
+
   async listHarnessAdvanceReceipts(workspaceId: string): Promise<HarnessAdvanceReceipt[]> {
     await this.ready;
     await this.writeQueue;
@@ -961,8 +983,3 @@ function workspaceParams(workspace: HarnessWorkspace): unknown[] {
     workspace.updatedAt,
   ];
 }
-
-export type LocalHarnessReleaseRecord = z.infer<typeof LocalHarnessReleaseRecordSchema> & {
-  agentSnapshot: AgentSnapshot;
-  harnessRelease: HarnessRelease;
-};

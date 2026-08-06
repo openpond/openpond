@@ -6,6 +6,7 @@ import { handleCommunityRoutes } from "./community-routes.js";
 import { handleDesktopBrowserRoutes } from "./desktop-browser-routes.js";
 import { handleEventRoutes } from "./event-routes.js";
 import { handleExtensionRoutes } from "./extension-routes.js";
+import { handleHarnessRoutes } from "./harness-routes.js";
 import { handleLocalAgentScheduleRoutes } from "./local-agent-schedule-routes.js";
 import { handleLocalContinuousLearningRoutes } from "./local-continuous-learning-routes.js";
 import { handleOrganizationRoutes } from "./organization-routes.js";
@@ -26,6 +27,7 @@ export const AUTHENTICATED_ROUTE_TABLE: HttpRouteModule[] = [
   { id: "work-outputs", handle: handleWorkOutputRoutes },
   { id: "work-evidence", handle: handleWorkEvidenceRoutes },
   { id: "extensions", handle: handleExtensionRoutes },
+  { id: "harness", handle: handleHarnessRoutes },
   { id: "training", handle: handleTrainingRoutes },
   { id: "compute", handle: handleComputeRoutes },
   { id: "create-improve", handle: handleCreateImproveRoutes },

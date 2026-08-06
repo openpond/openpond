@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 
 import {
@@ -30,6 +31,7 @@ export async function applyLocalHarnessRefinerProposal(input: {
   proposal: HarnessImprovementProposal;
   validations: HarnessTargetedValidationReceipt[];
   receiptId: string;
+  reviewAuthority?: { reviewer: string } | null;
   now?: () => string;
 }): Promise<{ workspace: HarnessWorkspace; receipt: HarnessAdvanceReceipt }> {
   const overlay = HarnessRunOverlaySchema.parse(input.overlay);
@@ -91,7 +93,7 @@ export async function applyLocalHarnessRefinerProposal(input: {
     }
 
     const authority = classifyHarnessAutoAdvanceAuthority({ workspace, proposal });
-    if (!authority.eligible) {
+    if (!authority.eligible && !input.reviewAuthority) {
       return input.store.advanceHarnessWorkspaceAtomically({
         receiptId: input.receiptId,
         workspaceId: workspace.id,
@@ -121,7 +123,21 @@ export async function applyLocalHarnessRefinerProposal(input: {
     await fs.rename(paths.source, backupSource);
     await fs.rename(candidateSource, paths.source);
     try {
-      const result = await input.store.advanceHarnessWorkspaceAtomically({
+      const result = input.reviewAuthority
+        ? await input.store.advanceReviewedHarnessWorkspaceAtomically({
+            receiptId: input.receiptId,
+            workspaceId: workspace.id,
+            proposal,
+            validations,
+            nextRelease: {
+              id: release.harnessRelease.id,
+              contentHash: release.harnessRelease.contentHash,
+            },
+            nextSourceRevision: release.sourceRevision,
+            reviewer: input.reviewAuthority.reviewer,
+            now: timestamp,
+          })
+        : await input.store.advanceHarnessWorkspaceAtomically({
         receiptId: input.receiptId,
         workspaceId: workspace.id,
         proposal,
@@ -132,7 +148,7 @@ export async function applyLocalHarnessRefinerProposal(input: {
         },
         nextSourceRevision: release.sourceRevision,
         now: timestamp,
-      });
+          });
       if (result.receipt.decision !== "advanced") {
         await restoreSource(paths.source, backupSource);
       } else {
@@ -253,6 +269,9 @@ export async function validateLocalHarnessRefinerProposal(input: {
   if (proposal.expectedWorkspace.workspaceId !== input.workspace.id) {
     throw new Error("Refiner proposal targets a different Harness workspace.");
   }
+  if (proposal.route === "memory") {
+    return validateMemoryProposal({ proposal, now: input.now });
+  }
   const paths = localHarnessWorkspacePaths(input.storeDir, input.workspace.id);
   const candidateSource = path.join(paths.root, `.validation-candidate-${randomUUID()}`);
   await fs.cp(paths.source, candidateSource, {
@@ -276,22 +295,47 @@ export async function validateLocalHarnessRefinerProposal(input: {
       let status: HarnessTargetedValidationReceipt["status"] = "passed";
       let summary = "The candidate Harness source compiles and preserves its manifest contract.";
       try {
-        if (plan.kind === "prompt") {
+        if (plan.kind === "observed_recovery") {
+          const recoveries = proposal.evidence.filter((evidence) => evidence.kind === "recovery");
+          if (recoveries.length === 0) {
+            throw new Error("Observed-recovery validation requires recorded recovery evidence.");
+          }
+          summary = `Validated ${recoveries.length} immutable recovery evidence reference(s) before candidate advancement.`;
+        } else if (plan.kind === "prompt") {
           const edits = proposal.edits.filter((edit) =>
-            declarations.get(edit.target)?.kind === "instruction",
+            edit.route === "prompt" && edit.target !== "harness.json",
           );
           if (edits.length === 0) {
             throw new Error("Prompt validation requires an instruction-file edit.");
           }
+          for (const edit of edits) {
+            const declaration = declarations.get(edit.target);
+            if (edit.operation === "delete") {
+              if (declaration) throw new Error(`Deleted instruction ${edit.target} remains declared.`);
+            } else if (declaration?.kind !== "instruction") {
+              throw new Error(`Instruction ${edit.target} is not declared in the candidate Harness.`);
+            }
+            if (edit.content !== null && /\b(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]/i.test(edit.content)) {
+              throw new Error(`Instruction ${edit.target} appears to contain credential material.`);
+            }
+          }
           summary = `Validated ${edits.length} textual instruction edit(s) and compiled candidate ${compiled.harnessRelease.id}.`;
         } else if (plan.kind === "skill") {
           const edits = proposal.edits.filter((edit) =>
-            declarations.get(edit.target)?.kind === "skill",
+            edit.route === "skill" && edit.target !== "harness.json",
           );
           if (edits.length === 0) {
             throw new Error("Skill validation requires a declared Skill-file edit.");
           }
           for (const edit of edits) {
+            const declaration = declarations.get(edit.target);
+            if (edit.operation === "delete") {
+              if (declaration) throw new Error(`Deleted Skill ${edit.target} remains declared.`);
+              continue;
+            }
+            if (declaration?.kind !== "skill") {
+              throw new Error(`Skill ${edit.target} is not declared in the candidate Harness.`);
+            }
             const content = editByTarget.get(edit.target)?.content;
             if (!content) throw new Error(`Skill edit ${edit.target} has no content.`);
             const parsed = parseProfileSkillMarkdown(content);
@@ -300,7 +344,7 @@ export async function validateLocalHarnessRefinerProposal(input: {
             }
           }
           summary = `Validated ${edits.length} Skill edit(s), Skill frontmatter, and compiled candidate ${compiled.harnessRelease.id}.`;
-        } else if (plan.kind === "dependency" || plan.kind === "package") {
+        } else if (plan.kind === "dependency") {
           const dependency = compiled.manifest.files.find(
             (file) => file.kind === "dependency_lock",
           );
@@ -309,6 +353,33 @@ export async function validateLocalHarnessRefinerProposal(input: {
             await fs.readFile(containedPath(candidateSource, dependency.path), "utf8"),
           );
           summary = `Validated dependency lock ${dependency.path} and compiled candidate ${compiled.harnessRelease.id}.`;
+        } else if (plan.kind === "schema") {
+          HarnessImprovementProposalSchema.parse(proposal);
+          summary = `Validated proposal, manifest, and candidate release schemas for ${compiled.harnessRelease.id}.`;
+        } else if (plan.kind === "package") {
+          const agentEdits = proposal.edits.filter((edit) =>
+            edit.route === "agent" && edit.operation !== "delete" && edit.target !== "harness.json",
+          );
+          for (const edit of agentEdits) {
+            if (!edit.content) throw new Error(`Agent edit ${edit.target} has no source.`);
+            stripTypeScriptTypes(edit.content, {
+              mode: "transform",
+              sourceUrl: edit.target,
+              sourceMap: false,
+            });
+          }
+          summary = agentEdits.length > 0
+            ? `Syntax-checked ${agentEdits.length} Agent source edit(s) and compiled candidate ${compiled.harnessRelease.id}.`
+            : `Compiled candidate package ${compiled.harnessRelease.id} and preserved the Harness source manifest contract.`;
+        } else if (plan.kind === "business_formula") {
+          status = "blocked";
+          summary = "Business or financial logic is retained for review until an approved deterministic fixture supplies inputs and expected outputs.";
+        } else if (plan.kind === "targeted_evaluation") {
+          status = "blocked";
+          summary = "This sensitive change requires an explicit authority-preserving targeted Evaluation before release.";
+        } else if (plan.kind === "file_render") {
+          status = "blocked";
+          summary = "File-render validation requires an exact produced artifact reference; no artifact was attached to this Harness-source proposal.";
         } else {
           status = "blocked";
           summary = `Local targeted validation does not yet own ${plan.kind}; it requires its dedicated validator.`;
@@ -355,6 +426,56 @@ export async function validateLocalHarnessRefinerProposal(input: {
   } finally {
     await fs.rm(candidateSource, { recursive: true, force: true }).catch(() => undefined);
   }
+}
+
+function validateMemoryProposal(input: {
+  proposal: HarnessImprovementProposal;
+  now?: () => string;
+}): HarnessTargetedValidationReceipt[] {
+  const timestamp = (input.now ?? (() => new Date().toISOString()))();
+  const edit = input.proposal.edits.find((candidate) => candidate.route === "memory");
+  return input.proposal.validationPlan.map((plan) => {
+    let status: HarnessTargetedValidationReceipt["status"] = "passed";
+    let summary = "Memory candidate is bounded, scoped, and contains no obvious credential material.";
+    try {
+      if (plan.kind === "observed_recovery") {
+        if (!input.proposal.evidence.some((evidence) => evidence.kind === "recovery")) {
+          throw new Error("Observed-recovery validation requires recorded recovery evidence.");
+        }
+        summary = "Memory proposal is grounded in immutable recovery evidence.";
+      } else if (plan.kind === "memory") {
+        if (!edit || !/^memory\/[a-z0-9][a-z0-9-]{0,119}$/.test(edit.target)) {
+          throw new Error("Memory proposal requires one safe memory/<slug> target.");
+        }
+        if (edit.operation !== "delete") {
+          if (!edit.content?.trim() || edit.content.length > 24_000) {
+            throw new Error("Memory content must contain 1-24,000 characters.");
+          }
+          if (/\b(?:api[_-]?key|access[_-]?token|password|secret)\s*[:=]/i.test(edit.content)) {
+            throw new Error("Memory content appears to contain credential material.");
+          }
+        }
+      } else {
+        status = "blocked";
+        summary = `Memory validation cannot satisfy ${plan.kind}.`;
+      }
+    } catch (error) {
+      status = "failed";
+      summary = error instanceof Error ? error.message : String(error);
+    }
+    return createHarnessTargetedValidationReceipt({
+      schemaVersion: "openpond.harnessTargetedValidationReceipt.v1",
+      id: `validation-${input.proposal.id}-${plan.id}`,
+      proposal: { id: input.proposal.id, contentHash: input.proposal.contentHash },
+      validationId: plan.id,
+      kind: plan.kind,
+      status,
+      summary,
+      evidenceRefs: input.proposal.evidence,
+      createdAt: timestamp,
+      metadata: { externalState: "harness_memory" },
+    });
+  });
 }
 
 export async function recoverLocalHarnessSourceSwap(input: {
