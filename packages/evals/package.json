@@ -22,6 +22,14 @@
       "types": "./dist/types/harness.d.ts",
       "import": "./dist/harness.js"
     },
+    "./harness-improvements": {
+      "types": "./dist/types/harness-improvements.d.ts",
+      "import": "./dist/harness-improvements.js"
+    },
+    "./harness-workspaces": {
+      "types": "./dist/types/harness-workspaces.d.ts",
+      "import": "./dist/harness-workspaces.js"
+    },
     "./tasksets": {
       "types": "./dist/types/tasksets.d.ts",
       "import": "./dist/tasksets.js"

@@ -27,6 +27,8 @@ import {
 import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
 import { contentHash, sha256 } from "../src/common.js";
 import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "../src/evidence/index.js";
+import { createImprovementObservation } from "../src/harness-improvements.js";
+import { createHarnessRunOverlay } from "../src/harness-workspaces.js";
 
 const artifact = {
   id: "artifact-trace",
@@ -248,6 +250,56 @@ describe("public package conformance", () => {
 
   it("exports the Work evidence conformance surface", () => {
     expect(verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)).toBe(true);
+  });
+
+  it("exports portable Harness workspace and improvement contracts", () => {
+    const overlay = createHarnessRunOverlay({
+      schemaVersion: "openpond.harnessRunOverlay.v1",
+      id: "portable-overlay",
+      runId: "portable-run",
+      baseHarnessRelease: genericToolConformance.manifest.harnessRelease,
+      workspace: {
+        workspaceId: "portable-workspace",
+        revision: 0,
+        sourceRevision: "source-a",
+        channelRevision: 1,
+      },
+      revision: 0,
+      status: "active",
+      edits: [],
+      createdAt: "2026-08-03T00:00:00.000Z",
+      updatedAt: "2026-08-03T00:00:00.000Z",
+      metadata: {},
+    });
+    const observation = createImprovementObservation({
+      schemaVersion: "openpond.improvementObservation.v1",
+      id: "portable-observation",
+      runRef: "portable-run",
+      turnId: "portable-turn",
+      harnessRelease: overlay.baseHarnessRelease,
+      overlay: {
+        id: overlay.id,
+        revision: overlay.revision,
+        contentHash: overlay.contentHash,
+      },
+      eventRefs: [{
+        id: "portable-event",
+        sequence: 1,
+        contentHash: contentHash("portable-event"),
+      }],
+      kind: "tool_failure",
+      state: "terminal",
+      tool: {
+        name: "exec_command",
+        invocationKey: contentHash("portable-invocation"),
+      },
+      deterministicClass: "command_exit_nonzero",
+      summary: "A portable command failure fixture.",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      metadata: {},
+    });
+    expect(overlay.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(observation.overlay?.contentHash).toBe(overlay.contentHash);
   });
 });
 

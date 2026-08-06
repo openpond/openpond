@@ -25,6 +25,8 @@ import { genericToolConformance } from "@openpond/evals/conformance";
 import { validateTasksetRelease } from "@openpond/evals/tasksets";
 import { RunManifestSchema } from "@openpond/evals/runs";
 import { HarnessReleaseSchema } from "@openpond/evals/harness";
+import { ImprovementObservationSchema } from "@openpond/evals/harness-improvements";
+import { HarnessRunOverlaySchema } from "@openpond/evals/harness-workspaces";
 import { gradeEvidence } from "@openpond/evals/graders";
 import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "@openpond/evals/evidence";
 
@@ -40,16 +42,19 @@ const grades = await gradeEvidence({
 if (!grades[0]?.passed) throw new Error("packed deterministic grader failed");
 if (verifyAttemptReceipt({}) !== false) throw new Error("invalid receipt was accepted");
 if (!verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)) throw new Error("packed Work evidence validation failed");
+if (!HarnessRunOverlaySchema || !ImprovementObservationSchema) throw new Error("packed Harness improvement exports unavailable");
 process.stdout.write("clean consumer verified\\n");
 `);
   await writeFile(path.join(temporary, "verify-types.mts"), `
 import type { AttemptReceipt, HarnessExecutor, TasksetRelease } from "@openpond/evals";
 import type { HarnessRuntime } from "@openpond/evals/harness";
+import type { ImprovementObservation } from "@openpond/evals/harness-improvements";
+import type { HarnessRunOverlay } from "@openpond/evals/harness-workspaces";
 import type { GraderEvidence } from "@openpond/evals/graders";
 import type { RunManifest } from "@openpond/evals/runs";
 import type { TaskRecord } from "@openpond/evals/tasksets";
 import type { WorkEvidenceReceipt, WorkFeedbackReceipt, WorkProcessTrace } from "@openpond/evals/evidence";
-void (null as unknown as AttemptReceipt | HarnessExecutor | TasksetRelease | HarnessRuntime | GraderEvidence | RunManifest | TaskRecord | WorkEvidenceReceipt | WorkFeedbackReceipt | WorkProcessTrace);
+void (null as unknown as AttemptReceipt | HarnessExecutor | TasksetRelease | HarnessRuntime | ImprovementObservation | HarnessRunOverlay | GraderEvidence | RunManifest | TaskRecord | WorkEvidenceReceipt | WorkFeedbackReceipt | WorkProcessTrace);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], { cwd: temporary, stdio: "inherit" });
   execFileSync(path.resolve(root, "../../node_modules/.bin/tsc"), [
