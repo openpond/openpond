@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -265,6 +266,7 @@ async function executeScriptedConverterTask(input: {
         occurredAt: input.occurredAt,
       }),
     );
+    const result = await executeConverterCommand(command);
     await input.store.appendRuntimeEvent(
       runtimeToolEvent({
         id: `${callId}-completed`,
@@ -272,8 +274,9 @@ async function executeScriptedConverterTask(input: {
         turnId: input.turnId,
         callId,
         command,
-        status: command.endsWith("--legacy") ? "failed" : "completed",
+        status: result.exitCode === 0 ? "completed" : "failed",
         occurredAt: input.occurredAt,
+        result,
       }),
     );
   }
@@ -288,6 +291,7 @@ function runtimeToolEvent(input: {
   command: string;
   status: "started" | "completed" | "failed";
   occurredAt: string;
+  result?: { exitCode: number; stdout: string; stderr: string };
 }): RuntimeEvent {
   const failed = input.status === "failed";
   return {
@@ -299,23 +303,49 @@ function runtimeToolEvent(input: {
     source: "provider",
     action: "exec_command",
     status: input.status,
-    output: failed
-      ? "Unexpected converter response. Command exited with code 1."
-      : input.status === "completed"
-        ? "REPORT_OK"
-        : undefined,
-    error: failed ? "Unexpected converter response." : undefined,
+    output: input.result
+      ? failed
+        ? `${input.result.stderr.trim()} Command exited with code ${input.result.exitCode}.`
+        : input.result.stdout.trim()
+      : undefined,
+    error: failed ? input.result?.stderr.trim() : undefined,
     args: { command: input.command },
     data: {
       toolCallId: input.callId,
-      result: {
-        exitCode: failed ? 1 : 0,
-        timedOut: false,
-        stderr: failed ? "Unexpected converter response." : "",
-        stdout: failed ? "" : "REPORT_OK",
-      },
+      ...(input.result
+        ? {
+            result: {
+              exitCode: input.result.exitCode,
+              timedOut: false,
+              stderr: input.result.stderr,
+              stdout: input.result.stdout,
+            },
+          }
+        : {}),
     },
   };
+}
+
+function executeConverterCommand(
+  command: string,
+): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const source = command.endsWith("--legacy")
+    ? "process.stderr.write('Unexpected converter response.'); process.exit(1);"
+    : "process.stdout.write('REPORT_OK');";
+  return new Promise((resolve) => {
+    execFile(process.execPath, ["-e", source], (error, stdout, stderr) => {
+      resolve({
+        exitCode:
+          error && typeof error.code === "number"
+            ? error.code
+            : error
+              ? 1
+              : 0,
+        stdout,
+        stderr,
+      });
+    });
+  });
 }
 
 async function readRuntimeInstructions(bundlePath: string): Promise<string> {
