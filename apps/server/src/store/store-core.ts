@@ -18,6 +18,7 @@ import {
 } from "./store-continuous-improvement-schema.js";
 import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
 import { createSidebarFileBookmarkTables as ensureSidebarFileBookmarkTables } from "./store-sidebar-file-bookmark-schema.js";
+import { createHarnessWorkspaceTables as ensureHarnessWorkspaceTables } from "./store-harness-workspace-schema.js";
 import type { OpenPondSqliteConnection } from "./sqlite/sqlite-driver.js";
 import { openNodeSqliteConnection } from "./sqlite/sqlite-driver-node.js";
 import {
@@ -289,6 +290,10 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS work_feedback_output_idx
         ON work_feedback_receipts(output_revision_hash, created_at ASC);
     `);
+  }
+
+  async createHarnessWorkspaceTables(): Promise<void> {
+    await ensureHarnessWorkspaceTables((sql) => this.exec(sql));
   }
 
   async createSidebarFileBookmarkTables(): Promise<void> {

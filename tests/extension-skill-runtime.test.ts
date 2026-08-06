@@ -3,8 +3,63 @@ import { describe, expect, test, vi } from "vitest";
 import { createProfileSkillCatalogRuntime } from "../apps/server/src/runtime/hosted-turn/profile-skill-catalog-runtime";
 import { resolveHostedToolRolloutFlags } from "../apps/server/src/runtime/hosted-turn/rollout";
 import { baseSession } from "./helpers/byok-turn-runner-harness";
+import { emptyOpenPondProfileState } from "../packages/contracts/src/index.js";
 
 describe("third-party extension skill runtime", () => {
+  test("uses the selected immutable Harness catalog instead of mutable Profile Skills", async () => {
+    const loadProfileState = vi.fn(async () => ({
+      ...emptyOpenPondProfileState(),
+      mode: "local" as const,
+      sourcePath: "/tmp/profile",
+    }));
+    const harnessRuntime = {
+        profileSourcePath: "/tmp/harness/release/source",
+        skills: [{
+          name: "documents",
+          description: "Create documents.",
+          path: "skills/documents/SKILL.md",
+          scope: "profile",
+          enabled: true,
+          sourcePath: "/tmp/harness/release/source",
+          charCount: 80,
+          sourceHash: "released-hash",
+          validationStatus: "valid",
+          validationMessages: [],
+          resourceFiles: [],
+        }],
+        readSkill: async () => ({
+          name: "documents",
+          description: "Create documents.",
+          body: "Use the released document procedure.",
+          path: "skills/documents/SKILL.md",
+          sourceHash: "released-hash",
+          charCount: 80,
+        }),
+      };
+    const runtime = createProfileSkillCatalogRuntime({
+      loadProfileState,
+      readProfileSkill: vi.fn(),
+      appendRuntimeEvent: async () => undefined,
+      nativeToolsEnabledForProvider: () => false,
+      hostedToolFlags: resolveHostedToolRolloutFlags({ toolMode: "text_fallback" }),
+      appendProfileSkillEvent: async () => undefined,
+      explicitProfileSkillNames: () => [],
+      profileSkillBodyFromReadResult: (skill) => skill,
+      throwIfInterrupted: () => undefined,
+    });
+
+    const catalog = await runtime.loadProfileSkillRuntime({
+      session: baseSession({ id: "session_harness_skill" }),
+      turnId: "turn_harness_skill",
+      harnessRuntime,
+    });
+    expect(catalog.skills.map((skill) => skill.name)).toEqual(["documents"]);
+    await expect(catalog.readSkill?.("documents")).resolves.toMatchObject({
+      body: "Use the released document procedure.",
+    });
+    expect(loadProfileState).not.toHaveBeenCalled();
+  });
+
   test("adds installed extension skills to the harness catalog and preloads explicit invocations", async () => {
     const readExtensionSkill = vi.fn(async () => ({
       name: "deploy-check",

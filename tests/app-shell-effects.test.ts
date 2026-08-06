@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
-import type { Session } from "@openpond/contracts";
-import { shouldForceCloudWorkspaceProviderOpenPond } from "../apps/web/src/hooks/useAppShellEffects";
+import { ProviderSettingsSchema, type Session } from "@openpond/contracts";
+import {
+  sessionModelSelectionSyncKey,
+  shouldForceCloudWorkspaceProviderOpenPond,
+} from "../apps/web/src/hooks/useAppShellEffects";
+import { activeChatProviderForWorkspace } from "../apps/web/src/hooks/useActiveWorkspaceViewState";
 import { hybridWorkspaceSessionMetadata } from "../apps/web/src/lib/workspace-location";
 
 describe("app shell effects", () => {
@@ -27,6 +31,59 @@ describe("app shell effects", () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  test("keeps a Hybrid chat's saved provider in the model picker", () => {
+    expect(
+      activeChatProviderForWorkspace({
+        draftProvider: "codex",
+        hasSelectedCloudProject: true,
+        selectedSessionHybridWorkspace: true,
+      }),
+    ).toBe("codex");
+    expect(
+      activeChatProviderForWorkspace({
+        draftProvider: "codex",
+        hasSelectedCloudProject: true,
+        selectedSessionHybridWorkspace: false,
+      }),
+    ).toBe("openpond");
+  });
+
+  test("resyncs when a selected chat hydrates its saved provider and model", () => {
+    const providerSettings = ProviderSettingsSchema.parse({
+      providers: {
+        openai: {
+          enabled: true,
+          defaultModel: "gpt-4.1",
+          modelOverrides: ["gpt-5.5"],
+        },
+      },
+      statuses: {
+        openai: {
+          id: "openai",
+          displayName: "OpenAI",
+          enabled: true,
+          available: true,
+          defaultModel: "gpt-4.1",
+        },
+      },
+    });
+    const beforeHydration = session({
+      provider: "openai",
+      modelRef: { providerId: "openai", modelId: "gpt-5.5" },
+    });
+    const afterHydration = session({
+      provider: "codex",
+      modelRef: { providerId: "codex", modelId: "gpt-5.6-sol" },
+    });
+
+    expect(sessionModelSelectionSyncKey(beforeHydration, providerSettings)).not.toBe(
+      sessionModelSelectionSyncKey(afterHydration, providerSettings),
+    );
+    expect(sessionModelSelectionSyncKey(afterHydration, providerSettings)).toContain(
+      "\u0000codex\u0000gpt-5.6-sol",
+    );
   });
 });
 

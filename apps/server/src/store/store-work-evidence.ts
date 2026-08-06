@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteSidebarFileBookmarkStore } from "./store-sidebar-file-bookmarks.js";
+import { SqliteHarnessWorkspaceStore } from "./store-harness-workspaces.js";
 
 const LocalWorkEvidenceArtifactSchema = z.object({
   kind: z.enum([
@@ -49,7 +49,7 @@ export const StoredWorkFeedbackSchema = z.object({
   createdAt: z.string().datetime({ offset: true }),
 }).strict();
 
-export class SqliteWorkEvidenceStore extends SqliteSidebarFileBookmarkStore {
+export class SqliteWorkEvidenceStore extends SqliteHarnessWorkspaceStore {
   async saveWorkEvidenceProjection(
     input: StoredWorkEvidenceProjection,
   ): Promise<StoredWorkEvidenceProjection> {
@@ -110,6 +110,22 @@ export class SqliteWorkEvidenceStore extends SqliteSidebarFileBookmarkStore {
     return row
       ? StoredWorkEvidenceProjectionSchema.parse(JSON.parse(row.payload))
       : null;
+  }
+
+  async listWorkEvidenceProjections(
+    limit = 100,
+  ): Promise<StoredWorkEvidenceProjection[]> {
+    await this.ready;
+    await this.writeQueue;
+    const boundedLimit = Math.min(Math.max(Math.trunc(limit), 1), 1_000);
+    const rows = await this.all<PayloadRow>(
+      `SELECT payload FROM work_evidence_receipts
+       ORDER BY created_at DESC, id DESC LIMIT ?`,
+      [boundedLimit],
+    );
+    return rows.map((row) =>
+      StoredWorkEvidenceProjectionSchema.parse(JSON.parse(row.payload))
+    );
   }
 
   async saveWorkFeedback(input: StoredWorkFeedback): Promise<StoredWorkFeedback> {

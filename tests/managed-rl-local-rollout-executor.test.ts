@@ -118,9 +118,7 @@ describe("Managed RL desktop rollout executor", () => {
       },
       store: {} as never,
       storeDir: "/tmp/openpond-test-store",
-      loadProfileState: async () => {
-        throw new Error("Exact-text rollout must not load a Profile.");
-      },
+      harnessRoot: "/tmp/openpond-test-store/training/harnesses/" + "a".repeat(64) + "/source",
     });
 
     executor.start();
@@ -251,9 +249,7 @@ describe("Managed RL desktop rollout executor", () => {
       executorId: "openpond-desktop:test-retry-executor",
       store: {} as never,
       storeDir: "/tmp/openpond-test-store",
-      loadProfileState: async () => {
-        throw new Error("Exact-text rollout must not load a Profile.");
-      },
+      harnessRoot: "/tmp/openpond-test-store/training/harnesses/" + "a".repeat(64) + "/source",
     });
 
     executor.start();

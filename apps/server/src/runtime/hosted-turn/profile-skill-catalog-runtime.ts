@@ -69,12 +69,16 @@ export function createProfileSkillCatalogRuntime(deps: {
     session: Session;
     turnId: string;
     profile?: OpenPondProfileState | null;
+    harnessRuntime?: ProfileSkillRuntime | null;
   }): Promise<ProfileSkillRuntime> {
+    const harnessRuntime = input.harnessRuntime ?? null;
     const [builtInResult, profileResult, extensionResult] = await Promise.allSettled([
       loadBuiltInSkills && readBuiltInSkill
         ? loadBuiltInSkills()
         : Promise.resolve([]),
-      input.profile
+      harnessRuntime
+        ? Promise.resolve(null)
+        : input.profile
         ? Promise.resolve(input.profile)
         : loadOpenPondProfileState && readOpenPondProfileSkill
           ? loadOpenPondProfileState(input.session)
@@ -107,6 +111,13 @@ export function createProfileSkillCatalogRuntime(deps: {
         if (!skill.enabled || skill.validationStatus !== "valid") continue;
         skills.push(skill);
         readers.set(skill.name, () => readBuiltInSkill(skill.name));
+      }
+    }
+    if (harnessRuntime?.readSkill) {
+      for (const skill of harnessRuntime.skills) {
+        if (!skill.enabled || skill.validationStatus !== "valid" || readers.has(skill.name)) continue;
+        skills.push(skill);
+        readers.set(skill.name, () => harnessRuntime.readSkill!(skill.name));
       }
     }
     if (profile?.sourcePath && !profile.error && readOpenPondProfileSkill) {

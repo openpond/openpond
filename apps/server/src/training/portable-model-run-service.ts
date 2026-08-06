@@ -8,6 +8,7 @@ import {
   TrainingJobSchema,
   type TrainingApproval,
   type TrainingCatalog,
+  type TrainingJob,
   type TrainingPreparationPlan,
   type TrainingPreparedStart,
 } from "@openpond/contracts";
@@ -51,6 +52,7 @@ export function createPortableModelRunService(deps: {
     environmentPlacement?: "local" | "remote";
     exportApproved?: boolean;
     retentionDays?: number | null;
+    harnessRelease?: { id: string; contentHash: string } | null;
   }): Promise<TrainingPreparedStart>;
   approve(input: {
     planId: string;
@@ -58,7 +60,18 @@ export function createPortableModelRunService(deps: {
     maximumCostUsd?: number | null;
   }): Promise<TrainingApproval>;
   prepareModel?: (input: { modelId: string; revision: string | null }) => Promise<unknown>;
+  resolveReleasedHarness: (input: {
+    taskset: NonNullable<Awaited<ReturnType<SqliteStore["getTaskset"]>>>;
+    modelRun: NonNullable<Awaited<ReturnType<SqliteStore["getModelRunDraft"]>>>;
+  }) => Promise<{
+    harnessRelease: { id: string; contentHash: string };
+    tasksetRelease: { id: string; contentHash: string };
+  }>;
 }) {
+  const reconciliationIntervalMs = 5_000;
+  let reconciliationInFlight: Promise<void> | null = null;
+  let lastReconciledAt = 0;
+
   async function start(input: {
     modelRunId: string;
     maximumSpendUsd: number | null;
@@ -66,10 +79,11 @@ export function createPortableModelRunService(deps: {
     retentionDays?: number | null;
     manifest?: unknown;
   }) {
-    const modelRun = await deps.store.getModelRunDraft(input.modelRunId);
-    if (!modelRun || modelRun.status !== "ready_to_run") {
+    const loadedModelRun = await deps.store.getModelRunDraft(input.modelRunId);
+    if (!loadedModelRun || loadedModelRun.status !== "ready_to_run") {
       throw new Error("A ready saved Model Run is required.");
     }
+    let modelRun = loadedModelRun;
     if (
       !modelRun.tasksetRef ||
       !modelRun.baseModel ||
@@ -78,6 +92,19 @@ export function createPortableModelRunService(deps: {
     ) {
       throw new Error("The saved Model Run is incomplete.");
     }
+    const baseModel = modelRun.baseModel;
+    const tasksetRef = modelRun.tasksetRef;
+    const taskset = await deps.store.getTaskset(modelRun.tasksetRef.id);
+    if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
+      throw new Error("The saved Model Run Taskset release is stale.");
+    }
+    const releasedHarness = await deps.resolveReleasedHarness({ taskset, modelRun });
+    modelRun = await deps.store.saveModelRunDraft({
+      ...modelRun,
+      harnessRelease: releasedHarness.harnessRelease,
+      tasksetRelease: releasedHarness.tasksetRelease,
+      updatedAt: new Date().toISOString(),
+    });
     const preparation = await deps.prepare({
       modelRunId: modelRun.id,
       maximumSpendUsd: input.maximumSpendUsd,
@@ -91,13 +118,13 @@ export function createPortableModelRunService(deps: {
         throw new Error("This Model requires a verified downloader before training can start.");
       }
       await deps.prepareModel({
-        modelId: modelRun.baseModel.modelId,
-        revision: modelRun.baseModel.revision,
+        modelId: baseModel.modelId,
+        revision: baseModel.revision,
       });
     }
     const prepared = await deps.prepareStart({
       modelId: modelRun.modelId,
-      tasksetId: modelRun.tasksetRef.id,
+      tasksetId: tasksetRef.id,
       destinationId: modelRun.destinationId,
       recipe: modelRun.recipe,
       environmentPlacement:
@@ -106,6 +133,7 @@ export function createPortableModelRunService(deps: {
           : undefined,
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
+      harnessRelease: releasedHarness.harnessRelease,
     });
     const approval = await deps.approve({
       planId: prepared.plan.id,
@@ -119,10 +147,6 @@ export function createPortableModelRunService(deps: {
     });
     if (!bindings.runtime || !bindings.compute || !bindings.engine) {
       throw new Error("The saved Model Run has no complete portable adapter binding.");
-    }
-    const taskset = await deps.store.getTaskset(modelRun.tasksetRef.id);
-    if (!taskset || taskset.contentHash !== modelRun.tasksetRef.contentHash) {
-      throw new Error("The saved Model Run Taskset release is stale.");
     }
     const graph = buildTasksetTrainingBundle({
       taskset,
@@ -142,6 +166,8 @@ export function createPortableModelRunService(deps: {
           : bindings.engine.adapterId === "fireworks-native"
             ? "openpond.fireworksNative.v1"
             : "openpond.localTrainingWorker.v1",
+      harnessRelease: releasedHarness.harnessRelease,
+      tasksetRelease: releasedHarness.tasksetRelease,
     });
     const resolvedPlanBase = {
       schemaVersion: "openpond.resolvedTrainingPlan.v1" as const,
@@ -287,13 +313,29 @@ export function createPortableModelRunService(deps: {
     return job;
   }
 
-  function executionRef(job: Awaited<ReturnType<typeof execution>>) {
+  function executionRef(job: TrainingJob) {
     return TrainingExecutionRefSchema.safeParse(job.metadata.portableExecutionRef);
   }
 
   async function status(modelRunId: string) {
     const canonical = await deps.store.getModelRun(modelRunId);
-    if (canonical && ["succeeded", "failed", "cancelled"].includes(canonical.status)) {
+    const terminalStatus =
+      canonical?.status === "succeeded"
+      || canonical?.status === "failed"
+      || canonical?.status === "cancelled"
+        ? canonical.status
+        : null;
+    if (canonical && terminalStatus) {
+      const job = await execution(modelRunId);
+      if (["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status)) {
+        await deps.store.saveTrainingJob({
+          ...job,
+          status: terminalStatus,
+          completedAt: canonical.completedAt ?? canonical.updatedAt,
+          error: canonical.status === "failed" ? canonical.failure : null,
+          updatedAt: canonical.updatedAt,
+        });
+      }
       return portableStatusFromModelRun(canonical);
     }
     const job = await execution(modelRunId);
@@ -436,7 +478,38 @@ export function createPortableModelRunService(deps: {
     throw new Error("Training execution has no registered portable engine.");
   }
 
-  return { start, status, events, logs, artifacts, cancel };
+  function reconcileActive(options: { force?: boolean } = {}): Promise<void> {
+    if (reconciliationInFlight) return reconciliationInFlight;
+    if (!options.force && Date.now() - lastReconciledAt < reconciliationIntervalMs) {
+      return Promise.resolve();
+    }
+    const reconciliation = (async () => {
+      const jobs = await deps.store.listTrainingJobs();
+      const modelRunIds = [
+        ...new Set(
+          jobs
+            .filter((job) =>
+              ["queued", "starting", "running", "cancelling", "reconciling"].includes(
+                job.status,
+              ),
+            )
+            .filter((job) => executionRef(job).success)
+            .map((job) => job.metadata.modelRunId)
+            .filter((id): id is string => typeof id === "string" && id.length > 0),
+        ),
+      ];
+      for (let index = 0; index < modelRunIds.length; index += 4) {
+        await Promise.allSettled(modelRunIds.slice(index, index + 4).map((id) => status(id)));
+      }
+      lastReconciledAt = Date.now();
+    })().finally(() => {
+      if (reconciliationInFlight === reconciliation) reconciliationInFlight = null;
+    });
+    reconciliationInFlight = reconciliation;
+    return reconciliation;
+  }
+
+  return { start, status, events, logs, artifacts, cancel, reconcileActive };
 }
 
 function assertSubmittedManifest(

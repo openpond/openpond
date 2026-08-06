@@ -1,19 +1,20 @@
 # Releasing `@openpond/evals`
 
 The package version is independent from OpenPond application and schema
-versions. Version `0.1.1` is the current provenance-backed baseline and supports
+versions. Version `0.3.0` is the next Harness-first release and supports
 these initial schema literals:
 
-- `openpond.agentSnapshot.v1`
-- `openpond.harnessRelease.v1`
-- `openpond.tasksetRelease.v1`
+- `openpond.agentSnapshot.v2`
+- `openpond.harnessRelease.v2`
+- `openpond.tasksetRelease.v2`
 - `openpond.runManifest.v1`
 - `openpond.attemptReceipt.v1`
 - `openpond.harnessTrace.v1`
+- `openpond.harnessCompatibility.v1`
 - `openpond.graderEvidence.v1`
 - `openpond.evaluationResult.v1`
 
-This branch prepares the additive Work evidence schemas for `0.2.0`:
+The package also carries the Work evidence schemas introduced in `0.2.0`:
 
 - `openpond.workEvidenceReceipt.v1`
 - `openpond.workProcessTrace.v1`

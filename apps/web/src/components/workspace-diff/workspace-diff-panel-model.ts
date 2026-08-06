@@ -13,6 +13,13 @@ export type WorkspaceDiffTabRequest = {
   tab: Extract<DiffTab, "files" | "summary">;
 };
 
+export type WorkspaceDiffOpenFileRequest = {
+  id: number;
+  path: string;
+  file?: WorkspaceDiffFile;
+  imageUrl?: string;
+};
+
 export type WorkspaceDiffSideChatTab = {
   id: string;
   title: string;

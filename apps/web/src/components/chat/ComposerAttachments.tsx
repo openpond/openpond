@@ -1,6 +1,12 @@
 import type { ChatAttachment } from "@openpond/contracts";
-import { CHAT_ATTACHMENT_LIMITS } from "@openpond/contracts";
-import { FileText, ImageIcon, Paperclip, X } from "../icons";
+import { CHAT_ATTACHMENT_LIMITS, countTextLines } from "@openpond/contracts";
+import { useEffect, useState } from "react";
+import { X } from "../icons";
+import {
+  AttachmentTypeIcon,
+  attachmentTypeLabel,
+  formatAttachmentLineCount,
+} from "./AttachmentTypeIcon";
 
 const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "csv",
@@ -23,6 +29,9 @@ const TEXT_ATTACHMENT_EXTENSIONS = new Set([
   "yml",
 ]);
 
+export const COMPOSER_PASTED_TEXT_MIN_CHARS = 2_000;
+const PASTED_TEXT_ATTACHMENT_NAME_PATTERN = /^Pasted text(?: (\d+))?\.txt$/;
+
 export type ComposerAttachmentDraft = {
   id: string;
   file: File;
@@ -34,6 +43,23 @@ export type ComposerAttachmentDraft = {
   previewUrl?: string;
 };
 
+export function createComposerPastedTextFile(
+  text: string,
+  existingAttachments: readonly Pick<ComposerAttachmentDraft, "name">[],
+): File | null {
+  if (text.length < COMPOSER_PASTED_TEXT_MIN_CHARS) return null;
+  const usedPasteNumbers = new Set<number>();
+  for (const attachment of existingAttachments) {
+    const match = PASTED_TEXT_ATTACHMENT_NAME_PATTERN.exec(attachment.name);
+    if (match) usedPasteNumbers.add(match[1] ? Number(match[1]) : 1);
+  }
+  let pasteNumber = 1;
+  while (usedPasteNumbers.has(pasteNumber)) pasteNumber += 1;
+  const name =
+    pasteNumber === 1 ? "Pasted text.txt" : `Pasted text ${pasteNumber}.txt`;
+  return new File([text], name, { type: "text/plain" });
+}
+
 export function ComposerAttachmentPreview({
   attachment,
   onRemove,
@@ -41,12 +67,20 @@ export function ComposerAttachmentPreview({
   attachment: ComposerAttachmentDraft;
   onRemove: () => void;
 }) {
-  const Icon =
-    attachment.kind === "image"
-      ? ImageIcon
-      : attachment.kind === "text"
-      ? FileText
-      : Paperclip;
+  const [lineCount, setLineCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (attachment.kind !== "text") return;
+    let cancelled = false;
+    void attachment.file.text().then(
+      (text) => {
+        if (!cancelled) setLineCount(countTextLines(text));
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.file, attachment.kind]);
   const showMeta = attachment.kind !== "image";
   return (
     <div className={`composer-attachment-card ${attachment.kind}`}>
@@ -54,13 +88,17 @@ export function ComposerAttachmentPreview({
         {attachment.previewUrl ? (
           <img alt="" decoding="async" src={attachment.previewUrl} />
         ) : (
-          <Icon size={22} />
+          <AttachmentTypeIcon attachment={attachment} size={22} />
         )}
       </div>
       {showMeta ? (
         <div className="composer-attachment-meta">
           <strong>{attachment.name}</strong>
-          <span>{formatBytes(attachment.sizeBytes)}</span>
+          <span>
+            {attachment.kind === "text" && lineCount !== null
+              ? formatAttachmentLineCount(lineCount)
+              : attachmentTypeLabel(attachment)}
+          </span>
         </div>
       ) : null}
       <button
@@ -104,6 +142,7 @@ export async function readComposerAttachmentPayload(
     mediaType: attachment.mediaType,
     sizeBytes: attachment.sizeBytes,
     kind: attachment.kind,
+    ...(text !== undefined ? { lineCount: countTextLines(text) } : {}),
     ...(attachment.relativePath
       ? { relativePath: attachment.relativePath }
       : {}),

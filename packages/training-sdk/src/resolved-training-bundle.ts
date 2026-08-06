@@ -15,6 +15,7 @@ import path from "node:path";
 import {
   HarnessRunManifestContentSchema,
   HarnessRunManifestSchema,
+  ImmutableReleaseRefSchema,
   ResolvedTrainingBundleContentSchema,
   ResolvedTrainingBundleManifestSchema,
   type ComputeTargetBinding,
@@ -28,7 +29,12 @@ import {
   type TrainingEngineBinding,
   type VersionedReleaseRef,
 } from "@openpond/contracts";
-import { canonicalJson, contentHash, sha256 } from "@openpond/taskset-sdk";
+import {
+  canonicalJson,
+  computeTasksetHash,
+  contentHash,
+  sha256,
+} from "@openpond/taskset-sdk";
 
 export type TasksetTrainingBundle = {
   manifest: HarnessRunManifest;
@@ -36,6 +42,7 @@ export type TasksetTrainingBundle = {
   assets: ReadonlyMap<string, Uint8Array>;
   profileRelease: VersionedReleaseRef;
   harnessRelease: ImmutableReleaseRef;
+  tasksetRelease: ImmutableReleaseRef;
   datasetRelease: ImmutableReleaseRef;
   evidenceSetRelease: ImmutableReleaseRef | null;
 };
@@ -59,8 +66,23 @@ export function buildTasksetTrainingBundle(input: {
   secretLeaseRefs?: OpaqueSecretLeaseRef[];
   openpondRelease: string;
   workerProtocol: string;
+  harnessRelease: ImmutableReleaseRef;
+  tasksetRelease: ImmutableReleaseRef;
 }): TasksetTrainingBundle {
-  const { taskset, modelRun } = input;
+  const { taskset, modelRun, harnessRelease, tasksetRelease } = input;
+  const releasedHarness = ImmutableReleaseRefSchema.parse(harnessRelease);
+  const releasedTaskset = ImmutableReleaseRefSchema.parse(tasksetRelease);
+  // These remain part of the preparation API for adapter compatibility; the
+  // selected Harness release is now supplied explicitly and is never rebuilt
+  // from mutable Profile/Taskset state here.
+  void input.openpondRelease;
+  void input.workerProtocol;
+  const actualTasksetHash = computeTasksetHash(taskset);
+  if (actualTasksetHash !== taskset.contentHash) {
+    throw new Error(
+      "Taskset authoring state changed after its release was selected.",
+    );
+  }
   if (
     !modelRun.baseModel?.revision ||
     !modelRun.baseModel.tokenizerRevision ||
@@ -125,23 +147,10 @@ export function buildTasksetTrainingBundle(input: {
     assets.set(`evidence/signals/${sha256(value)}.json`, value);
   }
 
-  const harnessRelease = {
-    id: `harness_${taskset.id}_r${taskset.revision}`,
-    contentHash: contentHash({
-      profileRelease,
-      environment: taskset.environment,
-      capabilities: taskset.capabilities,
-      policy: taskset.policy,
-      graders: taskset.graders,
-      graderFixtures: taskset.graderFixtures,
-      openpondRelease: input.openpondRelease,
-      workerProtocol: input.workerProtocol,
-    }),
-  };
   const datasetRelease = {
     id: `dataset_${taskset.id}_r${taskset.revision}`,
     contentHash: contentHash({
-      taskset: taskset.contentHash,
+      taskset: releasedTaskset,
       sourceRefs: taskset.sourceRefs,
       datasetArtifact: taskset.datasetArtifact ?? null,
       trainTasks,
@@ -152,8 +161,8 @@ export function buildTasksetTrainingBundle(input: {
       ? {
           id: `evidence_${taskset.id}_r${taskset.revision}`,
           contentHash: contentHash({
-            taskset: taskset.contentHash,
-            harnessRelease,
+            taskset: releasedTaskset,
+            harnessRelease: releasedHarness,
             datasetRelease,
             profileRelease,
             signals: approvedSignals,
@@ -164,7 +173,7 @@ export function buildTasksetTrainingBundle(input: {
   const bundleContent = ResolvedTrainingBundleContentSchema.parse({
     schemaVersion: "openpond.resolvedTrainingBundle.v1",
     projection: "trainer",
-    harnessRelease,
+    harnessRelease: releasedHarness,
     datasetRelease,
     evidenceSetRelease,
     files: [...assets.entries()]
@@ -214,7 +223,8 @@ export function buildTasksetTrainingBundle(input: {
     resolvedBundleManifest,
     assets,
     profileRelease,
-    harnessRelease,
+    harnessRelease: releasedHarness,
+    tasksetRelease: releasedTaskset,
     datasetRelease,
     evidenceSetRelease,
   };

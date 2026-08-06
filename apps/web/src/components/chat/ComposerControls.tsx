@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CodexReasoningEffort } from "@openpond/contracts";
+import type { ChatProvider, CodexReasoningEffort } from "@openpond/contracts";
 import {
   ArrowLeft,
   Check,
@@ -10,7 +10,7 @@ import {
   Plus,
   UploadCloud,
 } from "../icons";
-import { CODEX_MODEL_OPTIONS, CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
+import { CODEX_REASONING_EFFORT_OPTIONS } from "../../lib/app-models";
 import type { DropdownOption } from "../../lib/app-models";
 import type {
   WorkspaceTargetOptionState,
@@ -482,37 +482,48 @@ function WorkspaceTargetIcon({
   return <Folder size={size} />;
 }
 
-export function CodexModelReasoningMenu({
+export function ComposerModelMenu({
   disabled,
   model,
-  modelOptions = CODEX_MODEL_OPTIONS,
+  modelGroups,
   placement,
+  provider,
   reasoningEffort,
-  onModelChange,
+  showReasoning,
+  onModelSelectionChange,
+  onProviderSetupOpen,
   onReasoningEffortChange,
 }: {
   disabled: boolean;
   model: string;
-  modelOptions?: DropdownOption[];
+  modelGroups: ComposerModelGroup[];
   placement: "bottom" | "top";
+  provider: ChatProvider;
   reasoningEffort: CodexReasoningEffort;
-  onModelChange: (value: string) => void;
+  showReasoning: boolean;
+  onModelSelectionChange: (provider: ChatProvider, model: string) => void;
+  onProviderSetupOpen?: () => void;
   onReasoningEffortChange: (value: CodexReasoningEffort) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [panel, setPanel] = useState<"root" | "provider" | "model" | "effort">("root");
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedModel =
-    modelOptions.find((option) => option.value === model) ??
-    CODEX_MODEL_OPTIONS.find((option) => option.value === model) ??
-    modelOptions[0] ??
-    CODEX_MODEL_OPTIONS[0]!;
+  const selectedGroup = modelGroups.find((group) => group.provider === provider);
+  const selectedModel = selectedGroup?.options.find((option) => option.value === model);
   const selectedReasoning =
     CODEX_REASONING_EFFORT_OPTIONS.find((option) => option.value === reasoningEffort) ??
     CODEX_REASONING_EFFORT_OPTIONS[1]!;
-  const triggerLabel = `${compactModelLabel(selectedModel.label)} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`;
+  const modelLabel = compactModelLabel(selectedModel?.label ?? model);
+  const triggerLabel = showReasoning
+    ? `${modelLabel} ${selectedReasoning.shortLabel ?? selectedReasoning.label}`
+    : modelLabel;
+  const controlLabel = showReasoning ? "Model and reasoning" : "Model";
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPanel("root");
+      return;
+    }
     function handlePointerDown(event: PointerEvent) {
       if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
     }
@@ -527,17 +538,21 @@ export function CodexModelReasoningMenu({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!showReasoning && panel === "effort") setPanel("root");
+  }, [panel, showReasoning]);
+
   return (
     <div
       className={`codex-model-reasoning ${placement === "top" ? "open-up" : ""}`}
-      data-tooltip="Model and reasoning"
+      data-tooltip={controlLabel}
       ref={menuRef}
     >
       <button
         type="button"
         className={`codex-model-trigger ${open ? "active" : ""}`}
         disabled={disabled}
-        aria-label="Model and reasoning"
+        aria-label={controlLabel}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
@@ -546,40 +561,191 @@ export function CodexModelReasoningMenu({
         <ChevronDown size={14} />
       </button>
       {open && (
-        <div className="codex-model-menu" role="menu" aria-label="Model and reasoning">
-          <div className="codex-model-menu-title">Reasoning</div>
-          {CODEX_REASONING_EFFORT_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === reasoningEffort}
-              className={option.value === reasoningEffort ? "selected" : ""}
-              onClick={() => onReasoningEffortChange(option.value)}
-            >
-              <span>{option.label}</span>
-              {option.value === reasoningEffort && <Check size={14} />}
-            </button>
-          ))}
-          <div className="codex-model-menu-title">Model</div>
-          {modelOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={option.value === model}
-              className={option.value === model ? "selected" : ""}
-              onClick={() => onModelChange(option.value)}
-            >
-              <span>{option.label}</span>
-              {option.value === model && <Check size={14} />}
-            </button>
-          ))}
+        <div className="codex-model-menu" role="menu" aria-label={controlLabel}>
+          {panel === "root" ? (
+            <div className="codex-model-menu-root">
+              <button
+                type="button"
+                className="codex-model-menu-row"
+                role="menuitem"
+                onClick={() => setPanel("provider")}
+              >
+                <span>Provider</span>
+                <span className="codex-model-menu-value">
+                  {selectedGroup?.label ?? provider}
+                </span>
+                <ChevronRight size={14} />
+              </button>
+              <button
+                type="button"
+                className="codex-model-menu-row"
+                role="menuitem"
+                onClick={() => setPanel("model")}
+              >
+                <span>Model</span>
+                <span className="codex-model-menu-value">{selectedModel?.label ?? model}</span>
+                <ChevronRight size={14} />
+              </button>
+              {showReasoning ? (
+                <button
+                  type="button"
+                  className="codex-model-menu-row"
+                  role="menuitem"
+                  onClick={() => setPanel("effort")}
+                >
+                  <span>Effort</span>
+                  <span className="codex-model-menu-value">
+                    {selectedReasoning.shortLabel ?? selectedReasoning.label}
+                  </span>
+                  <ChevronRight size={14} />
+                </button>
+              ) : null}
+            </div>
+          ) : panel === "provider" ? (
+            <>
+              <button
+                type="button"
+                className="codex-model-submenu-heading"
+                aria-label="Back to model settings — Provider"
+                onClick={() => setPanel("root")}
+              >
+                <ArrowLeft size={14} />
+                <span>Provider</span>
+              </button>
+              <div className="codex-model-menu-divider" />
+              <div className="codex-model-menu-options">
+                {modelGroups.map((group) => {
+                  const selected = group.provider === provider;
+                  return (
+                    <button
+                      key={group.provider}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={selected ? "selected" : ""}
+                      onClick={() => {
+                        const nextModel =
+                          group.options.find((option) => option.value === group.defaultModel) ??
+                          group.options[0];
+                        if (!nextModel) return;
+                        onModelSelectionChange(group.provider, nextModel.value);
+                        setPanel("root");
+                      }}
+                    >
+                      <span>{group.label}</span>
+                      {selected ? <Check size={14} /> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="codex-model-setup-action"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onProviderSetupOpen?.();
+                }}
+              >
+                <span className="codex-model-menu-option-label">
+                  <Plus size={13} />
+                  <span>New Model/Provider</span>
+                </span>
+              </button>
+            </>
+          ) : panel === "model" ? (
+            <>
+              <button
+                type="button"
+                className="codex-model-submenu-heading"
+                aria-label="Back to model settings — Model"
+                onClick={() => setPanel("root")}
+              >
+                <ArrowLeft size={14} />
+                <span>Model</span>
+              </button>
+              <div className="codex-model-menu-divider" />
+              <div className="codex-model-menu-options">
+                {(selectedGroup?.options ?? []).map((option) => {
+                  const selected = option.value === model;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={selected}
+                      className={selected ? "selected" : ""}
+                      onClick={() => {
+                        onModelSelectionChange(provider, option.value);
+                        setPanel("root");
+                      }}
+                    >
+                      <span>{option.label}</span>
+                      {selected ? <Check size={14} /> : null}
+                    </button>
+                  );
+                })}
+                {!selectedGroup?.options.length ? (
+                  <div className="codex-model-menu-empty">No models from this provider</div>
+                ) : null}
+              </div>
+              <button
+                type="button"
+                className="codex-model-setup-action"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  onProviderSetupOpen?.();
+                }}
+              >
+                <span className="codex-model-menu-option-label">
+                  <Plus size={13} />
+                  <span>New Model/Provider</span>
+                </span>
+              </button>
+            </>
+          ) : (
+            <div className="codex-model-menu-effort">
+              <button
+                type="button"
+                className="codex-model-submenu-heading"
+                aria-label="Back to model settings — Effort"
+                onClick={() => setPanel("root")}
+              >
+                <ArrowLeft size={14} />
+                <span>Effort</span>
+              </button>
+              <div className="codex-model-menu-divider" />
+              {CODEX_REASONING_EFFORT_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={option.value === reasoningEffort}
+                  className={option.value === reasoningEffort ? "selected" : ""}
+                  onClick={() => {
+                    onReasoningEffortChange(option.value);
+                    setPanel("root");
+                  }}
+                >
+                  <span>{option.label}</span>
+                  {option.value === reasoningEffort ? <Check size={14} /> : null}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
+
+export type ComposerModelGroup = {
+  provider: ChatProvider;
+  label: string;
+  defaultModel: string;
+  options: DropdownOption[];
+};
 
 function compactModelLabel(label: string): string {
   return label.replace(/^GPT-/, "").replace(/\s+Codex Spark$/, " Spark").replace(/\s+Codex$/, " Codex");

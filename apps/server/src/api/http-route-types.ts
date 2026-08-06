@@ -225,6 +225,7 @@ export type HttpRouteDeps = {
   chatAttachmentImagePayload: (
     input: ChatAttachmentImagePayloadRequest
   ) => Promise<WorkspaceImagePayload>;
+  chatAttachmentFilePayload: (input: unknown) => Promise<unknown>;
   workspaceLspTouchPayload: (
     appId: string,
     payload: unknown

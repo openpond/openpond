@@ -228,19 +228,25 @@ function saveCurrentPromptDraft(state: AppState): Record<string, string> {
 function selectPromptDraft(
   state: AppState,
   patch: Partial<AppState>,
-  options: { clearSelectedDraft?: boolean } = {}
+  options: { clearSelectedDraft?: boolean; preserveCurrentPrompt?: boolean } = {}
 ): AppState {
   const selected = { ...state, ...patch };
   const selectedKey = promptDraftKey(selected);
   const savedDrafts = saveCurrentPromptDraft(state);
   const promptDrafts = options.clearSelectedDraft
     ? setPromptDraft(savedDrafts, selectedKey, "")
-    : savedDrafts;
+    : options.preserveCurrentPrompt
+      ? setPromptDraft(savedDrafts, selectedKey, state.prompt)
+      : savedDrafts;
   return {
     ...state,
     ...patch,
     promptDrafts,
-    prompt: options.clearSelectedDraft ? "" : promptDrafts[selectedKey] ?? "",
+    prompt: options.clearSelectedDraft
+      ? ""
+      : options.preserveCurrentPrompt
+        ? state.prompt
+        : promptDrafts[selectedKey] ?? "",
   };
 }
 
@@ -300,12 +306,16 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         view: "chat",
       });
     case "selectProject":
-      return selectPromptDraft(state, {
-        selectedAppId: null,
-        selectedProjectId: action.projectId,
-        selectedSessionId: null,
-        view: "chat",
-      });
+      return selectPromptDraft(
+        state,
+        {
+          selectedAppId: null,
+          selectedProjectId: action.projectId,
+          selectedSessionId: null,
+          view: "chat",
+        },
+        { preserveCurrentPrompt: true }
+      );
     case "selectSession": {
       const projectId = action.projectId ?? null;
       return selectPromptDraft(state, {

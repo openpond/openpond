@@ -8,8 +8,10 @@ import {
 } from "react";
 import type {
   ChatAttachment,
+  ChatAttachmentSummary,
   ChatProvider,
   SidebarFileBookmark,
+  WorkspaceDiffFile,
 } from "@openpond/contracts";
 import { api } from "../../api";
 import { normalizePreferences } from "../../lib/app-models";
@@ -24,10 +26,14 @@ import type {
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
-import { normalizeChatFilePath } from "../../lib/chat-file-links";
+import {
+  normalizeChatFilePath,
+  resolveChatWorkspaceRootPath,
+} from "../../lib/chat-file-links";
 import { absoluteLocalVideoPath } from "../../lib/local-video";
 import { shouldShowThinkingIndicator } from "../../lib/chat-timeline-rows";
 import {
+  composerSlashCommandAllowedInExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -61,7 +67,10 @@ import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
-import type { WorkspaceFileSourceSwitcher } from "../workspace-diff/workspace-diff-panel-model";
+import type {
+  WorkspaceDiffOpenFileRequest,
+  WorkspaceFileSourceSwitcher,
+} from "../workspace-diff/workspace-diff-panel-model";
 import { useLabCandidateReview } from "../../hooks/useLabCandidateReview";
 import { useLabAgentAuthoring } from "../../hooks/useLabAgentAuthoring";
 import {
@@ -257,10 +266,8 @@ export function MainPane({
 }: MainPaneProps) {
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
-  const [openDiffFileRequest, setOpenDiffFileRequest] = useState<{
-    id: number;
-    path: string;
-  } | null>(null);
+  const [openDiffFileRequest, setOpenDiffFileRequest] =
+    useState<WorkspaceDiffOpenFileRequest | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
     useState<RightSidebarFileSource | null>(null);
   const [labSkillSource, setLabSkillSource] =
@@ -401,6 +408,7 @@ export function MainPane({
     };
   }, [connection, showToast, sidebarFileOpenRequest]);
   const composerActionCatalog = useMemo(() => {
+    if (experience === "chat") return selectedProfileActionCatalog;
     if (experience !== "development") return [];
     const byId = new Map(
       actionCatalog
@@ -837,12 +845,13 @@ export function MainPane({
           ? { command: selectedCommand.id, args: promptForSubmit.trim() }
           : parseComposerSlashCommandPrompt(promptForSubmit);
         if (command) {
-          const commandAllowed =
-            experience === "development" ||
-            (experience === "work" && command.command === "submit-issue");
+          const commandAllowed = composerSlashCommandAllowedInExperience(
+            { id: command.command },
+            experience,
+          );
           if (!commandAllowed) {
             showToast(
-              `/${command.command} is only available in Development.`,
+              `/${command.command} isn't available in ${experience}.`,
               "info"
             );
             return false;
@@ -996,6 +1005,7 @@ export function MainPane({
     chatTimelineRows,
     composerStackRef,
     goToUserMessage,
+    handleChatContentMutation,
     handleChatScroll,
     jumpToLatestChatMessage,
     showScrollToBottomButton,
@@ -1024,10 +1034,12 @@ export function MainPane({
     },
     [browserConversationId, onShowBrowserPanel]
   );
-  const workspaceRootPath =
-    workspaceTarget.value === "local"
-      ? workspaceState?.repoPath ?? workspaceTarget.detail
-      : workspaceState?.repoPath ?? null;
+  const workspaceRootPath = resolveChatWorkspaceRootPath({
+    projectTargetDetail: projectTarget.detail,
+    projectTargetValue: projectTarget.value,
+    workspaceRepoPath: workspaceState?.repoPath,
+    workspaceTargetValue: workspaceTarget.value,
+  });
   const handleOpenFileInSidebar = useCallback(
     (path: string) => {
       const videoPath = absoluteLocalVideoPath(path, workspaceRootPath);
@@ -1059,6 +1071,60 @@ export function MainPane({
       showToast,
       workspaceRootPath,
     ]
+  );
+  const handleOpenAttachmentInSidebar = useCallback(
+    async (attachment: ChatAttachmentSummary) => {
+      if (
+        !connection ||
+        (!attachment.filePreview && !attachment.imagePreview)
+      ) {
+        showToast("File content is not available for this attachment.", "error");
+        return;
+      }
+      try {
+        const displayName =
+          attachment.name.trim().replace(/[\\/]+/g, "-") || "attachment.txt";
+        const attachmentId = attachment.id.replace(/[^a-zA-Z0-9._-]+/g, "-");
+        const path = `Attachments/${attachmentId || "file"}/${displayName}`;
+        const file: WorkspaceDiffFile = {
+          path,
+          status: "",
+          additions: 0,
+          deletions: 0,
+          patch: "",
+          content: null,
+        };
+        let imageUrl: string | undefined;
+        if (attachment.filePreview) {
+          const payload = await api.chatAttachmentFile(
+            connection,
+            attachment.filePreview,
+          );
+          file.content = payload.content;
+        } else if (attachment.imagePreview) {
+          const payload = await api.signChatAttachmentImageUrl(
+            connection,
+            attachment.imagePreview,
+          );
+          imageUrl = payload.url;
+        }
+        onShowDiffPanel();
+        setOpenDiffFileRequest({
+          id: Date.now(),
+          path,
+          file,
+          ...(imageUrl ? { imageUrl } : {}),
+        });
+      } catch (error) {
+        showToast(
+          error instanceof Error
+            ? error.message
+            : "Could not open this attachment.",
+          "error",
+        );
+      }
+    },
+    [connection, onShowDiffPanel, showToast],
   );
   const workspaceStatusLoading =
     workspaceBusy && Boolean(activeWorkspaceAppId) && !workspaceState;
@@ -1240,6 +1306,7 @@ export function MainPane({
       onCodexReasoningEffortChange={changeCodexReasoningEffort}
       onOpenPondCommandAccessModeChange={changeOpenPondCommandAccessMode}
       onModelChange={onRightChatModelChange}
+      onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
       onOpenFileInSidebar={handleOpenFileInSidebar}
       onOpenProfileSettings={onOpenProfileSettings}
       onOpenSession={onOpenSession}
@@ -1552,10 +1619,13 @@ export function MainPane({
                 billingOrganizationSlug={billingTarget.organizationSlug}
                 billingTeamId={billingTarget.teamId}
                 connection={connection}
+                conversationKey={browserConversationId ?? "draft"}
                 creation={selectedTrainingCreation}
                 onOpenBrowserLink={handleOpenBrowserLink}
+                onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
                 onOpenFileInSidebar={handleOpenFileInSidebar}
                 onOpenProfileSettings={onOpenProfileSettings}
+                onContentMutation={handleChatContentMutation}
                 onResolveUserQuestion={async (_question, resolution) => {
                   const displayPrompt =
                     resolution.action === "answer"
@@ -1572,6 +1642,9 @@ export function MainPane({
                 onScroll={(event) => handleChatScroll(event.currentTarget)}
                 preparingInitialScroll={chatThreadPreparingInitialScroll}
                 rows={chatTimelineRows}
+                userAttachmentDisplay={
+                  activeProvider === "codex" ? "compact" : "full"
+                }
                 threadRef={chatThreadRef}
                 workspaceRootPath={workspaceRootPath}
               />
@@ -1619,13 +1692,9 @@ export function MainPane({
                 mode="dock"
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={experience === "development" ? mentionApps : []}
-                connectedAppMentions={
-                  experience === "work" ? connectedAppMentions : []
-                }
+                connectedAppMentions={connectedAppMentions}
                 profileSkills={
-                  experience === "chat"
-                    ? []
-                    : activeProvider === "codex"
+                  activeProvider === "codex"
                     ? bootstrap?.codexPersonalSkills ?? []
                     : selectedProfileSkills
                 }
@@ -1729,13 +1798,9 @@ export function MainPane({
                 autoFocus
                 focusRequestId={mainComposerFocusRequestId}
                 mentionApps={experience === "development" ? mentionApps : []}
-                connectedAppMentions={
-                  experience === "work" ? connectedAppMentions : []
-                }
+                connectedAppMentions={connectedAppMentions}
                 profileSkills={
-                  experience === "chat"
-                    ? []
-                    : activeProvider === "codex"
+                  activeProvider === "codex"
                     ? bootstrap?.codexPersonalSkills ?? []
                     : selectedProfileSkills
                 }

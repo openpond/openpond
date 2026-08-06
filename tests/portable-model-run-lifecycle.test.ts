@@ -90,6 +90,14 @@ describe("portable Model Run lifecycle", () => {
         },
         openpondRelease: "0.0.38",
         workerProtocol: "openpond.managedRlWorker.v2",
+        harnessRelease: {
+          id: "harness-release-fixture",
+          contentHash: sha256("harness-release-fixture"),
+        },
+        tasksetRelease: {
+          id: "taskset-release-fixture",
+          contentHash: sha256(taskset.contentHash),
+        },
       });
       const profileRelease = graph.profileRelease;
       const releaseGraph = portableReleaseGraphMetadata({
@@ -110,6 +118,7 @@ describe("portable Model Run lifecycle", () => {
         maximumSpendUsd: 2,
         startedAt: FIXED_TIME,
       });
+      expect(prepared.modelRun.harnessRelease).toEqual(graph.manifest.harnessRelease);
       expect(prepared.targetVersion.version).toBe(1);
       expect(
         await store.getModelVersion(

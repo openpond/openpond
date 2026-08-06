@@ -31,8 +31,14 @@ const ManagedJobDetailSchema = z.object({
     completedAt: OptionalTimestampSchema,
     inputBundle: z
       .object({
+        harnessRelease: z
+          .object({ contentHash: z.string().trim().min(1) })
+          .optional(),
         harnessRunManifest: z
           .object({
+            harnessRelease: z
+              .object({ contentHash: z.string().trim().min(1) })
+              .optional(),
             runtimeTarget: z
               .object({
                 placement: z.string().trim().min(1).optional(),

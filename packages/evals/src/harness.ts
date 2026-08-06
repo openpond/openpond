@@ -10,7 +10,7 @@ import {
   ReleaseIdSchema,
   contentHash,
 } from "./common.js";
-import { EnvironmentContractSchema, PolicyBoundarySchema, ToolDeclarationSchema } from "./tasksets.js";
+import { ToolDeclarationSchema } from "./tasksets.js";
 import { createAttemptReceipt, type AttemptReceipt, type RunManifest } from "./runs.js";
 
 export const PortabilityReportSchema = z.object({
@@ -21,9 +21,9 @@ export const PortabilityReportSchema = z.object({
 }).strict();
 
 export const AgentSnapshotContentSchema = z.object({
-  schemaVersion: z.literal("openpond.agentSnapshot.v1"),
+  schemaVersion: z.literal("openpond.agentSnapshot.v2"),
   id: ReleaseIdSchema,
-  profileRelease: ImmutableReleaseRefSchema.nullable(),
+  sourceRelease: ImmutableReleaseRefSchema.nullable(),
   instructions: z.array(ImmutableAssetRefSchema).max(10_000),
   skills: z.array(ImmutableAssetRefSchema).max(10_000),
   agents: z.array(ImmutableAssetRefSchema).max(10_000),
@@ -54,15 +54,13 @@ export const GraderInterfaceContractSchema = z.object({
 }).strict();
 
 export const HarnessReleaseContentSchema = z.object({
-  schemaVersion: z.literal("openpond.harnessRelease.v1"),
+  schemaVersion: z.literal("openpond.harnessRelease.v2"),
   id: ReleaseIdSchema,
   agentSnapshot: ImmutableReleaseRefSchema,
   program: ImmutableAssetRefSchema,
-  environment: EnvironmentContractSchema,
   tools: z.array(ToolDeclarationSchema).max(200),
   lifecycle: LifecycleContractSchema,
   graderInterface: GraderInterfaceContractSchema,
-  policy: PolicyBoundarySchema,
   files: z.array(ImmutableAssetRefSchema).max(100_000),
   metadata: MetadataSchema,
 }).strict();

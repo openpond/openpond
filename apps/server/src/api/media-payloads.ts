@@ -1,10 +1,17 @@
-import { readChatAttachmentImageFile } from "../chat-attachments.js";
+import { ChatAttachmentFilePreviewSchema } from "@openpond/contracts";
+import {
+  readChatAttachmentImageFile,
+  readChatAttachmentTextFile,
+} from "../chat-attachments.js";
 import { readLocalImageFile, readLocalVideoFile } from "../workspace/workspace-common.js";
 import type { HttpRouteDeps } from "./http-route-types.js";
 
 type MediaPayloads = Pick<
   HttpRouteDeps,
-  "localImagePayload" | "localVideoPayload" | "chatAttachmentImagePayload"
+  | "localImagePayload"
+  | "localVideoPayload"
+  | "chatAttachmentImagePayload"
+  | "chatAttachmentFilePayload"
 >;
 
 export function createMediaPayloads(attachmentRootDir: string): MediaPayloads {
@@ -29,6 +36,18 @@ export function createMediaPayloads(attachmentRootDir: string): MediaPayloads {
       });
       if (!image) throw new Error("Image not found");
       return image;
+    },
+    chatAttachmentFilePayload: async (payload) => {
+      const input = ChatAttachmentFilePreviewSchema.parse(payload);
+      const file = await readChatAttachmentTextFile({
+        attachmentRootDir,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        storageName: input.storageName,
+        contentType: input.contentType,
+      });
+      if (!file) throw new Error("Attachment preview is unavailable");
+      return file;
     },
   };
 }

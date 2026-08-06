@@ -1,6 +1,15 @@
-import { lazy, Suspense, type ComponentProps, type RefObject, type UIEvent } from "react";
+import {
+  lazy,
+  Suspense,
+  useLayoutEffect,
+  useMemo,
+  type ComponentProps,
+  type RefObject,
+  type UIEvent,
+} from "react";
 import type { TaskCreationSnapshot } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
+import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { buildChatTimelineRows } from "../../lib/chat-timeline-rows";
 import { MessageRow, ThinkingIndicator } from "../chat/Messages";
 
@@ -18,15 +27,19 @@ export function MainChatThread({
   billingOrganizationSlug,
   billingTeamId,
   connection,
+  conversationKey,
   creation,
   onOpenBrowserLink,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
+  onContentMutation,
   onResolveUserQuestion,
   onOpenSession,
   onScroll,
   preparingInitialScroll,
   rows,
+  userAttachmentDisplay,
   threadRef,
   workspaceRootPath,
 }: {
@@ -35,18 +48,45 @@ export function MainChatThread({
   billingOrganizationSlug: string | null;
   billingTeamId: string | null;
   connection: ClientConnection | null;
+  conversationKey: string;
   creation: TaskCreationSnapshot | null;
   onOpenBrowserLink: MessageRowProps["onOpenBrowserLink"];
+  onOpenAttachmentInSidebar: MessageRowProps["onOpenAttachmentInSidebar"];
   onOpenFileInSidebar: MessageRowProps["onOpenFileInSidebar"];
   onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
+  onContentMutation: (element: HTMLElement) => void;
   onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
   onOpenSession: MessageRowProps["onOpenSession"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
   preparingInitialScroll: boolean;
   rows: ReturnType<typeof buildChatTimelineRows>;
+  userAttachmentDisplay: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
   threadRef: RefObject<HTMLElement | null>;
   workspaceRootPath: string | null;
 }) {
+  const messages = useMemo(
+    () =>
+      rows.flatMap((row) =>
+        row.type === "message" ? [row.message] : []
+      ),
+    [rows]
+  );
+  const newMessageIds = useNewMessageIds(messages, conversationKey);
+
+  useLayoutEffect(() => {
+    const element = threadRef.current;
+    if (!element || typeof MutationObserver === "undefined") return undefined;
+
+    onContentMutation(element);
+    const observer = new MutationObserver(() => onContentMutation(element));
+    observer.observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [onContentMutation, threadRef]);
+
   return (
     <section
       className={`chat-thread${preparingInitialScroll ? " initial-scroll-pending" : ""}`}
@@ -63,13 +103,19 @@ export function MainChatThread({
           billingOrganizationSlug={billingOrganizationSlug}
           billingTeamId={billingTeamId}
           connection={connection}
+          animateInitialContent={
+            row.message.role === "assistant" &&
+            newMessageIds.has(row.message.id)
+          }
           key={row.id}
           message={row.message}
+          onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
           onOpenFileInSidebar={onOpenFileInSidebar}
           onOpenBrowserLink={onOpenBrowserLink}
           onOpenProfileSettings={onOpenProfileSettings}
           onResolveUserQuestion={onResolveUserQuestion}
           onOpenSession={onOpenSession}
+          userAttachmentDisplay={userAttachmentDisplay}
           workspaceRootPath={workspaceRootPath}
           showFooter={row.showFooter}
         />

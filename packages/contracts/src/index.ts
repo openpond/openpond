@@ -16,6 +16,7 @@ export * from "./approvals.js";
 export * from "./placeholders.js";
 export * from "./bootstrap.js";
 export * from "./requests.js";
+export * from "./chat-attachments.js";
 export * from "./workspace-tools.js";
 export * from "./work-outputs.js";
 export * from "./work-formats.js";
@@ -40,6 +41,7 @@ export * from "./dataset-artifacts.js";
 export * from "./dataset-imports.js";
 export * from "./task-mining.js";
 export * from "./continuous-learning.js";
+export * from "./learning-evidence.js";
 export * from "./training.js";
 export * from "./model-lifecycle.js";
 export * from "./training-benchmark.js";
@@ -50,6 +52,10 @@ export * from "./release-core.js";
 export * from "./learning-signals.js";
 export * from "./harness-releases.js";
 export * from "./harness-actions.js";
+export * from "./harness-workspaces.js";
+export * from "./harness-workspace-transitions.js";
+export * from "./harness-sources.js";
+export * from "./harness-improvements.js";
 export * from "./training-platform.js";
 export {
   AgentSnapshotSchema,

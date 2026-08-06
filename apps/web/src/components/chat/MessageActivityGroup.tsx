@@ -1,4 +1,10 @@
-import { useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import {
   ChevronDown,
   CircleAlert,
@@ -33,12 +39,15 @@ import {
 import { workspaceFileName } from "../../lib/workspace-images";
 import { revealLocalFile } from "../../lib/desktop-files";
 import { ImageLightbox } from "../common/ImageLightbox";
+import {
+  SubagentAvatarButton,
+  SubagentAvatarGroup,
+  subagentOpenSessions,
+  subagentRoleLabel,
+} from "./SubagentAvatarGroup";
 
-const MAX_SUMMARY_SUBAGENT_AVATARS = 4;
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
 const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
-
-type SubagentOpenSession = NonNullable<ActivityItem["openSession"]>;
 
 export function ActivityGroup({
   activeWorkspaceAppId,
@@ -53,12 +62,12 @@ export function ActivityGroup({
   onOpenFileInSidebar?: (path: string) => void;
   onOpenSession?: (sessionId: string) => void;
 }) {
+  const activities = message.activities ?? [];
   const [toolsExpanded, setToolsExpanded] = useState(false);
   const [openImage, setOpenImage] = useState<
     ActivityItem["imagePreview"] | null
   >(null);
   const toolListId = useId();
-  const activities = message.activities ?? [];
   const summary = useMemo(
     () => summarizeActivityGroup(activities),
     [activities]
@@ -85,7 +94,8 @@ export function ActivityGroup({
   const summaryText = workTraceSummaryText(
     summary.text,
     message.traceState,
-    duration
+    duration,
+    activities
   );
   const summaryOpenSessions = subagentOpenSessions(activities);
   const childMessageSummary =
@@ -221,24 +231,32 @@ function ActivityToolRow({
         className="activity-tool-summary"
         onClick={() => setExpanded((current) => !current)}
       >
+        {activity.kind === "command" ? (
+          <SquareTerminal aria-hidden className="activity-tool-kind-icon" size={12} />
+        ) : null}
+        <span>{activityToolRowLabel(activity)}</span>
         <ChevronDown
           className={`activity-tool-toggle ${expanded ? "expanded" : ""}`}
           size={13}
         />
-        <span>{activityToolRowLabel(activity)}</span>
       </button>
       {expanded ? (
         <div className="activity-tool-details" id={detailsId}>
-          {activity.content ? (
-            activity.kind === "command" ? (
-              <ShellCommandBlock command={activity.content} />
-            ) : isMultilineActivity(activity.content) ? (
+          {activity.kind === "command" && activity.content ? (
+            <CommandTerminal
+              command={activity.content}
+              exitCode={activity.terminal?.exitCode}
+              output={activity.detail}
+              state={activity.state}
+            />
+          ) : activity.content ? (
+            isMultilineActivity(activity.content) ? (
               <pre className="activity-detail-output">{activity.content}</pre>
             ) : (
               <code className="activity-tool-content">{activity.content}</code>
             )
           ) : null}
-          {activity.detail ? (
+          {activity.detail && activity.kind !== "command" ? (
             <pre className="activity-detail-output">
               {activity.detail.replace(/\r\n/g, "\n").trimEnd()}
             </pre>
@@ -593,9 +611,12 @@ function ActivitySummaryText({ summary }: { summary: string }) {
 function workTraceSummaryText(
   summary: string,
   traceState: ChatMessage["traceState"],
-  duration: string | null
+  duration: string | null,
+  activities: ActivityItem[]
 ): string {
-  if (traceState === "running") return "Working…";
+  if (traceState === "running") {
+    return latestWorkTraceActivitySummary(activities) || summary || "Working…";
+  }
   if (traceState === "failed") {
     return `${duration ? `Failed after ${duration}` : "Failed"}${
       summary ? ` · ${summary}` : ""
@@ -614,23 +635,96 @@ function workTraceSummaryText(
   return summary;
 }
 
-function activityToolRowLabel(activity: ActivityItem): string {
+function latestWorkTraceActivitySummary(
+  activities: ActivityItem[]
+): string | null {
+  let latestVisible: ActivityItem | null = null;
+  for (let index = activities.length - 1; index >= 0; index -= 1) {
+    const activity = activities[index]!;
+    if (activity.kind === "reasoning") continue;
+    latestVisible ??= activity;
+    if (activity.state === "running" || activity.state === "pending") {
+      return activitySummaryText(activity);
+    }
+  }
+  return latestVisible ? activitySummaryText(latestVisible) : null;
+}
+
+function activitySummaryText(activity: ActivityItem): string | null {
+  if (activity.kind === "command") {
+    if (activity.state === "failed") return "Command failed";
+    return (
+      summarizeShellCommand(activity.content, activity.state) ??
+      (activity.state === "running" || activity.state === "pending"
+        ? "Running command"
+        : "Ran command")
+    );
+  }
+  return activity.label.trim() || null;
+}
+
+export function activityToolRowLabel(activity: ActivityItem): string {
   if (activity.kind !== "command") return activity.label;
-  if (activity.state === "failed") return "Command failed";
+  if (activity.state === "running" || activity.state === "pending") {
+    return activitySummaryText(activity) ?? "Running command";
+  }
+  const duration = formatCommandDuration(activity.terminal?.durationMs);
+  if (activity.state === "failed") {
+    return `Command failed${duration ? ` in ${duration}` : ""}`;
+  }
+  const summary = activitySummaryText(activity) ?? "Ran command";
+  return `${summary}${duration ? ` in ${duration}` : ""}`;
+}
+
+function CommandTerminal({
+  command,
+  exitCode,
+  output,
+  state,
+}: {
+  command: string;
+  exitCode?: number | null;
+  output?: string;
+  state: ActivityItem["state"];
+}) {
+  const terminalStatus =
+    state === "running" || state === "pending"
+      ? "Running…"
+      : exitCode != null
+        ? `Exit code ${exitCode}`
+        : state === "completed"
+          ? "Exit code 0"
+          : "Failed";
   return (
-    summarizeShellCommand(activity.content, activity.state) ??
-    (activity.state === "running" ? "Running command" : "Ran command")
+    <section
+      aria-label="Shell command output"
+      className={`activity-command-terminal ${state ?? "completed"}`}
+    >
+      <header>Shell</header>
+      <pre>
+        <code className="shell-command-code">
+          <span className="activity-command-prompt" aria-hidden>
+            $&nbsp;
+          </span>
+          {highlightShellCommand(command)}
+          {output ? (
+            <span className="activity-command-output">
+              {`\n${output.replace(/\r\n/g, "\n").trimEnd()}`}
+            </span>
+          ) : null}
+        </code>
+      </pre>
+      <footer>{terminalStatus}</footer>
+    </section>
   );
 }
 
-function ShellCommandBlock({ command }: { command: string }) {
-  return (
-    <pre className="activity-detail-output activity-tool-command">
-      <code className="shell-command-code">
-        {highlightShellCommand(command)}
-      </code>
-    </pre>
-  );
+function formatCommandDuration(durationMs: number | undefined): string | null {
+  if (durationMs == null || durationMs < 0) return null;
+  if (durationMs < 60_000) return `${Math.max(1, Math.round(durationMs / 1000))}s`;
+  const minutes = Math.floor(durationMs / 60_000);
+  const seconds = Math.round((durationMs % 60_000) / 1000);
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 function highlightShellCommand(command: string) {
@@ -726,232 +820,6 @@ function activitySummaryIcon(kind: ActivityGroupSummaryKind): LucideIcon {
   if (kind === "subagent") return Bot;
   if (kind === "web") return Globe2;
   return SquareTerminal;
-}
-
-function SubagentAvatarGroup({
-  onOpenSession,
-  onShowAll,
-  sessions,
-}: {
-  onOpenSession: (sessionId: string) => void;
-  onShowAll: () => void;
-  sessions: SubagentOpenSession[];
-}) {
-  const visible = sessions.slice(0, MAX_SUMMARY_SUBAGENT_AVATARS);
-  const hiddenCount = Math.max(0, sessions.length - visible.length);
-  const label = sessions.map(subagentAvatarLabel).join(", ");
-  return (
-    <div
-      aria-label={`Subagent conversations: ${label}`}
-      className="activity-subagent-avatar-group"
-      title={`Subagent conversations: ${label}`}
-    >
-      {visible.map((openSession) => (
-        <SubagentAvatarButton
-          key={openSession.sessionId}
-          openSession={openSession}
-          onOpenSession={onOpenSession}
-        />
-      ))}
-      {hiddenCount > 0 ? (
-        <button
-          type="button"
-          aria-label={`Show ${hiddenCount} more subagent conversation${
-            hiddenCount === 1 ? "" : "s"
-          }`}
-          className="activity-subagent-avatar activity-subagent-avatar-count"
-          onClick={onShowAll}
-          title={`Show ${hiddenCount} more subagent conversation${
-            hiddenCount === 1 ? "" : "s"
-          }`}
-        >
-          +{hiddenCount}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function SubagentAvatarButton({
-  className = "",
-  onOpenSession,
-  openSession,
-}: {
-  className?: string;
-  onOpenSession: (sessionId: string) => void;
-  openSession: SubagentOpenSession;
-}) {
-  const roleId = normalizedSubagentRole(openSession.roleId);
-  const status = normalizedSubagentStatus(openSession.status);
-  const label = `Open ${subagentAvatarLabel(openSession)} conversation`;
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className={`activity-subagent-avatar ${className}`}
-      data-role={roleId}
-      data-status={status}
-      onClick={() => onOpenSession(openSession.sessionId)}
-      title={label}
-    >
-      <SubagentRoleGlyph roleId={roleId} />
-    </button>
-  );
-}
-
-function SubagentRoleGlyph({ roleId }: { roleId: string }) {
-  if (roleId === "coding") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <path d="M9.4 7.2 4.8 12l4.6 4.8" />
-        <path d="m14.6 7.2 4.6 4.8-4.6 4.8" />
-        <path d="m12.9 5.7-1.8 12.6" />
-      </svg>
-    );
-  }
-  if (roleId === "research") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <circle cx="10.8" cy="10.8" r="5.2" />
-        <path d="m15 15 4 4" />
-        <path d="M8.6 10.8h4.4" />
-        <path d="M10.8 8.6v4.4" />
-      </svg>
-    );
-  }
-  if (roleId === "review") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <path d="M7 4.8h7.2L18 8.6v10.6H7z" />
-        <path d="M14 4.8v4h4" />
-        <path d="m8.9 14.2 2 2 4.3-4.7" />
-      </svg>
-    );
-  }
-  if (roleId === "test") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <path d="M9.2 4.8h5.6" />
-        <path d="M10.4 4.8v5.4l-4 6.8a1.8 1.8 0 0 0 1.6 2.7h8a1.8 1.8 0 0 0 1.6-2.7l-4-6.8V4.8" />
-        <path d="M8.2 15.8h7.6" />
-      </svg>
-    );
-  }
-  if (roleId === "docs") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <path d="M7 4.8h7.2L18 8.6v10.6H7z" />
-        <path d="M14 4.8v4h4" />
-        <path d="M9.2 11.4h5.6" />
-        <path d="M9.2 14.2h5.6" />
-        <path d="M9.2 17h3.4" />
-      </svg>
-    );
-  }
-  if (roleId === "planner") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <circle cx="7.2" cy="7.2" r="2.1" />
-        <circle cx="16.8" cy="7.2" r="2.1" />
-        <circle cx="12" cy="16.8" r="2.1" />
-        <path d="M9 8.2h6" />
-        <path d="m8.5 9 2.4 5.4" />
-        <path d="m15.5 9-2.4 5.4" />
-      </svg>
-    );
-  }
-  if (roleId === "summarizer") {
-    return (
-      <svg
-        aria-hidden
-        viewBox="0 0 24 24"
-        className="activity-subagent-avatar-svg"
-      >
-        <path d="M7 6.8h10" />
-        <path d="M7 10.4h8.2" />
-        <path d="M7 14h6.2" />
-        <path d="M7 17.6h4.2" />
-      </svg>
-    );
-  }
-  return (
-    <svg
-      aria-hidden
-      viewBox="0 0 24 24"
-      className="activity-subagent-avatar-svg"
-    >
-      <circle cx="12" cy="8.2" r="3.2" />
-      <path d="M6.5 19.2c.6-3 2.5-5 5.5-5s4.9 2 5.5 5" />
-      <path d="M5.2 11.8h2" />
-      <path d="M16.8 11.8h2" />
-    </svg>
-  );
-}
-
-function subagentOpenSessions(
-  activities: ActivityItem[]
-): SubagentOpenSession[] {
-  const bySession = new Map<string, SubagentOpenSession>();
-  for (const activity of activities) {
-    const openSession = activity.openSession;
-    if (!openSession) continue;
-    bySession.set(openSession.sessionId, {
-      ...bySession.get(openSession.sessionId),
-      ...openSession,
-    });
-  }
-  return [...bySession.values()].reverse();
-}
-
-function subagentAvatarLabel(openSession: SubagentOpenSession): string {
-  const role = `${subagentRoleLabel(openSession.roleId)} subagent`;
-  const status = openSession.status?.replace(/_/g, " ").trim();
-  return status ? `${role} (${status})` : role;
-}
-
-function subagentRoleLabel(roleId: string | undefined): string {
-  const normalized = normalizedSubagentRole(roleId);
-  return (
-    normalized
-      .split(/[-_]+/)
-      .filter(Boolean)
-      .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-      .join(" ") || "Subagent"
-  );
-}
-
-function normalizedSubagentRole(roleId: string | undefined): string {
-  const value = roleId?.trim().toLowerCase() || "subagent";
-  return /^[a-z][a-z0-9_-]*$/.test(value) ? value : "subagent";
-}
-
-function normalizedSubagentStatus(status: string | undefined): string {
-  const value = status?.trim().toLowerCase() || "unknown";
-  return /^[a-z][a-z0-9_-]*$/.test(value) ? value : "unknown";
 }
 
 function useActivityImageUrl(

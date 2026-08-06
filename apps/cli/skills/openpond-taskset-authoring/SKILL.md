@@ -64,25 +64,35 @@ Use the installed Dataset Builder actions for design, materialization, and
 testing, following their schemas internally. Do not recite those schemas in the
 chat.
 
-## Reviewing consented conversations
+## Reviewing Work-first learning evidence
 
-When `get_conversations` is available for conversation-backed authoring:
+When `get_conversations` is available for continuous-learning authoring:
 
 1. Call `get_conversations` exactly once without arguments. Never supply or
    infer an owner, Team, conversation list, source ID, watermark, or budget.
-2. Use only the conversations and source references returned by the tool.
+2. Treat the returned lanes differently. Work contains only sanitized summaries
+   and content-addressed authoring references; never request or infer raw traces.
+   Chat contains bounded conversation excerpts only for recurrence context.
    Do not search conversation archives, connected apps, files, or the web for
    additional evidence.
-3. Identify recurrence across the returned conversations and return at most
-   three recommendations. For each pattern, explain whether the
-   next step should be a Taskset, Skill, prompting, retrieval, or no action.
-4. Prefer retrieval or no action for changing knowledge, privacy-sensitive
-   evidence, weak recurrence, or low-verifiability patterns. A candidate needs
-   at least three independent occurrences before Taskset recommendation.
-5. Cite the returned source reference IDs without repeating unrestricted source
-   content. If the tool returns no conversations, write a concise no-recommendation
+3. Rank verified, validation-backed Work above successful unverified Work, and
+   successful Work above chat-only evidence. Failed, cancelled, or timed-out
+   Work is discovery-only: it may reveal a repeated problem but never an
+   approved demonstration, preference, evaluation target, or reward signal.
+4. Use chat to establish missing recurrence and describe the repeated job. A
+   candidate needs at least three independent returned source references before
+   Taskset recommendation. Return at most three recommendations and explain
+   whether the next step should be a Taskset, Skill, prompting, retrieval, or
+   no action.
+5. Treat accepted, correction, rejected, or mixed feedback as evidence that may
+   change a recommendation. Feedback is never scalar reward, and a
+   `rewardCandidate` value of false is authoritative.
+6. Prefer retrieval or no action for changing knowledge, privacy-sensitive
+   evidence, weak recurrence, or low-verifiability patterns.
+7. Cite the returned source reference IDs without repeating unrestricted source
+   content. If both lanes return no evidence, write a concise no-recommendation
    result using its reason.
-6. If the Work item asks only for suggestions, stop after the recommendation.
+8. If the Work item asks only for suggestions, stop after the recommendation.
    Do not materialize a Taskset, create a grader, start an Evaluation or
    training Run, create a Model Version, deploy, bind, or request Work compute.
 

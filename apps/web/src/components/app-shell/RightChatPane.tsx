@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import type {
   BootstrapPayload,
   ChatAttachment,
+  ChatAttachmentSummary,
   ChatProvider,
   CodexPersonalSkill,
   CodexPermissionMode,
@@ -13,6 +14,7 @@ import type {
 } from "@openpond/contracts";
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
+import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
 import {
   buildChatTimelineRows,
@@ -58,6 +60,7 @@ export function RightChatPane({
   onCodexReasoningEffortChange,
   onOpenPondCommandAccessModeChange,
   onModelChange,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onOpenSession,
@@ -98,6 +101,7 @@ export function RightChatPane({
   onCodexReasoningEffortChange: (effort: CodexReasoningEffort) => void;
   onOpenPondCommandAccessModeChange: (mode: OpenPondCommandAccessMode) => void;
   onModelChange: (model: string) => void;
+  onOpenAttachmentInSidebar: (attachment: ChatAttachmentSummary) => Promise<void>;
   onOpenFileInSidebar: (path: string) => void;
   onOpenProfileSettings: () => void;
   onOpenSession?: (sessionId: string) => void;
@@ -137,6 +141,10 @@ export function RightChatPane({
     () => buildChatTimelineRows(panel.messages, { showThinkingIndicator: showThinking }),
     [panel.messages, showThinking],
   );
+  const newMessageIds = useNewMessageIds(
+    panel.messages,
+    panel.sessionId ?? `draft:${panel.id}`
+  );
   const latestMessage = panel.messages.at(-1);
   const contentKey = [
     panel.id,
@@ -160,6 +168,23 @@ export function RightChatPane({
     }
     if (stickyToBottomRef.current) element.scrollTop = element.scrollHeight;
   }, [contentKey, initialScrollState]);
+
+  useLayoutEffect(() => {
+    const element = threadRef.current;
+    if (!element || typeof MutationObserver === "undefined") return undefined;
+
+    if (stickyToBottomRef.current) element.scrollTop = element.scrollHeight;
+    const observer = new MutationObserver(() => {
+      if (!stickyToBottomRef.current) return;
+      element.scrollTop = element.scrollHeight;
+    });
+    observer.observe(element, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, [panel.id]);
 
   const handleOpenBrowserLink = useCallback(
     (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => {
@@ -218,13 +243,21 @@ export function RightChatPane({
             billingOrganizationSlug={billingOrganizationSlug}
             billingTeamId={billingTeamId}
             connection={connection}
+            animateInitialContent={
+              row.message.role === "assistant" &&
+              newMessageIds.has(row.message.id)
+            }
             key={row.id}
             message={row.message}
             onOpenBrowserLink={handleOpenBrowserLink}
+            onOpenAttachmentInSidebar={onOpenAttachmentInSidebar}
             onOpenFileInSidebar={onOpenFileInSidebar}
             onOpenProfileSettings={onOpenProfileSettings}
             onResolveUserQuestion={handleResolveUserQuestion}
             onOpenSession={onOpenSession}
+            userAttachmentDisplay={
+              panel.provider === "codex" ? "compact" : "full"
+            }
             workspaceRootPath={panel.workspaceRootPath}
             showFooter={row.showFooter}
           />

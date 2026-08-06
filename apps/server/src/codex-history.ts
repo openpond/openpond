@@ -21,9 +21,37 @@ import {
   safeChatAttachmentPathSegment,
 } from "./chat-attachments.js";
 import {
+  codexHistoryTextAttachmentMetadata,
+  type CodexImageReference,
+  codexNativeFileAttachments,
+  codexNativeFileMentions,
+  mergeCodexNativeImageReferences,
+} from "./codex-history-attachments.js";
+import {
   loadCodexHistoryFileIndex,
   type CodexHistoryFile,
 } from "./codex-history-file-index.js";
+import {
+  asRecord,
+  codexControlMessage,
+  codexHomePath,
+  isCodexInjectedUserMessage,
+  isoFromEpochSeconds,
+  isoFromFileName,
+  isoTimestamp,
+  latestIso,
+  latestMillis,
+  millisFromIso,
+  normalizeTitleText,
+  numberValue,
+  parseJson,
+  parseMaybeJson,
+  safeId,
+  stringMap,
+  stringValue,
+  truncateText,
+  type CodexRecord,
+} from "./codex-history-utils.js";
 
 const CODEX_HISTORY_SESSION_PREFIX = "codex_history_";
 const CODEX_HISTORY_EVENT_SOURCE = "codex_history";
@@ -61,6 +89,11 @@ export type CodexHistoryThreadPayload = {
   events: RuntimeEvent[];
 };
 
+export type CodexHistoryThreadRevision = {
+  revision: string;
+  thread: CodexHistoryThread;
+};
+
 type SessionMetadata = {
   id: string | null;
   cwd: string | null;
@@ -83,20 +116,6 @@ type CodexHistoryGoalRuntimeMetadata = {
   updatedAt: string;
 };
 
-type CodexRecord = {
-  arguments?: string;
-  call_id?: string;
-  content?: unknown;
-  name?: string;
-  output?: string;
-  type?: string;
-  role?: string;
-  phase?: string;
-  record_type?: string;
-  timestamp?: string;
-  payload?: unknown;
-};
-
 type ParsedCodexSession = {
   events: RuntimeEvent[];
   status: Session["status"];
@@ -105,13 +124,9 @@ type ParsedCodexSession = {
   goalRuntime: CodexHistoryGoalRuntimeMetadata | null;
 };
 
-type CodexControlMessage = {
-  kind: "goal_context" | "turn_aborted";
-  text: string;
-};
-
 type ParseCodexSessionInput = {
   attachmentRootDir?: string;
+  codexHome?: string;
   fallbackTimestamp: string;
   maxEvents?: number;
   sessionId: string;
@@ -168,22 +183,11 @@ export async function readCodexHistoryThreadPayload(
     tailBytes?: number;
   } = {}
 ): Promise<CodexHistoryThreadPayload> {
-  const threadId = codexHistoryThreadIdFromSessionId(sessionId);
-  if (!threadId) throw new Error("Codex history session not found");
   const codexHome = options.codexHome ?? codexHomePath();
-  const cacheKey = threadLookupCacheKey(codexHome, threadId);
-  let thread = threadLookupCache.get(cacheKey);
-  if (!thread || !existsSync(thread.filePath)) {
-    const threads = await loadCodexHistoryThreads({
-      codexHome,
-      includeThreadId: threadId,
-      metadataLimit: 1,
-    });
-    thread = threads.find((candidate) => candidate.threadId === threadId);
-  }
-  if (!thread) throw new Error("Codex history session not found");
+  const thread = await resolveCodexHistoryThread(sessionId, codexHome);
   const parseInput = {
     attachmentRootDir: options.attachmentRootDir,
+    codexHome,
     filePath: thread.filePath,
     fallbackTimestamp: thread.session.updatedAt,
     maxEvents: options.maxEvents ?? eventLimit(),
@@ -213,6 +217,41 @@ export async function readCodexHistoryThreadPayload(
     },
     events: parsed.events,
   };
+}
+
+export async function readCodexHistoryThreadRevision(
+  sessionId: string,
+  options: { codexHome?: string } = {},
+): Promise<CodexHistoryThreadRevision> {
+  const thread = await resolveCodexHistoryThread(
+    sessionId,
+    options.codexHome ?? codexHomePath(),
+  );
+  const stats = statSync(thread.filePath);
+  return {
+    revision: `${stats.size}:${stats.mtimeMs}`,
+    thread,
+  };
+}
+
+async function resolveCodexHistoryThread(
+  sessionId: string,
+  codexHome: string,
+): Promise<CodexHistoryThread> {
+  const threadId = codexHistoryThreadIdFromSessionId(sessionId);
+  if (!threadId) throw new Error("Codex history session not found");
+  const cacheKey = threadLookupCacheKey(codexHome, threadId);
+  let thread = threadLookupCache.get(cacheKey);
+  if (!thread || !existsSync(thread.filePath)) {
+    const threads = await loadCodexHistoryThreads({
+      codexHome,
+      includeThreadId: threadId,
+      metadataLimit: 1,
+    });
+    thread = threads.find((candidate) => candidate.threadId === threadId);
+  }
+  if (!thread) throw new Error("Codex history session not found");
+  return thread;
 }
 
 export async function loadCodexHistoryThreads(
@@ -343,8 +382,11 @@ export async function readCodexHistorySearchText(
     const role = stringValue(responsePayload.role);
     if (role !== "user" && role !== "assistant") return;
     const text = textFromContent(responsePayload.content).trim();
-    if (!text || (role === "user" && codexControlMessage(text))) return;
-    messages.push(text);
+    const visibleText =
+      role === "assistant" ? visibleCodexAssistantContent(text) : text;
+    if (!visibleText || (role === "user" && codexControlMessage(visibleText)))
+      return;
+    messages.push(visibleText);
   });
   return messages.join("\n");
 }
@@ -400,6 +442,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   let latestLifecycleStartAt: string | null = null;
   let latestFinalAt: string | null = null;
   let latestRecordAt: string | null = null;
+  const toolCallsByCallId = new Map<
+    string,
+    { command: string | null; name: string }
+  >();
 
   function push(event: RuntimeEvent): void {
     events.push(event);
@@ -411,7 +457,23 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     }
   }
 
-  function activeTurnId(): string {
+  function providerRuntimeTurnId(providerTurnId: string): string {
+    return `${input.sessionId}_turn_${safeId(providerTurnId)}`;
+  }
+
+  function adoptProviderTurn(providerTurnId: string | null): void {
+    if (!providerTurnId) return;
+    const nextTurnId = providerRuntimeTurnId(providerTurnId);
+    if (currentTurnId === nextTurnId) return;
+    currentTurnId = nextTurnId;
+    currentTurnStarted = false;
+    currentTurnCompleted = false;
+    assistantIndex = 0;
+    toolIndex = 0;
+  }
+
+  function activeTurnId(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (currentTurnId) return currentTurnId;
     turnIndex += 1;
     currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -420,7 +482,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     return currentTurnId;
   }
 
-  function beginPromptTurn(): string {
+  function beginPromptTurn(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (!currentTurnId || currentTurnStarted || currentTurnCompleted) {
       turnIndex += 1;
       currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -431,7 +494,8 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
     return currentTurnId;
   }
 
-  function beginLifecycleTurn(): string {
+  function beginLifecycleTurn(providerTurnId: string | null = null): string {
+    adoptProviderTurn(providerTurnId);
     if (!currentTurnId || currentTurnCompleted) {
       turnIndex += 1;
       currentTurnId = `${input.sessionId}_turn_${turnIndex}`;
@@ -474,9 +538,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
   function completeLifecycleTurn(
     timestamp: string,
     name: "turn.completed" | "turn.interrupted",
-    output?: string
+    output?: string,
+    providerTurnId: string | null = null
   ): void {
-    const turnId = currentTurnId ?? activeTurnId();
+    const turnId = activeTurnId(providerTurnId);
     if (!currentTurnCompleted) {
       push(
         historyEvent({
@@ -552,25 +617,33 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         return;
       }
       if (type === "task_started") {
-        beginLifecycleTurn();
+        beginLifecycleTurn(stringValue(payload.turn_id));
         latestLifecycleStartAt = timestamp;
         return;
       }
       if (type === "task_complete") {
-        completeLifecycleTurn(timestamp, "turn.completed");
+        completeLifecycleTurn(
+          timestamp,
+          "turn.completed",
+          undefined,
+          stringValue(payload.turn_id)
+        );
         return;
       }
       if (type === "turn_aborted") {
         completeLifecycleTurn(
           timestamp,
           "turn.interrupted",
-          turnAbortMessage(payload)
+          turnAbortMessage(payload),
+          stringValue(payload.turn_id)
         );
         return;
       }
     }
     const responsePayload = responsePayloadFromCodexRecord(record, payload);
     if (!responsePayload) return;
+    const providerTurnId = providerTurnIdFromResponsePayload(responsePayload);
+    const providerItemId = stringValue(responsePayload.id);
 
     if (responsePayload.type === "message") {
       const role = stringValue(responsePayload.role);
@@ -578,6 +651,7 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       const content = textFromContent(rawContent);
       if (!content && !codexContentHasInputImage(rawContent)) return;
       if (role === "user") {
+        adoptProviderTurn(providerTurnId);
         const internalGoalRuntime = activeGoalRuntimeFromCodexInternalContext(
           content,
           timestamp
@@ -622,9 +696,10 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           return;
         }
         if (isCodexInjectedUserMessage(content)) return;
-        const turnId = beginPromptTurn();
+        const turnId = beginPromptTurn(providerTurnId);
         const userContent = visibleCodexUserContent(rawContent, {
           attachmentRootDir: input.attachmentRootDir,
+          codexHome: input.codexHome ?? codexHomePath(),
           sessionId: input.sessionId,
           turnId,
         });
@@ -634,7 +709,9 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
         if (!firstPrompt) firstPrompt = userContent.prompt;
         push(
           historyEvent({
-            id: `${turnId}_started`,
+            id: providerItemId
+              ? `${input.sessionId}_${safeId(providerItemId)}_started`
+              : `${turnId}_started`,
             sessionId: input.sessionId,
             turnId,
             timestamp,
@@ -657,32 +734,39 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       }
 
       if (role === "assistant") {
-        assistantIndex += 1;
-        const turnId = activeTurnId();
+        const turnId = activeTurnId(providerTurnId);
         const phase = stringValue(responsePayload.phase);
         const legacyFinalAnswer = record.type === "message";
-        push(
-          historyEvent({
-            id: `${turnId}_assistant_${assistantIndex}`,
-            sessionId: input.sessionId,
-            turnId,
-            timestamp,
-            name: "assistant.delta",
-            source: "provider",
-            output: truncateText(content, ASSISTANT_MAX_LENGTH),
-            data: {
-              source: CODEX_HISTORY_EVENT_SOURCE,
-              codexThreadId: input.threadId,
-              ...(phase ? { phase } : {}),
-            },
-          })
-        );
+        const visibleContent = visibleCodexAssistantContent(content);
+        if (visibleContent) {
+          assistantIndex += 1;
+          push(
+            historyEvent({
+              id: providerItemId
+                ? `${input.sessionId}_${safeId(providerItemId)}_assistant`
+                : `${turnId}_assistant_${assistantIndex}`,
+              sessionId: input.sessionId,
+              turnId,
+              timestamp,
+              name: "assistant.delta",
+              source: "provider",
+              output: truncateText(visibleContent, ASSISTANT_MAX_LENGTH),
+              data: {
+                source: CODEX_HISTORY_EVENT_SOURCE,
+                codexThreadId: input.threadId,
+                ...(phase ? { phase } : {}),
+              },
+            })
+          );
+        }
         if (phase === "final_answer" || legacyFinalAnswer) {
           latestFinalAt = timestamp;
           if (!currentTurnCompleted) {
             push(
               historyEvent({
-                id: `${turnId}_completed`,
+                id: providerItemId
+                  ? `${input.sessionId}_${safeId(providerItemId)}_completed`
+                  : `${turnId}_completed`,
                 sessionId: input.sessionId,
                 turnId,
                 timestamp,
@@ -702,20 +786,28 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
       return;
     }
 
-    if (responsePayload.type === "function_call") {
+    if (isCodexToolCall(responsePayload.type)) {
       toolIndex += 1;
-      const turnId = activeTurnId();
+      const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
       const name = stringValue(responsePayload.name) ?? "tool";
-      const parsedArgs = parseMaybeJson(
-        stringValue(responsePayload.arguments) ?? ""
-      );
-      const command = commandFromToolCall(name, parsedArgs);
+      const rawArguments = codexToolCallArguments(responsePayload);
+      const parsedArgs =
+        responsePayload.type === "custom_tool_call"
+          ? rawArguments
+          : parseMaybeJson(rawArguments);
+      const command =
+        responsePayload.type === "custom_tool_call"
+          ? commandFromCustomToolCall(name, rawArguments)
+          : commandFromToolCall(name, parsedArgs);
+      toolCallsByCallId.set(callId, { command, name });
       push(
         historyEvent({
-          id: `${turnId}_tool_started_${toolIndex}_${callId}`,
+          id: providerItemId
+            ? `${input.sessionId}_${safeId(providerItemId)}_tool_started`
+            : `${turnId}_tool_started_${toolIndex}_${callId}`,
           sessionId: input.sessionId,
           turnId,
           timestamp,
@@ -723,53 +815,60 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
           source: "provider",
           action: name,
           status: "started",
-          output: command,
+          output: command ?? name,
           data: {
             source: CODEX_HISTORY_EVENT_SOURCE,
             codexThreadId: input.threadId,
             callId,
             tool: name,
-            arguments:
-              parsedArgs ?? stringValue(responsePayload.arguments) ?? "",
-            command,
+            arguments: parsedArgs ?? rawArguments,
+            ...(command ? { command } : {}),
           },
         })
       );
       return;
     }
 
-    if (responsePayload.type === "function_call_output") {
+    if (isCodexToolCallOutput(responsePayload.type)) {
       toolIndex += 1;
-      const turnId = activeTurnId();
+      const turnId = activeTurnId(providerTurnId);
       const callId = safeId(
         stringValue(responsePayload.call_id) ?? String(toolIndex)
       );
+      const toolCall = toolCallsByCallId.get(callId);
       const output = truncateText(
-        stringValue(responsePayload.output) ?? "",
+        codexToolCallOutput(responsePayload),
         TOOL_OUTPUT_MAX_LENGTH
       );
       push(
         historyEvent({
-          id: `${turnId}_tool_completed_${toolIndex}_${callId}`,
+          id: providerItemId
+            ? `${input.sessionId}_${safeId(providerItemId)}_tool_completed`
+            : `${turnId}_tool_completed_${toolIndex}_${callId}`,
           sessionId: input.sessionId,
           turnId,
           timestamp,
           name: "tool.completed",
           source: "provider",
-          action: "function_call_output",
+          action:
+            toolCall?.name ?? stringValue(responsePayload.type) ?? "tool",
           status: "completed",
           output,
           data: {
             source: CODEX_HISTORY_EVENT_SOURCE,
             codexThreadId: input.threadId,
             callId,
+            ...(toolCall?.name ? { tool: toolCall.name } : {}),
+            ...(toolCall?.command ? { command: toolCall.command } : {}),
           },
         })
       );
-      if (output) {
+      if (output && toolCall?.command) {
         push(
           historyEvent({
-            id: `${turnId}_command_output_${toolIndex}_${callId}`,
+            id: providerItemId
+              ? `${input.sessionId}_${safeId(providerItemId)}_command_output`
+              : `${turnId}_command_output_${toolIndex}_${callId}`,
             sessionId: input.sessionId,
             turnId,
             timestamp,
@@ -780,10 +879,12 @@ function createCodexRecordParser(input: ParseCodexSessionInput) {
               source: CODEX_HISTORY_EVENT_SOURCE,
               codexThreadId: input.threadId,
               callId,
+              command: toolCall.command,
             },
           })
         );
       }
+      toolCallsByCallId.delete(callId);
     }
   }
 
@@ -1012,9 +1113,9 @@ async function statusForCodexHistoryFile(
       }
     }
     if (
-      responsePayload.type === "function_call_output" &&
-      /Process running with session ID/i.test(
-        stringValue(responsePayload.output) ?? ""
+      isCodexToolCallOutput(responsePayload.type) &&
+      /(?:Process running with session ID|Script running with cell ID)/i.test(
+        codexToolCallOutput(responsePayload)
       )
     ) {
       hasRunningMarker = true;
@@ -1132,6 +1233,46 @@ function commandFromToolCall(name: string, args: unknown): string {
   );
 }
 
+function commandFromCustomToolCall(name: string, input: string): string | null {
+  if (name !== "exec") return null;
+  const commands = Array.from(
+    input.matchAll(/(?:"cmd"|\bcmd)\s*:\s*("(?:\\.|[^"\\])*")/g),
+    (match) => {
+      try {
+        const parsed = JSON.parse(match[1] ?? "");
+        return typeof parsed === "string" && parsed.trim() ? parsed.trim() : null;
+      } catch {
+        return null;
+      }
+    }
+  ).filter((command): command is string => Boolean(command));
+  if (commands.length === 1) return commands[0]!;
+  if (commands.length === 0 && /\btools\.apply_patch\s*\(/.test(input)) {
+    return "apply_patch";
+  }
+  return null;
+}
+
+function codexToolCallArguments(payload: Record<string, unknown>): string {
+  return (
+    stringValue(payload.arguments) ?? stringValue(payload.input) ?? ""
+  );
+}
+
+function codexToolCallOutput(payload: Record<string, unknown>): string {
+  return stringValue(payload.output) ?? textFromContent(payload.output);
+}
+
+function isCodexToolCall(type: unknown): boolean {
+  return type === "function_call" || type === "custom_tool_call";
+}
+
+function isCodexToolCallOutput(type: unknown): boolean {
+  return (
+    type === "function_call_output" || type === "custom_tool_call_output"
+  );
+}
+
 function responsePayloadFromCodexRecord(
   record: CodexRecord,
   payload: Record<string, unknown> | null
@@ -1139,6 +1280,15 @@ function responsePayloadFromCodexRecord(
   if (record.type === "response_item") return payload;
   if (!isLegacyResponseItemType(record.type)) return null;
   return asRecord(record);
+}
+
+function providerTurnIdFromResponsePayload(
+  payload: Record<string, unknown>
+): string | null {
+  const metadata = asRecord(
+    payload.internal_chat_message_metadata_passthrough
+  );
+  return stringValue(metadata?.turn_id) ?? stringValue(payload.turn_id);
 }
 
 function isLegacyResponseItemType(type: string | undefined): boolean {
@@ -1353,21 +1503,15 @@ type VisibleCodexUserContent = {
   prompt: string;
   attachments: ChatAttachmentSummary[];
 };
-
 type VisibleCodexUserContentContext = {
   attachmentRootDir?: string;
+  codexHome: string;
   sessionId: string;
   turnId: string;
 };
-
 type CodexUserContentParts = {
   text: string;
   inputImages: string[];
-};
-
-type CodexImageReference = {
-  label: string | null;
-  localPath: string | null;
 };
 
 const CODEX_ATTACHMENT_CONTEXT_PATTERN =
@@ -1376,7 +1520,29 @@ const CODEX_ATTACHMENT_LINE_PATTERN =
   /^\s*\d+\.\s+(.+)\s+\(([^,]+),\s*([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB),\s*(image|text|file)\)\.(?:\s+Saved locally at:\s*(.+))?\s*$/i;
 const CODEX_IMAGE_TAG_PATTERN =
   /<image\s+name=(?:\[([^\]]*)\]|"([^"]*)"|'([^']*)'|([^\s>]+))\s+path="([^"]+)"\s*>/g;
+const CODEX_IMAGE_CLOSE_TAG_PATTERN = /<\/image>/gi;
+const CODEX_FILES_MENTIONED_HEADER_PATTERN =
+  /^\s*# Files mentioned by the user:\s*$/im;
+const CODEX_USER_REQUEST_HEADER_PATTERN =
+  /^\s*## My request for Codex:\s*$/im;
+const CODEX_GIT_DIRECTIVE_PATTERN =
+  /^\s*::git-(?:stage|commit|create-branch|push|create-pr)\{[^\r\n]*\}\s*$/;
 const DATA_IMAGE_URL_PATTERN = /^data:([^;,]+);base64,([a-zA-Z0-9+/=\s]+)$/;
+
+function visibleCodexAssistantContent(value: string): string {
+  let fenceMarker: "`" | "~" | null = null;
+  const visibleLines = value.split(/\r?\n/).filter((line) => {
+    const fence = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (fence) {
+      const marker = fence[0] as "`" | "~";
+      if (fenceMarker === null) fenceMarker = marker;
+      else if (fenceMarker === marker) fenceMarker = null;
+      return true;
+    }
+    return fenceMarker !== null || !CODEX_GIT_DIRECTIVE_PATTERN.test(line);
+  });
+  return visibleLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 
 function visibleCodexUserContent(
   content: unknown,
@@ -1385,17 +1551,31 @@ function visibleCodexUserContent(
   const parts = codexUserContentParts(content);
   const attachments: ChatAttachmentSummary[] = [];
   let blockIndex = 0;
-  const imageReferences = codexImageReferences(parts.text);
-  const prompt = parts.text
-    .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
-      attachments.push(
-        ...parseCodexAttachmentContext(body, context, blockIndex)
-      );
-      blockIndex += 1;
-      return "\n";
-    })
-    .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
-    .trim();
+  const nativeFileMentions = codexNativeFileMentions(parts.text, context.codexHome);
+  const imageReferences = mergeCodexNativeImageReferences(codexImageReferences(parts.text), nativeFileMentions);
+  const prompt = visibleCodexPromptText(
+    parts.text
+      .replace(CODEX_ATTACHMENT_CONTEXT_PATTERN, (_match, body: string) => {
+        attachments.push(
+          ...parseCodexAttachmentContext(body, context, blockIndex)
+        );
+        blockIndex += 1;
+        return "\n";
+      })
+      .replace(CODEX_IMAGE_TAG_PATTERN, "\n")
+      .replace(CODEX_IMAGE_CLOSE_TAG_PATTERN, "\n")
+      .trim()
+  );
+
+  attachments.push(
+    ...codexNativeFileAttachments({
+      attachmentRootDir: context.attachmentRootDir,
+      mentions: nativeFileMentions,
+      offset: attachments.length,
+      sessionId: context.sessionId,
+      turnId: context.turnId,
+    }),
+  );
 
   attachments.push(
     ...codexInputImageAttachments(
@@ -1423,6 +1603,19 @@ function visibleCodexUserContent(
         : parts.text.trim()),
     attachments,
   };
+}
+
+function visibleCodexPromptText(value: string): string {
+  const filesHeader = CODEX_FILES_MENTIONED_HEADER_PATTERN.exec(value);
+  if (!filesHeader) return value;
+  const afterFilesHeader = value.slice(
+    filesHeader.index + filesHeader[0].length
+  );
+  const requestHeader = CODEX_USER_REQUEST_HEADER_PATTERN.exec(afterFilesHeader);
+  if (!requestHeader) return value;
+  return afterFilesHeader
+    .slice(requestHeader.index + requestHeader[0].length)
+    .trim();
 }
 
 function codexUserContentParts(content: unknown): CodexUserContentParts {
@@ -1486,6 +1679,15 @@ function parseCodexAttachmentContext(
       localPath,
       mediaType,
     });
+    const textAttachmentMetadata = codexHistoryTextAttachmentMetadata({
+      attachmentId: id,
+      attachmentRootDir: context.attachmentRootDir,
+      localPath,
+      mediaType,
+      name,
+      sessionId: context.sessionId,
+      sizeBytes,
+    });
     attachments.push({
       id,
       name,
@@ -1493,6 +1695,7 @@ function parseCodexAttachmentContext(
       sizeBytes,
       kind,
       ...(imagePreview ? { imagePreview } : {}),
+      ...textAttachmentMetadata,
     });
   }
   return attachments;
@@ -1766,153 +1969,6 @@ function attachmentKind(
 ): ChatAttachmentSummary["kind"] | null {
   if (value === "image" || value === "text" || value === "file") return value;
   return null;
-}
-
-function isCodexInjectedUserMessage(content: string): boolean {
-  const trimmed = content.trim();
-  return (
-    trimmed.startsWith("# AGENTS.md instructions for ") ||
-    trimmed.startsWith("<environment_context>") ||
-    trimmed.startsWith("<summary>") ||
-    trimmed.startsWith("<user_info>")
-  );
-}
-
-function codexControlMessage(content: string): CodexControlMessage | null {
-  const trimmed = content.trim();
-  const match = /^<(goal_context|turn_aborted)>\s*([\s\S]*?)\s*<\/\1>$/.exec(
-    trimmed
-  );
-  if (match) {
-    const kind = match[1] as CodexControlMessage["kind"];
-    return {
-      kind,
-      text: match[2]?.trim() || defaultCodexControlText(kind),
-    };
-  }
-  if (trimmed === "<turn_aborted>")
-    return {
-      kind: "turn_aborted",
-      text: defaultCodexControlText("turn_aborted"),
-    };
-  if (trimmed === "<goal_context>")
-    return {
-      kind: "goal_context",
-      text: defaultCodexControlText("goal_context"),
-    };
-  return null;
-}
-
-function defaultCodexControlText(kind: CodexControlMessage["kind"]): string {
-  return kind === "turn_aborted"
-    ? "The previous turn was interrupted."
-    : "Goal context updated.";
-}
-
-function truncateText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength)}\n\n[truncated ${
-    value.length - maxLength
-  } characters from Codex history]`;
-}
-
-function normalizeTitleText(value: string): string {
-  return value
-    .replace(/[^\S\r\n]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function parseMaybeJson(value: string): unknown | null {
-  if (!value.trim()) return null;
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-function parseJson(value: string): CodexRecord | null {
-  if (!value.trim()) return null;
-  try {
-    return JSON.parse(value) as CodexRecord;
-  } catch {
-    return null;
-  }
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function numberValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function stringMap(
-  record: Record<string, unknown> | null
-): Map<string, string> {
-  const map = new Map<string, string>();
-  if (!record) return map;
-  for (const [key, value] of Object.entries(record)) {
-    if (typeof value === "string" && value.trim()) map.set(key, value.trim());
-  }
-  return map;
-}
-
-function safeId(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, "_").slice(0, 96) || "item";
-}
-
-function latestMillis(values: Array<number | null | undefined>): number {
-  let latest = 0;
-  for (const value of values) {
-    if (typeof value === "number" && value > latest) latest = value;
-  }
-  return latest;
-}
-
-function latestIso(values: Array<string | null | undefined>): string {
-  const latest = latestMillis(values.map(millisFromIso));
-  return new Date(latest || Date.now()).toISOString();
-}
-
-function millisFromIso(value: string | null | undefined): number {
-  if (!value) return 0;
-  const millis = Date.parse(value);
-  return Number.isFinite(millis) ? millis : 0;
-}
-
-function isoTimestamp(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const trimmed = value.trim();
-  const normalized = trimmed.replace(/(\.\d{3})\d+(Z)$/i, "$1$2");
-  const millis = Date.parse(normalized);
-  return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
-}
-
-function isoFromEpochSeconds(value: number | null): string | null {
-  if (value === null) return null;
-  const millis = value * 1000;
-  return Number.isFinite(millis) ? new Date(millis).toISOString() : null;
-}
-
-function isoFromFileName(filePath: string): string | null {
-  const match = /rollout-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-/.exec(
-    path.basename(filePath)
-  );
-  if (!match) return null;
-  return isoTimestamp(`${match[1]}T${match[2]}:${match[3]}:${match[4]}.000Z`);
-}
-
-function codexHomePath(): string {
-  return process.env.CODEX_HOME?.trim() || path.join(os.homedir(), ".codex");
 }
 
 function metadataLimit(): number {

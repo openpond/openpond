@@ -125,19 +125,23 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(result.data.map((provider) => provider.id)).toEqual(["openpond", "openrouter"]);
   });
 
-  test("streams chat completions from /opchat/v1/chat/completions without changing the delta surface", async () => {
+  test("requests complete chat responses so whitespace survives provider chunk boundaries", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
       requests.push({
         url: String(input),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
-      return streamResponse([
-        'data: {"choices":[{"delta":{"content":"hello"},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{"reasoning_content":"thinking"},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"total_tokens":12}}\n\n',
-        "data: [DONE]\n\n",
-      ]);
+      return jsonResponse({
+        choices: [{
+          message: {
+            content: "hello world\n\n- one\n- two",
+            reasoning_content: "thinking clearly",
+          },
+          finish_reason: "stop",
+        }],
+        usage: { total_tokens: 12 },
+      });
     };
 
     const deltas = await collectStream({ reasoningEffort: "high" });
@@ -149,18 +153,21 @@ describe("OpenPond runtime OpChat routing", () => {
           model: "openpond-chat",
           messages: [{ role: "user", content: "hello" }],
           reasoning_effort: "high",
-          stream: true,
+          stream: false,
           thinking: { type: "enabled" },
         },
       },
     ]);
     expect(deltas.map((delta) => delta.type)).toEqual([
-      "text_delta",
       "reasoning_delta",
+      "text_delta",
       "usage",
       "finish",
     ]);
-    expect(deltas[0]).toMatchObject({ type: "text_delta", text: "hello" });
+    expect(deltas[1]).toMatchObject({
+      type: "text_delta",
+      text: "hello world\n\n- one\n- two",
+    });
     expect(deltas[2]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
     expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "stop" });
   });
@@ -172,12 +179,22 @@ describe("OpenPond runtime OpChat routing", () => {
         url: String(input),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
-      return streamResponse([
-        'data: {"choices":[{"delta":{"reasoning_content":"I should inspect the workspace."},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"resource_search","arguments":"{\\"query\\":\\"README\\"}"}}]},"finish_reason":null}]}\n\n',
-        'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}\n\n',
-        "data: [DONE]\n\n",
-      ]);
+      return jsonResponse({
+        choices: [{
+          message: {
+            reasoning_content: "I should inspect the workspace.",
+            tool_calls: [{
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "resource_search",
+                arguments: '{"query":"README"}',
+              },
+            }],
+          },
+          finish_reason: "tool_calls",
+        }],
+      });
     };
 
     const tools = [
@@ -214,7 +231,7 @@ describe("OpenPond runtime OpChat routing", () => {
         body: {
           model: "openpond-chat",
           messages: [{ role: "user", content: "find README" }],
-          stream: true,
+          stream: false,
           tools,
           tool_choice: "auto",
         },
@@ -253,10 +270,12 @@ describe("OpenPond runtime OpChat routing", () => {
     const requests: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_input, init) => {
       requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return streamResponse([
-        'data: {"choices":[{"delta":{"content":"done"},"finish_reason":"stop"}]}\n\n',
-        "data: [DONE]\n\n",
-      ]);
+      return jsonResponse({
+        choices: [{
+          message: { content: "done" },
+          finish_reason: "stop",
+        }],
+      });
     };
 
     for await (const _delta of streamOpChatChatCompletion({
@@ -327,7 +346,7 @@ describe("OpenPond runtime OpChat routing", () => {
       );
 
     await expect(collectStream()).rejects.toThrow(
-      "OpenPond OpChat stream failed: 502 provider_error: server_error: The upstream model provider failed to complete the request.",
+      "OpenPond OpChat request failed: 502 provider_error: server_error: The upstream model provider failed to complete the request.",
     );
   });
 });
@@ -352,12 +371,6 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
-  });
-}
-
-function streamResponse(chunks: string[]): Response {
-  return new Response(chunks.join(""), {
-    headers: { "content-type": "text/event-stream" },
   });
 }
 

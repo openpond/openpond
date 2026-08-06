@@ -77,7 +77,7 @@ export function createCapabilityCatalogRuntime(deps: {
       definitions.push({
         name: "get_conversations",
         description:
-          "Return the bounded, consented conversations configured for this continuous-learning Work item. This tool accepts no arguments and cannot materialize or train anything.",
+          "Return the bounded Work-first evidence configured for this continuous-learning Work item. The versioned result separates sanitized Work evidence from consented chat recurrence context; this tool accepts no arguments and cannot materialize or train anything.",
         parameters: {
           type: "object",
           additionalProperties: false,

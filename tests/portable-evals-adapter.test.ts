@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { contentHash, verifyAttemptReceipt } from "../packages/evals/src/index.js";
-import { GradeResultSchema, TaskAttemptArtifactSchema } from "../packages/contracts/src/index.js";
+import { GradeResultSchema, TaskAttemptArtifactSchema, emptyOpenPondProfileState } from "../packages/contracts/src/index.js";
 import { compileDesktopHarnessContext, projectDesktopAttemptReceipt } from "../apps/server/src/training/portable-evals-adapter.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures.js";
 
@@ -18,6 +18,63 @@ describe("portable Desktop eval adapter", () => {
     expect(context.tasksetRelease.tasks).toHaveLength(2);
     expect(JSON.stringify(context)).not.toContain("sourceRefs");
     expect(JSON.stringify(context)).not.toContain("consent");
+  });
+
+  it("keeps Harness identity independent from the concrete Taskset environment", () => {
+    const first = tasksetFixture({ ready: true });
+    const second = structuredClone(first);
+    second.environment = {
+      ...second.environment,
+      entrypoint: `${second.environment.entrypoint}-candidate`,
+    };
+    const firstContext = compileDesktopHarnessContext({
+      taskset: first,
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+    });
+    const secondContext = compileDesktopHarnessContext({
+      taskset: second,
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+    });
+    expect(secondContext.tasksetRelease.contentHash).not.toBe(firstContext.tasksetRelease.contentHash);
+    expect(secondContext.harnessRelease.contentHash).toBe(firstContext.harnessRelease.contentHash);
+  });
+
+  it("uses an admitted Harness workspace release without reading mutable Profile identity", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const admitted = compileDesktopHarnessContext({
+      taskset,
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+    });
+    const profile = {
+      ...emptyOpenPondProfileState(),
+      mode: "local" as const,
+      git: {
+        isRepo: true,
+        branch: "main",
+        head: "profile-mutated-after-release",
+        shortHead: "mutated",
+        dirty: true,
+        upstream: null,
+        ahead: null,
+        behind: null,
+        remoteUrl: null,
+        files: [],
+        error: null,
+      },
+    };
+    const selected = compileDesktopHarnessContext({
+      taskset,
+      profile,
+      releasedHarness: {
+        agentSnapshot: admitted.agentSnapshot,
+        harnessRelease: admitted.harnessRelease,
+      },
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+    });
+
+    expect(selected.harnessRelease).toEqual(admitted.harnessRelease);
+    expect(selected.agentSnapshot).toEqual(admitted.agentSnapshot);
+    expect(selected.runManifest.harnessRelease.contentHash).toBe(admitted.harnessRelease.contentHash);
   });
 
   it("projects legacy persistence into a hash-bound canonical receipt", () => {

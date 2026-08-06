@@ -8,6 +8,13 @@ export type ChatFilePathOptions = {
   workspaceRootPath?: string | null;
 };
 
+export type ChatWorkspaceRootOptions = {
+  projectTargetDetail: string;
+  projectTargetValue: string;
+  workspaceRepoPath?: string | null;
+  workspaceTargetValue: string;
+};
+
 const FILE_EXTENSIONS = new Set([
   "bash",
   "c",
@@ -63,6 +70,23 @@ const PATH_WITH_SLASH = new RegExp(
 );
 const SINGLE_FILE = new RegExp(String.raw`^${SEGMENT}(?::\d+(?::\d+)?)?`);
 const RESOURCE_FILE_REF = /^(?:workspace|sandbox):file:[^\s<>()]+/;
+
+export function resolveChatWorkspaceRootPath({
+  projectTargetDetail,
+  projectTargetValue,
+  workspaceRepoPath,
+  workspaceTargetValue,
+}: ChatWorkspaceRootOptions): string | null {
+  const repoPath = workspaceRepoPath?.trim();
+  if (repoPath) return repoPath;
+  if (
+    workspaceTargetValue !== "local" ||
+    !projectTargetValue.startsWith("local:")
+  ) {
+    return null;
+  }
+  return projectTargetDetail.trim() || null;
+}
 
 export function matchChatFilePathAt(
   content: string,

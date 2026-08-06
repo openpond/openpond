@@ -1,7 +1,11 @@
 import type { RuntimeEvent } from "@openpond/contracts";
 import type { ActivityItem, ChatMessage } from "./app-models";
-import { isWorkspaceImagePath, workspaceFileName } from "./workspace-images";
 import { asRecord, findLast, parseMaybeJson, stringValue } from "./chat-message-utils";
+import {
+  activityArtifacts,
+  activityImagePreview,
+  isViewImageEvent,
+} from "./chat-activity-artifacts";
 import {
   connectedAppToolActivityContent,
   connectedAppToolActivityLabel,
@@ -231,7 +235,8 @@ function activityFromEvent(item: RuntimeEvent): ActivityItem {
     kind === "command"
       ? { callId: activityCallId(item) ?? undefined }
       : {}),
-    ...(kind && item.name === "command.output" ? { detail: cleanCommandOutput(item.output ?? "") } : {}),
+    ...(kind && item.name === "command.output" ? { detail: commandOutputFromEvent(item) } : {}),
+    ...(kind === "command" ? { terminal: commandTerminalFromEvent(item) } : {}),
     ...(meta ? { meta } : {}),
     ...(receipt ? { receipt } : {}),
     ...(openSession ? { openSession } : {}),
@@ -246,11 +251,17 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   if (item.name === "tool.completed") {
     const existing = findMatchingCommandActivity(activities, item);
     if (!existing) return false;
+    const durationMs = elapsedMilliseconds(existing.timestamp, item.timestamp);
     existing.label = item.status === "failed" ? "Failed" : "Ran";
     existing.state = activity.state;
     existing.timestamp = item.timestamp;
     existing.artifacts = activity.artifacts;
-    const output = cleanCommandOutput(item.output ?? "");
+    existing.terminal = {
+      ...existing.terminal,
+      ...activity.terminal,
+      ...(durationMs !== null ? { durationMs } : {}),
+    };
+    const output = commandOutputFromEvent(item);
     if (output && output !== existing.content) existing.detail = appendCommandOutput(existing.detail, output);
     return true;
   }
@@ -258,10 +269,12 @@ function mergeCommandActivity(activities: ActivityItem[], item: RuntimeEvent, ac
   if (item.name === "command.output") {
     const existing = findMatchingCommandActivity(activities, item);
     if (!existing) return false;
-    const output = cleanCommandOutput(item.output ?? "");
+    const output = commandOutputFromEvent(item);
     if (output) existing.detail = appendCommandOutput(existing.detail, output);
+    existing.terminal = { ...existing.terminal, ...activity.terminal };
     existing.timestamp = item.timestamp;
-    if (existing.state !== "completed" && existing.state !== "failed") existing.state = "running";
+    if (activity.state === "failed") existing.state = "failed";
+    else if (existing.state !== "completed" && existing.state !== "failed") existing.state = "running";
     return true;
   }
 
@@ -598,11 +611,18 @@ function commandTextFromEvent(item: RuntimeEvent): string | null {
   const data = asRecord(item.data);
   const type = stringValue(data, ["type"]);
   const tool = stringValue(data, ["tool", "toolName", "tool_name", "name", "functionName", "function_name"]);
+  const result = asRecord(data?.result);
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const parsedOutputData = asRecord(parsedOutput?.data);
   const direct =
     stringValue(data, ["command", "cmd"]) ??
     stringValue(asRecord(data?.input), ["command", "cmd"]) ??
     stringValue(asRecord(data?.arguments), ["command", "cmd"]) ??
-    commandFromJsonString(stringValue(data, ["arguments", "args", "input"]));
+    stringValue(asRecord(data?.args), ["command", "cmd"]) ??
+    commandFromJsonString(stringValue(data, ["arguments", "args", "input"])) ??
+    stringValue(asRecord(item.args), ["command", "cmd"]) ??
+    stringValue(result, ["command", "cmd"]) ??
+    stringValue(parsedOutputData, ["command", "cmd"]);
   if (direct) return direct;
   if (
     item.name === "tool.started" &&
@@ -622,7 +642,15 @@ function commandFromJsonString(value: string | null): string | null {
 
 function activityCallId(item: RuntimeEvent): string | null {
   const data = asRecord(item.data);
-  return stringValue(data, ["callId", "call_id", "id", "itemId", "item_id"]);
+  return stringValue(data, [
+    "callId",
+    "call_id",
+    "toolCallId",
+    "tool_call_id",
+    "id",
+    "itemId",
+    "item_id",
+  ]);
 }
 
 function activityMeta(item: RuntimeEvent): string | null {
@@ -787,6 +815,8 @@ function shortId(value: string): string {
 function cleanCommandOutput(value: string): string {
   let output = value.replace(/\r\n/g, "\n").trim();
   if (!output) return "";
+  const commandResult = commandResultFromJson(output);
+  if (commandResult !== null) return commandResult;
   const marker = "\nOutput:\n";
   const markerIndex = output.indexOf(marker);
   if (markerIndex >= 0 && looksLikeCommandEnvelope(output.slice(0, markerIndex))) {
@@ -794,6 +824,61 @@ function cleanCommandOutput(value: string): string {
   }
   output = output.replace(/^Total output lines: \d+\n\n/, "");
   return output.trim();
+}
+
+function commandOutputFromEvent(item: RuntimeEvent): string {
+  const output = cleanCommandOutput(item.output ?? "");
+  if (output) return output;
+  const result = asRecord(asRecord(item.data)?.result);
+  if (!result) return "";
+  return commandResultOutput(result);
+}
+
+function commandTerminalFromEvent(item: RuntimeEvent): ActivityItem["terminal"] {
+  const data = asRecord(item.data);
+  const result = asRecord(data?.result);
+  const parsedOutput = asRecord(parseMaybeJson(item.output ?? ""));
+  const parsedOutputData = asRecord(parsedOutput?.data);
+  const timing = asRecord(data?.workspaceToolTiming);
+  const exitCode = [result?.exitCode, parsedOutputData?.exitCode, data?.exitCode]
+    .find((value) => typeof value === "number");
+  const durationMs = timing?.durationMs;
+  return {
+    ...(typeof exitCode === "number" ? { exitCode } : {}),
+    ...(typeof durationMs === "number" ? { durationMs } : {}),
+  };
+}
+
+function elapsedMilliseconds(startedAt: string, completedAt: string): number | null {
+  const elapsed = Date.parse(completedAt) - Date.parse(startedAt);
+  return Number.isFinite(elapsed) && elapsed > 0 ? elapsed : null;
+}
+
+function commandResultFromJson(value: string): string | null {
+  const envelope = asRecord(parseMaybeJson(value));
+  const action = typeof envelope?.action === "string" ? envelope.action : "";
+  if (
+    !envelope ||
+    typeof envelope.ok !== "boolean" ||
+    !action ||
+    typeof envelope.output !== "string"
+  ) {
+    return null;
+  }
+  const data = asRecord(envelope.data);
+  if (!data) return typeof envelope.output === "string" ? envelope.output.trim() : "";
+  return commandResultOutput(data, stringValue(envelope, ["output"]));
+}
+
+function commandResultOutput(
+  result: Record<string, unknown>,
+  fallback: string | null = null,
+): string {
+  const stdout = stringValue(result, ["stdout"])?.replace(/\r\n/g, "\n").trimEnd() ?? "";
+  const stderr = stringValue(result, ["stderr"])?.replace(/\r\n/g, "\n").trimEnd() ?? "";
+  const streams = [stdout, stderr].filter(Boolean);
+  if (streams.length > 0) return streams.join("\n");
+  return fallback?.replace(/\r\n/g, "\n").trim() ?? "";
 }
 
 function looksLikeCommandEnvelope(header: string): boolean {
@@ -810,117 +895,6 @@ function appendCommandOutput(existing: string | undefined, next: string): string
   if (next.includes(current)) return next;
   const separator = current.endsWith("\n") || next.startsWith("\n") ? "" : "\n";
   return `${current}${separator}${next}`;
-}
-
-function activityImagePreview(item: RuntimeEvent): ActivityItem["imagePreview"] | undefined {
-  if (!isViewImageEvent(item)) return undefined;
-  const data = asRecord(item.data);
-  const previewPath = typeof data?.openpondImagePreviewPath === "string" ? data.openpondImagePreviewPath : null;
-  const fallbackPath = previewPath ?? findImagePathValue(item.data) ?? findImagePathValue(item.args) ?? findImagePathValue(item.output);
-  if (!fallbackPath || !isWorkspaceImagePath(fallbackPath)) return undefined;
-  return {
-    path: fallbackPath,
-    appId: item.appId ?? null,
-    title: workspaceFileName(fallbackPath),
-  };
-}
-
-function activityArtifacts(item: RuntimeEvent): NonNullable<ActivityItem["artifacts"]> {
-  if (item.name !== "tool.completed" && item.name !== "workspace_action_result") return [];
-  const artifacts: NonNullable<ActivityItem["artifacts"]> = [];
-  const seen = new Set<string>();
-  collectActivityArtifacts(item.data, artifacts, seen);
-  return artifacts.slice(0, 12);
-}
-
-function collectActivityArtifacts(
-  value: unknown,
-  output: NonNullable<ActivityItem["artifacts"]>,
-  seen: Set<string>,
-  depth = 0,
-): void {
-  if (depth > 7 || value == null) return;
-  if (Array.isArray(value)) {
-    for (const item of value) collectActivityArtifacts(item, output, seen, depth + 1);
-    return;
-  }
-  const record = asRecord(value);
-  if (!record) return;
-  const path = stringValue(record, ["path", "artifactRef"]);
-  const contentType = stringValue(record, ["contentType", "mimeType"]);
-  if (path && contentType && !seen.has(path)) {
-    seen.add(path);
-    output.push({
-      path,
-      title: stringValue(record, ["title", "name"]) ?? workspaceFileName(path),
-      contentType,
-      sizeBytes: typeof record.sizeBytes === "number" ? record.sizeBytes : null,
-    });
-  }
-  for (const child of Object.values(record)) collectActivityArtifacts(child, output, seen, depth + 1);
-}
-
-function isViewImageEvent(item: RuntimeEvent): boolean {
-  if (item.name !== "tool.started" && item.name !== "tool.completed") return false;
-  const data = asRecord(item.data);
-  if (typeof data?.openpondImagePreviewPath === "string" && data.openpondImagePreviewPath.trim()) return true;
-  const candidates = [
-    item.output,
-    item.action,
-    stringValue(data, ["tool", "toolName", "tool_name", "name", "functionName", "function_name", "command"]),
-    stringValue(asRecord(data?.input), ["tool", "toolName", "tool_name", "name"]),
-    stringValue(asRecord(data?.arguments), ["tool", "toolName", "tool_name", "name"]),
-    stringValue(asRecord(data?.args), ["tool", "toolName", "tool_name", "name"]),
-  ].filter((value): value is string => Boolean(value));
-  return candidates.some((value) => value.toLowerCase().includes("view_image"));
-}
-
-function findImagePathValue(value: unknown, depth = 0, key = ""): string | null {
-  if (depth > 5 || value == null) return null;
-  if (typeof value === "string") {
-    if (isImagePathKey(key) && isWorkspaceImagePath(value.trim())) return value.trim();
-    const parsed = parseMaybeJson(value);
-    if (parsed !== null) {
-      const nested = findImagePathValue(parsed, depth + 1, key);
-      if (nested) return nested;
-    }
-    return extractImagePathFromText(value);
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const candidate = findImagePathValue(item, depth + 1, key);
-      if (candidate) return candidate;
-    }
-    return null;
-  }
-  const record = asRecord(value);
-  if (!record) return null;
-  for (const [childKey, child] of Object.entries(record)) {
-    if (!isImagePathKey(childKey)) continue;
-    const candidate = findImagePathValue(child, depth + 1, childKey);
-    if (candidate) return candidate;
-  }
-  for (const [childKey, child] of Object.entries(record)) {
-    if (isImagePathKey(childKey)) continue;
-    const candidate = findImagePathValue(child, depth + 1, childKey);
-    if (candidate) return candidate;
-  }
-  return null;
-}
-
-function isImagePathKey(key: string): boolean {
-  return /^(path|filePath|filepath|imagePath|image|localPath|uri|url)$/i.test(key);
-}
-
-function extractImagePathFromText(value: string): string | null {
-  const match = /(?:file:\/\/)?(?:\/|\.\/|[\w.-]+\/)[^\s"'`<>]+\.(?:avif|gif|jpe?g|png|webp)\b/i.exec(value);
-  if (!match) return null;
-  if (!match[0].startsWith("file://")) return match[0];
-  try {
-    return decodeURIComponent(new URL(match[0]).pathname);
-  } catch {
-    return match[0].replace(/^file:\/\//i, "");
-  }
 }
 
 type CodexControlMessage = {

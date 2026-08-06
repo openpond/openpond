@@ -72,6 +72,10 @@ export type ActivityItem = {
   controlKind?: "goal_context" | "turn_aborted";
   callId?: string;
   detail?: string;
+  terminal?: {
+    exitCode?: number | null;
+    durationMs?: number;
+  };
   meta?: string;
   receipt?: {
     id: string;

@@ -10,6 +10,7 @@ import {
   CONTINUOUS_LEARNING_TEMPLATE_KEY,
   ContinuousLearningRecommendationOutputSchema,
   EnsureLocalContinuousLearningRequestSchema,
+  GET_LEARNING_EVIDENCE_CONTRACT_VERSION,
   GET_CONVERSATIONS_CONTRACT_VERSION,
   GetConversationsToolInputSchema,
   GetConversationsToolResultSchema,
@@ -19,6 +20,7 @@ import {
   SetLocalConversationLearningConsentRequestSchema,
   type ContinuousLearningReceipt,
   type GetConversationsToolResult,
+  type GetLearningEvidenceToolResult,
   type LocalContinuousLearningDefinition,
   type LocalContinuousLearningRun,
   type LocalContinuousLearningState,
@@ -26,6 +28,7 @@ import {
 } from "@openpond/contracts";
 import type { SqliteStore } from "../store/store.js";
 import type { TasksetAuthoringSkillArtifact } from "./task-authoring-skill.js";
+import { collectLocalLearningEvidence } from "./local-learning-evidence.js";
 
 const RESULT_START = "<openpond-continuous-learning-recommendation>";
 const RESULT_END = "</openpond-continuous-learning-recommendation>";
@@ -46,7 +49,7 @@ export function createLocalContinuousLearningService(input: {
   tickMs?: number;
 }) {
   const running = new Map<string, { sessionId: string | null }>();
-  const evidenceByRun = new Map<string, GetConversationsToolResult>();
+  const evidenceByRun = new Map<string, GetLearningEvidenceToolResult>();
   let timer: ReturnType<typeof setInterval> | null = null;
   let tickRunning = false;
 
@@ -192,7 +195,7 @@ export function createLocalContinuousLearningService(input: {
   async function getConversations(
     session: Session,
     args: unknown,
-  ): Promise<GetConversationsToolResult> {
+  ): Promise<GetLearningEvidenceToolResult> {
     GetConversationsToolInputSchema.parse(args);
     const binding = runtimeBinding(session);
     const state = await requireState(binding.stateId);
@@ -200,11 +203,17 @@ export function createLocalContinuousLearningService(input: {
     if (binding.runId !== state.runs[0]?.id && !running.has(binding.runId)) {
       throw new Error("Continuous-learning run binding is no longer active.");
     }
-    const result = await collectConversations({
+    const conversations = await collectConversations({
       store: input.store,
       state,
       definition,
       excludedSessionId: session.id,
+    });
+    const result = await collectLocalLearningEvidence({
+      store: input.store,
+      state,
+      definition,
+      conversations,
     });
     evidenceByRun.set(binding.runId, result);
     return result;
@@ -613,7 +622,10 @@ async function collectConversations(input: {
   };
   const cutoff = Date.now() - input.definition.limits.lookbackDays * 86_400_000;
   const sessions = (await input.store.sessionShells())
-    .filter((session) => session.id !== input.excludedSessionId)
+    .filter(
+      (session) =>
+        session.id !== input.excludedSessionId && session.experience === "chat",
+    )
     .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
   const eligible: Session[] = [];
   for (const session of sessions) {
@@ -717,7 +729,7 @@ function recommendationReceipt(input: {
   state: LocalContinuousLearningState;
   definition: LocalContinuousLearningDefinition;
   runId: string;
-  evidence: GetConversationsToolResult;
+  evidence: GetLearningEvidenceToolResult;
   startedAt: string;
 }): ContinuousLearningReceipt {
   const start = input.text.indexOf(RESULT_START);
@@ -733,7 +745,14 @@ function recommendationReceipt(input: {
   }
   if (output.scope !== input.state.scope) throw new Error("The recommendation changed scope.");
   const allowedRefs = new Set(
-    input.evidence.conversations.map((item) => item.sourceReference.referenceId),
+    [
+      ...input.evidence.lanes.work.evidence.map(
+        (item) => item.sourceReference.referenceId,
+      ),
+      ...input.evidence.lanes.chat.evidence.map(
+        (item) => item.conversation.sourceReference.referenceId,
+      ),
+    ],
   );
   for (const recommendation of output.recommendations) {
     for (const ref of recommendation.sourceReferenceIds) {
@@ -757,12 +776,35 @@ function recommendationReceipt(input: {
     runRef: input.runId,
     promptVersion: input.definition.promptVersion,
     skill: input.definition.skill,
-    evidenceContractVersion: GET_CONVERSATIONS_CONTRACT_VERSION,
+    evidenceContractVersion: GET_LEARNING_EVIDENCE_CONTRACT_VERSION,
     inputWatermark: input.evidence.inputWatermark,
     outputWatermark: input.evidence.proposedWatermark,
-    consideredSourceCount: input.evidence.consideredSourceCount,
-    excludedCounts: input.evidence.excludedCounts,
-    selectedSourceReferences: input.evidence.conversations.map((item) => item.sourceReference),
+    consideredSourceCount:
+      input.evidence.lanes.work.counts.considered +
+      input.evidence.lanes.chat.counts.considered,
+    excludedCounts: {
+      notEligible: input.evidence.lanes.work.counts.excluded,
+      revoked:
+        input.evidence.lanes.work.counts.revoked +
+        input.evidence.lanes.chat.counts.revoked,
+      notCreatedByOwner: 0,
+      multiParticipant: 0,
+      outsideLookback: 0,
+      dismissedFingerprint: 0,
+      budgetBound: input.evidence.lanes.chat.counts.excluded,
+    },
+    evidenceLaneCounts: {
+      work: input.evidence.lanes.work.counts,
+      chat: input.evidence.lanes.chat.counts,
+    },
+    selectedSourceReferences: [
+      ...input.evidence.lanes.work.evidence.map(
+        (item) => item.sourceReference,
+      ),
+      ...input.evidence.lanes.chat.evidence.map(
+        (item) => item.conversation.sourceReference,
+      ),
+    ],
     candidateFingerprints: output.recommendations.map((item) => item.candidateFingerprint),
     recommendationSummaries: output.recommendations.map((item) => ({
       candidateFingerprint: item.candidateFingerprint,

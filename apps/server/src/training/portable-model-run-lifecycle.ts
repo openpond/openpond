@@ -142,6 +142,7 @@ export async function preparePortableModelRunLifecycle(input: {
       method,
       destinationId,
       taskset: input.draft.tasksetRef,
+      harnessRelease: input.releaseGraph.harnessRelease,
       quote: {
         maximumSpendUsd: input.maximumSpendUsd ?? 0,
         hourlyCostUsd: null,

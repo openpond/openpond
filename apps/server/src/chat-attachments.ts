@@ -4,9 +4,11 @@ import type {
   ChatAttachment,
   ChatAttachmentSummary,
 } from "@openpond/contracts";
+import { countTextLines } from "@openpond/contracts";
 
 const ATTACHMENT_CONTEXT_TEXT_LIMIT = 120_000;
 const MAX_CHAT_ATTACHMENT_IMAGE_BYTES = 15 * 1024 * 1024;
+export const CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024;
 const CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES = new Map<string, string>([
   [".gif", "image/gif"],
   [".jpeg", "image/jpeg"],
@@ -17,6 +19,50 @@ const CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES = new Map<string, string>([
 const CHAT_ATTACHMENT_IMAGE_MEDIA_TYPES = new Set(
   CHAT_ATTACHMENT_IMAGE_CONTENT_TYPES.values()
 );
+const CHAT_ATTACHMENT_TEXT_CONTENT_TYPES = new Set([
+  "application/javascript",
+  "application/json",
+  "application/ld+json",
+  "application/sql",
+  "application/toml",
+  "application/typescript",
+  "application/x-httpd-php",
+  "application/x-javascript",
+  "application/x-sh",
+  "application/x-yaml",
+  "application/xml",
+  "application/yaml",
+]);
+const CHAT_ATTACHMENT_TEXT_EXTENSIONS = new Set([
+  ".c",
+  ".cc",
+  ".cpp",
+  ".css",
+  ".csv",
+  ".go",
+  ".h",
+  ".html",
+  ".java",
+  ".js",
+  ".json",
+  ".jsx",
+  ".log",
+  ".md",
+  ".mdx",
+  ".php",
+  ".py",
+  ".rb",
+  ".rs",
+  ".sh",
+  ".sql",
+  ".toml",
+  ".ts",
+  ".tsx",
+  ".txt",
+  ".xml",
+  ".yaml",
+  ".yml",
+]);
 
 export type ChatAttachmentContextItem = ChatAttachmentSummary & {
   localPath?: string;
@@ -28,6 +74,13 @@ export type ChatAttachmentImageFile = {
   path: string;
   contentType: string;
   bytes: Buffer;
+  sizeBytes: number;
+};
+
+export type ChatAttachmentTextFile = {
+  path: string;
+  contentType: string;
+  content: string;
   sizeBytes: number;
 };
 
@@ -115,7 +168,25 @@ export function chatAttachmentSummaries(
         },
       };
     }
-    return summary;
+    return previewContext &&
+      materialized?.localPath &&
+      materialized.storageName &&
+      attachment.sizeBytes <= CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES &&
+      chatAttachmentTextPreviewSupported(
+        attachment.mediaType,
+        materialized.storageName
+      )
+      ? {
+          ...summary,
+          filePreview: {
+            sessionId: previewContext.sessionId,
+            turnId: previewContext.turnId,
+            attachmentId: attachment.id,
+            storageName: materialized.storageName,
+            contentType: attachment.mediaType,
+          },
+        }
+      : summary;
   });
 }
 
@@ -177,12 +248,16 @@ export function formatPromptWithAttachmentContext(
 function chatAttachmentSummary(
   attachment: ChatAttachment
 ): ChatAttachmentSummary {
+  const lineCount =
+    attachment.lineCount ??
+    (attachment.text !== undefined ? countTextLines(attachment.text) : undefined);
   return {
     id: attachment.id,
     name: attachment.name,
     mediaType: attachment.mediaType,
     sizeBytes: attachment.sizeBytes,
     kind: attachment.kind,
+    ...(lineCount !== undefined ? { lineCount } : {}),
     ...(attachment.relativePath
       ? { relativePath: attachment.relativePath }
       : {}),
@@ -229,6 +304,38 @@ export async function readChatAttachmentImageFile(input: {
   }
 }
 
+export async function readChatAttachmentTextFile(input: {
+  attachmentRootDir: string;
+  sessionId: string;
+  turnId: string;
+  storageName: string;
+  contentType: string;
+}): Promise<ChatAttachmentTextFile | null> {
+  const target = chatAttachmentStoredFilePath(input);
+  if (
+    !target ||
+    !chatAttachmentTextPreviewSupported(input.contentType, input.storageName)
+  )
+    return null;
+
+  try {
+    const stat = await fs.lstat(target.absolutePath);
+    if (
+      !stat.isFile() ||
+      stat.size > CHAT_ATTACHMENT_TEXT_PREVIEW_MAX_BYTES
+    )
+      return null;
+    return {
+      path: target.storageName,
+      contentType: input.contentType,
+      content: await fs.readFile(target.absolutePath, "utf8"),
+      sizeBytes: stat.size,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function chatAttachmentImageContentType(
   mediaType: string,
   fileName: string
@@ -258,6 +365,45 @@ function cleanStorageName(value: string): string | null {
   if (!trimmed || trimmed === "." || trimmed === ".." || /[\\/]/.test(trimmed))
     return null;
   return path.basename(trimmed);
+}
+
+function chatAttachmentStoredFilePath(input: {
+  attachmentRootDir: string;
+  sessionId: string;
+  turnId: string;
+  storageName: string;
+}): { absolutePath: string; storageName: string } | null {
+  const storageName = cleanStoragePath(input.storageName);
+  if (!storageName) return null;
+  const turnDir = path.resolve(
+    input.attachmentRootDir,
+    safeChatAttachmentPathSegment(input.sessionId),
+    safeChatAttachmentPathSegment(input.turnId)
+  );
+  const absolutePath = path.resolve(turnDir, storageName);
+  if (!absolutePath.startsWith(`${turnDir}${path.sep}`)) return null;
+  return { absolutePath, storageName };
+}
+
+function cleanStoragePath(value: string): string | null {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/")) return null;
+  const parts = normalized.split("/");
+  if (parts.some((part) => !part || part === "." || part === ".."))
+    return null;
+  return parts.join("/");
+}
+
+export function chatAttachmentTextPreviewSupported(
+  contentType: string,
+  fileName: string
+): boolean {
+  const normalizedType = contentType.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (normalizedType.startsWith("text/")) return true;
+  if (CHAT_ATTACHMENT_TEXT_CONTENT_TYPES.has(normalizedType)) return true;
+  return CHAT_ATTACHMENT_TEXT_EXTENSIONS.has(
+    path.extname(fileName).toLowerCase()
+  );
 }
 
 function uniqueSafeFileName(

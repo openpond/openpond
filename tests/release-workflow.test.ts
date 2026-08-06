@@ -227,8 +227,8 @@ describe("release workflow", () => {
       scripts?: Record<string, string>;
     };
 
-    expect(packageJson.scripts?.["bundle:server"]).toMatch(
-      /^tsc -b apps\/server && tsx scripts\/build\/bundle-server\.ts$/,
+    expect(packageJson.scripts?.["bundle:server"]).toBe(
+      "pnpm run build:sdk && tsc -b apps/server && tsx scripts/build/bundle-server.ts",
     );
   });
 

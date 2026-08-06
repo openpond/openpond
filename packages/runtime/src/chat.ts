@@ -260,44 +260,58 @@ export async function* streamOpChatChatCompletion(
     headers: opChatHeaders(
       requestUrl,
       options.token,
-      "text/event-stream",
+      "application/json",
       options.requestId
     ),
-    body: JSON.stringify(buildOpChatBody(options)),
+    // Hosted turns are published only after the provider finishes. Requesting
+    // the complete response also preserves whitespace that some upstream
+    // token streams omit at chunk boundaries.
+    body: JSON.stringify(buildOpChatBody(options, false)),
     signal: options.signal,
   });
-  if (!response.ok || !response.body) {
-    throw new Error(`OpenPond OpChat stream failed: ${response.status} ${await readOpChatError(response)}`);
+  if (!response.ok) {
+    throw new Error(`OpenPond OpChat request failed: ${response.status} ${await readOpChatError(response)}`);
   }
-  let reasoningText = "";
-  let hasToolCalls = false;
-  let pendingFinish: HostedChatStreamDelta | null = null;
-  let latestRaw: unknown = null;
-  for await (const raw of parseOpChatSse(response.body, options.signal)) {
-    latestRaw = raw;
-    if (raw && typeof raw === "object" && "error" in raw) {
-      throw new Error(`OpenPond OpChat stream failed: ${errorMessageFromPayload(raw)}`);
-    }
-    const usage = parseUsage(raw);
-    if (usage) yield { type: "usage", usage, raw };
-    for (const delta of streamDeltasFromChunk(raw)) {
-      if (delta.type === "reasoning_delta") reasoningText += delta.text;
-      if (delta.type === "tool_call_delta") hasToolCalls = true;
-      if (delta.type === "finish") pendingFinish = delta;
-      else yield delta;
-    }
+  const raw = await response.json() as unknown;
+  if (raw && typeof raw === "object" && "error" in raw) {
+    throw new Error(`OpenPond OpChat request failed: ${errorMessageFromPayload(raw)}`);
   }
-  if (hasToolCalls && reasoningText) {
+  const record = raw && typeof raw === "object"
+    ? raw as Record<string, unknown>
+    : {};
+  const choices = Array.isArray(record.choices) ? record.choices : [];
+  const choice = choices[0] && typeof choices[0] === "object"
+    ? choices[0] as Record<string, unknown>
+    : {};
+  const message = choice.message && typeof choice.message === "object"
+    ? choice.message as Record<string, unknown>
+    : {};
+  const reasoningText = streamTextValue(message.reasoning_content);
+  const content = streamTextValue(message.content);
+  const toolCalls = parseToolCalls(message.tool_calls);
+  const usage = parseUsage(raw);
+
+  if (reasoningText) yield { type: "reasoning_delta", text: reasoningText, raw };
+  if (content) yield { type: "text_delta", text: content, raw };
+  if (toolCalls.length > 0) {
+    yield { type: "tool_call_delta", toolCalls, raw };
+  }
+  if (toolCalls.length > 0 && reasoningText) {
     yield {
       type: "continuation",
       continuation: {
         kind: "chat_completions_reasoning",
         reasoningContent: reasoningText,
       },
-      raw: latestRaw,
+      raw,
     };
   }
-  if (pendingFinish) yield pendingFinish;
+  if (usage) yield { type: "usage", usage, raw };
+  yield {
+    type: "finish",
+    finishReason: stringValue(choice.finish_reason),
+    raw,
+  };
 }
 
 function buildOpChatBody(options: {
@@ -306,11 +320,11 @@ function buildOpChatBody(options: {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   reasoningEffort?: HostedChatTurnInput["reasoningEffort"];
-}): Record<string, unknown> {
+}, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
     messages: options.messages.map(opChatMessage),
-    stream: true,
+    stream,
   };
   if (options.tools) {
     body.tools = options.tools;
@@ -402,76 +416,6 @@ function errorMessageFromPayload(payload: unknown): string {
   return [stringValue(record.error), stringValue(record.message)].filter(Boolean).join(": ") || JSON.stringify(payload);
 }
 
-async function* parseOpChatSse(
-  stream: ReadableStream<Uint8Array>,
-  signal?: AbortSignal
-): AsyncGenerator<unknown, void, unknown> {
-  const reader = stream.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  const abortError = () => (signal?.reason instanceof Error ? signal.reason : new Error("openpond_opchat_aborted"));
-  try {
-    while (true) {
-      if (signal?.aborted) throw abortError();
-      const result = await reader.read();
-      if (result.done) break;
-      buffer += decoder.decode(result.value, { stream: true });
-      const blocks = buffer.split(/\r?\n\r?\n/);
-      buffer = blocks.pop() ?? "";
-      for (const block of blocks) {
-        for (const payload of parseSseBlock(block)) yield payload;
-      }
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  buffer += decoder.decode();
-  if (buffer.trim()) {
-    for (const payload of parseSseBlock(buffer)) yield payload;
-  }
-}
-
-function parseSseBlock(block: string): unknown[] {
-  const data = block
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith("data:"))
-    .map((line) => line.slice(5).trim())
-    .join("\n")
-    .trim();
-  if (!data || data === "[DONE]") return [];
-  return [JSON.parse(data) as unknown];
-}
-
-function streamDeltasFromChunk(raw: unknown): HostedChatStreamDelta[] {
-  if (!raw || typeof raw !== "object") return [];
-  const record = raw as Record<string, unknown>;
-  const choices = Array.isArray(record.choices) ? record.choices : [];
-  const deltas: HostedChatStreamDelta[] = [];
-  for (const choice of choices) {
-    if (!choice || typeof choice !== "object") continue;
-    const choiceRecord = choice as Record<string, unknown>;
-    const delta = choiceRecord.delta && typeof choiceRecord.delta === "object"
-      ? (choiceRecord.delta as Record<string, unknown>)
-      : {};
-    for (const key of ["content", "reasoning_content"] as const) {
-      const value = stringValue(delta[key]);
-      if (!value) continue;
-      deltas.push({
-        type: key === "content" ? "text_delta" : "reasoning_delta",
-        text: value,
-        raw,
-      });
-    }
-    const toolCalls = parseToolCalls(delta.tool_calls);
-    if (toolCalls.length > 0) {
-      deltas.push({ type: "tool_call_delta", toolCalls, raw });
-    }
-    const finishReason = stringValue(choiceRecord.finish_reason);
-    if (finishReason) deltas.push({ type: "finish", finishReason, raw });
-  }
-  return deltas;
-}
-
 function parseToolCalls(value: unknown): HostedChatToolCall[] {
   return Array.isArray(value)
     ? value.filter((item): item is HostedChatToolCall => Boolean(item) && typeof item === "object")
@@ -487,4 +431,8 @@ function parseUsage(raw: unknown): HostedChatUsage | null {
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function streamTextValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }

@@ -6,13 +6,13 @@ authorization, model streaming, artifact bytes, and runtime processes.
 
 | Existing object | Portable object | Migration rule |
 | --- | --- | --- |
-| `Taskset` | `TasksetRelease` | Project only the released tasks, policy, environment, tools, capabilities, graders, and immutable Harness binding. Authoring state and UI readiness remain host state. |
+| `Taskset` | `TasksetRelease` | Project only the released tasks, policy, environment, tools, capabilities, and graders. A Taskset is deliberately independent of any Harness so the same workload can run against local or hosted execution. Authoring state and UI readiness remain host state. |
 | `HarnessRunManifest` (`openpond.harnessRunManifest.v1`) | `RunManifest` (`openpond.runManifest.v1`) | Treat the old object as a legacy training projection. Normalize its release/model/runtime identities into one new manifest; recipe, compute, engine, secret leases, and approval records remain host bindings referenced by hashes. |
 | `HarnessRunTrace` | `HarnessTrace` | Preserve ordered actions, observations, lifecycle events, terminal state, failure class, and trace hash. Learning-signal envelopes remain a training projection of the trace and receipt. |
 | `TaskAttemptResult` | `AttemptReceipt` | Preserve the old record for application persistence while adding a lossless receipt reference. Output becomes `outputHash`; trace and artifacts are separately hash-bound. |
 | `GradeResult` | `GraderEvidence[]` | Preserve component score, pass, reward eligibility, failure class, feedback, and visible/private evidence references. Aggregate UI results remain host projections. |
 | managed-RL local receipt | `AttemptReceipt` | Submit canonical manifest/task/trace/artifact/grader identities; policy token responses and provider request IDs remain host-private trace data. |
-| resolved training bundle | `HarnessRelease` + host training binding | Environment, tools, program, policy, files, and grader interface belong to the Harness. Dataset/evidence, recipe, compute, engine, approval, and opaque leases remain explicit host-side bindings. |
+| resolved training bundle | `HarnessRelease` + host training binding | Agent snapshot, program, lifecycle, tool declarations, files, and grader interface belong to the Harness. Taskset environment/policy/graders and dataset/evidence, recipe, compute, engine, approval, and opaque leases remain explicit host-side bindings. |
 | completed Work or Development turn | `WorkEvidenceReceipt` | Project the authoritative terminal turn, immutable Agent snapshot when available, model/runtime identity, sanitized trace reference, exact output revisions, validation evidence, interventions, timing, usage, and explicit consent provenance. Keep the raw source and trace host-private. |
 | Agent plus environment runtime events | `WorkProcessTrace` | Emit one ordered trace with `agent` and `environment` layers. Bind every environment step to its outer Agent tool call or stable Agent-turn receipt hash. Hash inputs/outputs and expose only enumerated, bounded attributes. |
 | user feedback on Work output | `WorkFeedbackReceipt` | Append a new receipt bound to the evidence receipt and, when selected, the exact content-addressed output-revision descriptor. Corrections are separate artifacts and never mutate prior receipts. |
@@ -26,6 +26,17 @@ authorization, model streaming, artifact bytes, and runtime processes.
 - Compatible package releases may add optional helpers and exports. Changing a
   required field, identity hash, or privacy boundary requires a new schema
   literal and an explicit normalizer.
+- `openpond.agentSnapshot.v2`, `openpond.harnessRelease.v2`, and
+  `openpond.tasksetRelease.v2` define the Harness-first boundary. The v2
+  contracts remove the Profile reference from the Agent snapshot and keep the
+  Taskset independent of a concrete Harness, environment, or policy binding.
+- Runs with different Harness releases require an explicit
+  `HarnessCompatibilityReceipt` binding both Harnesses to the same Taskset and
+  recording environment, tool, policy, and grader-interface contract hashes.
+  Callers with materialized releases should use
+  `createVerifiedHarnessCompatibilityReceipt`; it derives those hashes from the
+  immutable objects and rejects lifecycle, tool, grader-interface, or required
+  Environment-tool drift before issuing the receipt.
 - The initial support target is Node.js ESM on Node 22.14 through Node 24.
 - Portable paths are relative and at most 2,000 characters. Individual assets
   are at most 250 MB. Tasksets, traces, and evidence arrays have schema-level

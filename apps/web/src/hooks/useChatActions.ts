@@ -42,6 +42,7 @@ import {
 } from "../lib/connected-app-mentions";
 import { resolveMentionedAction } from "../lib/action-mentions";
 import {
+  composerSlashCommandAllowedInExperience,
   parseComposerDirectCommandPrompt,
   parseComposerSlashCommandPrompt,
 } from "../lib/composer-slash-commands";
@@ -676,10 +677,9 @@ export function useChatActions({
         : parseComposerSlashCommandPrompt(value);
     const disallowedExperienceSlashCommand =
       parsedSlashCommandForTurn &&
-      !developmentTurn &&
-      !(
-        experienceForTurn === "work" &&
-        parsedSlashCommandForTurn.command === "submit-issue"
+      !composerSlashCommandAllowedInExperience(
+        { id: parsedSlashCommandForTurn.command },
+        experienceForTurn,
       )
         ? parsedSlashCommandForTurn
         : null;
@@ -702,7 +702,7 @@ export function useChatActions({
       }
       if (disallowedExperienceSlashCommand) {
         throw new Error(
-          `/${disallowedExperienceSlashCommand.command} is only available in Development.`
+          `/${disallowedExperienceSlashCommand.command} isn't available in ${experienceForTurn}.`
         );
       }
       if (

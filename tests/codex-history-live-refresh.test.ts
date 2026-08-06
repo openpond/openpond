@@ -96,6 +96,36 @@ describe("Codex history live refresh", () => {
     unsubscribeSidebar();
     expect(timers.size).toBe(0);
   });
+
+  test("does not notify subscribers when an unchanged refresh reuses the cached payload", async () => {
+    let timerCallback: (() => void) | null = null;
+    const payload = { session: session("active"), events: [] };
+    const received: typeof payload[] = [];
+    const coordinator = createCodexHistoryLiveRefreshCoordinator({
+      cachedPayload: () => payload,
+      clearTimer: () => undefined,
+      loadPayload: async () => payload,
+      now: () => 0,
+      setTimer: (callback) => {
+        timerCallback = callback;
+        return 1;
+      },
+    });
+    const unsubscribe = coordinator.subscribe({
+      connection: { serverUrl: "http://127.0.0.1:17876", token: "test-token" },
+      locallyActive: false,
+      onPayload: (next) => received.push(next),
+      reportedActive: true,
+      sessionId: payload.session.id,
+      surface: "thread",
+    });
+
+    expect(received).toEqual([payload]);
+    timerCallback?.();
+    await flushPromises();
+    expect(received).toEqual([payload]);
+    unsubscribe();
+  });
 });
 
 function runNextTimer(

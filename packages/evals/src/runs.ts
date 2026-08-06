@@ -8,6 +8,7 @@ import {
   ReleaseHashSchema,
   ReleaseIdSchema,
   ReleaseTimestampSchema,
+  assertContentHash,
   contentHash,
 } from "./common.js";
 
@@ -86,6 +87,22 @@ export const EvaluationResultContentSchema = z.object({
 }).strict();
 export const EvaluationResultSchema = EvaluationResultContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
 
+export const HarnessCompatibilityReceiptContentSchema = z.object({
+  schemaVersion: z.literal("openpond.harnessCompatibility.v1"),
+  id: ReleaseIdSchema,
+  baseHarnessRelease: ImmutableReleaseRefSchema,
+  candidateHarnessRelease: ImmutableReleaseRefSchema,
+  tasksetRelease: ImmutableReleaseRefSchema,
+  environmentHash: ReleaseHashSchema,
+  toolContractHash: ReleaseHashSchema,
+  policyHash: ReleaseHashSchema,
+  graderInterfaceHash: ReleaseHashSchema,
+  metadata: MetadataSchema,
+}).strict();
+export const HarnessCompatibilityReceiptSchema = HarnessCompatibilityReceiptContentSchema
+  .extend({ contentHash: ReleaseHashSchema })
+  .strict();
+
 export function createRunManifest(input: z.input<typeof RunManifestContentSchema>): RunManifest {
   const content = RunManifestContentSchema.parse(input);
   return RunManifestSchema.parse({ ...content, contentHash: contentHash(content) });
@@ -142,12 +159,33 @@ export function aggregateEvaluationReceipts(input: {
   return EvaluationResultSchema.parse({ ...content, contentHash: contentHash(content) });
 }
 
-export function assertComparableRunManifests(base: RunManifest, candidate: RunManifest): void {
-  if (base.harnessRelease.contentHash !== candidate.harnessRelease.contentHash) {
-    throw new Error("Evaluation runs use different Harness Releases.");
-  }
+export function createHarnessCompatibilityReceipt(
+  input: z.input<typeof HarnessCompatibilityReceiptContentSchema>,
+): z.infer<typeof HarnessCompatibilityReceiptSchema> {
+  const content = HarnessCompatibilityReceiptContentSchema.parse(input);
+  return HarnessCompatibilityReceiptSchema.parse({ ...content, contentHash: contentHash(content) });
+}
+
+export function assertComparableRunManifests(
+  base: RunManifest,
+  candidate: RunManifest,
+  compatibility?: z.input<typeof HarnessCompatibilityReceiptSchema>,
+): void {
   if (base.tasksetRelease.contentHash !== candidate.tasksetRelease.contentHash) {
     throw new Error("Evaluation runs use different Taskset Releases.");
+  }
+  if (base.harnessRelease.contentHash === candidate.harnessRelease.contentHash) return;
+  if (!compatibility) {
+    throw new Error("Evaluation runs use different Harness Releases without a compatibility receipt.");
+  }
+  const receipt = HarnessCompatibilityReceiptSchema.parse(compatibility);
+  assertContentHash(receipt, "Harness compatibility receipt");
+  if (
+    receipt.baseHarnessRelease.contentHash !== base.harnessRelease.contentHash
+    || receipt.candidateHarnessRelease.contentHash !== candidate.harnessRelease.contentHash
+    || receipt.tasksetRelease.contentHash !== base.tasksetRelease.contentHash
+  ) {
+    throw new Error("Harness compatibility receipt does not match the compared runs.");
   }
 }
 
@@ -168,3 +206,4 @@ export type RunLimits = z.infer<typeof RunLimitsSchema>;
 export type RunManifest = z.infer<typeof RunManifestSchema>;
 export type AttemptReceipt = z.infer<typeof AttemptReceiptSchema>;
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
+export type HarnessCompatibilityReceipt = z.infer<typeof HarnessCompatibilityReceiptSchema>;

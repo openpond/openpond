@@ -18,32 +18,29 @@ export const marketingPortfolioConformance = fixture("marketing-portfolio-v1", [
 
 function fixture(id: string, tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown>; inputSchemaHash: string; sideEffect: "read" | "write"; timeoutMs: number }>) {
   const snapshot = createAgentSnapshot({
-    schemaVersion: "openpond.agentSnapshot.v1",
+    schemaVersion: "openpond.agentSnapshot.v2",
     id: `${id}-agent`,
-    profileRelease: null,
+    sourceRelease: null,
     instructions: [], skills: [], agents: [], toolDeclarations: tools,
     capabilityRequirements: [], dependencyLock,
     portability: { portable: true, blockers: [], localOnlyAssetRefs: [], hostPrivateAssetRefs: [] },
     metadata: { conformanceFixture: id },
   });
   const harness = createHarnessRelease({
-    schemaVersion: "openpond.harnessRelease.v1",
+    schemaVersion: "openpond.harnessRelease.v2",
     id: `${id}-harness`,
     agentSnapshot: { id: snapshot.id, contentHash: snapshot.contentHash },
     program,
-    environment: { protocolVersion: "openpond.environment.v1", kind: "agent", entrypoint: id, stateful: true, deterministicSeeds: true, lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 5_000 },
     tools,
     lifecycle: { create: true, reset: true, step: true, collect: true, destroy: true, resetScope: "attempt" },
     graderInterface: { visibleEvidence: ["output"], privilegedEvidence: ["expected"], privateVerifierIsolation: true },
-    policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: [], connectedAppScopes: [] },
     files: [], metadata: { conformanceFixture: id },
   });
   const tasksetContent = {
-    schemaVersion: "openpond.tasksetRelease.v1" as const,
+    schemaVersion: "openpond.tasksetRelease.v2" as const,
     id: `${id}-taskset`, revision: 1,
-    harnessRelease: { id: harness.id, contentHash: harness.contentHash },
-    policy: harness.policy,
-    environment: harness.environment,
+    policy: { policyVisibleFields: ["input"], privilegedFields: ["expectedOutput"], hiddenGraderRefs: [], connectedAppScopes: [] },
+    environment: { protocolVersion: "openpond.environment.v1", kind: "agent", entrypoint: id, stateful: true, deterministicSeeds: true, lifecycle: ["create", "reset", "step", "collect", "destroy"], networkPolicy: "none", defaultTimeoutMs: 5_000 },
     tools,
     capabilities: [],
     tasks: [

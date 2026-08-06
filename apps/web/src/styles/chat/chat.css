@@ -119,6 +119,12 @@
   min-width: 0;
 }
 
+.user-message-attachments.compact {
+  gap: 4px 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
 .user-message-attachment {
   display: inline-flex;
   align-items: center;
@@ -132,6 +138,26 @@
   padding: 4px 7px;
   font-size: 12px;
   line-height: 1.2;
+}
+
+button.user-message-attachment {
+  font: inherit;
+  text-align: left;
+}
+
+.user-message-attachment.openable {
+  cursor: pointer;
+}
+
+.user-message-attachment.openable:hover:not(:disabled),
+.user-message-attachment.openable:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.user-message-attachment.openable:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .user-message-attachment svg {
@@ -150,6 +176,32 @@
   flex: 0 0 auto;
   color: #a4a4a4;
   font-size: 11px;
+}
+
+.user-message-attachments.compact .user-message-attachment {
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.82);
+  padding: 0;
+  font-size: 11px;
+}
+
+.user-message-attachments.compact .user-message-attachment svg {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.user-message-attachments.compact .user-message-attachment small {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 10px;
+}
+
+.user-message-attachments.compact .user-message-attachment.openable:hover:not(:disabled),
+.user-message-attachments.compact .user-message-attachment.openable:focus-visible {
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .user-message-image-attachment {
@@ -395,6 +447,19 @@
 .markdown-paragraph {
   margin: 0;
   white-space: pre-wrap;
+}
+
+.markdown-blockquote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  border-left: 3px solid color-mix(in srgb, var(--muted) 55%, transparent);
+  padding: 1px 0 1px 14px;
+  color: var(--muted-strong);
+}
+
+.markdown-blockquote .markdown-heading {
+  color: var(--text);
 }
 
 .markdown-heading {
@@ -810,6 +875,20 @@
   min-width: 0;
   margin-top: -5px;
   color: #767676;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .assistant-message-footer {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 120ms ease;
+  }
+
+  .message-row.assistant:hover .assistant-message-footer,
+  .message-row.assistant:focus-within .assistant-message-footer {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .message-copy-button {

@@ -17,6 +17,7 @@ type CacheEntry = {
   fetchedAt: number;
   payload?: CodexHistoryThreadPayload;
   promise?: Promise<CodexHistoryThreadPayload>;
+  revision?: string;
 };
 
 const threadPayloadCache = new Map<string, CacheEntry>();
@@ -39,9 +40,12 @@ export async function loadCodexHistoryThreadPayload(
 ): Promise<CodexHistoryThreadPayload> {
   const key = cacheKey(connection, sessionId);
   const existing = threadPayloadCache.get(key);
+  const limit = options.limit ?? CODEX_HISTORY_THREAD_TAIL_LIMIT;
+  const tail = options.tail ?? true;
   if (existing?.promise) return existing.promise;
   if (
     !options.force &&
+    tail &&
     existing?.payload &&
     Date.now() - existing.fetchedAt <= CODEX_HISTORY_CACHE_TTL_MS
   ) {
@@ -49,16 +53,31 @@ export async function loadCodexHistoryThreadPayload(
     return existing.payload;
   }
 
-  const limit = options.limit ?? CODEX_HISTORY_THREAD_TAIL_LIMIT;
-  const tail = options.tail ?? true;
+  const canRequestDelta = Boolean(options.force && tail && existing?.payload);
+  const afterEventId = canRequestDelta ? existing?.payload?.events.at(-1)?.id : undefined;
   const promise = api
-    .codexHistoryThread(connection, sessionId, {
+    .codexHistoryThreadIncremental(connection, sessionId, {
+      afterEventId,
       limit,
+      revision: canRequestDelta ? existing?.revision : undefined,
       tail,
     })
-    .then((payload) => {
+    .then((response) => {
       const existingPayload = threadPayloadCache.get(key)?.payload ?? existing?.payload;
-      const nextPayload = tail && existingPayload
+      if (response.unchanged) {
+        if (!existingPayload) {
+          throw new Error("Codex history revision matched without a cached thread.");
+        }
+        threadPayloadCache.set(key, {
+          fetchedAt: Date.now(),
+          payload: existingPayload,
+          revision: response.revision,
+        });
+        touchCacheEntry(key, threadPayloadCache.get(key)!);
+        return existingPayload;
+      }
+      const payload = { session: response.session, events: response.events };
+      const nextPayload = tail && existingPayload && !response.reset
         ? {
             ...payload,
             events: mergeCodexHistoryEvents(existingPayload.events, payload.events),
@@ -67,6 +86,7 @@ export async function loadCodexHistoryThreadPayload(
       threadPayloadCache.set(key, {
         fetchedAt: Date.now(),
         payload: nextPayload,
+        revision: response.revision,
       });
       trimCache();
       return nextPayload;
@@ -81,6 +101,7 @@ export async function loadCodexHistoryThreadPayload(
     fetchedAt: existing?.fetchedAt ?? 0,
     payload: existing?.payload,
     promise,
+    revision: existing?.revision,
   });
   trimCache();
   return promise;

@@ -395,6 +395,11 @@ export function useMainPaneChatScroll({
       updateChatScrollControls,
     ]
   );
+  const handleChatContentMutation = useCallback((element: HTMLElement) => {
+    if (!stickyChatScrollRef.current && !isNearChatBottom(element)) return;
+    stickyChatScrollRef.current = true;
+    element.scrollTop = element.scrollHeight;
+  }, []);
   useLayoutEffect(() => {
     if (view !== "chat" || !showChatThread || typeof window === "undefined")
       return undefined;
@@ -554,6 +559,7 @@ export function useMainPaneChatScroll({
     chatThreadRef,
     composerStackRef,
     goToUserMessage,
+    handleChatContentMutation,
     handleChatScroll,
     jumpToLatestChatMessage,
     showScrollToBottomButton,

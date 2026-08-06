@@ -9,21 +9,26 @@ import {
 import { gradeEvidence } from "../src/graders.js";
 import {
   executeRuntimeProtocol,
+  createHarnessRelease,
   type HarnessRuntime,
   type ModelAction,
 } from "../src/harness.js";
+import { createVerifiedHarnessCompatibilityReceipt } from "../src/compatibility.js";
 import { validateTasksetRelease } from "../src/tasksets.js";
 import { verifyAttemptReceipt } from "../src/runs.js";
 import {
   aggregateEvaluationReceipts,
   assertComparableRunManifests,
   createAttemptReceipt,
+  createHarnessCompatibilityReceipt,
   createRunManifest,
   rewardEligibleReceipts,
 } from "../src/runs.js";
 import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
 import { contentHash, sha256 } from "../src/common.js";
 import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "../src/evidence/index.js";
+import { createImprovementObservation } from "../src/harness-improvements.js";
+import { createHarnessRunOverlay } from "../src/harness-workspaces.js";
 
 const artifact = {
   id: "artifact-trace",
@@ -159,6 +164,81 @@ describe("public package conformance", () => {
     expect(rewardEligibleReceipts([receipt])).toEqual([receipt]);
   });
 
+  it("requires an explicit compatibility receipt when the Harness changes", () => {
+    const base = genericToolConformance.manifest;
+    const { contentHash: _baseHash, ...baseContent } = base;
+    const candidate = createRunManifest({
+      ...baseContent,
+      id: "generic-tool-v1-compatible-harness-run",
+      harnessRelease: { id: "generic-tool-v1-harness-v2", contentHash: contentHash("harness-v2") },
+    });
+    expect(() => assertComparableRunManifests(base, candidate)).toThrow(/compatibility receipt/);
+    const compatibility = createHarnessCompatibilityReceipt({
+      schemaVersion: "openpond.harnessCompatibility.v1",
+      id: "generic-tool-v1-harness-compatibility",
+      baseHarnessRelease: base.harnessRelease,
+      candidateHarnessRelease: candidate.harnessRelease,
+      tasksetRelease: base.tasksetRelease,
+      environmentHash: contentHash(genericToolConformance.taskset.environment),
+      toolContractHash: contentHash(genericToolConformance.taskset.tools),
+      policyHash: contentHash(genericToolConformance.taskset.policy),
+      graderInterfaceHash: contentHash(genericToolConformance.harness.graderInterface),
+      metadata: { reason: "same task environment and grader contract" },
+    });
+    expect(() => assertComparableRunManifests(base, candidate, compatibility)).not.toThrow();
+  });
+
+  it("derives compatibility evidence from immutable releases and rejects contract drift", () => {
+    const base = genericToolConformance.harness;
+    const { contentHash: _baseHash, ...baseContent } = base;
+    const candidate = createHarnessRelease({
+      ...baseContent,
+      id: "generic-tool-v1-harness-candidate",
+      agentSnapshot: {
+        id: "generic-tool-v1-agent-candidate",
+        contentHash: contentHash("generic-tool-v1-agent-candidate"),
+      },
+    });
+    const compatibility = createVerifiedHarnessCompatibilityReceipt({
+      id: "generic-tool-v1-verified-compatibility",
+      baseHarnessRelease: base,
+      candidateHarnessRelease: candidate,
+      tasksetRelease: genericToolConformance.taskset,
+      metadata: { reason: "Harness behavior changed without execution-contract drift." },
+    });
+    expect(compatibility).toMatchObject({
+      baseHarnessRelease: {
+        id: base.id,
+        contentHash: base.contentHash,
+      },
+      candidateHarnessRelease: {
+        id: candidate.id,
+        contentHash: candidate.contentHash,
+      },
+      tasksetRelease: {
+        id: genericToolConformance.taskset.id,
+        contentHash: genericToolConformance.taskset.contentHash,
+      },
+      environmentHash: contentHash(genericToolConformance.taskset.environment),
+      toolContractHash: contentHash(genericToolConformance.taskset.tools),
+      policyHash: contentHash(genericToolConformance.taskset.policy),
+    });
+
+    const drifted = createHarnessRelease({
+      ...baseContent,
+      id: "generic-tool-v1-harness-tool-drift",
+      tools: [],
+    });
+    expect(() =>
+      createVerifiedHarnessCompatibilityReceipt({
+        id: "generic-tool-v1-invalid-compatibility",
+        baseHarnessRelease: base,
+        candidateHarnessRelease: drifted,
+        tasksetRelease: genericToolConformance.taskset,
+      })
+    ).toThrow(/tool contract changed/);
+  });
+
   it("keeps frozen tasks and privileged grader state out of policy/training views", () => {
     const taskset = genericToolConformance.taskset;
     const policy = policyTaskView(taskset.tasks[0]!);
@@ -170,6 +250,56 @@ describe("public package conformance", () => {
 
   it("exports the Work evidence conformance surface", () => {
     expect(verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)).toBe(true);
+  });
+
+  it("exports portable Harness workspace and improvement contracts", () => {
+    const overlay = createHarnessRunOverlay({
+      schemaVersion: "openpond.harnessRunOverlay.v1",
+      id: "portable-overlay",
+      runId: "portable-run",
+      baseHarnessRelease: genericToolConformance.manifest.harnessRelease,
+      workspace: {
+        workspaceId: "portable-workspace",
+        revision: 0,
+        sourceRevision: "source-a",
+        channelRevision: 1,
+      },
+      revision: 0,
+      status: "active",
+      edits: [],
+      createdAt: "2026-08-03T00:00:00.000Z",
+      updatedAt: "2026-08-03T00:00:00.000Z",
+      metadata: {},
+    });
+    const observation = createImprovementObservation({
+      schemaVersion: "openpond.improvementObservation.v1",
+      id: "portable-observation",
+      runRef: "portable-run",
+      turnId: "portable-turn",
+      harnessRelease: overlay.baseHarnessRelease,
+      overlay: {
+        id: overlay.id,
+        revision: overlay.revision,
+        contentHash: overlay.contentHash,
+      },
+      eventRefs: [{
+        id: "portable-event",
+        sequence: 1,
+        contentHash: contentHash("portable-event"),
+      }],
+      kind: "tool_failure",
+      state: "terminal",
+      tool: {
+        name: "exec_command",
+        invocationKey: contentHash("portable-invocation"),
+      },
+      deterministicClass: "command_exit_nonzero",
+      summary: "A portable command failure fixture.",
+      createdAt: "2026-08-03T00:00:00.000Z",
+      metadata: {},
+    });
+    expect(overlay.contentHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(observation.overlay?.contentHash).toBe(overlay.contentHash);
   });
 });
 

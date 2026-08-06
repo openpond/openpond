@@ -1,7 +1,51 @@
 import { describe, expect, test } from "vitest";
-import { matchChatFilePathAt, normalizeChatFilePath } from "../apps/web/src/lib/chat-file-links";
+import {
+  matchChatFilePathAt,
+  normalizeChatFilePath,
+  resolveChatWorkspaceRootPath,
+} from "../apps/web/src/lib/chat-file-links";
 
 describe("chat file links", () => {
+  test("uses the selected local project's path before workspace state is available", () => {
+    const workspaceRootPath = resolveChatWorkspaceRootPath({
+      projectTargetDetail: "/home/glu/Projects/all/sandbox",
+      projectTargetValue: "local:sandbox-project",
+      workspaceRepoPath: null,
+      workspaceTargetValue: "local",
+    });
+
+    expect(workspaceRootPath).toBe("/home/glu/Projects/all/sandbox");
+    expect(
+      normalizeChatFilePath(
+        "/home/glu/Projects/all/sandbox/deployment-worker/domain/services/continuous-learning/receipt.ts",
+        { workspaceRootPath },
+      ),
+    ).toEqual({
+      displayPath:
+        "/home/glu/Projects/all/sandbox/deployment-worker/domain/services/continuous-learning/receipt.ts",
+      path: "deployment-worker/domain/services/continuous-learning/receipt.ts",
+    });
+  });
+
+  test("prefers the loaded workspace repo path and ignores non-local project details", () => {
+    expect(
+      resolveChatWorkspaceRootPath({
+        projectTargetDetail: "/home/glu/Projects/all/stale-project",
+        projectTargetValue: "local:stale-project",
+        workspaceRepoPath: "/home/glu/Projects/all/current-project",
+        workspaceTargetValue: "local",
+      }),
+    ).toBe("/home/glu/Projects/all/current-project");
+    expect(
+      resolveChatWorkspaceRootPath({
+        projectTargetDetail: "Choose a project for local or cloud work",
+        projectTargetValue: "none",
+        workspaceRepoPath: null,
+        workspaceTargetValue: "local",
+      }),
+    ).toBeNull();
+  });
+
   test("normalizes relative file paths and line suffixes", () => {
     expect(normalizeChatFilePath("./apps/web/src/App.tsx:42")).toEqual({
       displayPath: "./apps/web/src/App.tsx:42",

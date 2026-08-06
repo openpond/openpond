@@ -1,6 +1,7 @@
 import {
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -9,10 +10,11 @@ import {
   useState,
   type CSSProperties,
 } from "react";
-import type {
-  ChatAttachment,
-  OpenPondApp,
-  TeamChatMember,
+import {
+  CHAT_ATTACHMENT_LIMITS,
+  type ChatAttachment,
+  type OpenPondApp,
+  type TeamChatMember,
 } from "@openpond/contracts";
 import {
   chatProviderLabel,
@@ -36,7 +38,7 @@ import { composerActionCatalogLabel } from "../../lib/composer-action-catalog";
 import { shouldRetainOpenPondProfileActionAfterSubmit } from "../../lib/openpond-action-run";
 import {
   COMPOSER_SLASH_COMMANDS,
-  composerSlashCommandsForProvider,
+  composerSlashCommandsForExperience,
   parseComposerSlashCommandPrompt,
   type ComposerSlashCommand,
 } from "../../lib/composer-slash-commands";
@@ -94,6 +96,7 @@ import { ComposerSlashMenu, type SlashMenuItem } from "./ComposerSlashMenu";
 import { SubmitIssueDialog } from "./SubmitIssueDialog";
 import {
   ComposerAttachmentPreview,
+  createComposerPastedTextFile,
   readComposerAttachmentPayload,
 } from "./ComposerAttachments";
 import { useComposerAttachments } from "./useComposerAttachments";
@@ -108,6 +111,7 @@ import {
   slashCommandMatchesForQuery,
 } from "./composer-input-helpers";
 import type { ComposerProps } from "./composer-types";
+import { DEVELOPMENT_ONLY_PROFILE_SKILLS } from "./composer-profile-skills";
 import { useComposerMenuInteractions } from "./useComposerMenuInteractions";
 
 export {
@@ -116,12 +120,6 @@ export {
   promptWithSelectedInvocationText,
   selectedActionDisplayPrompt,
 } from "./composer-input-helpers";
-
-const DEVELOPMENT_ONLY_PROFILE_SKILLS = new Set([
-  "openpond-agent-authoring",
-  "openpond-skill-authoring",
-  "openpond-taskset-authoring",
-]);
 
 const ComposerCreateImproveStrip = lazy(() =>
   import("./ComposerCreateImproveStrip").then((module) => ({
@@ -294,6 +292,21 @@ export function Composer({
     attachmentRequestAppliedRef.current = attachmentRequest.id;
     addFiles([attachmentRequest.file]);
   }, [addFiles, attachmentRequest]);
+  const handlePasteTextAsAttachment = useCallback(
+    (text: string) => {
+      const file = createComposerPastedTextFile(text, attachments);
+      if (!file) return false;
+      if (
+        attachments.length >= CHAT_ATTACHMENT_LIMITS.maxAttachments ||
+        file.size > CHAT_ATTACHMENT_LIMITS.maxAttachmentBytes
+      ) {
+        return false;
+      }
+      addFiles([file]);
+      return true;
+    },
+    [addFiles, attachments],
+  );
   const placeholder =
     surface === "team"
       ? "Message team"
@@ -326,12 +339,7 @@ export function Composer({
     [actionCatalog, selectedActionId]
   );
   const availableSlashCommands = useMemo(() => {
-    const commands = composerSlashCommandsForProvider(provider);
-    if (experience === "development") return commands;
-    if (experience === "work") {
-      return commands.filter((command) => command.id === "submit-issue");
-    }
-    return [];
+    return composerSlashCommandsForExperience(provider, experience);
   }, [experience, provider]);
   const availableProfileSkills = useMemo(
     () =>
@@ -484,7 +492,7 @@ export function Composer({
         ];
     const setupProviderOption: DropdownOption = {
       value: "setup-provider",
-      label: "Setup new provider",
+      label: "New Model/Provider",
       icon: "plus",
       separatorBefore: true,
     };
@@ -1854,6 +1862,8 @@ export function Composer({
                   void submitComposer();
               }
             }}
+            onPasteFiles={addFiles}
+            onPasteTextAsAttachment={handlePasteTextAsAttachment}
             onPromptChange={(nextValue, nextPromptCursor) => {
               if (addMenuOpen) {
                 const queryStart = Math.max(

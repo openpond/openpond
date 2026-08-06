@@ -5,6 +5,7 @@ import {
   TrainingPlanSchema,
   TrainingRecipeSchema,
   type TrainingDestinationId,
+  type ImmutableReleaseRef,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
@@ -33,6 +34,7 @@ export type TrainingStartInput = {
   maximumCostUsd?: number | null;
   retentionDays?: number | null;
   region?: string | null;
+  harnessRelease?: ImmutableReleaseRef | null;
 };
 
 export function createTrainingPlanLifecycleService(deps: {
@@ -69,6 +71,7 @@ export function createTrainingPlanLifecycleService(deps: {
       exportApproved: input.exportApproved,
       retentionDays: input.retentionDays,
       region: input.region,
+      harnessRelease: input.harnessRelease,
     });
     const requestedPlacement =
       input.environmentPlacement ?? initial.environmentPlacement;
@@ -189,6 +192,7 @@ export function createTrainingPlanLifecycleService(deps: {
       maximumCostUsd,
       approvedBy,
       approvedAt: new Date().toISOString(),
+      harnessRelease: plan.harnessRelease,
     });
     return deps.store.saveTrainingApproval(approval);
   }

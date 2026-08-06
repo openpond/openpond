@@ -818,6 +818,8 @@
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .composer-inline-input[data-empty="true"]::before {
@@ -963,10 +965,18 @@
   place-items: center;
   width: 21px;
   height: 21px;
+  padding: 0;
   border: 0;
   border-radius: 999px;
-  background: rgba(12, 12, 12, 0.76);
-  color: #f5f5f5;
+  background: transparent;
+  color: #d7d7d7;
+  opacity: 0;
+  line-height: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+
+.composer-attachment-remove svg {
+  display: block;
 }
 
 .composer-attachment-card.image .composer-attachment-remove {
@@ -974,15 +984,17 @@
   right: 0;
   width: 22px;
   height: 22px;
-  background: rgba(12, 12, 12, 0.82);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.34);
   transform: translate(38%, -38%);
 }
 
+.composer-attachment-card:hover .composer-attachment-remove,
+.composer-attachment-card:focus-within .composer-attachment-remove,
 .composer-attachment-remove:hover,
 .composer-attachment-remove:focus-visible {
+  opacity: 1;
   outline: 0;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
 .composer-attachment-error {

@@ -23,6 +23,7 @@
 @import "./styles/chat/approval-request.css";
 @import "./styles/chat/composer-workspace.css";
 @import "./styles/chat/composer-footer.css";
+@import "./styles/chat/composer-model-menu.css";
 @import "./styles/chat/voice-input.css";
 @import "./styles/chat/command-results.css";
 @import "./styles/dropdown-select.css";

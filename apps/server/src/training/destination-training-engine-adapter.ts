@@ -3,7 +3,6 @@ import {
   TrainingExecutionRefSchema,
   type AdapterValidationReceipt,
   type LearningSignalBatch,
-  type OpenPondProfileState,
   type ResolvedTrainingPlan,
   type TrainingArtifact,
   type TrainingArtifacts,
@@ -39,7 +38,6 @@ export function createDestinationTrainingEngineRegistry(input: {
     token: string;
     teamId: string;
   }>;
-  loadProfileState?: () => Promise<OpenPondProfileState>;
   catalog(): Promise<TrainingCatalog>;
 }) {
   const adapters = new TrainingAdapterRegistry() as TrainingAdapterRegistry & {
@@ -69,7 +67,6 @@ export function createDestinationTrainingEngineRegistry(input: {
     store: input.store,
     storeDir: input.storeDir,
     resolveAccess: input.resolveManagedAccess,
-    loadProfileState: input.loadProfileState,
   });
   adapters.registerEngine(managed);
   adapters.close = () => managed.close();

@@ -7,6 +7,7 @@ import type {
   CreateLocalProjectRequest,
   CreateSessionRequest,
   TrainingStateResponse,
+  TrainingActivityResponse,
   TrainingCatalog,
   TrainingRunDetail,
   DatasetCatalogResponse,
@@ -579,6 +580,11 @@ export const api = {
     apiFetch<TrainingStateResponse>(
       connection,
       `/v1/training?profileId=${encodeURIComponent(profileId)}`
+    ),
+  trainingActivity: (connection: ClientConnection, profileId: string) =>
+    apiFetch<TrainingActivityResponse>(
+      connection,
+      `/v1/training/activity?profileId=${encodeURIComponent(profileId)}`
     ),
   portableTrainingCatalog: (
     connection: ClientConnection,
@@ -1205,6 +1211,35 @@ export const api = {
       `/v1/codex-history/${encodeURIComponent(sessionId)}${query}`
     );
   },
+  codexHistoryThreadIncremental: (
+    connection: ClientConnection,
+    sessionId: string,
+    input: {
+      afterEventId?: string;
+      limit?: number;
+      revision?: string;
+      tail?: boolean;
+    } = {}
+  ) => {
+    const params = new URLSearchParams({ incremental: "1" });
+    if (input.afterEventId) params.set("afterEventId", input.afterEventId);
+    if (input.limit !== undefined) params.set("limit", String(input.limit));
+    if (input.revision) params.set("revision", input.revision);
+    if (input.tail) params.set("tail", "1");
+    return apiFetch<
+      | { unchanged: true; revision: string }
+      | {
+          unchanged: false;
+          revision: string;
+          reset: boolean;
+          session: Session;
+          events: RuntimeEvent[];
+        }
+    >(
+      connection,
+      `/v1/codex-history/${encodeURIComponent(sessionId)}?${params.toString()}`
+    );
+  },
   sendCodexHistoryTurn: (
     connection: ClientConnection,
     sessionId: string,
@@ -1369,6 +1404,19 @@ export const api = {
         body: JSON.stringify(input),
       }
     ),
+  chatAttachmentFile: (
+    connection: ClientConnection,
+    input: NonNullable<ChatAttachmentSummary["filePreview"]>
+  ) =>
+    apiFetch<{
+      path: string;
+      contentType: string;
+      content: string;
+      sizeBytes: number;
+    }>(connection, "/v1/assets/chat-attachment-file", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   workspaceLspTouch: (
     connection: ClientConnection,
     appId: string,

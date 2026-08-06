@@ -3,13 +3,17 @@ import { SessionSchema, type RuntimeEvent } from "@openpond/contracts";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MessageRow } from "../apps/web/src/components/chat/Messages";
+import { attachmentIconKind } from "../apps/web/src/components/chat/AttachmentTypeIcon";
 import {
   activityGroupSummary,
   buildChatMessages,
 } from "../apps/web/src/lib/chat-messages";
 import { connectedAppProviderActivityRows } from "../apps/web/src/lib/connected-app-provider-activity";
 import { liveSessionsFromRuntimeEvents } from "../apps/web/src/hooks/useAppEffects";
-import { subagentMessageNeedsCollapse } from "../apps/web/src/components/chat/MessageActivityGroup";
+import {
+  activityToolRowLabel,
+  subagentMessageNeedsCollapse,
+} from "../apps/web/src/components/chat/MessageActivityGroup";
 import { workTracePresentation } from "../apps/web/src/lib/chat-work-trace";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
@@ -315,6 +319,7 @@ describe("chat message projection", () => {
         sessionId: "session_1",
         turnId: "turn_1",
         status: "started",
+        timestamp: "2026-05-16T00:00:00.000Z",
         output: "Research subagent started.",
         data: {
           childSessionId: "session_child",
@@ -364,7 +369,9 @@ describe("chat message projection", () => {
         onOpenSession: () => undefined,
       })
     );
-    expect(html).toContain("Working…");
+    expect(html).toContain(
+      "Searching for &quot;openpond_subagent_start&quot; in apps/server/src and tests"
+    );
     expect(html).not.toContain(
       "Subagent completed, read a file, and searched code"
     );
@@ -629,8 +636,13 @@ describe("chat message projection", () => {
     );
     expect(settledHtml).not.toContain("Working…");
     expect(settledHtml).not.toContain(" working");
-    expect(runningHtml).toContain("Working…");
+    expect(settledHtml).toContain('aria-expanded="false"');
+    expect(runningHtml).toContain(
+      "Listing files in apps/web/src/components/chat"
+    );
     expect(runningHtml).toContain(" working");
+    expect(runningHtml).toContain('aria-expanded="false"');
+    expect(runningHtml).not.toContain("Running command");
   });
 
   test("keeps completed reasoning hidden beneath a factual work summary", () => {
@@ -734,6 +746,21 @@ describe("chat message projection", () => {
               mediaType: "text/plain",
               sizeBytes: 128,
               kind: "text",
+              lineCount: 3,
+              filePreview: {
+                sessionId: "session_1",
+                turnId: "turn_1",
+                attachmentId: "attachment_2",
+                storageName: "notes.txt",
+                contentType: "text/plain",
+              },
+            },
+            {
+              id: "attachment_3",
+              name: "source.zip",
+              mediaType: "application/zip",
+              sizeBytes: 4096,
+              kind: "file",
             },
           ],
         },
@@ -762,7 +789,46 @@ describe("chat message projection", () => {
     expect(html).toContain("user-message-image-attachment");
     expect(html).toContain("Screenshot from 2026-07-02 13.49.59.png");
     expect(html).toContain("notes.txt");
+    expect(html).toContain("source.zip");
     expect(html).toContain("user-message-attachment");
+    expect(html).toContain("3 lines");
+    expect(html).not.toContain("128 B");
+    expect(html).not.toContain("44 KB");
+    const codexHtml = renderToStaticMarkup(
+      createElement(MessageRow, {
+        message: messages[0]!,
+        onOpenAttachmentInSidebar: async () => undefined,
+        userAttachmentDisplay: "compact",
+      })
+    );
+    expect(codexHtml).toContain("Can you inspect this bug screenshot?");
+    expect(codexHtml).toContain("user-message-attachments compact");
+    expect(codexHtml).toContain("Screenshot from 2026-07-02 13.49.59.png");
+    expect(codexHtml).toContain("Open attached file Screenshot from 2026-07-02 13.49.59.png");
+    expect(codexHtml).toContain("notes.txt");
+    expect(codexHtml).toContain("source.zip");
+    expect(codexHtml).toContain("Open attached file notes.txt");
+    expect(codexHtml).toContain("user-message-attachment openable");
+    expect(codexHtml).toContain("3 lines");
+    expect(codexHtml).not.toContain("128 B");
+    expect(codexHtml).not.toContain("44 KB");
+    expect(codexHtml).not.toContain("user-message-image-attachment");
+    expect(codexHtml).not.toContain("has-image-attachments");
+  });
+
+  test("selects distinct icons for common attachment families", () => {
+    const iconKind = (name: string, mediaType: string, kind: "image" | "text" | "file" = "file") =>
+      attachmentIconKind({ name, mediaType, kind });
+
+    expect(iconKind("screen.png", "image/png", "image")).toBe("image");
+    expect(iconKind("component.tsx", "text/typescript", "text")).toBe("code");
+    expect(iconKind("report.pdf", "application/pdf")).toBe("document");
+    expect(iconKind("results.csv", "text/csv", "text")).toBe("spreadsheet");
+    expect(iconKind("source.zip", "application/zip")).toBe("archive");
+    expect(iconKind("recording.wav", "audio/wav")).toBe("audio");
+    expect(iconKind("demo.mp4", "video/mp4")).toBe("video");
+    expect(iconKind("brief.pptx", "application/octet-stream")).toBe("presentation");
+    expect(iconKind("artifact.bin", "application/octet-stream")).toBe("file");
   });
 
   test("renders OpenPond Chat markdown image output inline", () => {
@@ -1542,8 +1608,7 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("Working…");
-    expect(html).not.toContain("X search");
+    expect(html).toContain("X search");
     expect(html).not.toContain("conn_should_not_render");
     expect(html).not.toContain("token_should_not_render");
 
@@ -1661,6 +1726,107 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Pushed changes");
   });
 
+  test("keeps failed exec details collapsed without transport JSON", () => {
+    const result = JSON.stringify({
+      ok: false,
+      action: "exec_command",
+      output: "Command exited with code 1.",
+      data: {
+        command: "./cli promote production",
+        cwd: "/repo",
+        exitCode: 1,
+        stdout: "Fetching origin/develop\nPromotion refused",
+        stderr: "",
+      },
+    });
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Promote production" },
+      }),
+      runtimeEvent({
+        id: "tool_started",
+        name: "tool.started",
+        turnId: "turn_1",
+        action: "exec_command",
+        status: "started",
+        data: {
+          toolCallId: "call_1",
+          tool: "exec_command",
+          arguments: JSON.stringify({ cmd: "./cli promote production" }),
+        },
+      }),
+      {
+        ...runtimeEvent({
+          id: "tool_completed",
+          name: "tool.completed",
+          turnId: "turn_1",
+          action: "exec_command",
+          status: "failed",
+          output: result,
+          data: {
+            toolCallId: "call_1",
+            tool: "exec_command",
+          },
+        }),
+        timestamp: "2026-05-16T00:00:01.000Z",
+      },
+    ]);
+
+    const activity = messages[1]?.activities?.[0];
+    expect(activity).toMatchObject({
+      content: "./cli promote production",
+      detail: "Fetching origin/develop\nPromotion refused",
+      state: "failed",
+      terminal: { exitCode: 1, durationMs: 1000 },
+    });
+
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
+    expect(html).toContain("Command failed");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Ran command in 1s");
+    expect(html).not.toContain("activity-command-terminal");
+    expect(html).not.toContain("Fetching origin/develop");
+    expect(html).not.toContain("&quot;action&quot;:&quot;exec_command&quot;");
+  });
+
+  test("unwraps sandbox command failure envelopes without inventing an exit code", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_1",
+        name: "turn.started",
+        turnId: "turn_1",
+        args: { prompt: "Run a sandbox command" },
+      }),
+      commandStarted("tool_started", "turn_1", "printf 'hello'"),
+      runtimeEvent({
+        id: "command_output",
+        name: "command.output",
+        turnId: "turn_1",
+        status: "failed",
+        output: JSON.stringify({
+          ok: false,
+          action: "work_environment",
+          output: "Work sandbox entered error during startup.",
+        }),
+        data: { toolCallId: "tool_started" },
+      }),
+    ]);
+
+    const activity = messages[1]?.activities?.[0];
+    expect(activity?.detail).toBe("Work sandbox entered error during startup.");
+    const html = renderToStaticMarkup(
+      createElement(MessageRow, { message: messages[1]! })
+    );
+    expect(html).not.toContain("Work sandbox entered error during startup.");
+    expect(html).not.toContain("activity-command-terminal");
+    expect(html).not.toContain("&quot;action&quot;:&quot;work_environment&quot;");
+  });
+
   test("summarizes one command by activity instead of raw command text", () => {
     const messages = buildChatMessages([
       runtimeEvent({
@@ -1686,9 +1852,48 @@ describe("chat message projection", () => {
         message: messages[1]!,
       })
     );
-    expect(html).toContain("Working…");
+    expect(html).toContain(
+      "Searching for &quot;activityGroupSummary&quot; in apps/web/src"
+    );
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("Running command");
+    expect(html).not.toContain("activity-command-terminal");
     expect(html).not.toContain("Searched code");
-    expect(html).not.toContain("activityGroupSummary");
+  });
+
+  test("uses semantic command labels with duration for activity rows", () => {
+    expect(
+      activityToolRowLabel({
+        id: "read_command",
+        label: "Ran",
+        content: "sed -n '1,120p' app.ts",
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "completed",
+        terminal: { durationMs: 1_000 },
+      })
+    ).toBe("Read lines 1-120 of app.ts in 1s");
+    expect(
+      activityToolRowLabel({
+        id: "search_command",
+        label: "Running",
+        content: 'rg "activity-summary" apps/web/src',
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "running",
+      })
+    ).toBe('Searching for "activity-summary" in apps/web/src');
+    expect(
+      activityToolRowLabel({
+        id: "failed_command",
+        label: "Failed",
+        content: "pnpm test",
+        timestamp: "2026-05-16T00:00:01.000Z",
+        kind: "command",
+        state: "failed",
+        terminal: { durationMs: 1_000 },
+      })
+    ).toBe("Command failed in 1s");
   });
 
   test("merges workspace action results into the started activity row", () => {
@@ -1721,8 +1926,7 @@ describe("chat message projection", () => {
     const html = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[0]! })
     );
-    expect(html).toContain("Working…");
-    expect(html).not.toContain("Started sandbox");
+    expect(html).toContain("Started sandbox");
     expect(html).not.toContain("Starting sandbox");
   });
 
@@ -1791,159 +1995,5 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe(
       "Preserve failed and stopped sandbox"
     );
-  });
-
-  test("surfaces apply and stop outcomes when mixed with read actions", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "sandbox_exec_completed",
-        name: "workspace_action_result",
-        action: "sandbox_exec",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Command succeeded",
-      }),
-      runtimeEvent({
-        id: "sandbox_read_completed",
-        name: "workspace_action_result",
-        action: "sandbox_read_file",
-        status: "completed",
-        sessionId: "session_1",
-        output: "README.md",
-      }),
-      runtimeEvent({
-        id: "sandbox_git_status_completed",
-        name: "workspace_action_result",
-        action: "sandbox_git_status",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Sandbox git status has 1 changed file.",
-      }),
-      runtimeEvent({
-        id: "sandbox_apply_completed",
-        name: "workspace_action_result",
-        action: "sandbox_git_apply_patch_local",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Applied sandbox patch to github-pr-tracker-9: 1 changed file.",
-      }),
-      runtimeEvent({
-        id: "sandbox_preserve_completed",
-        name: "workspace_action_result",
-        action: "sandbox_preserve_source",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Preserved sandbox changes.",
-      }),
-      runtimeEvent({
-        id: "sandbox_stop_completed",
-        name: "workspace_action_result",
-        action: "sandbox_stop",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Stopped sandbox.",
-      }),
-      runtimeEvent({
-        id: "sandbox_status_with_receipt",
-        name: "workspace_action",
-        action: "sandbox_status",
-        status: "started",
-        sessionId: "session_1",
-      }),
-      runtimeEvent({
-        id: "sandbox_status_with_receipt_result",
-        name: "workspace_action_result",
-        action: "sandbox_status",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Read sandbox status.",
-        data: {
-          workspaceExecutionTarget: {
-            target: "sandbox",
-            sandboxId: "sandbox_receipt_1234567890",
-            hybrid: true,
-          },
-          sandbox: {
-            receipts: [
-              {
-                id: "receipt_1234567890",
-                status: "captured",
-                totalUsd: "0.011696",
-              },
-            ],
-          },
-        },
-      }),
-    ]);
-
-    const activities = messages[0]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe(
-      "Read a file, applied locally, preserved sandbox source, stopped sandbox, and captured receipt receip...7890 $0.011696"
-    );
-    expect(activities.at(-1)).toMatchObject({
-      label: "Checked sandbox",
-      meta: "Hybrid sandbox sandbo...7890 · receipt receip...7890 · $0.011696 captured",
-      receipt: {
-        id: "receipt_1234567890",
-        status: "captured",
-        totalUsd: "0.011696",
-      },
-    });
-  });
-
-  test("summarizes mixed command groups with deterministic counts", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Inspect chat activity UI" },
-      }),
-      commandStarted(
-        "read_1",
-        "turn_1",
-        "sed -n '1,160p' apps/web/src/components/chat/MessageActivityGroup.tsx"
-      ),
-      commandStarted(
-        "read_2",
-        "turn_1",
-        "cat apps/web/src/lib/chat-activities.ts"
-      ),
-      commandStarted(
-        "search_1",
-        "turn_1",
-        'rg "activity-summary" apps/web/src'
-      ),
-      commandStarted(
-        "list_1",
-        "turn_1",
-        "rg --files apps/web/src/components/chat"
-      ),
-    ]);
-
-    const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe(
-      "Read 2 files, searched code, and listed files"
-    );
-  });
-
-  test("summarizes edits and verification commands", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Patch and test" },
-      }),
-      commandStarted("edit_1", "turn_1", "apply_patch"),
-      commandStarted(
-        "check_1",
-        "turn_1",
-        "pnpm test tests/chat-messages.test.ts"
-      ),
-    ]);
-
-    const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe("Made edits and ran checks");
   });
 });

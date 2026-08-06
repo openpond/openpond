@@ -77,13 +77,14 @@ describe("chat message interrupted turn projection", () => {
         renderToStaticMarkup(createElement(MessageRow, { message }))
       )
       .join("");
-    expect(html.match(/Working…/g)).toHaveLength(1);
+    expect(html).not.toContain("Working…");
     expect(html).toContain(
       "Searched for &quot;activity-summary&quot; in apps/web/src"
     );
     expect(html).toContain(
       "Read lines 1-200 of apps/web/src/lib/chat-messages.ts"
     );
+    expect(html).toContain("Listing files in apps/web/src/components/chat");
   });
 
   test("keeps completed command artifacts visible when a turn is interrupted", () => {

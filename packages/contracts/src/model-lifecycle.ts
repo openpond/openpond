@@ -126,6 +126,7 @@ export const ModelRunSchema = z
     ]),
     destinationId: ReleaseIdSchema,
     taskset: VersionedReleaseRefSchema,
+    harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
     quote: z
       .object({
         maximumSpendUsd: z.number().nonnegative(),

@@ -5,7 +5,6 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
-  FileText,
   Globe2,
   ImageIcon,
 } from "../icons";
@@ -24,6 +23,7 @@ import {
 import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
+import { StreamingMarkdownText } from "./StreamingMarkdownText";
 import {
   ActionRunCard,
   isProfileActionRun,
@@ -33,9 +33,14 @@ import {
 import { ActivityGroup } from "./MessageActivityGroup";
 import { ChangeSummaryCard } from "./MessageChangeSummary";
 import { CreateImproveStatusReceipt } from "./CreatePipelineStatusReceipt";
+import {
+  AttachmentTypeIcon,
+  formatAttachmentLineCount,
+} from "./AttachmentTypeIcon";
 
 type MessageRowProps = {
   activeWorkspaceAppId?: string | null;
+  animateInitialContent?: boolean;
   accountBaseUrl?: string | null;
   billingOrganizationSlug?: string | null;
   billingTeamId?: string | null;
@@ -45,6 +50,9 @@ type MessageRowProps = {
     href: string,
     options?: { explicitFile?: boolean; newTab?: boolean }
   ) => void;
+  onOpenAttachmentInSidebar?: (
+    attachment: ChatAttachmentSummary
+  ) => Promise<void>;
   onOpenFileInSidebar?: (path: string) => void;
   onOpenProfileSettings?: () => void;
   onResolveUserQuestion?: (
@@ -53,22 +61,26 @@ type MessageRowProps = {
   ) => Promise<void>;
   onOpenSession?: (sessionId: string) => void;
   showFooter?: boolean;
+  userAttachmentDisplay?: "full" | "compact";
   workspaceRootPath?: string | null;
 };
 
 export const MessageRow = memo(function MessageRow({
   activeWorkspaceAppId = null,
+  animateInitialContent = false,
   accountBaseUrl = null,
   billingOrganizationSlug = null,
   billingTeamId = null,
   connection = null,
   message,
   onOpenBrowserLink,
+  onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
   onResolveUserQuestion,
   onOpenSession,
   showFooter = false,
+  userAttachmentDisplay = "full",
   workspaceRootPath = null,
 }: MessageRowProps) {
   if (message.role === "status_divider") {
@@ -110,9 +122,12 @@ export const MessageRow = memo(function MessageRow({
   }
 
   if (message.role === "user") {
-    const hasAttachments = Boolean(message.attachments?.length);
+    const visibleAttachments = message.attachments ?? [];
+    const compactAttachments = userAttachmentDisplay === "compact";
+    const hasAttachments = visibleAttachments.length > 0;
     const hasImageAttachments = Boolean(
-      message.attachments?.some((attachment) => attachment.kind === "image")
+      !compactAttachments &&
+        visibleAttachments.some((attachment) => attachment.kind === "image")
     );
     return (
       <article className="message-row user">
@@ -121,10 +136,12 @@ export const MessageRow = memo(function MessageRow({
             hasImageAttachments ? "has-image-attachments" : ""
           }`}
         >
-          {message.attachments?.length ? (
+          {visibleAttachments.length ? (
             <MessageAttachments
-              attachments={message.attachments}
+              attachments={visibleAttachments}
+              compact={compactAttachments}
               connection={connection}
+              onOpenAttachment={onOpenAttachmentInSidebar}
             />
           ) : null}
           {message.content ? (
@@ -146,8 +163,9 @@ export const MessageRow = memo(function MessageRow({
     <article className="message-row assistant">
       {message.content ? (
         <div className="assistant-message">
-          <MarkdownText
+          <StreamingMarkdownText
             activeWorkspaceAppId={activeWorkspaceAppId}
+            animateInitialContent={animateInitialContent}
             connection={connection}
             content={message.content}
             onOpenBrowserLink={onOpenBrowserLink}
@@ -285,16 +303,19 @@ function areMessageRowPropsEqual(
 ): boolean {
   return (
     previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
+    previous.animateInitialContent === next.animateInitialContent &&
     previous.accountBaseUrl === next.accountBaseUrl &&
     previous.billingOrganizationSlug === next.billingOrganizationSlug &&
     previous.billingTeamId === next.billingTeamId &&
     previous.connection === next.connection &&
     previous.onOpenBrowserLink === next.onOpenBrowserLink &&
+    previous.onOpenAttachmentInSidebar === next.onOpenAttachmentInSidebar &&
     previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
     previous.onOpenProfileSettings === next.onOpenProfileSettings &&
     previous.onResolveUserQuestion === next.onResolveUserQuestion &&
     previous.onOpenSession === next.onOpenSession &&
     previous.showFooter === next.showFooter &&
+    previous.userAttachmentDisplay === next.userAttachmentDisplay &&
     previous.workspaceRootPath === next.workspaceRootPath &&
     chatMessageShallowEqual(previous.message, next.message)
   );
@@ -622,11 +643,17 @@ function messageAttachmentsEqual(
       left.name !== right.name ||
       left.mediaType !== right.mediaType ||
       left.sizeBytes !== right.sizeBytes ||
+      left.lineCount !== right.lineCount ||
       left.imagePreview?.sessionId !== right.imagePreview?.sessionId ||
       left.imagePreview?.turnId !== right.imagePreview?.turnId ||
       left.imagePreview?.attachmentId !== right.imagePreview?.attachmentId ||
       left.imagePreview?.storageName !== right.imagePreview?.storageName ||
-      left.imagePreview?.contentType !== right.imagePreview?.contentType
+      left.imagePreview?.contentType !== right.imagePreview?.contentType ||
+      left.filePreview?.sessionId !== right.filePreview?.sessionId ||
+      left.filePreview?.turnId !== right.filePreview?.turnId ||
+      left.filePreview?.attachmentId !== right.filePreview?.attachmentId ||
+      left.filePreview?.storageName !== right.filePreview?.storageName ||
+      left.filePreview?.contentType !== right.filePreview?.contentType
     ) {
       return false;
     }
@@ -636,18 +663,27 @@ function messageAttachmentsEqual(
 
 function MessageAttachments({
   attachments,
+  compact,
   connection,
+  onOpenAttachment,
 }: {
   attachments: ChatAttachmentSummary[];
+  compact: boolean;
   connection: ClientConnection | null;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
 }) {
   return (
-    <div className="user-message-attachments" aria-label="Attached files">
+    <div
+      className={`user-message-attachments${compact ? " compact" : ""}`}
+      aria-label="Attached files"
+    >
       {attachments.map((attachment) => (
         <MessageAttachment
           attachment={attachment}
+          compact={compact}
           connection={connection}
           key={attachment.id}
+          onOpenAttachment={onOpenAttachment}
         />
       ))}
     </div>
@@ -656,24 +692,74 @@ function MessageAttachments({
 
 function MessageAttachment({
   attachment,
+  compact,
   connection,
+  onOpenAttachment,
 }: {
   attachment: ChatAttachmentSummary;
+  compact: boolean;
   connection: ClientConnection | null;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
 }) {
-  if (attachment.kind === "image" && attachment.imagePreview) {
+  if (!compact && attachment.kind === "image" && attachment.imagePreview) {
     return (
       <MessageImageAttachment attachment={attachment} connection={connection} />
     );
   }
 
-  const Icon = attachment.kind === "image" ? ImageIcon : FileText;
   return (
-    <span className="user-message-attachment" title={attachment.name}>
-      <Icon size={13} />
+    <MessageFileAttachment
+      attachment={attachment}
+      onOpenAttachment={onOpenAttachment}
+    />
+  );
+}
+
+function MessageFileAttachment({
+  attachment,
+  onOpenAttachment,
+}: {
+  attachment: ChatAttachmentSummary;
+  onOpenAttachment?: (attachment: ChatAttachmentSummary) => Promise<void>;
+}) {
+  const [opening, setOpening] = useState(false);
+  const canOpen = Boolean(
+    (attachment.filePreview || attachment.imagePreview) && onOpenAttachment,
+  );
+  const detail = opening
+    ? "Opening"
+    : attachment.lineCount !== undefined
+      ? formatAttachmentLineCount(attachment.lineCount)
+      : null;
+  const content = (
+    <>
+      <AttachmentTypeIcon attachment={attachment} size={13} />
       <span>{attachment.name}</span>
-      <small>{formatBytes(attachment.sizeBytes)}</small>
-    </span>
+      {detail ? <small>{detail}</small> : null}
+    </>
+  );
+  if (!canOpen) {
+    return (
+      <span className="user-message-attachment" title={attachment.name}>
+        {content}
+      </span>
+    );
+  }
+  return (
+    <button
+      aria-label={`Open attached file ${attachment.name}`}
+      className="user-message-attachment openable"
+      disabled={opening}
+      title={`Open ${attachment.name}`}
+      type="button"
+      onClick={() => {
+        if (!onOpenAttachment || opening) return;
+        setOpening(true);
+        void onOpenAttachment(attachment).finally(() => setOpening(false));
+      }}
+    >
+      {content}
+    </button>
   );
 }
 
@@ -710,21 +796,9 @@ function MessageImageAttachment({
       </div>
       <figcaption>
         <span>{attachment.name}</span>
-        <small>{formatBytes(attachment.sizeBytes)}</small>
       </figcaption>
     </figure>
   );
-}
-
-function formatBytes(value: number): string {
-  if (value < 1024) return `${value} B`;
-  const units = ["KB", "MB", "GB"];
-  let amount = value / 1024;
-  for (const unit of units) {
-    if (amount < 1024) return `${amount.toFixed(amount >= 10 ? 0 : 1)} ${unit}`;
-    amount /= 1024;
-  }
-  return `${amount.toFixed(0)} TB`;
 }
 
 export const ThinkingIndicator = memo(function ThinkingIndicator() {

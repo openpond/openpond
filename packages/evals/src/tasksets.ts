@@ -2,7 +2,6 @@ import { z } from "zod";
 
 import {
   ImmutableAssetRefSchema,
-  ImmutableReleaseRefSchema,
   MetadataSchema,
   ReleaseHashSchema,
   ReleaseIdSchema,
@@ -94,10 +93,9 @@ export const TaskRecordSchema = z.object({
 }).strict();
 
 export const TasksetReleaseContentSchema = z.object({
-  schemaVersion: z.literal("openpond.tasksetRelease.v1"),
+  schemaVersion: z.literal("openpond.tasksetRelease.v2"),
   id: ReleaseIdSchema,
   revision: z.number().int().positive(),
-  harnessRelease: ImmutableReleaseRefSchema,
   policy: PolicyBoundarySchema,
   environment: EnvironmentContractSchema,
   tools: z.array(ToolDeclarationSchema).max(200),
