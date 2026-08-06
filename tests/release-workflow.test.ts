@@ -14,11 +14,27 @@ import { validatePackagedSmokeReports } from "../scripts/validate-packaged-smoke
 
 const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+const EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-evals.yml";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 const LATEST_STABLE_TAG_SCRIPT_PATH = "scripts/latest-stable-release-tag.sh";
 
 describe("release workflow", () => {
+  test("retries Evals provenance verification while npm attestations propagate", () => {
+    const workflow = readFileSync(EVALS_RELEASE_WORKFLOW_PATH, "utf8");
+
+    expect(workflow).toContain('installed="false"');
+    expect(workflow).toContain(
+      'if [[ "${installed}" == "true" ]] && (cd "${consumer_dir}" && npm audit signatures); then',
+    );
+    expect(workflow).toContain(
+      "Waiting for npm package and attestation propagation",
+    );
+    expect(workflow).not.toContain(
+      '(cd "${consumer_dir}" && npm audit signatures)\n              echo',
+    );
+  });
+
   test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
