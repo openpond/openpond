@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
+import { AGENT_PROTOCOL_VERSION } from "@openpond/agent-runtime";
 
 import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
@@ -85,6 +86,66 @@ describe("CLI installed-package smoke", () => {
       ]);
     }
   });
+
+  test("runs the lean embedded app-server companion over JSONL", async () => {
+    const cwd = await mkdtemp(join(os.tmpdir(), "openpond-installed-app-server-cwd-"));
+    const storeDir = await mkdtemp(join(os.tmpdir(), "openpond-installed-app-server-state-"));
+    try {
+      const stdin = [
+        {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "initialize",
+          params: {
+            protocolVersion: AGENT_PROTOCOL_VERSION,
+            client: { name: "installed-cli-smoke", version: "1" },
+          },
+        },
+        { jsonrpc: "2.0", method: "initialized" },
+        { jsonrpc: "2.0", id: 2, method: "runtime/capabilities", params: {} },
+        { jsonrpc: "2.0", id: 3, method: "harness/validate", params: {} },
+      ].map((message) => JSON.stringify(message)).join("\n") + "\n";
+      const result = await runProcessCommand(
+        "node",
+        [
+          join(cliRoot, packageJson.bin!.openpond!),
+          "app-server",
+          "--store-dir",
+          storeDir,
+        ],
+        {
+          cwd,
+          env: {
+            OPENPOND_FORCE_EMBEDDED_COMPANIONS: "1",
+            OPENPOND_HARNESS_SCRIPTED_MODELS: "1",
+          },
+          stdin,
+          timeoutMs: 20_000,
+        },
+      );
+      expect(result.code).toBe(0);
+      expect(result.stderr.trim()).toBe("");
+      const messages = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
+      expect(messages).toHaveLength(3);
+      expect(messages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          id: 2,
+          result: expect.objectContaining({ placement: "hosted_work" }),
+        }),
+        expect.objectContaining({
+          id: 3,
+          result: expect.objectContaining({ valid: true }),
+        }),
+      ]));
+      expect(result.stdout).not.toContain("OPENPOND_APP_SERVER_READY");
+      expect(result.stdout).not.toContain("OpenPond API server");
+    } finally {
+      await Promise.all([
+        rm(cwd, { recursive: true, force: true }),
+        rm(storeDir, { recursive: true, force: true }),
+      ]);
+    }
+  }, 30_000);
 
   test(
     "prints help for every documented command group from the built dist bin",

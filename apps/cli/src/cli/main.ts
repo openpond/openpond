@@ -50,13 +50,23 @@ export async function runOpenPondCli(argv = process.argv.slice(2)): Promise<void
 }
 
 async function runEmbeddedCompanion(argv: string[]): Promise<boolean> {
+  if (argv[0] === "__app-server") {
+    process.argv = [process.execPath, "openpond-app-server", ...argv.slice(1)];
+    const [{ createOpenPondAppServer }, { runOpenPondAppServerCli }] = await Promise.all([
+      import("@openpond/local-server/app-server-runtime"),
+      import("@openpond/local-server/cli"),
+    ]);
+    await runOpenPondAppServerCli(createOpenPondAppServer);
+    return true;
+  }
   if (argv[0] === "__server") {
     process.argv = [process.execPath, "openpond-server", ...argv.slice(1)];
     const [{ createOpenPondServer }, { runOpenPondServerCli }] = await Promise.all([
       import("@openpond/local-server"),
       import("@openpond/local-server/cli"),
     ]);
-    await runOpenPondServerCli(createOpenPondServer);
+    const { createOpenPondAppServer } = await import("@openpond/local-server/app-server-runtime");
+    await runOpenPondServerCli({ createOpenPondServer, createOpenPondAppServer });
     return true;
   }
   if (argv[0] === "__terminal") {

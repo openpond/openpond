@@ -174,23 +174,35 @@ export function createOpenPondCommandAccessService(deps: {
       status: "pending",
       createdAt: now(),
     };
-    await upsertApproval(approval);
-    await appendRuntimeEvent(
-      event({
-        sessionId: input.input.session.id,
-        turnId: input.input.turnId ?? undefined,
-        name: "approval.requested",
-        source: "server",
-        action: "command",
-        appId: input.input.session.appId,
-        status: "pending",
-        output: approval.title,
-        data: approval,
-      }),
-    );
-    return new Promise<ResolveApprovalRequest["decision"]>((resolve) => {
-      pendingApprovals.set(approval.id, { approval, family: input.family, resolve });
+    let resolveDecision!: (decision: ResolveApprovalRequest["decision"]) => void;
+    const decision = new Promise<ResolveApprovalRequest["decision"]>((resolve) => {
+      resolveDecision = resolve;
     });
+    pendingApprovals.set(approval.id, {
+      approval,
+      family: input.family,
+      resolve: resolveDecision,
+    });
+    try {
+      await upsertApproval(approval);
+      await appendRuntimeEvent(
+        event({
+          sessionId: input.input.session.id,
+          turnId: input.input.turnId ?? undefined,
+          name: "approval.requested",
+          source: "server",
+          action: "command",
+          appId: input.input.session.appId,
+          status: "pending",
+          output: approval.title,
+          data: approval,
+        }),
+      );
+    } catch (error) {
+      pendingApprovals.delete(approval.id);
+      throw error;
+    }
+    return decision;
   }
 
   return {

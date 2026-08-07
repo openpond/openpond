@@ -77,7 +77,7 @@ describe("openpond app-server process boundary", () => {
       }),
       expect.objectContaining({
         id: 2,
-        result: expect.objectContaining({ placement: "local" }),
+        result: expect.objectContaining({ placement: "hosted_work" }),
       }),
       expect.objectContaining({
         id: 3,

@@ -34,10 +34,14 @@
     "./cli": {
       "import": "./dist/cli.js",
       "types": "./dist/cli.d.ts"
+    },
+    "./app-server-runtime": {
+      "import": "./dist/app-server-runtime.js",
+      "types": "./dist/app-server-runtime.d.ts"
     }
   },
   "bin": {
-    "openpond-app-server": "./dist/index.js"
+    "openpond-app-server": "./dist/app-server-entry.js"
   },
   "private": true,
   "scripts": {

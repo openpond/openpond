@@ -15,6 +15,7 @@ import {
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
 import { runAgentCompaction } from "@openpond/agent-runtime";
+import { createAppServer } from "@openpond/app-server";
 import {
   installAgentPackageIntoActiveProfile,
   loadOpenPondProfileLibrary,
@@ -34,6 +35,7 @@ import {
   VERSION,
 } from "./constants.js";
 import { runOpenPondServerCli } from "./cli.js";
+import { createOpenPondAppServer } from "./app-server-runtime.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { runHostedContextCompaction } from "./openpond/context-compaction/index.js";
 import { resolveContextCompactionAdapter } from "./openpond/context-adapter.js";
@@ -109,7 +111,7 @@ import {
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
-import { createLocalAgentRuntimeHost } from "./runtime/local-agent-runtime-host.js";
+import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
@@ -1648,33 +1650,36 @@ export async function createOpenPondServer(
 
   const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
 
-  const agentRuntime = createLocalAgentRuntimeHost({
-    createSession,
-    getSession,
-    turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
-    runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
-    sendTurn,
-    isSessionTurnActive: turnRunner.isSessionTurnActive,
-    waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
-    interruptSessionTurn,
-    resolveApproval,
-    inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
-    validateHarness: async () => {
-      const release = await resolveSelectedLocalHarnessRelease(store);
-      return release
-        ? {
-            valid: true,
-            workspaceId: release.workspaceId,
-            harnessRelease: release.harnessRelease,
-            agentSnapshot: release.agentSnapshot,
-          }
-        : { valid: false, reason: "No Local Harness release is selected." };
-    },
-    subscribeRuntimeEvents,
-    observeRuntimeOperation: (runtimeEvent) => {
-      logger.info("agent runtime operation", runtimeEvent);
-    },
-  });
+  const agentRuntime = createAppServer({
+    ports: createAgentRuntimePorts({
+      createSession,
+      getSession,
+      turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
+      runtimeEventsForSession: (sessionId) =>
+        store.runtimeEventsForSession(sessionId),
+      sendTurn,
+      isSessionTurnActive: turnRunner.isSessionTurnActive,
+      waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
+      interruptSessionTurn,
+      resolveApproval,
+      inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
+      validateHarness: async () => {
+        const release = await resolveSelectedLocalHarnessRelease(store);
+        return release
+          ? {
+              valid: true,
+              workspaceId: release.workspaceId,
+              harnessRelease: release.harnessRelease,
+              agentSnapshot: release.agentSnapshot,
+            }
+          : { valid: false, reason: "No Local Harness release is selected." };
+      },
+      subscribeRuntimeEvents,
+      observeRuntimeOperation: (runtimeEvent) => {
+        logger.info("agent runtime operation", runtimeEvent);
+      },
+    }),
+  }).runtime;
 
   const remoteAccess = createRemoteAccessManager({
     getActualPort: () => actualPort,
@@ -1939,7 +1944,10 @@ export async function createOpenPondServer(
 }
 
 if (isCliEntrypoint(import.meta.url)) {
-  void runOpenPondServerCli(createOpenPondServer).catch((error) => {
+  void runOpenPondServerCli({
+    createOpenPondServer,
+    createOpenPondAppServer,
+  }).catch((error) => {
     console.error(
       error instanceof Error ? error.stack ?? error.message : String(error)
     );

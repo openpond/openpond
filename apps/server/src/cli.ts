@@ -1,5 +1,5 @@
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
-import { attachAppServer, runAppServerJsonl } from "@openpond/app-server";
+import { runAppServerJsonl, type AppServerInstance } from "@openpond/app-server";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,6 +8,11 @@ import type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 import { parseListen } from "./utils.js";
 
 type CreateServer = (options: OpenPondServerOptions) => Promise<OpenPondServerInstance>;
+type CreateAgentServer = (options: { storeDir?: string }) => Promise<AppServerInstance>;
+type ServerCliFactories = {
+  createOpenPondServer: CreateServer;
+  createOpenPondAppServer: CreateAgentServer;
+};
 type CliMode = "app-server" | "serve" | "web";
 type ParsedCliArgs = {
   mode: CliMode;
@@ -183,7 +188,7 @@ Options:
 `);
 }
 
-export async function runOpenPondServerCli(createOpenPondServer: CreateServer): Promise<void> {
+export async function runOpenPondServerCli(factories: ServerCliFactories): Promise<void> {
   const args = parseCliArgs(process.argv.slice(2));
   if (args.help) {
     printHelp();
@@ -195,25 +200,18 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
     throw new Error("Could not find a built OpenPond web UI. Run `pnpm build:web` or pass --web-root.");
   }
 
-  const instance = await createOpenPondServer({
-    host: args.host,
-    port: args.mode === "app-server" ? 0 : args.port,
-    webRoot,
-    ...(args.storeDir ? { storeDir: args.storeDir } : {}),
-    silent: args.mode === "app-server",
-    httpEnabled: args.mode !== "app-server",
-  });
   if (args.mode === "app-server") {
-    await runAppServerJsonl({
-      appServer: attachAppServer({
-        runtime: instance.agentRuntime,
-        close: instance.close,
-      }),
-      readable: process.stdin,
-      writable: process.stdout,
-    });
+    await runAgentServer(factories.createOpenPondAppServer, args.storeDir);
     return;
   }
+
+  const instance = await factories.createOpenPondServer({
+    host: args.host,
+    port: args.port,
+    webRoot,
+    ...(args.storeDir ? { storeDir: args.storeDir } : {}),
+    httpEnabled: true,
+  });
   const webBaseUrl = args.mode === "web" ? browserBaseUrl(instance) : null;
   console.log(
     `OPENPOND_APP_SERVER_READY ${JSON.stringify({
@@ -249,5 +247,38 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
   process.on("SIGTERM", () => void shutdown());
   await new Promise<void>(() => {
     // Keep the CLI entrypoint alive when the server is launched outside Electron.
+  });
+}
+
+export async function runOpenPondAppServerCli(
+  createOpenPondAppServer: CreateAgentServer,
+): Promise<void> {
+  const rawArgs = process.argv.slice(2);
+  const args = parseCliArgs(
+    !rawArgs[0] || rawArgs[0].startsWith("-")
+      ? ["app-server", ...rawArgs]
+      : rawArgs,
+  );
+  if (args.help) {
+    printHelp();
+    return;
+  }
+  if (args.mode !== "app-server") {
+    throw new Error("The app-server entrypoint only accepts the app-server command.");
+  }
+  await runAgentServer(createOpenPondAppServer, args.storeDir);
+}
+
+async function runAgentServer(
+  createOpenPondAppServer: CreateAgentServer,
+  storeDir: string | null,
+): Promise<void> {
+  const appServer = await createOpenPondAppServer({
+    ...(storeDir ? { storeDir } : {}),
+  });
+  await runAppServerJsonl({
+    appServer,
+    readable: process.stdin,
+    writable: process.stdout,
   });
 }

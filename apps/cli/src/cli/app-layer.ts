@@ -9,6 +9,7 @@ import { openPondTuiNodeRuntimeMessage } from "./node-runtime";
 
 type CliOptions = Record<string, string | boolean>;
 type AppEntrypoint = { runner: string; args: string[]; cwd: string };
+type CompanionApp = "app-server" | "server" | "terminal";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,7 +25,9 @@ export async function runOpenPondServerCommand(
   options: CliOptions,
   rest: string[],
 ): Promise<void> {
-  const server = resolveAppEntrypoint("server");
+  const server = resolveAppEntrypoint(
+    mode === "app-server" ? "app-server" : "server",
+  );
   const args = [...server.args, mode, ...forwardedOptions(options), ...rest];
   if (mode === "web") {
     args.push(options.noOpen === true || options.noOpen === "true" ? "--print-access-url" : "--open-browser");
@@ -63,10 +66,19 @@ function findWorkspaceRoot(): string | null {
   return null;
 }
 
-function resolveAppEntrypoint(app: "server" | "terminal"): AppEntrypoint {
+function resolveAppEntrypoint(app: CompanionApp): AppEntrypoint {
   const workspaceRoot = findWorkspaceRoot();
   if (workspaceRoot) {
-    const source = path.join(workspaceRoot, "apps", app, "src", "index.ts");
+    const source =
+      app === "app-server"
+        ? path.join(
+            workspaceRoot,
+            "apps",
+            "server",
+            "src",
+            "app-server-entry.ts",
+          )
+        : path.join(workspaceRoot, "apps", app, "src", "index.ts");
     if (existsSync(source)) {
       const workspaceRequire = createRequire(path.join(workspaceRoot, "package.json"));
       return {
@@ -75,14 +87,34 @@ function resolveAppEntrypoint(app: "server" | "terminal"): AppEntrypoint {
         cwd: workspaceRoot,
       };
     }
-    const built = path.join(workspaceRoot, "apps", app, "dist", "index.js");
-    if (existsSync(built)) return { runner: process.execPath, args: [built], cwd: workspaceRoot };
+    const built =
+      app === "app-server"
+        ? path.join(
+            workspaceRoot,
+            "apps",
+            "server",
+            "dist",
+            "app-server-entry.js",
+          )
+        : path.join(workspaceRoot, "apps", app, "dist", "index.js");
+    if (existsSync(built)) {
+      return { runner: process.execPath, args: [built], cwd: workspaceRoot };
+    }
   }
 
   const installedCli = installedCliEntrypoint();
-  const embeddedMode = app === "server" ? "__server" : "__terminal";
+  const embeddedMode =
+    app === "app-server"
+      ? "__app-server"
+      : app === "server"
+        ? "__server"
+        : "__terminal";
   if (installedCli) {
-    return { runner: process.execPath, args: [installedCli, embeddedMode], cwd: path.dirname(path.dirname(installedCli)) };
+    return {
+      runner: process.execPath,
+      args: [installedCli, embeddedMode],
+      cwd: path.dirname(path.dirname(installedCli)),
+    };
   }
   if (isCompiledExecutable()) return { runner: process.execPath, args: [embeddedMode], cwd: process.cwd() };
   throw new Error(`Could not find the installed OpenPond ${app} companion.`);
