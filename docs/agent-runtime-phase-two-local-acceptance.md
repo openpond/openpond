@@ -28,6 +28,8 @@ Milestone commits on `feat/app-server-runtime-convergence`:
 - `2cc3c8a` — shared runtime boundary and portable Refiner extraction.
 - `faa5a29` — Local app-server JSON-RPC protocol, generated artifacts, CLI
   spelling, and shared HTTP/RPC runtime composition.
+- `b2e86b9` — handshake ordering, process/resilience metrics, shared compaction
+  lifecycle, final-source live acceptance, and this completion ledger.
 
 ## Automated protocol and recovery evidence
 
