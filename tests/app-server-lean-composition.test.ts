@@ -165,6 +165,140 @@ describe("lean app-server composition", () => {
     }
   });
 
+  test("forwards hosted Work tools to only the attached remote sandbox", async () => {
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-lean-app-server-remote-sandbox-"),
+    );
+    const files = new Map<string, string>();
+    const requests: Array<Record<string, unknown>> = [];
+    let providerRound = 0;
+    const server = await createOpenPondAppServer({
+      storeDir: path.join(directory, "state"),
+      workspaceDir: path.join(directory, "host-workspace"),
+      sandboxRequest: async (action) => {
+        requests.push(action as unknown as Record<string, unknown>);
+        if (action.type === "get") {
+          return {
+            sandbox: {
+              id: action.sandboxId,
+              state: "running",
+              status: "running",
+            },
+          };
+        }
+        if (action.type === "upload_file") {
+          const payload = action.payload as Record<string, unknown>;
+          files.set(String(payload.path), String(payload.contents ?? ""));
+          return { file: { path: payload.path } };
+        }
+        if (action.type === "download_file") {
+          const payload = action.payload as Record<string, unknown>;
+          return {
+            file: {
+              path: payload.path,
+              content: files.get(String(payload.path)) ?? "",
+            },
+          };
+        }
+        throw new Error(`Unexpected sandbox request: ${action.type}`);
+      },
+      streamOpenPondHostedChatTurn: async function* () {
+        providerRound += 1;
+        if (providerRound === 1) {
+          yield {
+            type: "tool_call_delta",
+            toolCalls: [{
+              id: "call_remote_write",
+              type: "function",
+              function: {
+                name: "work_write_file",
+                arguments: JSON.stringify({
+                  area: "outputs",
+                  path: "remote-proof.md",
+                  content: "# Remote proof\n",
+                }),
+              },
+            }],
+          };
+          yield { type: "finish", finishReason: "tool_calls" };
+          return;
+        }
+        if (providerRound === 2) {
+          yield {
+            type: "tool_call_delta",
+            toolCalls: [{
+              id: "call_remote_read",
+              type: "function",
+              function: {
+                name: "work_read_file",
+                arguments: JSON.stringify({
+                  area: "outputs",
+                  path: "remote-proof.md",
+                }),
+              },
+            }],
+          };
+          yield { type: "finish", finishReason: "tool_calls" };
+          return;
+        }
+        yield { type: "text_delta", text: "remote Work completed" };
+        yield { type: "finish", finishReason: "stop" };
+      },
+    });
+    cleanup.push({ close: server.close, directory });
+
+    const rpc = new AgentJsonRpcDispatcher(server.runtime);
+    await initializeRpc(rpc);
+    const thread = await rpc.handle({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "thread/start",
+      params: {
+        session: {
+          provider: "openpond",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+          experience: "work",
+          workspaceKind: "sandbox",
+          workspaceId: "sandbox-attached",
+          metadata: { workspaceTarget: "hybrid" },
+        },
+      },
+    });
+    const threadId = resultRecord(thread).thread.id as string;
+    const turn = await rpc.handle({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId,
+        input: {
+          prompt: "Write and read the proof file in remote compute.",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+        },
+      },
+    });
+
+    expect(resultRecord(turn).turn).toMatchObject({ status: "completed" });
+    expect(files.get("outputs/remote-proof.md")).toBe(
+      "# Remote proof\n",
+    );
+    expect(requests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "get", sandboxId: "sandbox-attached" }),
+        expect.objectContaining({
+          type: "upload_file",
+          sandboxId: "sandbox-attached",
+        }),
+        expect.objectContaining({
+          type: "download_file",
+          sandboxId: "sandbox-attached",
+        }),
+      ]),
+    );
+    expect(requests.every((request) => request.sandboxId === "sandbox-attached"))
+      .toBe(true);
+  }, 30_000);
+
   test("resolves command approval over RPC without an HTTP product host", async () => {
     const directory = await mkdtemp(
       path.join(os.tmpdir(), "openpond-lean-app-server-approval-"),

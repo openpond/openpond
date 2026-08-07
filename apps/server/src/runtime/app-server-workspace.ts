@@ -18,6 +18,11 @@ import { loadWorkspaceDiffAtPath } from "../workspace/workspace-diff.js";
 import { loadWorkspaceStateAtPath } from "../workspace/workspaces.js";
 import { handleActiveWorkspaceToolAction } from "../workspace-tools/workspace-tool-active-handlers.js";
 import { MUTATING_WORKSPACE_TOOL_ACTIONS } from "../workspace-tools/workspace-tool-action-sets.js";
+import { sandboxRequestPayload } from "../openpond/sandboxes.js";
+import {
+  executeAppServerSandboxTool,
+  type AppServerSandboxRequest,
+} from "./app-server-sandbox-tools.js";
 
 type AppServerWorkspaceLogger = {
   info(message: string, fields?: Record<string, unknown>): void;
@@ -29,6 +34,7 @@ export function createAppServerWorkspace(input: {
   logger: AppServerWorkspaceLogger;
   getSession(sessionId: string): Promise<Session>;
   appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void>;
+  sandboxRequest?: AppServerSandboxRequest;
 }) {
   const workspaceDir = path.resolve(input.workspaceDir);
   const locks = new Map<string, Promise<unknown>>();
@@ -112,9 +118,18 @@ export function createAppServerWorkspace(input: {
 
     try {
       if (request.action.startsWith("sandbox_")) {
-        throw new Error(
-          "Nested sandbox operations are not available inside the app-server placement.",
-        );
+        const result = await executeAppServerSandboxTool({
+          session,
+          request,
+          sandboxRequest: input.sandboxRequest ?? sandboxRequestPayload,
+        });
+        if (!result) {
+          throw new Error(
+            `Sandbox action ${request.action} is not available in app-server placement.`,
+          );
+        }
+        await recordResult(session, result, options.turnId, startedAt);
+        return result;
       }
       const { app, state } = await workspaceForSession(session);
       const result = await handleActiveWorkspaceToolAction({
