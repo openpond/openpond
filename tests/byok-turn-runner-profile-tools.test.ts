@@ -820,12 +820,12 @@ describe("BYOK turn runner profile and tools", () => {
     expect(streamInputs[0].toolChoice).toBe("auto");
     expect(streamInputs[0].tools.map((tool: any) => tool.function.name)).toEqual([
       "ask_user",
-      "resource_search",
+      "openpond_action_run",
+      "openpond_action_search",
       "resource_read",
+      "resource_search",
       "web_fetch",
       "web_search",
-      "openpond_action_search",
-      "openpond_action_run",
     ]);
     expect(streamInputs[1].messages).toContainEqual(
       expect.objectContaining({

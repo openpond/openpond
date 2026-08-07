@@ -10,16 +10,12 @@ import type {
 import {
   streamOpenAiCompatibleChatCompletion,
 } from "../openpond/openai-compatible-provider.js";
-import {
-  readProviderSecrets,
-  type ProviderSecrets,
-} from "../openpond/provider-secrets.js";
+import type { ProviderSecrets } from "../openpond/provider-secrets.js";
 import { LOCAL_ADAPTER_PROVIDER_ID } from "./local-adapter-models.js";
 import type { createTrainedAdapterChatRuntime } from "./trained-adapter-chat-runtime.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingModelRuntime(deps: {
-  providerSecretPaths: Parameters<typeof readProviderSecrets>[0];
   loadLocalByokRuntimeState(): Promise<{
     settings: ProviderSettings;
     secrets: ProviderSecrets;
@@ -30,29 +26,6 @@ export function createTrainingModelRuntime(deps: {
   >;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
 }) {
-  async function resolveFireworksCredential() {
-    const credential = (await readProviderSecrets(deps.providerSecretPaths))
-      .providers.fireworks;
-    if (!credential) return null;
-    const value = credential.source === "local_secret"
-      ? credential.value
-      : credential.source === "env" && credential.envVar
-        ? process.env[credential.envVar] ?? null
-        : null;
-    if (
-      !value?.trim()
-      || (credential.source !== "local_secret" && credential.source !== "env")
-    ) {
-      return null;
-    }
-    return {
-      value,
-      source: credential.source,
-      createdAt: credential.createdAt,
-      updatedAt: credential.updatedAt,
-    };
-  }
-
   async function trainingModelText(input: {
     model: ChatModelRef;
     reasoningEffort?: CodexReasoningEffort | "none" | null;
@@ -195,7 +168,6 @@ export function createTrainingModelRuntime(deps: {
     };
 
   return {
-    resolveFireworksCredential,
     trainingModelText,
     trainingModelStream,
   };

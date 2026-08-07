@@ -20,9 +20,8 @@ export type PortableTrainingAdapterComposition = {
 };
 
 /**
- * Desktop composition intentionally owns only local compute. Fireworks is a
- * provider-native destination and OpenPond Managed is a Sandbox API adapter;
- * neither gives the desktop raw provider credentials or worker leases.
+ * Desktop composition intentionally owns only local compute. OpenPond Managed
+ * is a Sandbox API adapter and does not give the desktop raw worker leases.
  */
 export function createPortableTrainingServerDependencies(input: {
   computeInventory?: () => Promise<ComputeInventory | null>;

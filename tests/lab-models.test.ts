@@ -210,7 +210,7 @@ describe("Lab Model workspace projection", () => {
       profileId: "default",
       taskset,
       modelId: "model_legacy_first",
-      preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModelId: "Qwen/Qwen3-0.6B",
       preferredBaseModel: managedPreference(),
       timestamp: "2026-07-12T00:00:00.000Z",
     });
@@ -218,7 +218,7 @@ describe("Lab Model workspace projection", () => {
       profileId: "default",
       taskset,
       modelId: "model_legacy_second",
-      preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModelId: "Qwen/Qwen3-0.6B",
       preferredBaseModel: managedPreference(),
       timestamp: "2026-07-13T00:00:00.000Z",
     });
@@ -226,7 +226,7 @@ describe("Lab Model workspace projection", () => {
       profileId: "default",
       taskset,
       modelId: "model_intentional_new",
-      preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModelId: "Qwen/Qwen3-0.6B",
       preferredBaseModel: managedPreference(),
       timestamp: "2026-07-14T00:00:00.000Z",
     });
@@ -437,7 +437,7 @@ function job(
     planId,
     bundleHash: "bundlehash0001",
     approvalId: `approval_${id}`,
-    destinationId: "fireworks",
+    destinationId: "openpond_managed",
     status: "succeeded",
     nonProduction: false,
     workerPid: null,
@@ -469,8 +469,8 @@ function lineage(
     planHash: "planhash0001",
     bundleHash: "bundlehash0001",
     recipeHash: "recipehash0001",
-    workerVersion: "fireworks-v1",
-    trainerVersion: "fireworks-v1",
+    workerVersion: "managed-rl-v2",
+    trainerVersion: "managed-rl-v2",
     importedAt: timestamp,
     frozenEvaluationArtifactId: `evaluation_${id}`,
     promotable: true,
@@ -498,7 +498,7 @@ function lineage(
 function managedPreference() {
   return {
     schemaVersion: "openpond.baseModelPreference.v1" as const,
-    modelId: "accounts/fireworks/models/qwen3-8b",
+    modelId: "Qwen/Qwen3-0.6B",
     revision: null,
     tokenizerRevision: null,
     chatTemplateHash: null,

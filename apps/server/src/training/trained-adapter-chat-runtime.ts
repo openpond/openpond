@@ -25,10 +25,6 @@ export function createTrainedAdapterChatRuntime(dependencies: {
     appliesTo(modelId: string | null | undefined): Promise<boolean>;
     stream: AdapterStream;
   };
-  fireworks: {
-    appliesTo(modelId: string | null | undefined): Promise<boolean>;
-    stream: AdapterStream;
-  };
   local: {
     stream: AdapterStream;
     close(): Promise<void>;
@@ -37,10 +33,6 @@ export function createTrainedAdapterChatRuntime(dependencies: {
   async function* stream(input: AdapterStreamInput) {
     if (await dependencies.managed.appliesTo(input.modelId)) {
       yield* dependencies.managed.stream(input);
-      return;
-    }
-    if (await dependencies.fireworks.appliesTo(input.modelId)) {
-      yield* dependencies.fireworks.stream(input);
       return;
     }
     yield* dependencies.local.stream(input);

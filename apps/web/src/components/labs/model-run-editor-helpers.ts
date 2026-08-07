@@ -287,8 +287,8 @@ function methodExecutionTargets(
     ),
     executionTarget(
       method,
-      "fireworks",
-      method === "grpo" ? "Fireworks RFT" : "Fireworks",
+      "openpond_managed",
+      "OpenPond Managed",
       destinations,
     ),
   ];
@@ -296,7 +296,7 @@ function methodExecutionTargets(
 
 function executionTarget(
   method: TrainingMethod,
-  destinationId: "local_cpu_fixture" | "fireworks",
+  destinationId: "local_cpu_fixture" | "openpond_managed",
   label: string,
   destinations: NonNullable<
     TrainingWorkspaceProps["training"]["payload"]
@@ -306,7 +306,7 @@ function executionTarget(
     (candidate) => candidate.destinationId === destinationId,
   );
   const destinationName =
-    destinationId === "local_cpu_fixture" ? "Local CPU" : "Fireworks";
+    destinationId === "local_cpu_fixture" ? "Local CPU" : "OpenPond Managed";
   const supportsMethod = Boolean(destination?.methods.includes(method));
   return {
     id: destinationId,

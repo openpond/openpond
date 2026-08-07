@@ -85,7 +85,6 @@ const TEAM_CHAT_PROVIDER_IDS = new Set<ChatProvider>([
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "custom-openai-compatible",
 ]);
 

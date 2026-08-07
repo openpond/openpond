@@ -19,10 +19,7 @@ import {
   type createTrainingDatasetSelection,
   toProjectedTrainingData,
 } from "./training-dataset-selection.js";
-import {
-  requireFireworksApprovalActor,
-  withAuthoritativeRecipeHashes,
-} from "./training-service-helpers.js";
+import { withAuthoritativeRecipeHashes } from "./training-service-helpers.js";
 
 export type TrainingStartInput = {
   modelId: string;
@@ -45,7 +42,6 @@ export function createTrainingPlanLifecycleService(deps: {
     typeof createTrainingDatasetSelection
   >["projectArtifactRows"];
   revalidateCompute?: () => Promise<void>;
-  resolveApprovalActor?: () => Promise<string | null>;
 }) {
   async function createPlan(
     input: Omit<TrainingStartInput, "maximumCostUsd">,
@@ -159,9 +155,7 @@ export function createTrainingPlanLifecycleService(deps: {
         `Training method ${recipe.method} has no executable approval contract.`,
       );
     }
-    const approvedBy = plan.destinationId === "fireworks"
-      ? await requireFireworksApprovalActor(deps.resolveApprovalActor)
-      : input.approvedBy ?? "local_user";
+    const approvedBy = input.approvedBy ?? "local_user";
     const maximumCostUsd = input.maximumCostUsd ?? plan.estimatedCostUsd;
     const approvalModel = recipe.method === "dpo"
       ? recipe.policyModel
@@ -208,16 +202,6 @@ export function createTrainingPlanLifecycleService(deps: {
     ) {
       throw new Error("Training approval does not match this plan.");
     }
-    if (plan.destinationId === "fireworks") {
-      const currentActor = await requireFireworksApprovalActor(
-        deps.resolveApprovalActor,
-      );
-      if (approval.approvedBy !== currentActor) {
-        throw new Error(
-          `Fireworks training was approved by ${approval.approvedBy}, but the signed-in OpenPond account is ${currentActor}. Re-approve before launch.`,
-        );
-      }
-    }
     const bundle = await deps.store.findTrainingBundleByPlanAndHash(
       plan.id,
       approval.bundleHash,
@@ -227,16 +211,6 @@ export function createTrainingPlanLifecycleService(deps: {
       (job) => job.approvalId === approval.id,
     );
     if (existing) {
-      if (
-        existing.destinationId === "fireworks"
-        && existing.status === "failed"
-      ) {
-        const retried = await deps.registry
-          .get(existing.destinationId)
-          .launch(plan, approval);
-        await deps.store.saveTrainingJob(retried);
-        return retried;
-      }
       try {
         return await deps.registry
           .get(existing.destinationId)
@@ -280,9 +254,7 @@ export function createTrainingPlanLifecycleService(deps: {
       );
     }
     const bundle = await buildBundle(plan.id);
-    const approvalActor = plan.destinationId === "fireworks"
-      ? await requireFireworksApprovalActor(deps.resolveApprovalActor)
-      : null;
+    const approvalActor = null;
     return TrainingPreparedStartSchema.parse({
       schemaVersion: "openpond.trainingPreparedStart.v1",
       plan,

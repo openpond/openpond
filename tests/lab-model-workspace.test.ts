@@ -32,7 +32,7 @@ describe("Lab Model workspace organization", () => {
       kind: "training",
       status: "failed",
       method: "grpo",
-      destinationId: "fireworks",
+      destinationId: "openpond_managed",
       taskset: {
         id: "taskset_fixture",
         revision: 1,
@@ -103,7 +103,7 @@ describe("Lab Model workspace organization", () => {
       kind: "training",
       status: "failed",
       method: "grpo",
-      destinationId: "fireworks",
+      destinationId: "openpond_managed",
       taskset: {
         id: "taskset_fixture",
         revision: 1,
@@ -143,7 +143,7 @@ function trainingJob(
     planId: "training_plan_fixture",
     bundleHash: "bundlehash0001",
     approvalId: `approval_${id}`,
-    destinationId: "fireworks",
+    destinationId: "openpond_managed",
     status: "failed",
     nonProduction: false,
     workerPid: null,

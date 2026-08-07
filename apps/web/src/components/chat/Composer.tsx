@@ -52,7 +52,6 @@ import {
   replaceActiveProfileSkillInvocation,
 } from "../../lib/profile-skill-invocations";
 import { insertVoiceTranscript } from "../../lib/voice-text";
-import { isDesktopShell } from "../app-shell/WindowControls";
 import {
   ComposerPinnedWorkspaceContext,
   ComposerProjectTargetControl,
@@ -316,8 +315,6 @@ export function Composer({
         ? "Ask anything"
         : "What should we work on?"
       : "Ask for follow-up changes";
-  const showLocalWorkGuidance =
-    experience === "work" && surface === "chat" && isDesktopShell();
   const repositoryWork =
     experience === "development" ||
     (experience === "work" && projectTarget.value !== "none");
@@ -1688,12 +1685,6 @@ export function Composer({
           {composeNotice.message}
         </div>
       )}
-      {showLocalWorkGuidance ? (
-        <p className="composer-local-work-guidance">
-          Work can run against a Local project or a Hosted sandbox. Choose the
-          execution target below before starting a new task.
-        </p>
-      ) : null}
       <div className="composer-input-shell" ref={inputShellRef}>
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu

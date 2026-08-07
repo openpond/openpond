@@ -4,16 +4,16 @@ import {
   CanonicalAgentEventSchema,
   canonicalHash,
   canonicalEventHash,
-  createAgentRuntimeService,
   type CanonicalAgentEvent,
   type AgentProtocolCapabilities,
-  type AgentRuntimeHost,
+  type AgentRuntimeServicePorts,
   type JsonRpcNotification,
 } from "@openpond/agent-runtime";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { z } from "zod";
 
-export function createLocalAgentRuntimeHost(deps: {
+export function createAgentRuntimePorts(deps: {
+  placement?: AgentProtocolCapabilities["placement"];
   createSession(payload: unknown): Promise<Session>;
   getSession(sessionId: string): Promise<Session>;
   turnsForSession(sessionId: string): Promise<Turn[]>;
@@ -27,7 +27,7 @@ export function createLocalAgentRuntimeHost(deps: {
   validateHarness(): Promise<unknown>;
   subscribeRuntimeEvents(listener: (event: RuntimeEvent) => void): () => void;
   observeRuntimeOperation?(event: import("@openpond/agent-runtime").AgentRuntimeTelemetryEvent): void;
-}): AgentRuntimeHost {
+}): AgentRuntimeServicePorts<Session, Turn, RuntimeEvent, Approval> {
   const toolCatalogHash = canonicalHash([]);
   const capabilities = async (params?: unknown): Promise<AgentProtocolCapabilities> => {
     const parsed = z.object({ threadId: z.string().trim().min(1).optional() }).passthrough().safeParse(params ?? {});
@@ -44,7 +44,7 @@ export function createLocalAgentRuntimeHost(deps: {
       : toolCatalogHash;
     return {
       protocolVersion: AGENT_PROTOCOL_VERSION,
-      placement: "local",
+      placement: deps.placement ?? "local",
       methods: [...AGENT_RPC_METHODS],
       features: {
         streamingEvents: true,
@@ -61,7 +61,7 @@ export function createLocalAgentRuntimeHost(deps: {
     };
   };
 
-  return createAgentRuntimeService({
+  return {
     capabilities,
     createThread: deps.createSession,
     readThread: deps.getSession,
@@ -77,7 +77,7 @@ export function createLocalAgentRuntimeHost(deps: {
     subscribeEvents: deps.subscribeRuntimeEvents,
     eventNotification: runtimeEventNotification,
     telemetry: deps.observeRuntimeOperation,
-  });
+  };
 }
 
 function runtimeEventNotification(event: RuntimeEvent): JsonRpcNotification {

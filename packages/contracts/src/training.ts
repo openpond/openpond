@@ -68,7 +68,6 @@ export const TrainingMethodSchema = z.enum([
 export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
   "local_cpu_fixture",
-  "fireworks",
   "openpond_managed",
 ]);
 
@@ -810,55 +809,6 @@ export const ModelBindingSchema = z.object({
   metadata: MetadataSchema,
 });
 
-export const FireworksModelServingSessionSchema = z.object({
-  schemaVersion: z.literal("openpond.fireworksModelServingSession.v1"),
-  id: IdSchema,
-  runtimeId: IdSchema,
-  profileId: IdSchema,
-  modelArtifactLineageId: IdSchema,
-  jobId: IdSchema,
-  tasksetId: IdSchema,
-  provider: z.literal("fireworks"),
-  state: z.enum(["starting", "ready", "stopping", "stopped", "failed"]),
-  accountId: IdSchema.nullable(),
-  baseModel: IdSchema,
-  outputModel: IdSchema,
-  deploymentId: IdSchema,
-  deployedModelId: IdSchema.nullable(),
-  acceleratorType: z.literal("NVIDIA_H100_80GB"),
-  acceleratorCount: z.literal(1),
-  hourlyCostUsd: z.number().positive(),
-  idleTimeoutSeconds: z.number().int().min(60).max(3_600),
-  maxDurationSeconds: z.number().int().min(60).max(3_600),
-  maxEstimatedCostUsd: z.number().positive(),
-  estimatedCostUsd: z.number().nonnegative(),
-  createdAt: TimestampSchema,
-  readyAt: TimestampSchema.nullable(),
-  lastUsedAt: TimestampSchema.nullable(),
-  stopRequestedAt: TimestampSchema.nullable(),
-  stoppedAt: TimestampSchema.nullable(),
-  updatedAt: TimestampSchema,
-  stopReason: z
-    .enum([
-      "user",
-      "idle",
-      "duration",
-      "budget",
-      "restart_cleanup",
-      "startup_error",
-      "shutdown",
-    ])
-    .nullable(),
-  error: z.string().trim().min(1).max(5_000).nullable(),
-});
-
-export const TrainingCredentialRefSchema = z.object({
-  destinationId: z.string().trim().min(1),
-  configured: z.boolean(),
-  createdAt: TimestampSchema.nullable(),
-  updatedAt: TimestampSchema.nullable(),
-});
-
 export const TrainingActivityResponseSchema = z.object({
   schemaVersion: z.literal("openpond.trainingActivity.v1"),
   profileId: IdSchema,
@@ -868,7 +818,6 @@ export const TrainingActivityResponseSchema = z.object({
     creations: z.number().int().nonnegative(),
     minerRuns: z.number().int().nonnegative(),
     datasetImports: z.number().int().nonnegative(),
-    servingSessions: z.number().int().nonnegative(),
   }),
   revision: HashSchema,
   generatedAt: TimestampSchema,
@@ -898,10 +847,8 @@ export const TrainingStateResponseSchema = z.object({
   models: z.array(ModelArtifactLineageSchema),
   rolloutReceipts: z.array(RolloutTrajectoryReceiptSchema).default([]),
   modelBindings: z.array(ModelBindingSchema).default([]),
-  servingSessions: z.array(FireworksModelServingSessionSchema).default([]),
   destinations: z.array(TrainingDestinationCapabilitiesSchema),
   baseModelCandidates: z.array(BaseModelCandidateSchema).default([]),
-  credentialRefs: z.array(TrainingCredentialRefSchema),
   activityRevision: HashSchema.optional(),
   generatedAt: TimestampSchema,
 });
@@ -976,8 +923,5 @@ export type TrainingArtifact = z.infer<typeof TrainingArtifactSchema>;
 export type ModelArtifactLineage = z.infer<typeof ModelArtifactLineageSchema>;
 export type ModelBindingRole = z.infer<typeof ModelBindingRoleSchema>;
 export type ModelBinding = z.infer<typeof ModelBindingSchema>;
-export type FireworksModelServingSession = z.infer<
-  typeof FireworksModelServingSessionSchema
->;
 export type TrainingStateResponse = z.infer<typeof TrainingStateResponseSchema>;
 export type TrainingActivityResponse = z.infer<typeof TrainingActivityResponseSchema>;

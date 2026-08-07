@@ -43,10 +43,12 @@ for (const parent of ["apps", "packages"]) {
     const manifestPath = path.join(packageDirectory, "package.json");
     try {
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        bin?: unknown;
         exports?: unknown;
         main?: string;
       };
       const targets: string[] = [];
+      collectManifestTargets(manifest.bin, targets);
       collectManifestTargets(manifest.exports, targets);
       if (manifest.main) targets.push(manifest.main);
       for (const target of targets) addManifestTarget(packageDirectory, target);

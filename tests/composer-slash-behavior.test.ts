@@ -503,56 +503,6 @@ describe("composer slash behavior", () => {
     expect(markup).toContain("Provider setup is required before this action can run.");
   });
 
-  test("desktop Work composer explains its local runtime above the input", () => {
-    vi.stubGlobal("window", {
-      openpond: { closeWindow: () => undefined },
-    });
-
-    try {
-      const markup = renderToStaticMarkup(
-        createElement(Composer, {
-          experience: "work",
-          mode: "start",
-          prompt: "",
-          mentionApps: [],
-          selectedMentionAppId: null,
-          contextWindowStatus,
-          goalRuntime: null,
-          busy: false,
-          running: false,
-          connection: null,
-          provider: "openpond",
-          model: "openpond-chat",
-          projectTarget,
-          actionCatalog: [],
-          workspaceTarget,
-          codexPermissionMode: "default",
-          codexReasoningEffort: "medium",
-          onProviderChange: noop,
-          onProjectTargetChange: noop,
-          onWorkspaceTargetChange: noop,
-          onModelChange: noop,
-          onCodexPermissionModeChange: noop,
-          onCodexReasoningEffortChange: noop,
-          onPromptChange: noop,
-          onMentionAppSelect: noop,
-          showToast: noop,
-          onSubmit: async () => true,
-          onStop: noop,
-        }),
-      );
-
-      const guidanceIndex = markup.indexOf("composer-local-work-guidance");
-      expect(markup).toContain(
-        "Work can run against a Local project or a Hosted sandbox. Choose the execution target below before starting a new task.",
-      );
-      expect(guidanceIndex).toBeGreaterThan(-1);
-      expect(guidanceIndex).toBeLessThan(markup.indexOf("composer-input-shell"));
-    } finally {
-      vi.unstubAllGlobals();
-    }
-  });
-
   test("resolves slash action target from a local project linked to Cloud", () => {
     expect(
       openPondActionProjectTarget({

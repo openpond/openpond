@@ -47,7 +47,6 @@ const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "custom-openai-compatible",
 ] as const satisfies readonly ChatProvider[];
 

@@ -10,7 +10,7 @@
   - a **Model** owns the base policy and any trained versions produced by runs.
 - Treat the Taskset as a module and release boundary, not as a code-authoring
   burden for the user. Emit a content-addressed bundle that native OpenPond,
-  Prime Verifiers, or a later Harbor adapter can load without changing task
+  OpenPond Managed workers or a later adapter can load without changing task
   semantics.
 - Treat a task as an executable contract, not just a row. Specify the
   policy-facing instruction, initial state, Harness/tools, verifier, task-owned

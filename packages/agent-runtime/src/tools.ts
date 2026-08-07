@@ -31,7 +31,11 @@ export type AgentToolCatalogProjectionInput = {
   displayLabel?: string;
   unavailableReason?: string | null;
   executorAvailable: boolean;
+  validateArguments?: (input: unknown) => unknown;
+  execute?: (input: unknown, context: AgentToolExecutionContext) => Promise<unknown>;
 };
+
+export type AgentToolCatalogProjection = ReturnType<typeof createAgentToolCatalogProjection>;
 
 export function createAgentToolCatalog(definitions: readonly AgentToolDefinition[]) {
   const byName = new Map<string, AgentToolDefinition>();
@@ -107,9 +111,26 @@ export function createAgentToolCatalogProjection(
     unavailableReason: tool.unavailableReason ?? null,
   }));
   return {
+    byName: new Map(tools.map((tool) => [tool.name, tool])),
     tools,
     modelTools,
     capabilities,
     hash: canonicalHash({ modelTools, capabilities }),
   };
+}
+
+export async function executeProjectedAgentTool(
+  catalog: AgentToolCatalogProjection,
+  input: { name: string; arguments: unknown; context: AgentToolExecutionContext },
+): Promise<unknown> {
+  const definition = catalog.byName.get(input.name);
+  if (!definition) throw new Error(`Unknown agent tool: ${input.name}.`);
+  if (definition.unavailableReason) {
+    throw new Error(`Agent tool ${input.name} is unavailable: ${definition.unavailableReason}`);
+  }
+  if (!definition.execute) throw new Error(`Agent tool ${input.name} has no executor.`);
+  const validated = definition.validateArguments
+    ? definition.validateArguments(input.arguments)
+    : input.arguments;
+  return definition.execute(validated, input.context);
 }

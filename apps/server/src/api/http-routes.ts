@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { createReadStream } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { HttpBodyError, applyCorsHeaders, hasAuth, readJson, sendBinary, sendJson, sendText } from "./http.js";
+import { HttpBodyError, applyCorsHeaders, hasAuth, sendBinary, sendJson, sendText } from "./http.js";
 import type { HttpRouteDeps } from "./http-route-types.js";
 import { AUTHENTICATED_ROUTE_TABLE } from "./routes/index.js";
 import {
@@ -98,16 +98,6 @@ export function createHttpRequestHandler(
           version,
           runtimeVersion,
         });
-        return;
-      }
-      if (
-        request.method === "POST" &&
-        requestUrl.pathname === "/v1/training/fireworks/rft/init"
-      ) {
-        const result = await deps.fireworksRftPayload(
-          await readJson(request, { maxBytes: 1024 * 1024 }),
-        );
-        sendJson(response, result.status, result.body);
         return;
       }
       if (request.method === "GET" && requestUrl.pathname === "/v1/assets/workspace-image") {

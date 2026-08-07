@@ -18,6 +18,7 @@ import {
   createAgentToolCatalogProjection,
   runProviderRound,
   runProviderRoundLoop,
+  type AgentToolCatalogProjection,
 } from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
@@ -38,7 +39,6 @@ import {
 } from "../../openpond/native-tool-calls.js";
 import {
   enabledModelToolDefinitions,
-  modelToolDefinitionToHostedTool,
   type ModelToolDefinition,
 } from "../../openpond/model-tool-registry.js";
 import type { ProfileSkillInstructionMode } from "../../openpond/hosted-turn-helpers.js";
@@ -141,7 +141,7 @@ export function createHostedToolLoopRuntime(deps: {
     mentionedApps: OpenPondApp[];
     userPrompt: string;
     turnMetadata: Turn["metadata"];
-    toolDefinitions: Map<string, ModelToolDefinition>;
+    toolCatalog: AgentToolCatalogProjection;
     invalidRequestCounts: Map<string, number>;
     toolCalls: import("../../openpond/native-tool-calls.js").NativeModelToolCall[];
   }): Promise<NativeModelToolResult[]>;
@@ -252,12 +252,6 @@ export function createHostedToolLoopRuntime(deps: {
           )
         )
       : [];
-    const nativeTools = nativeToolDefinitions.map(
-      modelToolDefinitionToHostedTool
-    );
-    const nativeToolDefinitionByName = new Map(
-      nativeToolDefinitions.map((definition) => [definition.name, definition])
-    );
     const effectiveToolCatalog = createAgentToolCatalogProjection(
       nativeToolDefinitions.map((definition) => ({
         name: definition.name,
@@ -265,7 +259,32 @@ export function createHostedToolLoopRuntime(deps: {
         inputSchema: definition.parameters,
         placement: "local" as const,
         executorAvailable: typeof definition.execute === "function",
+        execute: (args, context) =>
+          definition.execute({
+            session: params.session,
+            turnId: context.turnId,
+            turnPermissions: params.turnPermissions,
+            provider: params.provider,
+            model: params.model,
+            callId: context.callId,
+            args: args as Record<string, unknown>,
+            signal: context.signal,
+            workspaceDiffBaseline: params.workspaceDiffBaseline,
+            mentionedApps: params.mentionedApps,
+            userPrompt: params.userPrompt,
+            turnMetadata: params.turn.metadata,
+          }),
       })),
+    );
+    const nativeTools: HostedChatTool[] = effectiveToolCatalog.modelTools.map(
+      (tool) => ({
+        type: "function",
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.inputSchema,
+        },
+      }),
     );
     await deps.recordTurnToolCatalog?.({
       turnId: params.turn.id,
@@ -462,7 +481,7 @@ export function createHostedToolLoopRuntime(deps: {
           mentionedApps: params.mentionedApps,
           userPrompt: params.userPrompt,
           turnMetadata: params.turn.metadata,
-          toolDefinitions: nativeToolDefinitionByName,
+          toolCatalog: effectiveToolCatalog,
           invalidRequestCounts,
           toolCalls: nativeToolCalls,
         });

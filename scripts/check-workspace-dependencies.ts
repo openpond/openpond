@@ -24,9 +24,13 @@ const builtin = new Set([
 async function main(): Promise<void> {
   const packageDirs = [root, ...await workspacePackageDirectories()];
   const workspaceNames = new Set<string>();
+  const workspaceNameByDirectory = new Map<string, string>();
   for (const packageDir of packageDirs) {
     const manifest = await readManifest(packageDir);
-    if (manifest.name) workspaceNames.add(manifest.name);
+    if (manifest.name) {
+      workspaceNames.add(manifest.name);
+      workspaceNameByDirectory.set(packageDir, manifest.name);
+    }
   }
 
   const errors: string[] = [];
@@ -52,7 +56,22 @@ async function main(): Promise<void> {
       const source = await fs.readFile(file, "utf8");
       for (const imported of ts.preProcessFile(source, true, true).importedFiles) {
         const specifier = imported.fileName;
-        if (!specifier || specifier.startsWith(".") || specifier.startsWith("/") || builtin.has(specifier)) continue;
+        if (!specifier || specifier.startsWith("/") || builtin.has(specifier)) continue;
+        if (specifier.startsWith(".")) {
+          if (!production) continue;
+          const target = path.resolve(path.dirname(file), specifier);
+          const owner = packageDirs
+            .filter((candidate) => target.startsWith(`${candidate}${path.sep}`))
+            .sort((left, right) => right.length - left.length)[0];
+          if (!owner || owner === packageDir) continue;
+          const packageName = workspaceNameByDirectory.get(owner);
+          if (!packageName || declared.has(packageName) ||
+              (bundledSource.has(packageName) && development.has(packageName))) continue;
+          errors.push(
+            `${relative(file)} imports workspace package ${packageName} through relative source path ${specifier} without declaring a supported package boundary in ${relative(path.join(packageDir, "package.json"))}`,
+          );
+          continue;
+        }
         const packageName = importedPackageName(specifier);
         if (packageName === manifest.name) continue;
         if (declared.has(packageName) || (bundledSource.has(packageName) && development.has(packageName))) continue;

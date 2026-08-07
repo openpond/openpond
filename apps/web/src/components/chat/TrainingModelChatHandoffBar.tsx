@@ -1,4 +1,3 @@
-import type { FireworksModelServingSession } from "@openpond/contracts";
 import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { selectedTrainingModelChatTask } from "../../lib/training-model-chat-handoff";
 import { ArrowLeft, ArrowRight, X } from "../icons";
@@ -8,15 +7,11 @@ export function TrainingModelChatHandoffBar({
   handoff,
   onDismiss,
   onSelectTask,
-  servingSession,
-  onStopServing,
 }: {
   busy: boolean;
   handoff: TrainingModelChatHandoff;
   onDismiss: () => void;
   onSelectTask: (index: number) => void;
-  servingSession?: FireworksModelServingSession | null;
-  onStopServing?: (servingSessionId: string) => void;
 }) {
   const task = selectedTrainingModelChatTask(handoff);
   const position = handoff.selectedTaskIndex + 1;
@@ -29,9 +24,6 @@ export function TrainingModelChatHandoffBar({
           {task
             ? `${splitLabel(task.split)} · ${position} of ${handoff.tasks.length} · New chat per question`
             : "Ask the imported model directly"}
-          {servingSession
-            ? ` · Fireworks ${servingSession.state} · $${servingSession.estimatedCostUsd.toFixed(4)}`
-            : ""}
         </small>
       </div>
       <div className="training-chat-handoff-actions">
@@ -64,16 +56,6 @@ export function TrainingModelChatHandoffBar({
               <ArrowRight size={14} />
             </button>
           </>
-        ) : null}
-        {servingSession && ["starting", "ready"].includes(servingSession.state) ? (
-          <button
-            className="training-chat-handoff-stop"
-            disabled={busy}
-            type="button"
-            onClick={() => onStopServing?.(servingSession.id)}
-          >
-            Stop serving
-          </button>
         ) : null}
         <button
           type="button"

@@ -114,9 +114,9 @@ describe("OpenAI-compatible provider adapter", () => {
       ]);
     };
     for await (const _delta of streamOpenAiCompatibleChatCompletion({
-      ...providerState("https://api.fireworks.ai/inference/v1", "fireworks"),
-      providerId: "fireworks",
-      modelId: "accounts/fireworks/models/qwen3-0p6b",
+      ...providerState("https://api.together.xyz/v1", "together"),
+      providerId: "together",
+      modelId: "Qwen/Qwen3-Next-80B-A3B-Instruct",
       messages: [{ role: "user", content: "Solve the problem." }],
       reasoningEffort: "none",
       maxOutputTokens: 2_048,
@@ -127,7 +127,6 @@ describe("OpenAI-compatible provider adapter", () => {
       // Drain the stream.
     }
     expect(body).toMatchObject({
-      reasoning_effort: "none",
       max_tokens: 2_048,
       temperature: 0.8,
       top_p: 0.95,

@@ -24,7 +24,6 @@ const VERIFIED_NATIVE_TOOL_PROVIDERS = new Set<ChatProvider>([
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "local-adapter",
 ]);
 

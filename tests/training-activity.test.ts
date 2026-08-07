@@ -22,7 +22,6 @@ describe("training activity projection", () => {
       creations: 1,
       minerRuns: 1,
       datasetImports: 1,
-      servingSessions: 1,
     });
     expect(reordered.revision).toBe(first.revision);
   });
@@ -42,7 +41,6 @@ describe("training activity projection", () => {
         creations: [],
         minerRuns: [],
         datasetImports: [],
-        servingSessions: [],
       },
     });
 
@@ -53,7 +51,7 @@ describe("training activity projection", () => {
 
 function activityState(): Pick<
   TrainingStateResponse,
-  "jobs" | "creations" | "minerRuns" | "datasetImports" | "servingSessions"
+  "jobs" | "creations" | "minerRuns" | "datasetImports"
 > {
   return {
     jobs: [
@@ -69,9 +67,6 @@ function activityState(): Pick<
     datasetImports: [
       lifecycleItem({ id: "import-a", status: "validating" }),
     ] as TrainingStateResponse["datasetImports"],
-    servingSessions: [
-      lifecycleItem({ id: "serving-a", state: "ready" }),
-    ] as TrainingStateResponse["servingSessions"],
   };
 }
 

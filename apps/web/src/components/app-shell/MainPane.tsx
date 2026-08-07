@@ -237,7 +237,6 @@ export function MainPane({
   setMentionedAppId,
   showToast,
   sendPrompt,
-  onStartScheduledWorkChat,
   stopTurn,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
@@ -781,10 +780,6 @@ export function MainPane({
       handoff={trainingChatHandoff}
       onDismiss={onTrainingChatHandoffDismiss}
       onSelectTask={onTrainingChatTaskSelect}
-      onStopServing={(sessionId) =>
-        void training.actions.stopModelServing(sessionId)
-      }
-      servingSessions={training.payload?.servingSessions ?? []}
     />
   );
   const createImproveActions = useMemo<ComposerCreateImproveActions>(
@@ -1492,7 +1487,6 @@ export function MainPane({
             detailExpanded={diffPanelExpanded}
             onDetailResizeStart={onDiffPanelResizeStart}
             onToggleDetailExpanded={onToggleDiffPanelExpanded}
-            onStartWorkChat={onStartScheduledWorkChat}
           />
         </Suspense>
       ) : view === "outputs" ? (

@@ -82,7 +82,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
-  "('local_cpu_fixture', 'fireworks', 'openpond_managed')";
+  "('local_cpu_fixture', 'openpond_managed')";
 
 export class SqliteTrainingStore extends SqliteDatasetStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
@@ -945,7 +945,7 @@ function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
   const readiness = isRecord(value.readiness) ? value.readiness : value;
   if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
   const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
-    (destinationClass) => destinationClass !== "openpond_managed",
+    (destinationClass) => destinationClass !== "openpond_managed" && destinationClass !== "hosted_byok",
   );
   if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
   const normalizedReadiness = { ...readiness, compatibleDestinationClasses };
@@ -967,9 +967,9 @@ function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
   };
 }
 
-function retiredManagedServingSource(value: unknown): "openpond_training" | null {
+function retiredManagedServingSource(value: unknown): "openpond_fireworks" | null {
   if (!isRecord(value) || !isRecord(value.managedServing)) return null;
-  return value.managedServing.source === "openpond_training" ? "openpond_training" : null;
+  return value.managedServing.source === "openpond_fireworks" ? "openpond_fireworks" : null;
 }
 
 function isRetiredTrainingDestination(value: unknown): boolean {

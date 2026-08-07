@@ -14,13 +14,8 @@ import type { SqliteStore } from "../store/store.js";
 import {
   PortablePreparationTrainingDestination,
 } from "./destinations.js";
-import { listTrainingDestinationSecretRefs, writeTrainingDestinationSecret } from "./destination-secrets.js";
 import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
-import { FireworksTrainingDestination, type FireworksProviderCredential } from "./fireworks-destination.js";
-import { createFireworksRftEnvironment, validateFireworksRftCallbackCredential } from "./fireworks-rft-environment.js";
-import type { FireworksRftEvaluatorProvisioner } from "./fireworks-rft-evaluator.js";
 import { createCrossSystemExpertBootstrapService } from "./cross-system-operations/expert-bootstrap-service.js";
-import { createFireworksServingService } from "./fireworks-serving-service.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
 import type { ManagedModelBindingCallbacks } from "./managed-model-binding-coordinator.js";
 import {
@@ -36,10 +31,7 @@ import { createPortableTrainingServiceSupport } from "./portable-training-servic
 import { createTrainingArtifactExportService } from "./training-artifact-export-service.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
 import { createTrainingPlanLifecycleService } from "./training-plan-lifecycle-service.js";
-import {
-  createTrainingModelConfigurationService,
-  stopActiveFireworksServingSessions,
-} from "./training-model-controls.js";
+import { createTrainingModelConfigurationService } from "./training-model-controls.js";
 import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingService(deps: {
@@ -51,9 +43,7 @@ export function createTrainingService(deps: {
   resolveModelPath?: (modelId: string, revision: string) => Promise<string | null>;
   modelArtifactStore?: () => Promise<string | null>;
   computeInventory?: () => Promise<ComputeInventory | null>;
-  resolveFireworksCredential?: () => Promise<FireworksProviderCredential | null>;
   resolveApprovalActor?: () => Promise<string | null>;
-  recordFireworksCredentialValidation?: (error: string | null) => Promise<void>;
   gradeTaskAttempt?: (input: {
     tasksetId: string;
     taskId: string;
@@ -65,9 +55,6 @@ export function createTrainingService(deps: {
     taskId: string;
     split: "train" | "frozen_eval";
   }) => Promise<import("@openpond/contracts").TaskDataRecord>;
-  fireworksRequest?: typeof fetch;
-  provisionFireworksRftEvaluator?: FireworksRftEvaluatorProvisioner;
-  fireworksRftPublicBaseUrl?: () => string | null;
   tasksetWorkRuntime?: TasksetWorkAttemptRuntime;
   prepareModel?: (input: {
     modelId: string;
@@ -92,10 +79,7 @@ export function createTrainingService(deps: {
     updateModelConfiguration,
   } = createTrainingModelConfigurationService(deps.store);
   const resolveTaskset = (id: string) => deps.store.getTaskset(id);
-  const {
-    projectArtifactRows,
-    resolveTrainingSelection,
-  } = createTrainingDatasetSelection({
+  const { projectArtifactRows } = createTrainingDatasetSelection({
     storeDir: deps.storeDir,
     projectDatasetArtifact: deps.projectDatasetArtifact,
   });
@@ -114,44 +98,13 @@ export function createTrainingService(deps: {
       modelAllowlist: ["Qwen/Qwen3-0.6B"],
     }),
   );
-  const fireworks = new FireworksTrainingDestination({
-    store: deps.store,
-    storeDir: deps.storeDir,
-    resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
-    recordCredentialValidation: deps.recordFireworksCredentialValidation,
-    gradeAttempt: deps.gradeTaskAttempt,
-    resolveTrainingSelection,
-    resolveTask: deps.resolveDatasetTask,
-    request: deps.fireworksRequest,
-    provisionRftEvaluator: deps.provisionFireworksRftEvaluator,
-    rftPublicBaseUrl: deps.fireworksRftPublicBaseUrl,
-    tasksetWorkRuntime: deps.tasksetWorkRuntime,
-  });
-  const fireworksRftEnvironment = createFireworksRftEnvironment({
-    store: deps.store,
-    resolveTask: deps.resolveDatasetTask,
-    gradeAttempt: deps.gradeTaskAttempt,
-    resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
-    request: deps.fireworksRequest,
-    validateCallbackCredential: (input) =>
-      validateFireworksRftCallbackCredential({
-        ...input,
-        request: deps.fireworksRequest,
-      }),
-  });
   const expertBootstrap = createCrossSystemExpertBootstrapService({
     store: deps.store,
     storeDir: deps.storeDir,
     resolveApprovalActor: deps.resolveApprovalActor,
   });
-  const fireworksServing = createFireworksServingService({
-    store: deps.store,
-    resolveCredential: deps.resolveFireworksCredential ?? (async () => null),
-    request: deps.fireworksRequest,
-  });
   const modelBindings = createTrainingModelBindingService({
     store: deps.store,
-    fireworksServing,
     deactivateManagedBinding: deps.deactivateManagedBinding,
     reactivateManagedBinding: deps.reactivateManagedBinding,
     activateManagedBinding: deps.activateManagedBinding,
@@ -161,7 +114,6 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     localCpu,
   });
-  registry.register(fireworks);
   deps.registerDestinations?.(registry);
   const portableAdapters = createDestinationTrainingEngineRegistry({
     destinations: registry,
@@ -172,8 +124,6 @@ export function createTrainingService(deps: {
   });
   deps.registerPortableAdapters?.(portableAdapters);
   void localCpu.reconcile();
-  void fireworks.reconcile();
-  void fireworksServing.reconcile();
 
   async function destinations() { return Promise.all(registry.list().map((destination) => destination.capabilities())); }
 
@@ -202,7 +152,6 @@ export function createTrainingService(deps: {
     registry,
     projectArtifactRows,
     revalidateCompute: deps.revalidateCompute,
-    resolveApprovalActor: deps.resolveApprovalActor,
   });
 
   async function deleteTaskset(tasksetId: string) {
@@ -217,10 +166,6 @@ export function createTrainingService(deps: {
     const relatedJobs = jobs.filter((job) => planIds.has(job.planId));
     const activeJob = relatedJobs.find((job) => ["queued", "starting", "running", "cancelling", "reconciling"].includes(job.status));
     if (activeJob) throw new Error("Cancel the active training job before deleting this model.");
-    await stopActiveFireworksServingSessions(fireworksServing, {
-      tasksetId,
-      reason: "Delete this model",
-    });
     const jobIds = new Set(relatedJobs.map((job) => job.id));
     const managedTrainingRoot = path.resolve(deps.storeDir, "training");
     for (const artifact of artifacts.filter((artifact) => jobIds.has(artifact.jobId))) {
@@ -275,21 +220,13 @@ export function createTrainingService(deps: {
   });
   void portableModelRuns.reconcileActive({ force: true });
 
-  async function activity(profileId?: string) {
-    await Promise.all([
-      fireworks.reconcile(),
-      fireworksServing.reconcile(),
-      portableModelRuns.reconcileActive(),
-    ]);
-    const [jobs, servingSessions] = await Promise.all([
-      deps.store.listTrainingJobs(),
-      fireworksServing.list(profileId),
-    ]);
-    return { jobs, servingSessions };
+  async function activity() {
+    await portableModelRuns.reconcileActive();
+    return { jobs: await deps.store.listTrainingJobs() };
   }
 
-  async function state(profileId?: string) {
-    const activeState = await activity(profileId);
+  async function state() {
+    const activeState = await activity();
     const [
       plans,
       bundles,
@@ -298,11 +235,8 @@ export function createTrainingService(deps: {
       models,
       rolloutReceipts,
       modelBindings,
-      servingSessions,
       destinationCapabilities,
       computeInventory,
-      secretRefs,
-      fireworksCredential,
     ] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingBundles(),
@@ -311,11 +245,8 @@ export function createTrainingService(deps: {
       deps.store.listModelArtifactLineage(),
       deps.store.listRolloutTrajectoryReceipts(),
       deps.store.listModelBindings(),
-      Promise.resolve(activeState.servingSessions),
       destinations(),
       deps.computeInventory?.() ?? Promise.resolve(null),
-      listTrainingDestinationSecretRefs(path.join(deps.storeDir, "secrets")),
-      deps.resolveFireworksCredential?.() ?? Promise.resolve(null),
     ]);
     return {
       plans,
@@ -325,21 +256,11 @@ export function createTrainingService(deps: {
       models,
       rolloutReceipts,
       modelBindings,
-      servingSessions,
       destinations: destinationCapabilities,
       baseModelCandidates: projectBaseModelCandidates({
         destinations: destinationCapabilities,
         inventory: computeInventory,
       }),
-      credentialRefs: [
-        ...secretRefs.filter((credential) => credential.destinationId !== "fireworks"),
-        {
-          destinationId: "fireworks",
-          configured: Boolean(fireworksCredential),
-          createdAt: fireworksCredential?.createdAt ?? null,
-          updatedAt: fireworksCredential?.updatedAt ?? null,
-        },
-      ],
     };
   }
 
@@ -356,26 +277,10 @@ export function createTrainingService(deps: {
     rollbackModelBinding,
   } = modelBindings;
 
-  async function saveCredential(input: { destinationId: string; value: string }) {
-    if (input.destinationId === "fireworks") throw new Error("Fireworks training uses the saved Settings > Providers credential; it does not use a second training credential.");
-    return writeTrainingDestinationSecret({ directory: path.join(deps.storeDir, "secrets"), destinationId: input.destinationId, value: input.value, timestamp: new Date().toISOString() });
-  }
-
   async function cancelJob(jobId: string) {
     const job = await deps.store.getTrainingJob(jobId);
     if (!job) throw new Error("Training job not found.");
     return registry.get(job.destinationId).cancel(job.id);
-  }
-
-  async function evaluateJob(jobId: string) {
-    const job = await deps.store.getTrainingJob(jobId);
-    if (!job) throw new Error("Training job not found.");
-    if (job.destinationId !== "fireworks") {
-      throw new Error(
-        "Explicit provider evaluation is currently implemented for Fireworks jobs.",
-      );
-    }
-    return fireworks.evaluate(job.id);
   }
 
   async function refreshManagedRunEvidence(jobId: string): Promise<void> {
@@ -384,14 +289,9 @@ export function createTrainingService(deps: {
     await portableAdapters.refreshManagedEvidence(job);
   }
 
-  async function handleFireworksRft(payload: unknown) {
-    return fireworksRftEnvironment.handle(payload);
-  }
-
   async function close(): Promise<void> {
     await Promise.all([
       localCpu.close(),
-      fireworksServing.close(),
       portableAdapters.close(),
     ]);
   }
@@ -429,15 +329,8 @@ export function createTrainingService(deps: {
     rollbackModelBinding,
     updateModelConfiguration,
     setModelPinned,
-    saveCredential,
     cancelJob,
-    evaluateJob,
     refreshManagedRunEvidence,
-    isFireworksModel: fireworksServing.appliesTo,
-    startModelServing: fireworksServing.start,
-    stopModelServing: fireworksServing.stop,
-    streamFireworksModel: fireworksServing.stream,
-    handleFireworksRft,
     close,
   };
 

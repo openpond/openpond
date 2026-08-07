@@ -499,34 +499,6 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     ],
   },
   {
-    id: "fireworks",
-    displayName: "Fireworks",
-    credentialModes: ["local-byok"],
-    routing: { localRuntime: true, localByok: true },
-    capabilities: {
-      chatCompletions: true,
-      streaming: true,
-      modelDiscovery: "provider",
-      toolCalling: true,
-      reasoning: true,
-    },
-    defaultBaseUrl: "https://api.fireworks.ai/inference/v1",
-    defaultModel: "accounts/fireworks/models/kimi-k2-instruct",
-    modelCacheSource: "curated",
-    models: [
-      {
-        id: "accounts/fireworks/models/kimi-k2-instruct",
-        displayName: "Kimi K2 Instruct",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-      {
-        id: "accounts/fireworks/models/deepseek-r1",
-        displayName: "DeepSeek R1",
-        capabilities: REASONING_MODEL_CAPABILITIES,
-      },
-    ],
-  },
-  {
     id: "custom-openai-compatible",
     displayName: "Local / Custom OpenAI-compatible",
     credentialModes: ["local-byok", "custom"],

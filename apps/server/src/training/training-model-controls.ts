@@ -1,7 +1,6 @@
 import { LocalModelChatConfigurationSchema } from "@openpond/contracts";
 
 import type { SqliteStore } from "../store/store.js";
-import type { createFireworksServingService } from "./fireworks-serving-service.js";
 
 export function createTrainingModelConfigurationService(store: SqliteStore) {
   async function updateModelConfiguration(input: {
@@ -45,29 +44,4 @@ export function createTrainingModelConfigurationService(store: SqliteStore) {
   }
 
   return { setModelPinned, updateModelConfiguration };
-}
-
-export async function stopActiveFireworksServingSessions(
-  fireworksServing: ReturnType<typeof createFireworksServingService>,
-  input: {
-    tasksetId?: string;
-    modelArtifactLineageId?: string;
-    reason: string;
-  },
-): Promise<void> {
-  const sessions = (await fireworksServing.list()).filter(
-    (session) =>
-      ["starting", "ready", "stopping"].includes(session.state) &&
-      (!input.tasksetId || session.tasksetId === input.tasksetId) &&
-      (!input.modelArtifactLineageId ||
-        session.modelArtifactLineageId === input.modelArtifactLineageId),
-  );
-  for (const session of sessions) {
-    const stopped = await fireworksServing.stop(session.id, "user");
-    if (stopped.state !== "stopped") {
-      throw new Error(
-        `${input.reason} could not confirm Fireworks cleanup: ${stopped.error ?? stopped.state}.`,
-      );
-    }
-  }
 }

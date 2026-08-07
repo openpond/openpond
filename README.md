@@ -6,7 +6,7 @@ OpenPond Harness is an open-source, mutable agent harness designed to continuous
 
 - Harness is adaptable to your daily workflow - code agents/skills/harness extensions and train models, all in the same harness, 100% opensource and owned by you.
 - The training module is optimized for smaller models, SFT and RL techniques are in beta.
-- Works with fireworks RFT (BYOK) and coming soon, Openpond Managed.
+- Works with local training and OpenPond Managed RL.
 
 ```mermaid
 flowchart LR
@@ -64,36 +64,25 @@ pnpm dev:web # Server & Web
 
 Corepack is only needed when running from source. It makes the repository's pinned `pnpm@11.13.0` command available; if that pnpm version is already installed, you can skip `corepack enable`.
 
-## Repository packages
+## npm packages
 
-The workspace separates public packages from application-only implementation
-packages. Harness is the dependency base for Evals: `@openpond/evals` may
-depend on and re-export `@openpond/harness`, while Harness never imports Evals.
+OpenPond publishes four packages to npm. Internal application and workspace
+packages are implementation details and are documented in the
+[development guide](docs/public/development.md).
 
-| Package | Path | Role | Distribution |
-| --- | --- | --- | --- |
-| `openpond` | `apps/cli` | CLI, TUI, and local OpenPond entrypoint | Public package |
-| `@openpond/desktop` | `apps/desktop` | Electron desktop shell | Workspace only |
-| `@openpond/local-server` | `apps/server` | Local API, Work runtime, Harness services, and training orchestration | Workspace only |
-| `@openpond/terminal` | `apps/terminal` | Terminal UI implementation | Workspace only |
-| `@openpond/web` | `apps/web` | Shared web and desktop renderer | Workspace only |
-| `@openpond/harness` | `packages/harness` | Immutable Harness releases, workspaces, improvements, traces, tools, and model identities | Public package; bootstrap pending |
-| `@openpond/evals` | `packages/evals` | Tasksets, graders, evaluation runs, receipts, conformance, and Work evidence | Public package |
-| `openpond-sdk` | `packages/sdk` | Server-side TypeScript SDK for sandbox and agentic work | Public package |
-| `openpond-agent-sdk` | `packages/agent-sdk` | Agent authoring, validation, actions, workflows, and behavior Evals | Workspace only |
-| `@openpond/cloud` | `packages/cloud` | Local client boundary for OpenPond Cloud data and services | Workspace only |
-| `@openpond/codex-provider` | `packages/codex-provider` | Codex model-provider adapter | Workspace only |
-| `@openpond/connected-apps` | `packages/connected-apps` | Connected-app contracts and adapters | Workspace only |
-| `@openpond/contracts` | `packages/contracts` | Shared application schemas and API contracts | Workspace only |
-| `@openpond/logging` | `packages/logging` | Shared structured logging helpers | Workspace only |
-| `@openpond/runtime` | `packages/runtime` | Shared turn, session, and model-runtime primitives | Workspace only |
-| `@openpond/taskset-sdk` | `packages/taskset-sdk` | Internal Taskset materialization and local execution SDK | Workspace only |
-| `@openpond/trainer-local` | `packages/trainer-local` | Local training engine and process boundary | Workspace only |
-| `@openpond/training-sdk` | `packages/training-sdk` | Internal training authoring and orchestration SDK | Workspace only |
+| Package | Role |
+| --- | --- |
+| [`openpond`](https://www.npmjs.com/package/openpond) | CLI, TUI, Local OpenPond app, and bundled app-server executable. |
+| [`openpond-sdk`](https://www.npmjs.com/package/openpond-sdk) | Server-side TypeScript SDK for hosted Work and sandboxes. |
+| [`@openpond/harness`](https://www.npmjs.com/package/@openpond/harness) | Portable immutable Harness releases, workspaces, improvements, tools, models, and Refiner contracts. |
+| [`@openpond/evals`](https://www.npmjs.com/package/@openpond/evals) | Portable Tasksets, graders, evaluation runs, receipts, conformance, and Work evidence. |
+
+Harness is the dependency base for Evals: `@openpond/evals` may depend on and
+re-export `@openpond/harness`, while Harness never imports Evals.
 
 ## What is this
 
-An harness optimized to turn your conversations into datasets, run evals and faciliate code updates (agents/skills/extensions) or facilitate model training (local SFT, alpha support for RFT with fireworks BYOK, Openpond Managed RL coming soon).
+A harness optimized to turn your conversations into datasets, run evals and facilitate code updates (agents/skills/extensions) or model training through local training and OpenPond Managed RL.
 
 ## Profile
 

@@ -77,6 +77,9 @@ describe("Sidebar navigation", () => {
     const markup = renderSidebarNavigation("chat");
 
     expect(markup).toContain("New task");
+    expect(markup).toContain('class="nav-command nav-command-new-task"');
+    expect(markup).toContain('class="lucide lucide-plus"');
+    expect(markup).not.toContain('class="lucide lucide-square-pen"');
     expect(markup).not.toContain("Profile");
     expect(markup).not.toContain("Models");
     expect(markup).not.toContain("Docs");

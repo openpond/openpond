@@ -10,7 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import { OpenPondManagedTrainingAdapter } from "../apps/server/src/training/openpond-managed-training-adapter.js";
 import { publishRunGraph } from "../apps/server/src/training/portable-model-run-service.js";
-import { fireworksRftRecipe, rftTasksetFixture } from "./helpers/fireworks-destination-fixtures.js";
+import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
 
 const MANAGED_MODEL = {
@@ -58,10 +58,10 @@ describe("OpenPond Managed training adapter", () => {
         contentHash: computeTasksetHash(tasksetDraft),
       });
       const recipe = {
-        ...fireworksRftRecipe(),
+        ...managedRftRecipe(),
         baseModel: MANAGED_MODEL,
         dataset: {
-          ...fireworksRftRecipe().dataset,
+          ...managedRftRecipe().dataset,
           maxPromptTokens: 4_096,
         },
         lora: { rank: 16 },

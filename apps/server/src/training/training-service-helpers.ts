@@ -191,15 +191,3 @@ export async function assertArtifactIntegrity(
     );
   }
 }
-
-export async function requireFireworksApprovalActor(
-  resolveApprovalActor: (() => Promise<string | null>) | undefined,
-): Promise<string> {
-  const actor = (await resolveApprovalActor?.())?.trim() ?? "";
-  if (!actor) {
-    throw new Error(
-      "Fireworks training requires a signed-in OpenPond account profile with a handle.",
-    );
-  }
-  return actor;
-}

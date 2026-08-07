@@ -12,7 +12,7 @@ import {
   Cloud,
   FileText,
   Plug,
-  SquarePen,
+  Plus,
 } from "../icons";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -90,11 +90,11 @@ export function SidebarNavigation({
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea === "models" ? null : (
         <button
-          className="nav-command"
+          className="nav-command nav-command-new-task"
           type="button"
           onClick={() => beginNewChat(null)}
         >
-          <SquarePen size={16} />
+          <Plus size={18} />
           <span>{newExperienceTitle(experience)}</span>
         </button>
       )}

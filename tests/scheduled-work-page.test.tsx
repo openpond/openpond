@@ -51,25 +51,22 @@ function schedule(
 }
 
 describe("ScheduledWorkPage", () => {
-  test("renders the scheduling product surface and composer", () => {
+  test("renders schedule controls without the scheduling composer", () => {
     const markup = renderToStaticMarkup(
       createElement(ScheduledWorkPage, {
         connection: null,
         detailExpanded: false,
         onDetailResizeStart: () => undefined,
         onToggleDetailExpanded: () => undefined,
-        onStartWorkChat: async () => undefined,
       }),
     );
 
-    expect(markup).toContain("Scheduled");
-    expect(markup).toContain(
-      "Ask OpenPond to schedule tasks, reminders, or recurring work.",
-    );
-    expect(markup).toContain('aria-label="Schedule a task"');
-    expect(markup).toContain('aria-label="Start scheduling chat"');
+    expect(markup).toContain('aria-label="Refresh schedules"');
     expect(markup).toContain('aria-label="Schedule filter"');
     expect(markup).toContain('<option value="all" selected="">All</option>');
+    expect(markup).not.toContain("Ask OpenPond to schedule");
+    expect(markup).not.toContain("Describe what you want to schedule");
+    expect(markup).not.toContain("<textarea");
   });
 
   test("filters schedules and orders active work by its next run", () => {

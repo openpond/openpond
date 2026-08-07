@@ -176,7 +176,7 @@ export function buildTasksetReadiness(input: {
     methodReadiness,
     compatibleDestinationClasses: ready
       ? recommendedMethod === "grpo"
-        ? ["export", "custom", "hosted_byok"]
+        ? ["export", "custom", "hosted_managed"]
         : ["export", "local_cpu_fixture", "custom"]
       : ["export"],
     blockers,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
+import { createAgentToolCatalogProjection } from "@openpond/agent-runtime";
 import type { RuntimeEvent } from "../packages/contracts/src";
 import { createAuthoringModelToolDefinitions } from "../apps/server/src/openpond/authoring-tool-registry";
-import type { ModelToolDefinition } from "../apps/server/src/openpond/model-tool-registry";
 import { createNativeToolRuntime } from "../apps/server/src/runtime/hosted-turn/native-tools-runtime";
 import { baseSession } from "./helpers/byok-turn-runner-harness";
 
@@ -32,15 +32,40 @@ describe("ask_user native runtime", () => {
       },
     });
 
+    const session = baseSession();
+    const turnPermissions = {
+      approvalPolicy: null,
+      sandbox: null,
+      codexPermissionMode: null,
+      codexReasoningEffort: null,
+    };
+    const toolCatalog = createAgentToolCatalogProjection(
+      definitions.map((definition) => ({
+        name: definition.name,
+        description: definition.description,
+        inputSchema: definition.parameters,
+        placement: "local" as const,
+        executorAvailable: true,
+        execute: (args, context) => definition.execute({
+          session,
+          turnId: context.turnId,
+          turnPermissions,
+          provider: "openrouter",
+          model: "test/model",
+          callId: context.callId,
+          args: args as Record<string, unknown>,
+          signal: context.signal,
+          workspaceDiffBaseline: null,
+          mentionedApps: [],
+          userPrompt: "Create the Agent.",
+          turnMetadata: {},
+        }),
+      })),
+    );
     const results = await runtime.executeNativeToolCalls({
-      session: baseSession(),
+      session,
       turnId: "turn_1",
-      turnPermissions: {
-        approvalPolicy: null,
-        sandbox: null,
-        codexPermissionMode: null,
-        codexReasoningEffort: null,
-      },
+      turnPermissions,
       provider: "openrouter",
       model: "test/model",
       signal: new AbortController().signal,
@@ -48,9 +73,7 @@ describe("ask_user native runtime", () => {
       mentionedApps: [],
       userPrompt: "Create the Agent.",
       turnMetadata: {},
-      toolDefinitions: new Map<string, ModelToolDefinition>(
-        definitions.map((definition) => [definition.name, definition]),
-      ),
+      toolCatalog,
       invalidRequestCounts: new Map(),
       toolCalls: [
         toolCall("call_mutation", "mutation_fixture", {}),

@@ -295,9 +295,7 @@ function portableProvider(job: TrainingJob): string {
   const compute = objectValue(bindings.compute);
   return typeof compute.provider === "string" && compute.provider.trim()
     ? compute.provider
-    : job.destinationId === "fireworks"
-      ? "fireworks"
-      : job.destinationId;
+    : job.destinationId;
 }
 
 function objectValue(value: unknown): Record<string, unknown> {

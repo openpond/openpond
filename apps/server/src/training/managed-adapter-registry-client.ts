@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type {
   HostedChatMessage,
   HostedChatTool,
@@ -6,11 +5,10 @@ import type {
   HostedChatToolChoice,
 } from "@openpond/cloud";
 import { withVercelProtectionBypass } from "@openpond/cloud";
-import type { ModelBinding, TrainingArtifact } from "@openpond/contracts";
+import type { ModelBinding } from "@openpond/contracts";
 import {
   registryArtifacts,
   registryDeployments,
-  requiredRegistryArtifact,
   requiredRegistryCapabilities,
 } from "./managed-adapter-registry-parsers.js";
 import {
@@ -59,38 +57,8 @@ export type ManagedAdapterChatDelta = {
   raw?: unknown;
 };
 
-type UploadCapability = {
-  path: string;
-  url: string;
-  headers: Record<string, string>;
-};
-
-type PortableUploadFile = {
-  artifact: TrainingArtifact;
-  path: string;
-  mediaType: "application/json" | "application/vnd.safetensors";
-};
-
-export type FireworksSourceImport = {
-  teamId: string;
-  lineageId: string;
-  label: string;
-  baseProfileId: string;
-  trainingJobId: string;
-  trainingPlanId: string;
-  sourceArtifactId: string;
-  sourceArtifactSha256: string;
-  tasksetId: string;
-  tasksetHash: string;
-  evaluationArtifactId: string | null;
-  evaluationArtifactSha256: string | null;
-  providerRunId: string | null;
-  files: PortableUploadFile[];
-};
-
 export type ManagedAdapterRegistryClientDependencies = {
   fetchImpl?: typeof fetch;
-  readFileImpl?: typeof readFile;
   resolveRegistryAccess?: ManagedAdapterAccessResolver;
   resolveInferenceAccess?: ManagedAdapterAccessResolver;
   env?: Record<string, string | undefined>;
@@ -104,7 +72,6 @@ export function createManagedAdapterRegistryClient(
   dependencies: ManagedAdapterRegistryClientDependencies = {}
 ) {
   const fetchImpl = dependencies.fetchImpl ?? fetch;
-  const readFileImpl = dependencies.readFileImpl ?? readFile;
   const resolveRegistryAccess =
     dependencies.resolveRegistryAccess ??
     ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
@@ -187,119 +154,6 @@ export function createManagedAdapterRegistryClient(
         "/v1/model-adapters/capabilities"
       )
     );
-  }
-
-  async function publishFireworksSource(
-    input: FireworksSourceImport
-  ): Promise<ManagedRegistryArtifact> {
-    return uploadSource({
-      input,
-      resolveAccess: resolveRegistryAccess,
-      baseProfileId: input.baseProfileId,
-      idempotencyKey: `openpond-fireworks:${input.lineageId}:${input.sourceArtifactSha256}`,
-    });
-  }
-
-  async function uploadSource({
-    input,
-    resolveAccess,
-    baseProfileId,
-    idempotencyKey,
-  }: {
-    input: {
-      teamId: string;
-      label: string;
-      files: PortableUploadFile[];
-    };
-    resolveAccess: ManagedAdapterAccessResolver;
-    baseProfileId: string;
-    idempotencyKey: string;
-  }): Promise<ManagedRegistryArtifact> {
-    assertPortableUploadFiles(input.files);
-    const created = await requestJson<{
-      upload: { id: string; version: number; state: string };
-      uploadCapabilities: UploadCapability[];
-    }>(
-      resolveAccess,
-      input.teamId,
-      "/v1/model-adapters/uploads",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          label: input.label,
-          idempotencyKey,
-          baseProfileId,
-          files: input.files.map(({ artifact, path, mediaType }) => ({
-            path,
-            sizeBytes: artifact.sizeBytes,
-            sha256: artifact.sha256,
-            mediaType,
-          })),
-        }),
-      }
-    );
-    if (
-      created.upload.state === "created" ||
-      created.upload.state === "uploading"
-    ) {
-      const filesByPath = new Map(input.files.map((file) => [file.path, file]));
-      if (
-        created.uploadCapabilities.length !== input.files.length ||
-        new Set(created.uploadCapabilities.map((item) => item.path)).size !==
-          input.files.length
-      ) {
-        throw new Error(
-          "Managed adapter upload capabilities did not match the declared files."
-        );
-      }
-      for (const capability of created.uploadCapabilities) {
-        const file = filesByPath.get(capability.path);
-        if (!file) {
-          throw new Error(
-            "Managed adapter upload returned an undeclared file capability."
-          );
-        }
-        assertUploadCapability(capability);
-        const bytes = await readFileImpl(file.artifact.path);
-        if (bytes.byteLength !== file.artifact.sizeBytes) {
-          throw new Error(
-            `Training artifact ${file.artifact.id} changed before upload.`
-          );
-        }
-        const response = await fetchImpl(capability.url, {
-          method: "PUT",
-          headers: capability.headers,
-          body: new Uint8Array(bytes),
-        });
-        if (!response.ok) {
-          throw new Error(
-            `Managed adapter byte upload failed with status ${response.status}.`
-          );
-        }
-      }
-    } else if (
-      (created.upload.state === "committing" ||
-        created.upload.state === "committed") &&
-      created.uploadCapabilities.length === 0
-    ) {
-      // Idempotent replay: complete below returns or resumes the same artifact.
-    } else {
-      throw new Error("Managed adapter upload is not resumable.");
-    }
-    const completed = await requestJson<{
-      artifact: ManagedRegistryArtifact;
-    }>(
-      resolveAccess,
-      input.teamId,
-      `/v1/model-adapters/uploads/${encodeURIComponent(
-        created.upload.id
-      )}/complete`,
-      {
-        method: "POST",
-        body: JSON.stringify({ expectedVersion: created.upload.version }),
-      }
-    );
-    return requiredRegistryArtifact(completed.artifact);
   }
 
   async function syncBindingWithAccess(
@@ -435,7 +289,6 @@ export function createManagedAdapterRegistryClient(
   return {
     listRegistry,
     capabilities,
-    publishFireworksSource,
     syncBinding,
     streamChat,
   };
@@ -453,48 +306,6 @@ function assertResolvedTeam(
     throw new Error(
       "Managed adapter access resolved a different OpenPond team."
     );
-  }
-}
-
-function assertPortableUploadFiles(files: PortableUploadFile[]): void {
-  const paths = files.map((file) => file.path);
-  if (
-    paths.length < 2 ||
-    new Set(paths).size !== paths.length ||
-    !paths.includes("adapter_config.json") ||
-    !paths.some((path) => path.endsWith(".safetensors"))
-  ) {
-    throw new Error(
-      "Fireworks lineage does not contain a complete portable PEFT adapter."
-    );
-  }
-}
-
-function assertUploadCapability(capability: UploadCapability): void {
-  const url = new URL(capability.url);
-  const local =
-    url.protocol === "http:" &&
-    (url.hostname === "localhost" || url.hostname === "127.0.0.1");
-  const awsS3 =
-    url.protocol === "https:" &&
-    url.hostname.endsWith(".amazonaws.com") &&
-    url.hostname.split(".").some((part) => part.startsWith("s3"));
-  const cloudflareR2 =
-    url.protocol === "https:" &&
-    /^[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/i.test(url.hostname);
-  if (!local && !awsS3 && !cloudflareR2) {
-    throw new Error(
-      `Managed adapter upload capability used an unsafe URL host (${url.protocol}//${url.hostname}).`
-    );
-  }
-  if (
-    Object.keys(capability.headers).some(
-      (name) =>
-        name.toLowerCase() !== "content-type" &&
-        !name.toLowerCase().startsWith("x-amz-")
-    )
-  ) {
-    throw new Error("Managed adapter upload capability used unsafe headers.");
   }
 }
 

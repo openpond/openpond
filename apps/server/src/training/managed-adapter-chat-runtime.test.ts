@@ -347,7 +347,7 @@ function modelLineage(): ModelArtifactLineage {
     managedServing: {
       schemaVersion: "openpond.managedAdapterServingProjection.v1",
       teamId: "team_qa",
-      source: "openpond_fireworks",
+      source: "openpond_training",
       sourceRef: "lineage-1",
       canonicalArtifactId: "artifact-1",
       canonicalArtifactState: "promotable",

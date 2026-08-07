@@ -39,7 +39,6 @@ export const OPENAI_COMPATIBLE_PROVIDER_IDS = [
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "custom-openai-compatible",
 ] as const satisfies readonly ProviderId[];
 
@@ -473,7 +472,7 @@ function buildChatCompletionBody(input: {
     body.tools = input.tools;
   }
   if (
-    (input.providerId === "openai" || input.providerId === "fireworks")
+    input.providerId === "openai"
     && input.reasoningEffort
   ) {
     body.reasoning_effort = input.reasoningEffort;

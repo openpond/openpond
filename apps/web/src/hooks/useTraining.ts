@@ -19,7 +19,6 @@ import type {
   LocalModelChatConfiguration,
   ModelProject,
   ModelRunDraft,
-  FireworksModelServingSession,
   CrossSystemExpertBootstrapPreview,
   CrossSystemExpertBootstrapApproval,
   DatasetImportJob,
@@ -91,7 +90,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         payload.creations.some((creation) => ["planning", "materializing", "validating"].includes(creation.state)),
         payload.minerRuns.some((run) => ["queued", "running", "cancelling"].includes(run.status)),
         payload.datasetImports.some((job) => ["inspecting", "materializing", "validating", "cancelling"].includes(job.status)),
-        payload.servingSessions.some((session) => ["starting", "ready", "stopping"].includes(session.state)),
       ].some(Boolean)
     : false;
   useEffect(() => {
@@ -330,24 +328,8 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     }>("start-prepared-training", "/start/prepared", body),
     startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
-    evaluateJob: (jobId: string) => mutate(
-      "evaluate-job",
-      `/jobs/${encodeURIComponent(jobId)}/evaluate`,
-      {},
-    ),
     importArtifact: (planId: string, bundleId: string, artifactDirectory: string) => mutate("import-artifact", "/import", { planId, bundleId, artifactDirectory }),
     rejectModel: (modelId: string, reason: string) => mutate("reject-model", `/models/${encodeURIComponent(modelId)}/reject`, { reason }),
-    startModelServing: (modelId: string) => mutate<FireworksModelServingSession>(
-      "start-model-serving",
-      `/models/${encodeURIComponent(modelId)}/serving`,
-      { profileId },
-    ),
-    stopModelServing: (servingSessionId: string) =>
-      mutate<FireworksModelServingSession>(
-        "stop-model-serving",
-        `/serving/${encodeURIComponent(servingSessionId)}/stop`,
-        {},
-      ),
     bindModel: (
       modelId: string,
       role: "chat_manual" | "agent" | "extension" | "authoring_optimizer",

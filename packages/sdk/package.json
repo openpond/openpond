@@ -34,13 +34,18 @@
   "engines": {
     "node": ">=22.14.0 <25"
   },
+  "openpondBundledSourceDependencies": [
+    "@openpond/cloud"
+  ],
   "scripts": {
+    "prebuild": "pnpm --dir ../cloud run build",
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build && npm pack --dry-run"
   },
   "devDependencies": {
+    "@openpond/cloud": "workspace:*",
     "@types/node": "24.13.3",
     "esbuild": "0.28.1",
     "tsx": "4.23.1",

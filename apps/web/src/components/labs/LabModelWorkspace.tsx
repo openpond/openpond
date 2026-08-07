@@ -739,7 +739,7 @@ function VersionStatusBadge({
 function shortId(value: string) {
   const normalized = value
     .replace(/^baseline_run_/, "")
-    .replace(/^(?:training_job_|lineage_)(?:fireworks_)?(?:artifact_)?/, "")
+    .replace(/^(?:training_job_|lineage_)(?:artifact_)?/, "")
     .replace(/^model_run_/, "");
   return normalized.length <= 12 ? normalized : normalized.slice(-8);
 }
