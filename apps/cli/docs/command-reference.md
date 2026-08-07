@@ -200,6 +200,15 @@ Usage:
 Options:
   --json
 ```
+## app-server
+
+```text
+Usage:
+  openpond app-server [--store-dir DIR]
+
+Options:
+  --store-dir <string>
+```
 ## serve
 
 ```text
@@ -506,11 +515,11 @@ Options:
   --trigger-type <string>
   --workflow-mode <string>
 ```
-## harness
+## desktop-test
 
 ```text
 Usage:
-  openpond harness desktop <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]
+  openpond desktop-test <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]
 
 Options:
   --artifacts-dir <string>

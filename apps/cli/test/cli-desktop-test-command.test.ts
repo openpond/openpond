@@ -7,7 +7,7 @@ import { parseArgs } from "../src/cli/common";
 import {
   buildDesktopHarnessInvocation,
   resolveDesktopHarnessRepoRoot,
-} from "../src/cli/harness";
+} from "../src/cli/desktop-test";
 
 async function makeHarnessRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "openpond-cli-harness-root-"));
@@ -16,24 +16,22 @@ async function makeHarnessRoot(): Promise<string> {
   return root;
 }
 
-describe("CLI desktop harness command", () => {
-  test("parses harness --json as a report path without changing global json parsing", () => {
-    const harness = parseArgs([
-      "harness",
-      "desktop",
+describe("CLI desktop test command", () => {
+  test("parses desktop-test --json as a report path without changing global json parsing", () => {
+    const desktopTest = parseArgs([
+      "desktop-test",
       "run",
       "tests/desktop-scenarios/chat-two-turns.ts",
       "--json",
       "tmp/desktop-harness/report.json",
     ]);
 
-    expect(harness.command).toBe("harness");
-    expect(harness.rest).toEqual([
-      "desktop",
+    expect(desktopTest.command).toBe("desktop-test");
+    expect(desktopTest.rest).toEqual([
       "run",
       "tests/desktop-scenarios/chat-two-turns.ts",
     ]);
-    expect(harness.options.json).toBe("tmp/desktop-harness/report.json");
+    expect(desktopTest.options.json).toBe("tmp/desktop-harness/report.json");
 
     expect(() => parseArgs(["profile", "current", "--json=maybe"])).toThrow(
       /json must be a boolean/
@@ -47,7 +45,6 @@ describe("CLI desktop harness command", () => {
         cwd: path.join(root, "scripts"),
         env: { OPENPOND_NODE_BINARY: "/custom/node" },
         rest: [
-          "desktop",
           "run",
           "tests/desktop-scenarios/chat-two-turns.ts",
           "tests/desktop-scenarios/subagent-visible-lifecycle.ts",
@@ -91,7 +88,7 @@ describe("CLI desktop harness command", () => {
     try {
       const invocation = await buildDesktopHarnessInvocation({
         cwd: root,
-        rest: ["desktop", "attach", "scenario.ts"],
+        rest: ["attach", "scenario.ts"],
         options: {
           devtoolsPort: "9333",
           jsonPath: "tmp/report.json",
@@ -125,7 +122,7 @@ describe("CLI desktop harness command", () => {
     try {
       const invocation = await buildDesktopHarnessInvocation({
         cwd: root,
-        rest: ["desktop", "run", "tests/desktop-scenarios/chat-two-turns.ts"],
+        rest: ["run", "tests/desktop-scenarios/chat-two-turns.ts"],
         options: {
           app: "release/linux-unpacked/openpond",
           packaged: "true",

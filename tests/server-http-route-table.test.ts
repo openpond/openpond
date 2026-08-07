@@ -424,6 +424,17 @@ function routeTableDeps(calls: RecordedCall[]): HttpRouteDeps {
       error() {},
     },
     subscribers: new Set<ServerResponse>(),
+    agentRuntime: {
+      async turnStart(params: unknown) {
+        const input = params as { threadId: string; input: unknown };
+        const call = {
+          name: "sendTurn",
+          args: [input.threadId, input.input],
+        };
+        calls.push(call);
+        return { turn: call };
+      },
+    },
     async workspaceImagePayload() {
       throw new Error(
         "workspace image route not expected in route table dispatch test"

@@ -1,7 +1,4 @@
 import {
-  SubagentMessageDeliverySchema,
-  SubagentMessageSchema,
-  SubagentRunSchema,
   DEFAULT_SESSION_EXPERIENCE,
   type AppPreferences,
   type ChatProvider,
@@ -12,12 +9,16 @@ import {
   type RuntimeEvent,
   type Session,
   type SubagentRoleSettings,
-  type SubagentRun,
   type Taskset,
   type Turn,
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
 } from "@openpond/contracts";
+import {
+  createAgentToolCatalogProjection,
+  runProviderRound,
+  runProviderRoundLoop,
+} from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import { trustedProviderContextLimit } from "../../openpond/context-usage.js";
@@ -58,7 +59,6 @@ import type {
 import { isTerminalOneShotTurn } from "../turns/request-context.js";
 import {
   recordFromUnknown,
-  truncateForModelAside,
 } from "../turns/value-utils.js";
 import { normalizeMentionedSandboxToolRequest } from "../create-pipeline/snapshots.js";
 import {
@@ -67,10 +67,10 @@ import {
 } from "../experience-policy.js";
 import { hostedTrainingHarnessRound } from "./training-harness-round.js";
 import {
-  PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS,
   READ_ONLY_SUBAGENT_WORKSPACE_TOOL_ACTIONS,
   RESOURCE_TEXT_FALLBACK_ACTIONS,
 } from "./tool-loop-action-policy.js";
+import { subagentModelAsideMessages } from "./tool-loop-subagent-asides.js";
 
 export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
@@ -117,6 +117,11 @@ export function createHostedToolLoopRuntime(deps: {
     }
   ): Promise<RuntimeEvent[]>;
   getSession(sessionId: string): Promise<Session>;
+  recordTurnToolCatalog?(input: {
+    turnId: string;
+    hash: string;
+    capabilities: Array<Record<string, unknown>>;
+  }): Promise<void>;
   getTaskset?: (tasksetId: string) => Promise<Taskset | null>;
   appendHostedContextUsage: TurnRunnerDependencies["appendHostedContextUsage"];
   maxHostedWorkspaceToolRounds: number;
@@ -253,6 +258,20 @@ export function createHostedToolLoopRuntime(deps: {
     const nativeToolDefinitionByName = new Map(
       nativeToolDefinitions.map((definition) => [definition.name, definition])
     );
+    const effectiveToolCatalog = createAgentToolCatalogProjection(
+      nativeToolDefinitions.map((definition) => ({
+        name: definition.name,
+        description: definition.description,
+        inputSchema: definition.parameters,
+        placement: "local" as const,
+        executorAvailable: typeof definition.execute === "function",
+      })),
+    );
+    await deps.recordTurnToolCatalog?.({
+      turnId: params.turn.id,
+      hash: effectiveToolCatalog.hash,
+      capabilities: effectiveToolCatalog.capabilities,
+    });
     let completedTrainingHarnessActions = 0;
     const textFallbackMode = hostedToolInstructionModeForProvider(
       hostedToolFlags,
@@ -312,19 +331,17 @@ export function createHostedToolLoopRuntime(deps: {
       }
       return true;
     }
-    for (let index = 0; index < maxHostedWorkspaceToolRounds; index += 1) {
+    return runProviderRoundLoop<Session>({
+      turnId: params.turn.id,
+      maxRounds: maxHostedWorkspaceToolRounds,
+      signal: params.signal,
+      runRound: async (round) => {
+      const { index } = round;
       throwIfInterrupted(params.signal);
       await appendPendingSubagentAsides();
       await appendContextUsage({ messages });
-      let assistantText = "";
-      let reasoningText = "";
-      let latestContinuation:
-        | import("@openpond/cloud").HostedChatContinuation
-        | null = null;
-      let latestUsage: unknown;
-      let finishReason: string | null | undefined;
       const nativeToolAccumulator = new NativeToolCallAccumulator();
-      const usageRequestId = `${params.turn.id}:model:${index}`;
+      const usageRequestId = round.requestId;
       const usageRecorder = await startProviderRequestUsageRecorder({
         session,
         turn: params.turn,
@@ -339,37 +356,48 @@ export function createHostedToolLoopRuntime(deps: {
         completedActionCount: completedTrainingHarnessActions,
         nativeTools,
       });
-      try {
-        const requestTools = trainingHarnessRound?.tools ?? nativeTools;
-        const toolChoice: HostedChatToolChoice =
-          trainingHarnessRound?.toolChoice ?? "auto";
-        for await (const delta of params.stream(
+      const requestTools = trainingHarnessRound?.tools ?? nativeTools;
+      const toolChoice: HostedChatToolChoice =
+        trainingHarnessRound?.toolChoice ?? "auto";
+      const providerRound = await runProviderRound({
+        stream: params.stream(
           messages,
           requestTools.length > 0
             ? { tools: requestTools, toolChoice, requestId: usageRequestId }
-            : { requestId: usageRequestId }
-        )) {
+            : { requestId: usageRequestId },
+        ),
+        signal: params.signal,
+        onDelta: (delta) => {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
-          if (delta.usage) latestUsage = delta.usage;
-          if (delta.text) assistantText += delta.text;
-          if (delta.reasoningText) reasoningText += delta.reasoningText;
-          if (delta.continuation) latestContinuation = delta.continuation;
-          if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
-          if (delta.finishReason !== undefined)
-            finishReason = delta.finishReason;
-        }
-      } catch (error) {
-        await usageRecorder.fail(
-          error,
-          params.signal.aborted ||
-            (error instanceof Error && error.name === "AbortError")
-            ? "interrupted"
-            : "failed"
-        );
-        throw error;
+        },
+        onCompleted: async () => usageRecorder.complete(),
+        onFailed: async (error) => {
+          let recordedError = error;
+          if (params.signal.aborted) {
+            try {
+              throwIfInterrupted(params.signal);
+            } catch (interruptedError) {
+              recordedError = interruptedError;
+            }
+          }
+          await usageRecorder.fail(
+            recordedError,
+            params.signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+              ? "interrupted"
+              : "failed",
+          );
+        },
+      });
+      const assistantText = providerRound.text;
+      const reasoningText = providerRound.reasoningText;
+      const latestContinuation = providerRound.continuation;
+      const latestUsage = providerRound.usage;
+      const finishReason = providerRound.finishReason;
+      for (const toolCallBatch of providerRound.toolCallBatches) {
+        nativeToolAccumulator.append(toolCallBatch);
       }
-      await usageRecorder.complete();
       if (reasoningText) {
         await appendRuntimeEvent(
           event({
@@ -415,7 +443,7 @@ export function createHostedToolLoopRuntime(deps: {
           role: "user",
           content: `Call the required ${trainingHarnessRound.requiredToolName} function exactly once with valid JSON arguments. Do not answer in prose.`,
         });
-        continue;
+        return { type: "continue" };
       }
       if (nativeToolCalls.length > 0) {
         messages.push(
@@ -452,7 +480,7 @@ export function createHostedToolLoopRuntime(deps: {
             usage: latestUsage,
             includeCompletion: true,
           });
-          return session;
+          return { type: "complete", result: session };
         }
         if (
           trainingHarnessRound?.requiredToolName &&
@@ -469,7 +497,7 @@ export function createHostedToolLoopRuntime(deps: {
           usage: latestUsage,
           includeCompletion: true,
         });
-        continue;
+        return { type: "continue" };
       }
 
       if (finishReason === "tool_calls") {
@@ -493,7 +521,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Retry with one complete function call and valid JSON arguments, or answer normally if no tool is needed.",
           ].join(" "),
         });
-        continue;
+        return { type: "continue" };
       }
 
       const assistantMessage = {
@@ -564,7 +592,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Continue. Follow the loaded skill instructions when relevant. If another profile skill is required, respond with exactly one openpond_skill block. Otherwise answer the user normally without tool JSON.",
           ].join("\n\n"),
         });
-        continue;
+        return { type: "continue" };
       }
       if (deniedSubagentPolicyResults.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
@@ -581,7 +609,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Continue without mutating the workspace. If the assignment requires writes, report the isolation blocker.",
           ].join("\n\n"),
         });
-        continue;
+        return { type: "continue" };
       }
       if (deniedTextFallbackRequests.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
@@ -602,7 +630,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Use native tool calls when available. If text fallback is necessary, only use resource_search or resource_read.",
           ].join(" "),
         });
-        continue;
+        return { type: "continue" };
       }
       if (requests.length === 0) {
         messages.push(assistantMessage);
@@ -612,7 +640,7 @@ export function createHostedToolLoopRuntime(deps: {
             usage: latestUsage,
             includeCompletion: true,
           });
-          continue;
+          return { type: "continue" };
         }
         if (
           workspaceToolResultCount === 0 &&
@@ -632,7 +660,7 @@ export function createHostedToolLoopRuntime(deps: {
             ),
           });
           toolRequiredCorrectionSent = true;
-          continue;
+          return { type: "continue" };
         }
         await appendAssistantText(session, params.turn.id, assistantText);
         await appendContextUsage({
@@ -640,7 +668,7 @@ export function createHostedToolLoopRuntime(deps: {
           usage: latestUsage,
           includeCompletion: true,
         });
-        return session;
+        return { type: "complete", result: session };
       }
 
       messages.push(assistantMessage);
@@ -731,171 +759,23 @@ export function createHostedToolLoopRuntime(deps: {
           "Continue. If another workspace action is required, respond with exactly one openpond_tool block. Otherwise answer the user normally without tool JSON.",
         ].join("\n\n"),
       });
-    }
-
-    const limitLabel = Number.isFinite(maxHostedWorkspaceToolRounds)
-      ? `${maxHostedWorkspaceToolRounds}`
-      : "configured";
-    await appendAssistantText(
-      session,
-      params.turn.id,
-      [
-        `I hit the hosted workspace tool iteration limit (${limitLabel}) before I could finish.`,
-        "Please send the request again or narrow the workspace target so I can continue from the current context.",
-      ].join(" ")
-    );
-    return session;
-  }
-
-  function subagentModelAsideMessages(input: {
-    session: Session;
-    events: RuntimeEvent[];
-    initialEventIds: Set<string>;
-    deliveredKeys: Set<string>;
-  }): string[] {
-    const messages: string[] = [];
-    for (const item of input.events) {
-      const key = subagentAsideEventKey(item);
-      if (input.deliveredKeys.has(key)) continue;
-      const content = input.session.subagentRunId
-        ? childSubagentMailboxAside(input.session, item)
-        : parentSubagentReceiptAside({
-            session: input.session,
-            event: item,
-            initialEventIds: input.initialEventIds,
-          });
-      if (!content) continue;
-      input.deliveredKeys.add(key);
-      messages.push(content);
-    }
-    return messages;
-  }
-
-  function parentSubagentReceiptAside(input: {
-    session: Session;
-    event: RuntimeEvent;
-    initialEventIds: Set<string>;
-  }): string | null {
-    const item = input.event;
-    if (item.sessionId !== input.session.id) return null;
-    if (input.initialEventIds.has(item.id)) return null;
-    if (!PARENT_MODEL_VISIBLE_SUBAGENT_EVENTS.has(item.name)) return null;
-    if (item.name === "subagent.message")
-      return parentSubagentMessageAside(input.session, item);
-    const run = subagentRunFromRuntimeEvent(item);
-    if (!run || run.parentSessionId !== input.session.id) return null;
-    const report = run.report;
-    const details = [
-      "Subagent update:",
-      `event: ${item.name}`,
-      `run: ${run.id}`,
-      `role: ${run.roleId}`,
-      `status: ${run.status}`,
-      run.childSessionId ? `child session: ${run.childSessionId}` : null,
-      item.output ? `receipt: ${item.output}` : null,
-      report?.summary
-        ? `summary: ${truncateForModelAside(report.summary, 1200)}`
-        : null,
-      report?.blockers.length
-        ? `blockers: ${report.blockers.slice(0, 4).join(" | ")}`
-        : null,
-      report?.testsRun.length
-        ? `tests: ${report.testsRun.slice(0, 4).join(" | ")}`
-        : null,
-      report?.patchRef
-        ? `patch: ${report.patchRef.kind}:${report.patchRef.id} (${report.patchRef.label})`
-        : null,
-      report?.diffRef
-        ? `diff: ${report.diffRef.kind}:${report.diffRef.id} (${report.diffRef.label})`
-        : null,
-      "Use this pushed receipt. Do not poll unless you need a fresh diagnostic snapshot.",
-    ].filter(Boolean);
-    return details.join("\n");
-  }
-
-  function parentSubagentMessageAside(
-    session: Session,
-    item: RuntimeEvent
-  ): string | null {
-    const data = recordFromUnknown(item.data);
-    const parsed = SubagentMessageSchema.safeParse(data?.message);
-    if (!parsed.success) return null;
-    const message = parsed.data;
-    const delivery = SubagentMessageDeliverySchema.safeParse(
-      data?.delivery ?? message.delivery
-    ).success
-      ? SubagentMessageDeliverySchema.parse(data?.delivery ?? message.delivery)
-      : null;
-    if (delivery?.deliveredParentSessionId !== session.id) return null;
-    return [
-      "Subagent handoff:",
-      `message: ${message.id}`,
-      `kind: ${message.kind}`,
-      `from: ${message.fromRunId}`,
-      `body: ${truncateForModelAside(message.body, 4000)}`,
-      message.refs.length
-        ? `refs: ${message.refs
-            .slice(0, 8)
-            .map((ref) => `${ref.kind}:${ref.id} (${ref.label})`)
-            .join(", ")}`
-        : null,
-      "This is the child's bounded final result. Decide what it means and what to do next; the runtime does not accept, reject, review, or advance work for you.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  function childSubagentMailboxAside(
-    session: Session,
-    item: RuntimeEvent
-  ): string | null {
-    if (item.sessionId !== session.id || item.name !== "subagent.message")
-      return null;
-    const data = recordFromUnknown(item.data);
-    const parsed = SubagentMessageSchema.safeParse(data?.message);
-    if (!parsed.success) return null;
-    const message = parsed.data;
-    const deliveredToRunId =
-      typeof data?.deliveredToRunId === "string" ? data.deliveredToRunId : null;
-    if (
-      deliveredToRunId &&
-      session.subagentRunId &&
-      deliveredToRunId !== session.subagentRunId
-    )
-      return null;
-    const priority = message.priority ?? "normal";
-    return [
-      `Subagent mailbox ${priority === "interrupt" ? "interrupt" : "update"}:`,
-      `message: ${message.id}`,
-      `kind: ${message.kind}`,
-      `from: ${message.fromRunId}`,
-      message.toRunId ? `to run: ${message.toRunId}` : null,
-      message.toRole ? `to role: ${message.toRole}` : null,
-      `body: ${truncateForModelAside(message.body, 2000)}`,
-      message.refs.length
-        ? `refs: ${message.refs
-            .slice(0, 8)
-            .map((ref) => `${ref.kind}:${ref.id} (${ref.label})`)
-            .join(", ")}`
-        : null,
-      priority === "interrupt"
-        ? "Treat this as high-priority steering at this safe model boundary."
-        : "Use this message as goal-scoped coordination context.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  function subagentRunFromRuntimeEvent(item: RuntimeEvent): SubagentRun | null {
-    const data = recordFromUnknown(item.data);
-    const parsed = SubagentRunSchema.safeParse(data?.run);
-    return parsed.success ? parsed.data : null;
-  }
-
-  function subagentAsideEventKey(item: RuntimeEvent): string {
-    return typeof item.sequence === "number"
-      ? `seq:${item.sequence}`
-      : `id:${item.id}`;
+        return { type: "continue" };
+      },
+      onExhausted: async () => {
+        const limitLabel = Number.isFinite(maxHostedWorkspaceToolRounds)
+          ? `${maxHostedWorkspaceToolRounds}`
+          : "configured";
+        await appendAssistantText(
+          session,
+          params.turn.id,
+          [
+            `I hit the hosted workspace tool iteration limit (${limitLabel}) before I could finish.`,
+            "Please send the request again or narrow the workspace target so I can continue from the current context.",
+          ].join(" ")
+        );
+        return session;
+      },
+    });
   }
 
   function subagentWorkspaceToolPolicyBlocker(

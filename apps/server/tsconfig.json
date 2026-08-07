@@ -6,6 +6,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../../packages/agent-runtime" },
     { "path": "../../packages/cloud" },
     { "path": "../../packages/contracts" },
     { "path": "../../packages/harness/tsconfig.build.json" },

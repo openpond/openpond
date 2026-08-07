@@ -212,6 +212,33 @@ describe("contracts", () => {
       totalTokens: null,
     });
     assert.equal(started.status, "started");
+
+    const sparseAttribution = ModelUsageRecordSchema.parse({
+      ...record,
+      requestId: "request_sparse_attribution",
+      attribution: {
+        surface: "chat",
+        workflowKind: "subagent",
+      },
+    });
+    assert.deepEqual(sparseAttribution.attribution, {
+      surface: "chat",
+      workflowKind: "subagent",
+      sessionId: null,
+      turnId: null,
+      goalId: null,
+      subagentRunId: null,
+      subagentRoleId: null,
+      createImproveRunId: null,
+      commandName: null,
+      commandSource: null,
+      appId: null,
+      workspaceKind: null,
+      workspaceId: null,
+      localProjectId: null,
+      cloudProjectId: null,
+      sourceEventSequence: null,
+    });
   });
 
   test("provider contracts validate local BYOK surface without raw bootstrap secrets", () => {

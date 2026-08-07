@@ -499,6 +499,7 @@ export type TurnRunnerDependencies = {
 
 export type TurnRunner = TurnDispatcherPort & {
   isSessionTurnActive(sessionId: string): boolean;
+  waitForSessionTurnSettlement(sessionId: string): Promise<void>;
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   interruptAll(reason?: string): Promise<Turn[]>;
   close(): Promise<void>;

@@ -11,6 +11,7 @@ import {
   type Session,
 } from "@openpond/contracts";
 import type { HostedChatMessage } from "@openpond/cloud";
+import { materializeAgentPrompt } from "@openpond/agent-runtime";
 import { createContextUsageSnapshot } from "./context-usage.js";
 import {
   hostedToolProtocolForInstructionMode,
@@ -191,9 +192,11 @@ export function createHostedTurnHelpers(deps: {
     const connectedAppContext = buildConnectedAppIndexContext(
       options.connectedApps ?? []
     );
-    return buildPersonalizedSystemPrompt(
-      personalizationSoul,
-      [
+    return materializeAgentPrompt({
+      system: buildPersonalizedSystemPrompt(personalizationSoul, ""),
+      harnessInstructions: [],
+      skillInstructions: [],
+      hostInstructions: [
         basePrompt,
         developmentContext,
         toolProtocol,
@@ -204,10 +207,8 @@ export function createHostedTurnHelpers(deps: {
         actionCatalogContext,
         profileSkillContext,
         options.extraSystemContext,
-      ]
-        .filter(Boolean)
-        .join("\n\n")
-    );
+      ].filter((part): part is string => Boolean(part)),
+    });
   }
 
   async function appendAssistantText(

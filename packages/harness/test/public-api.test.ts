@@ -3,6 +3,7 @@ import { describe, expect, test } from "vitest";
 import {
   HarnessRunOverlaySchema,
   ImprovementObservationSchema,
+  LocalHarnessRefinerDecisionSchema,
   ToolDeclarationSchema,
   contentHash,
 } from "../src/index.js";
@@ -13,5 +14,6 @@ describe("@openpond/harness public API", () => {
     expect(ToolDeclarationSchema).toBeDefined();
     expect(HarnessRunOverlaySchema).toBeDefined();
     expect(ImprovementObservationSchema).toBeDefined();
+    expect(LocalHarnessRefinerDecisionSchema).toBeDefined();
   });
 });

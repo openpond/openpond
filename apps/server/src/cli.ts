@@ -1,4 +1,5 @@
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
+import { runAgentJsonlServer } from "@openpond/agent-runtime";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +8,7 @@ import type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 import { parseListen } from "./utils.js";
 
 type CreateServer = (options: OpenPondServerOptions) => Promise<OpenPondServerInstance>;
-type CliMode = "serve" | "web";
+type CliMode = "app-server" | "serve" | "web";
 type ParsedCliArgs = {
   mode: CliMode;
   host: string;
@@ -15,6 +16,7 @@ type ParsedCliArgs = {
   webRoot: string | null;
   openBrowser: boolean;
   printAccessUrl: boolean;
+  storeDir: string | null;
   help: boolean;
 };
 type BrowserHandoff = typeof openUrlWithSystemBrowser;
@@ -45,14 +47,16 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   let webRoot: string | null = null;
   let openBrowser = false;
   let printAccessUrl = false;
+  let storeDir: string | null = null;
   let index = 0;
 
   const command = args[0];
   if (command && !command.startsWith("-")) {
     if (command === "serve" || command === "server") mode = "serve";
+    else if (command === "app-server") mode = "app-server";
     else if (command === "web") mode = "web";
     else if (command === "help") {
-      return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: true };
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: true };
     }
     else throw new Error(`Unknown command: ${command}`);
     index = 1;
@@ -61,7 +65,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   for (let i = index; i < args.length; i += 1) {
     const arg = args[i]!;
     if (arg === "--help" || arg === "-h") {
-      return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: true };
+      return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: true };
     }
     if (arg === "--listen") {
       const listen = parseListen(requireValue(args, i, arg));
@@ -76,6 +80,9 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
       i += 1;
     } else if (arg === "--web-root") {
       webRoot = path.resolve(requireValue(args, i, arg));
+      i += 1;
+    } else if (arg === "--store-dir") {
+      storeDir = path.resolve(requireValue(args, i, arg));
       i += 1;
     } else if (arg === "--open-browser") {
       openBrowser = true;
@@ -92,7 +99,7 @@ function parseCliArgs(args: string[]): ParsedCliArgs {
   if (mode !== "web" && (openBrowser || printAccessUrl)) {
     throw new Error("Browser options are only available in web mode.");
   }
-  return { mode, host, port, webRoot, openBrowser, printAccessUrl, help: false };
+  return { mode, host, port, webRoot, openBrowser, printAccessUrl, storeDir, help: false };
 }
 
 function defaultWebRootCandidates(): string[] {
@@ -162,6 +169,7 @@ export async function resolveWebLaunchMessages(
 function printHelp(): void {
   console.log(`Usage:
   openpond-app-server serve [--hostname HOST] [--port PORT]
+  openpond-app-server app-server [--store-dir DIR]
   openpond-app-server web [--hostname HOST] [--port PORT] [--web-root DIR]
 
 Options:
@@ -169,6 +177,7 @@ Options:
   --hostname HOST        Bind host (default ${DEFAULT_HOST})
   --port PORT            Bind port, or 0 for any free port (default ${DEFAULT_PORT})
   --web-root DIR         Directory containing the built web UI for web mode
+  --store-dir DIR        Local app-server state directory
   --open-browser         Open the authenticated web URL in the system browser
   --print-access-url     Print the authenticated URL instead of opening it
 `);
@@ -186,7 +195,26 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
     throw new Error("Could not find a built OpenPond web UI. Run `pnpm build:web` or pass --web-root.");
   }
 
-  const instance = await createOpenPondServer({ host: args.host, port: args.port, webRoot });
+  const instance = await createOpenPondServer({
+    host: args.host,
+    port: args.mode === "app-server" ? 0 : args.port,
+    webRoot,
+    ...(args.storeDir ? { storeDir: args.storeDir } : {}),
+    silent: args.mode === "app-server",
+    httpEnabled: args.mode !== "app-server",
+  });
+  if (args.mode === "app-server") {
+    try {
+      await runAgentJsonlServer({
+        host: instance.agentRuntime,
+        readable: process.stdin,
+        writable: process.stdout,
+      });
+    } finally {
+      await instance.close();
+    }
+    return;
+  }
   const webBaseUrl = args.mode === "web" ? browserBaseUrl(instance) : null;
   console.log(
     `OPENPOND_APP_SERVER_READY ${JSON.stringify({

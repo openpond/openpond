@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import type { AgentRuntimeHost } from "@openpond/agent-runtime";
 import type { BootstrapPayload } from "@openpond/contracts";
 import type { OrganizationRequestAction } from "../openpond/organizations.js";
 import type { SandboxRequestAction } from "../openpond/sandboxes.js";
@@ -265,6 +266,7 @@ export type HttpRouteDeps = {
     payload: unknown
   ) => unknown;
   browserControlStatus: () => unknown;
+  agentRuntime: AgentRuntimeHost;
   createSession: (payload: unknown) => Promise<unknown>;
   patchSession: (sessionId: string, payload: unknown) => Promise<unknown>;
   sendTurn: (sessionId: string, payload: unknown) => Promise<unknown>;

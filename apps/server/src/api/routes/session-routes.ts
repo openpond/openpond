@@ -3,30 +3,39 @@ import type { HttpRouteContext } from "../http-route-types.js";
 
 export async function handleSessionRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const {
-    createSession,
     patchSession,
-    sendTurn,
     runSessionCommand,
     ensureCloudWorkspaceReady,
     recordPreflightTurnFailure,
-    interruptSessionTurn,
     compactSession,
     executeWorkspaceTool,
     runSubagentLifecycleAction,
-    resolveApproval,
+    agentRuntime,
   } = deps;
+  // Desktop remains on HTTP during the Local migration. Agent lifecycle routes
+  // are adapters to the same runtime exposed canonically through JSON-RPC.
+  const markTransitionalAgentAdapter = () =>
+    response.setHeader("X-OpenPond-Agent-Transport", "transitional-http-adapter");
   if (request.method === "POST" && requestUrl.pathname === "/v1/sessions") {
-    sendJson(response, 201, await createSession(await readJson(request)));
+    markTransitionalAgentAdapter();
+    const result = await agentRuntime.threadStart({ session: await readJson(request) }) as { thread: unknown };
+    sendJson(response, 201, result.thread);
     return true;
   }
   const sessionPatchMatch = /^\/v1\/sessions\/([^/]+)$/.exec(requestUrl.pathname);
   if (request.method === "PATCH" && sessionPatchMatch) {
+    markTransitionalAgentAdapter();
     sendJson(response, 200, await patchSession(sessionPatchMatch[1]!, await readJson(request)));
     return true;
   }
   const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(requestUrl.pathname);
   if (request.method === "POST" && turnMatch) {
-    sendJson(response, 202, await sendTurn(turnMatch[1]!, await readJson(request)));
+    markTransitionalAgentAdapter();
+    const result = await agentRuntime.turnStart({
+      threadId: turnMatch[1]!,
+      input: await readJson(request),
+    }) as { turn: unknown };
+    sendJson(response, 202, result.turn);
     return true;
   }
   const commandMatch = /^\/v1\/sessions\/([^/]+)\/commands$/.exec(requestUrl.pathname);
@@ -63,11 +72,14 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     requestUrl.pathname,
   );
   if (request.method === "POST" && turnInterruptMatch) {
-    sendJson(response, 202, await interruptSessionTurn(turnInterruptMatch[1]!));
+    markTransitionalAgentAdapter();
+    const result = await agentRuntime.turnInterrupt({ threadId: turnInterruptMatch[1]! }) as { turn: unknown };
+    sendJson(response, 202, result.turn);
     return true;
   }
   const compactMatch = /^\/v1\/sessions\/([^/]+)\/compact$/.exec(requestUrl.pathname);
   if (request.method === "POST" && compactMatch) {
+    markTransitionalAgentAdapter();
     sendJson(response, 202, await compactSession(compactMatch[1]!, await readJson(request)));
     return true;
   }
@@ -96,7 +108,12 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   }
   const approvalMatch = /^\/v1\/approvals\/([^/]+)$/.exec(requestUrl.pathname);
   if (request.method === "POST" && approvalMatch) {
-    sendJson(response, 200, await resolveApproval(approvalMatch[1]!, await readJson(request)));
+    markTransitionalAgentAdapter();
+    const result = await agentRuntime.approvalResolve({
+      approvalId: approvalMatch[1]!,
+      input: await readJson(request),
+    }) as { approval: unknown };
+    sendJson(response, 200, result.approval);
     return true;
   }
   return false;

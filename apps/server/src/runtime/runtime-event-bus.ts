@@ -52,6 +52,7 @@ export function createRuntimeEventBus({
   assistantDeltaFlushMs?: number;
 }) {
   const subscribers = new Set<RuntimeEventSubscriber>();
+  const runtimeListeners = new Set<(event: RuntimeEvent) => void>();
   const pendingAssistantDeltas = new Map<string, PendingAssistantDelta>();
 
   function logRuntimeEvent(runtimeEvent: RuntimeEvent): void {
@@ -91,6 +92,7 @@ export function createRuntimeEventBus({
   async function persistAndBroadcastRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void> {
     const persistedRuntimeEvent = (await store.appendRuntimeEvent(runtimeEvent)) ?? runtimeEvent;
     logRuntimeEvent(persistedRuntimeEvent);
+    for (const listener of runtimeListeners) listener(persistedRuntimeEvent);
     for (const subscriber of Array.from(subscribers)) {
       if (subscriber.response.destroyed) {
         subscribers.delete(subscriber);
@@ -154,6 +156,11 @@ export function createRuntimeEventBus({
     const subscriber: RuntimeEventSubscriber = { response, sessionId, ready: true, pending: [] };
     subscribers.add(subscriber);
     return () => disconnectSubscriber(subscriber, false);
+  }
+
+  function subscribeRuntimeEvents(listener: (event: RuntimeEvent) => void): () => void {
+    runtimeListeners.add(listener);
+    return () => runtimeListeners.delete(listener);
   }
 
   async function appendRuntimeEvent(runtimeEvent: RuntimeEvent): Promise<void> {
@@ -230,6 +237,7 @@ export function createRuntimeEventBus({
     addLiveSubscriber,
     closeEventSubscribers,
     openEventSubscriber,
+    subscribeRuntimeEvents,
     subscribers,
     truncateLogValue,
   };

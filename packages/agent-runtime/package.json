@@ -1,0 +1,35 @@
+{
+  "name": "@openpond/agent-runtime",
+  "version": "0.0.38",
+  "openpondReleaseVersioned": true,
+  "description": "Private host-neutral agent execution engine for OpenPond app-server",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project agent-runtime",
+    "generate:protocol": "tsx scripts/generate-protocol-schema.ts",
+    "check:protocol": "tsx scripts/generate-protocol-schema.ts --check",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run check:protocol && pnpm run build"
+  },
+  "dependencies": {
+    "@openpond/harness": "workspace:*",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "tsx": "4.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}
