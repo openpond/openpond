@@ -30,6 +30,7 @@
     "build:cloud": "tsc -b packages/cloud",
     "build:openpond": "pnpm run build:sdk && pnpm run build:cloud && pnpm --dir apps/cli run build",
     "build:contracts": "tsc -b packages/contracts",
+    "build:agent-runtime": "tsc -b packages/agent-runtime",
     "build:codex": "tsc -b packages/codex-provider",
     "build:runtime": "tsc -b packages/runtime",
     "build:server": "pnpm run build:openpond && tsc -b apps/server",
@@ -90,6 +91,7 @@
     "cli:build": "pnpm run build:web && pnpm --dir apps/cli run build",
     "cli:pack:dry-run": "npm pack ./apps/cli --dry-run",
     "agent-sdk:build": "pnpm --dir packages/agent-sdk run build",
+    "agent-runtime:check": "pnpm --dir packages/agent-runtime run check",
     "agent-sdk:typecheck": "pnpm --dir packages/agent-sdk run typecheck",
     "agent-sdk:test": "pnpm --dir packages/agent-sdk run test",
     "agent-sdk:check": "pnpm --dir packages/agent-sdk run check",
@@ -132,6 +134,7 @@
   },
   "devDependencies": {
     "@electron/asar": "^3.4.1",
+    "@openpond/agent-runtime": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/codex-provider": "workspace:*",
     "@openpond/connected-apps": "workspace:*",

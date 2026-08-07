@@ -15,7 +15,7 @@ export type DesktopHarnessCliInvocation = {
   cwd: string;
 };
 
-export async function runHarnessCommand(
+export async function runDesktopTestCommand(
   options: HarnessCommandOptions,
   rest: string[]
 ): Promise<void> {
@@ -38,15 +38,14 @@ export async function buildDesktopHarnessInvocation(input: {
 }): Promise<DesktopHarnessCliInvocation> {
   const options = input.options;
   const rest = input.rest;
-  const surface = rest[0];
-  const action = rest[1];
-  if (surface !== "desktop" || (action !== "run" && action !== "attach")) {
+  const action = rest[0];
+  if (action !== "run" && action !== "attach") {
     throw new CliUsageError(desktopHarnessCliUsage());
   }
 
-  const scenarios = rest.slice(2);
+  const scenarios = rest.slice(1);
   if (scenarios.length === 0) {
-    throw new CliUsageError("usage: openpond harness desktop run <scenario...> [options]");
+    throw new CliUsageError("usage: openpond desktop-test run <scenario...> [options]");
   }
 
   const startCwd = optionString(options, "cwd") || input.cwd || process.cwd();
@@ -142,8 +141,8 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 function desktopHarnessCliUsage(): string {
   return [
-    "usage: openpond harness desktop run <scenario...> [options]",
-    "       openpond harness desktop attach <scenario...> [options]",
+    "usage: openpond desktop-test run <scenario...> [options]",
+    "       openpond desktop-test attach <scenario...> [options]",
     "",
     "Options include --isolated, --attach, --packaged, --none, --app <path>,",
     "--server <url>, --token <token>, --token-file <path>, --devtools-port <port>, --artifacts-dir <path>,",

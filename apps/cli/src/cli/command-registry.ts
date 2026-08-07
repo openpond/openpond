@@ -309,8 +309,8 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options, rest }) => (await import("./project-agent")).runAgentCommand(options, rest),
   },
   {
-    name: "harness",
-    usage: "openpond harness desktop <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]",
+    name: "desktop-test",
+    usage: "openpond desktop-test <run|attach> <scenario...> [--isolated|--attach|--packaged|--none] [--app <path>] [--artifacts-dir <path>] [--json <path>]",
     optionSchema: {
       artifactsDir: "string",
       attach: "boolean",
@@ -327,7 +327,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       token: "string",
       tokenFile: "string",
     },
-    handler: async ({ options, rest }) => (await import("./harness")).runHarnessCommand(options, rest),
+    handler: async ({ options, rest }) => (await import("./desktop-test")).runDesktopTestCommand(options, rest),
   },
   {
     name: "sandbox",

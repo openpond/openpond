@@ -52,7 +52,7 @@
     {
       "id": "portable-harness-public-surface",
       "path": "packages/harness/test/public-api.test.ts",
-      "sha256": "c445a8d2cfd307a4b85a30cc87403a024f445848e174d2e37fc88029614b2751"
+      "sha256": "e916883512cc2ec7ac87be49e96f9cf97aaff5109bc1eef3705e8f392cb1923c"
     }
   ],
   "hosted": [

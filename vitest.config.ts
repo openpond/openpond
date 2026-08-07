@@ -78,6 +78,14 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
+          name: "agent-runtime",
+          include: ["packages/agent-runtime/test/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
           name: "agent-sdk",
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
         },

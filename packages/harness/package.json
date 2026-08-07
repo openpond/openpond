@@ -34,6 +34,10 @@
       "types": "./dist/types/models.d.ts",
       "import": "./dist/models.js"
     },
+    "./refiner": {
+      "types": "./dist/types/refiner.d.ts",
+      "import": "./dist/refiner.js"
+    },
     "./tools": {
       "types": "./dist/types/tools.d.ts",
       "import": "./dist/tools.js"
