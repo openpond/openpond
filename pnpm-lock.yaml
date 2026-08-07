@@ -108,6 +108,9 @@ importers:
         specifier: ^4.1.13
         version: 4.4.3
     devDependencies:
+      '@openpond/agent-runtime':
+        specifier: workspace:*
+        version: link:../../packages/agent-runtime
       '@openpond/cloud':
         specifier: workspace:*
         version: link:../../packages/cloud
