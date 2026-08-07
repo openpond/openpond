@@ -568,18 +568,22 @@ async function selectTaskMode(
   experience: "chat" | "work",
   label: string
 ): Promise<void> {
-  const selected = await evaluateValue<boolean>(
-    cdp,
-    `(() => {
-      const option = document.querySelector(
-        ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
-      );
-      if (!(option instanceof HTMLButtonElement)) return false;
-      option.click();
-      return true;
-    })()`
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `(() => {
+          const option = document.querySelector(
+            ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
+          );
+          if (!(option instanceof HTMLButtonElement)) return false;
+          option.click();
+          return true;
+        })()`
+      ),
+    5_000,
+    `Could not select the ${label} task mode.`
   );
-  if (!selected) throw new Error(`Could not select the ${label} task mode.`);
   await waitFor(
     async () =>
       evaluateValue<boolean>(
