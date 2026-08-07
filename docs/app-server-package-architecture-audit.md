@@ -92,6 +92,11 @@ stateful and placement-specific agent concern.
 | Training | `@openpond/taskset-sdk`, `@openpond/training-sdk`, `@openpond/trainer-local` | Taskset materialization/evaluation, training plans/adapters, and Local compute. |
 | Focused internals | `@openpond/codex-provider`, `@openpond/connected-apps`, `@openpond/logging` | Codex protocol client, connected-app catalog/contracts, and redacting file logging. |
 
+The root README intentionally lists only the four npm-hosted packages. This
+table is the internal repository map; it should remain in development and
+architecture documentation rather than being copied into the public package
+list.
+
 The intended dependency center is present:
 
 ```text
@@ -199,6 +204,85 @@ runtime/openpond graph, so this is not evidence of broken behavior. It is a
 change-isolation and ownership risk: the next hosted slice should reduce this
 composition root rather than add hosted adapters directly to it.
 
+### 6. Training and compute are Local product concerns, not app-server concerns
+
+The repository currently carries three private training packages plus a Python
+worker:
+
+| Surface | Current role | Disposition |
+| --- | --- | --- |
+| `@openpond/taskset-sdk` | Taskset validation, hashing, materialization, local grader execution, and portable local runtime helpers. It also re-exports Harness and Evals contracts. | Keep while training cleanup is in progress, then evaluate merging its public Taskset/evaluation primitives into `@openpond/evals` and keeping host-only materialization code private. It is not removable as dead code today. |
+| `@openpond/training-sdk` | Portable training plans, bundles, compatibility checks, destinations, and compute/engine/runtime adapter contracts. | Keep only to the extent that managed training still uses the portable plan and adapter boundary. Re-audit after Fireworks and local-provider removal; a managed-only product may need a materially smaller package. |
+| `@openpond/trainer-local` | An 85-line Local compute-target adapter. | Fold into the Local training host if Local training remains; delete with the Local training path if it does not. A standalone package is not justified by the current implementation. |
+| `python/openpond-training` | Optional local/native dataset, SFT/PPO, inference, model-manager, and vLLM evaluation worker. | Keep only if Local training or local model inference remains a supported product. It is active, not orphaned: the Local CPU destination invokes it, contracts generate schemas into it, push verification runs it, and CI tests it. Never include it in `@openpond/app-server` or the sandbox runtime. |
+
+The generic compute layer is also active and is not a Prime provider wrapper.
+It inventories Local CPU/device/runtime/storage state, manages model downloads,
+and supplies the Local training adapter. Removing Prime therefore does not by
+itself justify deleting `packages/contracts/src/compute.ts`, the Local compute
+service, or Settings compute UI. Those surfaces should be removed only if the
+product also drops Local training, local inference, and local model management.
+
+### 7. Prime is retired implementation-wise but leaves stale residue
+
+No live Prime compute-provider implementation or Prime package remains in the
+workspace. The remaining provider-specific residue is documentation, unused
+`.prime-compute-*` styles, an old `prime_hosted` stored-value decoder, a Taskset
+authoring reference, and a stale Python worker SBOM that still names Prime RL
+and Verifiers. Generic wording such as "Prime-style environment" in Evals is a
+semantic description rather than provider integration.
+
+The retired Prime documentation, styles, generated Skill artifact, and SBOM
+entries should be removed or regenerated. The stored-value decoder needs a
+separate data-compatibility decision: removing a provider does not necessarily
+mean old local records should become unreadable.
+
+### 8. Fireworks remains a large live product path
+
+Fireworks is not merely a compute provider package. It is a provider-native
+SFT/RFT destination with credentials, dataset projection, launch/status/
+cancel/collection, evaluation serving, RFT environments, API routes, product
+UI, contracts, persistence, tests, and public documentation. The audit found
+Fireworks references across more than seventy application, package,
+documentation, and root README files.
+
+The product direction is OpenPond Managed RL rather than Fireworks BYOK.
+Retiring Fireworks is therefore correct, but it must be handled as a focused
+cross-layer deletion. The managed adapter already submits to the authenticated
+OpenPond hosted API and does not require desktop Fireworks credentials. Remove
+Fireworks destination contracts, server composition, secrets and routes, UI,
+tests, and public claims together so the remaining managed path is coherent.
+Do not move any Fireworks code into `@openpond/app-server` as an intermediate
+step.
+
+### 9. The top-level `packaging` directory is documentation-only
+
+`packaging/` contains only `README.md`; active Electron packaging configuration
+lives under `apps/desktop`, while release automation lives in root scripts and
+GitHub Actions. The folder can be removed after preserving any unique release
+policy in the Desktop or public release documentation and removing its one
+repository-layout reference from `docs/public/development.md`. Removing the
+folder does not remove or change actual AppImage, macOS, CLI, signing, or
+release packaging.
+
+## Hosted Readiness Gate
+
+Not every cleanup item blocks hosted adoption. The required gate is a lean,
+shared app-server whose dependency graph excludes all Local product-only
+services. Hosted Work must not carry Python training, Local compute discovery,
+Fireworks, product HTTP/static routes, Desktop schedulers, or nested sandbox
+management.
+
+| Work | Required before hosted sandbox launch? | Reason |
+| --- | --- | --- |
+| Extract `@openpond/app-server` and converge tool dispatch | Yes | This is the runtime that the sandbox will actually start and the authority boundary hosted depends on. |
+| Prove the sandbox composition excludes training/compute/product services | Yes | A hidden full-Local boot would carry unnecessary credentials, lifecycle behavior, and attack surface into hosted Work. |
+| Remove Prime residue | No runtime dependency, but complete before the hosted product is presented as managed-only | The implementation is already absent; cleanup makes docs, generated artifacts, and supply-chain metadata truthful. |
+| Remove Fireworks BYOK | Not structurally required if the lean app-server excludes it, but complete before the managed-only training product is declared converged | It is still an exposed Local product path and public promise, not a sandbox runtime dependency. |
+| Decide whether Local Python training/inference remains | No, provided it is excluded from app-server | This is a Local product-scope decision. If unsupported, delete it and its TypeScript composition/tests in a focused change. |
+| Remove `packaging/` documentation folder | No | It has no runtime or release-build ownership. |
+| Consolidate training packages | No, provided none enter app-server | This reduces repository complexity but does not determine hosted agent correctness. |
+
 ## Product Decision
 
 Keep `@openpond/agent-runtime` as the portable/private agent-program package.
@@ -213,6 +297,12 @@ Create a private `@openpond/app-server` workspace package at
 `packages/app-server` above `@openpond/agent-runtime`. It owns the canonical
 agent-service composition and accepts typed placement adapters. It is not a
 separately published npm package; the public `openpond` CLI bundles it.
+
+Treat OpenPond Managed RL as the supported remote-training direction. Retire
+the Fireworks BYOK product path and remaining Prime artifacts in focused
+cleanup work; do not use either as a hosted app-server dependency. Keep Local
+training, inference, and compute only if they remain intentional Desktop/Local
+features after that product-scope review.
 
 Use that package in both placements:
 
@@ -274,6 +364,10 @@ cloud lifecycle services, or nested Work-sandbox management.
 - [x] Identify gaps against the hosted target. Done: isolated full-server boot,
   Local-owned production dispatch, hidden SDK coupling, naming ambiguity, and
   composition-root size.
+- [x] Audit training, compute, and packaging scope. Done: distinguished active
+  Local compute from retired Prime residue, confirmed Fireworks is a live
+  cross-layer destination, traced the Python worker into Local and CI entrypoints,
+  and identified the documentation-only packaging folder.
 
 ### Phase 1 - Establish lean app-server composition
 
