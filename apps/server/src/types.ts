@@ -1,3 +1,4 @@
+import type { AgentRuntimeHost } from "@openpond/agent-runtime";
 import type {
   AccountState,
   Approval,
@@ -52,11 +53,13 @@ export type OpenPondServerOptions = {
   webRoot?: string | null;
   version?: string;
   silent?: boolean;
+  httpEnabled?: boolean;
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
 };
 
 export type OpenPondServerInstance = {
+  agentRuntime: AgentRuntimeHost;
   url: string;
   token: string;
   tokenFile: string;

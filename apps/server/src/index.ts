@@ -109,6 +109,7 @@ import {
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
+import { createLocalAgentRuntimeHost } from "./runtime/local-agent-runtime-host.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
@@ -262,6 +263,7 @@ export async function createOpenPondServer(
     appendRuntimeEvent,
     closeEventSubscribers,
     openEventSubscriber,
+    subscribeRuntimeEvents,
     truncateLogValue,
   } = createRuntimeEventBus({
     logger,
@@ -1851,16 +1853,45 @@ export async function createOpenPondServer(
     },
     webRoot: options.webRoot ?? null,
   });
-  actualPort = await listenOpenPondHttpServer({
-    host,
-    httpServer,
-    logger,
-    port,
-    serverId,
-  });
+  if (options.httpEnabled !== false) {
+    actualPort = await listenOpenPondHttpServer({
+      host,
+      httpServer,
+      logger,
+      port,
+      serverId,
+    });
+  } else {
+    actualPort = 0;
+  }
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
-  localAgentScheduleLoop.start();
+  if (options.httpEnabled !== false) localAgentScheduleLoop.start();
+
+  const agentRuntime = createLocalAgentRuntimeHost({
+    createSession,
+    getSession,
+    turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
+    runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
+    sendTurn,
+    isSessionTurnActive: turnRunner.isSessionTurnActive,
+    waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
+    interruptSessionTurn,
+    resolveApproval,
+    inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
+    validateHarness: async () => {
+      const release = await resolveSelectedLocalHarnessRelease(store);
+      return release
+        ? {
+            valid: true,
+            workspaceId: release.workspaceId,
+            harnessRelease: release.harnessRelease,
+            agentSnapshot: release.agentSnapshot,
+          }
+        : { valid: false, reason: "No Local Harness release is selected." };
+    },
+    subscribeRuntimeEvents,
+  });
 
   const status: ServerStatus = {
     id: serverId,
@@ -1907,6 +1938,7 @@ export async function createOpenPondServer(
   });
 
   return {
+    agentRuntime,
     url: `http://${host}:${actualPort}`,
     token,
     tokenFile,

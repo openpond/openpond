@@ -142,6 +142,7 @@ export const HarnessTurnSnapshotSchema = z
     channelName: ReleaseIdSchema,
     channelRevision: RevisionSchema,
     harnessRelease: ImmutableReleaseRefSchema,
+    toolCatalogHash: ReleaseHashSchema.nullable().optional(),
     overlay: HarnessOverlaySnapshotRefSchema.nullable().optional().default(null),
   })
   .strict();

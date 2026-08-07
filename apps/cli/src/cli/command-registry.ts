@@ -166,6 +166,15 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     handler: async ({ options }) => (await import("./core-commands")).runHealth(options),
   },
   {
+    name: "app-server",
+    usage: "openpond app-server [--store-dir DIR]",
+    optionSchema: {
+      storeDir: "string",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./app-layer")).runOpenPondServerCommand("app-server", options, rest),
+  },
+  {
     name: "serve",
     usage: "openpond serve [args]",
     optionSchema: {

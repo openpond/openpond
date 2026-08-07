@@ -13,6 +13,7 @@ export type Command =
   | "profile"
   | "health"
   | "serve"
+  | "app-server"
   | "ui"
   | "tui"
   | "interactive"

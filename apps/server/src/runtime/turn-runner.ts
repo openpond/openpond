@@ -496,6 +496,19 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     runtimeEventsForSession: (sessionId, query) =>
       store.runtimeEventsForSession(sessionId, query),
     getSession,
+    recordTurnToolCatalog: async ({ turnId, hash, capabilities }) => {
+      await store.updateTurn(turnId, (turn) => ({
+        ...turn,
+        metadata: {
+          ...turn.metadata,
+          toolCatalogHash: hash,
+          toolCapabilities: capabilities,
+        },
+        harnessSnapshot: turn.harnessSnapshot
+          ? { ...turn.harnessSnapshot, toolCatalogHash: hash }
+          : turn.harnessSnapshot,
+      }));
+    },
     getTaskset: store.getTaskset
       ? (tasksetId) => store.getTaskset!(tasksetId)
       : undefined,
@@ -1675,6 +1688,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
   return {
     sendTurn,
     isSessionTurnActive: (sessionId: string) => activeTurns.has(sessionId),
+    waitForSessionTurnSettlement: async (sessionId: string) => {
+      await activeTurns.get(sessionId)?.settled;
+    },
     interruptSessionTurn,
     interruptAll: turnRunnerLifecycle.interruptAll,
     close: turnRunnerLifecycle.close,

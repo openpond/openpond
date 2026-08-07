@@ -14,7 +14,10 @@ import {
   type WorkspaceDiffSummary,
   type WorkspaceToolRequest,
 } from "@openpond/contracts";
-import { providerRoundSequence } from "@openpond/agent-runtime";
+import {
+  createAgentToolCatalogProjection,
+  providerRoundSequence,
+} from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import { trustedProviderContextLimit } from "../../openpond/context-usage.js";
@@ -113,6 +116,11 @@ export function createHostedToolLoopRuntime(deps: {
     }
   ): Promise<RuntimeEvent[]>;
   getSession(sessionId: string): Promise<Session>;
+  recordTurnToolCatalog?(input: {
+    turnId: string;
+    hash: string;
+    capabilities: Array<Record<string, unknown>>;
+  }): Promise<void>;
   getTaskset?: (tasksetId: string) => Promise<Taskset | null>;
   appendHostedContextUsage: TurnRunnerDependencies["appendHostedContextUsage"];
   maxHostedWorkspaceToolRounds: number;
@@ -249,6 +257,20 @@ export function createHostedToolLoopRuntime(deps: {
     const nativeToolDefinitionByName = new Map(
       nativeToolDefinitions.map((definition) => [definition.name, definition])
     );
+    const effectiveToolCatalog = createAgentToolCatalogProjection(
+      nativeToolDefinitions.map((definition) => ({
+        name: definition.name,
+        description: definition.description,
+        inputSchema: definition.parameters,
+        placement: "local" as const,
+        executorAvailable: typeof definition.execute === "function",
+      })),
+    );
+    await deps.recordTurnToolCatalog?.({
+      turnId: params.turn.id,
+      hash: effectiveToolCatalog.hash,
+      capabilities: effectiveToolCatalog.capabilities,
+    });
     let completedTrainingHarnessActions = 0;
     const textFallbackMode = hostedToolInstructionModeForProvider(
       hostedToolFlags,

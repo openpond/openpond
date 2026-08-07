@@ -23,6 +23,16 @@ export type AgentToolExecutionContext = {
 
 export type AgentToolCatalog = ReturnType<typeof createAgentToolCatalog>;
 
+export type AgentToolCatalogProjectionInput = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  placement: AgentToolPlacement;
+  displayLabel?: string;
+  unavailableReason?: string | null;
+  executorAvailable: boolean;
+};
+
 export function createAgentToolCatalog(definitions: readonly AgentToolDefinition[]) {
   const byName = new Map<string, AgentToolDefinition>();
   for (const definition of definitions) {
@@ -64,4 +74,42 @@ export async function executeAgentTool(
   }
   if (!definition.execute) throw new Error(`Agent tool ${input.name} has no executor.`);
   return definition.execute(definition.inputSchema.parse(input.arguments), input.context);
+}
+
+export function createAgentToolCatalogProjection(
+  definitions: readonly AgentToolCatalogProjectionInput[],
+) {
+  const names = new Set<string>();
+  const tools = [...definitions]
+    .map((definition) => {
+      const name = definition.name.trim();
+      if (!name) throw new Error("Agent tool names cannot be empty.");
+      if (names.has(name)) throw new Error(`Duplicate agent tool: ${name}.`);
+      names.add(name);
+      if (!definition.unavailableReason && !definition.executorAvailable) {
+        throw new Error(`Agent tool ${name} is declared as available without an executor.`);
+      }
+      return { ...definition, name };
+    })
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const modelTools = tools
+    .filter((tool) => !tool.unavailableReason)
+    .map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    }));
+  const capabilities = tools.map((tool) => ({
+    name: tool.name,
+    displayLabel: tool.displayLabel ?? tool.name,
+    placement: tool.placement,
+    available: !tool.unavailableReason,
+    unavailableReason: tool.unavailableReason ?? null,
+  }));
+  return {
+    tools,
+    modelTools,
+    capabilities,
+    hash: canonicalHash({ modelTools, capabilities }),
+  };
 }

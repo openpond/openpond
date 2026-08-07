@@ -20,7 +20,7 @@ export class OpenPondChildProcessExitError extends Error {
 }
 
 export async function runOpenPondServerCommand(
-  mode: "serve" | "web",
+  mode: "app-server" | "serve" | "web",
   options: CliOptions,
   rest: string[],
 ): Promise<void> {

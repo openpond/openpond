@@ -200,6 +200,15 @@ Usage:
 Options:
   --json
 ```
+## app-server
+
+```text
+Usage:
+  openpond app-server [--store-dir DIR]
+
+Options:
+  --store-dir <string>
+```
 ## serve
 
 ```text
