@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   canonicalHash,
+  agentCompactionDecision,
   createAgentRuntimeService,
   createAgentToolCatalog,
   executeAgentTool,
@@ -117,6 +118,20 @@ describe("@openpond/agent-runtime", () => {
       failed: async () => { calls.push("failed-recorded"); },
     })).rejects.toThrow("compaction failed");
     expect(calls.slice(-2)).toEqual(["failed-started", "failed-recorded"]);
+  });
+
+  test("owns provider-neutral compaction threshold decisions", () => {
+    expect(agentCompactionDecision({
+      projectedTokens: 700,
+      maxContextTokens: 1_000,
+      usableContextTokens: 800,
+      triggerPercent: 85,
+    })).toMatchObject({ shouldCompact: true, thresholdTokens: 680 });
+    expect(agentCompactionDecision({
+      projectedTokens: 10,
+      maxContextTokens: null,
+      usableContextTokens: null,
+    })).toMatchObject({ shouldCompact: false, maxContextTokens: 0 });
   });
 
   test("owns thread and turn lifecycle telemetry without recording request payloads", async () => {

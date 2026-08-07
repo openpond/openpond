@@ -11,9 +11,10 @@ installation, and control-plane transport remain Phase 3 or later.
   sequencing and exhaustion, tool catalog projection and dispatch, prompt
   materialization, the versioned JSON-RPC contract, the transport-neutral
   thread/turn service, privacy-safe lifecycle telemetry, generated
-  client/schema artifacts, and ordered JSONL transport. The provider-specific
-  round body, compaction algorithm, canonical event persistence, and durable
-  checkpoint adoption are still being extracted from `apps/server`.
+  client/schema artifacts, ordered JSONL transport, the provider-neutral
+  compaction threshold/lifecycle policy, canonical event persistence, and
+  durable checkpoint creation. The provider-specific round body and full
+  compaction execution algorithm are still being extracted from `apps/server`.
 - `@openpond/harness` owns the portable Refiner decision schema, bounded prompt,
   streaming parser, timeout, repair behavior, deterministic trigger/detour
   detection, bounded evidence projection, revision checks, stable IDs, and
@@ -38,6 +39,10 @@ Milestone commits on `feat/app-server-runtime-convergence`:
   spelling, and shared HTTP/RPC runtime composition.
 - `b2e86b9` — handshake ordering, process/resilience metrics, preliminary
   compaction lifecycle adapter, and initial Local acceptance ledger.
+- `90cd745` — shared Local runtime service ownership, canonical event and
+  checkpoint adoption, provider-round controller, and privacy-safe telemetry.
+- `3faae28` — portable Refiner detector/evidence/revision helpers moved into
+  `@openpond/harness`, leaving SQLite and filesystem concerns in the host.
 
 These commits are the initial draft baseline, not proof that the ownership
 extraction is complete.
@@ -151,10 +156,10 @@ The in-app browser was used against the running Local app at
 
 ## Local completion boundary
 
-Phases 0–2 are not complete yet. Completion requires the remaining production
-provider/tool orchestration, compaction ownership, canonical event/checkpoint
-persistence, and portable Refine classification to match the ownership model,
-followed by the same real Chat/Work/Harness matrix on the final branch commit.
+Phases 0–2 are not complete yet. Completion requires moving the remaining
+provider-specific round body and full compaction execution algorithm behind
+typed runtime host ports, followed by the same real Chat/Work/Harness matrix on
+the final branch commit.
 Phase 3 must consume that boundary without moving hosted provider credentials,
 connected-app implementations, sandbox provisioning, or web product state into
 `@openpond/agent-runtime` or `@openpond/harness`.

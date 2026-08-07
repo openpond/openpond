@@ -4,6 +4,7 @@ import {
   type ChatProvider,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
+import { agentCompactionDecision } from "@openpond/agent-runtime";
 import type { HostedChatMessage } from "@openpond/cloud";
 import {
   estimateHostedMessageTokens,
@@ -53,27 +54,20 @@ export function hostedAutoCompactionDecision(input: {
   const hostedProvider = hostedContextProvider(input.provider);
   const maxContextTokens = input.maxContextTokens ?? (hostedProvider ? hostedContextLimit(hostedProvider, input.model) : null);
   if (!maxContextTokens) {
-    return {
-      shouldCompact: false,
+    return agentCompactionDecision({
       projectedTokens: estimateHostedMessageTokens(input.messages),
-      thresholdTokens: Number.MAX_SAFE_INTEGER,
-      usableContextTokens: 0,
-      maxContextTokens: 0,
-      tokenSource: "heuristic",
-    };
+      maxContextTokens: null,
+      usableContextTokens: null,
+      triggerPercent: input.triggerPercent,
+    });
   }
   const usableContextTokens = usableHostedContextLimit(maxContextTokens);
-  const triggerRatio = Math.max(0.01, Math.min(1, (input.triggerPercent ?? 85) / 100));
-  const thresholdTokens = Math.max(1, Math.floor(usableContextTokens * triggerRatio));
-  const projectedTokens = estimateHostedMessageTokens(input.messages);
-  return {
-    shouldCompact: projectedTokens >= thresholdTokens,
-    projectedTokens,
-    thresholdTokens,
+  return agentCompactionDecision({
+    projectedTokens: estimateHostedMessageTokens(input.messages),
     usableContextTokens,
     maxContextTokens,
-    tokenSource: "heuristic",
-  };
+    triggerPercent: input.triggerPercent,
+  });
 }
 
 export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {
