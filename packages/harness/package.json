@@ -42,6 +42,10 @@
       "types": "./dist/types/refiner-detection.d.ts",
       "import": "./dist/refiner-detection.js"
     },
+    "./refiner-support": {
+      "types": "./dist/types/refiner-support.d.ts",
+      "import": "./dist/refiner-support.js"
+    },
     "./tools": {
       "types": "./dist/types/tools.d.ts",
       "import": "./dist/tools.js"

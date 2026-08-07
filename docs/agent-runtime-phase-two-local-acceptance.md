@@ -15,8 +15,11 @@ installation, and control-plane transport remain Phase 3 or later.
   round body, compaction algorithm, canonical event persistence, and durable
   checkpoint adoption are still being extracted from `apps/server`.
 - `@openpond/harness` owns the portable Refiner decision schema, bounded prompt,
-  streaming parser, timeout, and repair behavior. SQLite, queues, provider
-  credentials, UI composition, and release selection remain Local host concerns.
+  streaming parser, timeout, repair behavior, deterministic trigger/detour
+  detection, bounded evidence projection, revision checks, stable IDs, and
+  overlay/workspace comparison helpers. SQLite artifact lookup, queues,
+  provider credentials, filesystem materialization, UI composition, and release
+  selection remain Local host concerns.
 - `openpond app-server` launches the existing app-server in agent-only mode over
   JSONL stdio. It does not listen on HTTP or start the Local scheduler. Desktop
   continues using the HTTP/static-web adapter; its create/start/interrupt and
