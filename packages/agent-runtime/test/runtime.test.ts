@@ -6,7 +6,8 @@ import {
   createAgentToolCatalog,
   executeAgentTool,
   materializeAgentPrompt,
-  providerRoundSequence
+  providerRoundSequence,
+  runAgentCompaction,
 } from "../src/index.js";
 
 describe("@openpond/agent-runtime", () => {
@@ -68,5 +69,25 @@ describe("@openpond/agent-runtime", () => {
       skillInstructions: ["skill"],
       hostInstructions: ["host"]
     })).toBe("system\n\nharness\n\nskill\n\nhost");
+  });
+
+  test("owns compaction lifecycle ordering while the host supplies execution", async () => {
+    const calls: string[] = [];
+    await expect(runAgentCompaction({
+      started: async () => { calls.push("started"); },
+      compact: async () => {
+        calls.push("compact");
+        return { summary: "bounded" };
+      },
+      failed: async () => { calls.push("failed"); },
+    })).resolves.toEqual({ summary: "bounded" });
+    expect(calls).toEqual(["started", "compact"]);
+
+    await expect(runAgentCompaction({
+      started: async () => { calls.push("failed-started"); },
+      compact: async () => { throw new Error("compaction failed"); },
+      failed: async () => { calls.push("failed-recorded"); },
+    })).rejects.toThrow("compaction failed");
+    expect(calls.slice(-2)).toEqual(["failed-started", "failed-recorded"]);
   });
 });

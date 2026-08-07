@@ -105,6 +105,10 @@ export class AgentJsonRpcDispatcher {
     this.#host = host;
   }
 
+  get initialized(): boolean {
+    return this.#initialized;
+  }
+
   async handle(value: unknown): Promise<JsonRpcResponse | null> {
     const notification = JsonRpcNotificationSchema.safeParse(value);
     if (notification.success && !("id" in (value as object))) {

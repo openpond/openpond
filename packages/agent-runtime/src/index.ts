@@ -1,4 +1,5 @@
 export * from "./canonical.js";
+export * from "./compaction.js";
 export * from "./events.js";
 export * from "./generated/agent-rpc-client.js";
 export * from "./jsonl.js";

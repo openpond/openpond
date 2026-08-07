@@ -142,8 +142,52 @@ describe("agent JSON-RPC protocol", () => {
       method: "turn/event",
       params: { name: "assistant.delta", output: "hello" },
     });
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: AGENT_PROTOCOL_VERSION, client: { name: "notification-test", version: "1" } } })}\n`);
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", method: "initialized" })}\n`);
     readable.end();
     await server;
     expect(output.join("")).toContain('"method":"turn/event"');
+  });
+
+  test("buffers pre-initialization events and streams a bounded event burst with backpressure", async () => {
+    let emit!: (notification: JsonRpcNotification) => void;
+    const runtimeHost = host();
+    runtimeHost.subscribe = (listener) => {
+      emit = listener;
+      return () => undefined;
+    };
+    const readable = new PassThrough();
+    const writable = new PassThrough();
+    const output: string[] = [];
+    writable.on("data", (chunk) => output.push(chunk.toString()));
+    const server = runAgentJsonlServer({ host: runtimeHost, readable, writable });
+    const eventCount = 500;
+    const startedAt = performance.now();
+    for (let index = 0; index < eventCount; index += 1) {
+      emit({
+        jsonrpc: "2.0",
+        method: "item/assistantDelta",
+        params: { sequence: index, output: "x" },
+      });
+    }
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: AGENT_PROTOCOL_VERSION, client: { name: "throughput-test", version: "1" } } })}\n`);
+    readable.write(`${JSON.stringify({ jsonrpc: "2.0", method: "initialized" })}\n`);
+    readable.end();
+    await server;
+    const throughputMs = performance.now() - startedAt;
+    const messages = output.join("").trim().split("\n").map((line) => JSON.parse(line));
+    expect(messages.filter((message) => message.method === "item/assistantDelta")).toHaveLength(eventCount);
+    expect(messages.findIndex((message) => message.method === "item/assistantDelta")).toBeGreaterThan(
+      messages.findIndex((message) => message.id === 1),
+    );
+    expect(throughputMs).toBeLessThan(2_000);
+    if (process.env.OPENPOND_REPORT_AGENT_METRICS === "1") {
+      console.info(`OPENPOND_AGENT_METRIC ${JSON.stringify({
+        name: "eventThroughputPerSecond",
+        value: Math.round((eventCount / throughputMs) * 100_000) / 100,
+        eventCount,
+        durationMs: Math.round(throughputMs * 100) / 100,
+      })}`);
+    }
   });
 });

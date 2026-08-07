@@ -14,6 +14,7 @@ import {
   type ServerStatus,
 } from "@openpond/contracts";
 import { detectCodexStatus } from "@openpond/codex-provider";
+import { runAgentCompaction } from "@openpond/agent-runtime";
 import {
   installAgentPackageIntoActiveProfile,
   loadOpenPondProfileLibrary,
@@ -1390,9 +1391,9 @@ export async function createOpenPondServer(
         reason: input.reason,
       },
     });
-    await appendRuntimeEvent(startedEvent);
-
-    try {
+    return runAgentCompaction({
+      started: async () => { await appendRuntimeEvent(startedEvent); },
+      compact: async () => {
       if (session.provider === "codex") {
         const runtime = await ensureCodexRuntime(session, {
           approvalPolicy: "on-request",
@@ -1486,16 +1487,17 @@ export async function createOpenPondServer(
         maxContextTokens: result.maxContextTokens,
         tokenSource: result.tokenSource,
       };
-    } catch (error) {
-      await appendCompactionFailed(
-        session,
-        session.provider,
-        requestedModel,
-        input.reason,
-        error
-      );
-      throw error;
-    }
+      },
+      failed: async (error) => {
+        await appendCompactionFailed(
+          session,
+          session.provider,
+          requestedModel,
+          input.reason,
+          error
+        );
+      },
+    });
   }
 
   async function gitAvailabilityPayload(): Promise<unknown> {
