@@ -3,14 +3,15 @@
 Status: Lean runtime convergence is implemented and validated. Retired provider
 cleanup, executable tool-catalog convergence, the private app-server package,
 SDK guardrails, and the dedicated hosted placement adapter are complete.
-`openpond app-server` now starts the canonical agent runtime without constructing
-the Local HTTP/product server. Hosted rollout still requires publishing the CLI,
-pinning that version in the sandbox image, and running the staging acceptance
-matrix.
+`openpond app-server` starts the canonical agent runtime without constructing
+the Local HTTP/product server. In hosted Web, that process runs outside the
+compute sandbox and forwards only the attached sandbox's bounded Work actions
+through the scoped Sandbox API.
 
-Next proof: publish and pin the CLI, launch it from a hosted sandbox workspace,
-complete the JSONL readiness handshake, and pass no-Project Work before enabling
-Project-backed Development.
+Next proof: publish and pin the CLI in the hosted worker image, complete the
+JSONL readiness handshake there, and pass no-Project Work against a separately
+provisioned, exactly scoped compute sandbox before enabling Project-backed
+Development.
 
 Latest checkpoint: 2026-08-07. Local Python training, local inference, Compute
 settings, and `@openpond/trainer-local` remain supported and are explicitly
@@ -19,8 +20,9 @@ documentation-only packaging folder are removed. `@openpond/app-server` now
 owns canonical service/JSONL composition, Local HTTP uses it in-process, and
 native provider tools execute through the same admitted catalog that produces
 schemas, capability evidence, and hashes. The dedicated runtime reports the
-`hosted_work` placement and operates directly in the sandbox workspace over
-JSONL stdio. A real `pnpm dev` upgrade walkthrough also exposed and repaired
+`hosted_work` placement and serves JSONL stdio from the host placement while
+the Sandbox API owns compute/file execution. A real `pnpm dev` upgrade
+walkthrough also exposed and repaired
 clean-checkout SDK build ordering plus persisted Prime, Fireworks, and
 hosted-BYOK training values that previously blocked bootstrap against an
 existing Local database.
@@ -146,9 +148,10 @@ The intended dependency center is present:
 - `apps/server/src/app-server-runtime.ts`: the dedicated `hosted_work`
   composition initializes SQLite, the hosted provider, workspace tools,
   connected apps, approvals, Harness/Refiner, Agent Runtime, and JSONL only.
-- `apps/server/src/runtime/app-server-workspace.ts`: hosted filesystem,
-  resource, and git tools execute directly against the sandbox working
-  directory and reject nested `sandbox_*` operations.
+- `apps/server/src/runtime/app-server-workspace.ts` and
+  `apps/server/src/runtime/app-server-sandbox-tools.ts`: local placement tools
+  remain host-local, while hosted Work file/command actions are restricted to
+  the already-attached sandbox id and forwarded through the scoped Sandbox API.
 - `apps/server/src/runtime/hosted-turn/tool-loop-runtime.ts`: the Local host
   builds the effective native definitions, records their projected hash, and
   still calls the server-owned native dispatcher.
@@ -179,7 +182,8 @@ still constructed the full Local product server. The command now selects a
 dedicated executable and `createOpenPondAppServer` factory. Its declared
 composition contains twelve focused services and explicitly excludes HTTP,
 static delivery, training, compute, schedules, Desktop, remote access, and
-nested sandbox provisioning.
+sandbox provisioning. Its remote sandbox adapter is a bounded client for the
+pre-attached workspace, not a compute lifecycle owner.
 
 This closes the primary architecture issue for hosted convergence. Both the
 protocol and the executable composition are independent of the Local product
@@ -287,8 +291,9 @@ all three shapes.
 The code-level hosted gate is now satisfied: the shared app-server dependency
 graph excludes Local product-only services. Hosted Work does not initialize
 Python training, Local compute discovery, Fireworks, product HTTP/static
-routes, Desktop schedulers, or nested sandbox management. The remaining gate
-is operational distribution and staging proof.
+routes, Desktop schedulers, or sandbox provisioning. It may call the scoped
+Sandbox API for the exact compute workspace attached by the control plane. The
+remaining gate is operational distribution and staging proof.
 
 | Work | Required before hosted sandbox launch? | Reason |
 | --- | --- | --- |
@@ -358,7 +363,8 @@ apps/server
 The package boundary is an implementation constraint, not a new public
 distribution surface. `openpond app-server` must initialize it without
 constructing HTTP/static routes, training, Local product schedulers, unrelated
-cloud lifecycle services, or nested Work-sandbox management.
+cloud lifecycle services, or Work-sandbox provisioning. Hosted placement may
+use the scoped remote-workspace client for an already-attached sandbox.
 
 ## Boundaries
 
@@ -433,8 +439,10 @@ cloud lifecycle services, or nested Work-sandbox management.
   product HTTP/static ownership remains in `apps/server`.
 - [x] Prove agent-only boot does not construct or start excluded Local product
   services. Done: composition and source guards exclude HTTP, static product,
-  training, compute, schedules, Desktop, remote, and nested sandbox services;
-  an installed-CLI smoke boots from an unrelated directory with clean JSONL.
+  training, compute, schedules, Desktop, remote control, and sandbox
+  provisioning services; an installed-CLI smoke boots from an unrelated
+  directory with clean JSONL, and focused tests prove exact-id remote Work
+  forwarding.
 
 ### Phase 3 - Finish authoritative runtime tool ownership
 

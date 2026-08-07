@@ -45,6 +45,7 @@ import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
 import { appDataDir } from "./paths.js";
 import { createBackgroundWorkerQueue } from "./runtime/background-worker-queue.js";
 import { createAppServerWorkspace } from "./runtime/app-server-workspace.js";
+import type { AppServerSandboxRequest } from "./runtime/app-server-sandbox-tools.js";
 import {
   isBundledAuthoringSkillName,
   loadBundledAuthoringSkills,
@@ -67,6 +68,7 @@ export type OpenPondAppServerOptions = {
   version?: string;
   maxHostedWorkspaceToolRounds?: number;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
+  sandboxRequest?: AppServerSandboxRequest;
 };
 
 export type OpenPondAppServerInstance = AppServerInstance & {
@@ -174,6 +176,7 @@ export async function createOpenPondAppServer(
     logger,
     getSession,
     appendRuntimeEvent,
+    sandboxRequest: options.sandboxRequest,
   });
   const upsertApproval = async (approval: Approval): Promise<void> => {
     await store.upsertApproval(approval);
