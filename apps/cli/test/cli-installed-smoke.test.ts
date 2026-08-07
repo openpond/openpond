@@ -4,12 +4,12 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 
 import { beforeAll, describe, expect, test } from "vitest";
-import { AGENT_PROTOCOL_VERSION } from "@openpond/agent-runtime";
 
 import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dirname, "..");
+const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-06";
 
 type CliPackageJson = {
   version: string;
@@ -97,7 +97,7 @@ describe("CLI installed-package smoke", () => {
           id: 1,
           method: "initialize",
           params: {
-            protocolVersion: AGENT_PROTOCOL_VERSION,
+            protocolVersion: RELEASE_AGENT_PROTOCOL_VERSION,
             client: { name: "installed-cli-smoke", version: "1" },
           },
         },

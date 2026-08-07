@@ -68,7 +68,6 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@openpond/agent-runtime": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/contracts": "workspace:*",
     "@openpond/local-server": "workspace:*",
