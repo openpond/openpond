@@ -5,5 +5,6 @@ export * from "./generated/agent-rpc-client.js";
 export * from "./jsonl.js";
 export * from "./protocol.js";
 export * from "./provider-loop.js";
+export * from "./service.js";
 export * from "./snapshots.js";
 export * from "./tools.js";

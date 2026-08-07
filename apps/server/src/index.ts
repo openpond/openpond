@@ -1667,6 +1667,34 @@ export async function createOpenPondServer(
 
   const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
 
+  const agentRuntime = createLocalAgentRuntimeHost({
+    createSession,
+    getSession,
+    turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
+    runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
+    sendTurn,
+    isSessionTurnActive: turnRunner.isSessionTurnActive,
+    waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
+    interruptSessionTurn,
+    resolveApproval,
+    inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
+    validateHarness: async () => {
+      const release = await resolveSelectedLocalHarnessRelease(store);
+      return release
+        ? {
+            valid: true,
+            workspaceId: release.workspaceId,
+            harnessRelease: release.harnessRelease,
+            agentSnapshot: release.agentSnapshot,
+          }
+        : { valid: false, reason: "No Local Harness release is selected." };
+    },
+    subscribeRuntimeEvents,
+    observeRuntimeOperation: (runtimeEvent) => {
+      logger.info("agent runtime operation", runtimeEvent);
+    },
+  });
+
   const remoteAccess = createRemoteAccessManager({
     getActualPort: () => actualPort,
     logger,
@@ -1796,6 +1824,7 @@ export async function createOpenPondServer(
       browserControlNext: browserControlQueue.claimNext,
       browserControlComplete: browserControlQueue.completeRequest,
       browserControlStatus: browserControlQueue.status,
+      agentRuntime,
       createSession,
       patchSession: patchSessionPayload,
       sendTurn,
@@ -1869,31 +1898,6 @@ export async function createOpenPondServer(
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
   if (options.httpEnabled !== false) localAgentScheduleLoop.start();
-
-  const agentRuntime = createLocalAgentRuntimeHost({
-    createSession,
-    getSession,
-    turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
-    runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
-    sendTurn,
-    isSessionTurnActive: turnRunner.isSessionTurnActive,
-    waitForSessionTurnSettlement: turnRunner.waitForSessionTurnSettlement,
-    interruptSessionTurn,
-    resolveApproval,
-    inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
-    validateHarness: async () => {
-      const release = await resolveSelectedLocalHarnessRelease(store);
-      return release
-        ? {
-            valid: true,
-            workspaceId: release.workspaceId,
-            harnessRelease: release.harnessRelease,
-            agentSnapshot: release.agentSnapshot,
-          }
-        : { valid: false, reason: "No Local Harness release is selected." };
-    },
-    subscribeRuntimeEvents,
-  });
 
   const status: ServerStatus = {
     id: serverId,

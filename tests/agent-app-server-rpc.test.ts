@@ -118,7 +118,16 @@ describe("OpenPond app-server JSON-RPC integration", () => {
         harnessRelease: { contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) },
         toolCatalogHash: expect.stringMatching(/^[a-f0-9]{64}$/),
       },
-      metadata: { toolCatalogHash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      metadata: {
+        toolCatalogHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        agentCheckpoint: expect.objectContaining({
+          protocolVersion: AGENT_PROTOCOL_VERSION,
+          threadId,
+          toolCatalogHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          context: expect.objectContaining({ stage: "tool_catalog_ready" }),
+        }),
+        agentCheckpointHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+      },
     });
     expect(read.events).toEqual(expect.arrayContaining([
       expect.objectContaining({ name: "turn.started" }),
@@ -126,8 +135,18 @@ describe("OpenPond app-server JSON-RPC integration", () => {
       expect.objectContaining({ name: "turn.completed" }),
     ]));
     expect(notifications).toEqual(expect.arrayContaining([
-      expect.objectContaining({ method: "turn/started" }),
-      expect.objectContaining({ method: "item/assistantDelta" }),
+      expect.objectContaining({
+        method: "turn/started",
+        params: expect.objectContaining({ contentHash: expect.stringMatching(/^[a-f0-9]{64}$/) }),
+      }),
+      expect.objectContaining({
+        method: "item/assistantDelta",
+        params: expect.objectContaining({
+          name: "assistant.delta",
+          source: "provider",
+          contentHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+        }),
+      }),
       expect.objectContaining({ method: "turn/completed" }),
     ]));
 

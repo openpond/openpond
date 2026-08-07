@@ -17,6 +17,12 @@ import {
   type Turn,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
+import {
+  AGENT_PROTOCOL_VERSION,
+  AgentCheckpointSchema,
+  canonicalHash,
+  checkpointHash,
+} from "@openpond/agent-runtime";
 import { HOSTED_CHAT_SYSTEM_PROMPT } from "../constants.js";
 import {
   chatAttachmentContext,
@@ -497,17 +503,57 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       store.runtimeEventsForSession(sessionId, query),
     getSession,
     recordTurnToolCatalog: async ({ turnId, hash, capabilities }) => {
-      await store.updateTurn(turnId, (turn) => ({
-        ...turn,
-        metadata: {
-          ...turn.metadata,
+      const checkpointTurn = await getStoredTurn(turnId);
+      const compactionEvent = checkpointTurn
+        ? (await store.runtimeEventsForSession(checkpointTurn.sessionId, {
+            names: ["session.compaction.completed"],
+            limit: 1_000,
+          })).filter((runtimeEvent) => runtimeEvent.turnId === turnId).at(-1) ?? null
+        : null;
+      const compactionData = compactionEvent?.data && typeof compactionEvent.data === "object" &&
+        !Array.isArray(compactionEvent.data)
+        ? compactionEvent.data as Record<string, unknown>
+        : null;
+      await store.updateTurn(turnId, (turn) => {
+        const checkpoint = AgentCheckpointSchema.parse({
+          protocolVersion: AGENT_PROTOCOL_VERSION,
+          threadId: turn.sessionId,
+          turnId: turn.id,
+          harnessReleaseHash: turn.harnessSnapshot?.harnessRelease.contentHash ??
+            canonicalHash({ harnessRelease: null }),
           toolCatalogHash: hash,
-          toolCapabilities: capabilities,
-        },
-        harnessSnapshot: turn.harnessSnapshot
-          ? { ...turn.harnessSnapshot, toolCatalogHash: hash }
-          : turn.harnessSnapshot,
-      }));
+          context: {
+            stage: "tool_catalog_ready",
+            provider: turn.modelRef?.providerId ?? null,
+            model: turn.modelRef?.modelId ?? null,
+            compaction: compactionData
+              ? {
+                  eventId: compactionEvent?.id ?? null,
+                  compactedThroughEventId: compactionData.compactedThroughEventId ?? null,
+                  compactedThroughTurnId: compactionData.compactedThroughTurnId ?? null,
+                  summaryHash: typeof compactionData.summary === "string"
+                    ? canonicalHash(compactionData.summary)
+                    : null,
+                }
+              : null,
+          },
+          pendingInteraction: null,
+          usage: {},
+        });
+        return {
+          ...turn,
+          metadata: {
+            ...turn.metadata,
+            toolCatalogHash: hash,
+            toolCapabilities: capabilities,
+            agentCheckpoint: checkpoint,
+            agentCheckpointHash: checkpointHash(checkpoint),
+          },
+          harnessSnapshot: turn.harnessSnapshot
+            ? { ...turn.harnessSnapshot, toolCatalogHash: hash }
+            : turn.harnessSnapshot,
+        };
+      });
     },
     getTaskset: store.getTaskset
       ? (tasksetId) => store.getTaskset!(tasksetId)

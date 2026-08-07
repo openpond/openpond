@@ -1,19 +1,17 @@
 import {
   AGENT_PROTOCOL_VERSION,
   AGENT_RPC_METHODS,
+  CanonicalAgentEventSchema,
   canonicalHash,
+  canonicalEventHash,
+  createAgentRuntimeService,
+  type CanonicalAgentEvent,
   type AgentProtocolCapabilities,
   type AgentRuntimeHost,
   type JsonRpcNotification,
 } from "@openpond/agent-runtime";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { z } from "zod";
-
-const ThreadIdParamsSchema = z.object({ threadId: z.string().trim().min(1) }).passthrough();
-const ThreadStartParamsSchema = z.object({ session: z.unknown() }).strict();
-const TurnParamsSchema = ThreadIdParamsSchema.extend({ input: z.unknown() });
-const InterruptParamsSchema = ThreadIdParamsSchema.extend({ reason: z.string().trim().min(1).optional() });
-const ApprovalParamsSchema = z.object({ approvalId: z.string().trim().min(1), input: z.unknown() }).strict();
 
 export function createLocalAgentRuntimeHost(deps: {
   createSession(payload: unknown): Promise<Session>;
@@ -28,6 +26,7 @@ export function createLocalAgentRuntimeHost(deps: {
   inspectHarness(): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   subscribeRuntimeEvents(listener: (event: RuntimeEvent) => void): () => void;
+  observeRuntimeOperation?(event: import("@openpond/agent-runtime").AgentRuntimeTelemetryEvent): void;
 }): AgentRuntimeHost {
   const toolCatalogHash = canonicalHash([]);
   const capabilities = async (params?: unknown): Promise<AgentProtocolCapabilities> => {
@@ -62,51 +61,97 @@ export function createLocalAgentRuntimeHost(deps: {
     };
   };
 
-  const threadRead = async (params: unknown) => {
-    const { threadId } = ThreadIdParamsSchema.parse(params);
-    const [session, turns, events] = await Promise.all([
-      deps.getSession(threadId),
-      deps.turnsForSession(threadId),
-      deps.runtimeEventsForSession(threadId),
-    ]);
-    return { thread: session, turns, events };
-  };
-
-  return {
+  return createAgentRuntimeService({
     capabilities,
-    threadStart: async (params) => ({ thread: await deps.createSession(ThreadStartParamsSchema.parse(params).session) }),
-    threadResume: threadRead,
-    threadRead,
-    turnStart: async (params) => {
-      const input = TurnParamsSchema.parse(params);
-      return { turn: await deps.sendTurn(input.threadId, input.input) };
-    },
-    turnSteer: async (params) => {
-      const input = TurnParamsSchema.parse(params);
-      if (deps.isSessionTurnActive(input.threadId)) await deps.waitForSessionTurnSettlement(input.threadId);
-      return { turn: await deps.sendTurn(input.threadId, input.input) };
-    },
-    turnInterrupt: async (params) => {
-      const input = InterruptParamsSchema.parse(params);
-      return { turn: await deps.interruptSessionTurn(input.threadId, input.reason) };
-    },
-    approvalResolve: async (params) => {
-      const input = ApprovalParamsSchema.parse(params);
-      return { approval: await deps.resolveApproval(input.approvalId, input.input) };
-    },
-    userInputResolve: async (params) => {
-      const input = TurnParamsSchema.parse(params);
-      if (deps.isSessionTurnActive(input.threadId)) await deps.waitForSessionTurnSettlement(input.threadId);
-      return { turn: await deps.sendTurn(input.threadId, input.input) };
-    },
-    harnessInspect: () => deps.inspectHarness(),
-    harnessValidate: () => deps.validateHarness(),
-    subscribe: (listener) => deps.subscribeRuntimeEvents((event) => listener(runtimeEventNotification(event))),
-  };
+    createThread: deps.createSession,
+    readThread: deps.getSession,
+    listTurns: deps.turnsForSession,
+    listEvents: deps.runtimeEventsForSession,
+    startTurn: deps.sendTurn,
+    isTurnActive: deps.isSessionTurnActive,
+    waitForTurnSettlement: deps.waitForSessionTurnSettlement,
+    interruptTurn: deps.interruptSessionTurn,
+    resolveApproval: deps.resolveApproval,
+    inspectHarness: deps.inspectHarness,
+    validateHarness: deps.validateHarness,
+    subscribeEvents: deps.subscribeRuntimeEvents,
+    eventNotification: runtimeEventNotification,
+    telemetry: deps.observeRuntimeOperation,
+  });
 }
 
 function runtimeEventNotification(event: RuntimeEvent): JsonRpcNotification {
-  return { jsonrpc: "2.0", method: notificationMethod(event.name), params: event };
+  const canonicalEvent = CanonicalAgentEventSchema.parse({
+    sequence: event.sequence ?? 0,
+    name: canonicalEventName(event.name),
+    source: canonicalEventSource(event),
+    status: event.status ?? null,
+    threadId: event.sessionId ?? "unscoped",
+    turnId: event.turnId ?? null,
+    callId: runtimeEventCallId(event),
+    output: event.output ?? null,
+    error: event.error ?? null,
+    data: {
+      eventId: event.id,
+      originalName: event.name,
+      timestamp: event.timestamp,
+      action: event.action ?? null,
+      appId: event.appId ?? null,
+      args: event.args ?? null,
+      payload: event.data ?? null,
+      relatedDeploymentId: event.relatedDeploymentId ?? null,
+    },
+  });
+  return {
+    jsonrpc: "2.0",
+    method: notificationMethod(event.name),
+    params: { ...canonicalEvent, contentHash: canonicalEventHash(canonicalEvent) },
+  };
+}
+
+function canonicalEventName(name: RuntimeEvent["name"]): CanonicalAgentEvent["name"] {
+  if (name === "session.started") return "thread.started";
+  if (name === "session.compaction.started") return "compaction.started";
+  if (name === "session.compaction.completed") return "compaction.completed";
+  if (name === "session.compaction.failed") return "diagnostic";
+  if (name === "user_question.asked") return "user_input.requested";
+  if (name === "user_question.answered" || name === "user_question.dismissed") {
+    return "user_input.resolved";
+  }
+  if (name === "skill.selected") return "item.started";
+  if (name === "skill.loaded") return "item.completed";
+  if (name === "assistant.delta") return "assistant.delta";
+  if (name === "assistant.reasoning.delta") return "assistant.reasoning.delta";
+  if (name === "approval.requested" || name === "approval.resolved" ||
+      name === "turn.started" || name === "turn.completed" || name === "turn.failed" ||
+      name === "turn.interrupted" || name === "tool.started" || name === "tool.completed" ||
+      name === "harness.refiner.queued" ||
+      name === "harness.refiner.started" || name === "harness.refiner.completed" ||
+      name === "harness.refiner.failed") {
+    return name;
+  }
+  return "diagnostic";
+}
+
+function canonicalEventSource(event: RuntimeEvent): CanonicalAgentEvent["source"] {
+  if (event.name.startsWith("harness.refiner.")) return "refiner";
+  if (event.source === "provider") return "provider";
+  if (event.name.startsWith("tool.") || event.name.startsWith("workspace.") ||
+      event.name === "workspace_action" || event.name === "workspace_action_result" ||
+      event.name === "command.output") {
+    return "tool";
+  }
+  return event.source === "server" ? "runtime" : "host";
+}
+
+function runtimeEventCallId(event: RuntimeEvent): string | null {
+  const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
+    ? event.data as Record<string, unknown>
+    : {};
+  for (const value of [data.toolCallId, data.callId, data.id]) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
 }
 
 function notificationMethod(name: RuntimeEvent["name"]): string {

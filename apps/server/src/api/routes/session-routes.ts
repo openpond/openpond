@@ -3,17 +3,14 @@ import type { HttpRouteContext } from "../http-route-types.js";
 
 export async function handleSessionRoutes({ deps, request, requestUrl, response }: HttpRouteContext): Promise<boolean> {
   const {
-    createSession,
     patchSession,
-    sendTurn,
     runSessionCommand,
     ensureCloudWorkspaceReady,
     recordPreflightTurnFailure,
-    interruptSessionTurn,
     compactSession,
     executeWorkspaceTool,
     runSubagentLifecycleAction,
-    resolveApproval,
+    agentRuntime,
   } = deps;
   // Desktop remains on HTTP during the Local migration. Agent lifecycle routes
   // are adapters to the same runtime exposed canonically through JSON-RPC.
@@ -21,7 +18,8 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
     response.setHeader("X-OpenPond-Agent-Transport", "transitional-http-adapter");
   if (request.method === "POST" && requestUrl.pathname === "/v1/sessions") {
     markTransitionalAgentAdapter();
-    sendJson(response, 201, await createSession(await readJson(request)));
+    const result = await agentRuntime.threadStart({ session: await readJson(request) }) as { thread: unknown };
+    sendJson(response, 201, result.thread);
     return true;
   }
   const sessionPatchMatch = /^\/v1\/sessions\/([^/]+)$/.exec(requestUrl.pathname);
@@ -33,7 +31,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   const turnMatch = /^\/v1\/sessions\/([^/]+)\/turns$/.exec(requestUrl.pathname);
   if (request.method === "POST" && turnMatch) {
     markTransitionalAgentAdapter();
-    sendJson(response, 202, await sendTurn(turnMatch[1]!, await readJson(request)));
+    const result = await agentRuntime.turnStart({
+      threadId: turnMatch[1]!,
+      input: await readJson(request),
+    }) as { turn: unknown };
+    sendJson(response, 202, result.turn);
     return true;
   }
   const commandMatch = /^\/v1\/sessions\/([^/]+)\/commands$/.exec(requestUrl.pathname);
@@ -71,7 +73,8 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   );
   if (request.method === "POST" && turnInterruptMatch) {
     markTransitionalAgentAdapter();
-    sendJson(response, 202, await interruptSessionTurn(turnInterruptMatch[1]!));
+    const result = await agentRuntime.turnInterrupt({ threadId: turnInterruptMatch[1]! }) as { turn: unknown };
+    sendJson(response, 202, result.turn);
     return true;
   }
   const compactMatch = /^\/v1\/sessions\/([^/]+)\/compact$/.exec(requestUrl.pathname);
@@ -106,7 +109,11 @@ export async function handleSessionRoutes({ deps, request, requestUrl, response 
   const approvalMatch = /^\/v1\/approvals\/([^/]+)$/.exec(requestUrl.pathname);
   if (request.method === "POST" && approvalMatch) {
     markTransitionalAgentAdapter();
-    sendJson(response, 200, await resolveApproval(approvalMatch[1]!, await readJson(request)));
+    const result = await agentRuntime.approvalResolve({
+      approvalId: approvalMatch[1]!,
+      input: await readJson(request),
+    }) as { approval: unknown };
+    sendJson(response, 200, result.approval);
     return true;
   }
   return false;

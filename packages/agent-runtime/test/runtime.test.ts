@@ -3,10 +3,12 @@ import { z } from "zod";
 
 import {
   canonicalHash,
+  createAgentRuntimeService,
   createAgentToolCatalog,
   executeAgentTool,
   materializeAgentPrompt,
   providerRoundSequence,
+  runProviderRoundLoop,
   runAgentCompaction,
 } from "../src/index.js";
 
@@ -62,6 +64,32 @@ describe("@openpond/agent-runtime", () => {
     await expect(rounds.next()).rejects.toThrow("stop");
   });
 
+  test("owns provider loop completion and exhaustion", async () => {
+    const signal = new AbortController().signal;
+    const visited: number[] = [];
+    await expect(runProviderRoundLoop({
+      turnId: "turn-1",
+      maxRounds: 3,
+      signal,
+      runRound: async (round) => {
+        visited.push(round.index);
+        return round.index === 1
+          ? { type: "complete", result: "done" }
+          : { type: "continue" };
+      },
+      onExhausted: async () => "exhausted",
+    })).resolves.toBe("done");
+    expect(visited).toEqual([0, 1]);
+
+    await expect(runProviderRoundLoop({
+      turnId: "turn-2",
+      maxRounds: 1,
+      signal,
+      runRound: async () => ({ type: "continue" }),
+      onExhausted: async () => "exhausted",
+    })).resolves.toBe("exhausted");
+  });
+
   test("materializes prompt layers in canonical order", () => {
     expect(materializeAgentPrompt({
       system: "system",
@@ -89,5 +117,53 @@ describe("@openpond/agent-runtime", () => {
       failed: async () => { calls.push("failed-recorded"); },
     })).rejects.toThrow("compaction failed");
     expect(calls.slice(-2)).toEqual(["failed-started", "failed-recorded"]);
+  });
+
+  test("owns thread and turn lifecycle telemetry without recording request payloads", async () => {
+    const telemetry: Array<Record<string, unknown>> = [];
+    const service = createAgentRuntimeService({
+      capabilities: async () => ({
+        protocolVersion: "test",
+        placement: "local",
+        methods: [],
+        features: {},
+        tools: [],
+        toolCatalogHash: canonicalHash([]),
+      }),
+      createThread: async () => ({ id: "thread-1" }),
+      readThread: async (threadId) => ({ id: threadId }),
+      listTurns: async () => [],
+      listEvents: async () => [],
+      startTurn: async (threadId) => ({ id: "turn-1", threadId }),
+      isTurnActive: () => false,
+      waitForTurnSettlement: async () => undefined,
+      interruptTurn: async (threadId) => ({ id: "turn-1", threadId }),
+      resolveApproval: async (approvalId) => ({ id: approvalId }),
+      inspectHarness: async () => ({}),
+      validateHarness: async () => ({}),
+      telemetry: (event) => telemetry.push(event),
+    });
+
+    await service.turnStart({
+      threadId: "thread-1",
+      input: { prompt: "sensitive prompt", token: "secret" },
+    });
+
+    expect(telemetry).toEqual([
+      expect.objectContaining({
+        method: "turn/start",
+        phase: "started",
+        threadId: "thread-1",
+        durationMs: null,
+      }),
+      expect.objectContaining({
+        method: "turn/start",
+        phase: "completed",
+        threadId: "thread-1",
+        durationMs: expect.any(Number),
+      }),
+    ]);
+    expect(JSON.stringify(telemetry)).not.toContain("sensitive prompt");
+    expect(JSON.stringify(telemetry)).not.toContain("secret");
   });
 });

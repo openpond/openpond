@@ -1,4 +1,4 @@
-# Agent Runtime Phases 1–2 Local Acceptance
+# Agent Runtime Phases 1–2 Local Acceptance (In Progress)
 
 This ledger records the Local-only acceptance evidence for the shared agent
 runtime extraction and app-server protocol. Hosted Chat, hosted Work, sandbox
@@ -8,16 +8,21 @@ installation, and control-plane transport remain Phase 3 or later.
 
 - `@openpond/agent-runtime` is a private workspace package. It owns canonical
   hashing, event/checkpoint/effective-surface contracts, provider-round
-  boundaries, tool catalog projection and dispatch, prompt materialization,
-  compaction lifecycle orchestration, the versioned JSON-RPC contract,
-  generated client/schema artifacts, and ordered JSONL transport.
+  sequencing and exhaustion, tool catalog projection and dispatch, prompt
+  materialization, the versioned JSON-RPC contract, the transport-neutral
+  thread/turn service, privacy-safe lifecycle telemetry, generated
+  client/schema artifacts, and ordered JSONL transport. The provider-specific
+  round body, compaction algorithm, canonical event persistence, and durable
+  checkpoint adoption are still being extracted from `apps/server`.
 - `@openpond/harness` owns the portable Refiner decision schema, bounded prompt,
   streaming parser, timeout, and repair behavior. SQLite, queues, provider
   credentials, UI composition, and release selection remain Local host concerns.
 - `openpond app-server` launches the existing app-server in agent-only mode over
   JSONL stdio. It does not listen on HTTP or start the Local scheduler. Desktop
-  continues using the HTTP/static-web adapter against the same turn runner and
-  Harness services; agent lifecycle responses identify that adapter with
+  continues using the HTTP/static-web adapter; its create/start/interrupt and
+  approval routes now call the same `AgentRuntimeHost` service used by JSON-RPC
+  instead of independently invoking the old lifecycle functions. Agent
+  lifecycle responses identify that adapter with
   `X-OpenPond-Agent-Transport: transitional-http-adapter`.
 - The former Desktop scenario command is `openpond desktop-test`, leaving
   `openpond harness` available for release inspection and conformance semantics.
@@ -28,8 +33,11 @@ Milestone commits on `feat/app-server-runtime-convergence`:
 - `2cc3c8a` — shared runtime boundary and portable Refiner extraction.
 - `faa5a29` — Local app-server JSON-RPC protocol, generated artifacts, CLI
   spelling, and shared HTTP/RPC runtime composition.
-- `b2e86b9` — handshake ordering, process/resilience metrics, shared compaction
-  lifecycle, final-source live acceptance, and this completion ledger.
+- `b2e86b9` — handshake ordering, process/resilience metrics, preliminary
+  compaction lifecycle adapter, and initial Local acceptance ledger.
+
+These commits are the initial draft baseline, not proof that the ownership
+extraction is complete.
 
 ## Automated protocol and recovery evidence
 
@@ -96,6 +104,25 @@ The in-app browser was used against the running Local app at
 - After wiring the shared prompt materializer and compaction lifecycle adapter,
   the reloaded final-source app completed a fresh projectless Local smoke with
   the exact response `LOCAL-RUNTIME-OK` and no file mutation.
+- After the ownership audit, a fresh real Local Chat turn returned exactly
+  `CHAT-RUNTIME-OK`.
+- A projectless Local Work turn demonstrated workspace isolation by correctly
+  refusing to treat the OpenPond checkout as its workspace. A corrected
+  projectless test created, read, and deleted `runtime-acceptance.txt` in the
+  app-managed workspace and returned exactly `PROJECTLESS-WORK-OK`; a host
+  filesystem check confirmed the temporary file was absent afterward.
+- A Project-backed Local Work turn selected `openpond`, visibly showed `Local
+  checkout`, read `packages/agent-runtime/package.json`, and returned exactly
+  `PROJECT-WORK-OK` without modifying source files.
+- Structured server telemetry recorded the shared-service `thread/start` and
+  `turn/start` started/completed pairs with correlation IDs and durations. It
+  intentionally excludes prompts, tool arguments/results, file contents, and
+  credentials.
+- After the final runtime/checkpoint/Refiner-detector changes reloaded in the
+  real server, a fresh Local Chat returned exactly `FINAL-CHAT-OK`. A fresh
+  no-Project Local Work task created, read, and deleted
+  `final-runtime-smoke.txt`, then returned exactly `FINAL-WORK-OK`; a host
+  filesystem check confirmed the temporary file was absent.
 
 ## Repository verification
 
@@ -112,11 +139,19 @@ The in-app browser was used against the running Local app at
 - Agent SDK: 9 files / 33 tests passed.
 - Production web build, CLI/package build, and installed CLI release matrix
   (1 file / 5 tests) passed.
+- The post-audit matrix repeated these gates: 376/377 unit files and
+  1,868/1,869 tests (only the same missing-ImageMagick exception), 4 integration
+  files / 35 tests, 42 Node contracts, 33 Agent SDK tests, 5 installed release
+  tests, Harness clean-consumer packing, source structure, dependency
+  declarations, production reachability, repository hygiene, and Node-only
+  toolchain checks.
 
 ## Local completion boundary
 
-Phases 0–2 are complete when this ledger, the generated protocol artifacts,
-the live acceptance result, and the regression gates remain true on the final
-branch commit. Phase 3 must consume this boundary without moving hosted
-provider credentials, connected-app implementations, sandbox provisioning, or
-web product state into `@openpond/agent-runtime` or `@openpond/harness`.
+Phases 0–2 are not complete yet. Completion requires the remaining production
+provider/tool orchestration, compaction ownership, canonical event/checkpoint
+persistence, and portable Refine classification to match the ownership model,
+followed by the same real Chat/Work/Harness matrix on the final branch commit.
+Phase 3 must consume that boundary without moving hosted provider credentials,
+connected-app implementations, sandbox provisioning, or web product state into
+`@openpond/agent-runtime` or `@openpond/harness`.

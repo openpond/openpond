@@ -16,7 +16,7 @@ import {
 } from "@openpond/contracts";
 import {
   createAgentToolCatalogProjection,
-  providerRoundSequence,
+  runProviderRoundLoop,
 } from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
@@ -330,11 +330,11 @@ export function createHostedToolLoopRuntime(deps: {
       }
       return true;
     }
-    for await (const round of providerRoundSequence({
+    return runProviderRoundLoop<Session>({
       turnId: params.turn.id,
       maxRounds: maxHostedWorkspaceToolRounds,
       signal: params.signal,
-    })) {
+      runRound: async (round) => {
       const { index } = round;
       throwIfInterrupted(params.signal);
       await appendPendingSubagentAsides();
@@ -438,7 +438,7 @@ export function createHostedToolLoopRuntime(deps: {
           role: "user",
           content: `Call the required ${trainingHarnessRound.requiredToolName} function exactly once with valid JSON arguments. Do not answer in prose.`,
         });
-        continue;
+        return { type: "continue" };
       }
       if (nativeToolCalls.length > 0) {
         messages.push(
@@ -475,7 +475,7 @@ export function createHostedToolLoopRuntime(deps: {
             usage: latestUsage,
             includeCompletion: true,
           });
-          return session;
+          return { type: "complete", result: session };
         }
         if (
           trainingHarnessRound?.requiredToolName &&
@@ -492,7 +492,7 @@ export function createHostedToolLoopRuntime(deps: {
           usage: latestUsage,
           includeCompletion: true,
         });
-        continue;
+        return { type: "continue" };
       }
 
       if (finishReason === "tool_calls") {
@@ -516,7 +516,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Retry with one complete function call and valid JSON arguments, or answer normally if no tool is needed.",
           ].join(" "),
         });
-        continue;
+        return { type: "continue" };
       }
 
       const assistantMessage = {
@@ -587,7 +587,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Continue. Follow the loaded skill instructions when relevant. If another profile skill is required, respond with exactly one openpond_skill block. Otherwise answer the user normally without tool JSON.",
           ].join("\n\n"),
         });
-        continue;
+        return { type: "continue" };
       }
       if (deniedSubagentPolicyResults.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
@@ -604,7 +604,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Continue without mutating the workspace. If the assignment requires writes, report the isolation blocker.",
           ].join("\n\n"),
         });
-        continue;
+        return { type: "continue" };
       }
       if (deniedTextFallbackRequests.length > 0 && requests.length === 0) {
         messages.push(assistantMessage);
@@ -625,7 +625,7 @@ export function createHostedToolLoopRuntime(deps: {
             "Use native tool calls when available. If text fallback is necessary, only use resource_search or resource_read.",
           ].join(" "),
         });
-        continue;
+        return { type: "continue" };
       }
       if (requests.length === 0) {
         messages.push(assistantMessage);
@@ -635,7 +635,7 @@ export function createHostedToolLoopRuntime(deps: {
             usage: latestUsage,
             includeCompletion: true,
           });
-          continue;
+          return { type: "continue" };
         }
         if (
           workspaceToolResultCount === 0 &&
@@ -655,7 +655,7 @@ export function createHostedToolLoopRuntime(deps: {
             ),
           });
           toolRequiredCorrectionSent = true;
-          continue;
+          return { type: "continue" };
         }
         await appendAssistantText(session, params.turn.id, assistantText);
         await appendContextUsage({
@@ -663,7 +663,7 @@ export function createHostedToolLoopRuntime(deps: {
           usage: latestUsage,
           includeCompletion: true,
         });
-        return session;
+        return { type: "complete", result: session };
       }
 
       messages.push(assistantMessage);
@@ -754,20 +754,23 @@ export function createHostedToolLoopRuntime(deps: {
           "Continue. If another workspace action is required, respond with exactly one openpond_tool block. Otherwise answer the user normally without tool JSON.",
         ].join("\n\n"),
       });
-    }
-
-    const limitLabel = Number.isFinite(maxHostedWorkspaceToolRounds)
-      ? `${maxHostedWorkspaceToolRounds}`
-      : "configured";
-    await appendAssistantText(
-      session,
-      params.turn.id,
-      [
-        `I hit the hosted workspace tool iteration limit (${limitLabel}) before I could finish.`,
-        "Please send the request again or narrow the workspace target so I can continue from the current context.",
-      ].join(" ")
-    );
-    return session;
+        return { type: "continue" };
+      },
+      onExhausted: async () => {
+        const limitLabel = Number.isFinite(maxHostedWorkspaceToolRounds)
+          ? `${maxHostedWorkspaceToolRounds}`
+          : "configured";
+        await appendAssistantText(
+          session,
+          params.turn.id,
+          [
+            `I hit the hosted workspace tool iteration limit (${limitLabel}) before I could finish.`,
+            "Please send the request again or narrow the workspace target so I can continue from the current context.",
+          ].join(" ")
+        );
+        return session;
+      },
+    });
   }
 
   function subagentWorkspaceToolPolicyBlocker(

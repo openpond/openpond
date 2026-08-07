@@ -4,6 +4,10 @@ export type ProviderRoundContext = {
   signal: AbortSignal;
 };
 
+export type ProviderRoundDecision<TResult> =
+  | { type: "continue" }
+  | { type: "complete"; result: TResult };
+
 export async function* providerRoundSequence(input: {
   turnId: string;
   maxRounds: number;
@@ -20,4 +24,19 @@ export async function* providerRoundSequence(input: {
       signal: input.signal
     };
   }
+}
+
+/** Owns provider/tool round sequencing, completion, exhaustion, and aborts. */
+export async function runProviderRoundLoop<TResult>(input: {
+  turnId: string;
+  maxRounds: number;
+  signal: AbortSignal;
+  runRound(round: ProviderRoundContext): Promise<ProviderRoundDecision<TResult>>;
+  onExhausted(): Promise<TResult>;
+}): Promise<TResult> {
+  for await (const round of providerRoundSequence(input)) {
+    const decision = await input.runRound(round);
+    if (decision.type === "complete") return decision.result;
+  }
+  return input.onExhausted();
 }
