@@ -915,11 +915,15 @@ function retiredTaskCreationSpecificationKind(value: unknown): "agent_benchmark"
 }
 
 function parseStoredTaskset(value: unknown): Taskset {
-  return TasksetSchema.parse(normalizeStoredTasksetAuthoringProvenance(value));
+  return TasksetSchema.parse(
+    normalizeStoredTasksetAuthoringProvenance(
+      normalizeStoredReadinessDestinationClasses(value),
+    ),
+  );
 }
 
 function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
-  return TasksetReadinessReportSchema.parse(value);
+  return TasksetReadinessReportSchema.parse(normalizeStoredReadinessDestinationClasses(value));
 }
 
 function parseStoredModelProject(value: unknown): ModelProject {
@@ -934,6 +938,18 @@ function normalizeStoredModelProjectDestination(value: unknown): unknown {
     return value;
   }
   return { ...value, defaultDestinationId: null };
+}
+
+function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
+  if (!isRecord(value)) return value;
+  const readiness = isRecord(value.readiness) ? value.readiness : value;
+  if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
+  const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
+    (destinationClass) => destinationClass !== "openpond_managed" && destinationClass !== "hosted_byok",
+  );
+  if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
+  const normalizedReadiness = { ...readiness, compatibleDestinationClasses };
+  return readiness === value ? normalizedReadiness : { ...value, readiness: normalizedReadiness };
 }
 
 function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
@@ -951,15 +967,16 @@ function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
   };
 }
 
-function retiredManagedServingSource(value: unknown): "openpond_training" | null {
+function retiredManagedServingSource(value: unknown): "openpond_fireworks" | null {
   if (!isRecord(value) || !isRecord(value.managedServing)) return null;
-  return value.managedServing.source === "openpond_training" ? "openpond_training" : null;
+  return value.managedServing.source === "openpond_fireworks" ? "openpond_fireworks" : null;
 }
 
 function isRetiredTrainingDestination(value: unknown): boolean {
   return typeof value === "string"
     && [
       "export",
+      "prime_hosted",
       "ssh_gpu",
       "custom",
       "local_cuda",

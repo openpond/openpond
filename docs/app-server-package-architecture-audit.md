@@ -12,7 +12,10 @@ deferred from this cleanup. Prime and Fireworks integration residue plus the
 documentation-only packaging folder are removed. `@openpond/app-server` now
 owns canonical service/JSONL composition, Local HTTP uses it in-process, and
 native provider tools execute through the same admitted catalog that produces
-schemas, capability evidence, and hashes.
+schemas, capability evidence, and hashes. A real `pnpm dev` upgrade walkthrough
+also exposed and repaired clean-checkout SDK build ordering plus persisted
+Prime, Fireworks, and hosted-BYOK training values that previously blocked
+bootstrap against an existing Local database.
 
 Related docs:
 
@@ -240,6 +243,22 @@ The documentation-only folder and its repository-layout reference are gone.
 Active Electron packaging remains under `apps/desktop`; root scripts and
 GitHub Actions still own release automation.
 
+### 10. Clean installation and existing-state upgrades are covered
+
+The initial CI run failed before tests because a clean checkout built
+`openpond-sdk` before its private bundled Cloud dependency had emitted
+`dist/*`. The SDK package now builds Cloud in its `prebuild` lifecycle, so the
+same package command works with no cached workspace artifacts.
+
+The first real `pnpm dev` walkthrough also found that an existing Local
+database could not bootstrap after provider retirement. Stored
+`openpond_fireworks` serving lineage, `prime_hosted` model defaults, and the
+retired `openpond_managed`/`hosted_byok` readiness classes are now handled by
+the existing read-normalization boundary. They are ignored or cleared rather
+than re-enabling retired providers, mutating the database in place, or asking
+users to delete Local state. Regression tests cover direct reads and lists for
+all three shapes.
+
 ## Hosted Readiness Gate
 
 Not every cleanup item blocks hosted adoption. The required gate is a lean,
@@ -362,6 +381,10 @@ cloud lifecycle services, or nested Work-sandbox management.
   tests remain intact. Done: all 38 Python contract, dataset, adapter,
   inference, vLLM, policy-manager, local SFT/DPO/PPO, and worker tests pass;
   Compute UI and `@openpond/trainer-local` remain present.
+- [x] Preserve existing Local state across retired-provider cleanup. Done:
+  Fireworks serving lineage is ignored, Prime model defaults are cleared, and
+  retired hosted readiness classes are filtered during stored-payload reads;
+  bootstrap succeeds without deleting or rewriting the user's database.
 
 ### Phase 2 - Establish lean app-server composition
 
@@ -392,7 +415,9 @@ cloud lifecycle services, or nested Work-sandbox management.
   definitions close over Local sessions, permissions, Work state, and events;
   Agent Runtime owns only admission and dispatch mechanics.
 - [ ] Repeat Local Chat, projectless Work, Project-backed Work, approval,
-  interruption, compaction, and Harness snapshot acceptance.
+  interruption, compaction, and Harness snapshot acceptance. Current: the
+  `pnpm dev` shell, existing-task transcript, Chat/Work composers, and every
+  top-level product/settings screen pass; full new-turn acceptance remains.
 
 ### Phase 4 - Repair package-boundary and architecture guardrails
 
@@ -421,8 +446,8 @@ cloud lifecycle services, or nested Work-sandbox management.
 
 - Passed: `pnpm run dependencies:check` reported all 21 workspace projects and
   direct plus relative cross-package source imports valid.
-- Passed: `pnpm exec tsx scripts/check-source-structure.ts` reported 1,247
-  production modules, 1,904 handwritten files, and zero runtime/openpond
+- Passed: `pnpm exec tsx scripts/check-source-structure.ts` reported 1,245
+  production modules, 1,902 handwritten files, and zero runtime/openpond
   cycles.
 - Passed: `pnpm exec tsx scripts/report-server-runtime-cycles.ts` reported 128
   modules, 262 local edges, and zero cycles.
@@ -431,7 +456,7 @@ cloud lifecycle services, or nested Work-sandbox management.
 - Passed: focused App Server, Agent Runtime, SDK, managed training, provider,
   Labs, artifact, and training compatibility tests.
 - Passed: `pnpm run test:python` completed all 38 retained Local worker tests.
-- Passed: `pnpm run test:unit` completed 370 files and 1,830 passing tests with
+- Passed: `pnpm run test:unit` completed 370 files and 1,833 passing tests with
   one intentional skip.
 - Passed: `pnpm run test:integration` completed 35 integration tests, including
   app-server JSON-RPC, restart recovery, and CLI process boundaries.
@@ -439,6 +464,17 @@ cloud lifecycle services, or nested Work-sandbox management.
   Agent SDK tests.
 - Passed: App Server tests, Agent Runtime check/protocol generation/build, SDK
   check/build/dry-pack, web/CLI release builds, and all five release tests.
+- Passed: clean-artifact `pnpm run build:sdk`; the SDK `prebuild` first emits
+  its private bundled Cloud dependency and no longer depends on cached `dist`.
+- Passed: upgrade-read regression coverage for retired Fireworks serving
+  lineage, Prime model defaults, and hosted-BYOK/managed readiness classes.
+- Passed: real `pnpm dev` launched the server, Vite renderer, and Electron;
+  bootstrap returned 200 against the existing Local database after the read
+  normalizers were repaired.
+- Passed: browser walkthrough of New Task, an existing 46-message task,
+  Chat/Work mode switching, Schedule, Outputs, Apps, Models, Tasksets, Serving,
+  Usage, and all 17 Settings sections. Compute and Training contain no active
+  Prime or Fireworks controls, and no page-level browser errors were recorded.
 - Passed previously: PR #71 unit, integration, runtime-contract,
   quality/build, release-artifact, and aggregate GitHub checks.
 
@@ -467,3 +503,8 @@ cloud lifecycle services, or nested Work-sandbox management.
 - 2026-08-07: Added `@openpond/app-server`, converged executable tool catalog
   ownership, repaired SDK package imports, and enforced relative package-root
   boundaries. The lean placement adapter remains the hosted launch blocker.
+- 2026-08-07: Ran the real Desktop development shell and screen-by-screen UI
+  audit. Repaired clean-CI SDK build ordering and existing-state bootstrap for
+  retired Fireworks lineage, Prime defaults, and hosted readiness classes;
+  added focused upgrade regression tests and confirmed the full product shell
+  loads against the retained Local database.
