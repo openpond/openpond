@@ -1,0 +1,101 @@
+{
+  "schemaVersion": "openpond.agentRuntimeCharacterization.v1",
+  "capturedAt": "2026-08-07T06:42:00.000Z",
+  "openpondCommit": "f3381f75b6bb259c953b171a602a30a55876d9c2",
+  "sandboxCommit": "3559206a887c2c9bda1e944e1e965694917afe60",
+  "canonicalization": {
+    "algorithm": "sha256",
+    "encoding": "utf8",
+    "serialization": "recursive-key-sorted-json",
+    "eventFields": ["sequence", "name", "source", "status", "turnId", "callId", "output", "error", "data"],
+    "toolResultFields": ["callId", "toolName", "status", "output", "error", "receipt"],
+    "checkpointFields": ["protocolVersion", "threadId", "turnId", "harnessReleaseHash", "toolCatalogHash", "context", "pendingInteraction", "usage"],
+    "capabilityFields": ["protocolVersion", "placement", "methods", "tools", "features"],
+    "effectiveSurfaceFields": ["harnessReleaseHash", "instructionsHash", "skillHashes", "agentAssetHashes", "toolCatalogHash", "memoryRevision"]
+  },
+  "local": [
+    {
+      "id": "provider-rounds-tool-batches-interruption",
+      "path": "tests/turn-runner-characterization.test.ts",
+      "sha256": "0295dd732182cc72a752657f74c0b376b7952fe653413fc1cdff6d2f99e8989d"
+    },
+    {
+      "id": "provider-tools-compaction-concurrency-interruption",
+      "path": "tests/byok-turn-runner.test.ts",
+      "sha256": "a7b2990cf04a33c556299e1177b2670826f9f41e68305965f58d82d9f8adcae5"
+    },
+    {
+      "id": "compaction-checkpoint-content",
+      "path": "tests/context-compaction.test.ts",
+      "sha256": "77ece749bf8386f73f6ecf555f4c894d1ad5c1aa7f08692416751bc1dee5e76b"
+    },
+    {
+      "id": "approval-and-user-input-projection",
+      "path": "tests/chat-control-messages.test.ts",
+      "sha256": "65028dc4ea3bd89cd2c6dc63b20a83e6c190595a3567c6576ff0d2b84d4359be"
+    },
+    {
+      "id": "harness-admission-refine-advancement-failure-avoidance",
+      "path": "apps/server/src/harness/local-harness-refinement-acceptance.test.ts",
+      "sha256": "d7abeb2f26063541b9ad495e56dae5e8328332cb4f5cd536c9dbb45b87a34b17"
+    },
+    {
+      "id": "candidate-validation-review-rollback",
+      "path": "apps/server/src/harness/local-harness-refiner-worker.test.ts",
+      "sha256": "7ca92bac45842cbef47671be35dbb94924f9aae0b20b521198f8f87e94878750"
+    },
+    {
+      "id": "skill-loading-memory-tools-release-materialization",
+      "path": "apps/server/src/harness/local-harness-workspace-service.test.ts",
+      "sha256": "63b0dbb981212368a3496fb382c20c21a8ab9fa67297b10c63f88f10a68e4250"
+    },
+    {
+      "id": "portable-harness-public-surface",
+      "path": "packages/harness/test/public-api.test.ts",
+      "sha256": "c445a8d2cfd307a4b85a30cc87403a024f445848e174d2e37fc88029614b2751"
+    }
+  ],
+  "hosted": [
+    {
+      "id": "provider-rounds-checkpoints-tools-waits-cancellation",
+      "path": "lib/sandbox/agent-runtime/provider-round.ts",
+      "sha256": "4a097c8f2939e7f24a35988cf4654c651bcdff63cc5ec51d19e014607a9387c2"
+    },
+    {
+      "id": "prompt-skills-compaction-provider-tool-registry",
+      "path": "deployment-worker/domain/services/hosted-agent-runtime/runtime-composition.test.ts",
+      "sha256": "9c024698e565dba9a008c441af6b761c6592aa1e76176111de441f9cd2dce96a"
+    },
+    {
+      "id": "sandbox-and-managed-tool-adapters",
+      "path": "deployment-worker/domain/services/hosted-agent-runtime/runtime-adapters.test.ts",
+      "sha256": "74e5ba7c8cef29eb3199ec6f22627302ad436fdafe483eec388c72f0500fc1fd"
+    },
+    {
+      "id": "durable-event-ordering",
+      "path": "deployment-worker/domain/services/hosted-agent-runtime/event-store.test.ts",
+      "sha256": "6e6f8ad13ab8bb4c7617966916dbd6ca890b1bb4c2d1c6e2226c7e7eed43962c"
+    },
+    {
+      "id": "web-event-projection",
+      "path": "apps/web/components/sandbox/sandbox-manager/hosted-agent-events.test.ts",
+      "sha256": "671fa74bc2d18848160dc413b6a09469846c30d4212c55f4e740cf6e39f88e64"
+    },
+    {
+      "id": "web-chat-work-turn-lifecycle",
+      "path": "apps/web/components/sandbox/sandbox-manager/hosted-work-chat.test.tsx",
+      "sha256": "0065ef79ab15f6b012c0da38c680a48f670ed32d664c39040770b0f3b7f952a1"
+    },
+    {
+      "id": "turn-service-cancellation-and-outputs",
+      "path": "lib/sandbox/hosted-work/service.test.ts",
+      "sha256": "480c085c90fdf994e68f8e081678a2f7cb4e20a79c5ddb1b35dc23394123ce56"
+    }
+  ],
+  "productGate": {
+    "pullRequest": "https://github.com/openpond/openpond/pull/69",
+    "mergeCommit": "f3381f75b6bb259c953b171a602a30a55876d9c2",
+    "test": "apps/server/src/harness/local-harness-refinement-acceptance.test.ts",
+    "invariant": "A task admitted on R1 records a recovered failure; Refine advances R2; the admitted R1 task remains pinned; a fresh task admits R2 and avoids the failed command."
+  }
+}
