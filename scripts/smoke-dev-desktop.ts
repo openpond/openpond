@@ -312,7 +312,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
 
   const experienceMenuStyled =
     ["flex", "inline-flex"].includes(initial.triggerDisplay) &&
-    initial.triggerLabel === "OpenPond experience: Chat" &&
+    initial.triggerLabel === "OpenPond product: Chat" &&
     initial.visibleExperience === "Chat";
   if (!experienceMenuStyled) {
     throw new Error(
@@ -552,7 +552,7 @@ async function selectExperience(
       evaluateValue<boolean>(
         cdp,
         `document.querySelector(".sidebar-experience-trigger")?.getAttribute("aria-label") ===
-          ${JSON.stringify(`OpenPond experience: ${label}`)}`
+          ${JSON.stringify(`OpenPond product: ${label}`)}`
       ),
     5_000,
     `${label} did not become the active experience.`
