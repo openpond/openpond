@@ -237,7 +237,6 @@ export function MainPane({
   setMentionedAppId,
   showToast,
   sendPrompt,
-  onStartScheduledWorkChat,
   stopTurn,
   syncWorkspaceLocally,
   refreshWorkspaceDiff,
@@ -1488,7 +1487,6 @@ export function MainPane({
             detailExpanded={diffPanelExpanded}
             onDetailResizeStart={onDiffPanelResizeStart}
             onToggleDetailExpanded={onToggleDiffPanelExpanded}
-            onStartWorkChat={onStartScheduledWorkChat}
           />
         </Suspense>
       ) : view === "outputs" ? (

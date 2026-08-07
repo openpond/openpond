@@ -1,5 +1,4 @@
 import {
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -9,6 +8,7 @@ import { api, type ClientConnection } from "../../api";
 import { revealLocalFile, saveLocalFileAs } from "../../lib/desktop-files";
 import {
   Code2,
+  Download,
   File as FileIcon,
   FileAudio,
   FileSpreadsheet,
@@ -23,9 +23,9 @@ import {
 } from "../icons";
 import {
   outputFilePresentation,
-  sortOutputFilesNewestFirst,
   type OutputFileType,
 } from "./output-file-model";
+import { useCachedWorkOutputs } from "./useCachedWorkOutputs";
 
 const ALL_FILE_TYPES = "all";
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -47,34 +47,11 @@ export function OutputsPage({
   connection: ClientConnection | null;
   onViewChat: (sessionId: string) => void;
 }) {
-  const [outputs, setOutputs] = useState<FileOutputRef[]>([]);
+  const { error: outputsError, loading, outputs } = useCachedWorkOutputs(connection);
   const [filter, setFilter] = useState(ALL_FILE_TYPES);
-  const [loading, setLoading] = useState(Boolean(connection));
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [busyOutputKey, setBusyOutputKey] = useState<string | null>(null);
   const [preview, setPreview] = useState<OutputPreview | null>(null);
-
-  const loadOutputs = useCallback(async () => {
-    if (!connection) {
-      setOutputs([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await api.workOutputs(connection);
-      setOutputs(sortOutputFilesNewestFirst(response.outputs));
-    } catch (caught) {
-      setError(errorMessage(caught));
-    } finally {
-      setLoading(false);
-    }
-  }, [connection]);
-
-  useEffect(() => {
-    void loadOutputs();
-  }, [loadOutputs]);
 
   useEffect(
     () => () => {
@@ -105,7 +82,7 @@ export function OutputsPage({
     if (!connection) return;
     const key = outputKey(output);
     setBusyOutputKey(key);
-    setError(null);
+    setActionError(null);
     try {
       const result = await api.workspaceTool(connection, output.sourceTaskId, {
         action: "work_output_read",
@@ -130,7 +107,7 @@ export function OutputsPage({
         text: textPreview ? await file.text() : null,
       });
     } catch (caught) {
-      setError(errorMessage(caught));
+      setActionError(errorMessage(caught));
     } finally {
       setBusyOutputKey(null);
     }
@@ -140,7 +117,7 @@ export function OutputsPage({
     if (output.location.kind !== "local") return;
     const result = await saveLocalFileAs(output.location.path, output.title);
     if (!result.ok && !result.canceled) {
-      setError("Could not save a copy of the Work output.");
+      setActionError("Could not save a copy of the Work output.");
     }
   }
 
@@ -151,12 +128,8 @@ export function OutputsPage({
     >
       <div className="outputs-scroll">
         <div className="outputs-content">
-          <header className="outputs-header">
-            <div>
-              <h1>Outputs</h1>
-              <p>Files created by your Work tasks.</p>
-            </div>
-            {outputs.length > 0 ? (
+          {outputs.length > 0 ? (
+            <header className="outputs-header">
               <label className="outputs-filter">
                 <select
                   aria-label="Filter outputs by file type"
@@ -171,10 +144,12 @@ export function OutputsPage({
                   ))}
                 </select>
               </label>
-            ) : null}
-          </header>
+            </header>
+          ) : null}
 
-          {error ? <p className="outputs-error">{error}</p> : null}
+          {outputsError || actionError ? (
+            <p className="outputs-error">{actionError ?? outputsError}</p>
+          ) : null}
           {!connection ? (
             <OutputMessage>Connect to the local OpenPond server to view outputs.</OutputMessage>
           ) : loading && outputs.length === 0 ? (
@@ -187,11 +162,7 @@ export function OutputsPage({
           ) : visibleOutputs.length === 0 ? (
             <OutputMessage>No outputs match this file type.</OutputMessage>
           ) : (
-            <>
-              <p className="outputs-count">
-                {visibleOutputs.length} {visibleOutputs.length === 1 ? "file" : "files"}
-              </p>
-              <div className="outputs-grid" data-testid="desktop-output-cards">
+            <div className="outputs-grid" data-testid="desktop-output-cards">
                 {visibleOutputs.map((output) => {
                   const presentation = outputFilePresentation(output);
                   const key = outputKey(output);
@@ -223,8 +194,14 @@ export function OutputsPage({
                       </button>
                       <div className="output-card-actions">
                         {output.location.kind === "local" ? (
-                          <button onClick={() => void saveOutput(output)} type="button">
-                            Save as
+                          <button
+                            aria-label={`Download ${output.title}`}
+                            className="output-download-button"
+                            onClick={() => void saveOutput(output)}
+                            title="Download"
+                            type="button"
+                          >
+                            <Download aria-hidden="true" size={14} />
                           </button>
                         ) : null}
                         <button onClick={() => onViewChat(output.sourceTaskId)} type="button">
@@ -234,8 +211,7 @@ export function OutputsPage({
                     </article>
                   );
                 })}
-              </div>
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -309,7 +285,15 @@ function OutputPreviewPanel({
               <FolderOpen size={14} />
               Reveal
             </button>
-            <button onClick={onSave} type="button">Save as</button>
+            <button
+              aria-label={`Download ${preview.output.title}`}
+              className="output-download-button"
+              onClick={onSave}
+              title="Download"
+              type="button"
+            >
+              <Download aria-hidden="true" size={14} />
+            </button>
           </>
         ) : null}
         <button onClick={onViewChat} type="button">View chat</button>

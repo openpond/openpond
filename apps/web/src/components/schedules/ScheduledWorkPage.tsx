@@ -19,10 +19,8 @@ import { useErrorToast } from "../../app/AppToastContext";
 import { useHostedSavedWork } from "../../hooks/useHostedSavedWork";
 import { useLocalAgentSchedules } from "../../hooks/useLocalAgentSchedules";
 import {
-  ArrowUp,
   ExternalLink,
   ListFilter,
-  Loader2,
   Pause,
   Play,
   RefreshCw,
@@ -71,21 +69,16 @@ export function ScheduledWorkPage({
   detailExpanded,
   onDetailResizeStart,
   onToggleDetailExpanded,
-  onStartWorkChat,
 }: {
   connection: ClientConnection | null;
   detailExpanded: boolean;
   onDetailResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleDetailExpanded: () => void;
-  onStartWorkChat: (prompt: string) => Promise<void>;
 }) {
   const savedWork = useHostedSavedWork(connection);
   const localSchedules = useLocalAgentSchedules(connection);
   const [filter, setFilter] = useState<ScheduleFilter>("all");
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
-  const [composerPrompt, setComposerPrompt] = useState("");
-  const [composerPending, setComposerPending] = useState(false);
-  const [composerError, setComposerError] = useState<string | null>(null);
   const rows = useMemo(
     () => scheduledRows(savedWork.definitions),
     [savedWork.definitions]
@@ -114,29 +107,12 @@ export function ScheduledWorkPage({
 
   useErrorToast(savedWork.error, { prefix: "Scheduled Work" });
   useErrorToast(localSchedules.error, { prefix: "Local schedules" });
-  useErrorToast(composerError, { prefix: "Scheduling chat" });
 
   useEffect(() => {
     if (selectedScheduleKey && !selectedHosted && !selectedLocal) {
       setSelectedScheduleKey(null);
     }
   }, [selectedHosted, selectedLocal, selectedScheduleKey]);
-
-  async function submitPrompt(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const prompt = composerPrompt.trim();
-    if (!prompt || composerPending) return;
-    setComposerPending(true);
-    setComposerError(null);
-    try {
-      await onStartWorkChat(prompt);
-      setComposerPrompt("");
-    } catch (error) {
-      setComposerError(errorMessage(error));
-    } finally {
-      setComposerPending(false);
-    }
-  }
 
   return (
     <section
@@ -146,10 +122,6 @@ export function ScheduledWorkPage({
       <div className="scheduled-work-scroll">
         <div className="scheduled-work-content">
           <header className="scheduled-work-header">
-            <div>
-              <h1>Scheduled</h1>
-              <p>Ask OpenPond to schedule tasks, reminders, or recurring work.</p>
-            </div>
             <div className="scheduled-work-header-actions">
               <button
                 aria-label="Refresh schedules"
@@ -170,7 +142,7 @@ export function ScheduledWorkPage({
                   size={16}
                 />
               </button>
-              <label className="scheduled-filter">
+              <label className="scheduled-filter" title="Filter schedules">
                 <ListFilter aria-hidden="true" size={16} />
                 <select
                   aria-label="Schedule filter"
@@ -186,28 +158,6 @@ export function ScheduledWorkPage({
               </label>
             </div>
           </header>
-
-          <form className="scheduled-composer" onSubmit={submitPrompt}>
-            <textarea
-              aria-label="Schedule a task"
-              onChange={(event) => setComposerPrompt(event.target.value)}
-              placeholder="Describe what you want to schedule"
-              value={composerPrompt}
-            />
-            <button
-              aria-label="Start scheduling chat"
-              className="scheduled-composer-submit"
-              disabled={!connection || !composerPrompt.trim() || composerPending}
-              title="Start scheduling chat"
-              type="submit"
-            >
-              {composerPending ? (
-                <Loader2 className="scheduled-spin" size={16} />
-              ) : (
-                <ArrowUp size={16} />
-              )}
-            </button>
-          </form>
 
           <section
             aria-busy={savedWork.loading || localSchedules.loading}

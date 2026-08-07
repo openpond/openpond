@@ -28,24 +28,7 @@
 
 .outputs-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-}
-
-.outputs-header h1 {
-  margin: 0;
-  color: var(--text);
-  font-size: 30px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.outputs-header p {
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.5;
+  justify-content: flex-end;
 }
 
 .outputs-filter {
@@ -73,16 +56,11 @@
   background: #202020;
 }
 
-.outputs-count {
-  margin: 30px 0 12px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
 .outputs-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 30px;
 }
 
 .output-card {
@@ -195,6 +173,15 @@
   color: var(--text);
 }
 
+.output-card-actions .output-download-button,
+.output-detail-actions .output-download-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
 .outputs-empty,
 .outputs-loading {
   margin: 28px 0 0;
@@ -203,9 +190,13 @@
 }
 
 .outputs-loading {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  margin: 0;
 }
 
 .outputs-error {
@@ -370,8 +361,7 @@
   }
 
   .outputs-header {
-    display: grid;
-    gap: 16px;
+    display: flex;
   }
 
   .outputs-grid {

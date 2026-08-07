@@ -230,7 +230,6 @@ export type MainPaneProps = {
       turnMetadata?: Record<string, unknown>;
     }
   ) => Promise<boolean>;
-  onStartScheduledWorkChat: (prompt: string) => Promise<void>;
   stopTurn: () => Promise<boolean>;
   syncWorkspaceLocally: () => Promise<void>;
   refreshWorkspaceDiff: (options?: { silent?: boolean }) => Promise<void>;

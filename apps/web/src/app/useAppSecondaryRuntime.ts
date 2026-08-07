@@ -4,16 +4,8 @@ import type {
   Session,
   SubagentDelegationMode,
 } from "@openpond/contracts";
-import {
-  DEFAULT_CHAT_MODEL,
-  DEFAULT_CHAT_PROVIDER,
-} from "@openpond/contracts";
 import { api } from "../api";
-import {
-  defaultModelForProvider,
-  modelRefForTurn,
-  providerOptionsFromSettings,
-} from "../lib/app-models";
+import { modelRefForTurn } from "../lib/app-models";
 import { newExperienceTitle } from "../lib/experience-options";
 import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
@@ -91,7 +83,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setPrompt,
     setDraftProvider,
     setDraftModel,
-    setDraftExperience,
     setDiffPanelOpen,
     setRightPanelMode,
     setRightChatPanels,
@@ -693,40 +684,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     setMentionedAppId,
     showToast,
   });
-  const startScheduledWorkChat = useCallback(
-    async (prompt: string) => {
-      const provider =
-        activeProvider === "codex"
-          ? providerOptionsFromSettings(bootstrap?.providers, {
-              enabledOnly: true,
-            }).find((option) => option.value !== "codex")?.value ??
-            DEFAULT_CHAT_PROVIDER
-          : activeProvider;
-      const model =
-        provider === activeProvider
-          ? activeModel
-          : defaultModelForProvider(provider, bootstrap?.providers) ??
-            DEFAULT_CHAT_MODEL;
-
-      setDraftExperience("work");
-      const sent = await sendPrompt([], null, prompt, {
-        experience: "work",
-        model,
-        provider,
-        session: null,
-      });
-      if (!sent) throw new Error("Unable to start the scheduling chat.");
-      setView("chat");
-    }, [
-      activeModel,
-      activeProvider,
-      bootstrap?.providers,
-      sendPrompt,
-      setDraftExperience,
-      setView,
-    ],
-  );
-
   const openSandboxWorkspace = useOpenSandboxWorkspace({
     appDispatch,
     connection,
@@ -936,7 +893,6 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     changeWorkspaceTarget,
     switchProjectWorkspaceTarget,
     sendPromptFromMainComposer,
-    startScheduledWorkChat,
     openSandboxWorkspace,
     createCloudEnvironmentFromSidebar,
     openCloudProjectDialog,
