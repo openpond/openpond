@@ -104,6 +104,22 @@ describe("CLI installed-package smoke", () => {
         { jsonrpc: "2.0", method: "initialized" },
         { jsonrpc: "2.0", id: 2, method: "runtime/capabilities", params: {} },
         { jsonrpc: "2.0", id: 3, method: "harness/validate", params: {} },
+        {
+          jsonrpc: "2.0",
+          id: 4,
+          method: "thread/start",
+          params: {
+            session: {
+              provider: "openpond",
+              modelRef: {
+                providerId: "openpond",
+                modelId: "openpond-chat",
+              },
+              experience: "work",
+              title: "Installed app-server cwd proof",
+            },
+          },
+        },
       ].map((message) => JSON.stringify(message)).join("\n") + "\n";
       const result = await runProcessCommand(
         "node",
@@ -126,7 +142,7 @@ describe("CLI installed-package smoke", () => {
       expect(result.code).toBe(0);
       expect(result.stderr.trim()).toBe("");
       const messages = result.stdout.trim().split("\n").map((line) => JSON.parse(line));
-      expect(messages).toHaveLength(3);
+      expect(messages).toHaveLength(5);
       expect(messages).toEqual(expect.arrayContaining([
         expect.objectContaining({
           id: 2,
@@ -135,6 +151,12 @@ describe("CLI installed-package smoke", () => {
         expect.objectContaining({
           id: 3,
           result: expect.objectContaining({ valid: true }),
+        }),
+        expect.objectContaining({
+          id: 4,
+          result: {
+            thread: expect.objectContaining({ cwd }),
+          },
         }),
       ]));
       expect(result.stdout).not.toContain("OPENPOND_APP_SERVER_READY");

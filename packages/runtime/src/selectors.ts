@@ -2,11 +2,15 @@ import type { ActiveProfileSelector, ConfiguredProfile } from "@openpond/cloud";
 import type { RuntimeLocalAccount, RuntimeLocalConfig } from "./types.js";
 import { deriveEnvironment, normalizeBaseUrl } from "./urls.js";
 
-export function accountToken(account: RuntimeLocalAccount | null): string | null {
+export function accountToken(
+  account: RuntimeLocalAccount | null,
+  env: Record<string, string | undefined> = process.env,
+): string | null {
   const candidates = [
     account?.apiKey,
     account?.session?.token,
     account?.token,
+    env.OPENPOND_API_KEY,
   ];
   for (const value of candidates) {
     const trimmed = typeof value === "string" ? value.trim() : "";

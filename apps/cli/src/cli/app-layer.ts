@@ -34,7 +34,11 @@ export async function runOpenPondServerCommand(
   }
   const webRoot = mode === "web" && typeof options.webRoot !== "string" ? packagedWebRoot() : null;
   if (webRoot) args.push("--web-root", webRoot);
-  await runChild(server.runner, args, server.cwd);
+  await runChild(
+    server.runner,
+    args,
+    mode === "app-server" ? process.cwd() : server.cwd,
+  );
 }
 
 export async function runOpenPondTerminalCommand(options: CliOptions, rest: string[]): Promise<void> {
