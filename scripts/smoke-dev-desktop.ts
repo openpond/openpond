@@ -351,19 +351,22 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     async () =>
       evaluateValue<{
         labels: string[];
-        focusedExperience: string | null;
+        focusedProductArea: string | null;
       } | null>(
         cdp,
         `(() => {
           const menu = document.querySelector(".sidebar-experience-popover");
           if (!(menu instanceof HTMLElement)) return null;
+          const labels = [...menu.querySelectorAll("[role='menuitemradio'] strong")]
+            .map((item) => item.textContent?.trim() ?? "");
+          const focusedProductArea =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement.dataset.productArea ?? null
+              : null;
+          if (labels.length === 0 || focusedProductArea === null) return null;
           return {
-            labels: [...menu.querySelectorAll("[role='menuitemradio'] strong")]
-              .map((item) => item.textContent?.trim() ?? ""),
-            focusedExperience:
-              document.activeElement instanceof HTMLElement
-                ? document.activeElement.dataset.experience ?? null
-                : null
+            labels,
+            focusedProductArea
           };
         })()`
       ),
@@ -371,8 +374,8 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     "Experience menu did not open from the keyboard."
   );
   const keyboardMenuPassed =
-    keyboardMenu.labels.join(",") === "Chat,Work,Development" &&
-    keyboardMenu.focusedExperience === "chat";
+    keyboardMenu.labels.join(",") === "Chat,Models" &&
+    keyboardMenu.focusedProductArea === "chat";
   if (!keyboardMenuPassed) {
     throw new Error(
       `Experience keyboard menu failed: ${JSON.stringify(keyboardMenu)}`
@@ -400,7 +403,21 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   );
 
   const experienceOptions = keyboardMenu.labels;
-  await selectExperience(cdp, "work", "Work");
+  await selectProductArea(cdp, "models", "Models");
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `Boolean(
+          document.querySelector("[aria-label='Models']") &&
+          !document.querySelector(".work-starter-prompts")
+        )`
+      ),
+    5_000,
+    "Models controls did not render after switching products."
+  );
+  await selectProductArea(cdp, "chat", "Chat");
+  await selectTaskMode(cdp, "work", "Work");
   const workState = await waitFor(
     async () =>
       evaluateValue<{
@@ -480,20 +497,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     code: "Backspace",
   });
 
-  await selectExperience(cdp, "development", "Development");
-  await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `Boolean(
-          document.querySelector("[aria-label='Lab']") &&
-          !document.querySelector(".work-starter-prompts")
-        )`
-      ),
-    5_000,
-    "Development controls did not return after switching experiences."
-  );
-  await selectExperience(cdp, "chat", "Chat");
+  await selectTaskMode(cdp, "chat", "Chat");
 
   return {
     experienceMenuStyled,
@@ -508,9 +512,9 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   };
 }
 
-async function selectExperience(
+async function selectProductArea(
   cdp: CdpClient,
-  experience: "chat" | "work" | "development",
+  productArea: "chat" | "models",
   label: string
 ): Promise<void> {
   const opened = await evaluateValue<boolean>(
@@ -523,7 +527,7 @@ async function selectExperience(
     })()`
   );
   if (!opened)
-    throw new Error(`Could not open the experience menu for ${label}.`);
+    throw new Error(`Could not open the product menu for ${label}.`);
   await waitFor(
     async () =>
       evaluateValue<boolean>(
@@ -531,14 +535,14 @@ async function selectExperience(
         `document.querySelector(".sidebar-experience-popover") instanceof HTMLElement`
       ),
     5_000,
-    `Experience menu did not open for ${label}.`
+    `Product menu did not open for ${label}.`
   );
   const selected = await evaluateValue<boolean>(
     cdp,
     `(() => {
       const option = document.querySelector(
         ${JSON.stringify(
-          `.sidebar-experience-popover [data-experience="${experience}"]`
+          `.sidebar-experience-popover [data-product-area="${productArea}"]`
         )}
       );
       if (!(option instanceof HTMLButtonElement)) return false;
@@ -546,7 +550,7 @@ async function selectExperience(
       return true;
     })()`
   );
-  if (!selected) throw new Error(`Could not select the ${label} experience.`);
+  if (!selected) throw new Error(`Could not select the ${label} product.`);
   await waitFor(
     async () =>
       evaluateValue<boolean>(
@@ -555,7 +559,37 @@ async function selectExperience(
           ${JSON.stringify(`OpenPond product: ${label}`)}`
       ),
     5_000,
-    `${label} did not become the active experience.`
+    `${label} did not become the active product.`
+  );
+}
+
+async function selectTaskMode(
+  cdp: CdpClient,
+  experience: "chat" | "work",
+  label: string
+): Promise<void> {
+  const selected = await evaluateValue<boolean>(
+    cdp,
+    `(() => {
+      const option = document.querySelector(
+        ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
+      );
+      if (!(option instanceof HTMLButtonElement)) return false;
+      option.click();
+      return true;
+    })()`
+  );
+  if (!selected) throw new Error(`Could not select the ${label} task mode.`);
+  await waitFor(
+    async () =>
+      evaluateValue<boolean>(
+        cdp,
+        `document.querySelector(
+          ${JSON.stringify(`.new-experience-option[data-experience="${experience}"]`)}
+        )?.getAttribute("aria-checked") === "true"`
+      ),
+    5_000,
+    `${label} did not become the active task mode.`
   );
 }
 
