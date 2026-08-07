@@ -1,4 +1,4 @@
-# Agent Runtime Phases 1–2 Local Acceptance (In Progress)
+# Agent Runtime Phases 1–2 Local Acceptance (Complete)
 
 This ledger records the Local-only acceptance evidence for the shared agent
 runtime extraction and app-server protocol. Hosted Chat, hosted Work, sandbox
@@ -12,9 +12,10 @@ installation, and control-plane transport remain Phase 3 or later.
   materialization, the versioned JSON-RPC contract, the transport-neutral
   thread/turn service, privacy-safe lifecycle telemetry, generated
   client/schema artifacts, ordered JSONL transport, the provider-neutral
-  compaction threshold/lifecycle policy, canonical event persistence, and
-  durable checkpoint creation. The provider-specific round body and full
-  compaction execution algorithm are still being extracted from `apps/server`.
+  provider stream/round program, compaction threshold/lifecycle policy and full
+  compaction program, canonical event persistence, and durable checkpoint
+  creation. Provider credentials, provider-specific tool policy, model-message
+  projection, persistence, and metrics remain typed Local host adapters.
 - `@openpond/harness` owns the portable Refiner decision schema, bounded prompt,
   streaming parser, timeout, repair behavior, deterministic trigger/detour
   detection, bounded evidence projection, revision checks, stable IDs, and
@@ -131,6 +132,27 @@ The in-app browser was used against the running Local app at
   no-Project Local Work task created, read, and deleted
   `final-runtime-smoke.txt`, then returned exactly `FINAL-WORK-OK`; a host
   filesystem check confirmed the temporary file was absent.
+- A realistic Local Chat researched OpenPond.ai and produced a source-backed
+  company brief. A correction turn replaced third-party source attribution
+  with only official OpenPond and official GitHub sources, added an access date,
+  and kept inference explicitly labeled.
+- A realistic no-Project Local Work task delegated primary-source research to a
+  child agent and created `openpond-company-brief.pdf` in its isolated task
+  workspace. Independent inspection found 4 US Letter pages, 1,404 extracted
+  words, 11 embedded primary-source links, no encryption, and no JavaScript.
+  All four pages rendered successfully and were visually inspected; no Project
+  or repository file was modified.
+- That run exposed a real sparse model-usage attribution failure during child
+  handoff: an omitted nullable `createImproveRunId` was rejected as
+  `undefined`. The contracts schema now normalizes every absent nullable
+  attribution dimension to `null`. The running app restarted from source,
+  resumed the parent turn, consumed the completed child result, and finished
+  the PDF, proving restart recovery on the corrected implementation.
+- Background Refiner review detected two failed query-less `resource_search`
+  calls followed by successful `web_fetch` recovery. It emitted a detailed
+  runtime recommendation, explicitly declined a one-off Harness edit because
+  only one recovery pair existed, and left the current release at `e001872197`,
+  channel revision 10, with zero proposals requiring review.
 
 ## Repository verification
 
@@ -156,10 +178,12 @@ The in-app browser was used against the running Local app at
 
 ## Local completion boundary
 
-Phases 0–2 are not complete yet. Completion requires moving the remaining
-provider-specific round body and full compaction execution algorithm behind
-typed runtime host ports, followed by the same real Chat/Work/Harness matrix on
-the final branch commit.
+Phases 0–2 are complete. The shared package now owns provider stream/round
+sequencing and the full compaction program behind typed runtime host ports, and
+the final implementation passed the real Local Chat, projectless Work,
+project-backed Work, Harness diff/history/rollback, Refiner routing, restart,
+and realistic PDF-generation paths.
+
 Phase 3 must consume that boundary without moving hosted provider credentials,
 connected-app implementations, sandbox provisioning, or web product state into
 `@openpond/agent-runtime` or `@openpond/harness`.

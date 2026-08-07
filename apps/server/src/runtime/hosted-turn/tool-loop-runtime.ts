@@ -16,6 +16,7 @@ import {
 } from "@openpond/contracts";
 import {
   createAgentToolCatalogProjection,
+  runProviderRound,
   runProviderRoundLoop,
 } from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
@@ -339,13 +340,6 @@ export function createHostedToolLoopRuntime(deps: {
       throwIfInterrupted(params.signal);
       await appendPendingSubagentAsides();
       await appendContextUsage({ messages });
-      let assistantText = "";
-      let reasoningText = "";
-      let latestContinuation:
-        | import("@openpond/cloud").HostedChatContinuation
-        | null = null;
-      let latestUsage: unknown;
-      let finishReason: string | null | undefined;
       const nativeToolAccumulator = new NativeToolCallAccumulator();
       const usageRequestId = round.requestId;
       const usageRecorder = await startProviderRequestUsageRecorder({
@@ -362,37 +356,48 @@ export function createHostedToolLoopRuntime(deps: {
         completedActionCount: completedTrainingHarnessActions,
         nativeTools,
       });
-      try {
-        const requestTools = trainingHarnessRound?.tools ?? nativeTools;
-        const toolChoice: HostedChatToolChoice =
-          trainingHarnessRound?.toolChoice ?? "auto";
-        for await (const delta of params.stream(
+      const requestTools = trainingHarnessRound?.tools ?? nativeTools;
+      const toolChoice: HostedChatToolChoice =
+        trainingHarnessRound?.toolChoice ?? "auto";
+      const providerRound = await runProviderRound({
+        stream: params.stream(
           messages,
           requestTools.length > 0
             ? { tools: requestTools, toolChoice, requestId: usageRequestId }
-            : { requestId: usageRequestId }
-        )) {
+            : { requestId: usageRequestId },
+        ),
+        signal: params.signal,
+        onDelta: (delta) => {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
-          if (delta.usage) latestUsage = delta.usage;
-          if (delta.text) assistantText += delta.text;
-          if (delta.reasoningText) reasoningText += delta.reasoningText;
-          if (delta.continuation) latestContinuation = delta.continuation;
-          if (delta.toolCalls) nativeToolAccumulator.append(delta.toolCalls);
-          if (delta.finishReason !== undefined)
-            finishReason = delta.finishReason;
-        }
-      } catch (error) {
-        await usageRecorder.fail(
-          error,
-          params.signal.aborted ||
-            (error instanceof Error && error.name === "AbortError")
-            ? "interrupted"
-            : "failed"
-        );
-        throw error;
+        },
+        onCompleted: async () => usageRecorder.complete(),
+        onFailed: async (error) => {
+          let recordedError = error;
+          if (params.signal.aborted) {
+            try {
+              throwIfInterrupted(params.signal);
+            } catch (interruptedError) {
+              recordedError = interruptedError;
+            }
+          }
+          await usageRecorder.fail(
+            recordedError,
+            params.signal.aborted ||
+              (error instanceof Error && error.name === "AbortError")
+              ? "interrupted"
+              : "failed",
+          );
+        },
+      });
+      const assistantText = providerRound.text;
+      const reasoningText = providerRound.reasoningText;
+      const latestContinuation = providerRound.continuation;
+      const latestUsage = providerRound.usage;
+      const finishReason = providerRound.finishReason;
+      for (const toolCallBatch of providerRound.toolCallBatches) {
+        nativeToolAccumulator.append(toolCallBatch);
       }
-      await usageRecorder.complete();
       if (reasoningText) {
         await appendRuntimeEvent(
           event({

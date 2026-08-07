@@ -4,7 +4,10 @@ import {
   type ChatProvider,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
-import { agentCompactionDecision } from "@openpond/agent-runtime";
+import {
+  agentCompactionDecision,
+  runAgentCompactionProgram,
+} from "@openpond/agent-runtime";
 import type { HostedChatMessage } from "@openpond/cloud";
 import {
   estimateHostedMessageTokens,
@@ -73,65 +76,52 @@ export function hostedAutoCompactionDecision(input: {
 export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {
   const model = hostedCompactionModel(input.provider, input.model);
   const maxContextTokens = hostedCompactionContextLimit(input.provider, model, input.maxContextTokens);
-  const projectionEvents = eventsForHostedCompaction(input.events);
-  const selection = selectEventsForHostedCompaction(projectionEvents, maxContextTokens);
-  const { summaryEvents, preservedEvents, preservedEventIds } = selection;
-  if (summaryEvents.length === 0) throw new Error("There is not enough prior context to compact.");
-
-  const summaryRecords = normalizeCompactionRecords(summaryEvents);
-  const fileLedger = buildFileOperationLedger(normalizeCompactionRecords(projectionEvents));
-  const serialized = serializeRecordsForCompaction(summaryRecords, compactionInputCharBudget(maxContextTokens));
-  if (!serialized.text.trim()) throw new Error("There is not enough prior context to compact.");
-
-  const messages = buildCompactionSummaryMessages({
-    serializedHistory: serialized.text,
-    fileLedger,
-  });
-
-  const startedAtMs = Date.now();
-  const summary = (await streamCompactionSummary({ ...input, model, messages })).trim();
-  const durationMs = Date.now() - startedAtMs;
-  if (!summary) throw new Error("Compaction summary was empty.");
-
-  const beforeMessages = buildChatMessagesForProvider(input.events, "", "Compaction projection");
-  const preservedMessages = buildChatMessagesForProvider(preservedEvents, "", "Compaction projection").slice(1);
-  const afterMessages: HostedChatMessage[] = [
-    { role: "system", content: "Compaction projection" },
-    { role: "system", content: summary },
-    ...preservedMessages,
-  ];
-  const inputTokensBefore = estimateHostedMessageTokens(beforeMessages);
-  const inputTokensAfter = estimateHostedMessageTokens(afterMessages);
-  const metrics = createCompactionMetrics({
-    sourceEvents: projectionEvents.length,
-    summarizedEvents: summaryEvents.length,
-    preservedEvents: preservedEvents.length,
-    summaryInputChars: serialized.inputChars,
-    retainedTailTokens: selection.retainedTailTokens,
-    retainedTailBudgetTokens: selection.retainedTailBudgetTokens,
-    finalProviderContextTokens: inputTokensAfter,
-    durationMs,
-    fileLedgerEntries: fileLedger.length,
-    splitTurnId: selection.splitTurnId,
-  });
-
-  return {
-    summary,
+  return runAgentCompactionProgram({
+    events: input.events,
     model,
-    compactedThroughEventId: projectionEvents[projectionEvents.length - 1]?.id ?? null,
-    compactedThroughTurnId: lastTurnId(projectionEvents),
-    preservedFromEventId: preservedEvents[0]?.id ?? null,
-    preservedEventIds,
-    preservedResourceRefs: durableResourceRefs(input.events),
-    sourceEventCount: summaryEvents.length,
-    preservedEventCount: preservedEvents.length,
-    fileLedger,
-    inputTokensBefore,
-    inputTokensAfter,
     maxContextTokens,
-    tokenSource: "heuristic",
-    metrics,
-  };
+    signal: input.signal,
+    host: {
+      projectEvents: eventsForHostedCompaction,
+      selectEvents: selectEventsForHostedCompaction,
+      normalizeRecords: normalizeCompactionRecords,
+      buildFileLedger: buildFileOperationLedger,
+      inputCharBudget: compactionInputCharBudget,
+      serializeRecords: serializeRecordsForCompaction,
+      buildSummaryMessages: buildCompactionSummaryMessages,
+      streamSummary: ({ model: selectedModel, messages, signal }) =>
+        streamCompactionSummary({
+          ...input,
+          model: selectedModel,
+          messages,
+          signal,
+        }),
+      estimateProjection: ({ events, preservedEvents, summary }) => {
+        const beforeMessages = buildChatMessagesForProvider(
+          events,
+          "",
+          "Compaction projection",
+        );
+        const preservedMessages = buildChatMessagesForProvider(
+          preservedEvents,
+          "",
+          "Compaction projection",
+        ).slice(1);
+        const afterMessages: HostedChatMessage[] = [
+          { role: "system", content: "Compaction projection" },
+          { role: "system", content: summary },
+          ...preservedMessages,
+        ];
+        return {
+          inputTokensBefore: estimateHostedMessageTokens(beforeMessages),
+          inputTokensAfter: estimateHostedMessageTokens(afterMessages),
+        };
+      },
+      durableResourceRefs,
+      lastTurnId,
+      createMetrics: createCompactionMetrics,
+    },
+  });
 }
 
 function hostedCompactionModel(provider: ChatProvider, model?: string | null): string {

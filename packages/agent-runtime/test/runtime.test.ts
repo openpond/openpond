@@ -9,8 +9,10 @@ import {
   executeAgentTool,
   materializeAgentPrompt,
   providerRoundSequence,
+  runProviderRound,
   runProviderRoundLoop,
   runAgentCompaction,
+  runAgentCompactionProgram,
 } from "../src/index.js";
 
 describe("@openpond/agent-runtime", () => {
@@ -91,6 +93,40 @@ describe("@openpond/agent-runtime", () => {
     })).resolves.toBe("exhausted");
   });
 
+  test("owns provider stream collection and lifecycle hooks", async () => {
+    const calls: string[] = [];
+    async function* stream() {
+      yield { text: "hel", toolCalls: [{ index: 0, value: "a" }] };
+      yield {
+        text: "lo",
+        reasoningText: "reason",
+        usage: { total: 3 },
+        continuation: { id: "next" },
+        toolCalls: [{ index: 0, value: "b" }],
+        finishReason: "tool_calls",
+      };
+    }
+    const result = await runProviderRound({
+      stream: stream(),
+      signal: new AbortController().signal,
+      onDelta: () => calls.push("delta"),
+      onCompleted: async () => { calls.push("completed"); },
+      onFailed: async () => { calls.push("failed"); },
+    });
+    expect(result).toEqual({
+      text: "hello",
+      reasoningText: "reason",
+      usage: { total: 3 },
+      continuation: { id: "next" },
+      toolCallBatches: [
+        [{ index: 0, value: "a" }],
+        [{ index: 0, value: "b" }],
+      ],
+      finishReason: "tool_calls",
+    });
+    expect(calls).toEqual(["delta", "delta", "completed"]);
+  });
+
   test("materializes prompt layers in canonical order", () => {
     expect(materializeAgentPrompt({
       system: "system",
@@ -132,6 +168,57 @@ describe("@openpond/agent-runtime", () => {
       maxContextTokens: null,
       usableContextTokens: null,
     })).toMatchObject({ shouldCompact: false, maxContextTokens: 0 });
+  });
+
+  test("owns the complete compaction program behind typed host ports", async () => {
+    type TestEvent = { id: string; turnId?: string | null; text: string };
+    const events: TestEvent[] = [
+      { id: "old", turnId: "turn-1", text: "old context" },
+      { id: "tail", turnId: "turn-2", text: "recent context" },
+    ];
+    const result = await runAgentCompactionProgram({
+      events,
+      model: "test-model",
+      maxContextTokens: 1_000,
+      host: {
+        projectEvents: (items) => [...items],
+        selectEvents: (items) => ({
+          summaryEvents: [items[0]!],
+          preservedEvents: [items[1]!],
+          preservedEventIds: [items[1]!.id],
+          retainedTailTokens: 10,
+          retainedTailBudgetTokens: 100,
+          splitTurnId: null,
+        }),
+        normalizeRecords: (items) => items.map((item) => item.text),
+        buildFileLedger: () => [{ path: "README.md" }],
+        inputCharBudget: () => 1_000,
+        serializeRecords: (records) => ({
+          text: records.join("\n"),
+          inputChars: records.join("\n").length,
+        }),
+        buildSummaryMessages: ({ serializedHistory }) => [serializedHistory],
+        streamSummary: async () => "durable summary",
+        estimateProjection: () => ({
+          inputTokensBefore: 20,
+          inputTokensAfter: 12,
+        }),
+        durableResourceRefs: () => ["resource:one"],
+        lastTurnId: (items) => items.at(-1)?.turnId ?? null,
+        createMetrics: (metrics) => metrics,
+      },
+    });
+    expect(result).toMatchObject({
+      summary: "durable summary",
+      compactedThroughEventId: "tail",
+      compactedThroughTurnId: "turn-2",
+      preservedFromEventId: "tail",
+      preservedEventIds: ["tail"],
+      sourceEventCount: 1,
+      preservedEventCount: 1,
+      inputTokensBefore: 20,
+      inputTokensAfter: 12,
+    });
   });
 
   test("owns thread and turn lifecycle telemetry without recording request payloads", async () => {
