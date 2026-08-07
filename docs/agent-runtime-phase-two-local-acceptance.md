@@ -4,6 +4,11 @@ This ledger records the Local-only acceptance evidence for the shared agent
 runtime extraction and app-server protocol. Hosted Chat, hosted Work, sandbox
 installation, and control-plane transport remain Phase 3 or later.
 
+Architecture follow-up: [App-Server Package Architecture Audit](./app-server-package-architecture-audit.md).
+The audit clarifies that Phase 2 extracted portable agent programs and a shared
+service boundary into `@openpond/agent-runtime`; it did not yet split the full
+Local product-server composition from the JSONL app-server process.
+
 ## Implementation boundary
 
 - `@openpond/agent-runtime` is a private workspace package. It owns canonical
@@ -187,3 +192,9 @@ and realistic PDF-generation paths.
 Phase 3 must consume that boundary without moving hosted provider credentials,
 connected-app implementations, sandbox provisioning, or web product state into
 `@openpond/agent-runtime` or `@openpond/harness`.
+
+Before hosted installation, Phase 3 must also establish a lean agent-only
+composition. The current `openpond app-server` mode disables HTTP and Local
+schedules but still constructs the full Local server and starts other Local
+lifecycle behavior. That is valid Local Phase 2 evidence, not proof that the
+hosted process boundary is already minimal.
