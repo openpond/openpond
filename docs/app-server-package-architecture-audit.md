@@ -8,10 +8,11 @@ remain pending before hosted adoption.
 
 Latest checkpoint: 2026-08-07. OpenPond `master` includes runtime-convergence
 PR #71. Package dependency, production reachability, source-structure, and
-runtime-cycle audits pass. The immediate design decision is to keep
-`apps/server` as the Local HTTP/product host while extracting a smaller private
-app-server composition layer above `@openpond/agent-runtime` for JSONL and
-future authenticated hosted transports.
+runtime-cycle audits pass. The product decision is to keep `apps/server` as
+the Local HTTP/product host and extract a private `@openpond/app-server`
+workspace package above `@openpond/agent-runtime`. Local development will use
+that package behind the HTTP host; Work sandboxes will launch it directly
+through the bundled `openpond app-server` command.
 
 Related docs:
 
@@ -80,6 +81,7 @@ stateful and placement-specific agent concern.
 | Portable behavior | `@openpond/harness` | Immutable releases, workspaces, improvements, tools, models, hashes, and Refiner decisions. |
 | Portable evaluation | `@openpond/evals` | Tasksets, graders, runs, evidence, receipts, and conformance; depends one-way on Harness. |
 | Agent programs | `@openpond/agent-runtime` | Protocol, provider-round programs, compaction, events, snapshots, tool primitives, prompt materialization, and transport-neutral service methods. |
+| Shared agent server, target | `@openpond/app-server` in `packages/app-server` | Private canonical agent-service composition used behind Local HTTP and directly by sandbox JSONL or hosted transports. Not implemented yet. |
 | Local product host | `@openpond/local-server` in `apps/server` | Full Local composition, durable state, provider and tool adapters, HTTP/static product surface, and JSONL app-server mode. |
 | Product clients | `apps/web`, `apps/desktop`, `apps/terminal` | Renderer, Electron host, and terminal client. They do not own an agent loop. |
 | Distribution | `apps/cli` | Public `openpond` artifact bundling the private server, terminal, runtime, cloud, contracts, and SDK source. |
@@ -205,15 +207,28 @@ adoption.
 
 Keep `apps/server` as the Local product host for HTTP, static web delivery,
 SQLite, Settings, media, OAuth, Local schedules, training, and other Desktop
-composition.
+composition. Its `serve` and `web` modes remain the Local HTTP entrypoints.
 
-Add a lean private app-server composition layer above
-`@openpond/agent-runtime`. The preferred end state is:
+Create a private `@openpond/app-server` workspace package at
+`packages/app-server` above `@openpond/agent-runtime`. It owns the canonical
+agent-service composition and accepts typed placement adapters. It is not a
+separately published npm package; the public `openpond` CLI bundles it.
+
+Use that package in both placements:
+
+- `pnpm dev` starts `apps/server`, Vite, and Desktop. `apps/server` constructs
+  `@openpond/app-server` behind the Local HTTP compatibility and product APIs.
+- `openpond serve` and `openpond ui` start the same Local HTTP/product host.
+- `openpond app-server` starts `@openpond/app-server` directly without the
+  Local HTTP/static/product layer. This is the command installed in hosted Work
+  sandboxes.
+
+The target end state is:
 
 ```text
 @openpond/harness
   -> @openpond/agent-runtime
-    -> lean app-server composition
+    -> @openpond/app-server
       -> JSONL stdio transport
       -> future authenticated hosted transport
       -> Local HTTP compatibility adapter in apps/server
@@ -224,12 +239,10 @@ apps/server
   -> lean app-server composition
 ```
 
-The lean layer may become a private workspace package or a separately enforced
-composition domain before being promoted to a package. The acceptance
-criterion matters more than the folder name: `openpond app-server` must be able
-to initialize without constructing HTTP/static routes, training, Local product
-schedulers, unrelated cloud lifecycle services, or nested Work-sandbox
-management.
+The package boundary is an implementation constraint, not a new public
+distribution surface. `openpond app-server` must initialize it without
+constructing HTTP/static routes, training, Local product schedulers, unrelated
+cloud lifecycle services, or nested Work-sandbox management.
 
 ## Boundaries
 
@@ -265,11 +278,11 @@ management.
 ### Phase 1 - Establish lean app-server composition
 
 - [ ] Define the exact services and adapters required by agent-only mode.
-- [ ] Extract a private lean composition entrypoint above
-  `@openpond/agent-runtime` without changing Local thread/turn behavior.
-- [ ] Make `openpond app-server` call the lean entrypoint directly.
+- [ ] Create private `packages/app-server` above `@openpond/agent-runtime`
+  without changing Local thread/turn behavior.
+- [ ] Make `openpond app-server` construct `@openpond/app-server` directly.
 - [ ] Keep `serve` and `web` modes in `apps/server` and adapt their agent routes
-  to the same lean service.
+  to the same package.
 - [ ] Prove agent-only boot does not construct or start excluded Local product
   services.
 
@@ -320,10 +333,10 @@ management.
 
 ## Open Questions
 
-- Should the lean composition become `packages/app-server`, an enforced domain
-  within `apps/server`, or a new `apps/app-server` executable package? The
-  required dependency boundary and boot behavior should decide this, not the
-  name alone.
+- Should `apps/server` embed `@openpond/app-server` in-process during Local
+  development, or supervise it as a child process? The initial extraction
+  should prefer in-process composition unless process isolation is required by
+  a concrete failure or deployment boundary.
 - Which exact Local host services are required for agent-only Chat and Work,
   and which current `createOpenPondServer` services must be forbidden?
 - Should the first production catalog adoption wrap the current
