@@ -49,10 +49,6 @@ export function createDestinationTrainingEngineRegistry(input: {
       adapterId: "local-trl",
       destinationId: "local_cpu_fixture",
     },
-    {
-      adapterId: "fireworks-native",
-      destinationId: "fireworks",
-    },
   ] as const) {
     adapters.registerEngine(
       new DestinationTrainingEngineAdapter({

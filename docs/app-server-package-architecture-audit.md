@@ -1,18 +1,18 @@
 # 2026-08-07 App-Server Package Architecture Audit
 
-Status: Architecture audit complete. The Local runtime extraction and protocol
-are valid Phase 2 work, but the current JSONL app-server mode still boots the
-full Local product-server composition. A lean app-server composition boundary,
-production tool-dispatch convergence, and one SDK package-boundary repair
-remain pending before hosted adoption.
+Status: Implementation in progress. Retired provider cleanup, executable tool
+catalog convergence, the private app-server package, and SDK guardrails are
+implemented. The remaining hosted blocker is a lean placement adapter:
+`openpond app-server` uses the new package and JSONL lifecycle but still gets
+its Local ports by constructing the full Local product-server composition.
 
-Latest checkpoint: 2026-08-07. OpenPond `master` includes runtime-convergence
-PR #71. Package dependency, production reachability, source-structure, and
-runtime-cycle audits pass. The product decision is to keep `apps/server` as
-the Local HTTP/product host and extract a private `@openpond/app-server`
-workspace package above `@openpond/agent-runtime`. Local development will use
-that package behind the HTTP host; Work sandboxes will launch it directly
-through the bundled `openpond app-server` command.
+Latest checkpoint: 2026-08-07. Local Python training, local inference, Compute
+settings, and `@openpond/trainer-local` remain supported and are explicitly
+deferred from this cleanup. Prime and Fireworks integration residue plus the
+documentation-only packaging folder are removed. `@openpond/app-server` now
+owns canonical service/JSONL composition, Local HTTP uses it in-process, and
+native provider tools execute through the same admitted catalog that produces
+schemas, capability evidence, and hashes.
 
 Related docs:
 
@@ -81,7 +81,7 @@ stateful and placement-specific agent concern.
 | Portable behavior | `@openpond/harness` | Immutable releases, workspaces, improvements, tools, models, hashes, and Refiner decisions. |
 | Portable evaluation | `@openpond/evals` | Tasksets, graders, runs, evidence, receipts, and conformance; depends one-way on Harness. |
 | Agent programs | `@openpond/agent-runtime` | Protocol, provider-round programs, compaction, events, snapshots, tool primitives, prompt materialization, and transport-neutral service methods. |
-| Shared agent server, target | `@openpond/app-server` in `packages/app-server` | Private canonical agent-service composition used behind Local HTTP and directly by sandbox JSONL or hosted transports. Not implemented yet. |
+| Shared agent server | `@openpond/app-server` in `packages/app-server` | Private canonical agent-service and JSONL lifecycle composition used behind Local HTTP. Implemented; the dedicated lean Local/hosted placement adapter remains pending. |
 | Local product host | `@openpond/local-server` in `apps/server` | Full Local composition, durable state, provider and tool adapters, HTTP/static product surface, and JSONL app-server mode. |
 | Product clients | `apps/web`, `apps/desktop`, `apps/terminal` | Renderer, Electron host, and terminal client. They do not own an agent loop. |
 | Distribution | `apps/cli` | Public `openpond` artifact bundling the private server, terminal, runtime, cloud, contracts, and SDK source. |
@@ -122,9 +122,10 @@ The intended dependency center is present:
 - `packages/agent-runtime/src/compaction.ts`: the package owns the full
   provider-neutral compaction order while hosts supply event projection,
   persistence shapes, and provider access.
-- `packages/agent-runtime/src/tools.ts`: the package defines an executable
-  catalog and validated dispatch primitive, but production Local execution
-  currently uses only its catalog projection.
+- `packages/agent-runtime/src/tools.ts`: the package defines both Zod-native and
+  JSON-schema-backed executable catalogs. Production Local execution now uses
+  the projected catalog for provider schemas, capability/hash evidence, and
+  dispatch while Local closures retain placement-specific executors.
 - `apps/server/src/runtime/local-agent-runtime-host.ts`: Local sessions, turns,
   approvals, Harness operations, and stored runtime events adapt into the
   transport-neutral service.
@@ -138,10 +139,10 @@ The intended dependency center is present:
   Local product, agent, Work, Harness, training, compute, and HTTP surfaces.
   With HTTP disabled it still recovers pending subagents and starts the Work
   sandbox lifecycle.
-- `packages/sdk/src/index.ts` and `packages/sdk/src/work.ts`: the public SDK
-  imports private Cloud source through relative cross-package paths. The build
-  bundles this successfully, but the coupling is absent from the SDK manifest
-  and invisible to the dependency-boundary check.
+- `packages/sdk/src/index.ts` and `packages/sdk/src/work.ts`: the public SDK now
+  imports supported `@openpond/cloud` subpath exports and declares Cloud as a
+  bundled source dependency. Dependency validation also rejects future
+  production relative imports that escape into another workspace package.
 - `packages/contracts/src/index.ts`: the private aggregation package exports
   more than sixty product and portable domains. This is acceptable for the
   Local product but must not become the hosted agent protocol dependency.
@@ -159,27 +160,21 @@ Work-sandbox runtime.
 This is the primary architecture issue for hosted convergence. The protocol is
 independent; the executable composition is not yet independent.
 
-### 2. Production tool dispatch remains Local-host-owned
+### 2. Production tool dispatch now has one admitted catalog
 
-The production tool list and catalog hash are derived from the same Local
-native definitions, so current capability evidence is causal. However,
-`createAgentToolCatalog` and `executeAgentTool` are exercised only by runtime
-package tests. The Local provider loop projects definitions through
-`createAgentToolCatalogProjection`, then dispatches through
-`executeNativeToolCalls` in `apps/server`.
+The Local provider loop adapts placement-specific `ModelToolDefinition`
+executors into one executable Agent Runtime catalog. Provider schemas,
+capability projection, the recorded catalog hash, and dispatch now consume
+that same admitted object. Local event recording and execution policy remain
+in the placement adapter; hosted code must reuse the catalog rather than add a
+second registry.
 
-The hosted move must not build another tool registry beside this one. The
-runtime executable needs one authoritative registry that generates provider
-schemas, capability projection, validation, dispatch, and the recorded hash,
-while placement adapters supply actual Local or managed executors.
+### 3. The public SDK package boundary is repaired
 
-### 3. The public SDK has an undeclared source-level Cloud dependency
-
-`openpond-sdk` imports `../../cloud/src/...` directly and bundles those files.
-This is a hidden package boundary: the manifest advertises no dependency while
-the implementation follows private Cloud source layout. The current dependency
-checker ignores relative imports, including relative imports that cross a
-workspace-package root.
+`openpond-sdk` uses supported Cloud subpath exports and explicitly records its
+bundled source dependency. The workspace dependency checker resolves relative
+production imports to their owning package and fails when code crosses a
+package root without a declared boundary.
 
 ### 4. Package names obscure distinct runtime concepts
 
@@ -213,8 +208,8 @@ worker:
 | --- | --- | --- |
 | `@openpond/taskset-sdk` | Taskset validation, hashing, materialization, local grader execution, and portable local runtime helpers. It also re-exports Harness and Evals contracts. | Keep while training cleanup is in progress, then evaluate merging its public Taskset/evaluation primitives into `@openpond/evals` and keeping host-only materialization code private. It is not removable as dead code today. |
 | `@openpond/training-sdk` | Portable training plans, bundles, compatibility checks, destinations, and compute/engine/runtime adapter contracts. | Keep only to the extent that managed training still uses the portable plan and adapter boundary. Re-audit after Fireworks and local-provider removal; a managed-only product may need a materially smaller package. |
-| `@openpond/trainer-local` | An 85-line Local compute-target adapter. | Fold into the Local training host if Local training remains; delete with the Local training path if it does not. A standalone package is not justified by the current implementation. |
-| `python/openpond-training` | Optional local/native dataset, SFT/PPO, inference, model-manager, and vLLM evaluation worker. | Keep only if Local training or local model inference remains a supported product. It is active, not orphaned: the Local CPU destination invokes it, contracts generate schemas into it, push verification runs it, and CI tests it. Never include it in `@openpond/app-server` or the sandbox runtime. |
+| `@openpond/trainer-local` | An 85-line Local compute-target adapter. | Keep for the current Local training product. Package consolidation is deferred with the broader Local training cleanup. Never include it in `@openpond/app-server`. |
+| `python/openpond-training` | Optional local/native dataset, SFT/PPO, inference, model-manager, and vLLM evaluation worker. | Keep. It remains the supported Local training/inference worker: the Local CPU destination invokes it, contracts generate schemas into it, push verification runs it, and CI tests it. Never include it in `@openpond/app-server` or the sandbox runtime. |
 
 The generic compute layer is also active and is not a Prime provider wrapper.
 It inventories Local CPU/device/runtime/storage state, manages model downloads,
@@ -223,47 +218,27 @@ itself justify deleting `packages/contracts/src/compute.ts`, the Local compute
 service, or Settings compute UI. Those surfaces should be removed only if the
 product also drops Local training, local inference, and local model management.
 
-### 7. Prime is retired implementation-wise but leaves stale residue
+### 7. Prime retirement is complete in the active product surface
 
-No live Prime compute-provider implementation or Prime package remains in the
-workspace. The remaining provider-specific residue is documentation, unused
-`.prime-compute-*` styles, an old `prime_hosted` stored-value decoder, a Taskset
-authoring reference, and a stale Python worker SBOM that still names Prime RL
-and Verifiers. Generic wording such as "Prime-style environment" in Evals is a
-semantic description rather than provider integration.
+No live Prime compute-provider implementation, package, documentation, style,
+stored destination, generated Skill wording, or worker SBOM entry remains.
+Ordinary uses of “prime” in mathematics and UI cursor initialization are not
+provider integration. Generic Local compute remains intentionally supported.
 
-The retired Prime documentation, styles, generated Skill artifact, and SBOM
-entries should be removed or regenerated. The stored-value decoder needs a
-separate data-compatibility decision: removing a provider does not necessarily
-mean old local records should become unreadable.
+### 8. Fireworks BYOK is removed
 
-### 8. Fireworks remains a large live product path
+The provider-native destination, credentials, dataset/evaluation/serving
+runtimes, callbacks, provider settings, contracts, storage, UI actions, tests,
+fixtures, scripts, and public claims are removed together. OpenPond Managed RL
+and retained Local training are the remaining destinations. The managed
+adapter continues to use the authenticated hosted API and owns no desktop
+provider credential.
 
-Fireworks is not merely a compute provider package. It is a provider-native
-SFT/RFT destination with credentials, dataset projection, launch/status/
-cancel/collection, evaluation serving, RFT environments, API routes, product
-UI, contracts, persistence, tests, and public documentation. The audit found
-Fireworks references across more than seventy application, package,
-documentation, and root README files.
+### 9. The top-level `packaging` directory is removed
 
-The product direction is OpenPond Managed RL rather than Fireworks BYOK.
-Retiring Fireworks is therefore correct, but it must be handled as a focused
-cross-layer deletion. The managed adapter already submits to the authenticated
-OpenPond hosted API and does not require desktop Fireworks credentials. Remove
-Fireworks destination contracts, server composition, secrets and routes, UI,
-tests, and public claims together so the remaining managed path is coherent.
-Do not move any Fireworks code into `@openpond/app-server` as an intermediate
-step.
-
-### 9. The top-level `packaging` directory is documentation-only
-
-`packaging/` contains only `README.md`; active Electron packaging configuration
-lives under `apps/desktop`, while release automation lives in root scripts and
-GitHub Actions. The folder can be removed after preserving any unique release
-policy in the Desktop or public release documentation and removing its one
-repository-layout reference from `docs/public/development.md`. Removing the
-folder does not remove or change actual AppImage, macOS, CLI, signing, or
-release packaging.
+The documentation-only folder and its repository-layout reference are gone.
+Active Electron packaging remains under `apps/desktop`; root scripts and
+GitHub Actions still own release automation.
 
 ## Hosted Readiness Gate
 
@@ -277,9 +252,9 @@ management.
 | --- | --- | --- |
 | Extract `@openpond/app-server` and converge tool dispatch | Yes | This is the runtime that the sandbox will actually start and the authority boundary hosted depends on. |
 | Prove the sandbox composition excludes training/compute/product services | Yes | A hidden full-Local boot would carry unnecessary credentials, lifecycle behavior, and attack surface into hosted Work. |
-| Remove Prime residue | No runtime dependency, but complete before the hosted product is presented as managed-only | The implementation is already absent; cleanup makes docs, generated artifacts, and supply-chain metadata truthful. |
-| Remove Fireworks BYOK | Not structurally required if the lean app-server excludes it, but complete before the managed-only training product is declared converged | It is still an exposed Local product path and public promise, not a sandbox runtime dependency. |
-| Decide whether Local Python training/inference remains | No, provided it is excluded from app-server | This is a Local product-scope decision. If unsupported, delete it and its TypeScript composition/tests in a focused change. |
+| Remove Prime residue | Complete | The implementation and stale documentation, generated artifacts, styles, and supply-chain metadata are gone. |
+| Remove Fireworks BYOK | Complete | The retired Local product path and public promise are gone; managed and Local training remain. |
+| Keep Local Python training/inference out of app-server | Yes | The Local feature remains supported, but the hosted executable must not initialize or distribute its worker, compute scanner, model manager, or inference lifecycle. |
 | Remove `packaging/` documentation folder | No | It has no runtime or release-build ownership. |
 | Consolidate training packages | No, provided none enter app-server | This reduces repository complexity but does not determine hosted agent correctness. |
 
@@ -301,8 +276,9 @@ separately published npm package; the public `openpond` CLI bundles it.
 Treat OpenPond Managed RL as the supported remote-training direction. Retire
 the Fireworks BYOK product path and remaining Prime artifacts in focused
 cleanup work; do not use either as a hosted app-server dependency. Keep Local
-training, inference, and compute only if they remain intentional Desktop/Local
-features after that product-scope review.
+training, inference, compute, and their Python worker as intentional
+Desktop/Local features. Their future simplification is a separate product
+decision and must not be folded into this hosted-runtime change.
 
 Use that package in both placements:
 
@@ -348,12 +324,15 @@ cloud lifecycle services, or nested Work-sandbox management.
   root without first establishing the lean boundary.
 - Do not preserve direct cross-package source imports in public packages when a
   supported export or owned implementation boundary can express the same API.
+- Do not remove or disconnect `python/openpond-training`, Local CPU training,
+  local trained-model inference, Compute settings, or `@openpond/trainer-local`
+  in this implementation.
 
 ## Phases
 
 ### Phase 0 - Audit the current package and execution boundaries
 
-- [x] Inventory all five apps and fourteen packages. Done: recorded package
+- [x] Inventory all five apps and fifteen packages. Done: recorded package
   roles, visibility, dependency direction, executable entrypoints, and
   distribution behavior.
 - [x] Verify the Local runtime convergence boundary. Done: confirmed shared
@@ -369,39 +348,68 @@ cloud lifecycle services, or nested Work-sandbox management.
   cross-layer destination, traced the Python worker into Local and CI entrypoints,
   and identified the documentation-only packaging folder.
 
-### Phase 1 - Establish lean app-server composition
+### Phase 1 - Remove retired and misleading surfaces
 
-- [ ] Define the exact services and adapters required by agent-only mode.
-- [ ] Create private `packages/app-server` above `@openpond/agent-runtime`
-  without changing Local thread/turn behavior.
+- [x] Remove Prime documentation, unused UI styles, generated Skill residue,
+  and stale supply-chain metadata. Done: provider residue is gone; generic
+  Local compute, model management, and Compute settings are unchanged.
+- [x] Remove Fireworks BYOK server, contracts, provider settings, UI, storage,
+  tests, and public claims. Done: managed registry/chat and Local training are
+  retained; direct provider credentials, serving sessions, and callbacks are gone.
+- [x] Remove the documentation-only `packaging/` folder. Done: active Desktop
+  and release configuration remains in its real owners; the stale layout link is gone.
+- [x] Prove Local Python training, local inference, Compute settings, and their
+  tests remain intact. Done: all 38 Python contract, dataset, adapter,
+  inference, vLLM, policy-manager, local SFT/DPO/PPO, and worker tests pass;
+  Compute UI and `@openpond/trainer-local` remain present.
+
+### Phase 2 - Establish lean app-server composition
+
+- [x] Define the canonical services and adapter interface required by
+  agent-only mode. Done: service ports, runtime host, JSONL I/O, and idempotent
+  close ownership live above Agent Runtime; placement state stays outside.
+- [x] Create private `packages/app-server` above `@openpond/agent-runtime`.
+  Done: the 21st workspace package depends only on Agent Runtime and Node I/O;
+  focused composition and shutdown tests pass.
 - [ ] Make `openpond app-server` construct `@openpond/app-server` directly.
-- [ ] Keep `serve` and `web` modes in `apps/server` and adapt their agent routes
-  to the same package.
+  Current: the command uses the package's JSONL lifecycle, but its Local ports
+  still come from `createOpenPondServer`, so the placement adapter is not lean.
+- [x] Keep `serve` and `web` modes in `apps/server` and adapt their agent routes
+  to the same package. Done: Local HTTP uses the in-process app-server runtime;
+  product HTTP/static ownership remains in `apps/server`.
 - [ ] Prove agent-only boot does not construct or start excluded Local product
   services.
 
-### Phase 2 - Finish authoritative runtime tool ownership
+### Phase 3 - Finish authoritative runtime tool ownership
 
-- [ ] Adapt production native tool definitions into the executable Agent
-  Runtime catalog rather than projection-only use.
-- [ ] Derive provider schemas, capability projection, validated dispatch, and
-  tool-catalog hash from the same admitted registry.
-- [ ] Keep executor implementations in placement adapters.
+- [x] Adapt production native tool definitions into the executable Agent
+  Runtime catalog. Done: JSON-schema projections now carry admitted executors
+  and optional argument validation instead of remaining evidence-only objects.
+- [x] Derive provider schemas, capability projection, dispatch, and
+  tool-catalog hash from the same admitted registry. Done: the Local tool loop
+  records and executes the exact catalog sent to the provider.
+- [x] Keep executor implementations in placement adapters. Done: Local tool
+  definitions close over Local sessions, permissions, Work state, and events;
+  Agent Runtime owns only admission and dispatch mechanics.
 - [ ] Repeat Local Chat, projectless Work, Project-backed Work, approval,
   interruption, compaction, and Harness snapshot acceptance.
 
-### Phase 3 - Repair package-boundary and architecture guardrails
+### Phase 4 - Repair package-boundary and architecture guardrails
 
-- [ ] Replace the public SDK's relative Cloud source imports with a supported
-  package boundary or SDK-owned client primitives.
-- [ ] Extend dependency validation to reject relative imports that escape one
-  workspace package and enter another package's source tree.
-- [ ] Add an architecture check or focused test proving agent-only composition
-  excludes the Local product surface.
-- [ ] Document the distinct responsibilities of `@openpond/runtime`,
-  `@openpond/agent-runtime`, and `openpond-agent-sdk` in the package inventory.
+- [x] Replace the public SDK's relative Cloud source imports. Done: supported
+  `@openpond/cloud` subpaths and an explicit bundled-source declaration replace
+  `../../cloud/src` coupling.
+- [x] Extend dependency validation for relative package escapes. Done: the
+  checker resolves production relative imports to the most-specific workspace
+  owner and requires a supported declared boundary.
+- [x] Add a focused package-composition test. Done: `@openpond/app-server`
+  composition and JSONL shutdown are covered, and its manifest admits only
+  `@openpond/agent-runtime`; the separate lean placement proof remains Phase 2.
+- [x] Document the distinct responsibilities of `@openpond/runtime`,
+  `@openpond/agent-runtime`, and `openpond-agent-sdk`. Done: the package map and
+  naming finding preserve the three separate concepts.
 
-### Phase 4 - Begin hosted adoption
+### Phase 5 - Begin hosted adoption
 
 - [ ] Publish a CLI version containing the lean app-server entrypoint.
 - [ ] Install the pinned CLI in the Work sandbox image.
@@ -411,19 +419,28 @@ cloud lifecycle services, or nested Work-sandbox management.
 
 ## Validation
 
-- Passed: `pnpm run dependencies:check` reported all 20 workspace projects and
-  direct package imports valid.
-- Passed: `pnpm exec tsx scripts/check-source-structure.ts` reported 1,262
-  production modules, 1,927 handwritten files, and zero runtime/openpond
+- Passed: `pnpm run dependencies:check` reported all 21 workspace projects and
+  direct plus relative cross-package source imports valid.
+- Passed: `pnpm exec tsx scripts/check-source-structure.ts` reported 1,247
+  production modules, 1,904 handwritten files, and zero runtime/openpond
   cycles.
 - Passed: `pnpm exec tsx scripts/report-server-runtime-cycles.ts` reported 128
   modules, 262 local edges, and zero cycles.
 - Passed: `pnpm exec tsx scripts/check-production-entrypoints.ts` reported
-  1,198 production modules reachable from 120 supported roots.
+  1,181 production modules reachable from 121 supported roots.
+- Passed: focused App Server, Agent Runtime, SDK, managed training, provider,
+  Labs, artifact, and training compatibility tests.
+- Passed: `pnpm run test:python` completed all 38 retained Local worker tests.
+- Passed: `pnpm run test:unit` completed 370 files and 1,830 passing tests with
+  one intentional skip.
+- Passed: `pnpm run test:integration` completed 35 integration tests, including
+  app-server JSON-RPC, restart recovery, and CLI process boundaries.
+- Passed: `pnpm run test:contract` completed 42 Node contract tests plus all 33
+  Agent SDK tests.
+- Passed: App Server tests, Agent Runtime check/protocol generation/build, SDK
+  check/build/dry-pack, web/CLI release builds, and all five release tests.
 - Passed previously: PR #71 unit, integration, runtime-contract,
   quality/build, release-artifact, and aggregate GitHub checks.
-- Not run for this documentation-only audit: full unit, integration, package,
-  or Desktop acceptance matrices. No production code changed.
 
 ## Open Questions
 
@@ -433,15 +450,20 @@ cloud lifecycle services, or nested Work-sandbox management.
   a concrete failure or deployment boundary.
 - Which exact Local host services are required for agent-only Chat and Work,
   and which current `createOpenPondServer` services must be forbidden?
-- Should the first production catalog adoption wrap the current
-  `ModelToolDefinition` executors, or should that type be replaced directly by
-  `AgentToolDefinition`?
-- Should the public SDK own its HTTP/sandbox client implementation, or should a
-  focused publishable client-core package replace the private Cloud imports?
+- Which Local product services can be removed from the dedicated placement
+  adapter without changing the Local Chat/Work acceptance matrix?
 
 ## Progress Log
 
+- 2026-08-07: Restored the uncommitted Python/local-training deletion in full.
+  Confirmed the active change keeps Local training, inference, Compute settings,
+  `@openpond/trainer-local`, schema generation, and Python CI coverage.
 - 2026-08-07: Audited the post-PR #71 package graph, runtime composition,
   production entrypoints, package boundaries, tool registry, agent-only boot,
   and source structure. Recorded the distinction between the completed Local
   extraction and the still-pending lean executable boundary.
+- 2026-08-07: Removed Prime and Fireworks integration surfaces plus the stale
+  packaging folder while retaining Python/local training and managed RL.
+- 2026-08-07: Added `@openpond/app-server`, converged executable tool catalog
+  ownership, repaired SDK package imports, and enforced relative package-root
+  boundaries. The lean placement adapter remains the hosted launch blocker.

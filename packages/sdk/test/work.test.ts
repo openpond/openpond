@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 
-import { OpenPondApiError } from "../../cloud/src/api/core.js";
-import type { OpenPondSandboxClient } from "../../cloud/src/sandbox/client.js";
-import type { SandboxRecord } from "../../cloud/src/sandbox/types/index.js";
+import { OpenPondApiError } from "@openpond/cloud/api/core";
+import type { OpenPondSandboxClient } from "@openpond/cloud/sandbox/client";
+import type { SandboxRecord } from "@openpond/cloud/sandbox/types";
 import { OpenPondWorkClient, type OpenPondWorkEvent } from "../src/work.js";
 
 function sandbox(state: SandboxRecord["state"] = "running"): SandboxRecord {

@@ -9,14 +9,14 @@ import {
   preparePortableModelRunLifecycle,
   reconcilePortableModelRunLifecycle,
 } from "../apps/server/src/training/portable-model-run-lifecycle.js";
-import { fireworksRftRecipe, rftTasksetFixture } from "./helpers/fireworks-destination-fixtures.js";
+import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 import { FIXED_TIME, withTrainingStore } from "./helpers/training-fixtures.js";
 
 describe("portable Model Run lifecycle", () => {
   test("imports a Sandbox-owned managed candidate into canonical lineage and Model Version state", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const taskset = rftTasksetFixture();
-      const recipeFixture = fireworksRftRecipe();
+      const recipeFixture = managedRftRecipe();
       const recipe = {
         ...recipeFixture,
         baseModel: {

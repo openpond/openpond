@@ -206,7 +206,6 @@ function localSourceLabel(model: ModelAsset): string {
 
 function destinationLabel(destinationId: BaseModelExecutionOption["destinationId"]): string {
   const labels: Partial<Record<BaseModelExecutionOption["destinationId"], string>> = {
-    fireworks: "Fireworks",
     openpond_managed: "OpenPond Managed",
     local_cpu_fixture: "Local CPU",
   };

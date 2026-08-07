@@ -168,7 +168,6 @@ export function destinationLabel(destination: string): string {
     export: "Export only",
     local_cpu_fixture: "Local CPU",
     openpond_managed: "OpenPond Managed",
-    fireworks: "Fireworks",
   };
   return (
     labels[destination] ??

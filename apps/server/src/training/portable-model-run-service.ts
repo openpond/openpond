@@ -163,9 +163,7 @@ export function createPortableModelRunService(deps: {
       workerProtocol:
         bindings.engine.adapterId === "sandbox-managed-rl"
           ? "openpond.managedRlWorker.v2"
-          : bindings.engine.adapterId === "fireworks-native"
-            ? "openpond.fireworksNative.v1"
-            : "openpond.localTrainingWorker.v1",
+          : "openpond.localTrainingWorker.v1",
       harnessRelease: releasedHarness.harnessRelease,
       tasksetRelease: releasedHarness.tasksetRelease,
     });

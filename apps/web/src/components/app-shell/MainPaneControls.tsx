@@ -1,4 +1,4 @@
-import type { ChatProvider, FireworksModelServingSession } from "@openpond/contracts";
+import type { ChatProvider } from "@openpond/contracts";
 import type { AppView } from "../../lib/app-models";
 import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import { TrainingModelChatHandoffBar } from "../chat/TrainingModelChatHandoffBar";
@@ -11,8 +11,6 @@ export function ActiveTrainingChatHandoffBar({
   handoff,
   onDismiss,
   onSelectTask,
-  onStopServing,
-  servingSessions,
 }: {
   activeModel: string;
   activeProvider: ChatProvider;
@@ -20,8 +18,6 @@ export function ActiveTrainingChatHandoffBar({
   handoff: TrainingModelChatHandoff | null;
   onDismiss: () => void;
   onSelectTask: (index: number) => void;
-  onStopServing: (sessionId: string) => void;
-  servingSessions: FireworksModelServingSession[];
 }) {
   if (
     !handoff
@@ -30,17 +26,12 @@ export function ActiveTrainingChatHandoffBar({
   ) {
     return null;
   }
-  const servingSession = servingSessions
-    .filter((session) => session.modelArtifactLineageId === handoff.model.modelId)
-    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
   return (
     <TrainingModelChatHandoffBar
       busy={busy}
       handoff={handoff}
       onDismiss={onDismiss}
       onSelectTask={onSelectTask}
-      servingSession={servingSession}
-      onStopServing={onStopServing}
     />
   );
 }

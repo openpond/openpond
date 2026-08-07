@@ -89,7 +89,6 @@ import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
 import {
   readProviderSecrets,
-  updateProviderCredentialValidation,
   writeProviderChatGptSubscriptionCredential,
 } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
@@ -516,13 +515,8 @@ export async function createOpenPondServer(
       ),
     };
   }
-  const {
-    resolveFireworksCredential,
-    trainingModelText,
-    trainingModelStream,
-  } =
+  const { trainingModelText, trainingModelStream } =
     createTrainingModelRuntime({
-      providerSecretPaths,
       loadLocalByokRuntimeState: localByokRuntimeState,
       getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
       streamOpenPondHostedChatTurn,
@@ -704,15 +698,6 @@ export async function createOpenPondServer(
       if (account.state !== "signed_in") return null;
       return account.profile?.handle?.trim() || null;
     },
-    resolveFireworksCredential,
-    recordFireworksCredentialValidation: async (error) => {
-      await updateProviderCredentialValidation({
-        paths: providerSecretPaths,
-        providerId: "fireworks",
-        timestamp: now(),
-        lastError: error,
-      });
-    },
     gradeTaskAttempt: taskEvaluationService.grade,
     projectDatasetArtifact: datasetArtifactService.project,
     resolveDatasetTask: ({ tasksetId, taskId, split }) =>
@@ -733,10 +718,6 @@ export async function createOpenPondServer(
   });
   const trainedAdapterChatRuntime = createTrainedAdapterChatRuntime({
     managed: managedAdapterChatRuntime,
-    fireworks: {
-      appliesTo: trainingService.isFireworksModel,
-      stream: trainingService.streamFireworksModel,
-    },
     local: localAdapterChatRuntime,
   });
   managedAdapterSyncService.start();
@@ -1741,7 +1722,6 @@ export async function createOpenPondServer(
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
       trainingPayload,
-      fireworksRftPayload: trainingService.handleFireworksRft,
       computePayload,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,

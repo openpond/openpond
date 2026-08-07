@@ -17,7 +17,7 @@ import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import { prepareTrainingSelection } from "@openpond/training-sdk";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 
-const PRIME_RL_REVISION = "e0d60e4d85ea636873acb2e7083e794740d20226";
+const MANAGED_RL_REVISION = "e0d60e4d85ea636873acb2e7083e794740d20226";
 const LOCAL_TARGET_POLICY = {
   executionMode: "local_worker" as const,
   approvalPolicy: null,
@@ -65,39 +65,6 @@ const MANAGED_TARGET_POLICY = {
     rolloutOutputTokens: 512,
   },
 };
-const FIREWORKS_TARGET_POLICY = {
-  executionMode: "provider_native" as const,
-  approvalPolicy: {
-    providerId: "fireworks" as const,
-    providerLabel: "Fireworks",
-    settingsActionLabel: "Manage Fireworks provider",
-    exportApprovalRequired: true,
-    exportDescription:
-      "Export only the approved train split. Frozen Eval cases and grader secrets stay in OpenPond.",
-    preparationRequired: true,
-    minimumSpendUsd: 3,
-    maximumSpendUsd: 9.99,
-    defaultMaximumSpendUsd: 3,
-    minimumRetentionDays: 1,
-    maximumRetentionDays: 30,
-    defaultRetentionDays: 7,
-    methodRequirement:
-      "RFT requires the configured provider callback. Launch fails closed before upload when it is unavailable.",
-  },
-  limits: {
-    maximumSequenceLength: 32_768,
-    maximumOutputTokens: 8_192,
-    maximumTrainingExamples: 32,
-  },
-  defaults: {
-    loraRank: 8,
-    maxSteps: 8,
-    rolloutGroupSize: 8,
-    rolloutConcurrency: 4,
-    rolloutOutputTokens: 2_048,
-  },
-};
-
 export function createPortableTrainingCatalog(input: {
   candidates: BaseModelCandidate[];
   destinations: TrainingDestinationCapabilities[];
@@ -292,17 +259,6 @@ function trainingTargets(input: {
       ...MANAGED_TARGET_POLICY,
     },
     {
-      id: "fireworks-managed",
-      label: "Fireworks",
-      description: "Use provider-managed training after quote and approval.",
-      destinationId: "fireworks",
-      computeAdapterId: "fireworks-managed",
-      runtimeAdapterId: "provider-native",
-      engineAdapterId: "fireworks-native",
-      capabilityPills: ["Fireworks"],
-      ...FIREWORKS_TARGET_POLICY,
-    },
-    {
       id: "this-device-cpu",
       label: "This device · CPU",
       description: "Keep the Harness and reference worker on this device.",
@@ -397,9 +353,7 @@ export function preparePortableModelRun(input: {
     maximumSpendUsd: input.maximumSpendUsd ?? null,
     quoteUsd: input.quoteUsd ?? null,
     retentionDays: input.retentionDays ?? null,
-    providerManaged:
-      input.modelRun.destinationId === "fireworks" ||
-      input.modelRun.destinationId === "openpond_managed",
+    providerManaged: input.modelRun.destinationId === "openpond_managed",
   });
 }
 
@@ -416,16 +370,13 @@ export function resolvePortableBindings(input: {
   if (!destinationId) return { runtime: null, compute: null, engine: null };
   const computeId = computeIdForDestination(destinationId);
   const engineId = engineIdForDestination(destinationId);
-  const runtimeId =
-    destinationId === "fireworks"
-      ? "provider-native"
-      : destinationId === "openpond_managed"
-        ? input.environmentPlacement === "remote" ||
-          (input.environmentPlacement === undefined &&
-            input.modelRun.managedRolloutPlacement === "remote")
-          ? "openpond-managed-harness"
-          : "local-harness"
-        : "local-harness";
+  const runtimeId = destinationId === "openpond_managed"
+    ? input.environmentPlacement === "remote" ||
+      (input.environmentPlacement === undefined &&
+        input.modelRun.managedRolloutPlacement === "remote")
+      ? "openpond-managed-harness"
+      : "local-harness"
+    : "local-harness";
   const compute = input.catalog.compute.find((candidate) => candidate.adapterId === computeId);
   const engine = input.catalog.engines.find((candidate) => candidate.adapterId === engineId);
   const runtime = input.catalog.runtimes.find((candidate) => candidate.adapterId === runtimeId);
@@ -436,9 +387,7 @@ export function resolvePortableBindings(input: {
     runtime: {
       adapterId: runtime.adapterId,
       placement:
-        runtimeId === "provider-native"
-          ? "provider_native"
-          : runtimeId === "openpond-managed-harness"
+        runtimeId === "openpond-managed-harness"
             ? "remote"
             : "local",
       capabilityReceipt: runtime.capabilityReceipt,
@@ -520,7 +469,6 @@ function computeCapabilities(
       null,
     ),
     capability("openpond-managed", "managed", "openpond", [], true, null),
-    capability("fireworks-managed", "managed", "fireworks", [], true, null),
   ];
   return mergeAdapterCapabilities(defaults, adapters);
 }
@@ -546,12 +494,9 @@ function engineCapabilities(input: {
     modelFamilies: ["transformers"],
     precisions: ["fp32", "fp16", "bf16"],
     topologies: ["single_worker", "single_gpu_phased"],
-    workerProtocolVersion:
-      adapterId === "sandbox-managed-rl"
-        ? "openpond.managedRlWorker.v2"
-        : adapterId === "fireworks-native"
-          ? "openpond.fireworksNative.v1"
-          : "openpond.localTrainingWorker.v1",
+    workerProtocolVersion: adapterId === "sandbox-managed-rl"
+      ? "openpond.managedRlWorker.v2"
+      : "openpond.localTrainingWorker.v1",
     upstreamRevision,
     capabilityReceipt: contentHash({
       adapterId,
@@ -563,9 +508,6 @@ function engineCapabilities(input: {
     unavailableReason: reason,
     workerImageDigest: null,
   });
-  const fireworksAvailable =
-    input.destinations.find((destination) => destination.destinationId === "fireworks")
-      ?.available ?? false;
   const registered = new Set(input.registeredEngineIds);
   return [
     engine(
@@ -581,22 +523,10 @@ function engineCapabilities(input: {
       ["grpo"],
       ["trajectory", "reward", "grader_evidence", "infrastructure_failure"],
       registered.has("sandbox-managed-rl"),
-      PRIME_RL_REVISION,
+      MANAGED_RL_REVISION,
       registered.has("sandbox-managed-rl")
         ? null
         : "Register the OpenPond Managed training adapter.",
-    ),
-    engine(
-      "fireworks-native",
-      ["sft", "grpo"],
-      ["demonstration", "trajectory", "reward"],
-      fireworksAvailable && registered.has("fireworks-native"),
-      "provider-managed",
-      !fireworksAvailable
-        ? "Fireworks is not configured."
-        : !registered.has("fireworks-native")
-          ? "The Fireworks adapter is not registered."
-          : null,
     ),
   ];
 }
@@ -643,7 +573,6 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
 function computeIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-cpu",
-    fireworks: "fireworks-managed",
     openpond_managed: "openpond-managed",
   };
   return values[destinationId] ?? "unsupported";
@@ -652,7 +581,6 @@ function computeIdForDestination(destinationId: string): string {
 function engineIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
     local_cpu_fixture: "local-trl",
-    fireworks: "fireworks-native",
     openpond_managed: "sandbox-managed-rl",
   };
   return values[destinationId] ?? "unsupported";

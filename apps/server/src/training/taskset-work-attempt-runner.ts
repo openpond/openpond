@@ -308,8 +308,7 @@ export async function runTasksetWorkAttempt(input: {
       let continuation: HostedChatContinuation | null = null;
       for await (const delta of input.stream({
         model: input.model,
-        reasoningEffort:
-          input.model.providerId === "fireworks" ? "none" : null,
+        reasoningEffort: null,
         messages,
         tools,
         toolChoice: "auto",

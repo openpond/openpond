@@ -1,5 +1,5 @@
 import { getBundledRuntimeVersion, openUrlWithSystemBrowser } from "@openpond/runtime";
-import { runAgentJsonlServer } from "@openpond/agent-runtime";
+import { attachAppServer, runAppServerJsonl } from "@openpond/app-server";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -204,15 +204,14 @@ export async function runOpenPondServerCli(createOpenPondServer: CreateServer): 
     httpEnabled: args.mode !== "app-server",
   });
   if (args.mode === "app-server") {
-    try {
-      await runAgentJsonlServer({
-        host: instance.agentRuntime,
-        readable: process.stdin,
-        writable: process.stdout,
-      });
-    } finally {
-      await instance.close();
-    }
+    await runAppServerJsonl({
+      appServer: attachAppServer({
+        runtime: instance.agentRuntime,
+        close: instance.close,
+      }),
+      readable: process.stdin,
+      writable: process.stdout,
+    });
     return;
   }
   const webBaseUrl = args.mode === "web" ? browserBaseUrl(instance) : null;

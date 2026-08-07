@@ -4,12 +4,12 @@ import {
   CanonicalAgentEventSchema,
   canonicalHash,
   canonicalEventHash,
-  createAgentRuntimeService,
   type CanonicalAgentEvent,
   type AgentProtocolCapabilities,
   type AgentRuntimeHost,
   type JsonRpcNotification,
 } from "@openpond/agent-runtime";
+import { createAppServer } from "@openpond/app-server";
 import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
 import { z } from "zod";
 
@@ -61,23 +61,25 @@ export function createLocalAgentRuntimeHost(deps: {
     };
   };
 
-  return createAgentRuntimeService({
-    capabilities,
-    createThread: deps.createSession,
-    readThread: deps.getSession,
-    listTurns: deps.turnsForSession,
-    listEvents: deps.runtimeEventsForSession,
-    startTurn: deps.sendTurn,
-    isTurnActive: deps.isSessionTurnActive,
-    waitForTurnSettlement: deps.waitForSessionTurnSettlement,
-    interruptTurn: deps.interruptSessionTurn,
-    resolveApproval: deps.resolveApproval,
-    inspectHarness: deps.inspectHarness,
-    validateHarness: deps.validateHarness,
-    subscribeEvents: deps.subscribeRuntimeEvents,
-    eventNotification: runtimeEventNotification,
-    telemetry: deps.observeRuntimeOperation,
-  });
+  return createAppServer({
+    ports: {
+      capabilities,
+      createThread: deps.createSession,
+      readThread: deps.getSession,
+      listTurns: deps.turnsForSession,
+      listEvents: deps.runtimeEventsForSession,
+      startTurn: deps.sendTurn,
+      isTurnActive: deps.isSessionTurnActive,
+      waitForTurnSettlement: deps.waitForSessionTurnSettlement,
+      interruptTurn: deps.interruptSessionTurn,
+      resolveApproval: deps.resolveApproval,
+      inspectHarness: deps.inspectHarness,
+      validateHarness: deps.validateHarness,
+      subscribeEvents: deps.subscribeRuntimeEvents,
+      eventNotification: runtimeEventNotification,
+      telemetry: deps.observeRuntimeOperation,
+    },
+  }).runtime;
 }
 
 function runtimeEventNotification(event: RuntimeEvent): JsonRpcNotification {

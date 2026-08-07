@@ -9,7 +9,7 @@ import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
 
 type TrainingController = ReturnType<typeof useTraining>;
-type PendingAction = "bind" | "reject" | "evaluate" | null;
+type PendingAction = "bind" | "reject" | null;
 
 const ROLE_LABELS: Record<ModelBindingRole, string> = {
   chat_manual: "Default chat model",
@@ -78,17 +78,6 @@ export function TrainingModelPromotion({
     onToast(result ? "Model candidate rejected." : "Couldn’t reject Model candidate.", result ? "success" : "error");
   }
 
-  async function evaluate() {
-    const result = await training.actions.evaluateJob(model.jobId);
-    setPending(null);
-    onToast(
-      result
-        ? "Frozen evaluation completed."
-        : "Couldn’t complete frozen evaluation.",
-      result ? "success" : "error",
-    );
-  }
-
   async function rollback() {
     if (!activeBinding) return;
     const result = await training.actions.rollbackModelBinding(activeBinding.id);
@@ -132,16 +121,6 @@ export function TrainingModelPromotion({
           />
         </label>
         <div className="training-promotion-actions">
-          {evaluationIncomplete ? (
-            <button
-              className="training-button secondary"
-              type="button"
-              disabled={busy}
-              onClick={() => setPending("evaluate")}
-            >
-              Run evaluation
-            </button>
-          ) : null}
           {bindingIsCurrent ? (
             <button className="training-button secondary" type="button" disabled={busy} onClick={() => void rollback()}>
               Roll back
@@ -177,9 +156,7 @@ export function TrainingModelPromotion({
             aria-label={
               pending === "bind"
                 ? "Confirm Model binding"
-                : pending === "evaluate"
-                  ? "Run frozen evaluation"
-                  : "Reject Model candidate"
+                : "Reject Model candidate"
             }
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -188,16 +165,12 @@ export function TrainingModelPromotion({
                 <h2>
                   {pending === "bind"
                     ? "Activate this Model binding?"
-                    : pending === "evaluate"
-                      ? "Run frozen evaluation?"
-                      : "Reject this Model candidate?"}
+                    : "Reject this Model candidate?"}
                 </h2>
                 <p>
                   {pending === "bind"
                     ? `${ROLE_LABELS[role]} · ${roleTargetId.trim()}`
-                    : pending === "evaluate"
-                      ? "Temporary Fireworks deployments are deleted after the base and trained runs."
-                      : "The artifact and evaluation evidence are retained."}
+                    : "The artifact and evaluation evidence are retained."}
                 </p>
               </div>
             </div>
@@ -205,19 +178,11 @@ export function TrainingModelPromotion({
               <p>{activeBinding
                 ? `The current binding ${shortModel(activeBinding.modelArtifactLineageId)} becomes the recorded rollback target.`
                 : "This is an explicit activation; training success alone never changes runtime selection."}</p>
-            ) : pending === "reject" ? (
+            ) : (
               <label className="training-promotion-reason">
                 <span>Reason</span>
                 <textarea autoFocus value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} />
               </label>
-            ) : (
-              <p>
-                OpenPond first validates both deployment shapes without
-                spending, then runs the approved frozen Taskset through the
-                stateful tool harness. Runtime is capped at 10 minutes and the
-                conservative deployment ceiling is $1.17 within the existing
-                training approval.
-              </p>
             )}
             <div className="training-dialog-actions">
               <button className="training-button secondary" type="button" disabled={busy} onClick={() => setPending(null)}>Cancel</button>
@@ -229,18 +194,14 @@ export function TrainingModelPromotion({
                   void (
                     pending === "bind"
                       ? bind()
-                      : pending === "evaluate"
-                        ? evaluate()
-                        : reject()
+                      : reject()
                   )}
               >
                 {busy
                   ? "Applying…"
                   : pending === "bind"
                     ? "Activate binding"
-                    : pending === "evaluate"
-                      ? "Run evaluation"
-                      : "Reject candidate"}
+                    : "Reject candidate"}
               </button>
             </div>
           </section>

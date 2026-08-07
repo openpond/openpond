@@ -82,7 +82,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
-  "('local_cpu_fixture', 'fireworks', 'openpond_managed')";
+  "('local_cpu_fixture', 'openpond_managed')";
 
 export class SqliteTrainingStore extends SqliteDatasetStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
@@ -915,15 +915,11 @@ function retiredTaskCreationSpecificationKind(value: unknown): "agent_benchmark"
 }
 
 function parseStoredTaskset(value: unknown): Taskset {
-  return TasksetSchema.parse(
-    normalizeStoredTasksetAuthoringProvenance(
-      normalizeStoredReadinessDestinationClasses(value),
-    ),
-  );
+  return TasksetSchema.parse(normalizeStoredTasksetAuthoringProvenance(value));
 }
 
 function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
-  return TasksetReadinessReportSchema.parse(normalizeStoredReadinessDestinationClasses(value));
+  return TasksetReadinessReportSchema.parse(value);
 }
 
 function parseStoredModelProject(value: unknown): ModelProject {
@@ -938,18 +934,6 @@ function normalizeStoredModelProjectDestination(value: unknown): unknown {
     return value;
   }
   return { ...value, defaultDestinationId: null };
-}
-
-function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
-  if (!isRecord(value)) return value;
-  const readiness = isRecord(value.readiness) ? value.readiness : value;
-  if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
-  const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
-    (destinationClass) => destinationClass !== "openpond_managed",
-  );
-  if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
-  const normalizedReadiness = { ...readiness, compatibleDestinationClasses };
-  return readiness === value ? normalizedReadiness : { ...value, readiness: normalizedReadiness };
 }
 
 function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
@@ -976,7 +960,6 @@ function isRetiredTrainingDestination(value: unknown): boolean {
   return typeof value === "string"
     && [
       "export",
-      "prime_hosted",
       "ssh_gpu",
       "custom",
       "local_cuda",

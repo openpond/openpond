@@ -39,16 +39,6 @@ const state = {
       },
     },
   ],
-  servingSessions: [
-    {
-      id: "serving_support_v2",
-      modelArtifactLineageId: "lineage_support_v2",
-      state: "ready",
-      provider: "fireworks",
-      estimatedCostUsd: 0.2147,
-      updatedAt: "2026-07-30T12:00:00.000Z",
-    },
-  ],
 } as unknown as TrainingStateResponse;
 
 function ModelsBrowserProof() {
@@ -63,12 +53,7 @@ function ModelsBrowserProof() {
         onCreateModel={() => setLastAction("create-model")}
       >
         {activeTab === "serving" ? (
-          <LabServingPage
-            busy={false}
-            state={state}
-            onStart={(lineageId) => setLastAction(`start:${lineageId}`)}
-            onStop={(sessionId) => setLastAction(`stop:${sessionId}`)}
-          />
+          <LabServingPage state={state} />
         ) : (
           <div className="labs-flat-body">
             <div className="labs-table-empty">{activeTab} proof</div>

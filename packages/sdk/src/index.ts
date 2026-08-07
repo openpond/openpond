@@ -1,8 +1,8 @@
 import {
   createOpenPondSandboxClient,
   type OpenPondSandboxClient,
-} from "../../cloud/src/sandbox/client.js";
-import { resolveOpChatApiBaseUrl } from "../../cloud/src/hosted-chat.js";
+} from "@openpond/cloud/sandbox/client";
+import { resolveOpChatApiBaseUrl } from "@openpond/cloud/hosted-chat";
 
 import { OpenPondWorkClient } from "./work.js";
 import type { OpenPondClientOptions } from "./types.js";
@@ -38,7 +38,7 @@ export function createOpenPondClient(options: OpenPondClientOptions): OpenPondCl
 
 export type { OpenPondClientOptions } from "./types.js";
 export { OpenPondWorkClient } from "./work.js";
-export { OpenPondApiError } from "../../cloud/src/api/core.js";
+export { OpenPondApiError } from "@openpond/cloud/api/core";
 export type {
   OpenPondWorkEvent,
   OpenPondWorkCleanup,
@@ -51,8 +51,8 @@ export type {
   OpenPondWorkRunResult,
 } from "./work.js";
 
-export * from "../../cloud/src/sandbox/client.js";
-export * from "../../cloud/src/sandbox/types/index.js";
+export * from "@openpond/cloud/sandbox/client";
+export * from "@openpond/cloud/sandbox/types";
 export {
   getOpChatModel,
   getOpChatProvider,
@@ -61,7 +61,7 @@ export {
   resolveOpChatApiBaseUrl,
   sendHostedChatTurn,
   streamHostedChatTurn,
-} from "../../cloud/src/hosted-chat.js";
+} from "@openpond/cloud/hosted-chat";
 export type {
   HostedChatCompletion,
   HostedChatMessage,
@@ -73,4 +73,4 @@ export type {
   HostedModelsResponse,
   HostedProvider,
   HostedProvidersResponse,
-} from "../../cloud/src/hosted-chat.js";
+} from "@openpond/cloud/hosted-chat";

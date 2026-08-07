@@ -184,16 +184,7 @@ export function validateTrainingCompatibility(input: {
         message: `${input.plan.destinationId} does not support ${input.plan.environmentPlacement} rollout placement.`,
       });
     }
-    if (input.plan.destinationId === "fireworks") {
-      if (input.plan.environmentPlacement !== "provider_native") {
-        issues.push({
-          code: "grpo_plan_placement",
-          severity: "error",
-          path: "environmentPlacement",
-          message: "Fireworks GRPO requires provider-native rollout placement.",
-        });
-      }
-    } else if (input.plan.destinationId === "openpond_managed") {
+    if (input.plan.destinationId === "openpond_managed") {
       if (
         input.plan.environmentPlacement !== "local"
         && input.plan.environmentPlacement !== "remote"
@@ -210,7 +201,7 @@ export function validateTrainingCompatibility(input: {
         code: "grpo_destination_unproven",
         severity: "error",
         path: "destinationId",
-        message: "GRPO is currently supported by Fireworks and OpenPond Managed RL.",
+        message: "GRPO is currently supported by OpenPond Managed RL.",
       });
     }
   }

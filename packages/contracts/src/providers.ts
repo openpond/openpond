@@ -14,7 +14,6 @@ export const PROVIDER_IDS = [
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "custom-openai-compatible",
 ] as const;
 

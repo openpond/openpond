@@ -274,8 +274,7 @@ async function runTextAttempt(input: {
   try {
     const text = await input.modelText({
       model: attemptInput.model,
-      reasoningEffort:
-        attemptInput.model.providerId === "fireworks" ? "none" : null,
+      reasoningEffort: null,
       signal: attemptInput.signal ?? new AbortController().signal,
       requestId,
       messages: policyMessages(attemptInput.task),

@@ -7,23 +7,11 @@
     "timestamp": "2026-07-23T12:00:00Z",
     "component": {
       "type": "application",
-      "name": "openpond-worker-prime-rl",
+      "name": "openpond-training",
       "version": "0.0.38"
     }
   },
   "components": [
-    {
-      "type": "framework",
-      "name": "prime-rl",
-      "version": "e0d60e4d85ea636873acb2e7083e794740d20226",
-      "purl": "pkg:github/PrimeIntellect-ai/prime-rl@e0d60e4d85ea636873acb2e7083e794740d20226"
-    },
-    {
-      "type": "library",
-      "name": "verifiers",
-      "version": "df9c5aa58c28db717cfeb1150c1d0c751f4570a6",
-      "purl": "pkg:github/PrimeIntellect-ai/verifiers@df9c5aa58c28db717cfeb1150c1d0c751f4570a6"
-    },
     {
       "type": "library",
       "name": "torch",

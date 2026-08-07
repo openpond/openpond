@@ -612,19 +612,4 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS model_bindings_model_idx
     ON model_bindings(model_artifact_lineage_id, updated_at DESC);
 
-  CREATE TABLE IF NOT EXISTS fireworks_model_serving_sessions (
-    id TEXT PRIMARY KEY,
-    profile_id TEXT NOT NULL,
-    model_artifact_lineage_id TEXT NOT NULL,
-    state TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-  );
-
-  CREATE INDEX IF NOT EXISTS fireworks_serving_profile_state_updated_idx
-    ON fireworks_model_serving_sessions(profile_id, state, updated_at DESC);
-
-  CREATE INDEX IF NOT EXISTS fireworks_serving_model_updated_idx
-    ON fireworks_model_serving_sessions(model_artifact_lineage_id, updated_at DESC);
 `;

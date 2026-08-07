@@ -52,8 +52,8 @@ export function createManagedAdapterChatRuntime(dependencies: {
   async function appliesTo(modelId: string | null | undefined): Promise<boolean> {
     // A managed projection owns this product identity even while it is waking,
     // degraded, or failed. Returning false here would silently route a
-    // Fireworks-trained adapter through temporary Fireworks serving or a local
-    // worker, bypassing the production gateway, billing, and kill switch.
+    // retired remote route through local inference, bypassing the production
+    // gateway, billing, and kill switch.
     return Boolean(await context(modelId));
   }
 

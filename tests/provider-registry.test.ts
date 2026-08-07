@@ -209,7 +209,7 @@ describe("local BYOK provider registry", () => {
               capabilities: { streaming: true, reasoning: true },
             },
             {
-              id: "accounts/fireworks/models/kimi-k3",
+              id: "moonshotai/kimi-k3",
               displayName: "Kimi K3",
               contextWindow: 1_048_576,
               capabilities: {
@@ -236,7 +236,7 @@ describe("local BYOK provider registry", () => {
         contextWindow: 1_048_576,
       }),
       expect.objectContaining({
-        id: "accounts/fireworks/models/kimi-k3",
+        id: "moonshotai/kimi-k3",
         providerId: "openpond",
         displayName: "Kimi K3",
         contextWindow: 1_048_576,
@@ -482,16 +482,16 @@ describe("local BYOK provider registry", () => {
   test("refreshes curated model cache with timestamps", () => {
     const fetchedAt = "2026-06-30T10:00:00.000Z";
     const cache = buildProviderModelCache({
-      providerId: "fireworks",
+      providerId: "together",
       file: emptyProvidersFile(),
       fetchedAt,
     });
 
-    expect(cache.providerId).toBe("fireworks");
+    expect(cache.providerId).toBe("together");
     expect(cache.fetchedAt).toBe(fetchedAt);
     expect(cache.source).toBe("curated");
     expect(cache.models.map((model) => model.id)).toContain(
-      "accounts/fireworks/models/kimi-k2-instruct",
+      "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo",
     );
   });
 

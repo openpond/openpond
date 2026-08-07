@@ -568,7 +568,7 @@ export const TasksetReadinessReportSchema = z.object({
   trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
   methodReadiness: z.array(TrainingMethodReadinessSchema).default([]),
   compatibleDestinationClasses: z.array(
-    z.enum(["export", "local_cpu_fixture", "custom", "hosted_byok"]),
+    z.enum(["export", "local_cpu_fixture", "custom", "hosted_managed"]),
   ),
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),

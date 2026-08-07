@@ -12,7 +12,6 @@ import {
   generateCrossSystemTasks,
   generateCrossSystemWorld,
 } from "../apps/server/src/training/cross-system-operations";
-import { renderFireworksSftDataset } from "../apps/server/src/training/fireworks-dataset";
 import { tasksetFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 const APPROVED_AT = "2026-07-17T18:00:00.000Z";
@@ -118,20 +117,6 @@ describe("Cross-System expert bootstrap", () => {
       )) as { approval: { approvedBy: string }; records: unknown[] };
       expect(fixture.approval.approvedBy).toBe("0xglu");
       expect(fixture.records).toHaveLength(5);
-
-      const rendered = renderFireworksSftDataset(approved.taskset);
-      expect(rendered.exampleCount).toBe(5);
-      expect(rendered.bytes.toString("utf8")).toContain('"tool_calls"');
-      expect(rendered.bytes.toString("utf8")).not.toContain("Say goodbye");
-      const renderedRecords = rendered.bytes.toString("utf8").trim().split("\n")
-        .map((line) => JSON.parse(line) as {
-          messages: Array<{ content?: unknown }>;
-          tools?: unknown[];
-        });
-      expect(renderedRecords.every((record) =>
-        record.messages.every((message) => typeof message.content === "string"),
-      )).toBe(true);
-      expect(renderedRecords.every((record) => record.tools?.length === 4)).toBe(true);
 
       const repeatedApproval = await service.approve({
         tasksetId: taskset.id,

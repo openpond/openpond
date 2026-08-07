@@ -153,7 +153,7 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain(">Active release<");
   });
 
-  test("keeps temporary sessions and managed publication separate in Serving", () => {
+  test("projects managed publication in Serving", () => {
     const rows = labServingRows({
       modelProjects: [
         {
@@ -178,14 +178,6 @@ describe("Lab workspace", () => {
           },
         },
       ],
-      servingSessions: [
-        {
-          id: "serving_1",
-          modelArtifactLineageId: "lineage_1",
-          state: "ready",
-          updatedAt: "2026-07-30T12:00:00.000Z",
-        },
-      ],
     } as unknown as TrainingStateResponse);
 
     expect(rows).toHaveLength(1);
@@ -193,7 +185,6 @@ describe("Lab workspace", () => {
       lineageId: "lineage_1",
       modelName: "Support model",
       versionLabel: "Version 2",
-      session: { id: "serving_1", state: "ready" },
       managed: { state: "ready" },
     });
   });
@@ -211,9 +202,9 @@ describe("Lab workspace", () => {
         available: false,
         selectionKey: "unavailable_qwen",
         label: "Qwen 3 8B",
-        modelId: "accounts/fireworks/models/qwen3-8b",
+        modelId: "Qwen/Qwen3-0.6B",
         source: "managed",
-        sourceLabel: "Fireworks",
+        sourceLabel: "OpenPond Managed",
       }),
       modelCandidate({
         selectionKey: "cpu_fixture",

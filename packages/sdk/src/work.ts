@@ -1,16 +1,16 @@
-import { OpenPondApiError } from "../../cloud/src/api/core.js";
+import { OpenPondApiError } from "@openpond/cloud/api/core";
 import {
   sendHostedChatTurn,
   type HostedChatMessage,
   type HostedChatTool,
   type HostedChatToolCall,
-} from "../../cloud/src/hosted-chat.js";
-import type { OpenPondSandboxClient } from "../../cloud/src/sandbox/client.js";
+} from "@openpond/cloud/hosted-chat";
+import type { OpenPondSandboxClient } from "@openpond/cloud/sandbox/client";
 import type {
   SandboxFileDownloadResponse,
   SandboxFileEntry,
   SandboxRecord,
-} from "../../cloud/src/sandbox/types/index.js";
+} from "@openpond/cloud/sandbox/types";
 
 const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;

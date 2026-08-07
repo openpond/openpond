@@ -6,7 +6,9 @@ import {
   agentCompactionDecision,
   createAgentRuntimeService,
   createAgentToolCatalog,
+  createAgentToolCatalogProjection,
   executeAgentTool,
+  executeProjectedAgentTool,
   materializeAgentPrompt,
   providerRoundSequence,
   runProviderRound,
@@ -65,6 +67,35 @@ describe("@openpond/agent-runtime", () => {
     });
     controller.abort(new Error("stop"));
     await expect(rounds.next()).rejects.toThrow("stop");
+  });
+
+  test("makes projected JSON-schema catalogs executable through the same admitted registry", async () => {
+    const execute = vi.fn(async (input: unknown) => input);
+    const catalog = createAgentToolCatalogProjection([
+      {
+        name: "read_resource",
+        description: "Read a resource",
+        inputSchema: { type: "object", properties: { ref: { type: "string" } } },
+        placement: "local",
+        executorAvailable: true,
+        validateArguments: (input) => z.object({ ref: z.string() }).parse(input),
+        execute,
+      },
+    ]);
+
+    await expect(executeProjectedAgentTool(catalog, {
+      name: "read_resource",
+      arguments: { ref: "workspace:README.md" },
+      context: {
+        threadId: "thread",
+        turnId: "turn",
+        callId: "call",
+        signal: new AbortController().signal,
+      },
+    })).resolves.toEqual({ ref: "workspace:README.md" });
+    expect(catalog.modelTools[0]?.inputSchema).toEqual(
+      expect.objectContaining({ type: "object" }),
+    );
   });
 
   test("owns provider loop completion and exhaustion", async () => {

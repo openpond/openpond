@@ -14,7 +14,7 @@ import {
 } from "../apps/server/src/training/training-artifact-package";
 
 describe("LoRA artifact package", () => {
-  test("selects the final Fireworks artifacts from nested provider paths", () => {
+  test("selects final OpenPond artifacts from nested provider paths", () => {
     const artifact = (
       id: string,
       providerFilename: string,
@@ -29,14 +29,14 @@ describe("LoRA artifact package", () => {
       path: `/tmp/${id}`,
       sha256: "a".repeat(64),
       sizeBytes: 1,
-      baseModelId: "accounts/fireworks/models/qwen3-8b",
+      baseModelId: "Qwen/Qwen3-0.6B",
       baseModelRevision: "provider-v1",
       tokenizerRevision: "provider-v1",
       chatTemplateHash: "chattemplatehash",
       nonProduction: false,
       createdAt,
       metadata: {
-        provider: "fireworks",
+        provider: "openpond",
         providerFilename,
       },
     });
@@ -72,7 +72,7 @@ describe("LoRA artifact package", () => {
     ]);
   });
 
-  test("selects a Fireworks sharded LoRA and its index", () => {
+  test("selects an OpenPond sharded LoRA and its index", () => {
     const artifact = (
       id: string,
       providerFilename: string,
@@ -86,14 +86,14 @@ describe("LoRA artifact package", () => {
       path: `/tmp/${id}`,
       sha256: "a".repeat(64),
       sizeBytes: 1,
-      baseModelId: "accounts/fireworks/models/qwen3-8b",
+      baseModelId: "Qwen/Qwen3-0.6B",
       baseModelRevision: "provider-v1",
       tokenizerRevision: "provider-v1",
       chatTemplateHash: "chattemplatehash",
       nonProduction: false,
       createdAt: "2026-07-18T06:38:26.000Z",
       metadata: {
-        provider: "fireworks",
+        provider: "openpond",
         providerFilename,
       },
     });
@@ -133,14 +133,14 @@ describe("LoRA artifact package", () => {
             path: weightsPath,
             sha256: sha256(weights),
             sizeBytes: weights.byteLength,
-            baseModelId: "accounts/fireworks/models/qwen3-0p6b",
+            baseModelId: "Qwen/Qwen3-0.6B",
             baseModelRevision: "provider-v1",
             tokenizerRevision: "provider-v1",
             chatTemplateHash: "chattemplatehash",
             nonProduction: false,
             createdAt: "2026-07-17T20:00:00.000Z",
             metadata: {
-              provider: "fireworks",
+              provider: "openpond",
               providerFilename: "adapter_model.safetensors",
             },
           },

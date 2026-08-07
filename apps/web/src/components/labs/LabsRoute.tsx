@@ -351,13 +351,6 @@ export function LabsRoute({
       versions.find((candidate) => candidate.lineage.promotable) ??
       null;
     if (!version?.taskset) return;
-    const job = training.training.payload?.jobs.find(
-      (candidate) => candidate.id === version.lineage.jobId
-    );
-    if (job?.destinationId === "fireworks") {
-      setModelUseVersionId(version.lineage.id);
-      return;
-    }
     training.onChatWithModel(
       buildTrainingModelChatHandoff({
         modelId: version.lineage.id,
@@ -448,14 +441,7 @@ export function LabsRoute({
         />
       ) : activeTab === "serving" ? (
         <LabServingPage
-          busy={Boolean(training.training.busyAction)}
           state={training.training.payload}
-          onStart={(lineageId) => {
-            void training.training.actions.startModelServing(lineageId);
-          }}
-          onStop={(sessionId) => {
-            void training.training.actions.stopModelServing(sessionId);
-          }}
         />
       ) : activeTab === "usage" ? (
         <LabUsagePage

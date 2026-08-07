@@ -319,14 +319,6 @@ export function createTrainingApi(deps: {
     if (action === "export_bundle") return deps.training.exportBundle(requiredString(input.bundleId, "bundleId"));
     if (action === "artifact_download") return deps.training.artifactDownload(requiredString(input.artifactId, "artifactId"));
     if (action === "model_package_download") return deps.training.modelPackageDownload(requiredString(input.modelId, "modelId"));
-    if (action === "start_model_serving") return deps.training.startModelServing({
-      profileId: requiredString(input.profileId, "profileId"),
-      modelId: requiredString(input.modelId, "modelId"),
-    });
-    if (action === "stop_model_serving") return deps.training.stopModelServing(
-      requiredString(input.servingSessionId, "servingSessionId"),
-      "user",
-    );
     if (action === "reject_model") return deps.training.rejectModel({ modelId: requiredString(input.modelId, "modelId"), reason: requiredString(input.reason, "reason") });
     if (action === "bind_model") return deps.training.bindModel({
       profileId: requiredString(input.profileId, "profileId"),
@@ -345,8 +337,6 @@ export function createTrainingApi(deps: {
       pinned: input.pinned === true,
     });
     if (action === "cancel_job") return deps.training.cancelJob(requiredString(input.jobId, "jobId"));
-    if (action === "evaluate_job") return deps.training.evaluateJob(requiredString(input.jobId, "jobId"));
-    if (action === "save_credential") return deps.training.saveCredential({ destinationId: requiredString(input.destinationId, "destinationId"), value: requiredString(input.value, "value") });
     if (action === "job_events") return deps.store.listTrainingJobEvents(requiredString(input.jobId, "jobId"));
     if (action === "run_detail") {
       const jobId = requiredString(input.jobId, "jobId");
@@ -460,7 +450,7 @@ export function createTrainingApi(deps: {
       deps.store.listModelVersions(),
       deps.store.listModelRuns(),
       deps.store.listTasksets(),
-      deps.training.state(profileId),
+      deps.training.state(),
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
@@ -471,7 +461,6 @@ export function createTrainingApi(deps: {
         creations,
         minerRuns,
         datasetImports,
-        servingSessions: execution.servingSessions,
       },
     });
     return {
@@ -502,7 +491,7 @@ export function createTrainingApi(deps: {
       deps.store.listTaskCreationSnapshots(profileId),
       deps.store.listDatasetImportJobs(profileId),
       deps.store.listTaskMinerRuns(profileId),
-      deps.training.activity(profileId),
+      deps.training.activity(),
     ]);
     return projectTrainingActivity({
       profileId,
@@ -511,7 +500,6 @@ export function createTrainingApi(deps: {
         creations,
         minerRuns,
         datasetImports,
-        servingSessions: execution.servingSessions,
       },
     });
   }

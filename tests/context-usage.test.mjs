@@ -19,7 +19,7 @@ describe("hosted context usage", () => {
           source: "hosted",
           models: [
             {
-              id: "accounts/fireworks/models/kimi-k3",
+              id: "openpond/kimi-k3",
               providerId: "openpond",
               displayName: "Kimi K3",
               contextWindow: 1_048_576,
@@ -56,7 +56,7 @@ describe("hosted context usage", () => {
     assert.equal(
       trustedProviderContextLimit({
         provider: "openpond",
-        model: "accounts/fireworks/models/kimi-k3",
+        model: "openpond/kimi-k3",
         settings,
       }),
       1_048_576,

@@ -45,7 +45,6 @@ const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "moonshot",
   "together",
   "groq",
-  "fireworks",
   "custom-openai-compatible",
   "setup-provider",
 ]);

@@ -13,10 +13,9 @@ describe("provider-neutral base-model candidates", () => {
   test("joins managed catalogs and exact local assets without offering inference-only weights", () => {
     const candidates = projectBaseModelCandidates({
       destinations: [
-        destination("fireworks", {
-          modelAllowlist: ["accounts/fireworks/models/qwen3-8b"],
-          methods: ["sft", "grpo"],
-          nonProduction: false,
+        destination("openpond_managed", {
+          modelAllowlist: ["Qwen/Qwen3-0.6B"],
+          methods: ["grpo"],
         }),
         destination("local_cpu_fixture", {
           modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture", "HuggingFaceTB/SmolLM2-135M-Instruct"],
@@ -26,7 +25,7 @@ describe("provider-neutral base-model candidates", () => {
     });
 
     expect(candidates.map((candidate) => candidate.preference.modelId)).toEqual([
-      "accounts/fireworks/models/qwen3-8b",
+      "Qwen/Qwen3-0.6B",
       "HuggingFaceTB/SmolLM2-135M-Instruct",
       "openpond/tiny-cpu-gpt2-fixture",
     ]);
@@ -47,11 +46,10 @@ describe("provider-neutral base-model candidates", () => {
   test("keeps a known managed model visible with its exact unavailable reason", () => {
     const [candidate] = projectBaseModelCandidates({
       destinations: [
-        destination("fireworks", {
+        destination("openpond_managed", {
           available: false,
-          modelAllowlist: ["accounts/fireworks/models/qwen3-8b"],
-          nonProduction: false,
-          unavailableReason: "Fireworks training credential is not configured.",
+          modelAllowlist: ["Qwen/Qwen3-0.6B"],
+          unavailableReason: "OpenPond Managed training is not available.",
         }),
       ],
       inventory: null,
@@ -59,8 +57,8 @@ describe("provider-neutral base-model candidates", () => {
 
     expect(candidate).toMatchObject({
       available: false,
-      unavailableReason: "Fireworks training credential is not configured.",
-      sourceLabel: "Fireworks",
+      unavailableReason: "OpenPond Managed training is not available.",
+      sourceLabel: "OpenPond Managed",
     });
   });
 
@@ -91,11 +89,6 @@ describe("provider-neutral base-model candidates", () => {
         modelAllowlist: ["Qwen/Qwen3-0.6B"],
         methods: ["grpo"],
       }),
-      destination("fireworks", {
-        modelAllowlist: ["accounts/fireworks/models/qwen3-8b"],
-        methods: ["sft", "grpo"],
-        nonProduction: false,
-      }),
       destination("local_cpu_fixture", {
         modelAllowlist: ["openpond/tiny-cpu-gpt2-fixture"],
       }),
@@ -108,7 +101,7 @@ describe("provider-neutral base-model candidates", () => {
       candidates,
       destinations,
       inventory: null,
-      registeredEngineIds: ["sandbox-managed-rl", "fireworks-native", "local-trl"],
+      registeredEngineIds: ["sandbox-managed-rl", "local-trl"],
       now: checkedAt,
     };
 
@@ -138,8 +131,8 @@ describe("provider-neutral base-model candidates", () => {
       }).targets[0],
     ).toMatchObject({
       id: "automatic",
-      destinationId: "fireworks",
-      computeAdapterId: "fireworks-managed",
+      destinationId: "local_cpu_fixture",
+      computeAdapterId: "local-cpu",
       available: true,
     });
   });
@@ -163,12 +156,7 @@ function destination(
     parameterizations: ["lora"],
     modelAllowlist: input.modelAllowlist,
     maxDatasetBytes: 10_000_000,
-    environmentPlacements:
-      destinationId === "fireworks"
-        ? ["provider_native"]
-        : destinationId === "openpond_managed"
-          ? ["remote"]
-          : ["local"],
+    environmentPlacements: destinationId === "openpond_managed" ? ["remote"] : ["local"],
     nonProduction: input.nonProduction ?? true,
     unavailableReason: input.unavailableReason ?? null,
     checkedAt,

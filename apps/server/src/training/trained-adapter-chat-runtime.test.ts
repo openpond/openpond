@@ -10,9 +10,6 @@ const streamInput = {
 
 describe("trained adapter chat runtime provider selection", () => {
   test("does not fall through after a managed provider failure", async () => {
-    const fireworksStream = vi.fn(async function* () {
-      yield { text: "fireworks" };
-    });
     const localStream = vi.fn(async function* () {
       yield { text: "local" };
     });
@@ -23,10 +20,6 @@ describe("trained adapter chat runtime provider selection", () => {
           throw new Error("managed_provider_unavailable");
         }),
       },
-      fireworks: {
-        appliesTo: vi.fn(async () => true),
-        stream: fireworksStream,
-      },
       local: {
         stream: localStream,
         close: vi.fn(async () => undefined),
@@ -36,42 +29,10 @@ describe("trained adapter chat runtime provider selection", () => {
     await expect(collect(runtime.stream(streamInput))).rejects.toThrow(
       "managed_provider_unavailable",
     );
-    expect(fireworksStream).not.toHaveBeenCalled();
     expect(localStream).not.toHaveBeenCalled();
   });
 
-  test("retains Fireworks fallback only for a lineage without a managed projection", async () => {
-    const fireworksStream = vi.fn(async function* () {
-      yield { text: "fireworks" };
-    });
-    const localStream = vi.fn(async function* () {
-      yield { text: "local" };
-    });
-    const runtime = createTrainedAdapterChatRuntime({
-      managed: {
-        appliesTo: vi.fn(async () => false),
-        stream: vi.fn(async function* () {
-          yield { text: "managed" };
-        }),
-      },
-      fireworks: {
-        appliesTo: vi.fn(async () => true),
-        stream: fireworksStream,
-      },
-      local: {
-        stream: localStream,
-        close: vi.fn(async () => undefined),
-      },
-    });
-
-    await expect(collect(runtime.stream(streamInput))).resolves.toEqual([
-      { text: "fireworks" },
-    ]);
-    expect(fireworksStream).toHaveBeenCalledOnce();
-    expect(localStream).not.toHaveBeenCalled();
-  });
-
-  test("uses local serving only when neither managed nor Fireworks owns the lineage", async () => {
+  test("uses local serving when managed does not own the lineage", async () => {
     const localStream = vi.fn(async function* () {
       yield { text: "local" };
     });
@@ -81,12 +42,6 @@ describe("trained adapter chat runtime provider selection", () => {
         appliesTo: vi.fn(async () => false),
         stream: vi.fn(async function* () {
           yield { text: "managed" };
-        }),
-      },
-      fireworks: {
-        appliesTo: vi.fn(async () => false),
-        stream: vi.fn(async function* () {
-          yield { text: "fireworks" };
         }),
       },
       local: { stream: localStream, close },

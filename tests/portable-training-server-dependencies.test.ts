@@ -70,7 +70,6 @@ describe("portable training server composition", () => {
     const dependencies = createPortableTrainingServerDependencies({
       storeDir: "/tmp/openpond-portable-training-test",
       environment: {
-        OPENPOND_PRIME_SSH_KEY_ID: "ignored-by-desktop",
       },
     });
     dependencies.registerPortableAdapters(registry);

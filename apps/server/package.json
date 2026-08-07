@@ -6,6 +6,7 @@
   "main": "./dist/index.js",
   "dependencies": {
     "@openpond/agent-runtime": "workspace:*",
+    "@openpond/app-server": "workspace:*",
     "@openpond/cloud": "workspace:*",
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",

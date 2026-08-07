@@ -12,7 +12,7 @@ describe("Model and Dataset association", () => {
     const run = createExistingTasksetModelCreateImproveRun({
       profileId: taskset.profileId,
       taskset,
-      preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModelId: "Qwen/Qwen3-0.6B",
       preferredBaseModel: managedPreference(),
       timestamp: "2026-07-18T12:00:00.000Z",
     });
@@ -34,7 +34,7 @@ describe("Model and Dataset association", () => {
     });
     expect(run.metadata).toMatchObject({
       source: "existing_dataset_model",
-      preferredBaseModelId: "accounts/fireworks/models/qwen3-8b",
+      preferredBaseModelId: "Qwen/Qwen3-0.6B",
       preferredBaseModel: managedPreference(),
     });
     expect(run.sourceRefs).toContain(taskset.id);
@@ -68,7 +68,7 @@ describe("Model and Dataset association", () => {
 function managedPreference() {
   return {
     schemaVersion: "openpond.baseModelPreference.v1" as const,
-    modelId: "accounts/fireworks/models/qwen3-8b",
+    modelId: "Qwen/Qwen3-0.6B",
     revision: null,
     tokenizerRevision: null,
     chatTemplateHash: null,

@@ -99,10 +99,6 @@ export type HttpRouteDeps = {
     payload: unknown,
     requestUrl?: URL
   ) => Promise<unknown>;
-  fireworksRftPayload: (payload: unknown) => Promise<{
-    status: number;
-    body: Record<string, unknown>;
-  }>;
   computePayload: (action: string, payload: unknown) => Promise<unknown>;
   listLocalAgentSchedulesPayload: (payload?: unknown) => Promise<unknown>;
   syncLocalAgentSchedulesPayload: () => Promise<unknown>;

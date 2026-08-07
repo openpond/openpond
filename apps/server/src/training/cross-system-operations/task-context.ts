@@ -48,7 +48,7 @@ export function resolveCrossSystemTrainTask(
     prompt: input.prompt,
   });
   if (context.authoredTask.split !== "train" || context.generatedTask.split !== "train") {
-    throw new Error(`Fireworks row ${input.rowId} does not resolve to an approved train task.`);
+    throw new Error(`Training row ${input.rowId} does not resolve to an approved train task.`);
   }
   return context;
 }

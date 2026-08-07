@@ -8,10 +8,7 @@ import {
 } from "../packages/contracts/src";
 import { validateTrainingCompatibility } from "../packages/training-sdk/src/compatibility";
 import { tasksetFixture } from "./helpers/training-fixtures";
-import {
-  fireworksRftRecipe,
-  rftTasksetFixture,
-} from "./helpers/fireworks-destination-fixtures";
+import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures";
 
 describe("training trajectory sizing", () => {
   test("sizes structured tool messages instead of only their prompt and final text", () => {
@@ -126,15 +123,15 @@ describe("training trajectory sizing", () => {
         createdAt: "2026-07-20T00:00:00.000Z",
       },
     } as Taskset;
-    const recipe = fireworksRftRecipe();
+    const recipe = managedRftRecipe();
     const plan: TrainingPlan = {
       schemaVersion: "openpond.trainingPlan.v1",
       id: "plan-artifact-rft",
       tasksetId: taskset.id,
       tasksetHash: taskset.contentHash,
-      destinationId: "fireworks",
+      destinationId: "openpond_managed",
       recipe,
-      environmentPlacement: "provider_native",
+      environmentPlacement: "remote",
       compatibility: null,
       dataPolicy: {
         exportApproved: true,
@@ -151,13 +148,13 @@ describe("training trajectory sizing", () => {
       plan,
       capabilities: {
         schemaVersion: "openpond.trainingDestinationCapabilities.v1",
-        destinationId: "fireworks",
+        destinationId: "openpond_managed",
         available: true,
         methods: ["sft", "grpo"],
         parameterizations: ["lora"],
         modelAllowlist: [recipe.baseModel.id],
         maxDatasetBytes: 1_000_000,
-        environmentPlacements: ["provider_native"],
+        environmentPlacements: ["remote"],
         nonProduction: false,
         unavailableReason: null,
         checkedAt: "2026-07-20T00:00:00.000Z",
@@ -173,7 +170,7 @@ describe("training trajectory sizing", () => {
     "accepts OpenPond Managed RL with %s rollout placement",
     (environmentPlacement) => {
       const taskset = rftTasksetFixture();
-      const recipe = fireworksRftRecipe();
+      const recipe = managedRftRecipe();
       const plan: TrainingPlan = {
         schemaVersion: "openpond.trainingPlan.v1",
         id: `plan-managed-rl-${environmentPlacement}`,

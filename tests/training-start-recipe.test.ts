@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import { trainingRecipe } from "../apps/web/src/components/training/training-start-recipe";
-import { rftTasksetFixture } from "./helpers/fireworks-destination-fixtures";
+import { rftTasksetFixture } from "./helpers/managed-training-fixtures";
 
 describe("training start recipe", () => {
   test("projects OpenPond Managed GRPO onto the qualified 0.6B recipe", () => {

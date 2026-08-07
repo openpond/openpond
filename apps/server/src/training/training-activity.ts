@@ -6,7 +6,7 @@ import { contentHash } from "@openpond/taskset-sdk";
 
 type ActivityState = Pick<
   TrainingStateResponse,
-  "jobs" | "creations" | "minerRuns" | "datasetImports" | "servingSessions"
+  "jobs" | "creations" | "minerRuns" | "datasetImports"
 >;
 
 const ACTIVE_JOB_STATUSES = new Set([
@@ -24,7 +24,6 @@ const ACTIVE_IMPORT_STATUSES = new Set([
   "validating",
   "cancelling",
 ]);
-const ACTIVE_SERVING_STATES = new Set(["starting", "ready", "stopping"]);
 
 export function projectTrainingActivity(input: {
   profileId: string;
@@ -42,9 +41,6 @@ export function projectTrainingActivity(input: {
     datasetImports: input.state.datasetImports.filter((item) =>
       ACTIVE_IMPORT_STATUSES.has(item.status),
     ).length,
-    servingSessions: input.state.servingSessions.filter((item) =>
-      ACTIVE_SERVING_STATES.has(item.state),
-    ).length,
   };
   const revision = contentHash({
     jobs: revisions(input.state.jobs, (item) => [item.id, item.status, item.updatedAt]),
@@ -53,11 +49,6 @@ export function projectTrainingActivity(input: {
     datasetImports: revisions(input.state.datasetImports, (item) => [
       item.id,
       item.status,
-      item.updatedAt,
-    ]),
-    servingSessions: revisions(input.state.servingSessions, (item) => [
-      item.id,
-      item.state,
       item.updatedAt,
     ]),
   });

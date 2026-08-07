@@ -1,12 +1,10 @@
 import type {
-  FireworksModelServingSession,
   ModelBinding,
   ModelRun,
   ModelVersion,
   RolloutTrajectoryReceipt,
 } from "@openpond/contracts";
 import {
-  FireworksModelServingSessionSchema,
   ModelBindingSchema,
   ModelRunSchema,
   ModelVersionSchema,
@@ -167,66 +165,6 @@ export class SqliteTrainingModelStore extends SqliteStoreCore {
       "SELECT payload FROM model_runs ORDER BY updated_at DESC",
       [],
       ModelRunSchema.parse,
-    );
-  }
-
-  async saveFireworksModelServingSession(
-    sessionInput: FireworksModelServingSession,
-  ): Promise<FireworksModelServingSession> {
-    const session = FireworksModelServingSessionSchema.parse(sessionInput);
-    await this.upsertPayload(
-      `INSERT INTO fireworks_model_serving_sessions
-        (id, profile_id, model_artifact_lineage_id, state, payload, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(id) DO UPDATE SET
-         profile_id = excluded.profile_id,
-         model_artifact_lineage_id = excluded.model_artifact_lineage_id,
-         state = excluded.state,
-         payload = excluded.payload,
-         updated_at = excluded.updated_at`,
-      [
-        session.id,
-        session.profileId,
-        session.modelArtifactLineageId,
-        session.state,
-        JSON.stringify(session),
-        session.createdAt,
-        session.updatedAt,
-      ],
-    );
-    return session;
-  }
-
-  async getFireworksModelServingSession(id: string): Promise<FireworksModelServingSession | null> {
-    return this.getParsedPayload(
-      "SELECT payload FROM fireworks_model_serving_sessions WHERE id = ?",
-      [id],
-      FireworksModelServingSessionSchema.parse,
-    );
-  }
-
-  async listFireworksModelServingSessions(input: {
-    profileId?: string;
-    modelArtifactLineageId?: string;
-  } = {}): Promise<FireworksModelServingSession[]> {
-    if (input.profileId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM fireworks_model_serving_sessions WHERE profile_id = ? ORDER BY updated_at DESC",
-        [input.profileId],
-        FireworksModelServingSessionSchema.parse,
-      );
-    }
-    if (input.modelArtifactLineageId) {
-      return this.listParsedPayloads(
-        "SELECT payload FROM fireworks_model_serving_sessions WHERE model_artifact_lineage_id = ? ORDER BY updated_at DESC",
-        [input.modelArtifactLineageId],
-        FireworksModelServingSessionSchema.parse,
-      );
-    }
-    return this.listParsedPayloads(
-      "SELECT payload FROM fireworks_model_serving_sessions ORDER BY updated_at DESC",
-      [],
-      FireworksModelServingSessionSchema.parse,
     );
   }
 

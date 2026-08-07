@@ -11,19 +11,10 @@ import {
   type ManagedModelBindingCallbacks,
 } from "./managed-model-binding-coordinator.js";
 import { updateModelCreateImproveRelease } from "./model-release-reconciliation.js";
-import {
-  type createFireworksServingService,
-} from "./fireworks-serving-service.js";
-import {
-  stopActiveFireworksServingSessions,
-} from "./training-model-controls.js";
 import { assertArtifactIntegrity } from "./training-service-helpers.js";
 
 export function createTrainingModelBindingService(
-  deps: {
-    store: SqliteStore;
-    fireworksServing: ReturnType<typeof createFireworksServingService>;
-  } & ManagedModelBindingCallbacks,
+  deps: { store: SqliteStore } & ManagedModelBindingCallbacks,
 ) {
   const managedModelBindings = createManagedModelBindingCoordinator({
     store: deps.store,
@@ -54,10 +45,6 @@ export function createTrainingModelBindingService(
         "Roll back every active Model binding before rejecting this artifact.",
       );
     }
-    await stopActiveFireworksServingSessions(deps.fireworksServing, {
-      modelArtifactLineageId: model.id,
-      reason: "Reject this Model",
-    });
     const timestamp = new Date().toISOString();
     const rejected = await deps.store.saveModelArtifactLineage({
       ...model,

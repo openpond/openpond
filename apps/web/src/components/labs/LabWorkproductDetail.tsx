@@ -487,10 +487,6 @@ export function LabWorkproductDetail({
       (candidate) => candidate.lineage.id === versionId
     );
     if (!version?.taskset) return;
-    if (version.job?.destinationId === "fireworks") {
-      setModelUseVersionId(versionId);
-      return;
-    }
     onChatWithModel(
       buildTrainingModelChatHandoff({
         modelId: versionId,

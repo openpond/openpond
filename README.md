@@ -6,7 +6,7 @@ OpenPond Harness is an open-source, mutable agent harness designed to continuous
 
 - Harness is adaptable to your daily workflow - code agents/skills/harness extensions and train models, all in the same harness, 100% opensource and owned by you.
 - The training module is optimized for smaller models, SFT and RL techniques are in beta.
-- Works with fireworks RFT (BYOK) and coming soon, Openpond Managed.
+- Works with local training and OpenPond Managed RL.
 
 ```mermaid
 flowchart LR
@@ -82,7 +82,7 @@ re-export `@openpond/harness`, while Harness never imports Evals.
 
 ## What is this
 
-An harness optimized to turn your conversations into datasets, run evals and faciliate code updates (agents/skills/extensions) or facilitate model training (local SFT, alpha support for RFT with fireworks BYOK, Openpond Managed RL coming soon).
+A harness optimized to turn your conversations into datasets, run evals and facilitate code updates (agents/skills/extensions) or model training through local training and OpenPond Managed RL.
 
 ## Profile
 

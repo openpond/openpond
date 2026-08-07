@@ -14,10 +14,8 @@ import {
   type ManagedRegistryDeployment,
 } from "./managed-adapter-registry-client.js";
 import { resolveManagedRlBaseProfile } from "./managed-rl-base-profile.js";
-import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 
 const DEFAULT_RECONCILE_INTERVAL_MS = 30_000;
-const PORTABLE_ADAPTER_PATTERN = /^adapter_model(?:-\d{5}-of-\d{5})?\.safetensors$/;
 const ARTIFACT_STATES = new Set([
   "imported_unvalidated",
   "evaluating",
@@ -262,10 +260,11 @@ async function reconcileLineage(input: {
       throw new Error("Select an OpenPond team before reconciling managed adapters.");
     }
     const baseProfiles = await input.baseProfilesForTeam(teamId);
-    const baseProfileId =
-      source === "openpond_training"
-        ? assertRetainedProjectionBase(input.lineage, baseProfiles)
-        : assertQualifiedBase(source, jobArtifacts, baseProfiles);
+    if (source === "openpond_training") {
+      assertRetainedProjectionBase(input.lineage, baseProfiles);
+    } else {
+      assertQualifiedManagedBase(jobArtifacts, baseProfiles);
+    }
     const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
@@ -292,43 +291,14 @@ async function reconcileLineage(input: {
           "Sandbox no longer exposes the retained canonical OpenPond training artifact.",
         );
       }
-      const job = await input.store.getTrainingJob(input.lineage.jobId);
-      if (!job) throw new Error(`${source} lineage lost its training job.`);
-      const plan = await input.store.getTrainingPlan(job.planId);
-      if (!plan) throw new Error(`${source} lineage lost its training plan.`);
-      const sourceArtifact = await input.store.getTrainingArtifact(input.lineage.artifactId);
-      if (!sourceArtifact) {
-        throw new Error(`${source} lineage lost its source adapter artifact.`);
-      }
-      const evaluation = input.lineage.frozenEvaluationArtifactId
-        ? await input.store.getTrainingArtifact(input.lineage.frozenEvaluationArtifactId)
-        : null;
-      const files = portableUploadFiles(jobArtifacts);
-      artifact = await input.client.publishFireworksSource({
-        teamId,
-        lineageId: input.lineage.id,
-        label: `OpenPond Fireworks ${input.lineage.id.slice(-12)}`,
-        baseProfileId,
-        trainingJobId: job.id,
-        trainingPlanId: plan.id,
-        sourceArtifactId: sourceArtifact.id,
-        sourceArtifactSha256: sourceArtifact.sha256,
-        tasksetId: input.lineage.tasksetId,
-        tasksetHash: input.lineage.tasksetHash,
-        evaluationArtifactId: evaluation?.id ?? null,
-        evaluationArtifactSha256: evaluation?.sha256 ?? null,
-        providerRunId:
-          typeof job.metadata.providerJobId === "string" ? job.metadata.providerJobId : null,
-        files,
-      });
-      registry.artifacts.push(artifact);
+      throw new Error("Managed adapter registry did not return a canonical artifact.");
     }
     const deployment =
       registry.deployments.find(
         (candidate) =>
-          candidate.artifactId === artifact!.id && !["deleted", "failed"].includes(candidate.state),
+          candidate.artifactId === artifact.id && !["deleted", "failed"].includes(candidate.state),
       ) ??
-      registry.deployments.find((candidate) => candidate.artifactId === artifact!.id) ??
+      registry.deployments.find((candidate) => candidate.artifactId === artifact.id) ??
       null;
     const ready =
       artifact.state === "promotable" &&
@@ -400,24 +370,7 @@ async function managedBindingTarget(
   };
 }
 
-function portableUploadFiles(artifacts: TrainingArtifact[]) {
-  return selectPortableModelArtifacts(artifacts)
-    .filter(
-      ({ name }) =>
-        name === "adapter_config.json" ||
-        name === "adapter_model.safetensors.index.json" ||
-        PORTABLE_ADAPTER_PATTERN.test(name),
-    )
-    .map(({ artifact, name }) => ({
-      artifact,
-      path: name,
-      mediaType: name.endsWith(".json")
-        ? ("application/json" as const)
-        : ("application/vnd.safetensors" as const),
-    }));
-}
-
-type ManagedLineageSource = "openpond_fireworks" | "openpond_training" | "sandbox_managed_rl";
+type ManagedLineageSource = "openpond_training" | "sandbox_managed_rl";
 
 function lineageSource(
   lineage: ModelArtifactLineage,
@@ -434,9 +387,7 @@ function lineageSource(
     artifacts.some((artifact) => artifact.metadata.provider === "sandbox")
   )
     return "sandbox_managed_rl";
-  return artifacts.some((artifact) => artifact.metadata.provider === "fireworks")
-    ? "openpond_fireworks"
-    : null;
+  return null;
 }
 
 function assertRetainedProjectionBase(
@@ -455,53 +406,38 @@ function assertRetainedProjectionBase(
   return baseProfileId;
 }
 
-function assertQualifiedBase(
-  source: ManagedLineageSource,
+function assertQualifiedManagedBase(
   artifacts: TrainingArtifact[],
   baseProfiles: ManagedRegistryBaseProfile[],
 ): string {
-  const qualifiedArtifacts =
-    source === "sandbox_managed_rl"
-      ? artifacts.filter(
-          (artifact) =>
-            artifact.metadata.provider === "sandbox" &&
-            artifact.metadata.managedRlCandidate === true,
-        )
-      : portableUploadFiles(artifacts).map(({ artifact }) => artifact);
-  if (qualifiedArtifacts.length < (source === "sandbox_managed_rl" ? 1 : 2)) {
-    throw new Error(`${source} lineage has no complete portable adapter.`);
+  const qualifiedArtifacts = artifacts.filter(
+    (artifact) =>
+      artifact.metadata.provider === "sandbox" && artifact.metadata.managedRlCandidate === true,
+  );
+  if (qualifiedArtifacts.length < 1) {
+    throw new Error("sandbox_managed_rl lineage has no managed adapter candidate.");
   }
   const firstArtifact = qualifiedArtifacts[0]!;
-  const openPondProfile =
-    source === "sandbox_managed_rl"
-      ? resolveManagedRlBaseProfile({
-          schemaVersion: "openpond.baseModelPreference.v1",
-          modelId: firstArtifact.baseModelId ?? "",
-          revision: firstArtifact.baseModelRevision,
-          tokenizerRevision: firstArtifact.tokenizerRevision,
-          chatTemplateHash: firstArtifact.chatTemplateHash,
-          modelAssetId: null,
-          source: "managed",
-        })
-      : null;
-  if (source === "sandbox_managed_rl" && !openPondProfile) {
+  const openPondProfile = resolveManagedRlBaseProfile({
+    schemaVersion: "openpond.baseModelPreference.v1",
+    modelId: firstArtifact.baseModelId ?? "",
+    revision: firstArtifact.baseModelRevision,
+    tokenizerRevision: firstArtifact.tokenizerRevision,
+    chatTemplateHash: firstArtifact.chatTemplateHash,
+    modelAssetId: null,
+    source: "managed",
+  });
+  if (!openPondProfile) {
     throw new Error(
       "sandbox_managed_rl adapter does not match the qualified Qwen3 managed-training identity.",
     );
   }
-  const expected = openPondProfile
-    ? {
-        model: openPondProfile.modelId,
-        revision: openPondProfile.revision,
-        tokenizerRevision: openPondProfile.tokenizerRevision,
-        chatTemplateHash: openPondProfile.chatTemplateHash,
-      }
-    : {
-        model: firstArtifact.baseModelId ?? "",
-        revision: firstArtifact.baseModelRevision,
-        tokenizerRevision: firstArtifact.tokenizerRevision,
-        chatTemplateHash: firstArtifact.chatTemplateHash,
-      };
+  const expected = {
+    model: openPondProfile.modelId,
+    revision: openPondProfile.revision,
+    tokenizerRevision: openPondProfile.tokenizerRevision,
+    chatTemplateHash: openPondProfile.chatTemplateHash,
+  };
   const matchedProfile = baseProfiles.find(
     (profile) =>
       profile.status === "qualified" &&
@@ -511,7 +447,7 @@ function assertQualifiedBase(
       profile.chatTemplateHash === expected.chatTemplateHash,
   );
   if (!matchedProfile) {
-    throw new Error(`${source} adapter does not match a Sandbox-qualified base profile.`);
+    throw new Error("sandbox_managed_rl adapter does not match a Sandbox-qualified base profile.");
   }
   for (const artifact of qualifiedArtifacts) {
     if (
@@ -521,7 +457,7 @@ function assertQualifiedBase(
       artifact.chatTemplateHash !== expected.chatTemplateHash
     ) {
       throw new Error(
-        `${source} adapter does not match the pinned ${expected.model} serving identity.`,
+        `sandbox_managed_rl adapter does not match the pinned ${expected.model} serving identity.`,
       );
     }
   }

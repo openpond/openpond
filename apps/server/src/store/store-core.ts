@@ -8,13 +8,11 @@ import { CURRENT_SQLITE_SCHEMA_VERSION, SQLITE_CREATE_SCHEMA_SQL } from "./store
 import { normalizeSessionPayload, persistStoreData, readStoreData } from "./store-persistence.js";
 import {
   createCreateImproveRunTables,
-  createFireworksModelServingSessionTables,
   createGraderAuditTables,
   createTaskAttemptArtifactTables,
   createTaskCreationProjectionTables,
   createTasksetRevisionTables,
   createTrainingReceiptAndModelBindingTables,
-  deduplicateFireworksMetricArtifacts,
 } from "./store-continuous-improvement-schema.js";
 import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
 import { createSidebarFileBookmarkTables as ensureSidebarFileBookmarkTables } from "./store-sidebar-file-bookmark-schema.js";
@@ -560,14 +558,6 @@ export class SqliteStoreCore {
 
   async createTrainingReceiptAndModelBindingTables(): Promise<void> {
     await createTrainingReceiptAndModelBindingTables((sql) => this.exec(sql));
-  }
-
-  async createFireworksModelServingSessionTables(): Promise<void> {
-    await createFireworksModelServingSessionTables((sql) => this.exec(sql));
-  }
-
-  async deduplicateFireworksMetricArtifacts(): Promise<void> {
-    await deduplicateFireworksMetricArtifacts((sql) => this.exec(sql));
   }
 
   async createTaskCreationProjectionTables(): Promise<void> {

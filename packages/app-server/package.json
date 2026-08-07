@@ -1,0 +1,30 @@
+{
+  "name": "@openpond/app-server",
+  "version": "0.0.38",
+  "openpondReleaseVersioned": true,
+  "description": "Private canonical OpenPond agent-service composition",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "vitest run --root ../.. --config vitest.config.ts --project app-server"
+  },
+  "dependencies": {
+    "@openpond/agent-runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.10"
+  }
+}

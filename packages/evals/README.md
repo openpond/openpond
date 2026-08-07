@@ -68,7 +68,7 @@ overrides that state.
 Implement `HarnessRuntime` for environment state and `HarnessExecutor` around
 the host's existing model/Agent loop. Do not reimplement prompting, tool dispatch,
 session persistence, cost accounting, cancellation, or cleanup in this package.
-A Prime-style environment maps reset/step/observation semantics to the same
+A step-based environment maps reset/step/observation semantics to the same
 interfaces and keeps provider allocation, authentication, and cleanup in its host.
 
 ## Conformance

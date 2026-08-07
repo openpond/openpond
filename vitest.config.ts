@@ -86,6 +86,14 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
+          name: "app-server",
+          include: ["packages/app-server/test/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
           name: "agent-sdk",
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
         },

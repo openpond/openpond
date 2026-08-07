@@ -41,5 +41,4 @@ docs/
   working-docs/    # implementation plans, investigations, and evidence
 scripts/           # development supervision, builds, verification, and release tooling
 tests/             # root unit, integration, contract, live, and smoke tests
-packaging/         # platform packaging policy and release metadata
 ```

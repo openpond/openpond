@@ -10,14 +10,15 @@ import {
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 import {
+  executeProjectedAgentTool,
+  type AgentToolCatalogProjection,
+} from "@openpond/agent-runtime";
+import {
   isConnectedAppProviderToolName,
   redactConnectedAppToolArguments,
 } from "../../openpond/connected-app-tool-registry.js";
 import { redactBrowserToolArguments } from "../../openpond/browser-tool-registry.js";
-import type {
-  ModelToolDefinition,
-  ProfileSkillReadResult,
-} from "../../openpond/model-tool-registry.js";
+import type { ProfileSkillReadResult } from "../../openpond/model-tool-registry.js";
 import type { HostedProfileSkillBody } from "../../openpond/hosted-turn-helpers.js";
 import {
   invalidNativeToolArgumentsResult,
@@ -56,7 +57,7 @@ export function createNativeToolRuntime(deps: {
     mentionedApps: OpenPondApp[];
     userPrompt: string;
     turnMetadata: Turn["metadata"];
-    toolDefinitions: Map<string, ModelToolDefinition>;
+    toolCatalog: AgentToolCatalogProjection;
     invalidRequestCounts: Map<string, number>;
     toolCalls: NativeModelToolCall[];
   }): Promise<NativeModelToolResult[]> {
@@ -82,7 +83,7 @@ export function createNativeToolRuntime(deps: {
         results.push(result);
         continue;
       }
-      const definition = params.toolDefinitions.get(toolCall.name);
+      const definition = params.toolCatalog.byName.get(toolCall.name);
       if (!definition) {
         const result = unknownNativeToolResult(toolCall);
         await appendNativeToolStarted(params.session, params.turnId, toolCall, {});
@@ -169,20 +170,16 @@ export function createNativeToolRuntime(deps: {
         nativeToolEventArgs(toolCall.name, args),
       );
       try {
-        const result = await definition.execute({
-          session: params.session,
-          turnId: params.turnId,
-          turnPermissions: params.turnPermissions,
-          provider: params.provider,
-          model: params.model,
-          callId: toolCall.id,
-          args,
-          signal: params.signal,
-          workspaceDiffBaseline: params.workspaceDiffBaseline,
-          mentionedApps: params.mentionedApps,
-          userPrompt: params.userPrompt,
-          turnMetadata: params.turnMetadata,
-        });
+        const result = (await executeProjectedAgentTool(params.toolCatalog, {
+          name: toolCall.name,
+          arguments: args,
+          context: {
+            threadId: params.session.id,
+            turnId: params.turnId,
+            callId: toolCall.id,
+            signal: params.signal,
+          },
+        })) as NativeModelToolResult;
         await appendNativeToolCompleted(params.session, params.turnId, result);
         if (profileSkillName) {
           const skill = profileSkillFromNativeResult(result);

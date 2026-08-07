@@ -781,10 +781,6 @@ export function MainPane({
       handoff={trainingChatHandoff}
       onDismiss={onTrainingChatHandoffDismiss}
       onSelectTask={onTrainingChatTaskSelect}
-      onStopServing={(sessionId) =>
-        void training.actions.stopModelServing(sessionId)
-      }
-      servingSessions={training.payload?.servingSessions ?? []}
     />
   );
   const createImproveActions = useMemo<ComposerCreateImproveActions>(
