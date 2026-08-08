@@ -36,6 +36,7 @@ export default defineConfig({
           include: [
             "tests/**/*.test.{ts,tsx}",
             "apps/server/src/**/*.test.{ts,tsx}",
+            "apps/web/src/**/*.test.{ts,tsx}",
             "packages/cloud/src/**/*.test.{ts,tsx}",
           ],
           exclude: [...ROOT_INTEGRATION_TESTS],

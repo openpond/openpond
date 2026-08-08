@@ -75,6 +75,7 @@ export function SettingsView({
   onToast,
   onBack,
   onOpenSourceSession,
+  onAcceptEvaluationReview,
   onOpenSkill,
   onOpenExtension,
   teamChatCurrentUserId,
@@ -98,6 +99,10 @@ export function SettingsView({
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
   onBack: () => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  onAcceptEvaluationReview: (
+    workspaceId: string,
+    review: { id: string; contentHash: string },
+  ) => Promise<boolean>;
   onOpenSkill: (skill: SkillSourceDocument) => void;
   onOpenExtension: (extension: OpenPondExtension) => void;
   teamChatCurrentUserId: string | null;
@@ -292,6 +297,7 @@ export function SettingsView({
           <HarnessHistorySettingsSection
             connection={connection}
             enabled={section === "harness"}
+            onAcceptEvaluationReview={onAcceptEvaluationReview}
             onError={onError}
             onDefaultReleaseDiff={setHarnessDiffSelection}
             onOpenSourceSession={onOpenSourceSession}

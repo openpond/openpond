@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  HarnessEvaluationReviewReceipt,
   HarnessEvaluationReviewSchedule,
   HarnessHistoryChange,
   HarnessHistoryPayload,
@@ -20,6 +21,10 @@ type Props = {
   onDefaultReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenSourceSession?: (sessionId: string) => void;
+  onAcceptEvaluationReview: (
+    workspaceId: string,
+    review: { id: string; contentHash: string },
+  ) => Promise<boolean>;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
 };
 
@@ -292,6 +297,7 @@ function ReleaseRow({
 export function HarnessHistorySettingsSection({
   connection,
   enabled,
+  onAcceptEvaluationReview,
   onError,
   onDefaultReleaseDiff,
   onOpenReleaseDiff,
@@ -304,6 +310,7 @@ export function HarnessHistorySettingsSection({
   const [reviewingProposalId, setReviewingProposalId] = useState<string | null>(null);
   const [savingBackgroundReview, setSavingBackgroundReview] = useState(false);
   const [reviewingEvaluation, setReviewingEvaluation] = useState(false);
+  const [acceptingEvaluationReviewId, setAcceptingEvaluationReviewId] = useState<string | null>(null);
   const [savingEvaluationSchedule, setSavingEvaluationSchedule] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -401,6 +408,27 @@ export function HarnessHistorySettingsSection({
       setSavingEvaluationSchedule(false);
     }
   }, [connection, history?.workspace, onError, onToast]);
+
+  const acceptEvaluationReview = useCallback(async (
+    review: HarnessEvaluationReviewReceipt,
+  ) => {
+    if (!history?.workspace) return;
+    setAcceptingEvaluationReviewId(review.id);
+    try {
+      const accepted = await onAcceptEvaluationReview(history.workspace.id, {
+        id: review.id,
+        contentHash: review.contentHash,
+      });
+      if (accepted) {
+        onError(null);
+        onToast?.("Taskset review opened in Models.", "success");
+      }
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setAcceptingEvaluationReviewId(null);
+    }
+  }, [history?.workspace, onAcceptEvaluationReview, onError, onToast]);
 
   const openReleaseDiff = useCallback((
     baseRelease: HarnessHistoryReleaseSummary | null,
@@ -507,7 +535,9 @@ export function HarnessHistorySettingsSection({
           </section>
 
           <HarnessEvaluationReviewSettings
+            acceptingReviewId={acceptingEvaluationReviewId}
             busy={reviewingEvaluation || savingEvaluationSchedule}
+            onAcceptTasksetReview={(review) => void acceptEvaluationReview(review)}
             onReview={(maxEstimatedCostUsd) => void reviewEvaluation(maxEstimatedCostUsd)}
             onSaveSchedule={(input) => void saveEvaluationSchedule(input)}
             qualifications={history.modelImprovementQualifications}

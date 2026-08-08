@@ -201,6 +201,18 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       : Promise.resolve({ schemaVersion: "openpond.trainingChatSearchResult.v1" as const, query, offset, limit, total: 0, hasMore: false, indexedChats: 0, totalChats: 0, indexing: false, entries: [] }),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
+    acceptHarnessReview: (
+      workspaceId: string,
+      reviewRef: { id: string; contentHash: string },
+      analysisModel: ChatModelRef | null = null,
+      analysisReasoningEffort: CodexReasoningEffort | null = null,
+    ) => mutate<TaskCreationSnapshot>("accept-harness-review", "/harness-reviews/accept", {
+      profileId,
+      workspaceId,
+      reviewRef,
+      analysisModel,
+      analysisReasoningEffort,
+    }),
     startCreation: (sourceIds: string[], options: { objective?: string; buildIntent?: TaskCreationRequest["buildIntent"]; buildSpecification?: TaskCreationRequest["buildSpecification"]; methodHint?: TaskCreationRequest["methodHint"]; preferredBaseModel?: BaseModelPreference | null; resourceIntent?: TaskCreationRequest["resourceIntent"]; mode?: "defaults" | "customize"; entryMode?: TaskCreationRequest["entryMode"]; surface?: TaskCreationRequest["surface"]; candidateId?: string | null; analysisModel?: ChatModelRef | null; analysisReasoningEffort?: CodexReasoningEffort | null; createImproveRunId?: string | null; targetIntent?: TaskCreationRequest["targetIntent"] } = {}) => mutate<TaskCreationSnapshot>("create-taskset", "/task-creations", { profileId, sourceIds, surface: options.surface ?? "training_page", mode: options.mode ?? "defaults", entryMode: options.entryMode ?? "manual", resourceIntent: options.resourceIntent ?? "workproduct", buildIntent: options.buildIntent ?? "demonstrations", buildSpecification: options.buildSpecification ?? null, objective: options.objective ?? null, methodHint: options.methodHint ?? null, preferredBaseModelId: options.preferredBaseModel?.modelId ?? null, preferredBaseModel: options.preferredBaseModel ?? null, candidateId: options.candidateId ?? null, analysisModel: options.analysisModel ?? null, analysisReasoningEffort: options.analysisReasoningEffort ?? null, createImproveRunId: options.createImproveRunId ?? null, targetIntent: options.targetIntent ?? { kind: "model", id: null, displayName: null, operation: "create" } }),
     createModelFromTaskset: (tasksetId: string, preferredBaseModel: BaseModelPreference) =>
       mutate<CreateImproveRun>("create-model", "/models/from-taskset", {
