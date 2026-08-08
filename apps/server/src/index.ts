@@ -1672,6 +1672,15 @@ export async function createOpenPondServer(
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
+      acceptHarnessEvaluationReview: async (request) => {
+        const profile = await loadOpenPondProfileState();
+        return trainingApi.request("accept_harness_review", {
+          ...(request && typeof request === "object" && !Array.isArray(request)
+            ? request
+            : {}),
+          profileId: profile.activeProfile ?? "default",
+        });
+      },
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release
