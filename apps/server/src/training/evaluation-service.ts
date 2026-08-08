@@ -32,6 +32,7 @@ import type {
   TasksetWorkModelStream,
   TasksetWorkRequiredOutputValidator,
 } from "./taskset-work-attempt-runner.js";
+import { linkHarnessReviewTaskset } from "./harness-review-taskset.js";
 
 type AuditFixtureInput = {
   label:
@@ -81,6 +82,7 @@ export function createTaskEvaluationService(deps: {
     };
     signal?: AbortSignal;
     resultId?: string;
+    admittedAt?: string;
   }) {
     if (
       !deps.storeDir
@@ -104,6 +106,7 @@ export function createTaskEvaluationService(deps: {
       profile,
       releasedHarness,
       model: input.model,
+      now: input.admittedAt ? () => input.admittedAt! : undefined,
     });
     const attempt = await runPostTrainingEvaluationAttempt({
       store: deps.store,
@@ -476,6 +479,111 @@ export function createTaskEvaluationService(deps: {
     return report;
   }
 
+  async function executeBaseline(input: {
+    tasksetId: string;
+    model: ChatModelRef;
+    reviewRef: { id: string; contentHash: string };
+    seeds?: number[];
+    attemptsPerTask?: number;
+    sampling?: {
+      maxOutputTokens: number;
+      temperature: number;
+      topP: number;
+    };
+    signal?: AbortSignal;
+  }) {
+    const taskset = await requireTaskset(input.tasksetId);
+    if (taskset.status !== "ready" || taskset.readiness?.ready !== true) {
+      throw new Error("Taskset must pass grader audit and readiness before baseline Evaluation.");
+    }
+    const lineage = taskset.metadata.harnessEvaluationReview;
+    if (
+      !lineage ||
+      typeof lineage !== "object" ||
+      Array.isArray(lineage) ||
+      (lineage as { id?: unknown }).id !== input.reviewRef.id ||
+      (lineage as { contentHash?: unknown }).contentHash !== input.reviewRef.contentHash
+    ) {
+      throw new Error("Taskset does not bind the supplied Harness Evaluation review.");
+    }
+    const existing = (await deps.store.listEvaluationResults(taskset.id, "baseline"))
+      .find((result) =>
+        result.metadata.sourceTasksetHash === taskset.contentHash &&
+        result.model.provider === input.model.providerId &&
+        result.model.model === input.model.modelId &&
+        reviewRefMatches(result.metadata.harnessEvaluationReview, input.reviewRef),
+      );
+    if (existing) return { evaluationResult: existing, attempts: [], reused: true };
+
+    const tasks = taskset.tasks.filter((task) => task.split === "frozen_eval");
+    if (!tasks.length) {
+      throw new Error("Baseline Evaluation requires at least one isolated frozen-evaluation task.");
+    }
+    const seeds = [...new Set(input.seeds?.length ? input.seeds : [17])].slice(0, 100);
+    const attemptsPerTask = Math.max(1, Math.min(20, Math.trunc(input.attemptsPerTask ?? 1)));
+    const admittedAt = new Date().toISOString();
+    const executions: Awaited<ReturnType<typeof execute>>[] = [];
+    for (const task of tasks) {
+      for (const seed of seeds) {
+        for (let attempt = 0; attempt < attemptsPerTask; attempt += 1) {
+          if (input.signal?.aborted) throw input.signal.reason;
+          executions.push(await execute({
+            tasksetId: taskset.id,
+            taskId: task.id,
+            model: input.model,
+            seed,
+            attempt,
+            sampling: input.sampling,
+            signal: input.signal,
+            admittedAt,
+            resultId: `baseline-attempt-${contentHash({
+              reviewRef: input.reviewRef,
+              tasksetHash: taskset.contentHash,
+              model: input.model,
+              taskId: task.id,
+              seed,
+              attempt,
+            }).slice(0, 24)}`,
+          }));
+        }
+      }
+    }
+    const manifest = executions[0]!.portable.runManifest;
+    if (executions.some((execution) => execution.portable.runManifest.contentHash !== manifest.contentHash)) {
+      throw new Error("Baseline attempts did not share one frozen Run Manifest.");
+    }
+    const receipts = executions.map((execution) => execution.portable.receipt);
+    const evaluationResult = aggregateEvaluationReceipts({
+      id: `baseline-evaluation-${contentHash({
+        manifest: manifest.contentHash,
+        receipts: receipts.map((receipt) => receipt.contentHash),
+        reviewRef: input.reviewRef,
+      }).slice(0, 24)}`,
+      manifest,
+      receipts,
+      metadata: {
+        kind: "baseline",
+        sourceTasksetId: taskset.id,
+        sourceTasksetRevision: taskset.revision,
+        sourceTasksetHash: taskset.contentHash,
+        harnessEvaluationReview: input.reviewRef,
+        admittedAt,
+      },
+    });
+    await deps.store.saveEvaluationResult({
+      tasksetId: taskset.id,
+      kind: "baseline",
+      result: evaluationResult,
+      createdAt: admittedAt,
+    });
+    await linkHarnessReviewTaskset({
+      store: deps.store,
+      taskset,
+      evaluationResult,
+    });
+    return { evaluationResult, attempts: executions, reused: false };
+  }
+
   async function requireTaskset(id: string) {
     const taskset = await deps.store.getTaskset(id);
     if (!taskset) throw new Error("Taskset not found.");
@@ -545,6 +653,20 @@ export function createTaskEvaluationService(deps: {
     auditFixtures,
     calibrateModelJudges,
     readiness,
+    executeBaseline,
     close: async () => {},
   };
+}
+
+function reviewRefMatches(
+  value: unknown,
+  expected: { id: string; contentHash: string },
+): boolean {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    (value as { id?: unknown }).id === expected.id &&
+    (value as { contentHash?: unknown }).contentHash === expected.contentHash,
+  );
 }

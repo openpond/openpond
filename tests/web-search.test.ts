@@ -113,7 +113,10 @@ describe("hosted web search executor", () => {
       "https://api.example.test/v1/search",
     );
     expect(normalizeSearchApiUrl("https://api.staging-api.openpond.ai")).toBe(
-      "https://api-new.staging-api.openpond.ai/v1/search",
+      "https://staging-api.openpond.ai/v1/search",
+    );
+    expect(normalizeSearchApiUrl("https://api-new.staging-api.openpond.ai")).toBe(
+      "https://staging-api.openpond.ai/v1/search",
     );
     expect(
       resolveWebSearchEndpoint(
@@ -179,7 +182,7 @@ describe("hosted web search executor", () => {
 
     expect(requests).toEqual([
       {
-        url: "https://api-new.staging-api.openpond.ai/v1/search",
+        url: "https://staging-api.openpond.ai/v1/search",
         authorization: "Bearer opk_account_search",
         apiKey: "opk_account_search",
         body: { query: "OpenPond Search", limit: 4 },
