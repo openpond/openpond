@@ -427,6 +427,7 @@ export const TrainingPlanSchema = z.object({
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
+  modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   recipe: TrainingRecipeSchema,
   environmentPlacement: z.enum([
@@ -511,6 +512,7 @@ export const TrainingApprovalSchema = z.object({
   planId: IdSchema,
   bundleHash: HashSchema,
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
+  modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   modelId: IdSchema,
   method: TrainingMethodSchema,

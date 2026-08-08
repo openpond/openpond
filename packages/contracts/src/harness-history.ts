@@ -12,6 +12,7 @@ import type {
 } from "./harness-improvements.js";
 import type { HarnessMemoryEntry } from "./harness-memory.js";
 import type { HarnessEvaluationReviewReceipt } from "@openpond/harness/evaluation-review";
+import type { ModelImprovementQualificationReceipt } from "@openpond/evals/model-improvement-qualification";
 import type { WorkspaceDiffFile } from "./workspaces.js";
 
 export type HarnessHistoryReleaseRef = {
@@ -68,6 +69,7 @@ export type HarnessHistoryPayload = {
   changes: HarnessHistoryChange[];
   routes: HarnessHistoryRoute[];
   evaluationReviews: HarnessEvaluationReviewReceipt[];
+  modelImprovementQualifications: ModelImprovementQualificationReceipt[];
   pendingReviews: HarnessHistoryPendingReview[];
   memories: HarnessMemoryEntry[];
 };

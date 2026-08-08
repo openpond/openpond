@@ -13,6 +13,7 @@ import {
   type TrainingExecutionRef,
   type TrainingExecutionStatus,
 } from "@openpond/contracts";
+import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
 import { withVercelProtectionBypass } from "@openpond/cloud";
 import { contentHash, sha256 } from "@openpond/taskset-sdk";
 import type { TrainingEngineAdapter } from "@openpond/training-sdk";
@@ -207,6 +208,29 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         });
       }
       if (taskset && trainingPlan && taskset.contentHash === trainingPlan.tasksetHash) {
+        if (taskset.metadata.harnessEvaluationReview !== undefined) {
+          const qualification = await managedQualification({
+            store: this.dependencies.store,
+            taskset,
+            qualificationRef: trainingPlan.modelImprovementQualification ?? null,
+          });
+          if (
+            !qualification ||
+            qualification.decision !== "rl" ||
+            approval?.modelImprovementQualification?.id !== qualification.id ||
+            approval.modelImprovementQualification.contentHash !== qualification.contentHash ||
+            qualification.metadata.sourceTasksetId !== taskset.id ||
+            qualification.metadata.sourceTasksetHash !== taskset.contentHash ||
+            (approval.maximumCostUsd !== null && approval.maximumCostUsd > qualification.maximumCostUsd)
+          ) {
+            issues.push({
+              code: "managed_qualification_invalid",
+              path: "execution",
+              message:
+                "OpenPond Managed requires an exact qualified RL receipt on the immutable Taskset, plan, and approval.",
+            });
+          }
+        }
         const requiresHarness =
           taskset.capabilities.requiresState ||
           taskset.capabilities.requiresTools;
@@ -317,6 +341,8 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         revision: taskset.revision,
         contentHash: taskset.contentHash,
       },
+      modelImprovementQualification:
+        trainingPlan.modelImprovementQualification ?? null,
       recipe: plan.recipe,
       resolvedBundle: {
         manifest: bundleManifest,
@@ -562,6 +588,29 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.localExecutors.set(ref.runId, executor);
     executor.start();
   }
+}
+
+async function managedQualification(input: {
+  store: SqliteStore;
+  taskset: { metadata: Record<string, unknown> };
+  qualificationRef: { id: string; contentHash: string } | null;
+}): Promise<ModelImprovementQualificationReceipt | null> {
+  if (!input.qualificationRef) return null;
+  const lineage = input.taskset.metadata.harnessEvaluationLineage;
+  if (!lineage || typeof lineage !== "object" || Array.isArray(lineage)) return null;
+  const review = (lineage as { review?: unknown }).review;
+  if (!review || typeof review !== "object" || Array.isArray(review)) return null;
+  const workspaceId = (review as { workspaceId?: unknown }).workspaceId;
+  if (typeof workspaceId !== "string" || !workspaceId) return null;
+  const receipts = await input.store.listHarnessImprovementArtifacts(
+    workspaceId,
+    "training_qualification",
+    1_000,
+  ) as ModelImprovementQualificationReceipt[];
+  return receipts.find((receipt) =>
+    receipt.id === input.qualificationRef!.id &&
+    receipt.contentHash === input.qualificationRef!.contentHash,
+  ) ?? null;
 }
 
 function dateString(value: string | Date): string {

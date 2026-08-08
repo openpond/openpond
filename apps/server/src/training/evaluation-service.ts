@@ -553,6 +553,10 @@ export function createTaskEvaluationService(deps: {
       throw new Error("Baseline attempts did not share one frozen Run Manifest.");
     }
     const receipts = executions.map((execution) => execution.portable.receipt);
+    const portableTaskset = executions[0]!.portable.tasksetRelease;
+    const scores = receipts.flatMap((receipt) =>
+      typeof receipt.metadata.score === "number" ? [receipt.metadata.score] : [],
+    );
     const evaluationResult = aggregateEvaluationReceipts({
       id: `baseline-evaluation-${contentHash({
         manifest: manifest.contentHash,
@@ -567,6 +571,19 @@ export function createTaskEvaluationService(deps: {
         sourceTasksetRevision: taskset.revision,
         sourceTasksetHash: taskset.contentHash,
         harnessEvaluationReview: input.reviewRef,
+        environmentHash: contentHash(portableTaskset.environment),
+        toolContractHash: contentHash(portableTaskset.tools),
+        permissionContractHash: contentHash({
+          connectedAppScopes: portableTaskset.policy.connectedAppScopes,
+          networkPolicy: portableTaskset.environment.networkPolicy,
+        }),
+        policyHash: contentHash(portableTaskset.policy),
+        verifierRef: {
+          id: `verifier-${taskset.id}-r${taskset.revision}`,
+          contentHash: contentHash(portableTaskset.graders),
+        },
+        scores,
+        scoreVariance: variance(scores),
         admittedAt,
       },
     });
@@ -669,4 +686,10 @@ function reviewRefMatches(
     (value as { id?: unknown }).id === expected.id &&
     (value as { contentHash?: unknown }).contentHash === expected.contentHash,
   );
+}
+
+function variance(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((total, value) => total + value, 0) / values.length;
+  return values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
 }

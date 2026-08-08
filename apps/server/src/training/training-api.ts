@@ -47,6 +47,10 @@ import {
   linkHarnessReviewTaskset,
   startHarnessReviewTasksetAuthoring,
 } from "./harness-review-taskset.js";
+import {
+  qualifyHarnessModelImprovement,
+  requireQualifiedModelImprovement,
+} from "./harness-model-improvement.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -327,6 +331,18 @@ export function createTrainingApi(deps: {
         },
       });
     }
+    if (action === "qualify_harness_model_improvement") {
+      const reviewRef = requiredImmutableRef(input.reviewRef, "reviewRef");
+      return qualifyHarnessModelImprovement({
+        store: deps.store,
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        baselineEvaluationId: requiredString(input.baselineEvaluationId, "baselineEvaluationId"),
+        reviewRef,
+        privacyApproval: optionalImmutableRef(input.privacyApproval, "privacyApproval"),
+        budgetApproval: optionalImmutableRef(input.budgetApproval, "budgetApproval"),
+        maximumCostUsd: nonnegativeNumber(input.maximumCostUsd, "maximumCostUsd"),
+      });
+    }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
@@ -336,6 +352,43 @@ export function createTrainingApi(deps: {
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
     if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "prepare_qualified_model_improvement") {
+      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+      const workspaceId = requiredString(input.workspaceId, "workspaceId");
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const recipe = record(input.recipe);
+      const destinationId = TrainingDestinationIdSchema.parse(input.destinationId);
+      const qualification = await requireQualifiedModelImprovement({
+        store: deps.store,
+        workspaceId,
+        qualificationRef,
+        tasksetId,
+        recipe,
+        baseModelId: recipeBaseModelId(recipe),
+      });
+      if (qualification.decision === "rl" && destinationId !== "openpond_managed") {
+        throw new Error("Qualified RL must use the OpenPond Managed boundary.");
+      }
+      const prepared = await deps.training.prepareStart({
+        modelId: requiredString(input.modelId, "modelId"),
+        tasksetId,
+        destinationId,
+        recipe,
+        environmentPlacement: managedRolloutPlacement(input.environmentPlacement),
+        exportApproved: input.exportApproved === true,
+        retentionDays: nullableNumber(input.retentionDays),
+        region: string(input.region),
+        harnessRelease: qualification.harnessRelease,
+        modelImprovementQualification: qualificationRef,
+      });
+      if (
+        prepared.plan.estimatedCostUsd !== null &&
+        prepared.plan.estimatedCostUsd > qualification.maximumCostUsd
+      ) {
+        throw new Error("Prepared Training Plan exceeds the qualified maximum cost.");
+      }
+      return { qualification, prepared };
+    }
     if (action === "prepare_model_run") return deps.training.prepareModelRun({
       modelRunId: requiredString(input.modelRunId, "modelRunId"),
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
@@ -373,6 +426,31 @@ export function createTrainingApi(deps: {
         maximumCostUsd: nullableNumber(input.maximumCostUsd),
       });
       return linkStartedTraining(result);
+    }
+    if (action === "start_qualified_model_improvement") {
+      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+      const planId = requiredString(input.planId, "planId");
+      const bundleId = requiredString(input.bundleId, "bundleId");
+      const plan = await deps.store.getTrainingPlan(planId);
+      if (!plan || !sameImmutableRef(plan.modelImprovementQualification, qualificationRef)) {
+        throw new Error("Prepared Training Plan does not match the supplied qualification.");
+      }
+      const maximumCostUsd = nonnegativeNumber(input.maximumCostUsd, "maximumCostUsd");
+      const qualification = await requireQualifiedModelImprovement({
+        store: deps.store,
+        workspaceId: requiredString(input.workspaceId, "workspaceId"),
+        qualificationRef,
+        tasksetId: plan.tasksetId,
+        recipe: plan.recipe,
+        baseModelId: recipeBaseModelId(plan.recipe),
+        maximumCostUsd,
+      });
+      const result = await deps.training.startPrepared({
+        planId,
+        bundleId,
+        maximumCostUsd,
+      });
+      return { ...await linkStartedTraining(result), qualification };
     }
     if (action === "start") {
       const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
@@ -822,6 +900,53 @@ function integerArray(value: unknown, label: string): number[] | undefined {
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
+function nonnegativeNumber(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative number.`);
+  }
+  return value;
+}
+function optionalImmutableRef(
+  value: unknown,
+  name: string,
+): { id: string; contentHash: string } | null {
+  if (value === undefined || value === null) return null;
+  return requiredImmutableRef(value, name);
+}
+function requiredImmutableRef(
+  value: unknown,
+  name: string,
+): { id: string; contentHash: string } {
+  const candidate = record(value);
+  return {
+    id: requiredString(candidate.id, `${name}.id`),
+    contentHash: requiredString(candidate.contentHash, `${name}.contentHash`),
+  };
+}
+function sameImmutableRef(
+  value: unknown,
+  expected: { id: string; contentHash: string },
+): boolean {
+  const candidate = record(value);
+  return candidate.id === expected.id && candidate.contentHash === expected.contentHash;
+}
+function recipeBaseModelId(recipe: Record<string, unknown>): string {
+  const method = recipe.method;
+  const base = record(recipe.baseModel);
+  if (method === "sft" || method === "grpo") {
+    return requiredString(base.id, "recipe.baseModel.id");
+  }
+  if (method === "dpo") {
+    return requiredString(record(recipe.policyModel).id, "recipe.policyModel.id");
+  }
+  if (method === "ppo") {
+    return requiredString(
+      record(record(recipe.policyOptimization).policyModel).id,
+      "recipe.policyOptimization.policyModel.id",
+    );
+  }
+  throw new Error("Qualified training recipe method is not executable.");
+}
 function boundedInteger(
   value: unknown,
   name: string,
