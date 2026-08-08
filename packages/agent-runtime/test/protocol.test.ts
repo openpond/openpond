@@ -100,7 +100,7 @@ describe("agent JSON-RPC protocol", () => {
     expect(runtimeHost.threadStart).toHaveBeenCalledWith({ experience: "work" });
   });
 
-  test("delegates Harness review and rollback through the private runtime", async () => {
+  test("delegates Harness proposal review through the private runtime", async () => {
     const runtimeHost = host();
     const dispatcher = new AgentJsonRpcDispatcher(runtimeHost);
     await dispatcher.handle({
@@ -122,11 +122,11 @@ describe("agent JSON-RPC protocol", () => {
       dispatcher.handle({
         jsonrpc: "2.0",
         id: 2,
-        method: "harness/review",
+        method: "harness/proposalReview",
         params: review,
       }),
-    ).resolves.toMatchObject({ result: { review } });
-    expect(runtimeHost.harnessReview).toHaveBeenCalledWith(review);
+    ).resolves.toMatchObject({ result: { proposalReview: review } });
+    expect(runtimeHost.harnessProposalReview).toHaveBeenCalledWith(review);
   });
 
   test("processes turn and interrupt requests concurrently over JSONL", async () => {

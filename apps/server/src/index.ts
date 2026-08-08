@@ -1670,6 +1670,7 @@ export async function createOpenPondServer(
       interruptSessionTurn,
       resolveApproval,
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
+      reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);

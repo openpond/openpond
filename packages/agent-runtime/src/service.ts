@@ -24,12 +24,12 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<TApproval>;
   inspectHarness(): Promise<unknown>;
+  reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
   rollbackHarness(payload: unknown): Promise<unknown>;
-  reviewHarnessProposal(payload: unknown): Promise<unknown>;
   subscribeEvents?(listener: (event: TEvent) => void): () => void;
   eventNotification?(event: TEvent): JsonRpcNotification;
   telemetry?(event: AgentRuntimeTelemetryEvent): void;
