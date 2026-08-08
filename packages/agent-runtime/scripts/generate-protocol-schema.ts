@@ -32,6 +32,7 @@ const methodNames = {
   "harness/proposalReview": "harnessProposalReview",
   "harness/review": "harnessReview",
   "harness/acceptEvaluationReview": "harnessAcceptEvaluationReview",
+  "harness/materializeEvaluationTaskset": "harnessMaterializeEvaluationTaskset",
   "harness/validate": "harnessValidate",
   "harness/backgroundReview": "harnessBackgroundReview",
   "harness/diff": "harnessDiff",

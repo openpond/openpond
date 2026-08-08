@@ -1681,6 +1681,15 @@ export async function createOpenPondServer(
           profileId: profile.activeProfile ?? "default",
         });
       },
+      materializeHarnessEvaluationTaskset: async (request) => {
+        const input = request && typeof request === "object" && !Array.isArray(request)
+          ? request as Record<string, unknown>
+          : {};
+        return trainingApi.request("approve_materialization", {
+          creationId: input.creationId,
+          approved: true,
+        });
+      },
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release

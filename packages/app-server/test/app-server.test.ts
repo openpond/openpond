@@ -36,6 +36,7 @@ describe("app server composition", () => {
         reviewHarnessProposal: async (params) => ({ params }),
         reviewHarness: async (params) => ({ params }),
         acceptHarnessEvaluationReview: async (params) => ({ params }),
+        materializeHarnessEvaluationTaskset: async (params) => ({ params }),
         validateHarness: async () => ({ valid: true }),
         updateHarnessBackgroundReview: async (payload) => payload,
         diffHarness: async (payload) => payload,

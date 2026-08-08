@@ -345,6 +345,12 @@ export async function createOpenPondAppServer(
           reviewRef: input.reviewRef,
         });
       },
+      materializeHarnessEvaluationTaskset: async (request) => {
+        const input = z.object({
+          creationId: z.string().trim().min(1),
+        }).strict().parse(request);
+        return taskCreator.approveMaterialization(input.creationId, true);
+      },
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release

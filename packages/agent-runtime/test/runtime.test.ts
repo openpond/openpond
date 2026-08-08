@@ -276,6 +276,7 @@ describe("@openpond/agent-runtime", () => {
       reviewHarnessProposal: async () => ({}),
       reviewHarness: async () => ({}),
       acceptHarnessEvaluationReview: async () => ({}),
+      materializeHarnessEvaluationTaskset: async () => ({}),
       validateHarness: async () => ({}),
       updateHarnessBackgroundReview: async () => ({}),
       diffHarness: async () => ({}),
