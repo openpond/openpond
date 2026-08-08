@@ -15,12 +15,10 @@ import {
   readProfileSkill,
 } from "@openpond/cloud";
 import { createLogger } from "@openpond/logging";
-import { contentHash } from "@openpond/taskset-sdk";
 import {
   getBundledRuntimeVersion,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
-import { z } from "zod";
 
 import { VERSION } from "./constants.js";
 import {
@@ -58,9 +56,7 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
-import { startHarnessReviewTasksetAuthoring } from "./training/harness-review-taskset.js";
-import { loadTasksetAuthoringSkillArtifact } from "./training/task-authoring-skill.js";
-import { createTaskCreatorService } from "./training/task-creator.js";
+import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
@@ -128,14 +124,10 @@ export async function createOpenPondAppServer(
     metadata: { version, runtimeVersion, placement: "hosted_work" },
   });
   const store = new SqliteStore(storeDir, { logger });
-  const tasksetAuthoringSkill = await loadTasksetAuthoringSkillArtifact();
-  const taskCreator = createTaskCreatorService({
+  const harnessTasksetReview = await createLocalHarnessTasksetReviewControl({
     store,
-    tasksetRootDir: path.join(storeDir, "training", "tasksets"),
-    authoringSkillHash: contentHash(tasksetAuthoringSkill.bundle),
-    loadProfileState: loadOpenPondProfileState,
+    storeDir,
   });
-  await taskCreator.reconcileInterruptedCreations();
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
@@ -327,30 +319,9 @@ export async function createOpenPondAppServer(
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: createLocalHarnessSettingsRoutePayloads({ store, storeDir }).reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
-      acceptHarnessEvaluationReview: async (request) => {
-        const input = z.object({
-          workspaceId: z.string().trim().min(1),
-          reviewRef: z.object({
-            id: z.string().trim().min(1),
-            contentHash: z.string().trim().min(1),
-          }).strict(),
-        }).strict().parse(request);
-        const profile = await loadOpenPondProfileState();
-        return startHarnessReviewTasksetAuthoring({
-          store,
-          taskCreator,
-          startCreation: taskCreator.start,
-          profileId: profile.activeProfile ?? "default",
-          workspaceId: input.workspaceId,
-          reviewRef: input.reviewRef,
-        });
-      },
-      materializeHarnessEvaluationTaskset: async (request) => {
-        const input = z.object({
-          creationId: z.string().trim().min(1),
-        }).strict().parse(request);
-        return taskCreator.approveMaterialization(input.creationId, true);
-      },
+      acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
+      materializeHarnessEvaluationTaskset:
+        harnessTasksetReview.materializeEvaluationTaskset,
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release
