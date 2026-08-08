@@ -32,6 +32,7 @@ export type TrainingStartInput = {
   retentionDays?: number | null;
   region?: string | null;
   harnessRelease?: ImmutableReleaseRef | null;
+  modelImprovementQualification?: ImmutableReleaseRef | null;
 };
 
 export function createTrainingPlanLifecycleService(deps: {
@@ -53,6 +54,14 @@ export function createTrainingPlanLifecycleService(deps: {
         "Taskset is not ready for training. Resolve readiness blockers first.",
       );
     }
+    if (
+      taskset.metadata.harnessEvaluationReview !== undefined &&
+      !input.modelImprovementQualification
+    ) {
+      throw new Error(
+        "Harness-origin Tasksets require an exact model-improvement qualification before training planning.",
+      );
+    }
     const recipe = TrainingRecipeSchema.parse(
       withAuthoritativeRecipeHashes(taskset, input.recipe),
     );
@@ -68,6 +77,7 @@ export function createTrainingPlanLifecycleService(deps: {
       retentionDays: input.retentionDays,
       region: input.region,
       harnessRelease: input.harnessRelease,
+      modelImprovementQualification: input.modelImprovementQualification,
     });
     const requestedPlacement =
       input.environmentPlacement ?? initial.environmentPlacement;
@@ -169,6 +179,7 @@ export function createTrainingPlanLifecycleService(deps: {
       approvalModel.id,
       recipe.method,
       recipe.parameterization,
+      plan.modelImprovementQualification,
       maximumCostUsd,
       approvedBy,
     ]).slice(0, 24)}`;
@@ -187,6 +198,7 @@ export function createTrainingPlanLifecycleService(deps: {
       approvedBy,
       approvedAt: new Date().toISOString(),
       harnessRelease: plan.harnessRelease,
+      modelImprovementQualification: plan.modelImprovementQualification,
     });
     return deps.store.saveTrainingApproval(approval);
   }

@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 39;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 40;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -430,6 +430,15 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS evaluation_results (
+    id TEXT PRIMARY KEY,
+    taskset_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS evaluation_results_taskset_kind_idx ON evaluation_results(taskset_id, kind, created_at DESC);
 
   CREATE TABLE IF NOT EXISTS grader_audit_reports (
     id TEXT PRIMARY KEY,

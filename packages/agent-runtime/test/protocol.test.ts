@@ -16,7 +16,7 @@ function host(): AgentRuntimeHost {
     capabilities: vi.fn(async () => ({
       protocolVersion: AGENT_PROTOCOL_VERSION,
       placement: "local",
-      methods: ["initialize", "initialized", "runtime/capabilities", "thread/start", "thread/resume", "thread/read", "turn/start", "turn/steer", "turn/interrupt", "approval/resolve", "userInput/resolve", "harness/inspect", "harness/validate", "harness/backgroundReview", "harness/diff", "harness/rollback", "harness/review"],
+      methods: ["initialize", "initialized", "runtime/capabilities", "thread/start", "thread/resume", "thread/read", "turn/start", "turn/steer", "turn/interrupt", "approval/resolve", "userInput/resolve", "harness/inspect", "harness/proposalReview", "harness/review", "harness/validate", "harness/backgroundReview", "harness/diff", "harness/rollback"],
       features: { streamingEvents: true },
       tools: [],
       toolCatalogHash: "0".repeat(64),
@@ -30,11 +30,12 @@ function host(): AgentRuntimeHost {
     approvalResolve: vi.fn(async (params) => ({ approval: params })),
     userInputResolve: vi.fn(async (params) => ({ input: params })),
     harnessInspect: vi.fn(async () => ({ release: "r1" })),
+    harnessProposalReview: vi.fn(async (params) => ({ proposalReview: params })),
+    harnessReview: vi.fn(async (params) => ({ review: params })),
     harnessValidate: vi.fn(async () => ({ valid: true })),
     harnessBackgroundReview: vi.fn(async (params) => ({ backgroundReview: params })),
     harnessDiff: vi.fn(async (params) => ({ diff: params })),
     harnessRollback: vi.fn(async (params) => ({ rollback: params })),
-    harnessReview: vi.fn(async (params) => ({ review: params })),
   };
 }
 
@@ -99,7 +100,7 @@ describe("agent JSON-RPC protocol", () => {
     expect(runtimeHost.threadStart).toHaveBeenCalledWith({ experience: "work" });
   });
 
-  test("delegates Harness review and rollback through the private runtime", async () => {
+  test("delegates Harness proposal review through the private runtime", async () => {
     const runtimeHost = host();
     const dispatcher = new AgentJsonRpcDispatcher(runtimeHost);
     await dispatcher.handle({
@@ -121,11 +122,11 @@ describe("agent JSON-RPC protocol", () => {
       dispatcher.handle({
         jsonrpc: "2.0",
         id: 2,
-        method: "harness/review",
+        method: "harness/proposalReview",
         params: review,
       }),
-    ).resolves.toMatchObject({ result: { review } });
-    expect(runtimeHost.harnessReview).toHaveBeenCalledWith(review);
+    ).resolves.toMatchObject({ result: { proposalReview: review } });
+    expect(runtimeHost.harnessProposalReview).toHaveBeenCalledWith(review);
   });
 
   test("processes turn and interrupt requests concurrently over JSONL", async () => {

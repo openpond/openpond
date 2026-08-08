@@ -24,11 +24,12 @@ export function createAgentRuntimePorts(deps: {
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   inspectHarness(): Promise<unknown>;
+  reviewHarnessProposal(params: unknown): Promise<unknown>;
+  reviewHarness(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
   rollbackHarness(payload: unknown): Promise<unknown>;
-  reviewHarnessProposal(payload: unknown): Promise<unknown>;
   subscribeRuntimeEvents(listener: (event: RuntimeEvent) => void): () => void;
   observeRuntimeOperation?(event: import("@openpond/agent-runtime").AgentRuntimeTelemetryEvent): void;
 }): AgentRuntimeServicePorts<Session, Turn, RuntimeEvent, Approval> {
@@ -57,6 +58,8 @@ export function createAgentRuntimePorts(deps: {
         userInput: true,
         compaction: true,
         harnessInspection: true,
+        harnessProposalReview: true,
+        harnessEvaluationReview: true,
         harnessValidation: true,
         immutableHarnessAdmission: true,
         harnessBackgroundReview: true,
@@ -81,11 +84,12 @@ export function createAgentRuntimePorts(deps: {
     interruptTurn: deps.interruptSessionTurn,
     resolveApproval: deps.resolveApproval,
     inspectHarness: deps.inspectHarness,
+    reviewHarnessProposal: deps.reviewHarnessProposal,
+    reviewHarness: deps.reviewHarness,
     validateHarness: deps.validateHarness,
     updateHarnessBackgroundReview: deps.updateHarnessBackgroundReview,
     diffHarness: deps.diffHarness,
     rollbackHarness: deps.rollbackHarness,
-    reviewHarnessProposal: deps.reviewHarnessProposal,
     subscribeEvents: deps.subscribeRuntimeEvents,
     eventNotification: runtimeEventNotification,
     telemetry: deps.observeRuntimeOperation,

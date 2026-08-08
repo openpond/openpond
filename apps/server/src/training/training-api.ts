@@ -43,6 +43,22 @@ import {
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
 import { projectTrainingActivity } from "./training-activity.js";
+import {
+  linkHarnessReviewTaskset,
+  startHarnessReviewTasksetAuthoring,
+} from "./harness-review-taskset.js";
+import {
+  qualifyHarnessModelImprovement,
+  requireQualifiedModelImprovement,
+} from "./harness-model-improvement.js";
+import {
+  harnessIntegerArray,
+  nonnegativeHarnessNumber,
+  optionalImmutableRef,
+  recipeBaseModelId,
+  requiredImmutableRef,
+  sameImmutableRef,
+} from "./harness-training-api-inputs.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -180,6 +196,24 @@ export function createTrainingApi(deps: {
         preferredBaseModel,
       });
     }
+    if (action === "accept_harness_review") {
+      const reviewRef = record(input.reviewRef);
+      return startHarnessReviewTasksetAuthoring({
+        store: deps.store,
+        taskCreator: deps.taskCreator,
+        startCreation: startModelCreation,
+        profileId: requiredString(input.profileId, "profileId"),
+        workspaceId: requiredString(input.workspaceId, "workspaceId"),
+        reviewRef: {
+          id: requiredString(reviewRef.id, "reviewRef.id"),
+          contentHash: requiredString(reviewRef.contentHash, "reviewRef.contentHash"),
+        },
+        analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null,
+        analysisReasoningEffort: input.analysisReasoningEffort
+          ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort)
+          : null,
+      });
+    }
     if (action === "start_creation") {
       const preferredBaseModel = nullableBaseModelPreference(
         input.preferredBaseModel,
@@ -212,7 +246,11 @@ export function createTrainingApi(deps: {
     if (action === "answer_questions") return syncCreation(await deps.taskCreator.answerQuestions(requiredString(input.creationId, "creationId"), stringRecord(input.answers)));
     if (action === "approve_materialization") {
       const creation = await deps.taskCreator.approveMaterialization(requiredString(input.creationId, "creationId"), input.approved === true);
-      if (creation.state === "ready" && creation.materializedTasksetId) await deps.evaluation.readiness(creation.materializedTasksetId);
+      if (creation.state === "ready" && creation.materializedTasksetId) {
+        await deps.evaluation.readiness(creation.materializedTasksetId);
+        const taskset = await deps.store.getTaskset(creation.materializedTasksetId);
+        if (taskset) await linkHarnessReviewTaskset({ store: deps.store, taskset });
+      }
       return syncCreation(creation);
     }
     if (action === "chat_creation") return syncCreation(await deps.taskCreator.chat(requiredString(input.creationId, "creationId"), requiredString(input.message, "message")));
@@ -264,6 +302,55 @@ export function createTrainingApi(deps: {
         resultId: string(input.resultId) ?? undefined,
       });
     }
+    if (action === "execute_harness_review_baseline") {
+      const reviewRef = record(input.reviewRef);
+      const sampling = record(input.sampling);
+      return deps.evaluation.executeBaseline({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        model: ChatModelRefSchema.parse(input.model),
+        reviewRef: {
+          id: requiredString(reviewRef.id, "reviewRef.id"),
+          contentHash: requiredString(reviewRef.contentHash, "reviewRef.contentHash"),
+        },
+        seeds: harnessIntegerArray(input.seeds, "seeds"),
+        attemptsPerTask: boundedInteger(
+          input.attemptsPerTask,
+          "attemptsPerTask",
+          1,
+          20,
+          1,
+        ),
+        sampling: {
+          maxOutputTokens: boundedInteger(
+            sampling.maxOutputTokens,
+            "sampling.maxOutputTokens",
+            1,
+            128_000,
+            4_096,
+          ),
+          temperature: boundedNumber(
+            sampling.temperature,
+            "sampling.temperature",
+            0,
+            2,
+            0,
+          ),
+          topP: boundedNumber(sampling.topP, "sampling.topP", 0, 1, 1),
+        },
+      });
+    }
+    if (action === "qualify_harness_model_improvement") {
+      const reviewRef = requiredImmutableRef(input.reviewRef, "reviewRef");
+      return qualifyHarnessModelImprovement({
+        store: deps.store,
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        baselineEvaluationId: requiredString(input.baselineEvaluationId, "baselineEvaluationId"),
+        reviewRef,
+        privacyApproval: optionalImmutableRef(input.privacyApproval, "privacyApproval"),
+        budgetApproval: optionalImmutableRef(input.budgetApproval, "budgetApproval"),
+        maximumCostUsd: nonnegativeHarnessNumber(input.maximumCostUsd, "maximumCostUsd"),
+      });
+    }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
     if (action === "calibrate_judges") return deps.evaluation.calibrateModelJudges(requiredString(input.tasksetId, "tasksetId"));
     if (action === "readiness") return deps.evaluation.readiness(requiredString(input.tasksetId, "tasksetId"));
@@ -273,6 +360,43 @@ export function createTrainingApi(deps: {
       previewHash: requiredString(input.previewHash, "previewHash"),
     });
     if (action === "create_plan") return deps.training.createPlan({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
+    if (action === "prepare_qualified_model_improvement") {
+      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+      const workspaceId = requiredString(input.workspaceId, "workspaceId");
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const recipe = record(input.recipe);
+      const destinationId = TrainingDestinationIdSchema.parse(input.destinationId);
+      const qualification = await requireQualifiedModelImprovement({
+        store: deps.store,
+        workspaceId,
+        qualificationRef,
+        tasksetId,
+        recipe,
+        baseModelId: recipeBaseModelId(recipe),
+      });
+      if (qualification.decision === "rl" && destinationId !== "openpond_managed") {
+        throw new Error("Qualified RL must use the OpenPond Managed boundary.");
+      }
+      const prepared = await deps.training.prepareStart({
+        modelId: requiredString(input.modelId, "modelId"),
+        tasksetId,
+        destinationId,
+        recipe,
+        environmentPlacement: managedRolloutPlacement(input.environmentPlacement),
+        exportApproved: input.exportApproved === true,
+        retentionDays: nullableNumber(input.retentionDays),
+        region: string(input.region),
+        harnessRelease: qualification.harnessRelease,
+        modelImprovementQualification: qualificationRef,
+      });
+      if (
+        prepared.plan.estimatedCostUsd !== null &&
+        prepared.plan.estimatedCostUsd > qualification.maximumCostUsd
+      ) {
+        throw new Error("Prepared Training Plan exceeds the qualified maximum cost.");
+      }
+      return { qualification, prepared };
+    }
     if (action === "prepare_model_run") return deps.training.prepareModelRun({
       modelRunId: requiredString(input.modelRunId, "modelRunId"),
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
@@ -310,6 +434,31 @@ export function createTrainingApi(deps: {
         maximumCostUsd: nullableNumber(input.maximumCostUsd),
       });
       return linkStartedTraining(result);
+    }
+    if (action === "start_qualified_model_improvement") {
+      const qualificationRef = requiredImmutableRef(input.qualificationRef, "qualificationRef");
+      const planId = requiredString(input.planId, "planId");
+      const bundleId = requiredString(input.bundleId, "bundleId");
+      const plan = await deps.store.getTrainingPlan(planId);
+      if (!plan || !sameImmutableRef(plan.modelImprovementQualification, qualificationRef)) {
+        throw new Error("Prepared Training Plan does not match the supplied qualification.");
+      }
+      const maximumCostUsd = nonnegativeHarnessNumber(input.maximumCostUsd, "maximumCostUsd");
+      const qualification = await requireQualifiedModelImprovement({
+        store: deps.store,
+        workspaceId: requiredString(input.workspaceId, "workspaceId"),
+        qualificationRef,
+        tasksetId: plan.tasksetId,
+        recipe: plan.recipe,
+        baseModelId: recipeBaseModelId(plan.recipe),
+        maximumCostUsd,
+      });
+      const result = await deps.training.startPrepared({
+        planId,
+        bundleId,
+        maximumCostUsd,
+      });
+      return { ...await linkStartedTraining(result), qualification };
     }
     if (action === "start") {
       const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
@@ -454,6 +603,9 @@ export function createTrainingApi(deps: {
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
+    const evaluationResults = (await Promise.all(
+      tasksets.map((taskset) => deps.store.listEvaluationResults(taskset.id)),
+    )).flat();
     const activity = projectTrainingActivity({
       profileId,
       state: {
@@ -472,6 +624,7 @@ export function createTrainingApi(deps: {
       datasetImports,
       datasetArtifacts,
       graderAuditReports,
+      evaluationResults,
       candidates,
       minerConfig,
       minerRuns,

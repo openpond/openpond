@@ -33,11 +33,12 @@ describe("app server composition", () => {
         interruptTurn: async (threadId) => ({ threadId, interrupted: true }),
         resolveApproval: async (approvalId) => ({ approvalId }),
         inspectHarness: async () => ({ valid: true }),
+        reviewHarnessProposal: async (params) => ({ params }),
+        reviewHarness: async (params) => ({ params }),
         validateHarness: async () => ({ valid: true }),
         updateHarnessBackgroundReview: async (payload) => payload,
         diffHarness: async (payload) => payload,
         rollbackHarness: async (payload) => payload,
-        reviewHarnessProposal: async (payload) => payload,
       },
     });
 
@@ -76,10 +77,11 @@ function runtimeStub() {
     approvalResolve: async () => ({}),
     userInputResolve: async () => ({}),
     harnessInspect: async () => ({}),
+    harnessProposalReview: async () => ({}),
+    harnessReview: async () => ({}),
     harnessValidate: async () => ({}),
     harnessBackgroundReview: async () => ({}),
     harnessDiff: async () => ({}),
     harnessRollback: async () => ({}),
-    harnessReview: async () => ({}),
   };
 }

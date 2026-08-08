@@ -24,11 +24,12 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<TApproval>;
   inspectHarness(): Promise<unknown>;
+  reviewHarnessProposal(params: unknown): Promise<unknown>;
+  reviewHarness(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
   rollbackHarness(payload: unknown): Promise<unknown>;
-  reviewHarnessProposal(payload: unknown): Promise<unknown>;
   subscribeEvents?(listener: (event: TEvent) => void): () => void;
   eventNotification?(event: TEvent): JsonRpcNotification;
   telemetry?(event: AgentRuntimeTelemetryEvent): void;
@@ -37,9 +38,9 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "approval/resolve" |
-    "userInput/resolve" | "harness/inspect" | "harness/validate" |
-    "harness/backgroundReview" | "harness/diff" | "harness/rollback" |
-    "harness/review";
+    "userInput/resolve" | "harness/inspect" | "harness/proposalReview" |
+    "harness/review" | "harness/validate" |
+    "harness/backgroundReview" | "harness/diff" | "harness/rollback";
   phase: "started" | "completed" | "failed";
   threadId: string | null;
   durationMs: number | null;
@@ -139,6 +140,9 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
       });
     },
     harnessInspect: () => run("harness/inspect", null, () => ports.inspectHarness()),
+    harnessProposalReview: (params) =>
+      run("harness/proposalReview", null, () => ports.reviewHarnessProposal(params)),
+    harnessReview: (params) => run("harness/review", null, () => ports.reviewHarness(params)),
     harnessValidate: () => run("harness/validate", null, () => ports.validateHarness()),
     harnessBackgroundReview: (params) =>
       run("harness/backgroundReview", null, () => ports.updateHarnessBackgroundReview(params)),
@@ -146,8 +150,6 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
       run("harness/diff", null, () => ports.diffHarness(params)),
     harnessRollback: (params) =>
       run("harness/rollback", null, () => ports.rollbackHarness(params)),
-    harnessReview: (params) =>
-      run("harness/review", null, () => ports.reviewHarnessProposal(params)),
     subscribe: ports.subscribeEvents && ports.eventNotification
       ? (listener) => ports.subscribeEvents!((event) => listener(ports.eventNotification!(event)))
       : undefined,

@@ -11,6 +11,8 @@ import type {
   RefinementTriggerDecision,
 } from "./harness-improvements.js";
 import type { HarnessMemoryEntry } from "./harness-memory.js";
+import type { HarnessEvaluationReviewReceipt } from "@openpond/harness/evaluation-review";
+import type { ModelImprovementQualificationReceipt } from "@openpond/evals/model-improvement-qualification";
 import type { WorkspaceDiffFile } from "./workspaces.js";
 
 export type HarnessHistoryReleaseRef = {
@@ -63,11 +65,52 @@ export type HarnessHistoryPayload = {
     enabled: boolean;
     updatedAt: string | null;
   };
+  evaluationReviewSchedule: HarnessEvaluationReviewSchedule;
   releases: HarnessHistoryReleaseSummary[];
   changes: HarnessHistoryChange[];
   routes: HarnessHistoryRoute[];
+  evaluationReviews: HarnessEvaluationReviewReceipt[];
+  modelImprovementQualifications: ModelImprovementQualificationReceipt[];
   pendingReviews: HarnessHistoryPendingReview[];
   memories: HarnessMemoryEntry[];
+};
+
+export type HarnessEvaluationReviewCadence = "manual" | "daily" | "weekly";
+
+export type HarnessEvaluationReviewSchedule = {
+  enabled: boolean;
+  cadence: HarnessEvaluationReviewCadence;
+  maxEstimatedCostUsd: number;
+  nextRunAt: string | null;
+  lastRunAt: string | null;
+  lastResult: {
+    id: string;
+    contentHash: string;
+    classification: HarnessEvaluationReviewReceipt["classification"];
+  } | null;
+  lastError: string | null;
+  updatedAt: string | null;
+};
+
+export type HarnessEvaluationReviewRequest = {
+  workspaceId: string;
+  maxEstimatedCostUsd?: number;
+};
+
+export type HarnessEvaluationReviewResponse = {
+  receipt: HarnessEvaluationReviewReceipt;
+  history: HarnessHistoryPayload;
+};
+
+export type HarnessEvaluationReviewScheduleRequest = {
+  workspaceId: string;
+  enabled: boolean;
+  cadence: HarnessEvaluationReviewCadence;
+  maxEstimatedCostUsd: number;
+};
+
+export type HarnessEvaluationReviewScheduleResponse = {
+  history: HarnessHistoryPayload;
 };
 
 export type HarnessBackgroundReviewRequest = {

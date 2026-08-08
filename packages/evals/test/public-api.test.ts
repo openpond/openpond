@@ -30,6 +30,10 @@ import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
 import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "../src/evidence/index.js";
 import { createImprovementObservation } from "../src/harness-improvements.js";
 import { createHarnessRunOverlay } from "../src/harness-workspaces.js";
+import {
+  harnessEvaluationReviewConformance,
+  verifyModelImprovementQualificationReceipt,
+} from "../src/index.js";
 
 const artifact = {
   id: "artifact-trace",
@@ -251,6 +255,14 @@ describe("public package conformance", () => {
 
   it("exports the Work evidence conformance surface", () => {
     expect(verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)).toBe(true);
+  });
+
+  it("exports Harness review and model-improvement qualification conformance", () => {
+    expect(
+      verifyModelImprovementQualificationReceipt(
+        harnessEvaluationReviewConformance.qualifiedRl,
+      ),
+    ).toBe(true);
   });
 
   it("exports portable Harness workspace and improvement contracts", () => {

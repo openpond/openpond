@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { EvaluationResult } from "@openpond/evals";
 import {
   BaseModelPreferenceSchema,
   DatasetBuildIntentSchema,
@@ -426,6 +427,7 @@ export const TrainingPlanSchema = z.object({
   tasksetId: IdSchema,
   tasksetHash: HashSchema,
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
+  modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   recipe: TrainingRecipeSchema,
   environmentPlacement: z.enum([
@@ -510,6 +512,7 @@ export const TrainingApprovalSchema = z.object({
   planId: IdSchema,
   bundleHash: HashSchema,
   harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
+  modelImprovementQualification: ImmutableReleaseRefSchema.nullable().optional(),
   destinationId: TrainingDestinationIdSchema,
   modelId: IdSchema,
   method: TrainingMethodSchema,
@@ -832,6 +835,7 @@ export const TrainingStateResponseSchema = z.object({
   datasetImports: z.array(DatasetImportJobSchema).default([]),
   datasetArtifacts: z.array(DatasetArtifactSummarySchema).default([]),
   graderAuditReports: z.array(GraderAuditReportSchema),
+  evaluationResults: z.array(z.custom<EvaluationResult>()).default([]),
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),

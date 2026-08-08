@@ -18,7 +18,7 @@ import {
 import { type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteHarnessMemoryStore } from "./store-harness-memory.js";
+import { SqliteHarnessEvaluationReviewSettingsStore } from "./store-harness-evaluation-review-settings.js";
 import { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 import {
   HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS,
@@ -31,48 +31,13 @@ import {
 export { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 
 export type { HarnessImprovementArtifactKind } from "./store-harness-workspace-artifacts.js";
+export type {
+  HarnessBackgroundReviewSettings,
+  HarnessEvaluationReviewCadence,
+  HarnessEvaluationReviewSettings,
+} from "./store-harness-evaluation-review-settings.js";
 
-export type HarnessBackgroundReviewSettings = { enabled: boolean; updatedAt: string | null };
-
-export class SqliteHarnessWorkspaceStore extends SqliteHarnessMemoryStore {
-  async getHarnessBackgroundReviewSettings(
-    workspaceId: string,
-  ): Promise<HarnessBackgroundReviewSettings> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<{ background_review_enabled: number; updated_at: string }>(
-      `SELECT background_review_enabled, updated_at
-       FROM harness_workspace_settings WHERE workspace_id = ?`,
-      [workspaceId],
-    );
-    return row
-      ? { enabled: row.background_review_enabled === 1, updatedAt: row.updated_at }
-      : { enabled: true, updatedAt: null };
-  }
-
-  async setHarnessBackgroundReviewSettings(input: {
-    workspaceId: string;
-    enabled: boolean;
-    updatedAt: string;
-  }): Promise<HarnessBackgroundReviewSettings> {
-    await this.ready;
-    const write = this.writeQueue.then(async () => {
-      await this.requireHarnessWorkspace(input.workspaceId);
-      await this.run(
-        `INSERT INTO harness_workspace_settings (
-           workspace_id, background_review_enabled, updated_at
-         ) VALUES (?, ?, ?)
-         ON CONFLICT(workspace_id) DO UPDATE SET
-           background_review_enabled = excluded.background_review_enabled,
-           updated_at = excluded.updated_at`,
-        [input.workspaceId, input.enabled ? 1 : 0, input.updatedAt],
-      );
-    });
-    this.writeQueue = write.catch(() => undefined);
-    await write;
-    return { enabled: input.enabled, updatedAt: input.updatedAt };
-  }
-
+export class SqliteHarnessWorkspaceStore extends SqliteHarnessEvaluationReviewSettingsStore {
   async createHarnessWorkspace(input: HarnessWorkspace): Promise<HarnessWorkspace> {
     const workspace = HarnessWorkspaceSchema.parse(input);
     await this.ready;

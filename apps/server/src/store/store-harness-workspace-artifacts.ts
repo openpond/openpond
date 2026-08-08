@@ -1,5 +1,6 @@
 import {
   HarnessImprovementProposalSchema,
+  HarnessEvaluationReviewReceiptSchema,
   HarnessOverlayMergeReceiptSchema,
   HarnessRefinerOutcomeSchema,
   HarnessRunOverlaySchema,
@@ -9,6 +10,7 @@ import {
   ImprovementRouteDecisionSchema,
   RefinementTriggerDecisionSchema,
   type HarnessImprovementProposal,
+  type HarnessEvaluationReviewReceipt,
   type HarnessOverlayMergeReceipt,
   type HarnessRefinerOutcome,
   type HarnessRunOverlay,
@@ -19,11 +21,17 @@ import {
   type ImprovementRouteDecision,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
+import {
+  ModelImprovementQualificationReceiptSchema,
+  type ModelImprovementQualificationReceipt,
+} from "@openpond/evals";
 
 import type { LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 
 export type HarnessImprovementArtifact =
   | HarnessRunOverlay
+  | HarnessEvaluationReviewReceipt
+  | ModelImprovementQualificationReceipt
   | HarnessImprovementProposal
   | HarnessTargetedValidationReceipt
   | HarnessOverlayMergeReceipt
@@ -35,6 +43,8 @@ export type HarnessImprovementArtifact =
 
 export type HarnessImprovementArtifactKind =
   | "run_overlay"
+  | "evaluation_review"
+  | "training_qualification"
   | "proposal"
   | "targeted_validation"
   | "merge_receipt"
@@ -46,6 +56,8 @@ export type HarnessImprovementArtifactKind =
 
 export const HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS = {
   run_overlay: HarnessRunOverlaySchema,
+  evaluation_review: HarnessEvaluationReviewReceiptSchema,
+  training_qualification: ModelImprovementQualificationReceiptSchema,
   proposal: HarnessImprovementProposalSchema,
   targeted_validation: HarnessTargetedValidationReceiptSchema,
   merge_receipt: HarnessOverlayMergeReceiptSchema,

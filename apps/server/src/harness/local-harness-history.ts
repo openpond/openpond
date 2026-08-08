@@ -3,6 +3,10 @@ import path from "node:path";
 import {
   type HarnessBackgroundReviewRequest,
   type HarnessBackgroundReviewResponse,
+  type HarnessEvaluationReviewRequest,
+  type HarnessEvaluationReviewResponse,
+  type HarnessEvaluationReviewScheduleRequest,
+  type HarnessEvaluationReviewScheduleResponse,
   createImprovementApplyReceipt,
   type HarnessAdvanceReceipt,
   HarnessHistoryChange,
@@ -11,6 +15,7 @@ import {
   HarnessHistoryPendingReview,
   HarnessHistoryRoute,
   HarnessImprovementProposal,
+  HarnessEvaluationReviewReceipt,
   HarnessRefinerOutcome,
   HarnessRollbackRequest,
   HarnessRollbackResponse,
@@ -24,6 +29,7 @@ import {
   ImprovementRouteDecision,
   RefinementTriggerDecision,
 } from "@openpond/contracts";
+import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
@@ -37,6 +43,8 @@ import {
   applyLocalHarnessRefinerProposal,
   rollbackLocalHarnessWorkspaceRelease,
 } from "./local-harness-refiner.js";
+import { reviewSelectedLocalHarnessEvaluationFromHost } from "./local-harness-evaluation-review-host.js";
+import { nextHarnessEvaluationReviewRunAt } from "./local-harness-evaluation-review-scheduler.js";
 
 export function createLocalHarnessSettingsRoutePayloads(input: {
   store: SqliteStore;
@@ -48,6 +56,16 @@ export function createLocalHarnessSettingsRoutePayloads(input: {
       updateLocalHarnessBackgroundReviewFromSettings({
         store: input.store,
         request: parseHarnessBackgroundReviewRequest(payload),
+      }),
+    reviewHarnessEvaluationPayload: (payload: unknown) =>
+      reviewLocalHarnessEvaluationFromSettings({
+        store: input.store,
+        request: parseHarnessEvaluationReviewRequest(payload),
+      }),
+    updateHarnessEvaluationReviewSchedulePayload: (payload: unknown) =>
+      updateLocalHarnessEvaluationReviewScheduleFromSettings({
+        store: input.store,
+        request: parseHarnessEvaluationReviewScheduleRequest(payload),
       }),
     harnessDiffPayload: (payload: unknown) =>
       localHarnessReleaseDiffPayload({
@@ -64,6 +82,53 @@ export function createLocalHarnessSettingsRoutePayloads(input: {
         ...input,
         request: parseHarnessProposalReviewRequest(payload),
       }),
+  };
+}
+
+function parseHarnessEvaluationReviewRequest(payload: unknown): HarnessEvaluationReviewRequest {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Harness evaluation review requires a workspace.");
+  }
+  const record = payload as Record<string, unknown>;
+  if (typeof record.workspaceId !== "string") {
+    throw new Error("Harness evaluation review requires a workspace.");
+  }
+  if (
+    record.maxEstimatedCostUsd !== undefined &&
+    (typeof record.maxEstimatedCostUsd !== "number" ||
+      !Number.isFinite(record.maxEstimatedCostUsd) ||
+      record.maxEstimatedCostUsd < 0)
+  ) {
+    throw new Error("Harness evaluation review cost must be a non-negative number.");
+  }
+  return {
+    workspaceId: record.workspaceId,
+    maxEstimatedCostUsd: record.maxEstimatedCostUsd as number | undefined,
+  };
+}
+
+function parseHarnessEvaluationReviewScheduleRequest(
+  payload: unknown,
+): HarnessEvaluationReviewScheduleRequest {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Harness evaluation review schedule requires a workspace and cadence.");
+  }
+  const record = payload as Record<string, unknown>;
+  if (
+    typeof record.workspaceId !== "string" ||
+    typeof record.enabled !== "boolean" ||
+    (record.cadence !== "manual" && record.cadence !== "daily" && record.cadence !== "weekly") ||
+    typeof record.maxEstimatedCostUsd !== "number" ||
+    !Number.isFinite(record.maxEstimatedCostUsd) ||
+    record.maxEstimatedCostUsd < 0
+  ) {
+    throw new Error("Harness evaluation review schedule requires a valid workspace, cadence, and cost limit.");
+  }
+  return {
+    workspaceId: record.workspaceId,
+    enabled: record.enabled,
+    cadence: record.cadence,
+    maxEstimatedCostUsd: record.maxEstimatedCostUsd,
   };
 }
 
@@ -165,9 +230,21 @@ export async function localHarnessHistoryPayload(
     return {
       workspace: null,
       backgroundReview: { enabled: true, updatedAt: null },
+      evaluationReviewSchedule: {
+        enabled: false,
+        cadence: "manual",
+        maxEstimatedCostUsd: 0,
+        nextRunAt: null,
+        lastRunAt: null,
+        lastResult: null,
+        lastError: null,
+        updatedAt: null,
+      },
       releases: [],
       changes: [],
       routes: [],
+      evaluationReviews: [],
+      modelImprovementQualifications: [],
       pendingReviews: [],
       memories: [],
     };
@@ -175,21 +252,27 @@ export async function localHarnessHistoryPayload(
 
   const [
     backgroundReview,
+    evaluationReviewSchedule,
     releaseRecords,
     receipts,
     proposals,
     validations,
     routeDecisions,
+    evaluationReviews,
+    modelImprovementQualifications,
     applyReceipts,
     outcomes,
     triggers,
   ] = await Promise.all([
     store.getHarnessBackgroundReviewSettings(workspace.id),
+    store.getHarnessEvaluationReviewSettings(workspace.id),
     store.listHarnessReleaseRecords(workspace.id),
     store.listHarnessAdvanceReceipts(workspace.id),
     store.listHarnessImprovementArtifacts(workspace.id, "proposal", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "targeted_validation", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "route_decision", 1_000),
+    store.listHarnessImprovementArtifacts(workspace.id, "evaluation_review", 1_000),
+    store.listHarnessImprovementArtifacts(workspace.id, "training_qualification", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "apply_receipt", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "refiner_outcome", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "trigger_decision", 1_000),
@@ -299,6 +382,7 @@ export async function localHarnessHistoryPayload(
   return {
     workspace,
     backgroundReview,
+    evaluationReviewSchedule,
     releases: releaseRecords.map((record) => ({
       id: record.harnessRelease.id,
       contentHash: record.harnessRelease.contentHash,
@@ -315,9 +399,74 @@ export async function localHarnessHistoryPayload(
     })),
     changes,
     routes,
+    evaluationReviews: evaluationReviews as HarnessEvaluationReviewReceipt[],
+    modelImprovementQualifications: modelImprovementQualifications as ModelImprovementQualificationReceipt[],
     pendingReviews,
     memories: await store.listHarnessMemories(workspace.id),
   };
+}
+
+export async function reviewLocalHarnessEvaluationFromSettings(input: {
+  store: SqliteStore;
+  request: HarnessEvaluationReviewRequest;
+}): Promise<HarnessEvaluationReviewResponse> {
+  const settings = await input.store.getHarnessEvaluationReviewSettings(input.request.workspaceId);
+  const receipt = await reviewSelectedLocalHarnessEvaluationFromHost({
+    store: input.store,
+    workspaceId: input.request.workspaceId,
+    maxEstimatedCostUsd: input.request.maxEstimatedCostUsd ?? settings.maxEstimatedCostUsd,
+  });
+  const timestamp = new Date().toISOString();
+  await input.store.setHarnessEvaluationReviewSettings({
+    workspaceId: input.request.workspaceId,
+    settings: {
+      ...settings,
+      lastRunAt: timestamp,
+      lastResult: {
+        id: receipt.id,
+        contentHash: receipt.contentHash,
+        classification: receipt.classification,
+      },
+      lastError: null,
+      updatedAt: timestamp,
+    },
+  });
+  return { receipt, history: await localHarnessHistoryPayload(input.store) };
+}
+
+export async function updateLocalHarnessEvaluationReviewScheduleFromSettings(input: {
+  store: SqliteStore;
+  request: HarnessEvaluationReviewScheduleRequest;
+}): Promise<HarnessEvaluationReviewScheduleResponse> {
+  const workspace = await input.store.getHarnessWorkspace(input.request.workspaceId);
+  if (!workspace || workspace.ownerScope.kind !== "personal" || workspace.location !== "local") {
+    throw new Error("Evaluation review schedule requires the selected Personal Local Harness.");
+  }
+  const selected = await input.store.getSelectedHarnessWorkspace({
+    ownerKind: "personal",
+    ownerId: DESKTOP_PERSONAL_HARNESS_OWNER_ID,
+  });
+  if (selected?.id !== workspace.id) {
+    throw new Error("Evaluation review schedule requires the selected Personal Local Harness.");
+  }
+  const previous = await input.store.getHarnessEvaluationReviewSettings(workspace.id);
+  const timestamp = new Date().toISOString();
+  const enabled = input.request.enabled && input.request.cadence !== "manual";
+  await input.store.setHarnessEvaluationReviewSettings({
+    workspaceId: workspace.id,
+    settings: {
+      ...previous,
+      enabled,
+      cadence: input.request.cadence,
+      maxEstimatedCostUsd: input.request.maxEstimatedCostUsd,
+      nextRunAt: enabled
+        ? nextHarnessEvaluationReviewRunAt(input.request.cadence, timestamp)
+        : null,
+      lastError: null,
+      updatedAt: timestamp,
+    },
+  });
+  return { history: await localHarnessHistoryPayload(input.store) };
 }
 
 export async function updateLocalHarnessBackgroundReviewFromSettings(input: {

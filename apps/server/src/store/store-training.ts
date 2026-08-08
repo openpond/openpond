@@ -52,7 +52,7 @@ import {
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqliteDatasetStore } from "./store-datasets.js";
+import { SqliteEvaluationResultStore } from "./store-evaluation-results.js";
 import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
@@ -84,7 +84,7 @@ type TrainingChatSearchEvidenceRow = {
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
   "('local_cpu_fixture', 'openpond_managed')";
 
-export class SqliteTrainingStore extends SqliteDatasetStore {
+export class SqliteTrainingStore extends SqliteEvaluationResultStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;
@@ -486,6 +486,7 @@ export class SqliteTrainingStore extends SqliteDatasetStore {
       await this.exec("BEGIN IMMEDIATE");
       try {
         await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
+        await this.run("DELETE FROM evaluation_results WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);

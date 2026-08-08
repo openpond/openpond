@@ -1,4 +1,5 @@
 export * from "./common.js";
+export * from "./evaluation-review.js";
 export * from "./harness.js";
 export * from "./harness-improvements.js";
 export * from "./harness-workspaces.js";
