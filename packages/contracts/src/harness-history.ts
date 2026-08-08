@@ -11,6 +11,7 @@ import type {
   RefinementTriggerDecision,
 } from "./harness-improvements.js";
 import type { HarnessMemoryEntry } from "./harness-memory.js";
+import type { HarnessEvaluationReviewReceipt } from "@openpond/harness/evaluation-review";
 import type { WorkspaceDiffFile } from "./workspaces.js";
 
 export type HarnessHistoryReleaseRef = {
@@ -66,6 +67,7 @@ export type HarnessHistoryPayload = {
   releases: HarnessHistoryReleaseSummary[];
   changes: HarnessHistoryChange[];
   routes: HarnessHistoryRoute[];
+  evaluationReviews: HarnessEvaluationReviewReceipt[];
   pendingReviews: HarnessHistoryPendingReview[];
   memories: HarnessMemoryEntry[];
 };

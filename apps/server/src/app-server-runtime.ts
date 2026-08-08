@@ -55,6 +55,7 @@ import {
   readBundledAuthoringProfileSkill,
 } from "./runtime/bundled-authoring-skills.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
+import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
@@ -311,6 +312,7 @@ export async function createOpenPondAppServer(
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       inspectHarness: () => localHarnessHistoryPayload(store),
+      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release

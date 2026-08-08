@@ -31,6 +31,7 @@ export class AgentRpcClient {
   approvalResolve = (params: unknown) => this.#request("approval/resolve", params);
   userInputResolve = (params: unknown) => this.#request("userInput/resolve", params);
   harnessInspect = (params: unknown = {}) => this.#request("harness/inspect", params);
+  harnessReview = (params: unknown = {}) => this.#request("harness/review", params);
   harnessValidate = (params: unknown = {}) => this.#request("harness/validate", params);
   harnessBackgroundReview = (params: unknown = {}) => this.#request("harness/backgroundReview", params);
   harnessDiff = (params: unknown = {}) => this.#request("harness/diff", params);

@@ -59,8 +59,11 @@ export * from "./harness-memory.js";
 export * from "./training-platform.js";
 export {
   AgentSnapshotSchema,
+  HarnessEvaluationReviewReceiptSchema,
   HarnessReleaseSchema,
   type AgentSnapshot,
+  type HarnessEvaluationReviewReceipt,
+  type HarnessReviewEvidenceRef,
   type HarnessRelease,
 } from "@openpond/harness";
 export {

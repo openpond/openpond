@@ -29,6 +29,7 @@ const methodNames = {
   "approval/resolve": "approvalResolve",
   "userInput/resolve": "userInputResolve",
   "harness/inspect": "harnessInspect",
+  "harness/review": "harnessReview",
   "harness/validate": "harnessValidate",
   "harness/backgroundReview": "harnessBackgroundReview",
   "harness/diff": "harnessDiff",

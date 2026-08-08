@@ -16,7 +16,7 @@ function host(): AgentRuntimeHost {
     capabilities: vi.fn(async () => ({
       protocolVersion: AGENT_PROTOCOL_VERSION,
       placement: "local",
-      methods: ["initialize", "initialized", "runtime/capabilities", "thread/start", "thread/resume", "thread/read", "turn/start", "turn/steer", "turn/interrupt", "approval/resolve", "userInput/resolve", "harness/inspect", "harness/validate", "harness/backgroundReview", "harness/diff", "harness/rollback", "harness/review"],
+      methods: ["initialize", "initialized", "runtime/capabilities", "thread/start", "thread/resume", "thread/read", "turn/start", "turn/steer", "turn/interrupt", "approval/resolve", "userInput/resolve", "harness/inspect", "harness/proposalReview", "harness/review", "harness/validate", "harness/backgroundReview", "harness/diff", "harness/rollback"],
       features: { streamingEvents: true },
       tools: [],
       toolCatalogHash: "0".repeat(64),
@@ -30,11 +30,12 @@ function host(): AgentRuntimeHost {
     approvalResolve: vi.fn(async (params) => ({ approval: params })),
     userInputResolve: vi.fn(async (params) => ({ input: params })),
     harnessInspect: vi.fn(async () => ({ release: "r1" })),
+    harnessProposalReview: vi.fn(async (params) => ({ proposalReview: params })),
+    harnessReview: vi.fn(async (params) => ({ review: params })),
     harnessValidate: vi.fn(async () => ({ valid: true })),
     harnessBackgroundReview: vi.fn(async (params) => ({ backgroundReview: params })),
     harnessDiff: vi.fn(async (params) => ({ diff: params })),
     harnessRollback: vi.fn(async (params) => ({ rollback: params })),
-    harnessReview: vi.fn(async (params) => ({ review: params })),
   };
 }
 

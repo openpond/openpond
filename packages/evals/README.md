@@ -2,7 +2,8 @@
 
 Portable evaluation contracts and pure helpers for Tasksets, graders, run
 manifests, attempt and evaluation receipts, execution adapters, conformance
-fixtures, and Work-evidence eligibility. The package depends on
+fixtures, Work-evidence eligibility, and no-training/SFT/preference/RL
+qualification receipts. The package depends on
 [`@openpond/harness`](../harness/README.md) and re-exports its portable Harness
 contracts for compatibility with existing `@openpond/evals` consumers.
 
@@ -11,6 +12,7 @@ import {
   AttemptReceiptSchema,
   HarnessReleaseSchema,
   TasksetReleaseSchema,
+  ModelImprovementQualificationReceiptSchema,
   validateTasksetRelease,
   verifyAttemptReceipt,
 } from "@openpond/evals";
@@ -23,9 +25,20 @@ import {
 ```
 
 Subpath exports are available at `/harness`, `/tasksets`, `/graders`, `/runs`,
-`/conformance`, and `/evidence`. The package is an evaluation protocol library,
+`/conformance`, `/evidence`, `/review`, and
+`/model-improvement-qualification`. The package is an evaluation protocol library,
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
+
+## Harness Evaluation review
+
+`@openpond/harness` owns the immutable bounded review receipt and its routing
+decision. Evals binds an accepted review to the exact Harness, Taskset, scored
+baseline Evaluation, base Model, Environment/tool/permission/policy hashes,
+Verifier, source-policy checks, privacy approval, budget approval, and eligible
+non-frozen learning signal. Frozen Evaluation evidence is rejected as training
+evidence. Weak, constant, confounded, uncalibrated, revoked, or incompletely
+authorized signal produces `no_training`; it cannot qualify a managed run.
 
 ## Work evidence
 

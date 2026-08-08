@@ -15,6 +15,7 @@ export const AGENT_RPC_METHODS = [
   "approval/resolve",
   "userInput/resolve",
   "harness/inspect",
+  "harness/review",
   "harness/validate",
   "harness/backgroundReview",
   "harness/diff",
@@ -90,6 +91,7 @@ export type AgentRuntimeHost = {
   approvalResolve(params: unknown): Promise<unknown>;
   userInputResolve(params: unknown): Promise<unknown>;
   harnessInspect(params: unknown): Promise<unknown>;
+  harnessReview(params: unknown): Promise<unknown>;
   harnessValidate(params: unknown): Promise<unknown>;
   harnessBackgroundReview(params: unknown): Promise<unknown>;
   harnessDiff(params: unknown): Promise<unknown>;
@@ -168,6 +170,7 @@ export class AgentJsonRpcDispatcher {
       case "approval/resolve": return this.#host.approvalResolve(params);
       case "userInput/resolve": return this.#host.userInputResolve(params);
       case "harness/inspect": return this.#host.harnessInspect(params);
+      case "harness/review": return this.#host.harnessReview(params);
       case "harness/validate": return this.#host.harnessValidate(params);
       case "harness/backgroundReview": return this.#host.harnessBackgroundReview(params);
       case "harness/diff": return this.#host.harnessDiff(params);

@@ -26,6 +26,9 @@ runner.
 ## Runtime ownership
 
 The package describes Agent snapshots, releases, workspaces, overlays,
-improvement evidence, tools, model identities, and traces. Evaluation execution
-interfaces that bind a Harness to a Taskset and emit attempt receipts belong to
-`@openpond/evals`.
+improvement evidence, bounded cross-Work review decisions, tools, model
+identities, and traces. A review receipt owns claim grouping, source-policy
+checks, smallest-layer routing, watermark, cost ceiling, and next authority.
+Evaluation execution and model-improvement qualification contracts that bind a
+Harness to a Taskset, scored baseline, Model, verifier, and training signal
+belong to `@openpond/evals`.

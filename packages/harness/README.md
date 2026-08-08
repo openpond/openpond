@@ -8,18 +8,21 @@ Portable contracts and pure helpers for OpenPond's mutable Harness:
 - Harness workspaces, pinned run overlays, proposals, validation, advancement,
   rollback, and merge receipts;
 - improvement observations, Refiner outcomes, and apply receipts;
+- bounded cross-Work Evaluation review receipts with exact source-policy,
+  evidence, claim, routing, authority, and downstream lineage references;
 - model actions, tool observations, lifecycle events, and Harness traces.
 
 ```ts
 import {
   HarnessReleaseSchema,
+  HarnessEvaluationReviewReceiptSchema,
   HarnessRunOverlaySchema,
   ImprovementObservationSchema,
   contentHash,
 } from "@openpond/harness";
 ```
 
-Subpath exports are available at `/harness`, `/harness-improvements`,
+Subpath exports are available at `/harness`, `/evaluation-review`, `/harness-improvements`,
 `/harness-workspaces`, `/models`, and `/tools`.
 
 This package does not run evaluations, grade outputs, persist product state,
