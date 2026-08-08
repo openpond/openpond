@@ -29,7 +29,10 @@ import {
   ensureLocalHarnessRunOverlay,
   loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
-import { localHarnessHistoryPayload } from "./harness/local-harness-history.js";
+import {
+  createLocalHarnessSettingsRoutePayloads,
+  localHarnessHistoryPayload,
+} from "./harness/local-harness-history.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
@@ -290,6 +293,10 @@ export async function createOpenPondAppServer(
   }
 
   let closing = false;
+  const harnessSettings = createLocalHarnessSettingsRoutePayloads({
+    store,
+    storeDir,
+  });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
@@ -318,6 +325,11 @@ export async function createOpenPondAppServer(
               reason: "No app-server Harness release is selected.",
             };
       },
+      updateHarnessBackgroundReview:
+        harnessSettings.updateHarnessBackgroundReviewPayload,
+      diffHarness: harnessSettings.harnessDiffPayload,
+      rollbackHarness: harnessSettings.rollbackHarnessPayload,
+      reviewHarnessProposal: harnessSettings.reviewHarnessProposalPayload,
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);
