@@ -51,6 +51,14 @@ import {
   qualifyHarnessModelImprovement,
   requireQualifiedModelImprovement,
 } from "./harness-model-improvement.js";
+import {
+  harnessIntegerArray,
+  nonnegativeHarnessNumber,
+  optionalImmutableRef,
+  recipeBaseModelId,
+  requiredImmutableRef,
+  sameImmutableRef,
+} from "./harness-training-api-inputs.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -304,7 +312,7 @@ export function createTrainingApi(deps: {
           id: requiredString(reviewRef.id, "reviewRef.id"),
           contentHash: requiredString(reviewRef.contentHash, "reviewRef.contentHash"),
         },
-        seeds: integerArray(input.seeds, "seeds"),
+        seeds: harnessIntegerArray(input.seeds, "seeds"),
         attemptsPerTask: boundedInteger(
           input.attemptsPerTask,
           "attemptsPerTask",
@@ -340,7 +348,7 @@ export function createTrainingApi(deps: {
         reviewRef,
         privacyApproval: optionalImmutableRef(input.privacyApproval, "privacyApproval"),
         budgetApproval: optionalImmutableRef(input.budgetApproval, "budgetApproval"),
-        maximumCostUsd: nonnegativeNumber(input.maximumCostUsd, "maximumCostUsd"),
+        maximumCostUsd: nonnegativeHarnessNumber(input.maximumCostUsd, "maximumCostUsd"),
       });
     }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
@@ -435,7 +443,7 @@ export function createTrainingApi(deps: {
       if (!plan || !sameImmutableRef(plan.modelImprovementQualification, qualificationRef)) {
         throw new Error("Prepared Training Plan does not match the supplied qualification.");
       }
-      const maximumCostUsd = nonnegativeNumber(input.maximumCostUsd, "maximumCostUsd");
+      const maximumCostUsd = nonnegativeHarnessNumber(input.maximumCostUsd, "maximumCostUsd");
       const qualification = await requireQualifiedModelImprovement({
         store: deps.store,
         workspaceId: requiredString(input.workspaceId, "workspaceId"),
@@ -890,63 +898,9 @@ function requiredBaseModelPreference(value: unknown, legacyId: unknown): BaseMod
   return preference;
 }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []; }
-function integerArray(value: unknown, label: string): number[] | undefined {
-  if (value === undefined) return undefined;
-  if (!Array.isArray(value) || value.some((item) => !Number.isInteger(item))) {
-    throw new Error(`${label} must be an array of integers.`);
-  }
-  return value as number[];
-}
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }
-function nonnegativeNumber(value: unknown, name: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    throw new Error(`${name} must be a non-negative number.`);
-  }
-  return value;
-}
-function optionalImmutableRef(
-  value: unknown,
-  name: string,
-): { id: string; contentHash: string } | null {
-  if (value === undefined || value === null) return null;
-  return requiredImmutableRef(value, name);
-}
-function requiredImmutableRef(
-  value: unknown,
-  name: string,
-): { id: string; contentHash: string } {
-  const candidate = record(value);
-  return {
-    id: requiredString(candidate.id, `${name}.id`),
-    contentHash: requiredString(candidate.contentHash, `${name}.contentHash`),
-  };
-}
-function sameImmutableRef(
-  value: unknown,
-  expected: { id: string; contentHash: string },
-): boolean {
-  const candidate = record(value);
-  return candidate.id === expected.id && candidate.contentHash === expected.contentHash;
-}
-function recipeBaseModelId(recipe: Record<string, unknown>): string {
-  const method = recipe.method;
-  const base = record(recipe.baseModel);
-  if (method === "sft" || method === "grpo") {
-    return requiredString(base.id, "recipe.baseModel.id");
-  }
-  if (method === "dpo") {
-    return requiredString(record(recipe.policyModel).id, "recipe.policyModel.id");
-  }
-  if (method === "ppo") {
-    return requiredString(
-      record(record(recipe.policyOptimization).policyModel).id,
-      "recipe.policyOptimization.policyModel.id",
-    );
-  }
-  throw new Error("Qualified training recipe method is not executable.");
-}
 function boundedInteger(
   value: unknown,
   name: string,

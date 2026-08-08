@@ -1687,8 +1687,6 @@ export async function createOpenPondServer(
         harnessSettingsRoutes.updateHarnessBackgroundReviewPayload,
       diffHarness: harnessSettingsRoutes.harnessDiffPayload,
       rollbackHarness: harnessSettingsRoutes.rollbackHarnessPayload,
-      reviewHarnessProposal:
-        harnessSettingsRoutes.reviewHarnessProposalPayload,
       subscribeRuntimeEvents,
       observeRuntimeOperation: (runtimeEvent) => {
         logger.info("agent runtime operation", runtimeEvent);

@@ -39,7 +39,6 @@ describe("app server composition", () => {
         updateHarnessBackgroundReview: async (payload) => payload,
         diffHarness: async (payload) => payload,
         rollbackHarness: async (payload) => payload,
-        reviewHarnessProposal: async (payload) => payload,
       },
     });
 
@@ -84,6 +83,5 @@ function runtimeStub() {
     harnessBackgroundReview: async () => ({}),
     harnessDiff: async () => ({}),
     harnessRollback: async () => ({}),
-    harnessReview: async () => ({}),
   };
 }

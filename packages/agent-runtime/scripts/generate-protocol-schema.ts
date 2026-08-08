@@ -35,7 +35,6 @@ const methodNames = {
   "harness/backgroundReview": "harnessBackgroundReview",
   "harness/diff": "harnessDiff",
   "harness/rollback": "harnessRollback",
-  "harness/review": "harnessReview",
 } as const;
 const requestMethods = AGENT_RPC_METHODS.filter(
   (method): method is keyof typeof methodNames => method in methodNames,

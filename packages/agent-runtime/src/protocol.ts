@@ -21,7 +21,6 @@ export const AGENT_RPC_METHODS = [
   "harness/backgroundReview",
   "harness/diff",
   "harness/rollback",
-  "harness/review",
 ] as const;
 
 export type AgentRpcMethod = (typeof AGENT_RPC_METHODS)[number];
@@ -98,7 +97,6 @@ export type AgentRuntimeHost = {
   harnessBackgroundReview(params: unknown): Promise<unknown>;
   harnessDiff(params: unknown): Promise<unknown>;
   harnessRollback(params: unknown): Promise<unknown>;
-  harnessReview(params: unknown): Promise<unknown>;
   subscribe?(listener: (notification: JsonRpcNotification) => void): () => void;
 };
 
@@ -178,7 +176,6 @@ export class AgentJsonRpcDispatcher {
       case "harness/backgroundReview": return this.#host.harnessBackgroundReview(params);
       case "harness/diff": return this.#host.harnessDiff(params);
       case "harness/rollback": return this.#host.harnessRollback(params);
-      case "harness/review": return this.#host.harnessReview(params);
       default: throw new JsonRpcDispatchError(-32601, `Method not found: ${method}`);
     }
   }

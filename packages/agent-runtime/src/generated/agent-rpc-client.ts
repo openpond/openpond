@@ -37,5 +37,4 @@ export class AgentRpcClient {
   harnessBackgroundReview = (params: unknown = {}) => this.#request("harness/backgroundReview", params);
   harnessDiff = (params: unknown = {}) => this.#request("harness/diff", params);
   harnessRollback = (params: unknown = {}) => this.#request("harness/rollback", params);
-  harnessReview = (params: unknown = {}) => this.#request("harness/review", params);
 }
