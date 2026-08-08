@@ -68,10 +68,12 @@ export {
 } from "@openpond/harness";
 export {
   AttemptReceiptSchema,
+  ModelImprovementQualificationReceiptSchema,
   GraderEvidenceSchema as PortableGraderEvidenceSchema,
   RunManifestSchema as PortableRunManifestSchema,
   TasksetReleaseSchema,
   type AttemptReceipt,
+  type ModelImprovementQualificationReceipt,
   type RunManifest as PortableRunManifest,
   type TasksetRelease,
 } from "@openpond/evals";

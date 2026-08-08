@@ -25,6 +25,7 @@ import {
   ImprovementRouteDecision,
   RefinementTriggerDecision,
 } from "@openpond/contracts";
+import type { ModelImprovementQualificationReceipt } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
@@ -170,6 +171,7 @@ export async function localHarnessHistoryPayload(
       changes: [],
       routes: [],
       evaluationReviews: [],
+      modelImprovementQualifications: [],
       pendingReviews: [],
       memories: [],
     };
@@ -183,6 +185,7 @@ export async function localHarnessHistoryPayload(
     validations,
     routeDecisions,
     evaluationReviews,
+    modelImprovementQualifications,
     applyReceipts,
     outcomes,
     triggers,
@@ -194,6 +197,7 @@ export async function localHarnessHistoryPayload(
     store.listHarnessImprovementArtifacts(workspace.id, "targeted_validation", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "route_decision", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "evaluation_review", 1_000),
+    store.listHarnessImprovementArtifacts(workspace.id, "training_qualification", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "apply_receipt", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "refiner_outcome", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "trigger_decision", 1_000),
@@ -320,6 +324,7 @@ export async function localHarnessHistoryPayload(
     changes,
     routes,
     evaluationReviews: evaluationReviews as HarnessEvaluationReviewReceipt[],
+    modelImprovementQualifications: modelImprovementQualifications as ModelImprovementQualificationReceipt[],
     pendingReviews,
     memories: await store.listHarnessMemories(workspace.id),
   };
