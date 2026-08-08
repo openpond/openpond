@@ -44,6 +44,9 @@ describe("Local Harness Refiner model contract", () => {
         expect(system).toContain("Never return the complete file");
         expect(system).toContain("ordinary successful work is not improvement evidence");
         expect(system).toContain("no Agent source compiler or executor");
+        expect(system).toContain("completed refine_request tool call only requests this bounded review");
+        expect(system).toContain("Never return no_action merely because refine_request completed");
+        expect(system).toContain("downstream receipt review owns recurrence thresholds");
         expect(system).not.toContain("replacementContent");
         yield {
           text: JSON.stringify({
