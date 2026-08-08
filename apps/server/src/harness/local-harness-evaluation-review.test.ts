@@ -13,7 +13,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./local-harness-evaluation-review.js";
-import { localHarnessHistoryPayload } from "./local-harness-history.js";
+import {
+  localHarnessHistoryPayload,
+  reviewLocalHarnessEvaluationFromSettings,
+  updateLocalHarnessEvaluationReviewScheduleFromSettings,
+} from "./local-harness-history.js";
+import { createLocalHarnessEvaluationReviewScheduler } from "./local-harness-evaluation-review-scheduler.js";
 import { createLocalHarnessWorkspace } from "./local-harness-workspace-service.js";
 
 const NOW = "2026-08-08T12:00:00.000Z";
@@ -215,5 +220,66 @@ describe("local Harness evaluation review", () => {
       claim: { independentOccurrences: 3, unresolvedOccurrences: 3 },
     });
     expect(receipt.selectedEvidence).toHaveLength(3);
+  });
+
+  it("persists explicit review status and schedule controls in Harness history", async () => {
+    const current = await fixture();
+    const reviewed = await reviewLocalHarnessEvaluationFromSettings({
+      store: current.store,
+      request: { workspaceId: current.workspace.id, maxEstimatedCostUsd: 1.25 },
+    });
+    expect(reviewed.history.evaluationReviewSchedule.lastResult).toMatchObject({
+      id: reviewed.receipt.id,
+      contentHash: reviewed.receipt.contentHash,
+      classification: "no_action",
+    });
+
+    const scheduled = await updateLocalHarnessEvaluationReviewScheduleFromSettings({
+      store: current.store,
+      request: {
+        workspaceId: current.workspace.id,
+        enabled: true,
+        cadence: "daily",
+        maxEstimatedCostUsd: 2,
+      },
+    });
+    expect(scheduled.history.evaluationReviewSchedule).toMatchObject({
+      enabled: true,
+      cadence: "daily",
+      maxEstimatedCostUsd: 2,
+    });
+    expect(scheduled.history.evaluationReviewSchedule.nextRunAt).not.toBeNull();
+  });
+
+  it("runs due schedules through the same idempotent review operation", async () => {
+    const current = await fixture();
+    await current.store.setHarnessEvaluationReviewSettings({
+      workspaceId: current.workspace.id,
+      settings: {
+        enabled: true,
+        cadence: "daily",
+        maxEstimatedCostUsd: 0.5,
+        nextRunAt: "2026-08-08T11:59:00.000Z",
+        lastRunAt: null,
+        lastResult: null,
+        lastError: null,
+        updatedAt: "2026-08-08T11:58:00.000Z",
+      },
+    });
+    const scheduler = createLocalHarnessEvaluationReviewScheduler({
+      store: current.store,
+      isClosing: () => false,
+      now: () => NOW,
+    });
+    const receipt = await scheduler.runDueNow();
+    expect(receipt?.classification).toBe("no_action");
+    expect(receipt?.maxEstimatedCostUsd).toBe(0.5);
+    expect(await current.store.getHarnessEvaluationReviewSettings(current.workspace.id)).toMatchObject({
+      nextRunAt: "2026-08-09T12:00:00.000Z",
+      lastRunAt: NOW,
+      lastResult: { id: receipt?.id, contentHash: receipt?.contentHash },
+      lastError: null,
+    });
+    expect(await scheduler.runDueNow()).toBeNull();
   });
 });

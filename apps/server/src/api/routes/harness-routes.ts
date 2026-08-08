@@ -15,6 +15,18 @@ export async function handleHarnessRoutes({
     sendJson(response, 200, await deps.updateHarnessBackgroundReviewPayload(await readJson(request)));
     return true;
   }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/harness/evaluation-review") {
+    sendJson(response, 200, await deps.reviewHarnessEvaluationPayload(await readJson(request)));
+    return true;
+  }
+  if (request.method === "POST" && requestUrl.pathname === "/v1/harness/evaluation-review/settings") {
+    sendJson(
+      response,
+      200,
+      await deps.updateHarnessEvaluationReviewSchedulePayload(await readJson(request)),
+    );
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/harness/diff") {
     sendJson(response, 200, await deps.harnessDiffPayload(await readJson(request)));
     return true;

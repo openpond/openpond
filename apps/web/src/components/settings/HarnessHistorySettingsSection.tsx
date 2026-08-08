@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
+  HarnessEvaluationReviewSchedule,
   HarnessHistoryChange,
   HarnessHistoryPayload,
   HarnessHistoryPendingReview,
@@ -9,6 +10,7 @@ import type {
 
 import { api, type ClientConnection } from "../../api";
 import { Check, RefreshCw, RotateCcw, X } from "../icons";
+import { HarnessEvaluationReviewSettings } from "./HarnessEvaluationReviewSettings";
 import type { HarnessReleaseDiffSelection } from "./HarnessReleaseDiffSidebar";
 
 type Props = {
@@ -19,6 +21,17 @@ type Props = {
   onOpenReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenSourceSession?: (sessionId: string) => void;
   onToast?: (message: string, tone?: "success" | "error" | "info") => void;
+};
+
+const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
+  enabled: false,
+  cadence: "manual",
+  maxEstimatedCostUsd: 0,
+  nextRunAt: null,
+  lastRunAt: null,
+  lastResult: null,
+  lastError: null,
+  updatedAt: null,
 };
 
 function formatDate(value: string): string {
@@ -290,6 +303,8 @@ export function HarnessHistorySettingsSection({
   const [rollbackHash, setRollbackHash] = useState<string | null>(null);
   const [reviewingProposalId, setReviewingProposalId] = useState<string | null>(null);
   const [savingBackgroundReview, setSavingBackgroundReview] = useState(false);
+  const [reviewingEvaluation, setReviewingEvaluation] = useState(false);
+  const [savingEvaluationSchedule, setSavingEvaluationSchedule] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!connection) return;
@@ -341,6 +356,49 @@ export function HarnessHistorySettingsSection({
       onError(error instanceof Error ? error.message : String(error));
     } finally {
       setSavingBackgroundReview(false);
+    }
+  }, [connection, history?.workspace, onError, onToast]);
+
+  const reviewEvaluation = useCallback(async (maxEstimatedCostUsd: number) => {
+    if (!connection || !history?.workspace) return;
+    setReviewingEvaluation(true);
+    try {
+      const response = await api.reviewHarnessEvaluation(connection, {
+        workspaceId: history.workspace.id,
+        maxEstimatedCostUsd,
+      });
+      setHistory(response.history);
+      onError(null);
+      onToast?.(
+        `Harness review completed: ${response.receipt.classification.replaceAll("_", " ")}.`,
+        "success",
+      );
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setReviewingEvaluation(false);
+    }
+  }, [connection, history?.workspace, onError, onToast]);
+
+  const saveEvaluationSchedule = useCallback(async (input: {
+    enabled: boolean;
+    cadence: "manual" | "daily" | "weekly";
+    maxEstimatedCostUsd: number;
+  }) => {
+    if (!connection || !history?.workspace) return;
+    setSavingEvaluationSchedule(true);
+    try {
+      const response = await api.updateHarnessEvaluationReviewSchedule(connection, {
+        workspaceId: history.workspace.id,
+        ...input,
+      });
+      setHistory(response.history);
+      onError(null);
+      onToast?.(input.enabled ? "Harness review schedule saved." : "Harness review schedule disabled.", "info");
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingEvaluationSchedule(false);
     }
   }, [connection, history?.workspace, onError, onToast]);
 
@@ -447,6 +505,15 @@ export function HarnessHistorySettingsSection({
               </label>
             </div>
           </section>
+
+          <HarnessEvaluationReviewSettings
+            busy={reviewingEvaluation || savingEvaluationSchedule}
+            onReview={(maxEstimatedCostUsd) => void reviewEvaluation(maxEstimatedCostUsd)}
+            onSaveSchedule={(input) => void saveEvaluationSchedule(input)}
+            qualifications={history.modelImprovementQualifications}
+            reviews={history.evaluationReviews}
+            schedule={history.evaluationReviewSchedule ?? DEFAULT_EVALUATION_REVIEW_SCHEDULE}
+          />
 
           <section className="account-list">
             <div className="account-list-heading"><span>Releases</span><small>New runs use current; active runs stay pinned.</small></div>

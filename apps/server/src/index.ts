@@ -113,6 +113,7 @@ import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
+import { createLocalHarnessEvaluationReviewScheduler } from "./harness/local-harness-evaluation-review-scheduler.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
@@ -1650,6 +1651,11 @@ export async function createOpenPondServer(
   }
 
   const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
+  const harnessEvaluationReviewScheduler = createLocalHarnessEvaluationReviewScheduler({
+    store,
+    isClosing: () => closing,
+    logger,
+  });
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
@@ -1884,7 +1890,10 @@ export async function createOpenPondServer(
   }
   await turnRunner.recoverPendingSubagentCompletions();
   workSandboxLifecycle.start();
-  if (options.httpEnabled !== false) localAgentScheduleLoop.start();
+  if (options.httpEnabled !== false) {
+    localAgentScheduleLoop.start();
+    harnessEvaluationReviewScheduler.start();
+  }
 
   const status: ServerStatus = {
     id: serverId,
@@ -1908,6 +1917,7 @@ export async function createOpenPondServer(
     backgroundLoops: [
       taskMinerBackgroundLoop,
       localAgentScheduleLoop,
+      harnessEvaluationReviewScheduler,
     ],
     browserControlQueue,
     closeEventSubscribers,
