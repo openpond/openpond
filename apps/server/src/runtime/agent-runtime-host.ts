@@ -26,6 +26,8 @@ export function createAgentRuntimePorts(deps: {
   inspectHarness(): Promise<unknown>;
   reviewHarnessProposal(params: unknown): Promise<unknown>;
   reviewHarness(params: unknown): Promise<unknown>;
+  acceptHarnessEvaluationReview(params: unknown): Promise<unknown>;
+  materializeHarnessEvaluationTaskset(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
@@ -60,6 +62,8 @@ export function createAgentRuntimePorts(deps: {
         harnessInspection: true,
         harnessProposalReview: true,
         harnessEvaluationReview: true,
+        harnessEvaluationReviewAcceptance: true,
+        harnessEvaluationTasksetMaterialization: true,
         harnessValidation: true,
         immutableHarnessAdmission: true,
         harnessBackgroundReview: true,
@@ -86,6 +90,8 @@ export function createAgentRuntimePorts(deps: {
     inspectHarness: deps.inspectHarness,
     reviewHarnessProposal: deps.reviewHarnessProposal,
     reviewHarness: deps.reviewHarness,
+    acceptHarnessEvaluationReview: deps.acceptHarnessEvaluationReview,
+    materializeHarnessEvaluationTaskset: deps.materializeHarnessEvaluationTaskset,
     validateHarness: deps.validateHarness,
     updateHarnessBackgroundReview: deps.updateHarnessBackgroundReview,
     diffHarness: deps.diffHarness,

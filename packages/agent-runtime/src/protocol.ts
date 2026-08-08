@@ -17,6 +17,8 @@ export const AGENT_RPC_METHODS = [
   "harness/inspect",
   "harness/proposalReview",
   "harness/review",
+  "harness/acceptEvaluationReview",
+  "harness/materializeEvaluationTaskset",
   "harness/validate",
   "harness/backgroundReview",
   "harness/diff",
@@ -93,6 +95,8 @@ export type AgentRuntimeHost = {
   harnessInspect(params: unknown): Promise<unknown>;
   harnessProposalReview(params: unknown): Promise<unknown>;
   harnessReview(params: unknown): Promise<unknown>;
+  harnessAcceptEvaluationReview(params: unknown): Promise<unknown>;
+  harnessMaterializeEvaluationTaskset(params: unknown): Promise<unknown>;
   harnessValidate(params: unknown): Promise<unknown>;
   harnessBackgroundReview(params: unknown): Promise<unknown>;
   harnessDiff(params: unknown): Promise<unknown>;
@@ -172,6 +176,8 @@ export class AgentJsonRpcDispatcher {
       case "harness/inspect": return this.#host.harnessInspect(params);
       case "harness/proposalReview": return this.#host.harnessProposalReview(params);
       case "harness/review": return this.#host.harnessReview(params);
+      case "harness/acceptEvaluationReview": return this.#host.harnessAcceptEvaluationReview(params);
+      case "harness/materializeEvaluationTaskset": return this.#host.harnessMaterializeEvaluationTaskset(params);
       case "harness/validate": return this.#host.harnessValidate(params);
       case "harness/backgroundReview": return this.#host.harnessBackgroundReview(params);
       case "harness/diff": return this.#host.harnessDiff(params);

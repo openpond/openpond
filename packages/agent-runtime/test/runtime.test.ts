@@ -273,7 +273,14 @@ describe("@openpond/agent-runtime", () => {
       interruptTurn: async (threadId) => ({ id: "turn-1", threadId }),
       resolveApproval: async (approvalId) => ({ id: approvalId }),
       inspectHarness: async () => ({}),
+      reviewHarnessProposal: async () => ({}),
+      reviewHarness: async () => ({}),
+      acceptHarnessEvaluationReview: async () => ({}),
+      materializeHarnessEvaluationTaskset: async () => ({}),
       validateHarness: async () => ({}),
+      updateHarnessBackgroundReview: async () => ({}),
+      diffHarness: async () => ({}),
+      rollbackHarness: async () => ({}),
       telemetry: (event) => telemetry.push(event),
     });
 

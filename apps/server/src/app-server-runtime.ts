@@ -56,6 +56,7 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
+import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
@@ -123,6 +124,10 @@ export async function createOpenPondAppServer(
     metadata: { version, runtimeVersion, placement: "hosted_work" },
   });
   const store = new SqliteStore(storeDir, { logger });
+  const harnessTasksetReview = await createLocalHarnessTasksetReviewControl({
+    store,
+    storeDir,
+  });
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
@@ -314,6 +319,9 @@ export async function createOpenPondAppServer(
       inspectHarness: () => localHarnessHistoryPayload(store),
       reviewHarnessProposal: createLocalHarnessSettingsRoutePayloads({ store, storeDir }).reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
+      acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
+      materializeHarnessEvaluationTaskset:
+        harnessTasksetReview.materializeEvaluationTaskset,
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release
