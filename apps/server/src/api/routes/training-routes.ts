@@ -80,6 +80,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/sources/estimate", action: "estimate_sources" },
     { method: "POST", path: "/v1/training/sources/search", action: "search_sources" },
     { method: "POST", path: "/v1/training/dataset-imports/huggingface/inspect", action: "inspect_huggingface_dataset", status: 201 },
+    { method: "POST", path: "/v1/training/harness-reviews/accept", action: "accept_harness_review", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },

@@ -32,6 +32,7 @@ export function AppSettingsRoute({
   onToast,
   onBack,
   onOpenSourceSession,
+  onAcceptEvaluationReview,
   onOpenSkill,
   onOpenExtension,
   teamChatCurrentUserId,
@@ -58,6 +59,7 @@ export function AppSettingsRoute({
         onToast={onToast}
         onBack={onBack}
         onOpenSourceSession={onOpenSourceSession}
+        onAcceptEvaluationReview={onAcceptEvaluationReview}
         onOpenSkill={onOpenSkill}
         onOpenExtension={onOpenExtension}
         teamChatCurrentUserId={teamChatCurrentUserId}

@@ -11,6 +11,8 @@ type Props = {
   reviews: HarnessEvaluationReviewReceipt[];
   qualifications: ModelImprovementQualificationReceipt[];
   schedule: HarnessEvaluationReviewSchedule;
+  acceptingReviewId: string | null;
+  onAcceptTasksetReview: (review: HarnessEvaluationReviewReceipt) => void;
   onReview: (maxEstimatedCostUsd: number) => void;
   onSaveSchedule: (input: {
     enabled: boolean;
@@ -51,7 +53,19 @@ function ReviewLineage({ review }: { review: HarnessEvaluationReviewReceipt }) {
   );
 }
 
-function EvaluationReviewCard({ review }: { review: HarnessEvaluationReviewReceipt }) {
+function EvaluationReviewCard({
+  accepting,
+  onAcceptTasksetReview,
+  review,
+}: {
+  accepting: boolean;
+  onAcceptTasksetReview: (review: HarnessEvaluationReviewReceipt) => void;
+  review: HarnessEvaluationReviewReceipt;
+}) {
+  const awaitingTasksetApproval =
+    review.classification === "taskset" &&
+    review.nextAuthority === "human_review" &&
+    review.tasksetProposal === null;
   return (
     <article className="harness-history-card harness-evaluation-review-card">
       <header>
@@ -74,6 +88,18 @@ function EvaluationReviewCard({ review }: { review: HarnessEvaluationReviewRecei
         <span><strong>${review.maxEstimatedCostUsd.toFixed(2)}</strong> maximum cost</span>
       </div>
       <ReviewLineage review={review} />
+      {awaitingTasksetApproval ? (
+        <div className="harness-history-actions">
+          <button
+            className="settings-primary compact"
+            disabled={accepting}
+            onClick={() => onAcceptTasksetReview(review)}
+            type="button"
+          >
+            {accepting ? "Opening Taskset review…" : "Build training Taskset"}
+          </button>
+        </div>
+      ) : null}
       <footer>
         <span>Watermark {formatDate(review.nextWatermark.throughCreatedAt)}</span>
         <code>{shortHash(review.nextWatermark.cursor)}</code>
@@ -101,7 +127,9 @@ function QualificationCard({ receipt }: { receipt: ModelImprovementQualification
 }
 
 export function HarnessEvaluationReviewSettings({
+  acceptingReviewId,
   busy,
+  onAcceptTasksetReview,
   reviews,
   qualifications,
   schedule,
@@ -212,7 +240,14 @@ export function HarnessEvaluationReviewSettings({
           <span>{reviews.length}</span>
         </div>
         {reviews.length
-          ? reviews.map((review) => <EvaluationReviewCard key={`${review.id}:${review.contentHash}`} review={review} />)
+          ? reviews.map((review) => (
+              <EvaluationReviewCard
+                accepting={acceptingReviewId === review.id}
+                key={`${review.id}:${review.contentHash}`}
+                onAcceptTasksetReview={onAcceptTasksetReview}
+                review={review}
+              />
+            ))
           : <div className="harness-empty">No model improvement reviews have run.</div>}
       </section>
 

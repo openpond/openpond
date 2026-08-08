@@ -557,6 +557,32 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       setView,
     ]
   );
+  const acceptHarnessEvaluationReview = useCallback(async (
+    workspaceId: string,
+    review: { id: string; contentHash: string },
+  ): Promise<boolean> => {
+    const creation = await training.actions.acceptHarnessReview(
+      workspaceId,
+      review,
+      { providerId: activeProvider, modelId: activeModel },
+      codexReasoningEffort,
+    );
+    if (!creation) {
+      showToast("Taskset review could not be opened.", "error");
+      return false;
+    }
+    setTrainingDetailTasksetId(creation.materializedTasksetId ?? null);
+    setView("labs");
+    return true;
+  }, [
+    activeModel,
+    activeProvider,
+    codexReasoningEffort,
+    setTrainingDetailTasksetId,
+    setView,
+    showToast,
+    training.actions,
+  ]);
   if (!startup.ready) {
     return <AppSplash startup={startup} />;
   }
@@ -574,6 +600,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onError: setError,
             onToast: showToast,
             onOpenSourceSession: openSessionInChat,
+            onAcceptEvaluationReview: acceptHarnessEvaluationReview,
             onOpenSkill: openSkillFromSettings,
             onOpenExtension: openExtensionFromSettings,
             teamChatCurrentUserId: teamChat.currentUserId,
