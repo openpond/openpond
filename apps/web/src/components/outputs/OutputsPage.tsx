@@ -163,54 +163,59 @@ export function OutputsPage({
             <OutputMessage>No outputs match this file type.</OutputMessage>
           ) : (
             <div className="outputs-grid" data-testid="desktop-output-cards">
-                {visibleOutputs.map((output) => {
-                  const presentation = outputFilePresentation(output);
-                  const key = outputKey(output);
-                  return (
-                    <article className="output-card" key={key}>
+              {visibleOutputs.map((output) => {
+                const presentation = outputFilePresentation(output);
+                const key = outputKey(output);
+                return (
+                  <article className="output-card" key={key}>
+                    <button
+                      aria-label={`Preview ${output.title}`}
+                      className="output-card-main"
+                      disabled={busyOutputKey === key}
+                      onClick={() => void previewOutput(output)}
+                      type="button"
+                    >
+                      <span className="output-card-icon">
+                        <OutputTypeIcon type={presentation.type} />
+                      </span>
+                      <span className="output-card-copy">
+                        <strong>{output.title}</strong>
+                        <small>
+                          {presentation.label} · {formatBytes(output.sizeBytes)}
+                        </small>
+                        <small>
+                          Revision {output.revision} ·{" "}
+                          <time dateTime={output.createdAt}>
+                            {formatDateTime(output.createdAt)}
+                          </time>
+                        </small>
+                      </span>
+                      {busyOutputKey === key ? (
+                        <Loader2 className="outputs-spin" size={15} />
+                      ) : null}
+                    </button>
+                    <div className="output-card-actions">
+                      {output.location.kind === "local" ? (
+                        <button
+                          aria-label={`Download ${output.title}`}
+                          className="output-download-button"
+                          onClick={() => void saveOutput(output)}
+                          title="Download"
+                          type="button"
+                        >
+                          <Download aria-hidden="true" size={14} />
+                        </button>
+                      ) : null}
                       <button
-                        aria-label={`Preview ${output.title}`}
-                        className="output-card-main"
-                        disabled={busyOutputKey === key}
-                        onClick={() => void previewOutput(output)}
+                        onClick={() => onViewChat(output.sourceTaskId)}
                         type="button"
                       >
-                        <span className="output-card-icon">
-                          <OutputTypeIcon type={presentation.type} />
-                        </span>
-                        <span className="output-card-copy">
-                          <strong>{output.title}</strong>
-                          <small>
-                            {presentation.label} · {formatBytes(output.sizeBytes)}
-                          </small>
-                          <small>
-                            Revision {output.revision} ·{" "}
-                            <time dateTime={output.createdAt}>
-                              {formatDateTime(output.createdAt)}
-                            </time>
-                          </small>
-                        </span>
-                        {busyOutputKey === key ? <Loader2 className="outputs-spin" size={15} /> : null}
+                        View chat
                       </button>
-                      <div className="output-card-actions">
-                        {output.location.kind === "local" ? (
-                          <button
-                            aria-label={`Download ${output.title}`}
-                            className="output-download-button"
-                            onClick={() => void saveOutput(output)}
-                            title="Download"
-                            type="button"
-                          >
-                            <Download aria-hidden="true" size={14} />
-                          </button>
-                        ) : null}
-                        <button onClick={() => onViewChat(output.sourceTaskId)} type="button">
-                          View chat
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </div>

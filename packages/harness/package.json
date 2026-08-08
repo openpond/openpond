@@ -22,6 +22,10 @@
       "types": "./dist/types/harness.d.ts",
       "import": "./dist/harness.js"
     },
+    "./evaluation-review": {
+      "types": "./dist/types/evaluation-review.d.ts",
+      "import": "./dist/evaluation-review.js"
+    },
     "./harness-improvements": {
       "types": "./dist/types/harness-improvements.d.ts",
       "import": "./dist/harness-improvements.js"

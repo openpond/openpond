@@ -24,6 +24,7 @@ export function createAgentRuntimePorts(deps: {
   interruptSessionTurn(sessionId: string, reason?: string): Promise<Turn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<Approval>;
   inspectHarness(): Promise<unknown>;
+  reviewHarness(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   subscribeRuntimeEvents(listener: (event: RuntimeEvent) => void): () => void;
   observeRuntimeOperation?(event: import("@openpond/agent-runtime").AgentRuntimeTelemetryEvent): void;
@@ -53,6 +54,7 @@ export function createAgentRuntimePorts(deps: {
         userInput: true,
         compaction: true,
         harnessInspection: true,
+        harnessEvaluationReview: true,
         harnessValidation: true,
         immutableHarnessAdmission: true,
       },
@@ -73,6 +75,7 @@ export function createAgentRuntimePorts(deps: {
     interruptTurn: deps.interruptSessionTurn,
     resolveApproval: deps.resolveApproval,
     inspectHarness: deps.inspectHarness,
+    reviewHarness: deps.reviewHarness,
     validateHarness: deps.validateHarness,
     subscribeEvents: deps.subscribeRuntimeEvents,
     eventNotification: runtimeEventNotification,

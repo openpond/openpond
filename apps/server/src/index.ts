@@ -112,6 +112,7 @@ import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
+import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
 import { createWorkOutputService } from "./work/work-output-service.js";
@@ -1663,6 +1664,7 @@ export async function createOpenPondServer(
       interruptSessionTurn,
       resolveApproval,
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
+      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release

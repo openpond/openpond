@@ -42,6 +42,14 @@
       "types": "./dist/types/runs.d.ts",
       "import": "./dist/runs.js"
     },
+    "./review": {
+      "types": "./dist/types/review-conformance.d.ts",
+      "import": "./dist/review-conformance.js"
+    },
+    "./model-improvement-qualification": {
+      "types": "./dist/types/model-improvement-qualification.d.ts",
+      "import": "./dist/model-improvement-qualification.js"
+    },
     "./conformance": {
       "types": "./dist/types/conformance.d.ts",
       "import": "./dist/conformance.js"

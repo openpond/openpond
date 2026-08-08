@@ -21,6 +21,8 @@ runtime processes.
 | completed Work or Development turn | `WorkEvidenceReceipt` | Project the authoritative terminal turn, immutable Agent snapshot when available, model/runtime identity, sanitized trace reference, exact output revisions, validation evidence, interventions, timing, usage, and explicit consent provenance. Keep the raw source and trace host-private. |
 | Agent plus environment runtime events | `WorkProcessTrace` | Emit one ordered trace with `agent` and `environment` layers. Bind every environment step to its outer Agent tool call or stable Agent-turn receipt hash. Hash inputs/outputs and expose only enumerated, bounded attributes. |
 | user feedback on Work output | `WorkFeedbackReceipt` | Append a new receipt bound to the evidence receipt and, when selected, the exact content-addressed output-revision descriptor. Corrections are separate artifacts and never mutate prior receipts. |
+| bounded cross-Work review | `HarnessEvaluationReviewReceipt` | Select only currently authorized immutable evidence, advance one watermark, group one stable claim, route to the smallest correct layer, and name the next authority without performing downstream effects. |
+| model-improvement qualification | `ModelImprovementQualificationReceipt` | Bind the originating review, exact Harness, Taskset, real baseline Evaluation, Model, Environment/tool/permission/policy hashes, Verifier, source policies, privacy, budget, and non-frozen signal. Weak or confounded evidence emits `no_training`; training and activation remain host effects. |
 
 ## Compatibility policy
 

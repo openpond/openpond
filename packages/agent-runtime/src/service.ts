@@ -24,6 +24,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   interruptTurn(threadId: string, reason?: string): Promise<TTurn>;
   resolveApproval(approvalId: string, payload: unknown): Promise<TApproval>;
   inspectHarness(): Promise<unknown>;
+  reviewHarness(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   subscribeEvents?(listener: (event: TEvent) => void): () => void;
   eventNotification?(event: TEvent): JsonRpcNotification;
@@ -33,7 +34,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
 export type AgentRuntimeTelemetryEvent = {
   method: "runtime/capabilities" | "thread/start" | "thread/read" | "thread/resume" |
     "turn/start" | "turn/steer" | "turn/interrupt" | "approval/resolve" |
-    "userInput/resolve" | "harness/inspect" | "harness/validate";
+    "userInput/resolve" | "harness/inspect" | "harness/review" | "harness/validate";
   phase: "started" | "completed" | "failed";
   threadId: string | null;
   durationMs: number | null;
@@ -133,6 +134,7 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
       });
     },
     harnessInspect: () => run("harness/inspect", null, () => ports.inspectHarness()),
+    harnessReview: (params) => run("harness/review", null, () => ports.reviewHarness(params)),
     harnessValidate: () => run("harness/validate", null, () => ports.validateHarness()),
     subscribe: ports.subscribeEvents && ports.eventNotification
       ? (listener) => ports.subscribeEvents!((event) => listener(ports.eventNotification!(event)))
