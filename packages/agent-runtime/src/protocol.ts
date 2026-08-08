@@ -15,6 +15,7 @@ export const AGENT_RPC_METHODS = [
   "approval/resolve",
   "userInput/resolve",
   "harness/inspect",
+  "harness/proposalReview",
   "harness/review",
   "harness/validate",
 ] as const;
@@ -87,6 +88,7 @@ export type AgentRuntimeHost = {
   approvalResolve(params: unknown): Promise<unknown>;
   userInputResolve(params: unknown): Promise<unknown>;
   harnessInspect(params: unknown): Promise<unknown>;
+  harnessProposalReview(params: unknown): Promise<unknown>;
   harnessReview(params: unknown): Promise<unknown>;
   harnessValidate(params: unknown): Promise<unknown>;
   subscribe?(listener: (notification: JsonRpcNotification) => void): () => void;
@@ -162,6 +164,7 @@ export class AgentJsonRpcDispatcher {
       case "approval/resolve": return this.#host.approvalResolve(params);
       case "userInput/resolve": return this.#host.userInputResolve(params);
       case "harness/inspect": return this.#host.harnessInspect(params);
+      case "harness/proposalReview": return this.#host.harnessProposalReview(params);
       case "harness/review": return this.#host.harnessReview(params);
       case "harness/validate": return this.#host.harnessValidate(params);
       default: throw new JsonRpcDispatchError(-32601, `Method not found: ${method}`);

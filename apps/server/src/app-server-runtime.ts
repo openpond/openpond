@@ -29,7 +29,10 @@ import {
   ensureLocalHarnessRunOverlay,
   loadLocalHarnessRuntimeForAgentRun,
 } from "./harness/local-harness-run-overlay.js";
-import { localHarnessHistoryPayload } from "./harness/local-harness-history.js";
+import {
+  createLocalHarnessSettingsRoutePayloads,
+  localHarnessHistoryPayload,
+} from "./harness/local-harness-history.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
@@ -302,6 +305,7 @@ export async function createOpenPondAppServer(
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       inspectHarness: () => localHarnessHistoryPayload(store),
+      reviewHarnessProposal: createLocalHarnessSettingsRoutePayloads({ store, storeDir }).reviewHarnessProposalPayload,
       reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);

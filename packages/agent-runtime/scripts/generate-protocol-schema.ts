@@ -29,6 +29,7 @@ const methodNames = {
   "approval/resolve": "approvalResolve",
   "userInput/resolve": "userInputResolve",
   "harness/inspect": "harnessInspect",
+  "harness/proposalReview": "harnessProposalReview",
   "harness/review": "harnessReview",
   "harness/validate": "harnessValidate",
 } as const;
