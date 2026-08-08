@@ -43,6 +43,10 @@ import {
 import { syncModelTrainingCreateImproveRuns } from "./model-create-improve-reconciliation.js";
 import { legacyBaseModelPreference } from "./base-model-candidates.js";
 import { projectTrainingActivity } from "./training-activity.js";
+import {
+  linkHarnessReviewTaskset,
+  startHarnessReviewTasksetAuthoring,
+} from "./harness-review-taskset.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -180,6 +184,24 @@ export function createTrainingApi(deps: {
         preferredBaseModel,
       });
     }
+    if (action === "accept_harness_review") {
+      const reviewRef = record(input.reviewRef);
+      return startHarnessReviewTasksetAuthoring({
+        store: deps.store,
+        taskCreator: deps.taskCreator,
+        startCreation: startModelCreation,
+        profileId: requiredString(input.profileId, "profileId"),
+        workspaceId: requiredString(input.workspaceId, "workspaceId"),
+        reviewRef: {
+          id: requiredString(reviewRef.id, "reviewRef.id"),
+          contentHash: requiredString(reviewRef.contentHash, "reviewRef.contentHash"),
+        },
+        analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null,
+        analysisReasoningEffort: input.analysisReasoningEffort
+          ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort)
+          : null,
+      });
+    }
     if (action === "start_creation") {
       const preferredBaseModel = nullableBaseModelPreference(
         input.preferredBaseModel,
@@ -212,7 +234,11 @@ export function createTrainingApi(deps: {
     if (action === "answer_questions") return syncCreation(await deps.taskCreator.answerQuestions(requiredString(input.creationId, "creationId"), stringRecord(input.answers)));
     if (action === "approve_materialization") {
       const creation = await deps.taskCreator.approveMaterialization(requiredString(input.creationId, "creationId"), input.approved === true);
-      if (creation.state === "ready" && creation.materializedTasksetId) await deps.evaluation.readiness(creation.materializedTasksetId);
+      if (creation.state === "ready" && creation.materializedTasksetId) {
+        await deps.evaluation.readiness(creation.materializedTasksetId);
+        const taskset = await deps.store.getTaskset(creation.materializedTasksetId);
+        if (taskset) await linkHarnessReviewTaskset({ store: deps.store, taskset });
+      }
       return syncCreation(creation);
     }
     if (action === "chat_creation") return syncCreation(await deps.taskCreator.chat(requiredString(input.creationId, "creationId"), requiredString(input.message, "message")));
@@ -262,6 +288,43 @@ export function createTrainingApi(deps: {
           ),
         },
         resultId: string(input.resultId) ?? undefined,
+      });
+    }
+    if (action === "execute_harness_review_baseline") {
+      const reviewRef = record(input.reviewRef);
+      const sampling = record(input.sampling);
+      return deps.evaluation.executeBaseline({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        model: ChatModelRefSchema.parse(input.model),
+        reviewRef: {
+          id: requiredString(reviewRef.id, "reviewRef.id"),
+          contentHash: requiredString(reviewRef.contentHash, "reviewRef.contentHash"),
+        },
+        seeds: integerArray(input.seeds, "seeds"),
+        attemptsPerTask: boundedInteger(
+          input.attemptsPerTask,
+          "attemptsPerTask",
+          1,
+          20,
+          1,
+        ),
+        sampling: {
+          maxOutputTokens: boundedInteger(
+            sampling.maxOutputTokens,
+            "sampling.maxOutputTokens",
+            1,
+            128_000,
+            4_096,
+          ),
+          temperature: boundedNumber(
+            sampling.temperature,
+            "sampling.temperature",
+            0,
+            2,
+            0,
+          ),
+          topP: boundedNumber(sampling.topP, "sampling.topP", 0, 1, 1),
+        },
       });
     }
     if (action === "audit_graders") return deps.evaluation.auditFixtures({ tasksetId: requiredString(input.tasksetId, "tasksetId"), fixtures: Array.isArray(input.fixtures) ? input.fixtures as never[] : undefined });
@@ -454,6 +517,9 @@ export function createTrainingApi(deps: {
     ]);
     await syncModelTrainingCreateImproveRuns({ store: deps.store, profileId, execution });
     const graderAuditReports = (await Promise.all(tasksets.map((taskset) => deps.store.listGraderAuditReports(taskset.id)))).flat();
+    const evaluationResults = (await Promise.all(
+      tasksets.map((taskset) => deps.store.listEvaluationResults(taskset.id)),
+    )).flat();
     const activity = projectTrainingActivity({
       profileId,
       state: {
@@ -472,6 +538,7 @@ export function createTrainingApi(deps: {
       datasetImports,
       datasetArtifacts,
       graderAuditReports,
+      evaluationResults,
       candidates,
       minerConfig,
       minerRuns,
@@ -745,6 +812,13 @@ function requiredBaseModelPreference(value: unknown, legacyId: unknown): BaseMod
   return preference;
 }
 function stringArray(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()) : []; }
+function integerArray(value: unknown, label: string): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((item) => !Number.isInteger(item))) {
+    throw new Error(`${label} must be an array of integers.`);
+  }
+  return value as number[];
+}
 function requiredStringArray(value: unknown, name: string): string[] { const parsed = stringArray(value); if (!parsed.length) throw new Error(`${name} requires at least one value.`); return parsed; }
 function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
 function nullableNumber(value: unknown): number | null { return typeof value === "number" && Number.isFinite(value) ? value : null; }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EvaluationResultSchema } from "@openpond/evals";
 import {
   BaseModelPreferenceSchema,
   DatasetBuildIntentSchema,
@@ -832,6 +833,7 @@ export const TrainingStateResponseSchema = z.object({
   datasetImports: z.array(DatasetImportJobSchema).default([]),
   datasetArtifacts: z.array(DatasetArtifactSummarySchema).default([]),
   graderAuditReports: z.array(GraderAuditReportSchema),
+  evaluationResults: z.array(EvaluationResultSchema).default([]),
   candidates: z.array(TaskCandidateSchema),
   minerConfig: TaskMinerConfigSchema,
   minerRuns: z.array(TaskMinerRunSchema).default([]),

@@ -13,6 +13,62 @@ import {
 } from "./helpers/training-fixtures.js";
 
 describe("portable Evaluation release isolation", () => {
+  test("persists and reuses one real baseline over the frozen Evaluation split", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const reviewRef = { id: "review-baseline", contentHash: contentHash("review-baseline") };
+      const base = tasksetFixture({ ready: true });
+      const taskset = {
+        ...base,
+        metadata: { ...base.metadata, harnessEvaluationReview: reviewRef },
+      };
+      await store.upsertTaskset(taskset);
+      const evaluation = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        loadProfileState: async () => profileFixture("baseline-head", "baseline-skill"),
+        modelText: async () => "Goodbye friend",
+        modelStream: async function* () {
+          throw new Error("The chat fixture must not invoke the Work stream.");
+        },
+        workRuntime: {
+          createSession: async () => { throw new Error("Unexpected Work session."); },
+          getSession: async () => { throw new Error("Unexpected Work session read."); },
+          executeWorkspaceTool: async () => { throw new Error("Unexpected Work tool."); },
+          runtimeEventsForSession: async () => [],
+        },
+      });
+      const model = { providerId: "custom-openai-compatible", modelId: "fixture" } as const;
+
+      const first = await evaluation.executeBaseline({
+        tasksetId: taskset.id,
+        model,
+        reviewRef,
+        seeds: [17],
+      });
+      expect(first.reused).toBe(false);
+      expect(first.evaluationResult).toMatchObject({
+        attemptCount: 1,
+        rewardEligibleCount: 1,
+        terminalCount: 1,
+        meanScore: 1,
+        metadata: {
+          kind: "baseline",
+          sourceTasksetId: taskset.id,
+          sourceTasksetHash: taskset.contentHash,
+          harnessEvaluationReview: reviewRef,
+        },
+      });
+      const second = await evaluation.executeBaseline({
+        tasksetId: taskset.id,
+        model,
+        reviewRef,
+        seeds: [17],
+      });
+      expect(second).toMatchObject({ reused: true, attempts: [] });
+      expect(second.evaluationResult.contentHash).toBe(first.evaluationResult.contentHash);
+      expect(await store.listEvaluationResults(taskset.id, "baseline")).toHaveLength(1);
+    }));
+
   test("pins the admitted Harness before execution and compares a later candidate against the same Taskset", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const taskset = tasksetFixture({ ready: true });

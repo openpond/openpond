@@ -55,6 +55,7 @@ import {
   proposalMaterializationBlockers,
   trainingPathForProposal,
 } from "./task-creator-materialization.js";
+import { harnessReviewLineageFromSources } from "./harness-review-taskset.js";
 
 export { crossSystemStructuredExample, enrichCrossSystemProposal };
 
@@ -453,6 +454,7 @@ export function createTaskCreatorService(deps: {
     }
     const manual = manualBuildEvidence(snapshot);
     const effectiveSources = manual ? [...sources, manual.source] : sources;
+    const harnessReviewLineage = harnessReviewLineageFromSources(effectiveSources);
     const tasksetId = materializedTasksetId(snapshot, proposal);
     const existingTaskset = snapshot.request.resourceIntent === "dataset"
       && snapshot.request.targetIntent.operation === "improve"
@@ -577,6 +579,13 @@ export function createTaskCreatorService(deps: {
         diagnosis: proposal.diagnosis,
         assumptions: proposal.assumptions,
         warnings: proposal.warnings,
+        ...(harnessReviewLineage ? {
+          harnessEvaluationReview: {
+            id: harnessReviewLineage.review.id,
+            contentHash: harnessReviewLineage.review.contentHash,
+          },
+          harnessEvaluationLineage: harnessReviewLineage,
+        } : {}),
         ...crossSystemTasksetMetadata(effectiveSources),
       },
     };
