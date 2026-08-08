@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+
 import {
   WorkspaceToolResultSchema,
   type Session,
@@ -64,14 +66,16 @@ export async function executeAppServerSandboxTool(input: {
       },
     });
   } else if (action === "sandbox_read_file") {
-    data = await input.sandboxRequest({
-      type: "download_file",
-      sandboxId,
-      payload: {
-        path: requiredString(args.path, "path"),
-        maxBytes: numberValue(args.maxBytes) ?? 512 * 1024,
-      },
-    });
+    data = withDecodedFileContent(
+      await input.sandboxRequest({
+        type: "download_file",
+        sandboxId,
+        payload: {
+          path: requiredString(args.path, "path"),
+          maxBytes: numberValue(args.maxBytes) ?? 512 * 1024,
+        },
+      }),
+    );
   } else if (action === "sandbox_search_files") {
     data = await input.sandboxRequest({
       type: "search_files",
@@ -192,7 +196,8 @@ async function editRemoteSandboxFile(input: {
     optionalString(downloaded.contents) ||
     optionalString(downloaded.content) ||
     optionalString(file.contents) ||
-    optionalString(file.content);
+    optionalString(file.content) ||
+    decodeBase64(optionalString(file.contentsBase64));
   if (!content.includes(oldText)) {
     throw new Error(`Text to replace was not found in ${path}.`);
   }
@@ -208,6 +213,25 @@ async function editRemoteSandboxFile(input: {
     sandboxId: input.sandboxId,
     payload: { path, contents: nextContent },
   });
+}
+
+function withDecodedFileContent(value: unknown): unknown {
+  const result = asRecord(value);
+  const file = asRecord(result.file);
+  const contentsBase64 = optionalString(file.contentsBase64);
+  if (!contentsBase64) return value;
+  return {
+    ...result,
+    file: {
+      ...file,
+      content: decodeBase64(contentsBase64),
+    },
+  };
+}
+
+function decodeBase64(value: string): string {
+  if (!value) return "";
+  return Buffer.from(value, "base64").toString("utf8");
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
