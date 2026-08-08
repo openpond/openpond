@@ -32,6 +32,10 @@ import type {
   HarnessHistoryPayload,
   HarnessBackgroundReviewRequest,
   HarnessBackgroundReviewResponse,
+  HarnessEvaluationReviewRequest,
+  HarnessEvaluationReviewResponse,
+  HarnessEvaluationReviewScheduleRequest,
+  HarnessEvaluationReviewScheduleResponse,
   HarnessReleaseDiffPayload,
   HarnessReleaseDiffRequest,
   HarnessProposalReviewRequest,
@@ -576,6 +580,21 @@ export const api = {
     method: "POST",
     body: JSON.stringify(input),
   }),
+  reviewHarnessEvaluation: (
+    connection: ClientConnection,
+    input: HarnessEvaluationReviewRequest,
+  ) => apiFetch<HarnessEvaluationReviewResponse>(connection, "/v1/harness/evaluation-review", {
+    method: "POST",
+    body: JSON.stringify(input),
+  }),
+  updateHarnessEvaluationReviewSchedule: (
+    connection: ClientConnection,
+    input: HarnessEvaluationReviewScheduleRequest,
+  ) => apiFetch<HarnessEvaluationReviewScheduleResponse>(
+    connection,
+    "/v1/harness/evaluation-review/settings",
+    { method: "POST", body: JSON.stringify(input) },
+  ),
   harnessReleaseDiff: (
     connection: ClientConnection,
     input: HarnessReleaseDiffRequest,

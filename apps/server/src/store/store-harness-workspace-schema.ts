@@ -38,6 +38,24 @@ export async function createHarnessWorkspaceTables(
       FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
     );
 
+    CREATE TABLE IF NOT EXISTS harness_evaluation_review_settings (
+      workspace_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      cadence TEXT NOT NULL DEFAULT 'manual',
+      max_estimated_cost_usd REAL NOT NULL DEFAULT 0,
+      next_run_at TEXT,
+      last_run_at TEXT,
+      last_review_id TEXT,
+      last_review_hash TEXT,
+      last_classification TEXT,
+      last_error TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS harness_evaluation_review_settings_due_idx
+      ON harness_evaluation_review_settings(enabled, next_run_at);
+
     CREATE TABLE IF NOT EXISTS harness_release_records (
       content_hash TEXT PRIMARY KEY,
       id TEXT NOT NULL,
