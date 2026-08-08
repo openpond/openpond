@@ -196,7 +196,10 @@ describe("lean app-server composition", () => {
           return {
             file: {
               path: payload.path,
-              content: files.get(String(payload.path)) ?? "",
+              contentsBase64: Buffer.from(
+                files.get(String(payload.path)) ?? "",
+                "utf8",
+              ).toString("base64"),
             },
           };
         }
@@ -234,6 +237,26 @@ describe("lean app-server composition", () => {
                 arguments: JSON.stringify({
                   area: "outputs",
                   path: "remote-proof.md",
+                }),
+              },
+            }],
+          };
+          yield { type: "finish", finishReason: "tool_calls" };
+          return;
+        }
+        if (providerRound === 3) {
+          yield {
+            type: "tool_call_delta",
+            toolCalls: [{
+              id: "call_remote_edit",
+              type: "function",
+              function: {
+                name: "work_edit_file",
+                arguments: JSON.stringify({
+                  area: "outputs",
+                  path: "remote-proof.md",
+                  oldText: "# Remote proof\n",
+                  newText: "# Remote proof\nverified",
                 }),
               },
             }],
@@ -280,7 +303,7 @@ describe("lean app-server composition", () => {
 
     expect(resultRecord(turn).turn).toMatchObject({ status: "completed" });
     expect(files.get("outputs/remote-proof.md")).toBe(
-      "# Remote proof\n",
+      "# Remote proof\nverified\n",
     );
     expect(requests).toEqual(
       expect.arrayContaining([
