@@ -10,12 +10,9 @@ these initial schema literals:
 
 ## Trusted publishing
 
-This package name is not published yet. Its first publication is a one-time npm
-bootstrap after the Local branch is accepted and merged. The automated workflow
-intentionally refuses to publish until the npm package exists. Complete the
-organization's bootstrap procedure, configure `release-harness.yml` as
-the trusted publisher, and verify package integrity and provenance before using
-the normal release helper below. Do not bootstrap from a local feature branch.
+The package is published through `release-harness.yml` using npm trusted
+publishing. `@openpond/harness@0.1.0` is the current initial release; do not
+publish from a local feature branch or bypass the workflow.
 
 To inspect an already-published version:
 

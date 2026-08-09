@@ -7,7 +7,7 @@ import {
 import {
   contentHash,
   createHarnessEvaluationReviewReceipt,
-} from "@openpond/evals";
+} from "@openpond/harness";
 import { describe, expect, it, vi } from "vitest";
 
 import {

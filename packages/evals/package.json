@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
@@ -21,14 +21,6 @@
     "./harness": {
       "types": "./dist/types/harness.d.ts",
       "import": "./dist/harness.js"
-    },
-    "./harness-improvements": {
-      "types": "./dist/types/harness-improvements.d.ts",
-      "import": "./dist/harness-improvements.js"
-    },
-    "./harness-workspaces": {
-      "types": "./dist/types/harness-workspaces.d.ts",
-      "import": "./dist/harness-workspaces.js"
     },
     "./tasksets": {
       "types": "./dist/types/tasksets.d.ts",
@@ -88,7 +80,7 @@
     "zod": "^4.1.13"
   },
   "peerDependencies": {
-    "@openpond/harness": "^0.1.0"
+    "@openpond/harness": "^0.2.0"
   },
   "devDependencies": {
     "@openpond/harness": "workspace:*",

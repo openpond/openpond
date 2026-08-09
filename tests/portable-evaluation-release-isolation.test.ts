@@ -1,9 +1,9 @@
 import type { OpenPondProfileState } from "@openpond/contracts";
 import {
   assertComparableRunManifests,
-  contentHash,
   createVerifiedHarnessCompatibilityReceipt,
 } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
 
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service.js";

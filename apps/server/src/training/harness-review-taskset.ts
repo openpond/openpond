@@ -10,10 +10,12 @@ import {
   type TrainingSourceRef,
 } from "@openpond/contracts";
 import {
-  contentHash,
-  createHarnessEvaluationReviewReceipt,
   type EvaluationResult,
 } from "@openpond/evals";
+import {
+  contentHash,
+  createHarnessEvaluationReviewReceipt,
+} from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";

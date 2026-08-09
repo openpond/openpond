@@ -8,7 +8,11 @@ import {
   createRefinementTriggerDecision,
   type HarnessImprovementRoute,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
+import {
+  contentHash,
+  type HarnessEvaluationReviewModelDecision,
+  type HarnessEvaluationReviewModelStream,
+} from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -138,6 +142,14 @@ function sourcePolicies(runRefs: string[], state: "authorized" | "revoked" = "au
   }));
 }
 
+function reviewStream(
+  decision: HarnessEvaluationReviewModelDecision,
+): HarnessEvaluationReviewModelStream {
+  return async function* () {
+    yield { text: JSON.stringify(decision) };
+  };
+}
+
 describe("local Harness evaluation review", () => {
   it("persists one idempotent no-action receipt for an empty bounded window", async () => {
     const current = await fixture();
@@ -170,6 +182,20 @@ describe("local Harness evaluation review", () => {
     const receipt = await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-runtime"]) },
+      stream: reviewStream({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        decision: "review",
+        classification: "runtime",
+        selectedEvidenceIds: ["route_decision:route-run-runtime"],
+        ignoredEvidence: [],
+        recurrenceFamily: "supported-runtime-capability-failure",
+        statement: "The supported runtime capability failed during work.",
+        triageLayer: "runtime",
+        expectedOutcome: "Restore the supported runtime capability.",
+        counterevidence: "",
+        confidence: 0.94,
+        reason: "The authorized evidence directly identifies a runtime failure.",
+      }),
       now: () => "2026-08-08T12:10:00.000Z",
     });
     expect(receipt).toMatchObject({
@@ -196,7 +222,7 @@ describe("local Harness evaluation review", () => {
     expect(blocked.excludedEvidence).toContainEqual(expect.objectContaining({ reason: "revoked" }));
   });
 
-  it("requires three independent occurrences before proposing Taskset work", async () => {
+  it("lets the model select semantically related evidence for Taskset work", async () => {
     const current = await fixture();
     const runRefs = ["run-one", "run-two", "run-three"];
     for (const [index, runRef] of runRefs.entries()) {
@@ -212,6 +238,20 @@ describe("local Harness evaluation review", () => {
     const receipt = await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 3 } },
+      stream: reviewStream({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        decision: "review",
+        classification: "taskset",
+        selectedEvidenceIds: runRefs.map((runRef) => `route_decision:route-${runRef}`),
+        ignoredEvidence: [],
+        recurrenceFamily: "answer-quality-regression",
+        statement: "Independent turns show a related answer-quality regression.",
+        triageLayer: "evaluation",
+        expectedOutcome: "Measure the behavior under a controlled Taskset before escalation.",
+        counterevidence: "The surface wording differs across turns.",
+        confidence: 0.86,
+        reason: "The evidence is semantically related and needs controlled measurement.",
+      }),
       now: () => "2026-08-08T12:10:00.000Z",
     });
     expect(receipt).toMatchObject({
@@ -220,6 +260,177 @@ describe("local Harness evaluation review", () => {
       claim: { independentOccurrences: 3, unresolvedOccurrences: 3 },
     });
     expect(receipt.selectedEvidence).toHaveLength(3);
+  });
+
+  it("does not watermark evidence that a review budget has not examined", async () => {
+    const current = await fixture();
+    const runRefs = ["run-budget-one", "run-budget-two"];
+    for (const [index, runRef] of runRefs.entries()) {
+      await saveOccurrence({
+        store: current.store,
+        workspaceId: current.workspace.id,
+        harnessRelease: current.release.harnessRelease,
+        route: "runtime",
+        runRef,
+        createdAt: `2026-08-08T12:0${index + 1}:00.000Z`,
+      });
+    }
+    const first = await reviewSelectedLocalHarnessEvaluation({
+      store: current.store,
+      request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 1 } },
+      stream: reviewStream({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        decision: "no_action",
+        reason: "The first bounded candidate alone is insufficient.",
+        ignoredEvidence: [{
+          id: "route_decision:route-run-budget-one",
+          reason: "Review the next independent occurrence in a later bounded window.",
+        }],
+      }),
+      now: () => "2026-08-08T12:10:00.000Z",
+    });
+    expect(first.nextWatermark.throughCreatedAt).toBe("2026-08-08T12:01:00.000Z");
+
+    const second = await reviewSelectedLocalHarnessEvaluation({
+      store: current.store,
+      request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 1 } },
+      stream: reviewStream({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        decision: "review",
+        classification: "runtime",
+        selectedEvidenceIds: ["route_decision:route-run-budget-two"],
+        ignoredEvidence: [],
+        recurrenceFamily: "supported-runtime-capability-failure",
+        statement: "A later independent occurrence remains available for review.",
+        triageLayer: "runtime",
+        expectedOutcome: "Repair the supported runtime capability.",
+        counterevidence: "The first bounded review did not see this occurrence.",
+        confidence: 0.9,
+        reason: "Budget exclusion must defer evidence rather than consume it.",
+      }),
+      now: () => "2026-08-08T12:11:00.000Z",
+    });
+    expect(second).toMatchObject({
+      classification: "runtime",
+      selectedEvidence: [
+        { evidence: { id: "route-run-budget-two" } },
+      ],
+    });
+  });
+
+  it("defers evidence the model did not select for full review and aggregates staged usage", async () => {
+    const current = await fixture();
+    const runRefs = Array.from({ length: 20 }, (_, index) => `run-navigation-${index + 1}`);
+    for (const [index, runRef] of runRefs.entries()) {
+      await saveOccurrence({
+        store: current.store,
+        workspaceId: current.workspace.id,
+        harnessRelease: current.release.harnessRelease,
+        route: "runtime",
+        runRef,
+        createdAt: `2026-08-08T12:00:${String(index + 1).padStart(2, "0")}.000Z`,
+      });
+    }
+    let calls = 0;
+    const receipt = await reviewSelectedLocalHarnessEvaluation({
+      store: current.store,
+      request: {
+        sourcePolicies: sourcePolicies(runRefs),
+        limits: { maxEvidence: 20, maxTokens: 100_000 },
+      },
+      stream: async function* ({ messages }) {
+        calls += 1;
+        if (calls === 1) {
+          expect(messages[0]!.content).toContain("navigating a bounded set");
+          yield {
+            text: JSON.stringify({
+              schemaVersion: "openpond.harnessEvaluationReviewNavigationDecision.v1",
+              selectedEvidenceIds: [
+                "route_decision:route-run-navigation-1",
+                "route_decision:route-run-navigation-2",
+              ],
+              reason: "Inspect the first two related runtime occurrences in full.",
+            }),
+            usage: { promptTokens: 100, completionTokens: 10, totalTokens: 110 },
+          };
+          return;
+        }
+        yield {
+          text: JSON.stringify({
+            schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+            decision: "no_action",
+            reason: "The two fully reviewed occurrences are not yet enough for durable routing.",
+            ignoredEvidence: [
+              {
+                id: "route_decision:route-run-navigation-1",
+                reason: "Keep as counterevidence.",
+              },
+              {
+                id: "route_decision:route-run-navigation-2",
+                reason: "Keep as counterevidence.",
+              },
+            ],
+          }),
+          usage: { promptTokens: 200, completionTokens: 20, totalTokens: 220 },
+        };
+      },
+      now: () => "2026-08-08T12:10:00.000Z",
+    });
+
+    expect(calls).toBe(2);
+    expect(receipt.nextWatermark.throughCreatedAt).toBe("2026-08-08T12:00:02.000Z");
+    expect(receipt.excludedEvidence).toContainEqual(expect.objectContaining({
+      evidence: { id: "route-run-navigation-3", contentHash: expect.any(String) },
+      reason: "budget",
+    }));
+    expect(receipt.metadata).toMatchObject({
+      fullyReviewedEvidence: 2,
+      modelUsage: { promptTokens: 300, completionTokens: 30, totalTokens: 330 },
+    });
+  });
+
+  it("joins concurrent manual and scheduled reviews for one Local store", async () => {
+    const current = await fixture();
+    await saveOccurrence({
+      store: current.store,
+      workspaceId: current.workspace.id,
+      harnessRelease: current.release.harnessRelease,
+      route: "runtime",
+      runRef: "run-concurrent",
+      createdAt: "2026-08-08T12:01:00.000Z",
+    });
+    let modelCalls = 0;
+    const stream: HarnessEvaluationReviewModelStream = async function* () {
+      modelCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      yield { text: JSON.stringify({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        decision: "no_action",
+        reason: "One occurrence does not yet justify durable work.",
+        ignoredEvidence: [{
+          id: "route_decision:route-run-concurrent",
+          reason: "Retain the immutable occurrence for later cross-task review.",
+        }],
+      }) };
+    };
+    const request = { sourcePolicies: sourcePolicies(["run-concurrent"]) };
+    const [manual, scheduled] = await Promise.all([
+      reviewSelectedLocalHarnessEvaluation({
+        store: current.store,
+        request,
+        stream,
+        now: () => "2026-08-08T12:10:00.000Z",
+      }),
+      reviewSelectedLocalHarnessEvaluation({
+        store: current.store,
+        request,
+        stream,
+        now: () => "2026-08-08T12:10:01.000Z",
+      }),
+    ]);
+    expect(modelCalls).toBe(1);
+    expect(scheduled.contentHash).toBe(manual.contentHash);
+    expect((await localHarnessHistoryPayload(current.store)).evaluationReviews).toHaveLength(1);
   });
 
   it("persists explicit review status and schedule controls in Harness history", async () => {

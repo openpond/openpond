@@ -7,6 +7,7 @@ const manifest = JSON.parse(
   await readFile(path.join(root, "package.json"), "utf8"),
 ) as {
   dependencies?: Record<string, string>;
+  exports?: Record<string, unknown>;
   peerDependencies?: Record<string, string>;
 };
 const dependencies = Object.keys(manifest.dependencies ?? {});
@@ -20,6 +21,15 @@ if (peers.join(",") !== "@openpond/harness") {
   throw new Error(
     `@openpond/evals must peer only on @openpond/harness; found ${peers.join(", ") || "none"}.`,
   );
+}
+for (const legacySubpath of ["./harness-improvements", "./harness-workspaces"]) {
+  if (legacySubpath in (manifest.exports ?? {})) {
+    throw new Error(`@openpond/evals must not re-export Harness API ${legacySubpath}.`);
+  }
+}
+const rootIndex = await readFile(path.join(root, "src/index.ts"), "utf8");
+if (/export\s+\*\s+from\s+["']@openpond\/harness/.test(rootIndex)) {
+  throw new Error("@openpond/evals root must not re-export @openpond/harness.");
 }
 
 const forbidden = /(?:@openpond\/(?!harness(?:["'/]|$))|electron|next\/|better-sqlite|node:sqlite|connected-app|provider sdk)/i;

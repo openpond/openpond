@@ -148,7 +148,7 @@ describe("Harness improvement trigger detector", () => {
       toolEvent({ id: "done-a", sequence: 2, status: "completed" }),
     ]);
     expect(result.trigger.decision).toBe("queue_refiner");
-    expect(result.trigger.suggestedRoutes).toEqual(["runtime", "skill", "prompt"]);
+    expect(result.trigger.suggestedRoutes).toEqual([]);
     expect(result.trigger.estimatedMaxCostUsd).toBeLessThanOrEqual(
       DEFAULT_REFINEMENT_TRIGGER_POLICY.maxEstimatedCostUsd,
     );
@@ -191,7 +191,7 @@ describe("Harness improvement trigger detector", () => {
     expect(result.observations.some((item) => item.state === "terminal")).toBe(false);
   });
 
-  test("routes research-budget recovery to runtime and Skill review", () => {
+  test("queues research-budget recovery without preselecting a route", () => {
     const result = detect([
       toolEvent({
         id: "failed-a",
@@ -208,7 +208,7 @@ describe("Harness improvement trigger detector", () => {
       }),
     ]);
     expect(result.trigger.decision).toBe("queue_refiner");
-    expect(result.trigger.suggestedRoutes).toEqual(["runtime", "skill"]);
+    expect(result.trigger.suggestedRoutes).toEqual([]);
   });
 
   test("records recovery through a different fallback tool", () => {
@@ -266,16 +266,7 @@ describe("Harness improvement trigger detector", () => {
       deterministicClass: null,
     });
     expect(result.trigger.decision).toBe("queue_refiner");
-    expect(result.trigger.suggestedRoutes).toEqual([
-      "runtime",
-      "memory",
-      "prompt",
-      "skill",
-      "agent",
-      "product",
-      "taskset",
-      "training",
-    ]);
+    expect(result.trigger.suggestedRoutes).toEqual([]);
   });
 
   test("deduplicates equivalent routed evidence and treats terminal failure as actionable", () => {

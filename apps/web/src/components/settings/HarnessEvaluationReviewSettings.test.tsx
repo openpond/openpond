@@ -23,7 +23,10 @@ describe("HarnessEvaluationReviewSettings", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
+        backgroundReviewBusy={false}
+        backgroundReviewEnabled
         busy={false}
+        onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
         onSaveSchedule={() => undefined}
@@ -41,7 +44,10 @@ describe("HarnessEvaluationReviewSettings", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
+        backgroundReviewBusy={false}
+        backgroundReviewEnabled
         busy={false}
+        onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
         onSaveSchedule={() => undefined}
@@ -52,6 +58,8 @@ describe("HarnessEvaluationReviewSettings", () => {
     );
 
     expect(html).not.toContain("Build training Taskset");
+    expect(html).toContain("Refine completed turns");
+    expect(html).toContain("Review recurring patterns");
   });
 });
 

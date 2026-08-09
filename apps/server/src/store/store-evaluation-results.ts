@@ -1,8 +1,8 @@
 import {
   EvaluationResultSchema,
-  assertContentHash,
   type EvaluationResult,
 } from "@openpond/evals";
+import { assertContentHash } from "@openpond/harness";
 
 import { SqliteDatasetStore } from "./store-datasets.js";
 

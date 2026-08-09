@@ -26,14 +26,6 @@ import {
 } from "@openpond/contracts";
 import { loadOpenPondAccountContext } from "./account-context.js";
 import { errorMessage } from "./errors.js";
-import {
-  DEFAULT_HOSTED_REFINER_TIMEOUT_MS,
-  HostedHarnessRefinerRequestSchema,
-  HostedHarnessRefinerResponseSchema,
-  contentHash,
-  type HostedHarnessRefinerRequest,
-  type HostedHarnessRefinerResponse,
-} from "@openpond/harness";
 
 type OpChatModelsResponse = {
   object: "list" | string;
@@ -201,84 +193,6 @@ export async function* streamOpenPondHostedChatTurn(
     maxTokens: input.maxTokens,
     signal: input.signal,
   });
-}
-
-export async function requestOpenPondHostedHarnessRefinement(input: {
-  request: HostedHarnessRefinerRequest;
-  signal?: AbortSignal;
-}): Promise<HostedHarnessRefinerResponse> {
-  const request = HostedHarnessRefinerRequestSchema.parse(input.request);
-  if (contentHash(request.evidence) !== request.evidenceHash) {
-    throw new Error("Hosted Harness Refiner evidence hash does not match the request payload.");
-  }
-  const context = await loadOpenPondAccountContext();
-  if (!context.token) {
-    throw new Error(
-      "OpenPond is signed out. Add an account in Settings before using Background review.",
-    );
-  }
-  return requestOpChatHarnessRefinement({
-    apiBaseUrl: context.chatApiBaseUrl,
-    token: context.token,
-    request,
-    signal: input.signal,
-  });
-}
-
-export async function requestOpChatHarnessRefinement(input: {
-  apiBaseUrl: string;
-  token: string;
-  request: HostedHarnessRefinerRequest;
-  signal?: AbortSignal;
-}): Promise<HostedHarnessRefinerResponse> {
-  const request = HostedHarnessRefinerRequestSchema.parse(input.request);
-  if (contentHash(request.evidence) !== request.evidenceHash) {
-    throw new Error("Hosted Harness Refiner evidence hash does not match the request payload.");
-  }
-  const timeout = hostedRefinerTimeoutSignal(input.signal);
-  try {
-    const requestUrl = opChatEndpointUrl(
-      input.apiBaseUrl,
-      "harness/refine",
-    );
-    const response = await fetch(requestUrl, {
-      method: "POST",
-      headers: opChatHeaders(
-        requestUrl,
-        input.token,
-        "application/json",
-        request.requestId,
-      ),
-      body: JSON.stringify(request),
-      signal: timeout.signal,
-    });
-    if (!response.ok) {
-      throw new Error(
-        `Hosted Harness Refiner request failed: ${response.status} ${await readOpChatError(response)}`,
-      );
-    }
-    const result = HostedHarnessRefinerResponseSchema.parse(await response.json());
-    if (
-      result.requestId !== request.requestId ||
-      result.evidenceHash !== request.evidenceHash ||
-      result.admittedRelease.id !== request.harness.admittedRelease.id ||
-      result.admittedRelease.contentHash !== request.harness.admittedRelease.contentHash ||
-      result.currentRelease.id !== request.harness.currentRelease.id ||
-      result.currentRelease.contentHash !== request.harness.currentRelease.contentHash
-    ) {
-      throw new Error("Hosted Harness Refiner response binding does not match the request.");
-    }
-    return result;
-  } catch (error) {
-    if (timeout.signal.aborted && !input.signal?.aborted) {
-      throw new Error(
-        `Hosted Harness Refiner request timed out after ${DEFAULT_HOSTED_REFINER_TIMEOUT_MS}ms.`,
-      );
-    }
-    throw error;
-  } finally {
-    timeout.cleanup();
-  }
 }
 
 export async function listOpChatModels(options: {
@@ -456,38 +370,11 @@ function opChatMessage(message: HostedChatMessage): Record<string, unknown> {
 
 function opChatEndpointUrl(
   apiBaseUrl: string,
-  path:
-    | "models"
-    | "providers"
-    | "provider-catalog"
-    | "chat/completions"
-    | "harness/refine",
+  path: "models" | "providers" | "provider-catalog" | "chat/completions",
 ): string {
   const normalized = apiBaseUrl.trim().replace(/\/+$/, "");
   if (!normalized) throw new Error("OpenPond OpChat API base URL is required.");
   return `${normalized}/${path}`;
-}
-
-function hostedRefinerTimeoutSignal(parent?: AbortSignal): {
-  signal: AbortSignal;
-  cleanup: () => void;
-} {
-  const controller = new AbortController();
-  const abortFromParent = () => controller.abort(parent?.reason);
-  if (parent?.aborted) abortFromParent();
-  else parent?.addEventListener("abort", abortFromParent, { once: true });
-  const timer = setTimeout(
-    () => controller.abort(new Error("Hosted Harness Refiner request timed out.")),
-    DEFAULT_HOSTED_REFINER_TIMEOUT_MS,
-  );
-  timer.unref?.();
-  return {
-    signal: controller.signal,
-    cleanup: () => {
-      clearTimeout(timer);
-      parent?.removeEventListener("abort", abortFromParent);
-    },
-  };
 }
 
 function opChatHeaders(

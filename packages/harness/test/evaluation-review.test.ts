@@ -1,8 +1,10 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  authorHarnessEvaluationReviewWithModel,
   contentHash,
   createHarnessEvaluationReviewReceipt,
+  evaluationReviewMessages,
   verifyHarnessEvaluationReviewReceipt,
 } from "../src/index.js";
 
@@ -39,6 +41,17 @@ function noActionInput() {
 }
 
 describe("Harness Evaluation review contracts", () => {
+  test("asks the model to audit user-visible outcomes instead of trusting tool success", () => {
+    const messages = evaluationReviewMessages({
+      evidence: [],
+      harnessRelease: ref("harness-release"),
+      previousReviews: [],
+    });
+    expect(messages[0]!.content).toContain("actual user-visible answer and artifacts");
+    expect(messages[0]!.content).toContain("missing requested citations or links");
+    expect(messages[0]!.content).toContain("hidden metadata do not prove");
+  });
+
   test("creates and verifies an immutable bounded no-action receipt", () => {
     const receipt = createHarnessEvaluationReviewReceipt(noActionInput());
 
@@ -86,5 +99,105 @@ describe("Harness Evaluation review contracts", () => {
         nextAuthority: "human_review",
       }),
     ).toThrow(/authorized|proposal/i);
+  });
+
+  test("lets the model identify a durable pattern without a fixed occurrence threshold", async () => {
+    const evidence = [{
+      id: "route-one",
+      evidence: ref("route-one"),
+      kind: "route_decision" as const,
+      sourceRef: "source-one",
+      occurredAt: createdAt,
+      payload: {
+        rawError: "The PDF editor failed before the agent recovered with another supported path.",
+        recovered: true,
+      },
+    }];
+    const decision = await authorHarnessEvaluationReviewWithModel({
+      evidence,
+      harnessRelease: ref("harness-release"),
+      stream: async function* () {
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          decision: "review",
+          classification: "harness_maintenance",
+          selectedEvidenceIds: ["route-one"],
+          ignoredEvidence: [],
+          recurrenceFamily: "pdf-first-attempt-editing",
+          statement: "A supported PDF edit path was discovered only after an avoidable failed attempt.",
+          triageLayer: "harness",
+          expectedOutcome: "Choose the supported edit path first on equivalent PDF tasks.",
+          counterevidence: "Only one independent occurrence is currently available.",
+          confidence: 0.72,
+          reason: "The recovery is concrete and the proposed personal guidance is low risk.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(decision).toMatchObject({
+      decision: "review",
+      selectedEvidenceIds: ["route-one"],
+      recurrenceFamily: "pdf-first-attempt-editing",
+    });
+  });
+
+  test("lets the model navigate large evidence windows before full review", async () => {
+    const evidence = ["route-one", "route-two", "unrelated"].map((id) => ({
+      id,
+      evidence: ref(id),
+      kind: "route_decision" as const,
+      sourceRef: `source-${id}`,
+      occurredAt: createdAt,
+      payload: {
+        summary: id === "unrelated" ? "A separate product issue." : "The PDF renderer failed before recovery.",
+        detail: "x".repeat(12_000),
+      },
+    }));
+    let calls = 0;
+    let navigatedIds: string[] = [];
+    const decision = await authorHarnessEvaluationReviewWithModel({
+      evidence,
+      harnessRelease: ref("harness-release"),
+      stream: async function* ({ messages }) {
+        calls += 1;
+        if (calls === 1) {
+          expect(messages[0]!.content).toContain("only chooses what the full reviewer will inspect");
+          expect(messages[1]!.content.length).toBeLessThan(12_000);
+          yield { text: JSON.stringify({
+            schemaVersion: "openpond.harnessEvaluationReviewNavigationDecision.v1",
+            selectedEvidenceIds: ["route-one", "route-two"],
+            reason: "Inspect the two semantically related recovered PDF failures.",
+          }) };
+          return;
+        }
+        expect(messages[1]!.content).not.toContain('"id": "unrelated"');
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          decision: "review",
+          classification: "runtime",
+          selectedEvidenceIds: ["route-one", "route-two"],
+          ignoredEvidence: [],
+          recurrenceFamily: "pdf-renderer-runtime",
+          statement: "The same renderer failed across independent tasks.",
+          triageLayer: "runtime",
+          expectedOutcome: "Provide a compatible renderer.",
+          counterevidence: "Both tasks recovered.",
+          confidence: 0.9,
+          reason: "The recovered failures share a runtime cause.",
+        }) };
+      },
+      signal: new AbortController().signal,
+      onNavigation: (navigation) => {
+        navigatedIds = navigation.selectedEvidenceIds;
+      },
+    });
+
+    expect(calls).toBe(2);
+    expect(navigatedIds).toEqual(["route-one", "route-two"]);
+    expect(decision).toMatchObject({
+      decision: "review",
+      selectedEvidenceIds: ["route-one", "route-two"],
+    });
   });
 });

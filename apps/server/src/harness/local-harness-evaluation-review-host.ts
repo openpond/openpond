@@ -4,6 +4,7 @@ import type {
   RefinementTriggerDecision,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
+import type { HarnessEvaluationReviewModelStream } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
 import { resolveSelectedLocalHarnessRelease } from "./local-harness-selection.js";
@@ -15,6 +16,8 @@ export async function reviewSelectedLocalHarnessEvaluationFromHost(input: {
   store: SqliteStore;
   workspaceId: string;
   maxEstimatedCostUsd: number;
+  stream?: HarnessEvaluationReviewModelStream;
+  signal?: AbortSignal;
   now?: () => string;
 }): Promise<HarnessEvaluationReviewReceipt> {
   const selected = await resolveSelectedLocalHarnessRelease(input.store);
@@ -61,10 +64,12 @@ export async function reviewSelectedLocalHarnessEvaluationFromHost(input: {
       limits: {
         maxEvidence: 200,
         maxTokens: 50_000,
-        maxDurationMs: 5_000,
+        maxDurationMs: 240_000,
         maxEstimatedCostUsd: input.maxEstimatedCostUsd,
       },
     },
+    stream: input.stream,
+    signal: input.signal,
     now: input.now,
   });
 }

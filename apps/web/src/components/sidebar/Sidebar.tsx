@@ -11,6 +11,7 @@ import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
+import { HarnessLearningSidebarCard } from "./HarnessLearningSidebarCard";
 
 export function Sidebar(props: SidebarProps) {
   const {
@@ -120,6 +121,16 @@ export function Sidebar(props: SidebarProps) {
       )}
 
       <div className="sidebar-bottom-stack">
+        {productArea === "models" ? null : (
+          <HarnessLearningSidebarCard
+            connection={props.connection}
+            onOpenSettings={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("harness");
+              setView("settings");
+            }}
+          />
+        )}
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}

@@ -34,7 +34,6 @@ try {
   await writeFile(path.join(temporary, "verify.mjs"), `
 import { HarnessReleaseSchema } from "@openpond/harness";
 import {
-  HarnessReleaseSchema as CompatibilityHarnessReleaseSchema,
   RunManifestSchema,
   TasksetReleaseSchema,
   gradeEvidence,
@@ -42,9 +41,6 @@ import {
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
 import { workEvidenceConformance, verifyWorkEvidenceReceipt } from "@openpond/evals/evidence";
-if (CompatibilityHarnessReleaseSchema !== HarnessReleaseSchema) {
-  throw new Error("Evals did not re-export the canonical Harness schema");
-}
 HarnessReleaseSchema.parse(genericToolConformance.harness);
 RunManifestSchema.parse(genericToolConformance.manifest);
 TasksetReleaseSchema.parse(genericToolConformance.taskset);

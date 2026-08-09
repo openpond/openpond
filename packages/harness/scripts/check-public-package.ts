@@ -12,14 +12,10 @@ if (dependencies.join(",") !== "zod") {
 }
 
 const forbidden = /(?:@openpond\/|electron|next\/|better-sqlite|node:sqlite|connected-app|provider sdk)/i;
-const privateRefinerImplementation = /(?:authorLocalHarnessRefinementWithModel|LocalHarnessRefinerModelStream|refinerMessages|privateHarnessRefinerEnvelope|You are OpenPond's (?:private )?bounded Harness Refiner)/;
 for (const file of await sourceFiles(path.join(root, "src"))) {
   const source = await readFile(file, "utf8");
   if (forbidden.test(source)) {
     throw new Error(`Application-only dependency marker found in ${path.relative(root, file)}.`);
-  }
-  if (privateRefinerImplementation.test(source)) {
-    throw new Error(`Private Refiner implementation marker found in ${path.relative(root, file)}.`);
   }
 }
 

@@ -22,7 +22,6 @@
   },
   "dependencies": {
     "@openpond/cloud": "workspace:*",
-    "@openpond/contracts": "workspace:*",
-    "@openpond/harness": "workspace:*"
+    "@openpond/contracts": "workspace:*"
   }
 }

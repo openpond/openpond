@@ -9,6 +9,7 @@ import { DESKTOP_PERSONAL_HARNESS_OWNER_ID } from "./local-harness-selection.js"
 import { reviewSelectedLocalHarnessEvaluationFromHost } from "./local-harness-evaluation-review-host.js";
 
 const DEFAULT_TICK_MS = 15_000;
+const EVENT_DRIVEN_REVIEW_BATCH_SIZE = 10;
 
 type SchedulerLogger = {
   info(message: string, metadata?: Record<string, unknown>): void;
@@ -33,6 +34,7 @@ export function nextHarnessEvaluationReviewRunAt(
 
 export function createLocalHarnessEvaluationReviewScheduler(input: {
   store: SqliteStore;
+  stream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
   isClosing: () => boolean;
   logger?: SchedulerLogger;
   tickMs?: number;
@@ -52,16 +54,22 @@ export function createLocalHarnessEvaluationReviewScheduler(input: {
       if (!workspace) return null;
       const settings = await input.store.getHarnessEvaluationReviewSettings(workspace.id);
       const startedAt = now();
-      if (
-        !settings.enabled ||
-        settings.cadence === "manual" ||
-        !settings.nextRunAt ||
-        settings.nextRunAt > startedAt
-      ) return null;
+      if (!settings.enabled) return null;
+      const scheduledDue =
+        settings.cadence !== "manual" &&
+        Boolean(settings.nextRunAt) &&
+        settings.nextRunAt! <= startedAt;
+      const eventDrivenDue = await hasEventDrivenReviewBatch({
+        store: input.store,
+        workspaceId: workspace.id,
+      });
+      if (!scheduledDue && !eventDrivenDue) return null;
 
       const claimed: HarnessEvaluationReviewSettings = {
         ...settings,
-        nextRunAt: nextHarnessEvaluationReviewRunAt(settings.cadence, startedAt),
+        nextRunAt: scheduledDue
+          ? nextHarnessEvaluationReviewRunAt(settings.cadence, startedAt)
+          : settings.nextRunAt,
         lastRunAt: startedAt,
         lastError: null,
         updatedAt: startedAt,
@@ -75,6 +83,7 @@ export function createLocalHarnessEvaluationReviewScheduler(input: {
           store: input.store,
           workspaceId: workspace.id,
           maxEstimatedCostUsd: settings.maxEstimatedCostUsd,
+          stream: input.stream,
           now,
         });
         await input.store.setHarnessEvaluationReviewSettings({
@@ -129,4 +138,22 @@ export function createLocalHarnessEvaluationReviewScheduler(input: {
     },
     runDueNow,
   };
+}
+
+async function hasEventDrivenReviewBatch(input: {
+  store: SqliteStore;
+  workspaceId: string;
+}): Promise<boolean> {
+  const [outcomes, reviews] = await Promise.all([
+    input.store.listHarnessImprovementArtifacts(
+      input.workspaceId,
+      "refiner_outcome",
+      EVENT_DRIVEN_REVIEW_BATCH_SIZE,
+    ),
+    input.store.listHarnessImprovementArtifacts(input.workspaceId, "evaluation_review", 1),
+  ]);
+  const watermark = (reviews[0] as HarnessEvaluationReviewReceipt | undefined)
+    ?.nextWatermark.throughCreatedAt ?? null;
+  return outcomes.filter((outcome) => !watermark || outcome.createdAt > watermark).length >=
+    EVENT_DRIVEN_REVIEW_BATCH_SIZE;
 }

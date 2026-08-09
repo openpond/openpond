@@ -20,7 +20,6 @@ import type {
   CodexServerRequestResult,
 } from "@openpond/codex-provider";
 import type {
-  requestOpenPondHostedHarnessRefinement,
   streamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 import type {
@@ -58,7 +57,6 @@ export type OpenPondServerOptions = {
   silent?: boolean;
   httpEnabled?: boolean;
   maxHostedWorkspaceToolRounds?: number;
-  requestOpenPondHostedHarnessRefinement?: typeof requestOpenPondHostedHarnessRefinement;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
 };
 

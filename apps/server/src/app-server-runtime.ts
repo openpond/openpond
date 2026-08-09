@@ -17,7 +17,6 @@ import {
 import { createLogger } from "@openpond/logging";
 import {
   getBundledRuntimeVersion,
-  requestOpenPondHostedHarnessRefinement as defaultRequestOpenPondHostedHarnessRefinement,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 
@@ -57,6 +56,7 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
+import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
 import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
@@ -73,7 +73,6 @@ export type OpenPondAppServerOptions = {
   workspaceDir?: string;
   version?: string;
   maxHostedWorkspaceToolRounds?: number;
-  requestOpenPondHostedHarnessRefinement?: typeof defaultRequestOpenPondHostedHarnessRefinement;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   sandboxRequest?: AppServerSandboxRequest;
 };
@@ -130,6 +129,8 @@ export async function createOpenPondAppServer(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
   );
+  const harnessEvaluationReviewStream =
+    createLocalHarnessEvaluationReviewModelStream(streamOpenPondHostedChatTurn);
 
   const {
     appendRuntimeEvent,
@@ -230,9 +231,7 @@ export async function createOpenPondAppServer(
     store,
     storeDir,
     queue: turnFollowUpQueue,
-    requestOpenPondHostedHarnessRefinement:
-      options.requestOpenPondHostedHarnessRefinement ??
-      defaultRequestOpenPondHostedHarnessRefinement,
+    streamOpenPondHostedChatTurn,
     appendRuntimeEvent,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
   });
@@ -325,6 +324,7 @@ export async function createOpenPondAppServer(
   const harnessSettings = createLocalHarnessSettingsRoutePayloads({
     store,
     storeDir,
+    evaluationReviewStream: harnessEvaluationReviewStream,
   });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
@@ -340,8 +340,12 @@ export async function createOpenPondAppServer(
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       inspectHarness: () => localHarnessHistoryPayload(store),
-      reviewHarnessProposal: createLocalHarnessSettingsRoutePayloads({ store, storeDir }).reviewHarnessProposalPayload,
-      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
+      reviewHarnessProposal: harnessSettings.reviewHarnessProposalPayload,
+      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
+        store,
+        request,
+        stream: harnessEvaluationReviewStream,
+      }),
       acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
       materializeHarnessEvaluationTaskset:
         harnessTasksetReview.materializeEvaluationTaskset,

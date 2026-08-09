@@ -8,11 +8,7 @@ import {
   TurnSchema,
   type RuntimeEvent,
 } from "@openpond/contracts";
-import type {
-  HostedHarnessRefinerRequest,
-  HostedHarnessRefinerResponse,
-  LocalHarnessRefinerDecision,
-} from "@openpond/harness";
+import type { LocalHarnessRefinerDecision } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createBackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
@@ -30,20 +26,8 @@ const SAFE_COMMAND_GUIDANCE =
 
 const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
 
-function hostedResult(
-  request: HostedHarnessRefinerRequest,
-  decision: LocalHarnessRefinerDecision,
-): HostedHarnessRefinerResponse {
-  return {
-    schemaVersion: "openpond.hostedHarnessRefinerResponse.v1",
-    requestId: request.requestId,
-    evidenceHash: request.evidenceHash,
-    admittedRelease: request.harness.admittedRelease,
-    currentRelease: request.harness.currentRelease,
-    decision,
-    serviceRevision: "acceptance-test",
-    usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
-  };
+function refinerDelta(decision: LocalHarnessRefinerDecision) {
+  return { type: "text_delta" as const, text: JSON.stringify(decision), raw: null };
 }
 
 afterEach(async () => {
@@ -112,18 +96,19 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      requestOpenPondHostedHarnessRefinement: async ({ request }) => {
+      streamOpenPondHostedChatTurn: async function* ({ messages }) {
         refinerModelCalls += 1;
-        const evidence = JSON.stringify(request.evidence);
+        const evidence = messages.at(-1)?.content ?? "";
         if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
-          return hostedResult(request, {
+          yield refinerDelta({
               schemaVersion: "openpond.localHarnessRefinerDecision.v1",
               decision: "no_action",
               reason: "The completed turn succeeded with the existing safe converter guidance.",
           });
+          return;
         }
         const anchor = initialInstructions.trimEnd().split("\n").at(-1)!;
-        return hostedResult(request, {
+        yield refinerDelta({
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
@@ -147,7 +132,7 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
-    expect(refinerModelCalls).toBe(1);
+    expect(refinerModelCalls).toBe(2);
 
     expect(queue.receipts()).toEqual([
       expect.objectContaining({ status: "completed" }),
@@ -202,7 +187,7 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
-    expect(refinerModelCalls).toBe(1);
+    expect(refinerModelCalls).toBe(3);
 
     const secondEvents = await store.runtimeEventsForSession(second.session.id);
     expect(secondEvents.some((event) => event.status === "failed")).toBe(false);
@@ -320,12 +305,12 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      requestOpenPondHostedHarnessRefinement: async ({ request }) => {
+      streamOpenPondHostedChatTurn: async function* () {
         attempts += 1;
         if (attempts === 1) {
-          throw new Error("Hosted Harness Refiner request failed: 503 temporarily unavailable");
+          throw new Error("Harness Refiner model request failed: 503 temporarily unavailable");
         }
-        return hostedResult(request, {
+        yield refinerDelta({
           schemaVersion: "openpond.localHarnessRefinerDecision.v1",
           decision: "no_action",
           reason: "The recovered detour does not justify a durable Harness change.",

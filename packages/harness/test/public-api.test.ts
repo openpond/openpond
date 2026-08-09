@@ -4,6 +4,7 @@ import {
   HarnessRunOverlaySchema,
   ImprovementObservationSchema,
   HarnessEvaluationReviewReceiptSchema,
+  HarnessEvaluationReviewModelDecisionSchema,
   HostedHarnessRefinerRequestSchema,
   HostedHarnessRefinerResponseSchema,
   LocalHarnessRefinerDecisionSchema,
@@ -18,6 +19,7 @@ describe("@openpond/harness public API", () => {
     expect(HarnessRunOverlaySchema).toBeDefined();
     expect(ImprovementObservationSchema).toBeDefined();
     expect(HarnessEvaluationReviewReceiptSchema).toBeDefined();
+    expect(HarnessEvaluationReviewModelDecisionSchema).toBeDefined();
     expect(LocalHarnessRefinerDecisionSchema).toBeDefined();
     expect(HostedHarnessRefinerRequestSchema).toBeDefined();
     expect(HostedHarnessRefinerResponseSchema).toBeDefined();

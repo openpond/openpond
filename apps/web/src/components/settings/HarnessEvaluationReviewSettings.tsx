@@ -7,11 +7,14 @@ import type {
 } from "@openpond/contracts";
 
 type Props = {
+  backgroundReviewBusy: boolean;
+  backgroundReviewEnabled: boolean;
   busy: boolean;
   reviews: HarnessEvaluationReviewReceipt[];
   qualifications: ModelImprovementQualificationReceipt[];
   schedule: HarnessEvaluationReviewSchedule;
   acceptingReviewId: string | null;
+  onBackgroundReviewChange: (enabled: boolean) => void;
   onAcceptTasksetReview: (review: HarnessEvaluationReviewReceipt) => void;
   onReview: (maxEstimatedCostUsd: number) => void;
   onSaveSchedule: (input: {
@@ -128,7 +131,10 @@ function QualificationCard({ receipt }: { receipt: ModelImprovementQualification
 
 export function HarnessEvaluationReviewSettings({
   acceptingReviewId,
+  backgroundReviewBusy,
+  backgroundReviewEnabled,
   busy,
+  onBackgroundReviewChange,
   onAcceptTasksetReview,
   reviews,
   qualifications,
@@ -161,8 +167,8 @@ export function HarnessEvaluationReviewSettings({
       <section className="harness-history-section">
         <div className="harness-section-heading">
           <div>
-            <h2>Model improvement review</h2>
-            <p>Review authorized Harness evidence against a persisted watermark. This does not start training.</p>
+            <h2>Continuous learning</h2>
+            <p>Refine completed turns quickly, then review related evidence over time. Neither loop starts training or activates a Model.</p>
           </div>
           <button
             className="settings-primary compact"
@@ -174,7 +180,49 @@ export function HarnessEvaluationReviewSettings({
           </button>
         </div>
 
-        <section className="account-list harness-review-controls">
+        <section className="account-list harness-review-controls" aria-label="Continuous learning controls">
+          <div className="account-list-row">
+            <div className="account-list-copy">
+              <strong>Refine completed turns</strong>
+              <span>Run the fast model-driven Refiner after each completed turn. Already queued work may finish after this is turned off.</span>
+            </div>
+            <label className="provider-toggle" aria-label="Refine completed turns">
+              <input
+                checked={backgroundReviewEnabled}
+                disabled={backgroundReviewBusy}
+                onChange={(event) => onBackgroundReviewChange(event.target.checked)}
+                type="checkbox"
+              />
+              <span aria-hidden="true" />
+            </label>
+          </div>
+          <div className="account-list-row">
+            <div className="account-list-copy">
+              <strong>Review recurring patterns</strong>
+              <span>Let the model compare authorized evidence and prior Harness outcomes. Unchanged windows do not call the model.</span>
+            </div>
+            <label className="provider-toggle" aria-label="Review recurring patterns">
+              <input
+                checked={enabled}
+                disabled={busy}
+                onChange={(event) => {
+                  const nextEnabled = event.target.checked;
+                  const nextCadence = nextEnabled && cadence === "manual" ? "daily" : cadence;
+                  setEnabled(nextEnabled);
+                  setCadence(nextCadence);
+                  if (validCost) {
+                    onSaveSchedule({
+                      enabled: nextEnabled,
+                      cadence: nextCadence,
+                      maxEstimatedCostUsd: parsedCost,
+                    });
+                  }
+                }}
+                type="checkbox"
+              />
+              <span aria-hidden="true" />
+            </label>
+          </div>
           <div className="harness-review-control-grid">
             <label className="settings-select-field">
               <span>Cadence</span>
@@ -202,18 +250,6 @@ export function HarnessEvaluationReviewSettings({
                 type="number"
                 value={cost}
               />
-            </label>
-            <label className="harness-schedule-toggle">
-              <span><strong>Scheduled review</strong><small>Uses the same review operation as Review now.</small></span>
-              <span className="provider-toggle">
-                <input
-                  checked={enabled && cadence !== "manual"}
-                  disabled={busy || cadence === "manual"}
-                  onChange={(event) => setEnabled(event.target.checked)}
-                  type="checkbox"
-                />
-                <span aria-hidden="true" />
-              </span>
             </label>
             <button
               className="settings-secondary compact"
