@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { executableSearchPath } from "./executable-search-path.js";
+import { executableSearchPath } from "./executable-search-path-bun-compat.js";
 
 describe("executableSearchPath", () => {
   it("prioritizes user and operating-system tools over inherited host-runtime paths", () => {

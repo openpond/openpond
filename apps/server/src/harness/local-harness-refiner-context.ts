@@ -13,7 +13,7 @@ import {
 import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
-import { executableSearchPath } from "../runtime/executable-search-path.js";
+import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 
 const MAX_REFINER_SOURCE_BYTES = 60_000;
 const MAX_PDF_ARTIFACTS = 10;

@@ -10,7 +10,7 @@ import {
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
-import { executableSearchPath } from "../runtime/executable-search-path.js";
+import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { event, now } from "../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 import { pipefailLocalShellCommand } from "./shell-command.js";

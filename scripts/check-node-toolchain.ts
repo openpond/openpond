@@ -29,6 +29,8 @@ const compatibilityFiles = new Set([
   "apps/server/src/openpond/context-compaction/file-ledger.ts",
   "apps/server/src/runtime/subagents/progress-reducer.ts",
   "apps/server/src/runtime/terminal-sessions.ts",
+  "apps/server/src/runtime/executable-search-path-bun-compat.ts",
+  "apps/server/src/runtime/executable-search-path-bun-compat.test.ts",
   "apps/server/src/training/sandboxed-verifier.ts",
   "apps/server/src/workspace/workspace-lsp.ts",
   "apps/web/src/components/chat/workspaceSyntax.tsx",
