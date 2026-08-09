@@ -35,6 +35,7 @@ export class AgentRpcClient {
   harnessReview = (params: unknown = {}) => this.#request("harness/review", params);
   harnessAcceptEvaluationReview = (params: unknown = {}) => this.#request("harness/acceptEvaluationReview", params);
   harnessMaterializeEvaluationTaskset = (params: unknown = {}) => this.#request("harness/materializeEvaluationTaskset", params);
+  harnessRunEvaluationBaseline = (params: unknown = {}) => this.#request("harness/runEvaluationBaseline", params);
   harnessValidate = (params: unknown = {}) => this.#request("harness/validate", params);
   harnessBackgroundReview = (params: unknown = {}) => this.#request("harness/backgroundReview", params);
   harnessDiff = (params: unknown = {}) => this.#request("harness/diff", params);

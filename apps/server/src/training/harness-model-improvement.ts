@@ -1,4 +1,5 @@
 import {
+  ChatModelRefSchema,
   type HarnessEvaluationReviewReceipt,
   type Taskset,
   isTrainingSourceRef,
@@ -12,10 +13,73 @@ import {
   type EvaluationResult,
   type ModelImprovementQualificationReceipt,
 } from "@openpond/evals";
+import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";
+import type { createTaskEvaluationService } from "./evaluation-service.js";
 
 type ImmutableRef = { id: string; contentHash: string };
+
+export const HarnessReviewBaselineRequestSchema = z.object({
+  workspaceId: z.string().trim().min(1),
+  tasksetId: z.string().trim().min(1),
+  reviewRef: z.object({
+    id: z.string().trim().min(1),
+    contentHash: z.string().trim().min(1),
+  }).strict(),
+  model: ChatModelRefSchema,
+  maximumCostUsd: z.number().finite().nonnegative(),
+  seeds: z.array(z.number().int()).min(1).max(10).optional(),
+  attemptsPerTask: z.number().int().min(1).max(3).optional(),
+}).strict();
+
+export async function runHarnessReviewBaselineAndQualification(input: {
+  store: SqliteStore;
+  evaluation: Pick<ReturnType<typeof createTaskEvaluationService>, "executeBaseline">;
+  workspaceId: string;
+  tasksetId: string;
+  reviewRef: ImmutableRef;
+  model: import("@openpond/contracts").ChatModelRef;
+  maximumCostUsd: number;
+  seeds?: number[];
+  attemptsPerTask?: number;
+}): Promise<{
+  evaluationResult: EvaluationResult;
+  attemptCount: number;
+  reused: boolean;
+  qualification: ModelImprovementQualificationReceipt;
+}> {
+  const baseline = await input.evaluation.executeBaseline({
+    tasksetId: input.tasksetId,
+    model: input.model,
+    reviewRef: input.reviewRef,
+    seeds: input.seeds?.length ? input.seeds : [17],
+    attemptsPerTask: input.attemptsPerTask ?? 1,
+    sampling: {
+      maxOutputTokens: 4_096,
+      temperature: 0,
+      topP: 1,
+    },
+  });
+  const qualification = await qualifyHarnessModelImprovement({
+    store: input.store,
+    tasksetId: input.tasksetId,
+    baselineEvaluationId: baseline.evaluationResult.id,
+    reviewRef: input.reviewRef,
+    privacyApproval: null,
+    budgetApproval: null,
+    maximumCostUsd: input.maximumCostUsd,
+  });
+  if (qualification.metadata.workspaceId !== input.workspaceId) {
+    throw new Error("Baseline qualification does not match the requested Harness workspace.");
+  }
+  return {
+    evaluationResult: baseline.evaluationResult,
+    attemptCount: baseline.evaluationResult.attemptCount,
+    reused: baseline.reused,
+    qualification,
+  };
+}
 
 export async function qualifyHarnessModelImprovement(input: {
   store: SqliteStore;

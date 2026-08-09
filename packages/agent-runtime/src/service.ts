@@ -28,6 +28,7 @@ export type AgentRuntimeServicePorts<TThread, TTurn, TEvent, TApproval> = {
   reviewHarness(params: unknown): Promise<unknown>;
   acceptHarnessEvaluationReview(params: unknown): Promise<unknown>;
   materializeHarnessEvaluationTaskset(params: unknown): Promise<unknown>;
+  runHarnessEvaluationBaseline(params: unknown): Promise<unknown>;
   validateHarness(): Promise<unknown>;
   updateHarnessBackgroundReview(payload: unknown): Promise<unknown>;
   diffHarness(payload: unknown): Promise<unknown>;
@@ -42,7 +43,8 @@ export type AgentRuntimeTelemetryEvent = {
     "turn/start" | "turn/steer" | "turn/interrupt" | "approval/resolve" |
     "userInput/resolve" | "harness/inspect" | "harness/proposalReview" |
     "harness/review" | "harness/acceptEvaluationReview" |
-    "harness/materializeEvaluationTaskset" | "harness/validate" |
+    "harness/materializeEvaluationTaskset" | "harness/runEvaluationBaseline" |
+    "harness/validate" |
     "harness/backgroundReview" | "harness/diff" | "harness/rollback";
   phase: "started" | "completed" | "failed";
   threadId: string | null;
@@ -151,6 +153,9 @@ export function createAgentRuntimeService<TThread, TTurn, TEvent, TApproval>(
     harnessMaterializeEvaluationTaskset: (params) =>
       run("harness/materializeEvaluationTaskset", null, () =>
         ports.materializeHarnessEvaluationTaskset(params)),
+    harnessRunEvaluationBaseline: (params) =>
+      run("harness/runEvaluationBaseline", null, () =>
+        ports.runHarnessEvaluationBaseline(params)),
     harnessValidate: () => run("harness/validate", null, () => ports.validateHarness()),
     harnessBackgroundReview: (params) =>
       run("harness/backgroundReview", null, () => ports.updateHarnessBackgroundReview(params)),

@@ -124,10 +124,6 @@ export async function createOpenPondAppServer(
     metadata: { version, runtimeVersion, placement: "hosted_work" },
   });
   const store = new SqliteStore(storeDir, { logger });
-  const harnessTasksetReview = await createLocalHarnessTasksetReviewControl({
-    store,
-    storeDir,
-  });
   const streamOpenPondHostedChatTurn = createScriptedOpenPondChatStream(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
@@ -186,6 +182,29 @@ export async function createOpenPondAppServer(
     getSession,
     appendRuntimeEvent,
     sandboxRequest: options.sandboxRequest,
+  });
+  const harnessTasksetReview = await createLocalHarnessTasksetReviewControl({
+    store,
+    storeDir,
+    evaluationRuntime: {
+      streamOpenPondHostedChatTurn,
+      workRuntime: {
+        createSession,
+        getSession,
+        executeWorkspaceTool: workspace.executeWorkspaceTool,
+        runtimeEventsForSession: (sessionId) =>
+          store.runtimeEventsForSession(sessionId),
+      },
+      resolveReleasedHarness: async () => {
+        const release = await resolveSelectedLocalHarnessRelease(store);
+        return release
+          ? {
+              agentSnapshot: release.agentSnapshot,
+              harnessRelease: release.harnessRelease,
+            }
+          : null;
+      },
+    },
   });
   const upsertApproval = async (approval: Approval): Promise<void> => {
     await store.upsertApproval(approval);
@@ -322,6 +341,8 @@ export async function createOpenPondAppServer(
       acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
       materializeHarnessEvaluationTaskset:
         harnessTasksetReview.materializeEvaluationTaskset,
+      runHarnessEvaluationBaseline:
+        harnessTasksetReview.runEvaluationBaseline,
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release

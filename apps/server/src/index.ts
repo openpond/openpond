@@ -171,6 +171,7 @@ import {
 } from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
 import { createTrainingApi } from "./training/training-api.js";
+import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-taskset-review.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
@@ -1690,6 +1691,7 @@ export async function createOpenPondServer(
           approved: true,
         });
       },
+      runHarnessEvaluationBaseline: (request) => runLocalHarnessEvaluationBaseline({ store, evaluation: taskEvaluationService, request }),
       validateHarness: async () => {
         const release = await resolveSelectedLocalHarnessRelease(store);
         return release
