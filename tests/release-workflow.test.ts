@@ -41,6 +41,15 @@ describe("release workflow", () => {
     }
   });
 
+  test("builds the workspace Harness dependency before checking Evals for publication", () => {
+    const workflow = readFileSync(EVALS_RELEASE_WORKFLOW_PATH, "utf8");
+    const harnessBuild = workflow.indexOf("pnpm --dir packages/harness run build");
+    const evalsCheck = workflow.indexOf("pnpm run evals:check");
+
+    expect(harnessBuild).toBeGreaterThan(-1);
+    expect(evalsCheck).toBeGreaterThan(harnessBuild);
+  });
+
   test("keeps packaged desktop smoke wired for Linux and macOS release builds while Windows is disabled", () => {
     const workflow = readFileSync(WORKFLOW_PATH, "utf8");
 
