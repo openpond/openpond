@@ -20,6 +20,11 @@ import type { createTaskCreatorService } from "./task-creator.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 
+const HARNESS_REVIEW_TASKSET_STRATEGY = {
+  buildIntent: "verifiable_reward",
+  methodHint: "grpo",
+} as const;
+
 export async function startHarnessReviewTasksetAuthoring(input: {
   store: SqliteStore;
   taskCreator: Pick<TaskCreator, "addSessionSource">;
@@ -31,7 +36,10 @@ export async function startHarnessReviewTasksetAuthoring(input: {
   analysisReasoningEffort?: CodexReasoningEffort | null;
 }): Promise<TaskCreationSnapshot> {
   const review = await requireTasksetReview(input.store, input.workspaceId, input.reviewRef);
-  const candidateId = `harness-review-${review.contentHash.slice(0, 24)}`;
+  const candidateId = `harness-review-${contentHash({
+    review: review.contentHash,
+    strategy: HARNESS_REVIEW_TASKSET_STRATEGY,
+  }).slice(0, 24)}`;
   const existing = (await input.store.listTaskCreationSnapshots(input.profileId))
     .find((snapshot) => snapshot.request.candidateId === candidateId);
   if (existing) return existing;
@@ -123,10 +131,10 @@ export async function startHarnessReviewTasksetAuthoring(input: {
     mode: "customize",
     entryMode: "automated",
     resourceIntent: "workproduct",
-    buildIntent: "rubric",
+    buildIntent: HARNESS_REVIEW_TASKSET_STRATEGY.buildIntent,
     buildSpecification: null,
     objective: review.claim?.statement ?? review.reason,
-    methodHint: null,
+    methodHint: HARNESS_REVIEW_TASKSET_STRATEGY.methodHint,
     preferredBaseModelId: null,
     preferredBaseModel: null,
     candidateId,
