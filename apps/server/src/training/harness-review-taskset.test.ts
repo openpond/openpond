@@ -192,6 +192,8 @@ describe("Harness review Taskset bridge", () => {
       sourceIds: ["training-source-one"],
       surface: "task_candidate",
       mode: "customize",
+      buildIntent: "verifiable_reward",
+      methodHint: "grpo",
       objective: "Measure the unresolved behavior gap.",
     }));
     expect(result).toEqual(expect.objectContaining({ request: expect.any(Object) }));
