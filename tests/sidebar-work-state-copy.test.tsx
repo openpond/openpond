@@ -103,7 +103,7 @@ describe("sidebar task list controls", () => {
     expect(markup).not.toContain(">Show less<");
   });
 
-  test("renders project detail only for development tasks without elapsed runtime", () => {
+  test("renders project detail and updated date for development tasks without elapsed runtime", () => {
     const project = localProject();
     const projectItem: SidebarProjectItem = {
       id: `local:${project.id}`,
@@ -138,7 +138,10 @@ describe("sidebar task list controls", () => {
     expect(developmentMarkup).toContain(">Refine sidebar<");
     expect(developmentMarkup).toContain(">Active workspace<");
     expect(developmentMarkup).not.toContain(">2h 7m<");
-    expect(developmentMarkup).not.toContain("<time");
+    expect(developmentMarkup).toContain(
+      '<time class="sidebar-row-updated-at" dateTime="2026-07-29T12:00:00.000Z"'
+    );
+    expect(developmentMarkup).toContain(">Jul 29</time>");
     expect(developmentMarkup).not.toContain(" · ");
     expect(developmentMarkup).not.toContain(">Projects<");
 
@@ -163,7 +166,7 @@ describe("sidebar task list controls", () => {
     expect(workMarkup).toContain(">Refine sidebar<");
     expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
-    expect(workMarkup).not.toContain("<time");
+    expect(workMarkup).toContain(">Jul 29</time>");
   });
 });
 
