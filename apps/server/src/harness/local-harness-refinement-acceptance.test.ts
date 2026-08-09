@@ -8,6 +8,11 @@ import {
   TurnSchema,
   type RuntimeEvent,
 } from "@openpond/contracts";
+import type {
+  HostedHarnessRefinerRequest,
+  HostedHarnessRefinerResponse,
+  LocalHarnessRefinerDecision,
+} from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createBackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
@@ -24,6 +29,22 @@ const SAFE_COMMAND_GUIDANCE =
   "For converter reports, use `openpond-report --safe` directly and do not retry the legacy converter.";
 
 const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
+
+function hostedResult(
+  request: HostedHarnessRefinerRequest,
+  decision: LocalHarnessRefinerDecision,
+): HostedHarnessRefinerResponse {
+  return {
+    schemaVersion: "openpond.hostedHarnessRefinerResponse.v1",
+    requestId: request.requestId,
+    evidenceHash: request.evidenceHash,
+    admittedRelease: request.harness.admittedRelease,
+    currentRelease: request.harness.currentRelease,
+    decision,
+    serviceRevision: "acceptance-test",
+    usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+  };
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -91,31 +112,18 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      streamOpenPondHostedChatTurn: async function* ({
-        messages,
-        maxTokens,
-        reasoningEffort,
-      }) {
+      requestOpenPondHostedHarnessRefinement: async ({ request }) => {
         refinerModelCalls += 1;
-        expect(maxTokens).toBe(800);
-        expect(reasoningEffort).toBe("low");
-        const evidence = messages.at(-1)?.content ?? "";
+        const evidence = JSON.stringify(request.evidence);
         if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
-          yield {
-            type: "text_delta" as const,
-            text: JSON.stringify({
+          return hostedResult(request, {
               schemaVersion: "openpond.localHarnessRefinerDecision.v1",
               decision: "no_action",
               reason: "The completed turn succeeded with the existing safe converter guidance.",
-            }),
-            raw: { fixture: "refinement-acceptance" },
-          };
-          return;
+          });
         }
         const anchor = initialInstructions.trimEnd().split("\n").at(-1)!;
-        yield {
-          type: "text_delta" as const,
-          text: JSON.stringify({
+        return hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
@@ -129,9 +137,7 @@ describe("Local Harness refinement acceptance", () => {
               "The next equivalent report task uses the safe converter without the failed legacy attempt.",
             reason:
               "The evidence contains a successful recovery with a smaller reusable command path.",
-          }),
-          raw: { fixture: "refinement-acceptance" },
-        };
+        });
       },
     });
 

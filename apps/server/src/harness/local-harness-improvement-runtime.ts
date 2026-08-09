@@ -7,8 +7,9 @@ import {
   type Session,
   type Turn,
 } from "@openpond/contracts";
+import { DEFAULT_HOSTED_REFINER_TIMEOUT_MS } from "@openpond/harness";
 import type {
-  streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
+  requestOpenPondHostedHarnessRefinement as defaultRequestOpenPondHostedHarnessRefinement,
 } from "@openpond/runtime";
 
 import type { BackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
@@ -17,10 +18,6 @@ import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
-import {
-  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
-  DEFAULT_REFINER_TIMEOUT_MS,
-} from "./local-harness-refiner-model.js";
 
 type LocalHarnessImprovementBoundary = {
   session: Session;
@@ -40,7 +37,7 @@ export function createLocalHarnessImprovementRuntime(input: {
   store: SqliteStore;
   storeDir: string;
   queue: BackgroundWorkerQueue;
-  streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
+  requestOpenPondHostedHarnessRefinement: typeof defaultRequestOpenPondHostedHarnessRefinement;
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<unknown>;
   upsertModelUsageRecord: (record: ModelUsageRecord) => Promise<void>;
 }) {
@@ -101,8 +98,8 @@ export function createLocalHarnessImprovementRuntime(input: {
           output: trigger.reason,
           data: {
             triggerId: trigger.id,
-            timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
-            maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+            timeoutMs: DEFAULT_HOSTED_REFINER_TIMEOUT_MS,
+            execution: "hosted_endpoint",
             recoveredAfterRestart,
           },
         }),
@@ -140,8 +137,8 @@ export function createLocalHarnessImprovementRuntime(input: {
               data: {
                 triggerId: trigger.id,
                 queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
-                timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
-                maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+                timeoutMs: DEFAULT_HOSTED_REFINER_TIMEOUT_MS,
+                execution: "hosted_endpoint",
                 recoveredAfterRestart,
               },
             }),
@@ -151,10 +148,10 @@ export function createLocalHarnessImprovementRuntime(input: {
             storeDir: input.storeDir,
             trigger,
             signal: new AbortController().signal,
-            stream: async function* ({ messages, signal }) {
+            refine: async ({ request, signal }) => {
               if (modelStartedAtMs === null) modelStartedAtMs = Date.now();
               const ordinal = requestOrdinal++;
-              const requestId = `harness-refiner:${trigger.id}:${ordinal}`;
+              const requestId = request.requestId;
               const recorder = await startProviderRequestUsageRecorder({
                 session: boundary.session,
                 turn: boundary.turn,
@@ -166,25 +163,20 @@ export function createLocalHarnessImprovementRuntime(input: {
                 upsert: input.upsertModelUsageRecord,
               });
               try {
-                for await (const delta of input.streamOpenPondHostedChatTurn({
-                  model: DEFAULT_OPENPOND_CHAT_MODEL,
-                  messages,
-                  requestId,
-                  reasoningEffort: "low",
-                  maxTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+                const response = await input.requestOpenPondHostedHarnessRefinement({
+                  request,
                   signal,
-                })) {
-                  if (delta.type === "text_delta" && delta.text) {
-                    recorder.observeDelta({ text: delta.text });
-                    yield { text: delta.text };
-                  } else if (delta.type === "reasoning_delta" && delta.text) {
-                    recorder.observeDelta({ reasoningText: delta.text });
-                  } else if (delta.type === "usage") {
-                    recorder.observeDelta({ usage: delta.usage });
-                  }
-                }
+                });
+                recorder.observeDelta({
+                  usage: {
+                    prompt_tokens: response.usage.promptTokens,
+                    completion_tokens: response.usage.completionTokens,
+                    total_tokens: response.usage.totalTokens,
+                  },
+                });
                 await recorder.complete();
                 modelCompletedAtMs = Date.now();
+                return response;
               } catch (error) {
                 modelCompletedAtMs = Date.now();
                 await recorder.fail(error, signal.aborted ? "interrupted" : "failed");

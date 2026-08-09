@@ -19,7 +19,10 @@ import type {
   CodexServerRequest,
   CodexServerRequestResult,
 } from "@openpond/codex-provider";
-import type { streamOpenPondHostedChatTurn } from "@openpond/runtime";
+import type {
+  requestOpenPondHostedHarnessRefinement,
+  streamOpenPondHostedChatTurn,
+} from "@openpond/runtime";
 import type {
   BackgroundWorkReceipt,
   ServerWorkQueueId,
@@ -55,6 +58,7 @@ export type OpenPondServerOptions = {
   silent?: boolean;
   httpEnabled?: boolean;
   maxHostedWorkspaceToolRounds?: number;
+  requestOpenPondHostedHarnessRefinement?: typeof requestOpenPondHostedHarnessRefinement;
   streamOpenPondHostedChatTurn?: typeof streamOpenPondHostedChatTurn;
 };
 

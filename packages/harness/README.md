@@ -8,6 +8,7 @@ Portable contracts and pure helpers for OpenPond's mutable Harness:
 - Harness workspaces, pinned run overlays, proposals, validation, advancement,
   rollback, and merge receipts;
 - improvement observations, Refiner outcomes, and apply receipts;
+- hosted Refiner request/response contracts, without the private hosted policy or model implementation;
 - bounded cross-Work Evaluation review receipts with exact source-policy,
   evidence, claim, routing, authority, and downstream lineage references;
 - model actions, tool observations, lifecycle events, and Harness traces.

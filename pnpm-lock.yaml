@@ -423,6 +423,9 @@ importers:
       '@openpond/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@openpond/harness':
+        specifier: workspace:*
+        version: link:../harness
 
   packages/sdk:
     devDependencies:

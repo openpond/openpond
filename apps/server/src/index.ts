@@ -25,6 +25,7 @@ import {
 } from "@openpond/cloud";
 import {
   getBundledRuntimeVersion,
+  requestOpenPondHostedHarnessRefinement as defaultRequestOpenPondHostedHarnessRefinement,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 import {
@@ -789,7 +790,9 @@ export async function createOpenPondServer(
       store,
       storeDir,
       queue: workQueues.turnFollowUp,
-      streamOpenPondHostedChatTurn,
+      requestOpenPondHostedHarnessRefinement:
+        options.requestOpenPondHostedHarnessRefinement ??
+        defaultRequestOpenPondHostedHarnessRefinement,
       appendRuntimeEvent,
       upsertModelUsageRecord: safeUpsertModelUsageRecord,
     });

@@ -17,14 +17,16 @@ import {
   type ImprovementObservation,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
+import {
+  HostedHarnessRefinerRequestSchema,
+  HostedHarnessRefinerResponseSchema,
+  contentHash,
+  type HostedHarnessRefinerRequest,
+  type HostedHarnessRefinerResponse,
+  type LocalHarnessRefinerDecision,
+} from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
-import {
-  authorLocalHarnessRefinementWithModel,
-  type LocalHarnessRefinerDecision,
-  type LocalHarnessRefinerModelStream,
-} from "./local-harness-refiner-model.js";
 import {
   applyLocalHarnessRefinerProposal,
   validateLocalHarnessRefinerProposal,
@@ -64,7 +66,10 @@ export async function runLocalHarnessRefinerWorker(input: {
   store: SqliteStore;
   storeDir: string;
   trigger: RefinementTriggerDecision;
-  stream: LocalHarnessRefinerModelStream;
+  refine: (input: {
+    request: HostedHarnessRefinerRequest;
+    signal: AbortSignal;
+  }) => Promise<HostedHarnessRefinerResponse>;
   signal: AbortSignal;
   now?: () => string;
 }): Promise<LocalHarnessRefinerWorkerResult> {
@@ -178,18 +183,53 @@ export async function runLocalHarnessRefinerWorker(input: {
       now: input.now,
     });
   }
-  const decision = await authorLocalHarnessRefinementWithModel({
-    evidence: {
-      trigger: boundedTriggerEvidence(trigger),
-      observations: observations.map(boundedObservationEvidence),
-      task: boundedContext.task,
-      eventExcerpts: boundedContext.eventExcerpts,
-      sourceFiles: source.files,
-      sourceCatalog: source.catalog,
+  const hostedEvidence = {
+    trigger: boundedTriggerEvidence(trigger),
+    observations: observations.map(boundedObservationEvidence),
+    task: boundedContext.task,
+    eventExcerpts: boundedContext.eventExcerpts,
+    sourceFiles: source.files,
+    sourceCatalog: source.catalog,
+  };
+  const request = HostedHarnessRefinerRequestSchema.parse({
+    schemaVersion: "openpond.hostedHarnessRefinerRequest.v1",
+    requestId: trigger.id,
+    idempotencyKey: trigger.contentHash,
+    evidenceHash: contentHash(hostedEvidence),
+    harness: {
+      admittedRelease: overlay.baseHarnessRelease,
+      currentRelease: effectiveReleaseRef,
+      overlay: overlayRef(overlay),
+      workspace: {
+        id: workspace.id,
+        revision: workspace.revision,
+        sourceRevision: workspace.sourceRevision,
+        channelRevision: workspace.currentChannel.revision,
+      },
+      capabilities: {
+        memory: true,
+        prompt: true,
+        skill: true,
+        agent: false,
+      },
     },
-    stream: input.stream,
-    signal: input.signal,
+    evidence: hostedEvidence,
   });
+  const hostedResult = HostedHarnessRefinerResponseSchema.parse(
+    await input.refine({ request, signal: input.signal }),
+  );
+  if (
+    hostedResult.requestId !== request.requestId ||
+    hostedResult.evidenceHash !== request.evidenceHash ||
+    hostedResult.admittedRelease.id !== request.harness.admittedRelease.id ||
+    hostedResult.admittedRelease.contentHash !==
+      request.harness.admittedRelease.contentHash ||
+    hostedResult.currentRelease.id !== request.harness.currentRelease.id ||
+    hostedResult.currentRelease.contentHash !== request.harness.currentRelease.contentHash
+  ) {
+    throw new Error("Hosted Harness Refiner response binding does not match the request.");
+  }
+  const decision = hostedResult.decision;
   if (decision.decision === "no_action") {
     return persistNoAction({
       store: input.store,

@@ -523,12 +523,26 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessEvaluationReviewSe
         ) {
           throw new Error("Refiner proposal is not bound to the atomically frozen overlay.");
         }
-        if (
-          proposal.baseHarnessRelease.id !== overlay.baseHarnessRelease.id ||
-          proposal.baseHarnessRelease.contentHash !==
-            overlay.baseHarnessRelease.contentHash
-        ) {
-          throw new Error("Refiner proposal base release differs from the run overlay.");
+        if (!sameReleaseRef(proposal.baseHarnessRelease, overlay.baseHarnessRelease)) {
+          const rebasedFrom = proposal.metadata.rebasedFromHarnessRelease;
+          const workspace = await this.readHarnessWorkspace(
+            current.workspace.workspaceId,
+          );
+          if (
+            !workspace ||
+            !isReleaseRef(rebasedFrom) ||
+            !sameReleaseRef(rebasedFrom, overlay.baseHarnessRelease) ||
+            !workspace.currentChannel.release ||
+            !sameReleaseRef(workspace.currentChannel.release, proposal.baseHarnessRelease) ||
+            proposal.expectedWorkspace.workspaceId !== workspace.id ||
+            proposal.expectedWorkspace.revision !== workspace.revision ||
+            proposal.expectedWorkspace.sourceRevision !== workspace.sourceRevision ||
+            proposal.expectedWorkspace.channelRevision !== workspace.currentChannel.revision
+          ) {
+            throw new Error(
+              "Refiner proposal base release differs from both the run overlay and the atomically verified current workspace.",
+            );
+          }
         }
         if (JSON.stringify(proposal.edits) !== JSON.stringify(input.edits)) {
           throw new Error("Refiner proposal edits differ from the atomically applied edits.");
@@ -961,4 +975,17 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessEvaluationReviewSe
       ],
     );
   }
+}
+
+function isReleaseRef(value: unknown): value is ImmutableReleaseRef {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as { id?: unknown; contentHash?: unknown };
+  return typeof candidate.id === "string" && typeof candidate.contentHash === "string";
+}
+
+function sameReleaseRef(
+  left: ImmutableReleaseRef,
+  right: ImmutableReleaseRef,
+): boolean {
+  return left.id === right.id && left.contentHash === right.contentHash;
 }

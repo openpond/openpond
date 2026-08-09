@@ -64,6 +64,7 @@ async function main(): Promise<void> {
   const cycles = findCycles(graph);
 
   errors.push(...await checkFileLineLimits(handwrittenFiles, files));
+  errors.push(...await checkPrivateRefinerBoundary(files));
 
   if (cycles.length > maxRuntimeCycles) {
     errors.push(`runtime/openpond module cycles increased: ${cycles.length} found, maximum is ${maxRuntimeCycles}`);
@@ -79,6 +80,28 @@ async function main(): Promise<void> {
   console.log(
     `Source structure check passed: ${files.length} production modules, ${handwrittenFiles.length} hand-written code files, ${cycles.length} runtime/openpond cycles.`,
   );
+}
+
+async function checkPrivateRefinerBoundary(productionFiles: string[]): Promise<string[]> {
+  const forbidden = [
+    "authorLocalHarnessRefinementWithModel",
+    "LocalHarnessRefinerModelStream",
+    "refinerMessages",
+    "You are OpenPond's bounded Harness Refiner.",
+    "You are OpenPond's private bounded Harness Refiner.",
+  ];
+  const errors: string[] = [];
+  for (const file of productionFiles) {
+    const source = await readFile(file, "utf8");
+    for (const value of forbidden) {
+      if (source.includes(value)) {
+        errors.push(
+          `${relative(file)}: private hosted Refiner implementation leaked into public production source (${value})`,
+        );
+      }
+    }
+  }
+  return errors;
 }
 
 async function checkFileLineLimits(handwrittenFiles: string[], productionFiles: string[]): Promise<string[]> {

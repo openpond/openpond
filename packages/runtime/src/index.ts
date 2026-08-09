@@ -30,6 +30,7 @@ export {
   loadOpenPondProviderCatalog,
   listOpChatProviderCatalog,
   listOpChatProviders,
+  requestOpenPondHostedHarnessRefinement,
   streamOpenPondHostedChatTurn,
 } from "./chat.js";
 export { saveOpenPondAccount } from "./save-account.js";

@@ -17,6 +17,7 @@ import {
 import { createLogger } from "@openpond/logging";
 import {
   getBundledRuntimeVersion,
+  requestOpenPondHostedHarnessRefinement as defaultRequestOpenPondHostedHarnessRefinement,
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
 
@@ -72,6 +73,7 @@ export type OpenPondAppServerOptions = {
   workspaceDir?: string;
   version?: string;
   maxHostedWorkspaceToolRounds?: number;
+  requestOpenPondHostedHarnessRefinement?: typeof defaultRequestOpenPondHostedHarnessRefinement;
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   sandboxRequest?: AppServerSandboxRequest;
 };
@@ -228,7 +230,9 @@ export async function createOpenPondAppServer(
     store,
     storeDir,
     queue: turnFollowUpQueue,
-    streamOpenPondHostedChatTurn,
+    requestOpenPondHostedHarnessRefinement:
+      options.requestOpenPondHostedHarnessRefinement ??
+      defaultRequestOpenPondHostedHarnessRefinement,
     appendRuntimeEvent,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
   });
