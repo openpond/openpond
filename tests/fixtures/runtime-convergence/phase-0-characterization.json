@@ -37,12 +37,12 @@
     {
       "id": "harness-admission-refine-advancement-failure-avoidance",
       "path": "apps/server/src/harness/local-harness-refinement-acceptance.test.ts",
-      "sha256": "d7abeb2f26063541b9ad495e56dae5e8328332cb4f5cd536c9dbb45b87a34b17"
+      "sha256": "4cf2e4e586d5767f874e6cda61e51312cbec26af8fae8f0f1e2d442b72076541"
     },
     {
       "id": "candidate-validation-review-rollback",
       "path": "apps/server/src/harness/local-harness-refiner-worker.test.ts",
-      "sha256": "7ca92bac45842cbef47671be35dbb94924f9aae0b20b521198f8f87e94878750"
+      "sha256": "f8ebbba44fb1d83afddc57dbdddf0aae305465918c8b695013c105541547422f"
     },
     {
       "id": "skill-loading-memory-tools-release-materialization",
@@ -52,7 +52,7 @@
     {
       "id": "portable-harness-public-surface",
       "path": "packages/harness/test/public-api.test.ts",
-      "sha256": "0d814e23354664b5db24137a7b80cffb707d49276566742b75900479b2cfd161"
+      "sha256": "1c3801c3ce76187698198bef5cade30e1c46c11a970bc751184bbb013d5e4443"
     }
   ],
   "hosted": [

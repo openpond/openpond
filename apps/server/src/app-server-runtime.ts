@@ -56,6 +56,7 @@ import {
 } from "./runtime/bundled-authoring-skills.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
+import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
 import { createLocalHarnessTasksetReviewControl } from "./harness/local-harness-taskset-review.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
@@ -128,6 +129,8 @@ export async function createOpenPondAppServer(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() },
   );
+  const harnessEvaluationReviewStream =
+    createLocalHarnessEvaluationReviewModelStream(streamOpenPondHostedChatTurn);
 
   const {
     appendRuntimeEvent,
@@ -321,6 +324,7 @@ export async function createOpenPondAppServer(
   const harnessSettings = createLocalHarnessSettingsRoutePayloads({
     store,
     storeDir,
+    evaluationReviewStream: harnessEvaluationReviewStream,
   });
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
@@ -336,8 +340,12 @@ export async function createOpenPondAppServer(
       interruptSessionTurn: turnRunner.interruptSessionTurn,
       resolveApproval,
       inspectHarness: () => localHarnessHistoryPayload(store),
-      reviewHarnessProposal: createLocalHarnessSettingsRoutePayloads({ store, storeDir }).reviewHarnessProposalPayload,
-      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
+      reviewHarnessProposal: harnessSettings.reviewHarnessProposalPayload,
+      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
+        store,
+        request,
+        stream: harnessEvaluationReviewStream,
+      }),
       acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
       materializeHarnessEvaluationTaskset:
         harnessTasksetReview.materializeEvaluationTaskset,

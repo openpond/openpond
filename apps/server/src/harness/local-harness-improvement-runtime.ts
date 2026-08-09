@@ -7,6 +7,10 @@ import {
   type Session,
   type Turn,
 } from "@openpond/contracts";
+import {
+  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+  DEFAULT_REFINER_TIMEOUT_MS,
+} from "@openpond/harness";
 import type {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
@@ -17,10 +21,6 @@ import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
-import {
-  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
-  DEFAULT_REFINER_TIMEOUT_MS,
-} from "./local-harness-refiner-model.js";
 
 type LocalHarnessImprovementBoundary = {
   session: Session;
@@ -103,6 +103,7 @@ export function createLocalHarnessImprovementRuntime(input: {
             triggerId: trigger.id,
             timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
             maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+            execution: "public_package",
             recoveredAfterRestart,
           },
         }),
@@ -142,6 +143,7 @@ export function createLocalHarnessImprovementRuntime(input: {
                 queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
                 timeoutMs: DEFAULT_REFINER_TIMEOUT_MS,
                 maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+                execution: "public_package",
                 recoveredAfterRestart,
               },
             }),

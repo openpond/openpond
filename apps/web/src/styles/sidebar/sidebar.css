@@ -248,6 +248,41 @@
   line-height: 1.4;
 }
 
+.sidebar-learning-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.sidebar-learning-title span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.sidebar-learning-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-learning-control > span:first-child {
+  display: grid;
+  gap: 1px;
+}
+
+.sidebar-learning-control small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 .sidebar-learning-notice-actions {
   display: flex;
   align-items: center;

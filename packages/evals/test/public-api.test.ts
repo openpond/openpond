@@ -2,7 +2,12 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { contentHash, sha256 } from "@openpond/harness";
+import {
+  contentHash,
+  createHarnessRunOverlay,
+  createImprovementObservation,
+  sha256,
+} from "@openpond/harness";
 
 import {
   genericToolConformance,
@@ -28,8 +33,6 @@ import {
 } from "../src/runs.js";
 import { policyTaskView, trainingPolicyTaskViews } from "../src/tasksets.js";
 import { verifyWorkEvidenceReceipt, workEvidenceConformance } from "../src/evidence/index.js";
-import { createImprovementObservation } from "../src/harness-improvements.js";
-import { createHarnessRunOverlay } from "../src/harness-workspaces.js";
 import {
   harnessEvaluationReviewConformance,
   verifyModelImprovementQualificationReceipt,

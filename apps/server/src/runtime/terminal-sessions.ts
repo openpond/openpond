@@ -9,6 +9,7 @@ import { spawn as spawnPty } from "node-pty";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { TerminalScopeSchema, type TerminalScope } from "@openpond/contracts";
 import { hasAuth } from "../api/http.js";
+import { executableSearchPath } from "./executable-search-path-bun-compat.js";
 
 export const TERMINAL_WEBSOCKET_PROTOCOL = "openpond-terminal";
 export const TERMINAL_WEBSOCKET_TOKEN_PROTOCOL_PREFIX = "openpond-token.";
@@ -124,18 +125,7 @@ function defaultShell(): { command: string; args: string[]; label: string; env?:
 }
 
 function terminalPath(): string {
-  const entries = [
-    path.join(process.env.HOME ?? "", ".local", "bin"),
-    path.join(process.env.HOME ?? "", ".bun", "bin"),
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "/usr/bin",
-    "/bin",
-    "/usr/sbin",
-    "/sbin",
-    process.env.PATH,
-  ].filter(Boolean);
-  return Array.from(new Set(entries.join(path.delimiter).split(path.delimiter).filter(Boolean))).join(path.delimiter);
+  return executableSearchPath();
 }
 
 function interactiveShellArgs(command: string): string[] {

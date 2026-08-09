@@ -21,7 +21,7 @@ Local product-server composition from the JSONL app-server process.
   compaction program, canonical event persistence, and durable checkpoint
   creation. Provider credentials, provider-specific tool policy, model-message
   projection, persistence, and metrics remain typed Local host adapters.
-- `@openpond/harness` owns the portable Refiner decision schema, bounded prompt,
+- `@openpond/harness` owns the portable Refiner decision and hosted transport schemas,
   streaming parser, timeout, repair behavior, deterministic trigger/detour
   detection, bounded evidence projection, revision checks, stable IDs, and
   overlay/workspace comparison helpers. SQLite artifact lookup, queues,

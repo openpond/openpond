@@ -1,6 +1,7 @@
 # `@openpond/harness`
 
-Portable contracts and pure helpers for OpenPond's mutable Harness:
+Public provider-neutral learning operations, portable contracts, and pure
+helpers for OpenPond's mutable Harness:
 
 - immutable Agent snapshots and Harness releases;
 - content-addressed assets, artifacts, releases, and hashes;
@@ -8,8 +9,9 @@ Portable contracts and pure helpers for OpenPond's mutable Harness:
 - Harness workspaces, pinned run overlays, proposals, validation, advancement,
   rollback, and merge receipts;
 - improvement observations, Refiner outcomes, and apply receipts;
-- bounded cross-Work Evaluation review receipts with exact source-policy,
-  evidence, claim, routing, authority, and downstream lineage references;
+- a public provider-neutral model-driven Refiner plus optional managed-host request/response contracts;
+- model-driven continuous review over bounded authorized evidence, with exact
+  source-policy, claim, routing, authority, and downstream lineage receipts;
 - model actions, tool observations, lifecycle events, and Harness traces.
 
 ```ts
@@ -26,9 +28,23 @@ Subpath exports are available at `/harness`, `/evaluation-review`, `/harness-imp
 `/harness-workspaces`, `/models`, and `/tools`.
 
 This package does not run evaluations, grade outputs, persist product state,
-execute a desktop or hosted session, or resolve credentials. Evaluation
+execute a desktop or hosted session, resolve credentials, schedule jobs, or
+launch training. Hosts provide model streams and authorized evidence; the
+package owns the shared Refiner and continuous-review policy. Evaluation
 Tasksets, runners, receipts, graders, and Work-evidence eligibility live in
 `@openpond/evals`, which depends on this package.
+
+Semantic decisions are model-driven. Deterministic helpers enforce schema,
+identity, bounds, safe targets, and receipt invariants; they do not assign a
+route from prompt keywords, error strings, tool names, or a fixed recurrence
+count.
+
+The fast Refiner reviews one completed turn. Proposed edits receive a second
+model critique before they can reach host validation, so task-specific content
+can be generalized, routed, or rejected. Continuous review navigates large
+authorized windows from compact previews, then inspects a bounded set of full
+payloads. Evidence outside that full-review bound is deferred rather than
+silently consumed. Neither operation launches training or activates a Model.
 
 ## Verification
 

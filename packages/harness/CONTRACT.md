@@ -7,10 +7,11 @@ bytes.
 
 ## Dependency direction
 
-`@openpond/evals` may depend on and re-export `@openpond/harness`.
-`@openpond/harness` must never import `@openpond/evals` or an application
-package. This keeps Harness releases usable without installing an evaluation
-runner.
+`@openpond/evals` may depend on `@openpond/harness` but does not re-export it.
+Applications import the packages directly so learning and evaluation authority
+remain explicit. `@openpond/harness` must never import `@openpond/evals` or an
+application package. This keeps Harness releases usable without installing an
+evaluation runner.
 
 ## Compatibility
 
@@ -26,9 +27,15 @@ runner.
 ## Runtime ownership
 
 The package describes Agent snapshots, releases, workspaces, overlays,
-improvement evidence, bounded cross-Work review decisions, tools, model
-identities, and traces. A review receipt owns claim grouping, source-policy
-checks, smallest-layer routing, watermark, cost ceiling, and next authority.
+improvement evidence, public provider-neutral Refiner and continuous-review
+policy, bounded cross-Work review decisions, tools, model identities, and
+traces. Hosts provide authorized evidence and model adapters. Models decide
+semantic grouping and smallest-layer routing; deterministic package code owns
+schema, identity, bounds, and receipt invariants.
+Proposed mutations receive a second model critique for reusable root behavior
+before deterministic validation. Large continuous-review windows use compact
+model-driven navigation followed by full inspection of a bounded selection;
+unselected evidence remains available to a later host watermark.
 Evaluation execution and model-improvement qualification contracts that bind a
 Harness to a Taskset, scored baseline, Model, verifier, and training signal
 belong to `@openpond/evals`.

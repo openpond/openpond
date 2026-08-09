@@ -6,6 +6,40 @@ import { contentHash } from "../packages/taskset-sdk/src";
 import { seedConversation, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("Task Creator pipeline", () => {
+  test("materializes a heuristic three-source verifiable-reward Taskset", async () => withTrainingStore(async ({ store, directory }) => {
+    await seedConversation(store, { sessionId: "session_harness_one", turnId: "turn_harness_one", title: "Harness recurrence one", prompt: "Queue the first training occurrence.", assistant: "Training occurrence queued." });
+    await seedConversation(store, { sessionId: "session_harness_two", turnId: "turn_harness_two", title: "Harness recurrence two", prompt: "Queue the second training occurrence.", assistant: "Training occurrence queued." });
+    await seedConversation(store, { sessionId: "session_harness_three", turnId: "turn_harness_three", title: "Harness recurrence three", prompt: "Queue the third training occurrence.", assistant: "Training occurrence queued." });
+    const service = createTaskCreatorService({
+      store,
+      tasksetRootDir: path.join(directory, "training", "tasksets"),
+      authoringSkillHash: contentHash("skill"),
+      loadProfileState: async () => ({ mode: "local", activeProfile: "default", sourcePath: directory } as any),
+    });
+    const sources = await Promise.all([
+      service.addSessionSource({ profileId: "default", sessionId: "session_harness_one", turnIds: ["turn_harness_one"], consentScope: "selected_turns" }),
+      service.addSessionSource({ profileId: "default", sessionId: "session_harness_two", turnIds: ["turn_harness_two"], consentScope: "selected_turns" }),
+      service.addSessionSource({ profileId: "default", sessionId: "session_harness_three", turnIds: ["turn_harness_three"], consentScope: "selected_turns" }),
+    ]);
+    const creation = await service.start({
+      profileId: "default",
+      sourceIds: sources.map((source) => source.id),
+      surface: "task_candidate",
+      mode: "customize",
+      entryMode: "automated",
+      resourceIntent: "workproduct",
+      buildIntent: "verifiable_reward",
+      objective: "Measure the unresolved behavior gap.",
+      methodHint: "grpo",
+      targetIntent: { kind: "model", id: null, displayName: null, operation: "create" },
+    });
+    expect(creation.state, creation.blockedReason ?? creation.proposal?.warnings.join("\n")).toBe("awaiting_materialization_approval");
+
+    const ready = await service.approveMaterialization(creation.id, true);
+    expect(ready.state, ready.blockedReason ?? "Taskset materialization failed.").toBe("ready");
+    expect(ready.materializedTasksetId).toBeTruthy();
+  }));
+
   test("reconciles an interrupted authoring snapshot after restart without losing reviewed evidence", async () => withTrainingStore(async ({ store, directory }) => {
     await seedConversation(store, { sessionId: "session_interrupted_authoring", turnId: "turn_interrupted_authoring", title: "Interrupted authoring evidence" });
     const initial = createTaskCreatorService({ store, authoringSkillHash: contentHash("skill") });

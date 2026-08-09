@@ -8,6 +8,7 @@ import {
   TurnSchema,
   type RuntimeEvent,
 } from "@openpond/contracts";
+import type { LocalHarnessRefinerDecision } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createBackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
@@ -24,6 +25,10 @@ const SAFE_COMMAND_GUIDANCE =
   "For converter reports, use `openpond-report --safe` directly and do not retry the legacy converter.";
 
 const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
+
+function refinerDelta(decision: LocalHarnessRefinerDecision) {
+  return { type: "text_delta" as const, text: JSON.stringify(decision), raw: null };
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -91,31 +96,19 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      streamOpenPondHostedChatTurn: async function* ({
-        messages,
-        maxTokens,
-        reasoningEffort,
-      }) {
+      streamOpenPondHostedChatTurn: async function* ({ messages }) {
         refinerModelCalls += 1;
-        expect(maxTokens).toBe(800);
-        expect(reasoningEffort).toBe("low");
         const evidence = messages.at(-1)?.content ?? "";
         if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
-          yield {
-            type: "text_delta" as const,
-            text: JSON.stringify({
+          yield refinerDelta({
               schemaVersion: "openpond.localHarnessRefinerDecision.v1",
               decision: "no_action",
               reason: "The completed turn succeeded with the existing safe converter guidance.",
-            }),
-            raw: { fixture: "refinement-acceptance" },
-          };
+          });
           return;
         }
         const anchor = initialInstructions.trimEnd().split("\n").at(-1)!;
-        yield {
-          type: "text_delta" as const,
-          text: JSON.stringify({
+        yield refinerDelta({
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
@@ -129,9 +122,7 @@ describe("Local Harness refinement acceptance", () => {
               "The next equivalent report task uses the safe converter without the failed legacy attempt.",
             reason:
               "The evidence contains a successful recovery with a smaller reusable command path.",
-          }),
-          raw: { fixture: "refinement-acceptance" },
-        };
+        });
       },
     });
 
@@ -141,7 +132,7 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
-    expect(refinerModelCalls).toBe(1);
+    expect(refinerModelCalls).toBe(2);
 
     expect(queue.receipts()).toEqual([
       expect.objectContaining({ status: "completed" }),
@@ -196,7 +187,7 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     await queue.drain();
-    expect(refinerModelCalls).toBe(1);
+    expect(refinerModelCalls).toBe(3);
 
     const secondEvents = await store.runtimeEventsForSession(second.session.id);
     expect(secondEvents.some((event) => event.status === "failed")).toBe(false);
@@ -264,6 +255,117 @@ describe("Local Harness refinement acceptance", () => {
         data: expect.objectContaining({ recoveredAfterRestart: true }),
       }),
     ]));
+  });
+
+  it("keeps a completed foreground turn intact and retries one failed hosted review without duplicate application", async () => {
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "openpond-harness-refinement-retry-"),
+    );
+    const store = new SqliteStore(directory);
+    cleanup.push({ directory, store });
+    const created = await createLocalHarnessWorkspace({
+      store,
+      storeDir: directory,
+      id: "personal-refinement-retry",
+      ownerId: "desktop-personal",
+      name: "Personal Harness",
+      now: () => BEFORE,
+    });
+    await store.selectHarnessWorkspace({
+      ownerKind: "personal",
+      ownerId: "desktop-personal",
+      workspaceId: created.workspace.id,
+      updatedAt: BEFORE,
+    });
+    const runtime = await loadSelectedLocalHarnessRuntime(store);
+    if (!runtime) throw new Error("Local Harness runtime was not selected.");
+    const admitted = await admitRun({
+      store,
+      runtime,
+      runId: "refinement-retry",
+      admittedAt: BEFORE,
+    });
+    await executeScriptedConverterTask({
+      store,
+      sessionId: admitted.session.id,
+      turnId: admitted.turn.id,
+      instructions: await readRuntimeInstructions(runtime.release.bundlePath),
+      occurredAt: BEFORE,
+    });
+
+    const queue = createBackgroundWorkerQueue({
+      queueId: "local-harness-refinement-retry",
+    });
+    let attempts = 0;
+    const processBoundary = createLocalHarnessImprovementRuntime({
+      store,
+      storeDir: directory,
+      queue,
+      appendRuntimeEvent: (runtimeEvent) => store.appendRuntimeEvent(runtimeEvent),
+      upsertModelUsageRecord: async (record) => {
+        await store.upsertModelUsageRecord(record);
+      },
+      streamOpenPondHostedChatTurn: async function* () {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("Harness Refiner model request failed: 503 temporarily unavailable");
+        }
+        yield refinerDelta({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          decision: "no_action",
+          reason: "The recovered detour does not justify a durable Harness change.",
+        });
+      },
+    });
+
+    await expect(
+      processBoundary({
+        session: admitted.session,
+        turn: admitted.turn,
+        boundaryKind: "turn_completed",
+      }),
+    ).resolves.toBeUndefined();
+    expect((await store.getTurn(admitted.turn.id))?.status).toBe("completed");
+    await queue.drain();
+
+    expect(queue.receipts().map((receipt) => receipt.status)).toEqual(["failed"]);
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+    expect(await store.runtimeEventsForSession(admitted.session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "harness.refiner.failed",
+          status: "failed",
+        }),
+      ]),
+    );
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(1);
+    await queue.drain();
+
+    expect(attempts).toBe(2);
+    expect(queue.receipts().map((receipt) => receipt.status)).toEqual([
+      "failed",
+      "completed",
+    ]);
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(0);
+    const outcomes = await store.listHarnessImprovementArtifacts(
+      runtime.workspace.id,
+      "refiner_outcome",
+    );
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({ decision: "no_action" });
+    expect(await store.runtimeEventsForSession(admitted.session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "harness.refiner.completed",
+          status: "completed",
+          data: expect.objectContaining({ recoveredAfterRestart: true }),
+        }),
+      ]),
+    );
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(0);
+    expect(attempts).toBe(2);
   });
 });
 

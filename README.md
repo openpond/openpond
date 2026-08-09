@@ -77,8 +77,9 @@ packages are implementation details and are documented in the
 | [`@openpond/harness`](https://www.npmjs.com/package/@openpond/harness) | Portable immutable Harness releases, workspaces, improvements, tools, models, and Refiner contracts. |
 | [`@openpond/evals`](https://www.npmjs.com/package/@openpond/evals) | Portable Tasksets, graders, evaluation runs, receipts, conformance, and Work evidence. |
 
-Harness is the dependency base for Evals: `@openpond/evals` may depend on and
-re-export `@openpond/harness`, while Harness never imports Evals.
+Harness is the dependency base for Evals: `@openpond/evals` depends on
+`@openpond/harness`, applications import both packages directly, and Harness
+never imports Evals.
 
 ## What is this
 

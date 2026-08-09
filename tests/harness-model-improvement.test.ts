@@ -1,11 +1,13 @@
 import { TasksetSchema } from "@openpond/contracts";
 import {
   aggregateEvaluationReceipts,
-  contentHash,
   createAttemptReceipt,
-  createHarnessEvaluationReviewReceipt,
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
+import {
+  contentHash,
+  createHarnessEvaluationReviewReceipt,
+} from "@openpond/harness";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { describe, expect, it, vi } from "vitest";
 

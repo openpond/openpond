@@ -1,4 +1,3 @@
-export * from "@openpond/harness";
 export * from "./compatibility.js";
 export * from "./evidence/index.js";
 export * from "./graders.js";

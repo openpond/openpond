@@ -1,5 +1,7 @@
+import { execFile } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 
 import {
   HarnessSourceManifestSchema,
@@ -11,8 +13,12 @@ import {
 import { contentHash } from "@openpond/harness";
 
 import type { SqliteStore } from "../store/store.js";
+import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 
 const MAX_REFINER_SOURCE_BYTES = 60_000;
+const MAX_PDF_ARTIFACTS = 10;
+const MAX_PDF_BYTES = 20 * 1024 * 1024;
+const execFileAsync = promisify(execFile);
 
 export async function loadBoundedRefinerContext(
   store: SqliteStore,
@@ -22,11 +28,14 @@ export async function loadBoundedRefinerContext(
   task: {
     prompt: string | null;
     assistantOutput: string | null;
+    assistantOutputLinkCount: number;
     previousAssistantOutput: string | null;
   };
   eventExcerpts: Array<Record<string, unknown>>;
+  artifactDiagnostics: Array<Record<string, unknown>>;
 }> {
-  const [turn, events, turns] = await Promise.all([
+  const [session, turn, events, turns] = await Promise.all([
+    store.getSession(trigger.runRef),
     store.getTurn(trigger.turnId),
     store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
     store.turnsForSession(trigger.runRef, 1_000),
@@ -55,16 +64,19 @@ export async function loadBoundedRefinerContext(
     boundarySequence: trigger.boundary.eventSequence,
     limit: trigger.policy.maxEvidenceEvents,
   });
+  const assistantOutput = assistantOutputForTurn(events, trigger.turnId);
   return {
     task: {
       prompt: turn?.prompt
         ? redactAndBoundRefinerText(turn.prompt, 8_000)
         : null,
-      assistantOutput: assistantOutputForTurn(events, trigger.turnId),
+      assistantOutput,
+      assistantOutputLinkCount: countAbsoluteLinks(assistantOutput),
       previousAssistantOutput: previousTurn
         ? assistantOutputForTurn(events, previousTurn.id)
         : null,
     },
+    artifactDiagnostics: await inspectBoundedPdfArtifactDiagnostics(session?.cwd),
     eventExcerpts: evidenceEvents.map((runtimeEvent) => {
       const data = asRecord(runtimeEvent.data);
       const result = asRecord(data.result);
@@ -84,6 +96,106 @@ export async function loadBoundedRefinerContext(
       };
     }),
   };
+}
+
+export async function inspectBoundedPdfArtifactDiagnostics(
+  cwd: string | null | undefined,
+): Promise<Array<Record<string, unknown>>> {
+  if (!cwd) return [];
+  let entries;
+  try {
+    entries = await fs.readdir(cwd, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const pdfs = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".pdf"))
+    .slice(0, MAX_PDF_ARTIFACTS);
+  return Promise.all(
+    pdfs.map(async (entry) => {
+      const filename = path.join(cwd, entry.name);
+      try {
+        const metadata = await fs.stat(filename);
+        if (metadata.size > MAX_PDF_BYTES) {
+          return {
+            path: entry.name,
+            mediaType: "application/pdf",
+            check: "pdf_text_bounds",
+            status: "unavailable",
+            reason: `artifact exceeds ${MAX_PDF_BYTES} byte inspection bound`,
+          };
+        }
+        const { stdout } = await execFileAsync("pdftotext", ["-bbox", filename, "-"], {
+          env: { ...process.env, PATH: executableSearchPath() },
+          maxBuffer: 8 * 1024 * 1024,
+          timeout: 15_000,
+        });
+        return pdfTextBoundsDiagnostic(entry.name, stdout);
+      } catch (error) {
+        return {
+          path: entry.name,
+          mediaType: "application/pdf",
+          check: "pdf_text_bounds",
+          status: "unavailable",
+          reason: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+        };
+      }
+    }),
+  );
+}
+
+export function pdfTextBoundsDiagnostic(
+  artifactPath: string,
+  bboxXml: string,
+): Record<string, unknown> {
+  const clipped: Array<Record<string, unknown>> = [];
+  let pages = 0;
+  for (const pageMatch of bboxXml.matchAll(
+    /<page\s+width="([^"]+)"\s+height="([^"]+)"[^>]*>([\s\S]*?)<\/page>/g,
+  )) {
+    pages += 1;
+    const width = Number(pageMatch[1]);
+    const height = Number(pageMatch[2]);
+    for (const wordMatch of pageMatch[3].matchAll(
+      /<word\s+xMin="([^"]+)"\s+yMin="([^"]+)"\s+xMax="([^"]+)"\s+yMax="([^"]+)"[^>]*>([\s\S]*?)<\/word>/g,
+    )) {
+      const [xMin, yMin, xMax, yMax] = wordMatch.slice(1, 5).map(Number);
+      if (xMin >= 0 && yMin >= 0 && xMax <= width && yMax <= height) continue;
+      clipped.push({
+        page: pages,
+        text: decodeXmlText(wordMatch[5]).slice(0, 120),
+        xMin,
+        yMin,
+        xMax,
+        yMax,
+        pageWidth: width,
+        pageHeight: height,
+      });
+    }
+  }
+  return {
+    path: artifactPath,
+    mediaType: "application/pdf",
+    check: "pdf_text_bounds",
+    status: clipped.length > 0 ? "failed" : "passed",
+    pages,
+    clippedTextCount: clipped.length,
+    examples: clipped.slice(0, 10),
+  };
+}
+
+function decodeXmlText(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'");
+}
+
+function countAbsoluteLinks(value: string | null): number {
+  if (!value) return 0;
+  return value.match(/https?:\/\/[^\s<>)\]}"']+/gi)?.length ?? 0;
 }
 
 function assistantOutputForTurn(

@@ -61,9 +61,7 @@ import {
 } from "./harness/local-harness-run-overlay.js";
 import { createLocalHarnessImprovementRuntime } from "./harness/local-harness-improvement-runtime.js";
 import { createLocalHarnessModelToolDefinitions } from "./harness/local-harness-model-tools.js";
-import {
-  createLocalHarnessSettingsRoutePayloads,
-} from "./harness/local-harness-history.js";
+import { createLocalHarnessSettingsRoutePayloads } from "./harness/local-harness-history.js";
 import type {
   OpenPondServerInstance,
   OpenPondServerOptions,
@@ -82,10 +80,7 @@ import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
 } from "./api/event-page.js";
-import {
-  usageRecordsPayload,
-  usageSummaryPayload,
-} from "./api/usage-payloads.js";
+import { usageRecordsPayload, usageSummaryPayload } from "./api/usage-payloads.js";
 import { readProvidersFile } from "./openpond/provider-settings.js";
 import { buildProviderSettings } from "./openpond/provider-registry.js";
 import { cachedProviderCatalog } from "./openpond/provider-catalog.js";
@@ -104,15 +99,13 @@ import {
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
-import {
-  createOpenPondHttpSurface,
-  listenOpenPondHttpServer,
-} from "./api/server-http.js";
+import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { createAgentRuntimePorts } from "./runtime/agent-runtime-host.js";
 import { reviewSelectedLocalHarnessEvaluation } from "./harness/local-harness-evaluation-review.js";
+import { createLocalHarnessEvaluationReviewModelStream } from "./harness/local-harness-evaluation-review-model.js";
 import { createLocalHarnessEvaluationReviewScheduler } from "./harness/local-harness-evaluation-review-scheduler.js";
 import { startProviderRequestUsageRecorder } from "./runtime/model-usage-recorder.js";
 import { createWorkspaceToolExecutor } from "./workspace-tools/workspace-tool-executor.js";
@@ -213,6 +206,8 @@ export async function createOpenPondServer(
     options.streamOpenPondHostedChatTurn ?? defaultStreamOpenPondHostedChatTurn,
     { enabled: scriptedOpenPondModelsEnabled() }
   );
+  const harnessEvaluationReviewStream =
+    createLocalHarnessEvaluationReviewModelStream(streamOpenPondHostedChatTurn);
   const executeWebSearch = createWebSearchExecutorFromEnv();
   const executeConnectedAppTool = createCloudConnectedAppToolExecutor();
   const attachmentRootDir = path.join(storeDir, "attachments");
@@ -1651,9 +1646,14 @@ export async function createOpenPondServer(
     throw new Error(result.error);
   }
 
-  const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({ store, storeDir });
+  const harnessSettingsRoutes = createLocalHarnessSettingsRoutePayloads({
+    store,
+    storeDir,
+    evaluationReviewStream: harnessEvaluationReviewStream,
+  });
   const harnessEvaluationReviewScheduler = createLocalHarnessEvaluationReviewScheduler({
     store,
+    stream: harnessEvaluationReviewStream,
     isClosing: () => closing,
     logger,
   });
@@ -1672,7 +1672,11 @@ export async function createOpenPondServer(
       resolveApproval,
       inspectHarness: harnessSettingsRoutes.harnessHistoryPayload,
       reviewHarnessProposal: harnessSettingsRoutes.reviewHarnessProposalPayload,
-      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({ store, request }),
+      reviewHarness: (request) => reviewSelectedLocalHarnessEvaluation({
+        store,
+        request,
+        stream: harnessEvaluationReviewStream,
+      }),
       acceptHarnessEvaluationReview: async (request) => {
         const profile = await loadOpenPondProfileState();
         return trainingApi.request("accept_harness_review", {

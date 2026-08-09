@@ -10,6 +10,7 @@ import {
   type RuntimeEvent,
   type Session,
 } from "@openpond/contracts";
+import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { event, now } from "../utils.js";
 import { resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 import { pipefailLocalShellCommand } from "./shell-command.js";
@@ -371,7 +372,10 @@ function runShellCommand(input: {
     const child = spawn(shellCommand.command, {
       cwd: input.cwd,
       shell: shellCommand.shell,
-      env: process.env,
+      env: {
+        ...process.env,
+        PATH: executableSearchPath(),
+      },
       stdio: ["ignore", "pipe", "pipe"],
       detached: process.platform !== "win32",
     });

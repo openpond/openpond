@@ -5,14 +5,16 @@ import {
   isTrainingSourceRef,
 } from "@openpond/contracts";
 import {
-  HarnessReviewSourcePolicyRefSchema,
-  ImmutableReleaseRefSchema,
-  contentHash,
-  createHarnessEvaluationReviewReceipt,
   createModelImprovementQualificationReceipt,
   type EvaluationResult,
   type ModelImprovementQualificationReceipt,
 } from "@openpond/evals";
+import {
+  HarnessReviewSourcePolicyRefSchema,
+  ImmutableReleaseRefSchema,
+  contentHash,
+  createHarnessEvaluationReviewReceipt,
+} from "@openpond/harness";
 import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";

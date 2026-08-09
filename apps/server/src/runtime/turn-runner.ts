@@ -562,8 +562,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     maxHostedWorkspaceToolRounds,
     maxRepeatedInvalidToolRequests,
     appendRuntimeEvent,
-    processHarnessImprovementBoundary:
-      processHarnessImprovementBoundarySafely,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
     executeNativeToolCalls,
     readProfileSkillForModel,

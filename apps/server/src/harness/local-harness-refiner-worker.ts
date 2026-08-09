@@ -17,14 +17,18 @@ import {
   type ImprovementObservation,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
-
-import type { SqliteStore } from "../store/store.js";
 import {
   authorLocalHarnessRefinementWithModel,
+  HostedHarnessRefinerRequestSchema,
+  HostedHarnessRefinerResponseSchema,
+  contentHash,
+  type HostedHarnessRefinerRequest,
+  type HostedHarnessRefinerResponse,
   type LocalHarnessRefinerDecision,
   type LocalHarnessRefinerModelStream,
-} from "./local-harness-refiner-model.js";
+} from "@openpond/harness";
+
+import type { SqliteStore } from "../store/store.js";
 import {
   applyLocalHarnessRefinerProposal,
   validateLocalHarnessRefinerProposal,
@@ -64,7 +68,11 @@ export async function runLocalHarnessRefinerWorker(input: {
   store: SqliteStore;
   storeDir: string;
   trigger: RefinementTriggerDecision;
-  stream: LocalHarnessRefinerModelStream;
+  stream?: LocalHarnessRefinerModelStream;
+  refine?: (input: {
+    request: HostedHarnessRefinerRequest;
+    signal: AbortSignal;
+  }) => Promise<HostedHarnessRefinerResponse>;
   signal: AbortSignal;
   now?: () => string;
 }): Promise<LocalHarnessRefinerWorkerResult> {
@@ -163,33 +171,55 @@ export async function runLocalHarnessRefinerWorker(input: {
     trigger,
     observations,
   );
-  if (
-    observations.every((observation) => observation.kind === "user_turn") &&
-    boundedContext.task.previousAssistantOutput === null
-  ) {
-    return persistNoAction({
-      store: input.store,
-      workspace,
-      overlay,
-      trigger,
-      observations,
-      reason:
-        "The initial user turn has no prior result to improve and contains no execution evidence.",
-      now: input.now,
+  const refinerEvidence = {
+    trigger: boundedTriggerEvidence(trigger),
+    observations: observations.map(boundedObservationEvidence),
+    task: boundedContext.task,
+    eventExcerpts: boundedContext.eventExcerpts,
+    artifactDiagnostics: boundedContext.artifactDiagnostics,
+    sourceFiles: source.files,
+    sourceCatalog: source.catalog,
+  };
+  let decision: LocalHarnessRefinerDecision;
+  if (input.stream) {
+    decision = await authorLocalHarnessRefinementWithModel({
+      evidence: refinerEvidence,
+      stream: input.stream,
+      signal: input.signal,
     });
+  } else if (input.refine) {
+    const request = HostedHarnessRefinerRequestSchema.parse({
+      schemaVersion: "openpond.hostedHarnessRefinerRequest.v1",
+      requestId: trigger.id,
+      idempotencyKey: trigger.contentHash,
+      evidenceHash: contentHash(refinerEvidence),
+      harness: {
+        admittedRelease: overlay.baseHarnessRelease,
+        currentRelease: effectiveReleaseRef,
+        overlay: overlayRef(overlay),
+        workspace: {
+          id: workspace.id,
+          revision: workspace.revision,
+          sourceRevision: workspace.sourceRevision,
+          channelRevision: workspace.currentChannel.revision,
+        },
+        capabilities: {
+          memory: true,
+          prompt: true,
+          skill: true,
+          agent: false,
+        },
+      },
+      evidence: refinerEvidence,
+    });
+    const response = HostedHarnessRefinerResponseSchema.parse(
+      await input.refine({ request, signal: input.signal }),
+    );
+    assertHostedResponseBinding(request, response);
+    decision = response.decision;
+  } else {
+    throw new Error("Harness Refiner requires a public model stream or managed adapter.");
   }
-  const decision = await authorLocalHarnessRefinementWithModel({
-    evidence: {
-      trigger: boundedTriggerEvidence(trigger),
-      observations: observations.map(boundedObservationEvidence),
-      task: boundedContext.task,
-      eventExcerpts: boundedContext.eventExcerpts,
-      sourceFiles: source.files,
-      sourceCatalog: source.catalog,
-    },
-    stream: input.stream,
-    signal: input.signal,
-  });
   if (decision.decision === "no_action") {
     return persistNoAction({
       store: input.store,
@@ -299,6 +329,23 @@ export async function runLocalHarnessRefinerWorker(input: {
     proposal: atomic.proposal,
     observations,
   });
+}
+
+function assertHostedResponseBinding(
+  request: HostedHarnessRefinerRequest,
+  response: HostedHarnessRefinerResponse,
+): void {
+  if (
+    response.requestId !== request.requestId ||
+    response.evidenceHash !== request.evidenceHash ||
+    response.admittedRelease.id !== request.harness.admittedRelease.id ||
+    response.admittedRelease.contentHash !==
+      request.harness.admittedRelease.contentHash ||
+    response.currentRelease.id !== request.harness.currentRelease.id ||
+    response.currentRelease.contentHash !== request.harness.currentRelease.contentHash
+  ) {
+    throw new Error("Managed Harness Refiner response binding does not match the request.");
+  }
 }
 
 async function finishPersistedProposal(input: {

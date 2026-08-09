@@ -4,18 +4,20 @@ Portable evaluation contracts and pure helpers for Tasksets, graders, run
 manifests, attempt and evaluation receipts, execution adapters, conformance
 fixtures, Work-evidence eligibility, and no-training/SFT/preference/RL
 qualification receipts. The package depends on
-[`@openpond/harness`](../harness/README.md) and re-exports its portable Harness
-contracts for compatibility with existing `@openpond/evals` consumers.
+[`@openpond/harness`](../harness/README.md) for exact Harness identities but
+does not re-export Harness APIs. Applications import the two packages directly,
+which keeps refinement and evaluation authority visibly separate.
 
 ```ts
 import {
   AttemptReceiptSchema,
-  HarnessReleaseSchema,
   TasksetReleaseSchema,
   ModelImprovementQualificationReceiptSchema,
   validateTasksetRelease,
   verifyAttemptReceipt,
 } from "@openpond/evals";
+
+import { HarnessReleaseSchema } from "@openpond/harness";
 
 import {
   WorkEvidenceReceiptSchema,
@@ -32,8 +34,10 @@ resolve credentials, or persist artifacts.
 
 ## Harness Evaluation review
 
-`@openpond/harness` owns the immutable bounded review receipt and its routing
-decision. Evals binds an accepted review to the exact Harness, Taskset, scored
+`@openpond/harness` owns the public model-driven Refiner and continuous-review
+policy plus immutable bounded decisions and receipts. Evals does not own
+learning prompts, evidence selection, scheduling, or Harness mutation. It
+binds an accepted review to the exact Harness, Taskset, scored
 baseline Evaluation, base Model, Environment/tool/permission/policy hashes,
 Verifier, source-policy checks, privacy approval, budget approval, and eligible
 non-frozen learning signal. Frozen Evaluation evidence is rejected as training

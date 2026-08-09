@@ -6,8 +6,15 @@ import {
   createImprovementObservation,
   createRefinementTriggerDecision,
   TurnSchema,
+  type HarnessWorkspace,
 } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
+import {
+  contentHash,
+  type HostedHarnessRefinerRequest,
+  type HostedHarnessRefinerResponse,
+  type ImmutableReleaseRef,
+  type LocalHarnessRefinerDecision,
+} from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { SqliteStore } from "../store/store.js";
@@ -25,6 +32,22 @@ const NOW = "2026-08-05T20:00:00.000Z";
 const LATER = "2026-08-05T20:01:00.000Z";
 
 const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
+
+function hostedResult(
+  request: HostedHarnessRefinerRequest,
+  decision: LocalHarnessRefinerDecision,
+): HostedHarnessRefinerResponse {
+  return {
+    schemaVersion: "openpond.hostedHarnessRefinerResponse.v1",
+    requestId: request.requestId,
+    evidenceHash: request.evidenceHash,
+    admittedRelease: request.harness.admittedRelease,
+    currentRelease: request.harness.currentRelease,
+    decision,
+    serviceRevision: "worker-test",
+    usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+  };
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -53,13 +76,29 @@ async function fixture(runId: string) {
     workspaceId: created.workspace.id,
     updatedAt: NOW,
   });
+  const run = await addRunFixture({
+    store,
+    workspace: created.workspace,
+    harnessRelease: created.release.harnessRelease,
+    runId,
+  });
+  return { directory, store, ...created, ...run };
+}
+
+async function addRunFixture(input: {
+  store: SqliteStore;
+  workspace: HarnessWorkspace;
+  harnessRelease: ImmutableReleaseRef;
+  runId: string;
+}) {
+  const { store, workspace, harnessRelease, runId } = input;
   const overlay = await ensureLocalHarnessRunOverlay({
     store,
     runId,
-    workspace: created.workspace,
+    workspace,
     harnessRelease: {
-      id: created.release.harnessRelease.id,
-      contentHash: created.release.harnessRelease.contentHash,
+      id: harnessRelease.id,
+      contentHash: harnessRelease.contentHash,
     },
     admittedAt: NOW,
   });
@@ -124,7 +163,7 @@ async function fixture(runId: string) {
     metadata: {},
   });
   await store.saveHarnessImprovementArtifact(
-    created.workspace.id,
+    workspace.id,
     "observation",
     observation,
   );
@@ -158,11 +197,11 @@ async function fixture(runId: string) {
     metadata: {},
   });
   await store.saveHarnessImprovementArtifact(
-    created.workspace.id,
+    workspace.id,
     "trigger_decision",
     trigger,
   );
-  return { directory, store, ...created, overlay, trigger };
+  return { overlay, trigger };
 }
 
 describe("local Harness Refiner worker", () => {
@@ -184,14 +223,14 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* ({ messages }) {
+      refine: async ({ request }) => {
         calls += 1;
-        expect(messages.at(-1)?.content).toContain("password=[redacted]");
-        expect(messages.at(-1)?.content).toContain("access_token=[redacted]");
-        expect(messages.at(-1)?.content).not.toContain("fixture-secret");
-        expect(messages.at(-1)?.content).not.toContain("fixture-token");
-        yield {
-          text: JSON.stringify({
+        const serializedEvidence = JSON.stringify(request.evidence);
+        expect(serializedEvidence).toContain("password=[redacted]");
+        expect(serializedEvidence).toContain("access_token=[redacted]");
+        expect(serializedEvidence).not.toContain("fixture-secret");
+        expect(serializedEvidence).not.toContain("fixture-token");
+        return hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "prompt",
@@ -203,8 +242,7 @@ describe("local Harness Refiner worker", () => {
             replace: `${anchor}\n\nWhen a harmless command fails because of malformed syntax, correct only that command and continue from the current checkpoint.`,
             expectedOutcome: "Equivalent tasks avoid restarting after one corrected command.",
             reason: "The trace contains a successful recovery that is safe to encode as a textual instruction.",
-          }),
-        };
+        });
       },
     });
 
@@ -262,6 +300,87 @@ describe("local Harness Refiner worker", () => {
     expect(await fs.readFile(target, "utf8")).toBe(before);
   });
 
+  it("rebases a stale admitted run onto the atomically verified current release", async () => {
+    const current = await fixture("run-rebase-first");
+    const stale = await addRunFixture({
+      store: current.store,
+      workspace: current.workspace,
+      harnessRelease: current.release.harnessRelease,
+      runId: "run-rebase-stale",
+    });
+
+    const first = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      refine: async ({ request }) => {
+        const source = request.evidence.sourceFiles.find(
+          (candidate) => candidate.path === "instructions/system.md",
+        );
+        const anchor = source?.content.trimEnd().split("\n").at(-1);
+        if (!anchor) throw new Error("Expected instruction source evidence.");
+        return hostedResult(request, {
+          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          decision: "propose",
+          route: "prompt",
+          operation: "update",
+          target: "instructions/system.md",
+          summary: "Encode the first reusable recovery.",
+          createContent: null,
+          find: anchor,
+          replace: `${anchor}\n\nCorrect one harmless malformed command and continue.`,
+          expectedOutcome: "Equivalent tasks recover without restarting.",
+          reason: "The recovered detour is reusable.",
+        });
+      },
+    });
+    expect(first.advanceReceipt?.decision).toBe("advanced");
+
+    const rebased = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: stale.trigger,
+      signal: new AbortController().signal,
+      now: () => "2026-08-05T20:02:00.000Z",
+      refine: async ({ request }) => {
+        expect(request.harness.admittedRelease).toEqual(
+          stale.overlay.baseHarnessRelease,
+        );
+        expect(request.harness.currentRelease).toEqual(
+          first.workspace.currentChannel.release,
+        );
+        const source = request.evidence.sourceFiles.find(
+          (candidate) => candidate.path === "instructions/system.md",
+        );
+        const anchor = source?.content.trimEnd().split("\n").at(-1);
+        if (!anchor) throw new Error("Expected rebased instruction source evidence.");
+        return hostedResult(request, {
+          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          decision: "propose",
+          route: "prompt",
+          operation: "update",
+          target: "instructions/system.md",
+          summary: "Encode a second reusable recovery.",
+          createContent: null,
+          find: anchor,
+          replace: `${anchor}\n\nPreserve completed work when applying a second harmless correction.`,
+          expectedOutcome: "Later corrections preserve completed work.",
+          reason: "The second recovered detour is independently reusable.",
+        });
+      },
+    });
+
+    expect(rebased.advanceReceipt?.decision).toBe("advanced");
+    expect(rebased.proposal?.baseHarnessRelease).toEqual(
+      first.workspace.currentChannel.release,
+    );
+    expect(rebased.proposal?.metadata.rebasedFromHarnessRelease).toEqual(
+      stale.overlay.baseHarnessRelease,
+    );
+  });
+
   it("persists a bounded no-action outcome without changing the overlay or Harness", async () => {
     const current = await fixture("run-no-action");
     const result = await runLocalHarnessRefinerWorker({
@@ -270,15 +389,12 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
-        yield {
-          text: JSON.stringify({
+      refine: async ({ request }) =>
+        hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "no_action",
             reason: "The failure was conversation-specific and does not justify a durable Harness change.",
-          }),
-        };
-      },
+        }),
     });
 
     expect(result.outcome.decision).toBe("no_action");
@@ -301,9 +417,8 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
-        yield {
-          text: JSON.stringify({
+      refine: async ({ request }) =>
+        hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "agent",
@@ -315,9 +430,7 @@ describe("local Harness Refiner worker", () => {
             replace: null,
             expectedOutcome: "Future Desktop Work turns execute the recovery Agent.",
             reason: "The fixture verifies runtime activation fails closed.",
-          }),
-        };
-      },
+        }),
     });
 
     expect(result.outcome.decision).toBe("proposed");
@@ -359,9 +472,8 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
-        yield {
-          text: JSON.stringify({
+      refine: async ({ request }) =>
+        hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "memory",
@@ -373,9 +485,7 @@ describe("local Harness Refiner worker", () => {
             replace: "Use exactly three concise bullets when explicitly requested.",
             expectedOutcome: "Future requested briefs use the corrected style.",
             reason: "The user explicitly requested durable brief behavior.",
-          }),
-        };
-      },
+        }),
     });
 
     expect(result.proposal?.metadata.expectedMemory).toEqual({
@@ -416,9 +526,8 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
-        yield {
-          text: JSON.stringify({
+      refine: async ({ request }) =>
+        hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "memory",
@@ -430,9 +539,7 @@ describe("local Harness Refiner worker", () => {
             replace: null,
             expectedOutcome: "Future searches do not return the obsolete style.",
             reason: "The user explicitly requested removal.",
-          }),
-        };
-      },
+        }),
     });
     if (!result.proposal) throw new Error("Expected a retained memory proposal.");
     expect(result.validations.map((validation) => ({
@@ -490,9 +597,8 @@ describe("local Harness Refiner worker", () => {
       trigger: current.trigger,
       signal: new AbortController().signal,
       now: () => LATER,
-      stream: async function* () {
-        yield {
-          text: JSON.stringify({
+      refine: async ({ request }) =>
+        hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
             route: "memory",
@@ -504,9 +610,7 @@ describe("local Harness Refiner worker", () => {
             replace: null,
             expectedOutcome: "Future searches do not return the temporary audit style.",
             reason: "The temporary audit is complete.",
-          }),
-        };
-      },
+        }),
     });
     if (!result.proposal) throw new Error("Expected a retained memory proposal.");
     expect(result.proposal.metadata.expectedMemory).toEqual({
@@ -546,9 +650,8 @@ describe("local Harness Refiner worker", () => {
         trigger: current.trigger,
         signal: new AbortController().signal,
         now: () => LATER,
-        stream: async function* () {
-          yield {
-            text: JSON.stringify({
+        refine: async ({ request }) =>
+          hostedResult(request, {
               schemaVersion: "openpond.localHarnessRefinerDecision.v1",
               decision: "propose",
               route: "prompt",
@@ -560,9 +663,7 @@ describe("local Harness Refiner worker", () => {
               replace: "\n\n",
               expectedOutcome: "The exact intended location changes once.",
               reason: "This fixture verifies deterministic patch materialization.",
-            }),
-          };
-        },
+          }),
       }),
     ).rejects.toThrow(/must occur exactly once/i);
 

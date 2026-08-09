@@ -49,6 +49,7 @@ import { nextHarnessEvaluationReviewRunAt } from "./local-harness-evaluation-rev
 export function createLocalHarnessSettingsRoutePayloads(input: {
   store: SqliteStore;
   storeDir: string;
+  evaluationReviewStream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
 }) {
   return {
     harnessHistoryPayload: () => localHarnessHistoryPayload(input.store),
@@ -60,6 +61,7 @@ export function createLocalHarnessSettingsRoutePayloads(input: {
     reviewHarnessEvaluationPayload: (payload: unknown) =>
       reviewLocalHarnessEvaluationFromSettings({
         store: input.store,
+        stream: input.evaluationReviewStream,
         request: parseHarnessEvaluationReviewRequest(payload),
       }),
     updateHarnessEvaluationReviewSchedulePayload: (payload: unknown) =>
@@ -409,12 +411,14 @@ export async function localHarnessHistoryPayload(
 export async function reviewLocalHarnessEvaluationFromSettings(input: {
   store: SqliteStore;
   request: HarnessEvaluationReviewRequest;
+  stream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
 }): Promise<HarnessEvaluationReviewResponse> {
   const settings = await input.store.getHarnessEvaluationReviewSettings(input.request.workspaceId);
   const receipt = await reviewSelectedLocalHarnessEvaluationFromHost({
     store: input.store,
     workspaceId: input.request.workspaceId,
     maxEstimatedCostUsd: input.request.maxEstimatedCostUsd ?? settings.maxEstimatedCostUsd,
+    stream: input.stream,
   });
   const timestamp = new Date().toISOString();
   await input.store.setHarnessEvaluationReviewSettings({

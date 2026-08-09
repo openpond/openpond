@@ -127,8 +127,6 @@ export function createHostedToolLoopRuntime(deps: {
   maxHostedWorkspaceToolRounds: number;
   maxRepeatedInvalidToolRequests: number;
   appendRuntimeEvent: TurnRunnerDependencies["appendRuntimeEvent"];
-  processHarnessImprovementBoundary?:
-    TurnRunnerDependencies["processHarnessImprovementBoundary"];
   upsertModelUsageRecord(record: ModelUsageRecord): Promise<void>;
   executeNativeToolCalls(input: {
     session: Session;
@@ -167,10 +165,6 @@ export function createHostedToolLoopRuntime(deps: {
   const maxHostedWorkspaceToolRounds = deps.maxHostedWorkspaceToolRounds;
   const maxRepeatedInvalidToolRequests = deps.maxRepeatedInvalidToolRequests;
   const appendRuntimeEvent = deps.appendRuntimeEvent;
-  const processHarnessImprovementBoundary =
-    deps.processHarnessImprovementBoundary;
-  const recordCompletedToolBatch = (session: Session, turn: Turn) =>
-    processHarnessImprovementBoundary?.({ session, turn, boundaryKind: "completed_tool_batch" });
   const safeUpsertModelUsageRecord = deps.upsertModelUsageRecord;
   const executeNativeToolCalls = deps.executeNativeToolCalls;
   const readProfileSkillForModel = deps.readProfileSkillForModel;
@@ -489,7 +483,6 @@ export function createHostedToolLoopRuntime(deps: {
         for (const result of nativeResults) {
           messages.push(toolResultMessage(result));
         }
-        await recordCompletedToolBatch(session, params.turn);
         const blockingQuestion = nativeResults.find(
           (result) => result.turnControl === "await_user_input"
         );
@@ -768,7 +761,6 @@ export function createHostedToolLoopRuntime(deps: {
         toolResults.push(formatWorkspaceToolResultForModel(result));
       }
 
-      await recordCompletedToolBatch(session, params.turn);
 
       messages.push({
         role: "user",

@@ -29,9 +29,9 @@ type Props = {
 };
 
 const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
-  enabled: false,
-  cadence: "manual",
-  maxEstimatedCostUsd: 0,
+  enabled: true,
+  cadence: "daily",
+  maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
   lastRunAt: null,
   lastResult: null,
@@ -516,27 +516,12 @@ export function HarnessHistorySettingsSection({
             <div><span>Status</span><strong>{history.workspace.dirty ? "Unreleased changes" : "Clean"}</strong></div>
           </section>
 
-          <section className="account-list">
-            <div className="account-list-row">
-              <div className="account-list-copy">
-                <strong>Background review</strong>
-                <span>Review completed Local Work turns for reusable Harness improvements. Turning this off stops new reviews; already queued work may finish.</span>
-              </div>
-              <label className="provider-toggle" aria-label="Harness background review enabled">
-                <input
-                  checked={history.backgroundReview.enabled}
-                  disabled={savingBackgroundReview}
-                  onChange={(event) => void setBackgroundReviewEnabled(event.target.checked)}
-                  type="checkbox"
-                />
-                <span aria-hidden="true" />
-              </label>
-            </div>
-          </section>
-
           <HarnessEvaluationReviewSettings
             acceptingReviewId={acceptingEvaluationReviewId}
+            backgroundReviewBusy={savingBackgroundReview}
+            backgroundReviewEnabled={history.backgroundReview.enabled}
             busy={reviewingEvaluation || savingEvaluationSchedule}
+            onBackgroundReviewChange={(nextEnabled) => void setBackgroundReviewEnabled(nextEnabled)}
             onAcceptTasksetReview={(review) => void acceptEvaluationReview(review)}
             onReview={(maxEstimatedCostUsd) => void reviewEvaluation(maxEstimatedCostUsd)}
             onSaveSchedule={(input) => void saveEvaluationSchedule(input)}

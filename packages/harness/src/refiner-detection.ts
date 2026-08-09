@@ -203,7 +203,7 @@ export function detectHarnessImprovementAtBoundary(input: {
       ...base,
       decision: "queue_refiner",
       deterministicRoute: null,
-      suggestedRoutes: suggestedRoutesFor(actionable),
+      suggestedRoutes: [],
       reason: actionable.some((observation) => observation.kind === "user_turn")
         ? "A completed user turn is ready for bounded background Harness review."
         : "A recovered detour may contain a reusable Harness improvement.",
@@ -244,9 +244,6 @@ function collectObservations(input: {
 
   for (const outcome of input.outcomes) {
     if (outcome.action === "refine_request" && !outcome.failed) {
-      const suggestedRoute = typeof outcome.args.suggestedRoute === "string"
-        ? outcome.args.suggestedRoute
-        : null;
       const requestedSummary = typeof outcome.args.summary === "string"
         ? outcome.args.summary.trim()
         : "The agent explicitly requested bounded refinement.";
@@ -256,9 +253,7 @@ function collectObservations(input: {
           kind: "reusable_success",
           state: "terminal",
           outcomes: [outcome],
-          deterministicClass: suggestedRoute
-            ? `refine_requested_${suggestedRoute}`
-            : "refine_requested",
+          deterministicClass: "refine_requested",
           summary: requestedSummary.slice(0, 100_000),
         }),
       );
@@ -586,65 +581,6 @@ function isActionableObservation(observation: ImprovementObservation): boolean {
     (observation.kind === "validation" && observation.state === "terminal") ||
     (observation.kind === "tool_failure" && observation.state === "terminal")
   );
-}
-
-function suggestedRoutesFor(
-  observations: readonly ImprovementObservation[],
-): Array<
-  | "runtime"
-  | "memory"
-  | "prompt"
-  | "skill"
-  | "agent"
-  | "product"
-  | "taskset"
-  | "training"
-> {
-  const explicitlySuggested = observations
-    .map((observation) => /^refine_requested_(runtime|memory|prompt|skill|agent|product|taskset|training)$/.exec(
-      observation.deterministicClass ?? "",
-    )?.[1])
-    .find((route): route is
-      | "runtime"
-      | "memory"
-      | "prompt"
-      | "skill"
-      | "agent"
-      | "product"
-      | "taskset"
-      | "training" => Boolean(route));
-  if (explicitlySuggested) return [explicitlySuggested];
-  if (observations.some((observation) => observation.kind === "user_turn")) {
-    return [
-      "runtime",
-      "memory",
-      "prompt",
-      "skill",
-      "agent",
-      "product",
-      "taskset",
-      "training",
-    ];
-  }
-  if (
-    observations.some((observation) =>
-      ["tool_budget_exhausted", "recovered_tool_budget_exhausted"].includes(
-        observation.deterministicClass ?? "",
-      ),
-    )
-  ) {
-    return ["runtime", "skill"];
-  }
-  if (
-    observations.some((observation) =>
-      ["permission_denied", "recovered_permission_denied"].includes(
-        observation.deterministicClass ?? "",
-      ),
-    )
-  ) {
-    return ["product", "runtime"];
-  }
-  return ["runtime", "skill", "prompt"];
 }
 
 function toolAction(event: HarnessRefinerRuntimeEvent): string {

@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { listOpChatModels, listOpChatProviders, streamOpChatChatCompletion } from "../packages/runtime/src/chat";
+import {
+  listOpChatModels,
+  listOpChatProviders,
+  streamOpChatChatCompletion,
+} from "../packages/runtime/src/chat";
 import {
   DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,
   resolveHostedChatApiBaseUrl,

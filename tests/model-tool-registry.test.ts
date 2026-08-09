@@ -1645,7 +1645,7 @@ describe("model tool registry", () => {
     expect(result.contentText).not.toContain("#section");
   });
 
-  test("keeps full web search URLs in event data while hiding them from model-facing content", async () => {
+  test("keeps full web search URLs available for model-authored linked evidence", async () => {
     const tool = createWebSearchModelToolDefinition({
       executeWebSearch: async () => ({
         query: "USMNT July 1 2026",
@@ -1690,7 +1690,8 @@ describe("model tool registry", () => {
     });
     expect(result.contentText).toContain("U.S. Soccer");
     expect(result.contentText).toContain("ussoccer.com");
-    expect(result.contentText).not.toContain("https://www.ussoccer.com/stories/2026/07/usmnt-match-report");
+    expect(result.contentText).toContain("https://www.ussoccer.com/stories/2026/07/usmnt-match-report");
+    expect(result.contentText).toContain("when the user requests URLs or linked evidence");
   });
 });
 

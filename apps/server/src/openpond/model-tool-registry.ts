@@ -703,7 +703,7 @@ export function createWebSearchModelToolDefinition(deps: {
   return {
     name: "web_search",
     description:
-      "Search the web for current or external information. Cite by source title or source name in prose; the app renders clickable source pills, so do not paste raw URLs unless the user explicitly asks for URLs.",
+      "Search the web for current or external information. The app renders clickable source pills automatically. Cite by source title or source name in prose by default; when the user explicitly requests URLs or linked evidence, use the result URLs in clickable Markdown links.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -753,7 +753,7 @@ export function createWebSearchModelToolDefinition(deps: {
           {
             ok: true,
             action: "web_search",
-            output: `Found ${result.results.length} web result${result.results.length === 1 ? "" : "s"}. Use the source titles or names for citations; do not paste raw URLs unless the user asks.`,
+            output: `Found ${result.results.length} web result${result.results.length === 1 ? "" : "s"}. Source pills are automatic. Cite source titles or names by default; when the user requests URLs or linked evidence, use the result URLs in clickable Markdown links.`,
             data: { result: webSearchResultForModel(result) },
           },
           null,
@@ -828,7 +828,7 @@ function decodeHtmlEntities(value: string): string {
 }
 
 function webSearchResultForModel(result: WebSearchResult): Omit<WebSearchResult, "results"> & {
-  results: Array<Omit<WebSearchResultItem, "url" | "faviconUrl"> & { citation: string; domain: string | null }>;
+  results: Array<Omit<WebSearchResultItem, "faviconUrl"> & { citation: string; domain: string | null }>;
 } {
   return {
     query: result.query,
@@ -839,6 +839,7 @@ function webSearchResultForModel(result: WebSearchResult): Omit<WebSearchResult,
       id: item.id,
       citation: `[${index + 1}]`,
       title: item.title,
+      url: item.url,
       snippet: item.snippet,
       sourceName: item.sourceName,
       domain: hostnameFromUrl(item.url),
