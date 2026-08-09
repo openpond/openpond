@@ -248,28 +248,13 @@
   line-height: 1.4;
 }
 
-.sidebar-learning-title {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  text-align: left;
-}
-
-.sidebar-learning-title span {
-  color: var(--muted);
-  font-size: 10px;
-}
-
 .sidebar-learning-control {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 38px;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
 }
 
 .sidebar-learning-control > span:first-child {
@@ -281,6 +266,16 @@
   color: var(--muted);
   font-size: 10px;
   line-height: 1.2;
+}
+
+.sidebar-learning-toggle {
+  flex: 0 0 38px;
+  justify-self: end;
+}
+
+.sidebar-learning-control + .sidebar-learning-control {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 7px;
 }
 
 .sidebar-learning-notice-actions {
@@ -946,6 +941,27 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 1px;
+}
+
+.sidebar-project-title-line,
+.sidebar-session-title-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+
+.sidebar-session-title-line .sidebar-task-title {
+  flex: 1 1 auto;
+}
+
+.sidebar-row-updated-at {
+  flex: 0 0 auto;
+  color: #7f7f7f;
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
 }
 
 .sidebar-session-project-label {

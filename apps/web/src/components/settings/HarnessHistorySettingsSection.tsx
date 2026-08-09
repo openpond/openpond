@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   HarnessEvaluationReviewReceipt,
   HarnessEvaluationReviewSchedule,
@@ -340,11 +340,6 @@ export function HarnessHistorySettingsSection({
     if (enabled) void refresh();
   }, [enabled, refresh]);
 
-  const current = useMemo(
-    () => history?.releases.find((release) => release.current) ?? null,
-    [history],
-  );
-
   const setBackgroundReviewEnabled = useCallback(async (nextEnabled: boolean) => {
     if (!connection || !history?.workspace) return;
     setSavingBackgroundReview(true);
@@ -509,13 +504,6 @@ export function HarnessHistorySettingsSection({
 
       {history?.workspace ? (
         <>
-          <section className="harness-summary-grid">
-            <div><span>Workspace</span><strong>{history.workspace.name}</strong></div>
-            <div><span>Current release</span><strong>{shortHash(current?.contentHash)}</strong></div>
-            <div><span>Channel revision</span><strong>{history.workspace.currentChannel.revision}</strong></div>
-            <div><span>Status</span><strong>{history.workspace.dirty ? "Unreleased changes" : "Clean"}</strong></div>
-          </section>
-
           <HarnessEvaluationReviewSettings
             acceptingReviewId={acceptingEvaluationReviewId}
             backgroundReviewBusy={savingBackgroundReview}
