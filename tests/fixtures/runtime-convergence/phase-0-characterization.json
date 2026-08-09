@@ -37,7 +37,7 @@
     {
       "id": "harness-admission-refine-advancement-failure-avoidance",
       "path": "apps/server/src/harness/local-harness-refinement-acceptance.test.ts",
-      "sha256": "d2ab77e541fe5e11416c7735d1b8b3173609ba9d86bcfd0539578b051aaf3682"
+      "sha256": "a2e6f7389708c1dc9c489a5b5358bf44ac35da4752cc0d81a202f94fea8edd07"
     },
     {
       "id": "candidate-validation-review-rollback",

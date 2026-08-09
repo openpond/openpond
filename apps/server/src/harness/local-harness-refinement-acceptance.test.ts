@@ -271,6 +271,117 @@ describe("Local Harness refinement acceptance", () => {
       }),
     ]));
   });
+
+  it("keeps a completed foreground turn intact and retries one failed hosted review without duplicate application", async () => {
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "openpond-harness-refinement-retry-"),
+    );
+    const store = new SqliteStore(directory);
+    cleanup.push({ directory, store });
+    const created = await createLocalHarnessWorkspace({
+      store,
+      storeDir: directory,
+      id: "personal-refinement-retry",
+      ownerId: "desktop-personal",
+      name: "Personal Harness",
+      now: () => BEFORE,
+    });
+    await store.selectHarnessWorkspace({
+      ownerKind: "personal",
+      ownerId: "desktop-personal",
+      workspaceId: created.workspace.id,
+      updatedAt: BEFORE,
+    });
+    const runtime = await loadSelectedLocalHarnessRuntime(store);
+    if (!runtime) throw new Error("Local Harness runtime was not selected.");
+    const admitted = await admitRun({
+      store,
+      runtime,
+      runId: "refinement-retry",
+      admittedAt: BEFORE,
+    });
+    await executeScriptedConverterTask({
+      store,
+      sessionId: admitted.session.id,
+      turnId: admitted.turn.id,
+      instructions: await readRuntimeInstructions(runtime.release.bundlePath),
+      occurredAt: BEFORE,
+    });
+
+    const queue = createBackgroundWorkerQueue({
+      queueId: "local-harness-refinement-retry",
+    });
+    let attempts = 0;
+    const processBoundary = createLocalHarnessImprovementRuntime({
+      store,
+      storeDir: directory,
+      queue,
+      appendRuntimeEvent: (runtimeEvent) => store.appendRuntimeEvent(runtimeEvent),
+      upsertModelUsageRecord: async (record) => {
+        await store.upsertModelUsageRecord(record);
+      },
+      requestOpenPondHostedHarnessRefinement: async ({ request }) => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("Hosted Harness Refiner request failed: 503 temporarily unavailable");
+        }
+        return hostedResult(request, {
+          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          decision: "no_action",
+          reason: "The recovered detour does not justify a durable Harness change.",
+        });
+      },
+    });
+
+    await expect(
+      processBoundary({
+        session: admitted.session,
+        turn: admitted.turn,
+        boundaryKind: "turn_completed",
+      }),
+    ).resolves.toBeUndefined();
+    expect((await store.getTurn(admitted.turn.id))?.status).toBe("completed");
+    await queue.drain();
+
+    expect(queue.receipts().map((receipt) => receipt.status)).toEqual(["failed"]);
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+    expect(await store.runtimeEventsForSession(admitted.session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "harness.refiner.failed",
+          status: "failed",
+        }),
+      ]),
+    );
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(1);
+    await queue.drain();
+
+    expect(attempts).toBe(2);
+    expect(queue.receipts().map((receipt) => receipt.status)).toEqual([
+      "failed",
+      "completed",
+    ]);
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(0);
+    const outcomes = await store.listHarnessImprovementArtifacts(
+      runtime.workspace.id,
+      "refiner_outcome",
+    );
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({ decision: "no_action" });
+    expect(await store.runtimeEventsForSession(admitted.session.id)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "harness.refiner.completed",
+          status: "completed",
+          data: expect.objectContaining({ recoveredAfterRestart: true }),
+        }),
+      ]),
+    );
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(0);
+    expect(attempts).toBe(2);
+  });
 });
 
 async function admitRun(input: {

@@ -217,17 +217,35 @@ export async function requestOpenPondHostedHarnessRefinement(input: {
       "OpenPond is signed out. Add an account in Settings before using Background review.",
     );
   }
+  return requestOpChatHarnessRefinement({
+    apiBaseUrl: context.chatApiBaseUrl,
+    token: context.token,
+    request,
+    signal: input.signal,
+  });
+}
+
+export async function requestOpChatHarnessRefinement(input: {
+  apiBaseUrl: string;
+  token: string;
+  request: HostedHarnessRefinerRequest;
+  signal?: AbortSignal;
+}): Promise<HostedHarnessRefinerResponse> {
+  const request = HostedHarnessRefinerRequestSchema.parse(input.request);
+  if (contentHash(request.evidence) !== request.evidenceHash) {
+    throw new Error("Hosted Harness Refiner evidence hash does not match the request payload.");
+  }
   const timeout = hostedRefinerTimeoutSignal(input.signal);
   try {
     const requestUrl = opChatEndpointUrl(
-      context.chatApiBaseUrl,
+      input.apiBaseUrl,
       "harness/refine",
     );
     const response = await fetch(requestUrl, {
       method: "POST",
       headers: opChatHeaders(
         requestUrl,
-        context.token,
+        input.token,
         "application/json",
         request.requestId,
       ),

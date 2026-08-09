@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 
-import { listOpChatModels, listOpChatProviders, streamOpChatChatCompletion } from "../packages/runtime/src/chat";
+import { contentHash, type HostedHarnessRefinerRequest } from "@openpond/harness";
+import {
+  listOpChatModels,
+  listOpChatProviders,
+  requestOpChatHarnessRefinement,
+  streamOpChatChatCompletion,
+} from "../packages/runtime/src/chat";
 import {
   DEFAULT_OPENPOND_OPCHAT_API_BASE_URL,
   resolveHostedChatApiBaseUrl,
@@ -123,6 +129,63 @@ describe("OpenPond runtime OpChat routing", () => {
 
     expect(requests).toEqual(["https://api.example.test/opchat/v1/providers"]);
     expect(result.data.map((provider) => provider.id)).toEqual(["openpond", "openrouter"]);
+  });
+
+  test("posts content-addressed Harness evidence to the dedicated hosted Refiner route", async () => {
+    const request = hostedRefinerRequest();
+    const requests: Array<{
+      url: string;
+      authorization: string | null;
+      requestId: string | null;
+      body: unknown;
+    }> = [];
+    globalThis.fetch = async (input, init) => {
+      const headers = new Headers(init?.headers);
+      requests.push({
+        url: String(input),
+        authorization: headers.get("authorization"),
+        requestId: headers.get("x-openpond-request-id"),
+        body: JSON.parse(String(init?.body)),
+      });
+      return jsonResponse(hostedRefinerResponse(request));
+    };
+
+    await expect(
+      requestOpChatHarnessRefinement({
+        apiBaseUrl: "https://api.example.test/opchat/v1/",
+        token: "opk_runtime_scoped",
+        request,
+      }),
+    ).resolves.toEqual(hostedRefinerResponse(request));
+
+    expect(requests).toEqual([
+      {
+        url: "https://api.example.test/opchat/v1/harness/refine",
+        authorization: "Bearer opk_runtime_scoped",
+        requestId: request.requestId,
+        body: request,
+      },
+    ]);
+  });
+
+  test("rejects a hosted Refiner response that is not bound to the request release", async () => {
+    const request = hostedRefinerRequest();
+    globalThis.fetch = async () =>
+      jsonResponse({
+        ...hostedRefinerResponse(request),
+        currentRelease: {
+          id: "release-other",
+          contentHash: "f".repeat(64),
+        },
+      });
+
+    await expect(
+      requestOpChatHarnessRefinement({
+        apiBaseUrl: "https://api.example.test/opchat/v1",
+        token: "opk_runtime_scoped",
+        request,
+      }),
+    ).rejects.toThrow("response binding does not match the request");
   });
 
   test("requests complete chat responses so whitespace survives provider chunk boundaries", async () => {
@@ -372,6 +435,83 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json" },
   });
+}
+
+function hostedRefinerRequest(): HostedHarnessRefinerRequest {
+  const evidence = {
+    trigger: { id: "trigger-1" },
+    observations: [{ id: "observation-1", kind: "execution_recovery" }],
+    task: {
+      prompt: "Prepare the report.",
+      assistantOutput: "The report is ready.",
+      previousAssistantOutput: null,
+    },
+    eventExcerpts: [],
+    sourceFiles: [
+      {
+        path: "instructions/system.md",
+        kind: "instruction" as const,
+        content: "Complete the requested work.",
+        loaded: true,
+      },
+    ],
+    sourceCatalog: [
+      {
+        path: "instructions/system.md",
+        kind: "instruction" as const,
+        loaded: true,
+      },
+    ],
+  };
+  const admittedRelease = {
+    id: "release-admitted",
+    contentHash: "a".repeat(64),
+  };
+  return {
+    schemaVersion: "openpond.hostedHarnessRefinerRequest.v1",
+    requestId: "refiner-request-1",
+    idempotencyKey: "refiner-idempotency-1",
+    evidenceHash: contentHash(evidence),
+    harness: {
+      admittedRelease,
+      currentRelease: admittedRelease,
+      overlay: {
+        id: "overlay-1",
+        revision: 0,
+        contentHash: "b".repeat(64),
+      },
+      workspace: {
+        id: "workspace-1",
+        revision: 0,
+        sourceRevision: "c".repeat(64),
+        channelRevision: 0,
+      },
+      capabilities: {
+        memory: true,
+        prompt: true,
+        skill: true,
+        agent: false,
+      },
+    },
+    evidence,
+  };
+}
+
+function hostedRefinerResponse(request: HostedHarnessRefinerRequest) {
+  return {
+    schemaVersion: "openpond.hostedHarnessRefinerResponse.v1" as const,
+    requestId: request.requestId,
+    evidenceHash: request.evidenceHash,
+    admittedRelease: request.harness.admittedRelease,
+    currentRelease: request.harness.currentRelease,
+    decision: {
+      schemaVersion: "openpond.localHarnessRefinerDecision.v1" as const,
+      decision: "no_action" as const,
+      reason: "No durable Harness change is warranted.",
+    },
+    serviceRevision: "refiner-test-v1",
+    usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 },
+  };
 }
 
 function restoreEnv(name: "OPENPOND_OPCHAT_API_URL" | "OPENPOND_CHAT_API_URL", value: string | undefined) {
