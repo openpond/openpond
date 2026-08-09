@@ -16,6 +16,7 @@ import {
 import {
   qualifyHarnessModelImprovement,
   requireQualifiedModelImprovement,
+  runHarnessReviewBaselineAndQualification,
 } from "../apps/server/src/training/harness-model-improvement.js";
 
 const NOW = "2026-08-08T18:00:00.000Z";
@@ -171,6 +172,51 @@ function storeFixture(taskset: ReturnType<typeof tasksetWithLineage>, evaluation
 }
 
 describe("Harness model-improvement qualification", () => {
+  it("runs one real reviewed baseline and records a no-training qualification before approval", async () => {
+    const taskset = tasksetWithLineage(rewardTasksetFixture());
+    const evaluation = baseline({
+      tasksetId: taskset.id,
+      tasksetHash: taskset.contentHash,
+      score: 0.2,
+      scoreVariance: 0,
+    });
+    const { store } = storeFixture(taskset, evaluation);
+    const executeBaseline = vi.fn(async () => ({
+      evaluationResult: evaluation,
+      attempts: [{ id: "attempt-one" }],
+      reused: false,
+    }));
+    const result = await runHarnessReviewBaselineAndQualification({
+      store,
+      evaluation: { executeBaseline } as never,
+      workspaceId: "workspace-qualification",
+      tasksetId: taskset.id,
+      reviewRef,
+      model: { providerId: "openpond", modelId: "openpond-chat" },
+      maximumCostUsd: 0.1,
+    });
+    expect(executeBaseline).toHaveBeenCalledWith(expect.objectContaining({
+      tasksetId: taskset.id,
+      reviewRef,
+      model: { providerId: "openpond", modelId: "openpond-chat" },
+      seeds: [17],
+      attemptsPerTask: 1,
+    }));
+    expect(result).toMatchObject({
+      evaluationResult: { id: evaluation.id },
+      attemptCount: 1,
+      reused: false,
+      qualification: {
+        decision: "no_training",
+        signal: { kind: "scalar_reward", strength: "weak", variance: 0 },
+      },
+    });
+    expect(result.qualification.reasons).toEqual(expect.arrayContaining([
+      "A separate privacy approval over eligible training evidence is required.",
+      "A separate bounded-cost approval is required before planning training.",
+    ]));
+  });
+
   it("qualifies usable demonstration signal for SFT and links it to review history", async () => {
     const taskset = tasksetWithLineage();
     const evaluation = baseline({ tasksetId: taskset.id, tasksetHash: taskset.contentHash, score: 0.2, scoreVariance: 0.04 });
