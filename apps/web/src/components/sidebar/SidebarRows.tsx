@@ -52,6 +52,14 @@ import { RenameChatDialog } from "./RenameChatDialog";
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
 const PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE = 260;
+const sidebarUpdatedDateFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+});
+const sidebarUpdatedDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 function syncedRunningPulseStyle(): CSSProperties {
   return {
@@ -343,13 +351,18 @@ export function SidebarSessionRow({
       ) : (
         icon ?? <MessageSquare size={15} />
       )}
-      <span className={`row-label-shell${projectLabel ? " has-detail" : ""}`}>
-        <span
-          className="row-label sidebar-task-title"
-          data-overflowing="false"
-          onPointerEnter={prepareSidebarTitleTicker}
-        >
-          <span className="sidebar-task-title-text">{session.title}</span>
+      <span
+        className={`row-label-shell${projectLabel ? " has-detail" : ""}`}
+      >
+        <span className="sidebar-session-title-line">
+          <span
+            className="row-label sidebar-task-title"
+            data-overflowing="false"
+            onPointerEnter={prepareSidebarTitleTicker}
+          >
+            <span className="sidebar-task-title-text">{session.title}</span>
+          </span>
+          <SidebarUpdatedAt value={session.updatedAt} />
         </span>
         {projectLabel ? (
           <span className="sidebar-session-project-label">{projectLabel}</span>
@@ -714,7 +727,10 @@ export function SidebarProjectRow({
       <SidebarInteractiveRow
         selected={selected}
         placeholder={placeholder}
-        className={["sidebar-project-row", menuOpen ? "project-menu-open" : ""]
+        className={[
+          "sidebar-project-row",
+          menuOpen ? "project-menu-open" : "",
+        ]
           .filter(Boolean)
           .join(" ")}
         ariaExpanded={disclosure ? expanded : undefined}
@@ -732,16 +748,19 @@ export function SidebarProjectRow({
           baseSize={15}
         />
         <span className="row-label-shell">
-          <span className="row-label">{project.name}</span>
-          {disclosure ? (
-            <span className="sidebar-project-caret" aria-hidden="true">
-              {expanded ? (
-                <ChevronDown size={13} />
-              ) : (
-                <ChevronRight size={13} />
-              )}
-            </span>
-          ) : null}
+          <span className="sidebar-project-title-line">
+            <span className="row-label">{project.name}</span>
+            <SidebarUpdatedAt value={project.updatedAt} />
+            {disclosure ? (
+              <span className="sidebar-project-caret" aria-hidden="true">
+                {expanded ? (
+                  <ChevronDown size={13} />
+                ) : (
+                  <ChevronRight size={13} />
+                )}
+              </span>
+            ) : null}
+          </span>
         </span>
         <div className="row-meta">
           <span className="row-meta-status">
@@ -796,6 +815,36 @@ export function SidebarProjectRow({
       )}
     </div>
   );
+}
+
+function SidebarUpdatedAt({
+  value,
+}: {
+  value: string | null | undefined;
+}) {
+  const label = formatSidebarUpdatedDate(value);
+  if (!label || !value) return null;
+
+  const date = new Date(value);
+  return (
+    <time
+      className="sidebar-row-updated-at"
+      dateTime={value}
+      title={`Last updated ${sidebarUpdatedDateTimeFormatter.format(date)}`}
+    >
+      {label}
+    </time>
+  );
+}
+
+function formatSidebarUpdatedDate(
+  value: string | null | undefined
+): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? null
+    : sidebarUpdatedDateFormatter.format(date);
 }
 
 function SidebarTerminalStatusIcon({

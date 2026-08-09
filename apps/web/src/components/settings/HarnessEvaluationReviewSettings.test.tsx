@@ -38,6 +38,14 @@ describe("HarnessEvaluationReviewSettings", () => {
 
     expect(html).toContain("Build training Taskset");
     expect(html).toContain("3</strong> independent occurrences");
+    expect(html).toContain("Update schedule");
+    expect(html).toContain("Last run");
+    expect(html).toContain("Next run");
+    expect(html).not.toContain("Maximum estimated cost");
+    expect(html).not.toContain("maximum cost");
+    expect(html).not.toContain("Watermark");
+    expect(html).not.toContain("Last result");
+    expect(html).not.toContain("Save schedule");
   });
 
   it("does not offer Taskset authoring for no-action review receipts", () => {

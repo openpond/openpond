@@ -2,16 +2,16 @@ import { useCallback, useEffect, useState } from "react";
 import type { HarnessHistoryPayload } from "@openpond/contracts";
 
 import { api, type ClientConnection } from "../../api";
+import { X } from "../icons";
 
 export function HarnessLearningSidebarCard({
   connection,
-  onOpenSettings,
 }: {
   connection: ClientConnection | null;
-  onOpenSettings: () => void;
 }) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
   const [busy, setBusy] = useState<"refiner" | "review" | null>(null);
+  const [dismissed, setDismissed] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!connection) {
@@ -29,22 +29,25 @@ export function HarnessLearningSidebarCard({
     void refresh();
   }, [refresh]);
 
-  if (!connection || !history?.workspace) return null;
+  if (dismissed || !connection || !history?.workspace) return null;
   const schedule = history.evaluationReviewSchedule;
 
   return (
     <section className="sidebar-learning-notice" aria-label="Continuous learning">
-      <button
-        className="sidebar-learning-title"
-        onClick={onOpenSettings}
-        type="button"
-      >
+      <header>
         <strong>Continuous learning</strong>
-        <span>Open settings</span>
-      </button>
+        <button
+          className="sidebar-learning-notice-dismiss"
+          aria-label="Close continuous learning"
+          onClick={() => setDismissed(true)}
+          type="button"
+        >
+          <X size={14} />
+        </button>
+      </header>
       <label className="sidebar-learning-control">
         <span><strong>Refiner</strong><small>After each turn</small></span>
-        <span className="provider-toggle">
+        <span className="provider-toggle sidebar-learning-toggle">
           <input
             checked={history.backgroundReview.enabled}
             disabled={busy !== null}
@@ -64,7 +67,7 @@ export function HarnessLearningSidebarCard({
       </label>
       <label className="sidebar-learning-control">
         <span><strong>Pattern review</strong><small>{schedule.cadence}</small></span>
-        <span className="provider-toggle">
+        <span className="provider-toggle sidebar-learning-toggle">
           <input
             checked={schedule.enabled}
             disabled={busy !== null}

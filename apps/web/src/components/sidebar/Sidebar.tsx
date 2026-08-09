@@ -124,11 +124,6 @@ export function Sidebar(props: SidebarProps) {
         {productArea === "models" ? null : (
           <HarnessLearningSidebarCard
             connection={props.connection}
-            onOpenSettings={() => {
-              setSectionMenuOpen(null);
-              setSettingsSection("harness");
-              setView("settings");
-            }}
           />
         )}
         <div className="sidebar-footer-row">

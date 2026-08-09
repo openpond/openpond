@@ -17,40 +17,12 @@
   line-height: 1.5;
 }
 
-.harness-summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  background: var(--border);
-}
-
-.harness-summary-grid > div {
-  display: grid;
-  gap: 7px;
-  min-width: 0;
-  background: #181818;
-  padding: 15px 16px;
-}
-
-.harness-summary-grid span,
 .harness-history-card time,
 .harness-route-card time,
 .harness-history-card footer,
 .harness-route-card small {
   color: #8f8f8f;
   font-size: 11px;
-}
-
-.harness-summary-grid strong {
-  overflow: hidden;
-  color: #f4f4f4;
-  font-size: 13px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .harness-release-row {
@@ -84,8 +56,6 @@
   padding: 3px 7px;
   font-size: 10px;
   font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .harness-current-pill,
@@ -109,6 +79,20 @@
 .harness-section-heading > div { display: grid; gap: 5px; }
 .harness-section-heading h2 { margin: 0; color: #f3f3f3; font-size: 15px; font-weight: 600; }
 .harness-section-heading > span { color: #888; font-size: 12px; }
+.harness-section-heading > .harness-section-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+.harness-section-actions .settings-primary,
+.harness-section-actions .settings-secondary {
+  height: 28px;
+  margin: 0;
+  border-radius: 8px;
+  padding: 0 9px;
+  font-size: 12px;
+}
 
 .harness-history-card,
 .harness-route-card,
@@ -131,28 +115,34 @@
 .harness-history-card footer { display: flex; justify-content: space-between; gap: 12px; padding-top: 2px; }
 .harness-history-card footer code { color: #aaa; font-size: 10px; }
 
-.harness-review-controls { overflow: visible; }
-.harness-review-control-grid {
-  display: grid;
-  grid-template-columns: minmax(150px, 0.7fr) minmax(190px, 0.8fr) minmax(260px, 1.5fr) auto;
-  align-items: end;
-  gap: 12px;
-  padding: 16px;
+.harness-learning-card {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #181818;
+  padding-block: 4px;
 }
-.harness-schedule-toggle { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-height: 40px; }
-.harness-schedule-toggle > span:first-child { display: grid; gap: 3px; }
-.harness-schedule-toggle strong { color: #ddd; font-size: 12px; font-weight: 600; }
-.harness-schedule-toggle small { color: #888; font-size: 10px; line-height: 1.35; }
-.harness-review-status-grid {
+.harness-learning-setting {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  grid-template-columns: minmax(0, 1fr) 38px;
+  align-items: center;
+  gap: 20px;
+  min-height: 68px;
+  padding: 12px 16px;
 }
-.harness-review-status-grid > div { display: grid; gap: 4px; padding: 12px 16px; border-right: 1px solid rgba(255, 255, 255, 0.06); }
-.harness-review-status-grid > div:last-child { border-right: 0; }
-.harness-review-status-grid span { color: #858585; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
-.harness-review-status-grid strong { overflow: hidden; color: #d2d2d2; font-size: 11px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
-.harness-review-error { margin: 0; border-top: 1px solid rgba(218, 112, 112, 0.18); padding: 10px 16px; color: #e8a0a0; font-size: 11px; }
+.harness-learning-copy { display: grid; gap: 4px; min-width: 0; cursor: pointer; }
+.harness-learning-copy strong { color: #ededed; font-size: 13px; font-weight: 600; }
+.harness-learning-copy span { color: #969696; font-size: 11px; line-height: 1.45; }
+.harness-learning-toggle { justify-self: end; cursor: pointer; }
+.harness-learning-schedule {
+  display: grid;
+  grid-template-columns: minmax(180px, 280px);
+  padding: 14px 16px;
+}
+.harness-learning-run-times { display: flex; align-items: flex-start; gap: 36px; margin: 0; padding: 12px 16px; }
+.harness-learning-run-times > div { display: grid; gap: 4px; min-width: 150px; }
+.harness-learning-run-times dt { color: #8f8f8f; font-size: 11px; }
+.harness-learning-run-times dd { margin: 0; color: #d2d2d2; font-size: 12px; font-weight: 550; }
 .harness-review-metrics { display: flex; flex-wrap: wrap; gap: 8px 16px; color: #929292; font-size: 11px; }
 .harness-review-metrics strong { color: #d4d4d4; font-weight: 600; }
 .harness-review-lineage { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; }
@@ -291,26 +281,15 @@
 .harness-release-diff-status.deleted { color: #e8a0a0; }
 .harness-release-diff-status.modified { color: #d8c18c; }
 
-@media (max-width: 900px) {
-  .harness-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .harness-review-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .harness-review-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .harness-review-status-grid > div:nth-child(2) { border-right: 0; }
-  .harness-review-status-grid > div:nth-child(-n + 2) { border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-}
-
 @media (max-width: 640px) {
-  .harness-summary-grid { grid-template-columns: minmax(0, 1fr); }
   .harness-history-card > header,
   .harness-section-heading { align-items: start; flex-direction: column; }
+  .harness-section-actions { width: 100%; }
   .harness-validation-list > div { grid-template-columns: auto minmax(0, 1fr); }
   .harness-validation-list > div > span:last-child { grid-column: 1 / -1; }
-  .harness-review-control-grid,
-  .harness-review-status-grid,
   .harness-review-lineage { grid-template-columns: minmax(0, 1fr); }
-  .harness-review-status-grid > div,
+  .harness-learning-run-times { flex-direction: column; gap: 12px; }
   .harness-review-lineage > div { border-right: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
-  .harness-review-status-grid > div:last-child,
   .harness-review-lineage > div:last-child { border-bottom: 0; }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type {
   HarnessEvaluationReviewCadence,
   HarnessEvaluationReviewReceipt,
@@ -35,7 +35,8 @@ function shortHash(value: string | null | undefined): string {
 }
 
 function displayClassification(value: string): string {
-  return value.replaceAll("_", " ");
+  const label = value.replaceAll("_", " ");
+  return `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
 }
 
 function ReviewLineage({ review }: { review: HarnessEvaluationReviewReceipt }) {
@@ -88,7 +89,6 @@ function EvaluationReviewCard({
         <span><strong>{review.selectedEvidence.length}</strong> selected</span>
         <span><strong>{review.excludedEvidence.length}</strong> excluded</span>
         <span><strong>{review.claim?.independentOccurrences ?? 0}</strong> independent occurrences</span>
-        <span><strong>${review.maxEstimatedCostUsd.toFixed(2)}</strong> maximum cost</span>
       </div>
       <ReviewLineage review={review} />
       {awaitingTasksetApproval ? (
@@ -103,10 +103,6 @@ function EvaluationReviewCard({
           </button>
         </div>
       ) : null}
-      <footer>
-        <span>Watermark {formatDate(review.nextWatermark.throughCreatedAt)}</span>
-        <code>{shortHash(review.nextWatermark.cursor)}</code>
-      </footer>
     </article>
   );
 }
@@ -123,7 +119,7 @@ function QualificationCard({ receipt }: { receipt: ModelImprovementQualification
       </div>
       <p>{receipt.reasons.join(" ")}</p>
       <small>
-        Review {shortHash(receipt.review.contentHash)} · Taskset {shortHash(receipt.tasksetRelease?.contentHash)} · Baseline {shortHash(receipt.baselineEvaluation?.contentHash)} · maximum ${receipt.maximumCostUsd.toFixed(2)}
+        Review {shortHash(receipt.review.contentHash)} · Taskset {shortHash(receipt.tasksetRelease?.contentHash)} · Baseline {shortHash(receipt.baselineEvaluation?.contentHash)}
       </small>
     </article>
   );
@@ -142,25 +138,17 @@ export function HarnessEvaluationReviewSettings({
   onReview,
   onSaveSchedule,
 }: Props) {
+  const refinerToggleId = useId();
+  const recurringReviewToggleId = useId();
   const [cadence, setCadence] = useState<HarnessEvaluationReviewCadence>(schedule.cadence);
   const [enabled, setEnabled] = useState(schedule.enabled);
-  const [cost, setCost] = useState(String(schedule.maxEstimatedCostUsd));
 
   useEffect(() => {
     setCadence(schedule.cadence);
     setEnabled(schedule.enabled);
-    setCost(String(schedule.maxEstimatedCostUsd));
-  }, [schedule]);
+  }, [schedule.cadence, schedule.enabled]);
 
-  const parsedCost = Number(cost);
-  const validCost = Number.isFinite(parsedCost) && parsedCost >= 0;
-  const latest = reviews[0] ?? null;
-  const dirty = useMemo(
-    () => cadence !== schedule.cadence ||
-      enabled !== schedule.enabled ||
-      (validCost && parsedCost !== schedule.maxEstimatedCostUsd),
-    [cadence, enabled, parsedCost, schedule, validCost],
-  );
+  const dirty = cadence !== schedule.cadence || enabled !== schedule.enabled;
 
   return (
     <>
@@ -170,24 +158,39 @@ export function HarnessEvaluationReviewSettings({
             <h2>Continuous learning</h2>
             <p>Refine completed turns quickly, then review related evidence over time. Neither loop starts training or activates a Model.</p>
           </div>
-          <button
-            className="settings-primary compact"
-            disabled={busy || !validCost}
-            onClick={() => onReview(parsedCost)}
-            type="button"
-          >
-            {busy ? "Reviewing…" : "Review now"}
-          </button>
+          <div className="harness-section-actions">
+            <button
+              className="settings-secondary compact"
+              disabled={busy}
+              onClick={() => onReview(schedule.maxEstimatedCostUsd)}
+              type="button"
+            >
+              Review now
+            </button>
+            <button
+              className="settings-primary compact"
+              disabled={busy || !dirty}
+              onClick={() => onSaveSchedule({
+                enabled,
+                cadence,
+                maxEstimatedCostUsd: schedule.maxEstimatedCostUsd,
+              })}
+              type="button"
+            >
+              Update schedule
+            </button>
+          </div>
         </div>
 
-        <section className="account-list harness-review-controls" aria-label="Continuous learning controls">
-          <div className="account-list-row">
-            <div className="account-list-copy">
+        <section className="harness-learning-card" aria-label="Continuous learning controls">
+          <div className="harness-learning-setting">
+            <label className="harness-learning-copy" htmlFor={refinerToggleId}>
               <strong>Refine completed turns</strong>
               <span>Run the fast model-driven Refiner after each completed turn. Already queued work may finish after this is turned off.</span>
-            </div>
-            <label className="provider-toggle" aria-label="Refine completed turns">
+            </label>
+            <label className="provider-toggle harness-learning-toggle" aria-label="Refine completed turns">
               <input
+                id={refinerToggleId}
                 checked={backgroundReviewEnabled}
                 disabled={backgroundReviewBusy}
                 onChange={(event) => onBackgroundReviewChange(event.target.checked)}
@@ -196,13 +199,14 @@ export function HarnessEvaluationReviewSettings({
               <span aria-hidden="true" />
             </label>
           </div>
-          <div className="account-list-row">
-            <div className="account-list-copy">
+          <div className="harness-learning-setting">
+            <label className="harness-learning-copy" htmlFor={recurringReviewToggleId}>
               <strong>Review recurring patterns</strong>
               <span>Let the model compare authorized evidence and prior Harness outcomes. Unchanged windows do not call the model.</span>
-            </div>
-            <label className="provider-toggle" aria-label="Review recurring patterns">
+            </label>
+            <label className="provider-toggle harness-learning-toggle" aria-label="Review recurring patterns">
               <input
+                id={recurringReviewToggleId}
                 checked={enabled}
                 disabled={busy}
                 onChange={(event) => {
@@ -210,20 +214,13 @@ export function HarnessEvaluationReviewSettings({
                   const nextCadence = nextEnabled && cadence === "manual" ? "daily" : cadence;
                   setEnabled(nextEnabled);
                   setCadence(nextCadence);
-                  if (validCost) {
-                    onSaveSchedule({
-                      enabled: nextEnabled,
-                      cadence: nextCadence,
-                      maxEstimatedCostUsd: parsedCost,
-                    });
-                  }
                 }}
                 type="checkbox"
               />
               <span aria-hidden="true" />
             </label>
           </div>
-          <div className="harness-review-control-grid">
+          <div className="harness-learning-schedule">
             <label className="settings-select-field">
               <span>Cadence</span>
               <select
@@ -240,33 +237,11 @@ export function HarnessEvaluationReviewSettings({
                 <option value="weekly">Weekly</option>
               </select>
             </label>
-            <label className="settings-select-field">
-              <span>Maximum estimated cost (USD)</span>
-              <input
-                disabled={busy}
-                min={0}
-                onChange={(event) => setCost(event.target.value)}
-                step="0.01"
-                type="number"
-                value={cost}
-              />
-            </label>
-            <button
-              className="settings-secondary compact"
-              disabled={busy || !dirty || !validCost}
-              onClick={() => onSaveSchedule({ enabled, cadence, maxEstimatedCostUsd: parsedCost })}
-              type="button"
-            >
-              Save schedule
-            </button>
           </div>
-          <div className="harness-review-status-grid">
-            <div><span>Last result</span><strong>{latest ? displayClassification(latest.classification) : "No review"}</strong></div>
-            <div><span>Last run</span><strong>{formatDate(schedule.lastRunAt)}</strong></div>
-            <div><span>Next run</span><strong>{schedule.enabled ? formatDate(schedule.nextRunAt) : "Manual"}</strong></div>
-            <div><span>Watermark</span><strong>{latest ? formatDate(latest.nextWatermark.throughCreatedAt) : "Not established"}</strong></div>
-          </div>
-          {schedule.lastError ? <p className="harness-review-error">Last scheduled run: {schedule.lastError}</p> : null}
+          <dl className="harness-learning-run-times">
+            <div><dt>Last run</dt><dd>{formatDate(schedule.lastRunAt)}</dd></div>
+            <div><dt>Next run</dt><dd>{schedule.enabled ? formatDate(schedule.nextRunAt) : "Manual"}</dd></div>
+          </dl>
         </section>
       </section>
 
