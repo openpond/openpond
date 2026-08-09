@@ -80,6 +80,33 @@ describe("Harness improvement trigger detector", () => {
     expect(result.trigger.decision).toBe("no_action");
   });
 
+  test("queues paused-turn failures for model review without preselecting a route", () => {
+    const result = detect(
+      [
+        toolEvent({
+          id: "failed-paused-turn",
+          sequence: 1,
+          status: "failed",
+          output: "Unexpected PDF renderer response",
+        }),
+      ],
+      "turn_paused",
+    );
+
+    expect(result.observations).toEqual([
+      expect.objectContaining({
+        kind: "tool_failure",
+        state: "terminal",
+      }),
+    ]);
+    expect(result.trigger).toMatchObject({
+      decision: "queue_refiner",
+      deterministicRoute: null,
+      suggestedRoutes: [],
+    });
+    expect(result.trigger.reason).toMatch(/terminal tool failure/i);
+  });
+
   test("does not treat internal workspace cleanup as recovery", () => {
     const result = detect([
       toolEvent({

@@ -206,7 +206,13 @@ export function detectHarnessImprovementAtBoundary(input: {
       suggestedRoutes: [],
       reason: actionable.some((observation) => observation.kind === "user_turn")
         ? "A completed user turn is ready for bounded background Harness review."
-        : "A recovered detour may contain a reusable Harness improvement.",
+        : actionable.some(
+              (observation) =>
+                observation.kind === "tool_failure" &&
+                observation.state === "terminal",
+            )
+          ? "A terminal tool failure is ready for bounded background Harness review."
+          : "A recovered detour may contain a reusable Harness improvement.",
       estimatedMaxCostUsd,
     }),
   };
@@ -225,6 +231,9 @@ function collectObservations(input: {
   const openFailures: NormalizedToolOutcome[] = [];
   const seenFailureKeys = new Set<string>();
   const recoveredFailureKeys = new Set<string>();
+  const terminalBoundary =
+    input.boundary.kind === "turn_completed" ||
+    input.boundary.kind === "turn_paused";
 
   const userTurnEvent = input.boundary.kind === "turn_completed"
     ? latestUserTurnEvent(input.events)
@@ -270,7 +279,7 @@ function collectObservations(input: {
           observationFor({
             input,
             kind: "tool_failure",
-            state: input.boundary.kind === "turn_completed" ? "terminal" : "open",
+            state: terminalBoundary ? "terminal" : "open",
             outcomes: [outcome],
             deterministicClass: outcome.deterministicClass,
             summary: `Tool ${outcome.action} failed${
