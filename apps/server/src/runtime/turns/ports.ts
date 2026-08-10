@@ -375,35 +375,6 @@ export type TurnRunnerDependencies = {
     action: OpenPondDatasetBuilderAction;
     payload: Record<string, unknown>;
   }) => Promise<unknown>;
-  executeCrossSystemTool?: (input: {
-    modelId: string;
-    localProjectId: string | null;
-    turnId: string;
-    callId: string;
-    name: string;
-    args: Record<string, unknown>;
-    userPrompt: string;
-    taskId?: string;
-    signal: AbortSignal;
-  }) => Promise<NativeModelToolResult>;
-  finalizeCrossSystemTurn?: (input: {
-    modelId: string;
-    localProjectId: string | null;
-    sessionId: string;
-    turnId: string;
-    userPrompt: string;
-    taskId: string;
-    startedAt: string;
-    completedAt: string;
-    terminalFailure?: {
-      message: string;
-      failureClass: "policy_failure" | "infrastructure_failure";
-    } | null;
-  }) => Promise<{
-    attemptId: string;
-    gradeId: string;
-    generatedTaskId: string;
-  } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
   loadOpenPondProfileStateForRef?: (
     ref: OpenPondProfileRef | null | undefined

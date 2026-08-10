@@ -491,7 +491,6 @@ export function createTrainingApi(deps: {
       const result = await deps.training.start({ modelId: requiredString(input.modelId, "modelId"), tasksetId: requiredString(input.tasksetId, "tasksetId"), destinationId: TrainingDestinationIdSchema.parse(input.destinationId), recipe: input.recipe, environmentPlacement: managedRolloutPlacement(input.environmentPlacement), exportApproved: input.exportApproved === true, maximumCostUsd: nullableNumber(input.maximumCostUsd), retentionDays: nullableNumber(input.retentionDays), region: string(input.region) });
       return linkStartedTraining(result);
     }
-    if (action === "import_artifact") return deps.training.importExternal({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), artifactDirectory: requiredString(input.artifactDirectory, "artifactDirectory") });
     if (action === "export_bundle") return deps.training.exportBundle(requiredString(input.bundleId, "bundleId"));
     if (action === "artifact_download") return deps.training.artifactDownload(requiredString(input.artifactId, "artifactId"));
     if (action === "model_package_download") return deps.training.modelPackageDownload(requiredString(input.modelId, "modelId"));

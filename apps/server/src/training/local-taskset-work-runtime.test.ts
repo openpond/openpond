@@ -91,7 +91,7 @@ describe("local Taskset Work runtime", () => {
           "python3 -c \"from pathlib import Path; Path('/workspace/outputs/result.txt').write_text('mounted')\"",
       },
     });
-    expect(execute).toMatchObject({ ok: true });
+    expect(execute, execute.output).toMatchObject({ ok: true });
     await expect(
       fs.readFile(path.join(created.cwd!, "outputs", "result.txt"), "utf8"),
     ).resolves.toBe("mounted");

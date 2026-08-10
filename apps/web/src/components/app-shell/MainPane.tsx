@@ -61,7 +61,6 @@ import { selectComposerProfileTransaction } from "../../lib/profile-selection-tr
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { WorkSidebarPanel } from "./WorkSidebarPanel";
-import { WorkStarterPrompts } from "./WorkStarterPrompts";
 import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
@@ -142,7 +141,6 @@ export function MainPane({
   selectedSessionId,
   composerDraftStore,
   mainComposerFocusRequestId,
-  onRequestComposerFocus,
   labCloseDetailRequestId,
   labCloseDetailKind,
   sideChatTrainingLaunchRequest,
@@ -251,6 +249,8 @@ export function MainPane({
   onAddRightChat,
   onOpenRightChatForSession,
   onLabDetailOpenChange,
+  scheduledDetailOpen,
+  onScheduledDetailOpenChange,
   onTerminalTabsChange,
   onCloseRightChatPanel,
   onCloseNativeSkillSidebar,
@@ -1489,7 +1489,9 @@ export function MainPane({
         <Suspense fallback={null}>
           <ScheduledWorkPage
             connection={connection}
+            detailOpen={scheduledDetailOpen}
             detailExpanded={diffPanelExpanded}
+            onDetailOpenChange={onScheduledDetailOpenChange}
             onDetailResizeStart={onDiffPanelResizeStart}
             onToggleDetailExpanded={onToggleDiffPanelExpanded}
           />
@@ -1760,14 +1762,6 @@ export function MainPane({
             />
             <div className="start-welcome">
               <h1>{startMessage}</h1>
-              {experience === "work" ? (
-                <WorkStarterPrompts
-                  onSelect={(prompt) => {
-                    composerDraftStore.set(prompt);
-                    onRequestComposerFocus();
-                  }}
-                />
-              ) : null}
               {canSyncWorkspace && (
                 <WorkspaceSyncButton
                   busy={workspaceBusy}

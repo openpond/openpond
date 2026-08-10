@@ -32,7 +32,7 @@ The detailed split and acceptance contract are in the
 [`harness-refiner-public-v1` Taskset Release](./taskset/taskset.release.json)
 contains the frozen prompts, fixtures, grader assets, and production-derived
 tool contracts. Its current content hash is
-`f62b572eb5ef29f470f53d34fb9ae861bbd350756cee913e4c5701dd13bcc346`.
+`1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695`.
 
 ## Shipped reference Taskset
 

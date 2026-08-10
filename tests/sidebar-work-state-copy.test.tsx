@@ -70,7 +70,7 @@ describe("sidebar task list controls", () => {
       "sidebar-session-group pinned-group-first pinned-group-last"
     );
     expect(markup.match(/draggable="true"/g)).toHaveLength(1);
-    expect(markup).toContain(">Chat<");
+    expect(markup).toContain(">Work<");
     expect(markup).not.toContain(">No project<");
     expect(markup).not.toContain('aria-label="New task"');
     expect(markup).not.toContain('aria-label="Collapse Tasks"');
@@ -141,7 +141,7 @@ describe("sidebar task list controls", () => {
     expect(developmentMarkup).toContain(
       '<time class="sidebar-row-updated-at" dateTime="2026-07-29T12:00:00.000Z"'
     );
-    expect(developmentMarkup).toContain(">Jul 29</time>");
+    expect(developmentMarkup).toContain(">Jul 29 ");
     expect(developmentMarkup).not.toContain(" · ");
     expect(developmentMarkup).not.toContain(">Projects<");
 
@@ -166,7 +166,7 @@ describe("sidebar task list controls", () => {
     expect(workMarkup).toContain(">Refine sidebar<");
     expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
-    expect(workMarkup).toContain(">Jul 29</time>");
+    expect(workMarkup).toContain(">Jul 29 ");
   });
 });
 

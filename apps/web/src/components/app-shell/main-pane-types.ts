@@ -79,7 +79,6 @@ export type MainPaneProps = {
   selectedSessionId: string | null;
   composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
-  onRequestComposerFocus: () => void;
   labCloseDetailRequestId: number;
   labCloseDetailKind: LabDetailLocation["kind"] | null;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
@@ -244,6 +243,8 @@ export type MainPaneProps = {
   onAddRightChat: () => void;
   onOpenRightChatForSession: (sessionId: string, session?: Session) => void;
   onLabDetailOpenChange: (location: LabDetailLocation | null) => void;
+  scheduledDetailOpen: boolean;
+  onScheduledDetailOpenChange: (open: boolean) => void;
   onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;
   onCloseNativeSkillSidebar: () => void;

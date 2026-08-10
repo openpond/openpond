@@ -258,17 +258,6 @@ function trainingTargets(input: {
       capabilityPills: ["Managed", "Desktop rollouts"],
       ...MANAGED_TARGET_POLICY,
     },
-    {
-      id: "this-device-cpu",
-      label: "This device · CPU",
-      description: "Keep the Harness and reference worker on this device.",
-      destinationId: "local_cpu_fixture",
-      computeAdapterId: "local-cpu",
-      runtimeAdapterId: "local-harness",
-      engineAdapterId: "local-trl",
-      capabilityPills: ["Local"],
-      ...LOCAL_TARGET_POLICY,
-    },
   ] as const;
   const resolved = definitions.map((definition) => {
     const compute = input.compute.find((item) => item.adapterId === definition.computeAdapterId);

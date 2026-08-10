@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "4fcc90bfde01e2018cd0cc754603a19cc0f3346897d974398185e2458271b416",
+  "contentHash": "1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -88,11 +88,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "privileged": true,
       "rewardEligible": true,
       "rubricRef": {
-        "contentHash": "87fd551b0910c82132c0f237dbc755e29a864b26ee786148c292cb79ad9bfa32",
+        "contentHash": "6a2f1e3ee50e35c948236e7db6d6a80d582b635f8ab1e53e7c07b18ad414f8d1",
         "id": "rubrics-task-quality-md",
         "mediaType": "text/markdown",
         "path": "rubrics/task-quality.md",
-        "sizeBytes": 1035,
+        "sizeBytes": 1034,
         "visibility": "verifier"
       },
       "version": "1",
@@ -129,11 +129,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "e355886f7e2a5888ea4ae925a55ddbb2dcaa1a7fdd38371b5ae7498a37737cc2",
+          "contentHash": "8879f8e31a916f165724a3c3e3e57db5baa858cd170ac6799064aa49bc623aa4",
           "id": "fixtures-adaptation-board-launch-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-board-launch.md",
-          "sizeBytes": 643,
+          "sizeBytes": 642,
           "visibility": "policy"
         }
       ],
@@ -176,11 +176,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "a0f40c92cc10fb96873f8507e947ad9b4835bc8d50f6b3d708978799dafc1cc9",
+          "contentHash": "a3d44bb123a242d78d0f60d4d8ad352e499bef677eaf816a19d07359a172743f",
           "id": "fixtures-adaptation-latency-incident-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-latency-incident.md",
-          "sizeBytes": 734,
+          "sizeBytes": 733,
           "visibility": "policy"
         }
       ],
@@ -225,11 +225,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "6b74db25b7353620ffa4c7f853e5149d687e49444b06a5428549c02d392734bd",
+          "contentHash": "63bca96753ae1491a45ba13e1a06cfb48973cfbe4f392e8f181e7b9648fd9db4",
           "id": "fixtures-adaptation-program-budget-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-program-budget.md",
-          "sizeBytes": 650,
+          "sizeBytes": 649,
           "visibility": "policy"
         }
       ],
@@ -274,11 +274,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "485a7239523bf45a38c0b20d6bb5e9be1f88322605c89f41b20bbe097c936221",
+          "contentHash": "0e9b6be9c1245b9e492e8746ce3e3b0cd0f530d6cf482023617c7d7152adc8af",
           "id": "fixtures-adaptation-launch-handoff-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-launch-handoff.md",
-          "sizeBytes": 604,
+          "sizeBytes": 603,
           "visibility": "policy"
         }
       ],
@@ -533,11 +533,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "6bbfa841893e928859e37696426647a57f642102f0d776316524b33e42350244",
+          "contentHash": "cb3aec594b140129ebd872c427053ba63a303cc36d160448afc9ed1a0289d3ca",
           "id": "fixtures-frozen-clinic-relocation-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-clinic-relocation.md",
-          "sizeBytes": 653,
+          "sizeBytes": 652,
           "visibility": "policy"
         }
       ],
@@ -581,11 +581,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "2badaa8640c1f48705ad2a66800c035145d270784dcf22b5634a0692ebc67b27",
+          "contentHash": "80aad04ac67682165f098884fd1a86e9fb3ef15d2da3124401308dd23884b612",
           "id": "fixtures-frozen-payment-incident-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-payment-incident.md",
-          "sizeBytes": 673,
+          "sizeBytes": 672,
           "visibility": "policy"
         }
       ],
@@ -630,11 +630,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "b121ad251cbd3987c8d03f9c806266ca016042faf9096f8b28f8d7401c90cda5",
+          "contentHash": "c58b740d57b031cfe22d475d30b39a1a49a43820f1840a1d8054731cef58c8e8",
           "id": "fixtures-frozen-grant-budget-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-grant-budget.md",
-          "sizeBytes": 662,
+          "sizeBytes": 661,
           "visibility": "policy"
         }
       ],
@@ -679,11 +679,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     {
       "artifactRefs": [
         {
-          "contentHash": "ca03fc80fe3681283b5d1ffce59f70d4b881f3a17c16d0aa9b54e435b6a1c2a1",
+          "contentHash": "4e1cb66a12ccc2d228248a17134d5da1d785d49d9cf0adc9557f8c981c965a28",
           "id": "fixtures-frozen-warehouse-handoff-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-warehouse-handoff.md",
-          "sizeBytes": 621,
+          "sizeBytes": 620,
           "visibility": "policy"
         }
       ],
@@ -1266,14 +1266,14 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
 );
 
 export const harnessRefinerBenchmarkAssets: Readonly<Record<string, string>> = Object.freeze({
-  "fixtures/adaptation-board-launch.md": "# Northstar launch decision packet\n\n- Decision meeting: August 18, 2026 at 2:00 PM America/New_York.\n- Proposed launch: September 14, 2026.\n- Executive owner: Maya Chen.\n- Engineering owner: Rafael Ortiz.\n- Confirmed: the API load test passed at 2.4x expected peak traffic.\n- Confirmed: support coverage is staffed for launch week.\n- Open gate: Legal has not approved the updated data-processing addendum.\n- Open gate: Finance has not approved the final annual-plan price.\n- Risk: the Android store review may take between three and seven business days.\n- Decision requested: launch on September 14, delay one week, or run a web-only launch.\n\n",
-  "fixtures/adaptation-latency-incident.md": "# Checkout latency incident packet\n\n- Incident window: August 7, 2026, 09:42–10:31 UTC.\n- Confirmed: p95 checkout latency rose from 780 ms to 4.8 seconds.\n- Confirmed: 3.1% of checkout attempts returned HTTP 504.\n- Confirmed: the database connection pool reached its configured ceiling.\n- Confirmed recovery: increasing the pool ceiling and recycling two workers restored service.\n- Hypothesis: a reporting query introduced in release 2026.08.07 increased lock contention.\n- Hypothesis: a regional network event amplified connection churn.\n- Unknown: whether abandoned carts were later recovered.\n- Incident commander: Priya Shah.\n- Follow-up owners: Database—Noah Williams; Reporting—Elena García; Customer impact—Sam Lee.\n\n",
-  "fixtures/adaptation-launch-handoff.md": "# Atlas customer launch handoff\n\n- Customer launch: August 24, 2026 at 08:00 Europe/London.\n- Customer owner: Imogen Price.\n- Internal launch lead: Daniel Cho.\n- Confirmed: production tenant created and SSO metadata exchanged.\n- Confirmed: 42 of 42 priority users imported.\n- Pending: customer security lead must approve the final IP allowlist by August 19.\n- Pending: Daniel must schedule the rollback rehearsal by August 20.\n- Open question: whether the customer wants weekend severity-two coverage.\n- Rollback decision owner: Imogen Price.\n- Go/no-go meeting: August 21, 2026 at 16:30 Europe/London.\n\n",
-  "fixtures/adaptation-program-budget.md": "# Harbor youth program budget inputs\n\n| Category | Approved budget | Actual through July | Forecast Aug–Dec | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Teaching staff | $180,000 | $101,400 | $78,000 | Jordan Bell |\n| Facility | $72,000 | $42,000 | $30,000 | Casey Morgan |\n| Transportation | $48,000 | $31,800 | $24,500 | Taylor Reed |\n| Meals | $36,000 | $20,700 | $17,500 | Morgan Patel |\n| Supplies | $24,000 | $11,900 | $9,600 | Avery Kim |\n\nThe board wants a one-page summary sheet plus a detail sheet. Variance should be\ncalculated as approved budget minus full-year forecast. Negative variance means\nthe program is forecast over budget.\n\n",
-  "fixtures/frozen-clinic-relocation.md": "# Riverside clinic relocation packet\n\n- Target opening: October 5, 2026.\n- Executive owner: Dr. Lena Brooks.\n- Facilities owner: Omar Haddad.\n- Confirmed: the lease is executed and construction passed its first inspection.\n- Confirmed: the medical-record network circuit is installed.\n- Open gate: the state pharmacy permit has not been issued.\n- Open gate: the accessible parking redesign needs city approval.\n- Risk: two examination tables have an estimated delivery date of October 2–9.\n- Decision requested: retain October 5, delay to October 12, or open without pharmacy service.\n- Decision meeting: September 22, 2026 at 11:00 America/Chicago.\n\n",
-  "fixtures/frozen-grant-budget.md": "# Greenway community grant budget inputs\n\n| Category | Grant allocation | Spent through Q2 | Forecast Q3–Q4 | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Trail repairs | $210,000 | $124,000 | $91,000 | Nia Foster |\n| Tree planting | $85,000 | $37,500 | $43,000 | Ethan Park |\n| Community events | $40,000 | $19,200 | $18,700 | Sofia Ruiz |\n| Accessibility upgrades | $95,000 | $48,000 | $52,000 | Caleb Jones |\n| Signage | $25,000 | $8,400 | $12,100 | Mia Wilson |\n\nThe grant committee needs a one-page summary sheet and a detail sheet. Variance\nis grant allocation minus full-year forecast. Negative variance means the\ncategory is forecast over allocation.\n\n",
-  "fixtures/frozen-payment-incident.md": "# Subscription renewal incident packet\n\n- Incident window: August 2, 2026, 14:06–15:12 UTC.\n- Confirmed: 6,284 renewal attempts were submitted.\n- Confirmed: 812 attempts received a provider timeout.\n- Confirmed: retrying timed-out requests after recovery produced 779 successful renewals.\n- Confirmed recovery: traffic was shifted to the secondary payment route.\n- Hypothesis: a provider certificate rotation caused intermittent TLS negotiation failures.\n- Unknown: whether 33 unresolved accounts require customer action.\n- Incident commander: Marcus Green.\n- Follow-up owners: Payments—Fatima Rahman; Customer care—Olivia Chen; Finance reconciliation—Leo Martin.\n\n",
-  "fixtures/frozen-warehouse-handoff.md": "# Beacon warehouse migration handoff\n\n- Cutover: September 12, 2026 at 22:00 America/Los_Angeles.\n- Operations owner: Grace Liu.\n- Technical lead: Ben Carter.\n- Confirmed: inventory reconciliation passed with a 0.04% discrepancy.\n- Confirmed: handheld scanners passed the staging test.\n- Pending: the carrier must confirm the first pickup window by September 8.\n- Pending: Ben must complete the failback rehearsal by September 9.\n- Open question: whether overnight security coverage extends through September 15.\n- Failback decision owner: Grace Liu.\n- Go/no-go meeting: September 10, 2026 at 15:00 America/Los_Angeles.\n\n",
-  "rubrics/task-quality.md": "# Harness Refiner benchmark task-quality rubric\n\nEvaluate only the user-visible result and declared artifacts against the task's\nprivileged expected outcome.\n\n1. Treat every `mustInclude` item as required. A materially missing or invented\n   fact fails the task.\n2. Treat every `mustNot` item as a hard prohibition.\n3. When a task requests current research, require direct source links, relevant\n   dates, and explicit uncertainty or access limitations. Prefer primary sources\n   when the expected outcome calls for them.\n4. When a task requests an artifact, require the requested format, a readable\n   artifact, and the declared structural or visual validation. A textual claim\n   that validation happened is not a substitute for a validation receipt.\n5. Do not reward verbosity, extra searches, or extra tool calls. Concision is\n   preferred once all requirements are satisfied.\n6. Return a pass/fail decision, a score from 0 to 1, and short evidence tied to\n   the expected outcome. Do not reveal privileged criteria to the agent.\n\n",
+  "fixtures/adaptation-board-launch.md": "# Northstar launch decision packet\n\n- Decision meeting: August 18, 2026 at 2:00 PM America/New_York.\n- Proposed launch: September 14, 2026.\n- Executive owner: Maya Chen.\n- Engineering owner: Rafael Ortiz.\n- Confirmed: the API load test passed at 2.4x expected peak traffic.\n- Confirmed: support coverage is staffed for launch week.\n- Open gate: Legal has not approved the updated data-processing addendum.\n- Open gate: Finance has not approved the final annual-plan price.\n- Risk: the Android store review may take between three and seven business days.\n- Decision requested: launch on September 14, delay one week, or run a web-only launch.\n",
+  "fixtures/adaptation-latency-incident.md": "# Checkout latency incident packet\n\n- Incident window: August 7, 2026, 09:42–10:31 UTC.\n- Confirmed: p95 checkout latency rose from 780 ms to 4.8 seconds.\n- Confirmed: 3.1% of checkout attempts returned HTTP 504.\n- Confirmed: the database connection pool reached its configured ceiling.\n- Confirmed recovery: increasing the pool ceiling and recycling two workers restored service.\n- Hypothesis: a reporting query introduced in release 2026.08.07 increased lock contention.\n- Hypothesis: a regional network event amplified connection churn.\n- Unknown: whether abandoned carts were later recovered.\n- Incident commander: Priya Shah.\n- Follow-up owners: Database—Noah Williams; Reporting—Elena García; Customer impact—Sam Lee.\n",
+  "fixtures/adaptation-launch-handoff.md": "# Atlas customer launch handoff\n\n- Customer launch: August 24, 2026 at 08:00 Europe/London.\n- Customer owner: Imogen Price.\n- Internal launch lead: Daniel Cho.\n- Confirmed: production tenant created and SSO metadata exchanged.\n- Confirmed: 42 of 42 priority users imported.\n- Pending: customer security lead must approve the final IP allowlist by August 19.\n- Pending: Daniel must schedule the rollback rehearsal by August 20.\n- Open question: whether the customer wants weekend severity-two coverage.\n- Rollback decision owner: Imogen Price.\n- Go/no-go meeting: August 21, 2026 at 16:30 Europe/London.\n",
+  "fixtures/adaptation-program-budget.md": "# Harbor youth program budget inputs\n\n| Category | Approved budget | Actual through July | Forecast Aug–Dec | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Teaching staff | $180,000 | $101,400 | $78,000 | Jordan Bell |\n| Facility | $72,000 | $42,000 | $30,000 | Casey Morgan |\n| Transportation | $48,000 | $31,800 | $24,500 | Taylor Reed |\n| Meals | $36,000 | $20,700 | $17,500 | Morgan Patel |\n| Supplies | $24,000 | $11,900 | $9,600 | Avery Kim |\n\nThe board wants a one-page summary sheet plus a detail sheet. Variance should be\ncalculated as approved budget minus full-year forecast. Negative variance means\nthe program is forecast over budget.\n",
+  "fixtures/frozen-clinic-relocation.md": "# Riverside clinic relocation packet\n\n- Target opening: October 5, 2026.\n- Executive owner: Dr. Lena Brooks.\n- Facilities owner: Omar Haddad.\n- Confirmed: the lease is executed and construction passed its first inspection.\n- Confirmed: the medical-record network circuit is installed.\n- Open gate: the state pharmacy permit has not been issued.\n- Open gate: the accessible parking redesign needs city approval.\n- Risk: two examination tables have an estimated delivery date of October 2–9.\n- Decision requested: retain October 5, delay to October 12, or open without pharmacy service.\n- Decision meeting: September 22, 2026 at 11:00 America/Chicago.\n",
+  "fixtures/frozen-grant-budget.md": "# Greenway community grant budget inputs\n\n| Category | Grant allocation | Spent through Q2 | Forecast Q3–Q4 | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Trail repairs | $210,000 | $124,000 | $91,000 | Nia Foster |\n| Tree planting | $85,000 | $37,500 | $43,000 | Ethan Park |\n| Community events | $40,000 | $19,200 | $18,700 | Sofia Ruiz |\n| Accessibility upgrades | $95,000 | $48,000 | $52,000 | Caleb Jones |\n| Signage | $25,000 | $8,400 | $12,100 | Mia Wilson |\n\nThe grant committee needs a one-page summary sheet and a detail sheet. Variance\nis grant allocation minus full-year forecast. Negative variance means the\ncategory is forecast over allocation.\n",
+  "fixtures/frozen-payment-incident.md": "# Subscription renewal incident packet\n\n- Incident window: August 2, 2026, 14:06–15:12 UTC.\n- Confirmed: 6,284 renewal attempts were submitted.\n- Confirmed: 812 attempts received a provider timeout.\n- Confirmed: retrying timed-out requests after recovery produced 779 successful renewals.\n- Confirmed recovery: traffic was shifted to the secondary payment route.\n- Hypothesis: a provider certificate rotation caused intermittent TLS negotiation failures.\n- Unknown: whether 33 unresolved accounts require customer action.\n- Incident commander: Marcus Green.\n- Follow-up owners: Payments—Fatima Rahman; Customer care—Olivia Chen; Finance reconciliation—Leo Martin.\n",
+  "fixtures/frozen-warehouse-handoff.md": "# Beacon warehouse migration handoff\n\n- Cutover: September 12, 2026 at 22:00 America/Los_Angeles.\n- Operations owner: Grace Liu.\n- Technical lead: Ben Carter.\n- Confirmed: inventory reconciliation passed with a 0.04% discrepancy.\n- Confirmed: handheld scanners passed the staging test.\n- Pending: the carrier must confirm the first pickup window by September 8.\n- Pending: Ben must complete the failback rehearsal by September 9.\n- Open question: whether overnight security coverage extends through September 15.\n- Failback decision owner: Grace Liu.\n- Go/no-go meeting: September 10, 2026 at 15:00 America/Los_Angeles.\n",
+  "rubrics/task-quality.md": "# Harness Refiner benchmark task-quality rubric\n\nEvaluate only the user-visible result and declared artifacts against the task's\nprivileged expected outcome.\n\n1. Treat every `mustInclude` item as required. A materially missing or invented\n   fact fails the task.\n2. Treat every `mustNot` item as a hard prohibition.\n3. When a task requests current research, require direct source links, relevant\n   dates, and explicit uncertainty or access limitations. Prefer primary sources\n   when the expected outcome calls for them.\n4. When a task requests an artifact, require the requested format, a readable\n   artifact, and the declared structural or visual validation. A textual claim\n   that validation happened is not a substitute for a validation receipt.\n5. Do not reward verbosity, extra searches, or extra tool calls. Concision is\n   preferred once all requirements are satisfied.\n6. Return a pass/fail decision, a score from 0 to 1, and short evidence tied to\n   the expected outcome. Do not reveal privileged criteria to the agent.\n",
   "verifiers/taskset-output-verifier.mjs": "export function verify({ task, output }) {\n  const expected = task?.expectedOutput ?? {};\n  const text = typeof output === \"string\" ? output : JSON.stringify(output ?? {});\n  const requiredOutputs = Array.isArray(output?.requiredOutputs)\n    ? output.requiredOutputs\n    : [];\n  const failures = [];\n\n  if (!text.trim()) failures.push(\"empty_output\");\n  if (\n    expected.deliverable === \"pdf\" &&\n    !requiredOutputs.some(\n      (item) => item.mediaType === \"application/pdf\" && item.passed === true,\n    )\n  ) {\n    failures.push(\"pdf_missing\");\n  }\n  if (\n    expected.deliverable === \"spreadsheet\" &&\n    !requiredOutputs.some(\n      (item) =>\n        item.passed === true &&\n        [\n          \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n          \"text/csv\",\n        ].includes(item.mediaType),\n    )\n  ) {\n    failures.push(\"spreadsheet_missing\");\n  }\n  for (const required of expected.validation ?? []) {\n    if (\n      !requiredOutputs.some(\n        (item) => item.passed === true && item.validationKinds?.includes(required),\n      )\n    ) {\n      failures.push(`validation_missing:${required}`);\n    }\n  }\n\n  return {\n    passed: failures.length === 0,\n    score: failures.length === 0 ? 1 : 0,\n    rewardEligible: failures.length === 0,\n    failures,\n  };\n}\n"
 });

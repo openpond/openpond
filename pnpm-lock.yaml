@@ -177,9 +177,6 @@ importers:
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../../packages/taskset-sdk
-      '@openpond/trainer-local':
-        specifier: workspace:*
-        version: link:../../packages/trainer-local
       '@openpond/training-sdk':
         specifier: workspace:*
         version: link:../../packages/training-sdk

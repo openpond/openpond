@@ -190,23 +190,6 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     models: openAiFamilyModels(REASONING_MODEL_CAPABILITIES),
   },
   {
-    id: "local-adapter",
-    displayName: "My Models",
-    credentialModes: [],
-    routing: { localRuntime: true },
-    capabilities: {
-      chatCompletions: true,
-      streaming: true,
-      modelDiscovery: "manual",
-      toolCalling: false,
-      reasoning: false,
-    },
-    defaultEnabled: true,
-    defaultModel: null,
-    modelCacheSource: "manual",
-    models: [],
-  },
-  {
     id: "anthropic",
     displayName: "Anthropic",
     credentialModes: ["local-byok"],
@@ -882,15 +865,6 @@ function credentialStatusForPreset(input: {
           : input.codex?.appServer.lastError ?? null,
     });
   }
-  if (input.preset.id === "local-adapter") {
-    return ProviderCredentialStatusSchema.parse({
-      connected: true,
-      source: "none",
-      redacted: "Local runtime",
-      lastValidatedAt: null,
-      lastError: null,
-    });
-  }
   return credentialStatusFromSecret(input.secret);
 }
 
@@ -904,9 +878,6 @@ function providerAvailable(input: {
   if (input.preset.id === "openpond") return input.credentialConnected;
   if (input.preset.id === "codex") {
     return Boolean(input.codex?.available) && input.credentialConnected;
-  }
-  if (input.preset.id === "local-adapter") {
-    return input.config.enabled && input.modelCount > 0;
   }
   return input.config.enabled && input.credentialConnected;
 }

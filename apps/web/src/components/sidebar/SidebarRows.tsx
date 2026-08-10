@@ -57,6 +57,10 @@ const sidebarUpdatedDateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
 });
+const sidebarUpdatedTimeFormatter = new Intl.DateTimeFormat("en-US", {
+  hour: "numeric",
+  minute: "2-digit",
+});
 const sidebarUpdatedDateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -364,10 +368,13 @@ export function SidebarSessionRow({
           >
             <span className="sidebar-task-title-text">{session.title}</span>
           </span>
-          <SidebarUpdatedAt value={session.updatedAt} />
+          {projectLabel ? null : <SidebarUpdatedAt value={session.updatedAt} />}
         </span>
         {projectLabel ? (
-          <span className="sidebar-session-project-label">{projectLabel}</span>
+          <span className="sidebar-session-detail-line">
+            <span className="sidebar-session-project-label">{projectLabel}</span>
+            <SidebarUpdatedAt value={session.updatedAt} />
+          </span>
         ) : null}
       </span>
       <div className="row-meta">
@@ -840,13 +847,20 @@ function SidebarUpdatedAt({
 }
 
 function formatSidebarUpdatedDate(
-  value: string | null | undefined
+  value: string | null | undefined,
+  now = new Date(),
 ): string | null {
   if (!value) return null;
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? null
-    : sidebarUpdatedDateFormatter.format(date);
+  if (Number.isNaN(date.getTime())) return null;
+  const time = sidebarUpdatedTimeFormatter.format(date);
+  const updatedToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+  return updatedToday
+    ? time
+    : `${sidebarUpdatedDateFormatter.format(date)} ${time}`;
 }
 
 function SidebarTerminalStatusIcon({

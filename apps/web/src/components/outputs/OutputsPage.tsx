@@ -123,7 +123,7 @@ export function OutputsPage({
 
   return (
     <section
-      aria-label="Outputs"
+      aria-label="My files"
       className={`outputs-view${preview ? " detail-open" : ""}`}
     >
       <div className="outputs-scroll">
@@ -132,7 +132,7 @@ export function OutputsPage({
             <header className="outputs-header">
               <label className="outputs-filter">
                 <select
-                  aria-label="Filter outputs by file type"
+                  aria-label="Filter files by file type"
                   onChange={(event) => setFilter(event.target.value)}
                   value={effectiveFilter}
                 >
@@ -155,12 +155,12 @@ export function OutputsPage({
           ) : loading && outputs.length === 0 ? (
             <div className="outputs-loading" role="status">
               <Loader2 className="outputs-spin" size={16} />
-              <span>Loading outputs</span>
+              <span>Loading files</span>
             </div>
           ) : outputs.length === 0 ? (
             <OutputMessage>Files created in Work will appear here.</OutputMessage>
           ) : visibleOutputs.length === 0 ? (
-            <OutputMessage>No outputs match this file type.</OutputMessage>
+            <OutputMessage>No files match this file type.</OutputMessage>
           ) : (
             <div className="outputs-grid" data-testid="desktop-output-cards">
               {visibleOutputs.map((output) => {

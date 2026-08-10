@@ -861,53 +861,21 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
   }
 
   async listModelArtifactLineage(tasksetId?: string): Promise<ModelArtifactLineage[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(
-      tasksetId ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC" : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
+    return this.listParsedPayloads(
+      tasksetId
+        ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC"
+        : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
       tasksetId ? [tasksetId] : [],
+      ModelArtifactLineageSchema.parse,
     );
-    const lineages: ModelArtifactLineage[] = [];
-    for (const row of rows) {
-      const value = JSON.parse(row.payload);
-      const parsed = ModelArtifactLineageSchema.safeParse(value);
-      if (parsed.success) {
-        lineages.push(parsed.data);
-        continue;
-      }
-      const managedServingSource = retiredManagedServingSource(value);
-      if (managedServingSource) {
-        this.logger?.warn("retired Model artifact lineage ignored", {
-          lineageId: storedPayloadId(value),
-          managedServingSource,
-        });
-        continue;
-      }
-      throw parsed.error;
-    }
-    return lineages;
   }
 
   async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<PayloadRow>(
+    return this.getParsedPayload(
       "SELECT payload FROM model_artifact_lineage WHERE id = ?",
       [id],
+      ModelArtifactLineageSchema.parse,
     );
-    if (!row) return null;
-    const value = JSON.parse(row.payload);
-    const parsed = ModelArtifactLineageSchema.safeParse(value);
-    if (parsed.success) return parsed.data;
-    const managedServingSource = retiredManagedServingSource(value);
-    if (managedServingSource) {
-      this.logger?.warn("retired Model artifact lineage ignored", {
-        lineageId: storedPayloadId(value),
-        managedServingSource,
-      });
-      return null;
-    }
-    throw parsed.error;
   }
 
 }
@@ -930,17 +898,7 @@ function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
 }
 
 function parseStoredModelProject(value: unknown): ModelProject {
-  return ModelProjectSchema.parse(normalizeStoredModelProjectDestination(value));
-}
-
-function normalizeStoredModelProjectDestination(value: unknown): unknown {
-  if (
-    !isRecord(value)
-    || !isRetiredTrainingDestination(value.defaultDestinationId)
-  ) {
-    return value;
-  }
-  return { ...value, defaultDestinationId: null };
+  return ModelProjectSchema.parse(value);
 }
 
 function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
@@ -968,24 +926,6 @@ function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
       buildSpecification: null,
     },
   };
-}
-
-function retiredManagedServingSource(value: unknown): "openpond_fireworks" | null {
-  if (!isRecord(value) || !isRecord(value.managedServing)) return null;
-  return value.managedServing.source === "openpond_fireworks" ? "openpond_fireworks" : null;
-}
-
-function isRetiredTrainingDestination(value: unknown): boolean {
-  return typeof value === "string"
-    && [
-      "export",
-      "prime_hosted",
-      "ssh_gpu",
-      "custom",
-      "local_cuda",
-      "local_mlx",
-      "runpod_byoc",
-    ].includes(value);
 }
 
 function storedPayloadId(value: unknown): string | null {

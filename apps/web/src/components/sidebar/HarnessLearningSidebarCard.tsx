@@ -2,6 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { HarnessHistoryPayload } from "@openpond/contracts";
 
 import { api, type ClientConnection } from "../../api";
+import {
+  readHarnessLearningNoticeDismissed,
+  rememberHarnessLearningNoticeDismissed,
+} from "../../lib/harness-learning-notice-preference";
 import { Settings, X } from "../icons";
 
 export function HarnessLearningSidebarCard({
@@ -13,7 +17,9 @@ export function HarnessLearningSidebarCard({
 }) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
   const [busy, setBusy] = useState<"refiner" | "review" | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissed, setDismissed] = useState(
+    readHarnessLearningNoticeDismissed
+  );
 
   const refresh = useCallback(async () => {
     if (!connection) {
@@ -50,7 +56,10 @@ export function HarnessLearningSidebarCard({
           <button
             className="sidebar-learning-notice-action"
             aria-label="Close continuous learning"
-            onClick={() => setDismissed(true)}
+            onClick={() => {
+              setDismissed(true);
+              rememberHarnessLearningNoticeDismissed();
+            }}
             type="button"
           >
             <X size={14} />

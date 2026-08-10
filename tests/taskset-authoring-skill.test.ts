@@ -20,7 +20,13 @@ describe("bundled Taskset Authoring skill", () => {
     expect(skill).toContain("The dataset is the task collection or source data inside that package");
     expect(skill).toContain("submitting the first rollout or");
     expect(skill).toContain("Treat fixed synthetic smoke fixtures as diagnostics");
-    expect(refs.toSorted()).toEqual(["graders-and-rewards.md", "method-selection.md", "privacy-and-provenance.md", "task-design.md"]);
+    expect(refs.toSorted()).toEqual([
+      "benchmarking.md",
+      "graders-and-rewards.md",
+      "method-selection.md",
+      "privacy-and-provenance.md",
+      "task-design.md",
+    ]);
     expect((await readdir("apps/cli/skills")).filter((name) => name.includes("taskset") || name.includes("task-miner"))).toEqual(["openpond-taskset-authoring"]);
   });
 

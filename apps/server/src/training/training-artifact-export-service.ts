@@ -3,22 +3,12 @@ import path from "node:path";
 import { sha256 } from "@openpond/taskset-sdk";
 import { createTrainingBundleExport } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
-import type { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
 import { selectPortableModelArtifacts } from "./training-artifact-package.js";
 
 export function createTrainingArtifactExportService(deps: {
   store: SqliteStore;
   storeDir: string;
-  localCpu: LocalCpuTrainingDestination;
 }) {
-  async function importExternal(input: {
-    planId: string;
-    bundleId: string;
-    artifactDirectory: string;
-  }) {
-    return deps.localCpu.importExternal(input);
-  }
-
   async function exportBundle(bundleId: string) {
     const bundle = await deps.store.getTrainingBundle(bundleId);
     if (!bundle) throw new Error("Training Bundle not found.");
@@ -137,7 +127,6 @@ export function createTrainingArtifactExportService(deps: {
   }
 
   return {
-    importExternal,
     exportBundle,
     artifactDownload,
     modelPackageDownload,

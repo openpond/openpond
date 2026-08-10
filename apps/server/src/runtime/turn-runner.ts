@@ -3,12 +3,10 @@ import {
   AppPreferencesSchema,
   DEFAULT_OPENPOND_CHAT_MODEL,
   DEFAULT_SESSION_EXPERIENCE,
-  LocalModelChatConfigurationSchema,
   SendTurnRequestSchema,
   SessionUserQuestionResolutionSchema,
   type ChatModelRef,
   type ChatProvider,
-  type LocalModelChatConfiguration,
   type OpenPondActionCatalogEntry,
   type RuntimeEvent,
   type SessionUserQuestionResolution,
@@ -239,8 +237,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeOpenPondCommand,
     executeProfileAction,
     executeDatasetBuilderAction,
-    executeCrossSystemTool,
-    finalizeCrossSystemTurn,
     loadOpenPondProfileState,
     loadOpenPondProfileStateForRef,
     loadOpenPondProfileLibrary,
@@ -765,7 +761,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWebSearch,
     createScheduledWork,
     executeProfileAction,
-    executeCrossSystemTool,
     loadOpenPondProfileStateForRef,
   });
 
@@ -1056,72 +1051,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       ...createActiveTurnSettlement(),
     };
     turnRunnerLifecycle.registerActiveTurn(sessionId, activeTurn);
-    const persistGeneratedCrossSystemAttempt = async (input: {
-      completedAt: string;
-      terminalFailure?: {
-        message: string;
-        failureClass: "policy_failure" | "infrastructure_failure";
-      } | null;
-    }) => {
-      const generatedTaskId =
-        typeof turn.metadata.crossSystemTaskId === "string"
-          ? turn.metadata.crossSystemTaskId.trim()
-          : "";
-      const modelId = turnModelRef?.modelId ?? activeModelId;
-      if (
-        activeProvider !== "local-adapter" ||
-        !modelId ||
-        !generatedTaskId ||
-        !finalizeCrossSystemTurn
-      )
-        return;
-      try {
-        const persisted = await finalizeCrossSystemTurn({
-          modelId,
-          localProjectId:
-            session.localProjectId ??
-            (session.workspaceKind === "local_project"
-              ? session.workspaceId ?? null
-              : null),
-          sessionId,
-          turnId: turn.id,
-          userPrompt: turn.prompt,
-          taskId: generatedTaskId,
-          startedAt,
-          completedAt: input.completedAt,
-          terminalFailure: input.terminalFailure ?? null,
-        });
-        if (persisted) {
-          await appendRuntimeEvent(
-            event({
-              sessionId,
-              turnId: turn.id,
-              name: "diagnostic",
-              source: "server",
-              appId: session.appId,
-              status: "completed",
-              output: input.terminalFailure
-                ? "Persisted and graded the failed generated Cross-System Operations chat attempt."
-                : "Persisted and graded the generated Cross-System Operations chat attempt.",
-              data: persisted,
-            })
-          );
-        }
-      } catch (error) {
-        await appendRuntimeEvent(
-          event({
-            sessionId,
-            turnId: turn.id,
-            name: "diagnostic",
-            source: "server",
-            appId: session.appId,
-            status: "failed",
-            output: error instanceof Error ? error.message : String(error),
-            data: { generatedTaskId },
-          })
-        );
-      }
-    };
     try {
       await markSubagentContinuationRunning({
         context: subagentContinuation,
@@ -1406,21 +1335,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         const providerModel = providerSettings?.modelCaches[
           session.provider
         ]?.models.find((candidate) => candidate.id === runtimeModel);
-        const localModelConfiguration =
-          session.provider === "local-adapter"
-            ? LocalModelChatConfigurationSchema.safeParse(
-                providerModel?.raw?.chatConfiguration
-              ).data ?? null
-            : null;
-        if (
-          authoringRoute &&
-          localModelConfiguration?.systemPromptMode !== undefined &&
-          localModelConfiguration.systemPromptMode !== "full_harness"
-        ) {
-          throw new Error(
-            "Authoring requires the full OpenPond harness system prompt."
-          );
-        }
         const contextLimitTokens =
           localModelConfiguration?.contextWindowTokens ??
           trustedProviderContextLimit({
@@ -1582,7 +1496,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             },
           })
         );
-        await persistGeneratedCrossSystemAttempt({ completedAt: now() });
         const completed = await completeTurn(sessionId, turn.id, providerTurnId);
         await processHarnessImprovementBoundarySafely({
           session,
@@ -1705,17 +1618,6 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
         turn: failed,
         boundaryKind: "turn_completed",
       });
-      await persistGeneratedCrossSystemAttempt({
-        completedAt: failed.completedAt ?? now(),
-        terminalFailure: {
-          message,
-          failureClass:
-            error instanceof Error &&
-            error.name === "LocalAdapterToolProtocolError"
-              ? "policy_failure"
-              : "infrastructure_failure",
-        },
-      });
       return failed;
     } finally {
       await finalizeSubagentContinuationTurn({
@@ -1763,16 +1665,4 @@ function codexPromptWithHarnessContext(
     userPrompt,
     "</user_request>",
   ].join("\n");
-}
-
-function localModelSystemPrompt(
-  configuration: LocalModelChatConfiguration
-): string {
-  if (
-    configuration.systemPromptMode === "custom" &&
-    configuration.customSystemPrompt
-  ) {
-    return configuration.customSystemPrompt;
-  }
-  return "You are a helpful assistant. Answer the user directly and concisely. Follow the behavior learned for this task when it applies.";
 }

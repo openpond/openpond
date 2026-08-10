@@ -16,7 +16,6 @@
     "@openpond/runtime": "workspace:*",
     "openpond-sdk": "workspace:*",
     "@openpond/taskset-sdk": "workspace:*",
-    "@openpond/trainer-local": "workspace:*",
     "@openpond/training-sdk": "workspace:*",
     "cron-parser": "^5.6.1",
     "eval-protocol": "0.1.13",

@@ -98,7 +98,6 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/prepare", action: "prepare_start", status: 201 },
     { method: "POST", path: "/v1/training/start/prepared", action: "start_prepared", status: 202 },
     { method: "POST", path: "/v1/training/start", action: "start", status: 202 },
-    { method: "POST", path: "/v1/training/import", action: "import_artifact", status: 202 },
     { method: "POST", path: "/v1/training/credentials", action: "save_credential" },
   ];
   const route = routes.find((item) => item.method === request.method && item.path === requestUrl.pathname);

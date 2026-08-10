@@ -3,7 +3,6 @@ import { z } from "zod";
 export const PROVIDER_IDS = [
   "openpond",
   "codex",
-  "local-adapter",
   "anthropic",
   "openai",
   "xai",

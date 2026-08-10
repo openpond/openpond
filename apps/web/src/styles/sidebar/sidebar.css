@@ -427,6 +427,16 @@
   font-size: 15px;
 }
 
+.nav-command-prominent {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 15px;
+}
+
+.nav-command-prominent svg {
+  color: var(--cyan);
+}
+
 .nav-command:hover,
 .nav-command.active,
 .settings-nav-item:hover,
@@ -979,6 +989,14 @@
   flex: 1 1 auto;
 }
 
+.sidebar-session-detail-line {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-width: 0;
+}
+
 .sidebar-row-updated-at {
   flex: 0 0 auto;
   color: #7f7f7f;
@@ -987,8 +1005,14 @@
   white-space: nowrap;
 }
 
+.sidebar-task-row.has-running-dot .row-meta {
+  align-self: start;
+  height: 22px;
+  margin-top: 4px;
+}
+
 .sidebar-session-project-label {
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

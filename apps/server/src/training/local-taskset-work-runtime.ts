@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { promises as fs } from "node:fs";
+import { existsSync, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -287,7 +287,9 @@ function runCommand(command: string, cwd: string, timeoutMs: number): Promise<{
       "--ro-bind", "/etc", "/etc",
       "--ro-bind", "/var", "/var",
       "--ro-bind", nodeRuntimeRoot, nodeRuntimeRoot,
-      "--ro-bind", localPythonRoot, localPythonRoot,
+      ...(existsSync(localPythonRoot)
+        ? ["--ro-bind", localPythonRoot, localPythonRoot]
+        : []),
       "--proc", "/proc",
       "--dev", "/dev",
       "--tmpfs", "/tmp",

@@ -40,7 +40,7 @@
       ]
     }
   ],
-  "contentHash": "4fcc90bfde01e2018cd0cc754603a19cc0f3346897d974398185e2458271b416",
+  "contentHash": "1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -85,11 +85,11 @@
       "privileged": true,
       "rewardEligible": true,
       "rubricRef": {
-        "contentHash": "87fd551b0910c82132c0f237dbc755e29a864b26ee786148c292cb79ad9bfa32",
+        "contentHash": "6a2f1e3ee50e35c948236e7db6d6a80d582b635f8ab1e53e7c07b18ad414f8d1",
         "id": "rubrics-task-quality-md",
         "mediaType": "text/markdown",
         "path": "rubrics/task-quality.md",
-        "sizeBytes": 1035,
+        "sizeBytes": 1034,
         "visibility": "verifier"
       },
       "version": "1",
@@ -126,11 +126,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "e355886f7e2a5888ea4ae925a55ddbb2dcaa1a7fdd38371b5ae7498a37737cc2",
+          "contentHash": "8879f8e31a916f165724a3c3e3e57db5baa858cd170ac6799064aa49bc623aa4",
           "id": "fixtures-adaptation-board-launch-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-board-launch.md",
-          "sizeBytes": 643,
+          "sizeBytes": 642,
           "visibility": "policy"
         }
       ],
@@ -173,11 +173,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "a0f40c92cc10fb96873f8507e947ad9b4835bc8d50f6b3d708978799dafc1cc9",
+          "contentHash": "a3d44bb123a242d78d0f60d4d8ad352e499bef677eaf816a19d07359a172743f",
           "id": "fixtures-adaptation-latency-incident-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-latency-incident.md",
-          "sizeBytes": 734,
+          "sizeBytes": 733,
           "visibility": "policy"
         }
       ],
@@ -222,11 +222,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "6b74db25b7353620ffa4c7f853e5149d687e49444b06a5428549c02d392734bd",
+          "contentHash": "63bca96753ae1491a45ba13e1a06cfb48973cfbe4f392e8f181e7b9648fd9db4",
           "id": "fixtures-adaptation-program-budget-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-program-budget.md",
-          "sizeBytes": 650,
+          "sizeBytes": 649,
           "visibility": "policy"
         }
       ],
@@ -271,11 +271,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "485a7239523bf45a38c0b20d6bb5e9be1f88322605c89f41b20bbe097c936221",
+          "contentHash": "0e9b6be9c1245b9e492e8746ce3e3b0cd0f530d6cf482023617c7d7152adc8af",
           "id": "fixtures-adaptation-launch-handoff-md",
           "mediaType": "text/markdown",
           "path": "fixtures/adaptation-launch-handoff.md",
-          "sizeBytes": 604,
+          "sizeBytes": 603,
           "visibility": "policy"
         }
       ],
@@ -530,11 +530,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "6bbfa841893e928859e37696426647a57f642102f0d776316524b33e42350244",
+          "contentHash": "cb3aec594b140129ebd872c427053ba63a303cc36d160448afc9ed1a0289d3ca",
           "id": "fixtures-frozen-clinic-relocation-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-clinic-relocation.md",
-          "sizeBytes": 653,
+          "sizeBytes": 652,
           "visibility": "policy"
         }
       ],
@@ -578,11 +578,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "2badaa8640c1f48705ad2a66800c035145d270784dcf22b5634a0692ebc67b27",
+          "contentHash": "80aad04ac67682165f098884fd1a86e9fb3ef15d2da3124401308dd23884b612",
           "id": "fixtures-frozen-payment-incident-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-payment-incident.md",
-          "sizeBytes": 673,
+          "sizeBytes": 672,
           "visibility": "policy"
         }
       ],
@@ -627,11 +627,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "b121ad251cbd3987c8d03f9c806266ca016042faf9096f8b28f8d7401c90cda5",
+          "contentHash": "c58b740d57b031cfe22d475d30b39a1a49a43820f1840a1d8054731cef58c8e8",
           "id": "fixtures-frozen-grant-budget-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-grant-budget.md",
-          "sizeBytes": 662,
+          "sizeBytes": 661,
           "visibility": "policy"
         }
       ],
@@ -676,11 +676,11 @@
     {
       "artifactRefs": [
         {
-          "contentHash": "ca03fc80fe3681283b5d1ffce59f70d4b881f3a17c16d0aa9b54e435b6a1c2a1",
+          "contentHash": "4e1cb66a12ccc2d228248a17134d5da1d785d49d9cf0adc9557f8c981c965a28",
           "id": "fixtures-frozen-warehouse-handoff-md",
           "mediaType": "text/markdown",
           "path": "fixtures/frozen-warehouse-handoff.md",
-          "sizeBytes": 621,
+          "sizeBytes": 620,
           "visibility": "policy"
         }
       ],

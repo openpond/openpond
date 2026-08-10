@@ -29,7 +29,16 @@ export async function handleSettingsRoutes({
     providerDiagnosticsPayload,
     recordClientDiagnosticPayload,
     updatePersonalizationPayload,
+    datasetStoragePayload,
   } = deps;
+  if (request.method === "GET" && requestUrl.pathname === "/v1/settings/dataset-storage") {
+    sendJson(response, 200, await datasetStoragePayload("state"));
+    return true;
+  }
+  if (request.method === "PATCH" && requestUrl.pathname === "/v1/settings/dataset-storage") {
+    sendJson(response, 200, await datasetStoragePayload("update", await readJson(request)));
+    return true;
+  }
   if (request.method === "GET" && requestUrl.pathname === "/v1/system/git") {
     sendJson(response, 200, await gitAvailabilityPayload());
     return true;

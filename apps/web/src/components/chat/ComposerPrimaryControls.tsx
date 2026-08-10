@@ -36,7 +36,6 @@ import {
 
 const TEAM_CHAT_LOCAL_PROVIDER_IDS = new Set([
   "codex",
-  "local-adapter",
   "openai",
   "xai",
   "openrouter",

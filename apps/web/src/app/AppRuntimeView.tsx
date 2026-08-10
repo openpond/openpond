@@ -2,10 +2,8 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
-  DEFAULT_OPENPOND_CHAT_MODEL,
-  type CreateSessionRequest,
+  type CloudProject,
   type Experience,
-  type Session,
   OpenPondExtension,
   type OutputRef,
   type ProductArea,
@@ -46,23 +44,17 @@ import {
   productAreaForAppView,
   readLastChatTaskModeFromBrowser,
 } from "../lib/product-area";
-import {
-  isTaskDraftSession,
-  taskDraftPrompt,
-  taskDraftTitle,
-  withTaskDraftMetadata,
-} from "../lib/task-drafts";
-import {
-  buildHybridWorkspaceSessionRequest,
-  resolveHybridWorkspaceTarget,
-} from "../lib/hybrid-workspace-session";
+import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
   secondary: AppSecondaryRuntime;
 }
 
+const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
+
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
+  const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const {
     composerDraftStore,
     appDispatch,
@@ -339,12 +331,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] =
     useState<SidebarFileOpenRequest | null>(null);
 
-  useEffect(() => {
-    const savedPrompt = taskDraftPrompt(selectedSession);
-    if (!savedPrompt || composerDraftStore.getSnapshot()) return;
-    composerDraftStore.set(savedPrompt);
-  }, [composerDraftStore, selectedSession?.id]);
-
   const openTeamChatFromHeader = useCallback(() => {
     setSelectedAppId(null);
     setSelectedProjectId(null);
@@ -373,154 +359,25 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     setSelectedSessionId,
   ]);
 
-  const saveTaskDraft = useCallback(
-    async (prompt: string): Promise<boolean> => {
-      const value = prompt.trim();
-      if (!connection || !value || activeExperience === "chat") return false;
-      const title = taskDraftTitle(value);
-
-      try {
-        let draftSession: Session;
-        const currentSession = selectedSession;
-        if (currentSession && isTaskDraftSession(currentSession)) {
-          draftSession = await api.patchSession(connection, currentSession.id, {
-            title,
-            metadata: withTaskDraftMetadata(currentSession.metadata, value),
-          });
-          setSessions((current) =>
-            current.map((session) =>
-              session.id === draftSession.id ? draftSession : session
-            )
-          );
-        } else {
-          const sourceWorkspaceTarget =
-            selectedSession?.metadata?.workspaceTarget === "hybrid"
-              ? "hybrid"
-              : selectedSession?.metadata?.workspaceTarget === "local"
-              ? "local"
-              : null;
-          const provider =
-            selectedSession?.provider ??
-            (selectedCloudProject ? "openpond" : activeProvider);
-          const modelRef =
-            selectedSession?.modelRef ??
-            (provider === "openpond"
-              ? {
-                  providerId: "openpond" as const,
-                  modelId: DEFAULT_OPENPOND_CHAT_MODEL,
-                }
-              : { providerId: provider, modelId: activeModel });
-          const baseMetadata = sourceWorkspaceTarget
-            ? { workspaceTarget: sourceWorkspaceTarget }
-            : !selectedSession && workspaceTarget.value === "local"
-            ? { workspaceTarget: "local" }
-            : {};
-          let request: CreateSessionRequest;
-
-          if (!selectedSession && workspaceTarget.value === "hybrid") {
-            const target = resolveHybridWorkspaceTarget({
-              cloudProjects: bootstrap?.cloudProjects ?? [],
-              selectedCloudProject,
-              selectedProject,
-            });
-            if (target.kind !== "ready") throw new Error(target.message);
-            const hybridRequest = buildHybridWorkspaceSessionRequest({
-              modelRef,
-              provider,
-              target,
-              title,
-            });
-            request = {
-              ...hybridRequest,
-              experience: "work",
-              metadata: withTaskDraftMetadata(
-                hybridRequest.metadata,
-                value
-              ),
-            };
-          } else {
-            request = {
-              experience: "work",
-              provider,
-              modelRef,
-              openPondCommandAccessMode:
-                selectedSession?.openPondCommandAccessMode ??
-                activeOpenPondCommandAccessMode,
-              appId: selectedSession?.appId ?? null,
-              appName: selectedSession?.appName ?? null,
-              workspaceKind:
-                selectedSession?.workspaceKind ??
-                (selectedCloudProject
-                  ? "sandbox"
-                  : selectedProject
-                  ? "local_project"
-                  : undefined),
-              workspaceId:
-                selectedSession?.workspaceId ??
-                selectedCloudProject?.id ??
-                selectedProject?.id ??
-                null,
-              workspaceName:
-                selectedSession?.workspaceName ??
-                selectedCloudProject?.name ??
-                selectedProject?.name ??
-                null,
-              localProjectId:
-                selectedSession?.localProjectId ?? selectedProject?.id ?? null,
-              cloudProjectId:
-                selectedSession?.cloudProjectId ??
-                selectedCloudProject?.id ??
-                null,
-              cloudTeamId:
-                selectedSession?.cloudTeamId ??
-                selectedCloudProject?.teamId ??
-                null,
-              cwd:
-                selectedSession?.cwd ?? selectedProject?.workspacePath ?? null,
-              metadata: withTaskDraftMetadata(baseMetadata, value),
-              title,
-            };
-          }
-
-          draftSession = await api.createSession(connection, request);
-          setSessions((current) => [draftSession, ...current]);
-        }
-
-        composerDraftStore.set("");
-        setMentionedAppId(null);
-        setSelectedSessionId(null);
-        setView("chat");
-        requestMainComposerFocus();
-        showToast("Task draft saved.", "success");
-        return true;
-      } catch (error) {
-        showToast(
-          error instanceof Error ? error.message : "Could not save task draft.",
-          "error"
-        );
-        return false;
-      }
-    },
-    [
-      activeExperience,
-      activeModel,
-      activeOpenPondCommandAccessMode,
-      activeProvider,
-      bootstrap?.cloudProjects,
-      composerDraftStore,
-      connection,
-      requestMainComposerFocus,
-      selectedCloudProject,
-      selectedProject,
-      selectedSession,
-      setMentionedAppId,
-      setSelectedSessionId,
-      setSessions,
-      setView,
-      showToast,
-      workspaceTarget.value,
-    ]
-  );
+  const saveTaskDraft = useTaskDraftActions({
+    activeExperience,
+    activeModel,
+    activeOpenPondCommandAccessMode,
+    activeProvider,
+    cloudProjects: bootstrap?.cloudProjects ?? EMPTY_CLOUD_PROJECTS,
+    composerDraftStore,
+    connection,
+    requestComposerFocus: requestMainComposerFocus,
+    selectedCloudProject,
+    selectedProject,
+    selectedSession,
+    setMentionedAppId,
+    setSelectedSessionId,
+    setSessions,
+    setView,
+    showToast,
+    workspaceTarget: workspaceTarget.value,
+  });
   const handoffExperience = useCallback(
     async (input: {
       target: Experience;
@@ -840,6 +697,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const rightSidebarAvailableForView =
     (view === "chat" && activeExperience !== "chat") ||
     view === "labs" ||
+    (view === "scheduled" && scheduledDetailOpen) ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -1002,10 +860,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           diffPanelOpen,
           terminalOpen,
           rightSidebarAvailable: rightSidebarAvailableForView,
-          rightSidebarOpen: diffPanelOpen,
+          rightSidebarOpen: view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
           onToggleDiffPanel: toggleRightSidebar,
           onToggleRightSidebar:
-            view === "team" && Boolean(teamAiThreadId)
+            view === "scheduled"
+              ? () => setScheduledDetailOpen((open) => !open)
+              : view === "team" && Boolean(teamAiThreadId)
               ? toggleTeamAiSidebar
               : toggleRightSidebar,
           onOpenSearch: () => {
@@ -1125,7 +985,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           selectedSessionId,
           composerDraftStore,
           mainComposerFocusRequestId,
-          onRequestComposerFocus: requestMainComposerFocus,
           labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
           labCloseDetailKind: labDetailNavigation.closeDetailKind,
           sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
@@ -1214,6 +1073,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             if (session) openRightChatPanel(session, { preserveView: true });
           },
           onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
+          scheduledDetailOpen,
+          onScheduledDetailOpenChange: setScheduledDetailOpen,
           onTerminalTabsChange: setTerminalTabs,
           onCloseRightChatPanel: closeRightChatPanel,
           onCloseNativeSkillSidebar: closeNativeSkillSidebar,

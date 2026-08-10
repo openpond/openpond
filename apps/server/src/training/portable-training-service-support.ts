@@ -1,7 +1,4 @@
-import type {
-  ComputeInventory,
-  TrainingDestinationCapabilities,
-} from "@openpond/contracts";
+import type { TrainingDestinationCapabilities } from "@openpond/contracts";
 import type { TrainingAdapterRegistry } from "@openpond/training-sdk";
 import type { SqliteStore } from "../store/store.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
@@ -18,8 +15,6 @@ export function createPortableTrainingServiceSupport(input: {
   store: Pick<SqliteStore, "getModelRunDraft">;
   destinations: () => Promise<TrainingDestinationCapabilities[]>;
   adapters: TrainingAdapterRegistry;
-  computeInventory?: () => Promise<ComputeInventory | null>;
-  revalidateCompute?: () => Promise<unknown>;
   searchTrainingModels?: (
     query: string,
   ) => Promise<RegistryModelSearchResult[]>;
@@ -35,7 +30,7 @@ export function createPortableTrainingServiceSupport(input: {
       adapterCompute,
     ] = await Promise.all([
       input.destinations(),
-      input.computeInventory?.() ?? Promise.resolve(null),
+      Promise.resolve(null),
       query.trim().length >= 2
         ? (input.searchTrainingModels ?? searchHuggingFaceModels)(query)
         : Promise.resolve([]),
@@ -60,7 +55,6 @@ export function createPortableTrainingServiceSupport(input: {
     maximumSpendUsd?: number | null;
     retentionDays?: number | null;
   }) {
-    await input.revalidateCompute?.();
     const modelRun = await input.store.getModelRunDraft(
       inputPlan.modelRunId,
     );

@@ -1,0 +1,24 @@
+[project]
+name = "openpond-datasets"
+version = "0.0.1"
+description = "OpenPond dataset materialization and projection worker"
+license = "MIT"
+requires-python = ">=3.10,<3.13"
+dependencies = ["pyarrow==21.0.0"]
+
+[project.scripts]
+openpond-datasets = "openpond_datasets.dataset_worker:main"
+
+[dependency-groups]
+dev = ["pytest==9.0.2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openpond_datasets"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

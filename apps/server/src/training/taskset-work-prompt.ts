@@ -13,7 +13,12 @@ export function tasksetWorkMessages(
   assets: StagedAsset[],
   harnessInstructionContext?: string,
 ): HostedChatMessage[] {
-  const stagedAssets = assets.map((asset) => ({ ...asset }));
+  const stagedAssets = assets.map((asset) => ({
+    storageName: asset.storageName,
+    mediaType: asset.mediaType,
+    sha256: asset.sha256,
+    sizeBytes: asset.sizeBytes,
+  }));
   return [
     {
       role: "system",

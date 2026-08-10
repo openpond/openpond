@@ -16,10 +16,6 @@ import {
   newExperienceTitle,
 } from "../apps/web/src/lib/experience-options";
 import {
-  WORK_STARTER_PROMPTS,
-  WorkStarterPrompts,
-} from "../apps/web/src/components/app-shell/WorkStarterPrompts";
-import {
   projectlessSidebarSessionLabel,
   sidebarSessionsForExperience,
 } from "../apps/web/src/lib/experience-sessions";
@@ -116,19 +112,13 @@ describe("Work experience navigation", () => {
     ).toBe("Work");
   });
 
-  test("renders the wordmark trigger and truthful Work starter examples", () => {
+  test("renders the wordmark trigger and Work mode switcher", () => {
     const menu = renderToStaticMarkup(
       createElement(SidebarProductMenu, {
         value: "chat",
         onChange: () => undefined,
       })
     );
-    const starters = renderToStaticMarkup(
-      createElement(WorkStarterPrompts, {
-        onSelect: () => undefined,
-      })
-    );
-
     const switcher = renderToStaticMarkup(
       createElement(NewExperienceSwitcher, {
         value: "work",
@@ -158,11 +148,6 @@ describe("Work experience navigation", () => {
     expect(switcher).not.toContain('data-experience="development"');
     expect(switcher).toContain('data-experience="work"');
     expect(switcher).toContain('aria-checked="true"');
-    expect(WORK_STARTER_PROMPTS).toHaveLength(4);
-    for (const starter of WORK_STARTER_PROMPTS) {
-      expect(starters).toContain(starter.label);
-      expect(starter.prompt.length).toBeGreaterThan(40);
-    }
   });
 });
 

@@ -44,7 +44,6 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar-toolbar">
         <button
           className="sidebar-icon"
-          data-tooltip="Hide sidebar"
           aria-label="Hide sidebar"
           onClick={() => setSidebarOpen(false)}
         >
@@ -96,6 +95,13 @@ export function Sidebar(props: SidebarProps) {
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}
+            onOpenApps={productArea === "development" || productArea === "chat" ? () => {
+              setSectionMenuOpen(null);
+              setSelectedAppId(null);
+              setSelectedProjectId(null);
+              setSelectedSessionId(null);
+              setView("apps");
+            } : undefined}
             onOpenActivity={() => {
               setSectionMenuOpen(null);
               setSettingsSection("usage");
