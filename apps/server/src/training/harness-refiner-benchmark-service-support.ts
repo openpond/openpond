@@ -4,20 +4,18 @@ import path from "node:path";
 
 import {
   ModelRunSchema,
-  ModelVersionSchema,
-  type ChatModelRef,
-  type ModelProject,
   type ModelRun,
-  type OpenPondProfileState,
 } from "@openpond/contracts";
-import type { BenchmarkComparison, BenchmarkRunSummary } from "@openpond/evals";
-import { contentHash } from "@openpond/harness";
 import {
-  commitProfileBenchmarkRef,
-  type ProfileBenchmarkGitReceipt,
-} from "@openpond/cloud/profile/profile-git";
-
-import { localHarnessWorkspacePaths } from "../harness/local-harness-workspace-service.js";
+  AttemptReceiptContentSchema,
+  AttemptReceiptSchema,
+  aggregateEvaluationReceipts,
+  createBenchmarkRunSummary,
+  type AttemptReceipt,
+  type BenchmarkComparison,
+  type BenchmarkRunSummary,
+} from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-worker.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import type { SqliteStore } from "../store/store.js";
@@ -57,43 +55,6 @@ export type BenchmarkLineage = {
   valid: boolean;
 };
 
-export type ManagedResultManifest = {
-  schemaVersion: "openpond.harnessRefinerBenchmarkResult.v1";
-  id: string;
-  modelRunId: string;
-  benchmarkId: "harness-refiner";
-  model: ChatModelRef;
-  upstreamModel: {
-    providerId: string;
-    modelId: string;
-    revision: string;
-    pricing?: import("./hosted-token-pricing.js").HostedTokenPricing;
-  };
-  reasoningEffort: string | null;
-  tasksetRelease: { id: string; contentHash: string };
-  baseline: BenchmarkRunSummary;
-  adaptation: BenchmarkRunSummary;
-  refiner: { id: string; contentHash: string; outcomeCount: number };
-  candidateAdaptation: BenchmarkRunSummary;
-  candidate: BenchmarkRunSummary;
-  comparison: BenchmarkComparison;
-  executionPlan: HarnessRefinerExecutionPlanItem[];
-  evidenceSnapshot: ReturnType<BenchmarkEvidenceSnapshot["manifest"]>;
-  lineage: BenchmarkLineage;
-  publicationPolicy: {
-    judgeCalibration: "required_pass";
-    diagnosticPasses: 1;
-    confirmationPasses: 1;
-    uncertainty: "paired_per_case_descriptive";
-  };
-  harness: {
-    baseline: { id: string; contentHash: string };
-    candidate: { id: string; contentHash: string };
-  };
-  createdAt: string;
-  contentHash: string;
-};
-
 export function completedStage(input: {
   run: BenchmarkRunSummary;
   attempts: EvaluationAttempt[];
@@ -109,6 +70,106 @@ export function completedStage(input: {
   };
 }
 
+function attemptKey(attempt: Pick<StoredTaskAttempt, "taskId" | "seed" | "attempt">) {
+  return `${attempt.taskId}\u0000${attempt.seed}\u0000${attempt.attempt}`;
+}
+
+function rebaseAttemptReceipt(
+  receipt: AttemptReceipt,
+  runManifest: { id: string; contentHash: string },
+): AttemptReceipt {
+  const { contentHash: _priorHash, ...priorCore } = AttemptReceiptSchema.parse(receipt);
+  const core = AttemptReceiptContentSchema.parse({
+    ...priorCore,
+    runManifest,
+  });
+  return AttemptReceiptSchema.parse({
+    ...core,
+    contentHash: contentHash(core),
+  });
+}
+
+export async function combineRetriedBenchmarkStage(input: {
+  store: SqliteStore;
+  tasksetId: string;
+  parentModelRunId: string;
+  prior: CompletedBenchmarkStage;
+  retries: EvaluationAttempt[];
+  createdAt: string;
+}): Promise<CompletedBenchmarkStage> {
+  if (!input.retries.length) return input.prior;
+  const manifest = input.retries[0]!.portable.runManifest;
+  const retryByAttempt = new Map(input.retries.map((result) => [
+    attemptKey(result.attempt),
+    {
+      evidence: {
+        attempt: result.attempt,
+        grade: result.grade,
+        artifacts: result.artifacts,
+        receiptContentHash: result.portable.receipt.contentHash,
+      },
+      receipt: result.portable.receipt,
+    },
+  ]));
+  const combined = input.prior.attempts.map((prior) => {
+    const retry = retryByAttempt.get(attemptKey(prior.attempt));
+    const priorReceipt = AttemptReceiptSchema.parse(
+      prior.attempt.metadata.portableAttemptReceipt,
+    );
+    return retry ?? { evidence: prior, receipt: priorReceipt };
+  });
+  if (combined.length !== input.prior.run.attemptCount) {
+    throw new Error("Retried benchmark evidence changed the admitted attempt count.");
+  }
+  const receipts = combined.map(({ receipt }) => rebaseAttemptReceipt(receipt, {
+    id: manifest.id,
+    contentHash: manifest.contentHash,
+  }));
+  const evaluation = aggregateEvaluationReceipts({
+    id: `benchmark-evaluation-${contentHash({
+      manifest: manifest.contentHash,
+      phase: input.prior.run.phase,
+      receipts: receipts.map((receipt) => receipt.contentHash),
+    }).slice(0, 24)}`,
+    manifest,
+    receipts,
+    metadata: {
+      kind: "benchmark",
+      phase: input.prior.run.phase,
+      split: input.prior.run.protocol.split,
+      reasoningEffort: input.prior.run.reasoningEffort,
+      sourceTasksetId: input.tasksetId,
+      benchmarkDefinitionId: "harness-refiner",
+      parentModelRunId: input.parentModelRunId,
+      recoveredInfrastructureAttempts: input.retries.length,
+    },
+  });
+  await input.store.saveEvaluationResult({
+    tasksetId: input.tasksetId,
+    kind: input.prior.run.phase,
+    result: evaluation,
+    createdAt: input.createdAt,
+  });
+  const run = createBenchmarkRunSummary({
+    id: `benchmark-run-${evaluation.contentHash.slice(0, 24)}`,
+    phase: input.prior.run.phase,
+    evaluation,
+    receipts,
+    reasoningEffort: input.prior.run.reasoningEffort,
+    protocol: input.prior.run.protocol,
+    createdAt: input.createdAt,
+    metadata: {
+      ...input.prior.run.metadata,
+      recoveredInfrastructureAttempts: input.retries.length,
+    },
+  });
+  await input.store.saveBenchmarkRun({ tasksetId: input.tasksetId, run });
+  return {
+    run,
+    attempts: combined.map(({ evidence }) => evidence),
+  };
+}
+
 export async function loadCompletedBenchmarkStage(input: {
   store: SqliteStore;
   modelRunId: string;
@@ -120,8 +181,12 @@ export async function loadCompletedBenchmarkStage(input: {
     input.store.listTaskAttempts(input.tasksetId),
     input.store.listGradeResultsForTaskset(input.tasksetId),
   ]);
+  const phase = input.plan.stage === "baseline" || input.plan.stage === "adaptation"
+    ? "baseline"
+    : "candidate";
   const run = runs.find((candidate) =>
     candidate.metadata.parentModelRunId === input.modelRunId
+    && candidate.phase === phase
     && candidate.protocol.split === input.plan.split
     && contentHash(candidate.protocol.taskIds) === contentHash(input.plan.taskIds)
   );
@@ -129,11 +194,17 @@ export async function loadCompletedBenchmarkStage(input: {
     throw new Error(`Completed ${input.plan.stage} benchmark evidence is unavailable.`);
   }
   const taskOrder = new Map(input.plan.taskIds.map((taskId, index) => [taskId, index]));
-  const selected = attempts
-    .filter((attempt) =>
+  const selectedByKey = new Map<string, StoredTaskAttempt>();
+  for (const attempt of attempts) {
+    if (
       attempt.metadata.parentModelRunId === input.modelRunId
       && taskOrder.has(attempt.taskId)
-    )
+      && attemptHarnessReleaseHash(attempt) === run.harnessRelease.contentHash
+    ) {
+      selectedByKey.set(attemptKey(attempt), attempt);
+    }
+  }
+  const selected = [...selectedByKey.values()]
     .sort((left, right) =>
       (taskOrder.get(left.taskId) ?? 0) - (taskOrder.get(right.taskId) ?? 0)
       || left.seed - right.seed
@@ -156,6 +227,12 @@ export async function loadCompletedBenchmarkStage(input: {
     };
   }));
   return { run, attempts: evidence };
+}
+
+function attemptHarnessReleaseHash(attempt: StoredTaskAttempt): string | null {
+  const capability = objectRecord(attempt.metadata.harnessCapabilityReceipt);
+  const release = objectRecord(capability?.harnessRelease);
+  return typeof release?.contentHash === "string" ? release.contentHash : null;
 }
 
 function portableReceiptContentHash(attempt: StoredTaskAttempt): string {
@@ -507,165 +584,6 @@ async function reconstructFrozenToolObservations(
   return observations;
 }
 
-export function createResultManifest(
-  input: Omit<ManagedResultManifest, "schemaVersion" | "id" | "benchmarkId" | "tasksetRelease" | "harness" | "publicationPolicy" | "contentHash">,
-): ManagedResultManifest {
-  const core = {
-    schemaVersion: "openpond.harnessRefinerBenchmarkResult.v1" as const,
-    id: `benchmark-result-${input.modelRunId}`,
-    modelRunId: input.modelRunId,
-    benchmarkId: "harness-refiner" as const,
-    model: input.model,
-    upstreamModel: input.upstreamModel,
-    reasoningEffort: input.reasoningEffort,
-    tasksetRelease: input.baseline.tasksetRelease,
-    baseline: input.baseline,
-    adaptation: input.adaptation,
-    refiner: input.refiner,
-    candidateAdaptation: input.candidateAdaptation,
-    candidate: input.candidate,
-    comparison: input.comparison,
-    executionPlan: input.executionPlan,
-    evidenceSnapshot: input.evidenceSnapshot,
-    lineage: input.lineage,
-    publicationPolicy: {
-      judgeCalibration: "required_pass" as const,
-      diagnosticPasses: 1 as const,
-      confirmationPasses: 1 as const,
-      uncertainty: "paired_per_case_descriptive" as const,
-    },
-    harness: {
-      baseline: input.baseline.harnessRelease,
-      candidate: input.candidate.harnessRelease,
-    },
-    createdAt: input.createdAt,
-  };
-  return { ...core, contentHash: contentHash(core) };
-}
-
-export async function writeManagedResult(
-  storeDir: string,
-  modelRunId: string,
-  manifest: ManagedResultManifest,
-) {
-  const root = path.join(storeDir, "training", "model-runs", modelRunId, "benchmark");
-  await fs.mkdir(root, { recursive: true });
-  const filePath = path.join(root, `${manifest.contentHash}.json`);
-  await fs.writeFile(filePath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  return path.relative(storeDir, filePath).replaceAll(path.sep, "/");
-}
-
-export async function preserveProfileResult(input: {
-  profile: OpenPondProfileState;
-  modelRunId: string;
-  workspaceId: string;
-  storeDir: string;
-  manifest: ManagedResultManifest;
-}): Promise<ProfileBenchmarkGitReceipt | null> {
-  if (
-    input.profile.mode !== "local"
-    || !input.profile.repoPath
-    || !input.profile.git?.head
-  ) return null;
-  const sourceRoot = localHarnessWorkspacePaths(
-    input.storeDir,
-    input.workspaceId,
-  ).source;
-  const sourceFiles = await listFiles(sourceRoot);
-  const prefix = `benchmarks/harness-refiner/runs/${input.modelRunId}`;
-  return commitProfileBenchmarkRef({
-    repoPath: input.profile.repoPath,
-    runId: input.modelRunId,
-    baseCommit: input.profile.git.head,
-    message: `Preserve Harness Refiner benchmark ${input.modelRunId}`,
-    files: [
-      {
-        path: `${prefix}/result.json`,
-        contents: `${JSON.stringify(input.manifest, null, 2)}\n`,
-      },
-      ...await Promise.all(sourceFiles.map(async (relativePath) => ({
-        path: `${prefix}/candidate-harness/${relativePath}`,
-        contents: await fs.readFile(path.join(sourceRoot, ...relativePath.split("/"))),
-      }))),
-    ],
-  });
-}
-
-async function listFiles(root: string, relative = ""): Promise<string[]> {
-  const directory = path.join(root, ...relative.split("/").filter(Boolean));
-  const entries = await fs.readdir(directory, { withFileTypes: true });
-  const files: string[] = [];
-  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-    const next = relative ? `${relative}/${entry.name}` : entry.name;
-    if (entry.isDirectory()) files.push(...await listFiles(root, next));
-    else if (entry.isFile()) files.push(next);
-  }
-  return files;
-}
-
-export async function ensureBaseVersion(input: {
-  store: SqliteStore;
-  project: ModelProject;
-  modelRun: ModelRun;
-  model: ChatModelRef;
-  baseline: EvaluationAttempt | BenchmarkAttemptEvidence;
-}) {
-  const existing = await input.store.getModelVersion(input.modelRun.modelVersionId);
-  if (existing) return existing;
-  if (!("portable" in input.baseline)) {
-    throw new Error("A portable baseline attempt is required to create the base Model Version.");
-  }
-  const runManifest = input.baseline.portable.runManifest;
-  const tasksetRelease = input.baseline.portable.tasksetRelease;
-  const graph = {
-    resolvedBundleHash: contentHash({
-      tasksetRelease: tasksetRelease.contentHash,
-      runManifest: runManifest.contentHash,
-    }),
-    profileRelease: {
-      id: `profile-release-${input.modelRun.profileId}`,
-      revision: 1,
-      contentHash: contentHash({ profileId: input.modelRun.profileId }),
-    },
-    harnessRelease: runManifest.harnessRelease,
-    agentRelease: {
-      id: input.baseline.portable.agentSnapshot.id,
-      contentHash: input.baseline.portable.agentSnapshot.contentHash,
-    },
-    grader: {
-      id: `grader-${tasksetRelease.id}`,
-      contentHash: contentHash(tasksetRelease.graders),
-    },
-  };
-  const core = {
-    schemaVersion: "openpond.modelVersion.v1" as const,
-    id: input.modelRun.modelVersionId,
-    modelId: input.project.id,
-    profileId: input.project.profileId,
-    version: 0,
-    kind: "base_reference" as const,
-    status: "available" as const,
-    baseModel: {
-      schemaVersion: "openpond.baseModelPreference.v1" as const,
-      modelId: `${input.model.providerId}/${input.model.modelId}`,
-      revision: runManifest.model.revision,
-      tokenizerRevision: runManifest.model.tokenizerRevision,
-      chatTemplateHash: runManifest.model.chatTemplateHash,
-      modelAssetId: null,
-      source: "managed" as const,
-    },
-    taskset: input.modelRun.taskset,
-    releaseGraph: graph,
-    artifactLineageId: null,
-    adapterStatus: "not_trained" as const,
-    createdAt: input.modelRun.startedAt,
-  };
-  return input.store.saveModelVersion(ModelVersionSchema.parse({
-    ...core,
-    contentHash: contentHash(core),
-  }));
-}
-
 function modelEvaluationAttempts(
   phase: "baseline" | "adaptation" | "candidate_adaptation" | "candidate",
   results: Array<Pick<BenchmarkAttemptEvidence, "attempt" | "grade">>,
@@ -893,7 +811,10 @@ export async function benchmarkLineage(input: {
     refinerOutcomeHash: contentHash(outcomes),
     validationHash: contentHash(validations),
     applyReceiptHash: contentHash(applyReceipts),
-    candidateRelease: input.candidateRelease,
+    candidateRelease: {
+      id: input.candidateRelease.id,
+      contentHash: input.candidateRelease.contentHash,
+    },
     valid:
       outcomes.length === input.refinerResults.length
       && requiredValidationsPassed

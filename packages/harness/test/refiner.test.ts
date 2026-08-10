@@ -50,7 +50,9 @@ describe("public model-driven Harness Refiner", () => {
       },
     })[0]!.content;
     expect(system).toContain("review every supplied cohort attempt together");
-    expect(system).toContain("primary turn is only an evidence anchor");
+    expect(system).toContain("primary turn is only a transport anchor");
+    expect(system).toContain("behaviorFamilies and crossTaskToolFailureGroups");
+    expect(system).toContain("minimum number of materially different adaptation tasks");
     expect(system).toContain("Valid passing grades do not erase avoidable tool detours");
     expect(system).toContain("high usage alone does not justify a Harness change");
   });

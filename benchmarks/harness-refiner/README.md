@@ -31,8 +31,12 @@ The detailed split and acceptance contract are in the
 [Taskset design](./taskset/README.md). The materialized
 [`harness-refiner-public-v1` Taskset Release](./taskset/taskset.release.json)
 contains the frozen prompts, fixtures, grader assets, and production-derived
-tool contracts. Its current content hash is
-`1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695`.
+tool contracts. Revision 3 intentionally includes four fact-distinct
+direct-deliverable tasks in each split so repeated checklist-or-file
+substitution is visible within one adaptation cohort, and calibrates the judge
+to accept short framing when the complete requested copy is present inline.
+Its current content hash is
+`05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7`.
 
 ## Shipped reference Taskset
 
@@ -70,10 +74,12 @@ Each complete pass uses the following sequence:
 
 1. Run the frozen-evaluation cases with the baseline Harness and Refiner off.
 2. Run the adaptation cases with the same baseline Harness.
-3. Grade each adaptation result and give Refiner the bounded turn evidence plus
-   exact grader receipts. The adaptation receipt includes that case's bounded
-   expected-output contract as the learning label; frozen-evaluation labels
-   are never included in Refiner context.
+3. Grade each adaptation result and give Refiner one bounded cohort packet with
+   every adaptation request, user-visible output, artifact check, exact grader
+   receipt, and expected-output contract. Group the fact-distinct attempts by
+   their neutral behavior family and expose cross-task failure recurrence; the
+   selected primary turn is only a transport anchor. Frozen-evaluation prompts,
+   labels, and results are never included in Refiner context.
 4. Require an immutable candidate Harness Release before continuing.
 5. Replay all ten adaptation cases with the candidate Harness and report the
    repairs separately from the held-out causal metric.

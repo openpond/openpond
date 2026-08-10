@@ -12,6 +12,10 @@ import {
   createHarnessRefinerExecutionPlan,
   totalPlannedAttempts,
 } from "../apps/server/src/training/harness-refiner-benchmark-protocol.js";
+import {
+  benchmarkLineage,
+  loadCompletedBenchmarkStage,
+} from "../apps/server/src/training/harness-refiner-benchmark-service-support.js";
 
 describe("Harness Refiner benchmark protocol", () => {
   test("derives the four-stage forty-attempt plan from the admitted Taskset", () => {
@@ -108,7 +112,7 @@ describe("Harness Refiner benchmark protocol", () => {
     expect(live).not.toHaveBeenCalled();
   });
 
-  test("rejects replay when frozen web request arguments drift", async () => {
+  test("replays the frozen ordinal when model-authored web arguments drift", async () => {
     const snapshot = new BenchmarkEvidenceSnapshot();
     await snapshot.execute({
       mode: "record",
@@ -131,7 +135,7 @@ describe("Harness Refiner benchmark protocol", () => {
       toolName: "web_search",
       args: { query: "different source" },
       execute: async () => { throw new Error("live provider must stay disabled"); },
-    })).rejects.toThrow("arguments drifted");
+    })).resolves.toMatchObject({ ok: true, contentText: "frozen result" });
   });
 
   test("enforces spend and computes publication accounting", () => {
@@ -181,6 +185,95 @@ describe("Harness Refiner benchmark protocol", () => {
       candidateRelease: { id: "candidate-release", contentHash: hash },
       valid: true,
     })).toMatchObject({ refinerInputHash: hash });
+  });
+
+  test("reduces full candidate Harness releases to immutable lineage refs", async () => {
+    const hash = "a".repeat(64);
+    const store = {
+      listHarnessImprovementArtifacts: vi.fn(async () => []),
+    };
+    const fullCandidateRelease = {
+      id: "candidate-release",
+      contentHash: hash,
+      schemaVersion: "openpond.harnessRelease.v2",
+      agentSnapshot: { id: "snapshot", contentHash: hash },
+    };
+    const lineage = await benchmarkLineage({
+      store: store as never,
+      workspaceId: "benchmark-workspace",
+      adaptationAttempts: [],
+      refinerResults: [],
+      candidateRelease: fullCandidateRelease,
+      refinerInputHash: hash,
+    });
+
+    expect(lineage.candidateRelease).toEqual({
+      id: "candidate-release",
+      contentHash: hash,
+    });
+    expect(() => ModelEvaluationReceiptSchema.shape.lineage.parse(lineage)).not.toThrow();
+  });
+
+  test("restores the stage matching both its phase and Harness release", async () => {
+    const baselineHash = "b".repeat(64);
+    const candidateHash = "c".repeat(64);
+    const receiptHash = "d".repeat(64);
+    const taskIds = ["held-out-1"];
+    const run = (phase: "baseline" | "candidate", harnessHash: string) => ({
+      id: `${phase}-run`,
+      phase,
+      metadata: { parentModelRunId: "model-run" },
+      protocol: { split: "frozen_eval", taskIds },
+      harnessRelease: { id: `${phase}-harness`, contentHash: harnessHash },
+      attemptCount: 1,
+    });
+    const attempt = (id: string, harnessHash: string) => ({
+      id,
+      taskId: "held-out-1",
+      seed: 17,
+      attempt: 0,
+      metadata: {
+        parentModelRunId: "model-run",
+        harnessCapabilityReceipt: {
+          harnessRelease: { id: "harness", contentHash: harnessHash },
+        },
+        portableAttemptReceipt: { contentHash: receiptHash },
+      },
+    });
+    const grades = [
+      { attemptId: "baseline-attempt", score: 1 },
+      { attemptId: "candidate-attempt", score: 0 },
+    ];
+    const store = {
+      // Candidate-first ordering reproduces the ambiguous durable lookup that
+      // previously restored candidate evidence as the baseline stage.
+      listBenchmarkRuns: vi.fn(async () => [
+        run("candidate", candidateHash),
+        run("baseline", baselineHash),
+      ]),
+      listTaskAttempts: vi.fn(async () => [
+        attempt("baseline-attempt", baselineHash),
+        attempt("candidate-attempt", candidateHash),
+      ]),
+      listGradeResultsForTaskset: vi.fn(async () => grades),
+      listTaskAttemptArtifacts: vi.fn(async () => []),
+    };
+
+    const restored = await loadCompletedBenchmarkStage({
+      store: store as never,
+      modelRunId: "model-run",
+      tasksetId: "taskset",
+      plan: {
+        stage: "baseline",
+        split: "frozen_eval",
+        taskIds,
+        attemptCount: 1,
+      },
+    });
+
+    expect(restored.run.phase).toBe("baseline");
+    expect(restored.run.harnessRelease.contentHash).toBe(baselineHash);
+    expect(restored.attempts[0]?.attempt.id).toBe("baseline-attempt");
   });
 
   test("admits an inconclusive stop receipt before candidate spend", () => {

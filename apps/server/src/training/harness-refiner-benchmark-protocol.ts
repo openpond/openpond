@@ -146,11 +146,12 @@ export class BenchmarkEvidenceSnapshot {
           `Frozen web evidence is unavailable for ${input.taskId} ${input.toolName} call ${ordinal + 1}.`,
         );
       }
-      if (observation.argumentsHash !== argumentsHash) {
-        throw new Error(
-          `Frozen web evidence arguments drifted for ${input.taskId} ${input.toolName} call ${ordinal + 1}.`,
-        );
-      }
+      // Replay is deliberately keyed by the admitted task/tool ordinal instead
+      // of the model-authored argument bytes. A refined Harness can phrase the
+      // same search differently, and exact argument matching would turn harmless
+      // wording drift into an infrastructure failure. The immutable observation
+      // still records the baseline argument hash for auditability, while both
+      // sides receive the exact same frozen external result at each call site.
       return structuredClone(observation.result);
     }
     const result = await input.execute();

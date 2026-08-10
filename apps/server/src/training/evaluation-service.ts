@@ -40,6 +40,7 @@ import type {
 } from "./taskset-work-attempt-runner.js";
 import { linkHarnessReviewTaskset } from "./harness-review-taskset.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
+import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 
 type AuditFixtureInput = {
   label:
@@ -247,12 +248,15 @@ export function createTaskEvaluationService(deps: {
     const customVerifier = await customVerifierFor(taskset.id);
     const rawUsages: unknown[] = [];
     let explicitCostUsd = 0;
+    let modelJudgeCalls = 0;
+    let modelJudgeCostObserved = false;
     const result = await gradeTasksetEvaluationAttempt({
       task,
       attempt,
       graders: taskset.graders,
       modelJudge: deps.modelJudge
         ? async (judgeInput) => {
+            modelJudgeCalls += 1;
             const judged = await deps.modelJudge!(judgeInput);
             if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
             else if (judged.usage !== undefined) rawUsages.push(judged.usage);
@@ -260,7 +264,10 @@ export function createTaskEvaluationService(deps: {
               typeof judged.costUsd === "number"
               && Number.isFinite(judged.costUsd)
               && judged.costUsd >= 0
-            ) explicitCostUsd += judged.costUsd;
+            ) {
+              explicitCostUsd += judged.costUsd;
+              modelJudgeCostObserved = true;
+            }
             return judged;
           }
         : undefined,
@@ -283,12 +290,18 @@ export function createTaskEvaluationService(deps: {
       },
       { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     );
-    if (usage.totalTokens > 0 || explicitCostUsd > 0) {
-      graderUsageByAttemptId.set(attempt.id, {
-        ...usage,
-        costUsd: explicitCostUsd > 0 ? explicitCostUsd : null,
-      });
-    }
+    graderUsageByAttemptId.set(attempt.id, {
+      ...usage,
+      // Infrastructure and earlier hard-gate failures can skip the model
+      // judge entirely. That is an authoritative zero-cost grading path, not
+      // missing accounting. If a judge did run, retain fail-closed semantics
+      // unless its hosted cost was actually observed.
+      costUsd: modelJudgeCalls === 0
+        ? 0
+        : modelJudgeCostObserved
+          ? explicitCostUsd
+          : null,
+    });
     return result;
   }
 
@@ -976,23 +989,4 @@ export function createTaskEvaluationService(deps: {
     executeBenchmark,
     close: async () => {},
   };
-}
-
-function reviewRefMatches(
-  value: unknown,
-  expected: { id: string; contentHash: string },
-): boolean {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as { id?: unknown }).id === expected.id &&
-    (value as { contentHash?: unknown }).contentHash === expected.contentHash,
-  );
-}
-
-function variance(values: number[]): number {
-  if (values.length < 2) return 0;
-  const mean = values.reduce((total, value) => total + value, 0) / values.length;
-  return values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
 }

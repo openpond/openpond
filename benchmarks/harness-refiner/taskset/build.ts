@@ -105,6 +105,23 @@ export async function buildTaskset(): Promise<TasksetRelease> {
   if (BENCHMARK_CASES.filter((item) => item.split === "frozen_eval").length !== 10) {
     throw new Error("The frozen-evaluation split must contain ten cases.");
   }
+  const expectedFamilyCounts = new Map([
+    ["artifact-verification", 3],
+    ["research-efficiency", 3],
+    ["constraint-following", 4],
+  ]);
+  for (const split of ["validation", "frozen_eval"] as const) {
+    for (const [family, expectedCount] of expectedFamilyCounts) {
+      const actualCount = BENCHMARK_CASES.filter(
+        (item) => item.split === split && item.tags.includes(family),
+      ).length;
+      if (actualCount !== expectedCount) {
+        throw new Error(
+          `Behavior family ${family} must contain ${expectedCount} ${split} cases; found ${actualCount}.`,
+        );
+      }
+    }
+  }
 
   const assetPaths = [
     ...new Set(BENCHMARK_CASES.flatMap((item) => item.attachmentPaths ?? [])),
@@ -149,7 +166,7 @@ export async function buildTaskset(): Promise<TasksetRelease> {
   const content = {
     schemaVersion: "openpond.tasksetRelease.v2" as const,
     id: "harness-refiner-public-v1",
-    revision: 1,
+    revision: 3,
     policy: {
       policyVisibleFields: ["input"],
       privilegedFields: ["expectedOutput"],

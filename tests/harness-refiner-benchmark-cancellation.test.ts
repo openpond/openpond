@@ -86,7 +86,7 @@ describe("Harness Refiner benchmark cancellation", () => {
     expect(saveModelRun).toHaveBeenCalledOnce();
   });
 
-  test("permits only a failed Refiner checkpoint to re-enter running state", () => {
+  test("permits durable Refiner and comparison checkpoints to re-enter running state", () => {
     const source = runningEvaluationRun();
     const failed = ModelRunSchema.parse({
       ...source,
@@ -116,6 +116,24 @@ describe("Harness Refiner benchmark cancellation", () => {
         completedAttempts: 1,
       },
     }))).toBe(false);
+
+    const failedComparison = ModelRunSchema.parse({
+      ...failed,
+      evaluationProgress: {
+        ...failed.evaluationProgress!,
+        stage: "comparison",
+        completedAttempts: 4,
+      },
+      receipt: null,
+    });
+    const resumedComparison = ModelRunSchema.parse({
+      ...failedComparison,
+      status: "running",
+      failure: null,
+      completedAt: null,
+      updatedAt: "2026-08-10T00:02:00.000Z",
+    });
+    expect(isCheckpointResumeTransition(failedComparison, resumedComparison)).toBe(true);
   });
 
   test("reconciles only interrupted Harness Refiner evaluations", async () => {

@@ -30,27 +30,30 @@ import {
   type HarnessRefinerExecutionPlanItem,
 } from "./harness-refiner-benchmark-protocol.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
+import { resumeHarnessRefinerComparison } from "./harness-refiner-benchmark-comparison-recovery.js";
 import { runHarnessRefinerBenchmarkRefinerStage } from "./harness-refiner-benchmark-refiner-stage.js";
+import {
+  createResultManifest,
+  ensureBaseVersion,
+  preserveProfileResult,
+  writeManagedResult,
+} from "./harness-refiner-benchmark-result-persistence.js";
 import {
   checkpointAttempt,
   checkpointEvidenceSnapshot,
   classifyComparison,
   comparisonInvalidReasons,
   completedStage,
-  createResultManifest,
   emptyEvaluationAccounting,
-  ensureBaseVersion,
   frozenToolEvidence,
   loadCompletedBenchmarkStage,
   loadOrReconstructEvidenceSnapshot,
   modelVersionId,
-  preserveProfileResult,
   releasedHarness,
   requireModelProject,
   requirePlanStage,
   safeError,
   updateProgress,
-  writeManagedResult,
   type BenchmarkAttemptEvidence,
   type CompletedBenchmarkStage,
 } from "./harness-refiner-benchmark-service-support.js";
@@ -248,20 +251,24 @@ export function createHarnessRefinerBenchmarkService(deps: {
       throw new Error("No Harness Refiner evaluation exists for this Model Run.");
     }
     if (activeRuns.has(modelRunId) || run.status === "running") return run;
-    if (
-      run.status !== "failed"
-      || run.evaluationProgress?.stage !== "refiner"
-      || run.evaluationProgress.completedAttempts
-        !== completedBeforeStage(run.evaluation.attemptPlan, "candidate_adaptation")
-    ) {
+    const canResumeFromRefiner =
+      run.evaluationProgress?.stage === "refiner"
+      && run.evaluationProgress.completedAttempts
+        === completedBeforeStage(run.evaluation.attemptPlan, "candidate_adaptation");
+    const canResumeFromComparison =
+      run.evaluationProgress?.stage === "comparison"
+      && run.evaluationProgress.completedAttempts
+        === totalPlannedAttempts(run.evaluation.attemptPlan);
+    if (run.status !== "failed" || (!canResumeFromRefiner && !canResumeFromComparison)) {
       throw new Error(
-        "Only a Harness Refiner run that failed after durable adaptation evidence can resume.",
+        "Only a Harness Refiner run with a durable Refiner or comparison checkpoint can resume.",
       );
     }
     const project = await requireModelProject(deps.store, run.modelId, run.profileId);
     const prepared = await deps.store.saveModelRun(ModelRunSchema.parse({
       ...run,
       status: "running",
+      receipt: null,
       failure: null,
       completedAt: null,
       updatedAt: now(),
@@ -366,12 +373,39 @@ export function createHarnessRefinerBenchmarkService(deps: {
         modelRun.evaluationProgress?.stage === "refiner"
         && modelRun.evaluationProgress.completedAttempts
           === completedBeforeStage(executionPlan, "candidate_adaptation");
+      const resumeFromComparison =
+        modelRun.evaluationProgress?.stage === "comparison"
+        && modelRun.evaluationProgress.completedAttempts === totalAttempts;
       const budget = new BenchmarkSpendBudget(
         input.maximumSpendUsd,
-        resumeFromRefiner
+        resumeFromRefiner || resumeFromComparison
           ? modelRun.evaluationProgress?.accounting?.observedSpendUsd ?? 0
           : 0,
       );
+      if (resumeFromComparison) {
+        return resumeHarnessRefinerComparison({
+          deps: {
+            store: deps.store,
+            storeDir: deps.storeDir,
+            evaluation: deps.evaluation,
+            loadProfileState: deps.loadProfileState,
+            now,
+          },
+          benchmarkInput: input,
+          modelRun,
+          signal: context.signal,
+          workspace: isolated.workspace,
+          taskset,
+          executionPlan,
+          baselinePlan,
+          adaptationPlan,
+          candidateAdaptationPlan,
+          candidatePlan,
+          admittedPricing,
+          budget,
+          totalAttempts,
+        });
+      }
       let evidenceSnapshot = new BenchmarkEvidenceSnapshot();
       const observeStageAttempts = (
         stage: HarnessRefinerExecutionPlanItem["stage"],

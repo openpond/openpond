@@ -11,9 +11,9 @@ this benchmark does not start a training job.
 
 - Release: [`taskset.release.json`](./taskset.release.json)
 - Release id: `harness-refiner-public-v1`
-- Revision: `1`
+- Revision: `3`
 - Content hash:
-  `1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695`
+  `05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7`
 - Rebuild: `pnpm exec tsx benchmarks/harness-refiner/taskset/build.ts`
 
 ## Split
@@ -24,39 +24,40 @@ workspace layout.
 
 | Family | Adaptation cases | Frozen-evaluation cases |
 | --- | ---: | ---: |
-| Artifact creation and verification | 4 | 4 |
-| Current or primary-source research | 4 | 4 |
-| Constraint-following everyday work | 2 | 2 |
+| Artifact creation and verification | 3 | 3 |
+| Current or primary-source research | 3 | 3 |
+| Direct-deliverable everyday work | 4 | 4 |
 | Total | 10 | 10 |
 
-Adaptation and frozen-evaluation cases may share a behavioral-family tag, such
-as `artifact-verification` or `research-efficiency`, but may not share a source
-document, expected answer, entity set, or source-cluster key.
+Every case carries exactly one neutral behavioral-family tag. Adaptation and
+frozen-evaluation cases share those family labels, but may not share a source
+document, expected answer, entity set, or source-cluster key. Refiner receives
+the adaptation families and their fact-distinct attempt evidence as a cohort;
+frozen prompts, labels, and results remain hidden.
 
 ## Case families
 
-The first release should cover these general behaviors across different
+The release covers these general behaviors across different
 subjects in each split:
 
 - produce a bounded PDF from a supplied decision packet and visually verify it;
 - produce a bounded PDF from a supplied incident or operations packet without
   collapsing confirmed facts and open hypotheses;
 - create and verify a structured spreadsheet or presentation artifact;
-- preserve dates, owners, local times, and unresolved gates in an executive
-  handoff;
 - audit a software stack using primary security advisories without inferring
   exposure from an advisory alone;
-- compare primary research papers without converting incomparable metrics into
-  a leaderboard;
 - verify a time-sensitive travel or accessibility plan from official evidence;
 - find eligible time-sensitive funding opportunities without padding the list;
 - summarize recent public ChatGPT experiences from X and Reddit with direct
   links, dates, balanced evidence, and sampling limitations;
-- complete a concise everyday communication task without inventing facts.
+- complete four fact-distinct, concise communications by returning the actual
+  send-ready copy rather than only a file path, completion claim, summary, or
+  requirements checklist.
 
 The held-out split uses different documents, organizations, routes, software,
-papers, and communication scenarios while preserving the same reusable failure
-classes.
+and communication scenarios while preserving the same reusable failure
+classes. Its direct-deliverable cases vary across email, team chat, and support
+reply so a candidate must generalize beyond one prompt template.
 
 ## Evidence contract
 
@@ -65,12 +66,15 @@ receipts, generated artifacts, deterministic checks, calibrated grader output,
 manual-review state where required, and authoritative provider usage.
 
 For adaptation cases, Refiner receives bounded neutral facts,
-content-addressed references, the final grader receipt, and that case's bounded
-expected-output contract after grading. These are the visible learning labels
-for the adaptation split. The model decides relevance and the smallest
-justified Harness change. Deterministic code enforces authorization, budgets,
-schemas, paths, hashes, validation, atomic application, and rollback; it does
-not choose the semantic diagnosis or route.
+content-addressed references, requests, user-visible outputs, artifact checks,
+final grader receipts, and bounded expected-output contracts after grading.
+The cohort packet groups those facts by behavior family and lists tool failures
+that recur across at least two distinct adaptation tasks. The primary turn is
+only a transport anchor selected from the strongest repeated signal. The model
+still decides whether the recurrence is meaningful and chooses the smallest
+justified Harness change or external route. Deterministic code enforces
+authorization, budgets, schemas, paths, hashes, validation, atomic application,
+and rollback; it does not choose the semantic diagnosis or route.
 
 Frozen-evaluation prompts, privileged expected outcomes, grader rubrics, and
 results remain unavailable to Refiner until the candidate Harness is frozen.

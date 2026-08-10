@@ -22,16 +22,17 @@ import {
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import {
   addUsage,
-  attemptToolFailureCount,
   attemptUsageSummary,
   benchmarkLineage,
-  benchmarkToolFailureEvidence,
   checkpointRefinerUsage,
   emptyUsageCategory,
   stringMetadata,
   taskPrompt,
   type BenchmarkAttemptEvidence,
 } from "./harness-refiner-benchmark-service-support.js";
+import {
+  buildHarnessRefinerBenchmarkCohortEvidence,
+} from "./harness-refiner-benchmark-cohort-evidence.js";
 
 type BenchmarkRefinerModelStream = (input: {
   model: ChatModelRef;
@@ -167,12 +168,14 @@ export async function runHarnessRefinerBenchmarkRefinerStage(input: {
     }));
     refinerBoundaries.push({ session, turn, result });
   }
-  const primaryBoundary = [...refinerBoundaries].sort((left, right) => {
-    const failed = Number(!right.result.grade.passed) - Number(!left.result.grade.passed);
-    if (failed !== 0) return failed;
-    return attemptToolFailureCount(right.result)
-      - attemptToolFailureCount(left.result);
-  })[0];
+  const cohortEvidence = await buildHarnessRefinerBenchmarkCohortEvidence({
+    taskset: input.taskset,
+    adaptationAttempts: input.adaptationAttempts,
+  });
+  const primaryBoundary = refinerBoundaries.find(
+    (boundary) =>
+      boundary.result.attempt.id === cohortEvidence.primaryEvidenceAnchor.attemptId,
+  );
   if (!primaryBoundary) throw new Error("Adaptation cohort produced no Refiner evidence.");
   const detection = await recordLocalHarnessImprovementBoundary({
     store: input.store,
@@ -184,54 +187,6 @@ export async function runHarnessRefinerBenchmarkRefinerStage(input: {
   if (!detection || detection.trigger.decision !== "queue_refiner") {
     throw new Error("Adaptation cohort did not produce one Refiner trigger.");
   }
-  const cohortAttempts = await Promise.all(input.adaptationAttempts.map(async (result) => {
-    const toolFailureCount = attemptToolFailureCount(result);
-    const toolFailureEvidence = await benchmarkToolFailureEvidence({
-      attemptId: result.attempt.id,
-      artifacts: result.artifacts,
-      expectedCount: toolFailureCount,
-    });
-    return {
-      attemptId: result.attempt.id,
-      taskId: result.attempt.taskId,
-      attemptReceiptHash: result.receiptContentHash,
-      gradeHash: contentHash(result.grade),
-      passed: result.grade.passed,
-      score: result.grade.score,
-      failureClass: result.grade.failureClass,
-      feedback: result.grade.feedback,
-      toolFailureCount,
-      toolFailures: toolFailureEvidence.failures,
-      omittedToolFailureCount: toolFailureEvidence.omittedCount,
-      latencyMs: result.attempt.latencyMs,
-      usage: attemptUsageSummary(result.attempt.metadata.usage),
-    };
-  }));
-  const cohortEvidence = {
-    schemaVersion: "openpond.harnessRefinerBenchmarkCohortEvidence.v1" as const,
-    reviewScope: "adaptation_cohort" as const,
-    attemptCount: cohortAttempts.length,
-    passedCount: cohortAttempts.filter((attempt) => attempt.passed).length,
-    scoredAttemptCount: cohortAttempts.filter(
-      (attempt) => typeof attempt.score === "number",
-    ).length,
-    tasksWithToolFailures: cohortAttempts.filter(
-      (attempt) => attempt.toolFailureCount > 0,
-    ).length,
-    totalToolFailureCount: cohortAttempts.reduce(
-      (total, attempt) => total + attempt.toolFailureCount,
-      0,
-    ),
-    totalLatencyMs: cohortAttempts.reduce(
-      (total, attempt) => total + attempt.latencyMs,
-      0,
-    ),
-    totalTokens: cohortAttempts.reduce(
-      (total, attempt) => total + attempt.usage.totalTokens,
-      0,
-    ),
-    attempts: cohortAttempts,
-  };
   const refinerResults = [];
   input.budget.assertAvailable(`Refiner cohort ${detection.trigger.id}`);
   let refinerProviderInvoked = false;

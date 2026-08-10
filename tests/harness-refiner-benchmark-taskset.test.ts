@@ -33,6 +33,7 @@ describe("public Harness Refiner benchmark Taskset", () => {
 
     expect(validation.issues).toEqual([]);
     expect(taskset.id).toBe("harness-refiner-public-v1");
+    expect(taskset.revision).toBe(3);
     expect(taskset.tasks).toHaveLength(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
@@ -58,11 +59,35 @@ describe("public Harness Refiner benchmark Taskset", () => {
 
   test("keeps family coverage balanced across both splits", async () => {
     const taskset = await loadTaskset();
+    const expected = {
+      "artifact-verification": 3,
+      "research-efficiency": 3,
+      "constraint-following": 4,
+    };
     for (const split of ["validation", "frozen_eval"] as const) {
       const tasks = taskset.tasks.filter((task) => task.split === split);
-      expect(tasks.filter((task) => task.tags.includes("artifact-verification"))).toHaveLength(4);
-      expect(tasks.filter((task) => task.tags.includes("research-efficiency"))).toHaveLength(4);
-      expect(tasks.filter((task) => task.tags.includes("constraint-following"))).toHaveLength(2);
+      for (const [family, count] of Object.entries(expected)) {
+        expect(tasks.filter((task) => task.tags.includes(family))).toHaveLength(count);
+      }
+    }
+  });
+
+  test("contains repeated direct-deliverable evidence without source leakage", async () => {
+    const taskset = await loadTaskset();
+    for (const split of ["validation", "frozen_eval"] as const) {
+      const directDeliverables = taskset.tasks.filter(
+        (task) => task.split === split && task.tags.includes("direct-deliverable"),
+      );
+      expect(directDeliverables).toHaveLength(4);
+      for (const task of directDeliverables) {
+        expect(task.expectedOutput).toMatchObject({ deliverable: "message" });
+        expect(task.expectedOutput.mustInclude).toContainEqual(
+          expect.stringMatching(/complete .*message|complete .*reply/i),
+        );
+        expect(task.expectedOutput.mustNot).toContain(
+          "return only a checklist or file path instead of the message",
+        );
+      }
     }
   });
 
