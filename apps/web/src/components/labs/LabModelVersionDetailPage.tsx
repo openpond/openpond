@@ -21,6 +21,7 @@ import {
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import { LabModelRunSummary } from "./LabModelRunSummary";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
+import { benchmarkForegroundUsage } from "./benchmark-attempt-usage";
 import {
   BenchmarkAttemptCharts,
   BenchmarkAttemptTable,
@@ -466,6 +467,7 @@ function LabModelEvaluationRunDetail({
   const stopReceipt = run.receipt?.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
     ? run.receipt as ModelEvaluationStopReceipt
     : null;
+  const foregroundUsage = receipt ? benchmarkForegroundUsage(receipt) : null;
   return (
     <div className="labs-model-version-detail labs-model-evaluation-detail">
       <section className="labs-run-outcome-card">
@@ -499,20 +501,20 @@ function LabModelEvaluationRunDetail({
               {
                 id: "baseline",
                 label: "Held-out baseline",
-                inputTokens: receipt.usage.baseline.inputTokens,
-                outputTokens: receipt.usage.baseline.outputTokens,
-                tokens: receipt.usage.baseline.totalTokens,
+                inputTokens: foregroundUsage!.baseline.inputTokens,
+                outputTokens: foregroundUsage!.baseline.outputTokens,
+                tokens: foregroundUsage!.baseline.totalTokens,
                 passRate: receipt.quality.baselinePassRate,
-                costUsd: receipt.usage.baseline.costUsd,
+                costUsd: foregroundUsage!.baseline.costUsd,
               },
               {
                 id: "candidate",
                 label: "Held-out candidate",
-                inputTokens: receipt.usage.candidate.inputTokens,
-                outputTokens: receipt.usage.candidate.outputTokens,
-                tokens: receipt.usage.candidate.totalTokens,
+                inputTokens: foregroundUsage!.candidate.inputTokens,
+                outputTokens: foregroundUsage!.candidate.outputTokens,
+                tokens: foregroundUsage!.candidate.totalTokens,
                 passRate: receipt.quality.candidatePassRate,
-                costUsd: receipt.usage.candidate.costUsd,
+                costUsd: foregroundUsage!.candidate.costUsd,
               },
             ]}
           />
@@ -521,20 +523,20 @@ function LabModelEvaluationRunDetail({
               {
                 id: "adaptation-baseline",
                 label: "Adaptation baseline",
-                inputTokens: receipt.usage.adaptation.inputTokens,
-                outputTokens: receipt.usage.adaptation.outputTokens,
-                tokens: receipt.usage.adaptation.totalTokens,
+                inputTokens: foregroundUsage!.adaptation.inputTokens,
+                outputTokens: foregroundUsage!.adaptation.outputTokens,
+                tokens: foregroundUsage!.adaptation.totalTokens,
                 passRate: receipt.quality.adaptationBaselinePassRate,
-                costUsd: receipt.usage.adaptation.costUsd,
+                costUsd: foregroundUsage!.adaptation.costUsd,
               },
               {
                 id: "adaptation-candidate",
                 label: "Adaptation replay",
-                inputTokens: receipt.usage.candidateAdaptation.inputTokens,
-                outputTokens: receipt.usage.candidateAdaptation.outputTokens,
-                tokens: receipt.usage.candidateAdaptation.totalTokens,
+                inputTokens: foregroundUsage!.candidate_adaptation.inputTokens,
+                outputTokens: foregroundUsage!.candidate_adaptation.outputTokens,
+                tokens: foregroundUsage!.candidate_adaptation.totalTokens,
                 passRate: receipt.quality.adaptationCandidatePassRate,
-                costUsd: receipt.usage.candidateAdaptation.costUsd,
+                costUsd: foregroundUsage!.candidate_adaptation.costUsd,
               },
             ]}
           />

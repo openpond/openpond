@@ -26,6 +26,10 @@ import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNav
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
 import { BenchmarkComparisonSummary } from "../apps/web/src/components/labs/LabModelEvaluationBenchmarkDetails";
 import {
+  benchmarkForegroundUsage,
+  benchmarkSelectedAttempts,
+} from "../apps/web/src/components/labs/benchmark-attempt-usage";
+import {
   labWorkproductProjection,
 } from "../apps/web/src/components/labs/lab-workproducts";
 import {
@@ -263,6 +267,77 @@ describe("Lab workspace", () => {
     expect(markup).toContain(">Quality gate</dt><dd>Failed<");
     expect(markup).toContain(">Diagnostic gross token savings<");
     expect(markup).toContain("Candidate held-out quality did not pass every case.");
+  });
+
+  test("charts selected benchmark attempts without counting discarded recovery work", () => {
+    const attempt = (input: {
+      attemptId: string;
+      phase: "candidate" | "candidate_adaptation";
+      taskId: string;
+      inputTokens: number;
+      outputTokens: number;
+      startedAt: string;
+    }) => ({
+      ...input,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score: 1,
+      failureClass: null,
+      totalTokens: input.inputTokens + input.outputTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+    });
+    const receipt = {
+      attempts: [
+        attempt({
+          attemptId: "candidate-discarded",
+          phase: "candidate",
+          taskId: "held-out-task",
+          inputTokens: 47_955,
+          outputTokens: 2_574,
+          startedAt: "2026-08-10T20:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "candidate-selected",
+          phase: "candidate",
+          taskId: "held-out-task",
+          inputTokens: 999_979,
+          outputTokens: 41_114,
+          startedAt: "2026-08-10T21:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "adaptation-discarded",
+          phase: "candidate_adaptation",
+          taskId: "adaptation-task",
+          inputTokens: 562_907,
+          outputTokens: 7_523,
+          startedAt: "2026-08-10T20:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "adaptation-selected",
+          phase: "candidate_adaptation",
+          taskId: "adaptation-task",
+          inputTokens: 2_162_656,
+          outputTokens: 79_062,
+          startedAt: "2026-08-10T21:00:00.000Z",
+        }),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const usage = benchmarkForegroundUsage(receipt);
+
+    expect(benchmarkSelectedAttempts(receipt.attempts)).toHaveLength(2);
+    expect(usage.candidate).toMatchObject({
+      inputTokens: 999_979,
+      outputTokens: 41_114,
+      totalTokens: 1_041_093,
+    });
+    expect(usage.candidate_adaptation).toMatchObject({
+      inputTokens: 2_162_656,
+      outputTokens: 79_062,
+      totalTokens: 2_241_718,
+    });
   });
 
   test("projects managed publication in Serving", () => {

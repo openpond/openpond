@@ -6,6 +6,10 @@ import type {
 
 import { statusLabel } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  benchmarkResultAccepted,
+  benchmarkSelectedAttempts,
+} from "./benchmark-attempt-usage";
 
 export function StoppedEvaluationDetail({
   receipt,
@@ -93,7 +97,7 @@ export function BenchmarkProgress({ run }: { run: ModelRun }) {
 }
 
 export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationReceipt }) {
-  const attempts = receipt.attempts ?? [];
+  const attempts = benchmarkSelectedAttempts(receipt.attempts ?? []);
   const baseline = attempts.filter((attempt) => attempt.phase === "baseline");
   const candidate = attempts.filter((attempt) => attempt.phase === "candidate");
   const adaptation = attempts.filter((attempt) => attempt.phase === "adaptation");
@@ -140,11 +144,7 @@ export function BenchmarkComparisonSummary({
   tasksetName: string;
   onOpenTaskset?: () => void;
 }) {
-  const acceptedImprovement =
-    receipt.terminalClassification === "improved"
-    && receipt.quality.passed
-    && receipt.lineage.valid
-    && receipt.invalidReasons.length === 0;
+  const acceptedImprovement = benchmarkResultAccepted(receipt);
   const diagnosticLabel = (label: string) =>
     acceptedImprovement ? label : `Diagnostic ${label.toLowerCase()}`;
 
@@ -324,9 +324,18 @@ export function BenchmarkAttemptTable({
   receipt: ModelEvaluationReceipt | ModelEvaluationStopReceipt;
   onOpenConversation: (conversationId: string) => void;
 }) {
+  const attempts = receipt.schemaVersion === "openpond.modelEvaluationReceipt.v1"
+    ? benchmarkSelectedAttempts(receipt.attempts ?? [])
+    : receipt.attempts ?? [];
   return (
     <section className="labs-run-summary-card">
-      <header><h3>Task attempts</h3></header>
+      <header>
+        <h3>
+          {receipt.schemaVersion === "openpond.modelEvaluationReceipt.v1"
+            ? "Selected task results"
+            : "Completed attempts"}
+        </h3>
+      </header>
       <div className="training-table-wrap">
         <table className="training-data-table labs-benchmark-attempt-table">
           <thead>
@@ -340,7 +349,7 @@ export function BenchmarkAttemptTable({
             </tr>
           </thead>
           <tbody>
-            {(receipt.attempts ?? []).map((attempt) => (
+            {attempts.map((attempt) => (
               <tr key={`${attempt.phase}:${attempt.attemptId}`}>
                 <td>{humanizeTaskId(attempt.taskId)}</td>
                 <td>{attempt.phase}</td>

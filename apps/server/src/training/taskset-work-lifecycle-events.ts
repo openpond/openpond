@@ -33,6 +33,39 @@ export async function appendTasksetTurnStarted(input: LifecycleContext & {
   }));
 }
 
+export async function appendTasksetAssistantText(input: LifecycleContext & {
+  text: string;
+}) {
+  if (!input.text) return;
+  await input.store.appendRuntimeEvent(event({
+    sessionId: input.session.id,
+    turnId: input.turnId,
+    name: "assistant.delta",
+    source: "provider",
+    appId: input.session.appId,
+    output: input.text,
+  }));
+}
+
+export async function appendTasksetTurnTerminal(input: LifecycleContext & {
+  status: "completed" | "failed" | "interrupted";
+  error: string | null;
+}) {
+  await input.store.appendRuntimeEvent(event({
+    sessionId: input.session.id,
+    turnId: input.turnId,
+    name: input.status === "completed"
+      ? "turn.completed"
+      : input.status === "interrupted"
+        ? "turn.interrupted"
+        : "turn.failed",
+    source: "server",
+    appId: input.session.appId,
+    status: input.status === "failed" ? "failed" : "completed",
+    error: input.error ?? undefined,
+  }));
+}
+
 export async function appendTasksetToolStarted(input: LifecycleContext & {
   callId: string;
   name: string;

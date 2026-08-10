@@ -27,6 +27,7 @@ import {
 import { latestTurnCompletionState } from "../lib/turn-completion-state";
 import { isCloudWorkspaceKind } from "../lib/workspace-location";
 import { localPathWorkspaceId } from "@openpond/contracts";
+import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
@@ -63,6 +64,7 @@ export function useRightChatPanelViews(input: {
         : null;
       const provider = panel.provider;
       const isHistoryPanel = isCodexHistorySessionId(panel.sessionId);
+      const livePanelEvents = runtimeEventsForSession(runtimeIndexes, panel.sessionId);
       const panelEvents = isHistoryPanel
         ? (panel.sessionId
             ? rightChatHistoryEvents[panel.sessionId]
@@ -70,7 +72,12 @@ export function useRightChatPanelViews(input: {
           (panel.sessionId === selectedSessionId
             ? codexHistoryEvents
             : EMPTY_RUNTIME_EVENTS)
-        : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
+        : mergeRuntimeEventLists(
+            panel.sessionId
+              ? rightChatHistoryEvents[panel.sessionId] ?? EMPTY_RUNTIME_EVENTS
+              : EMPTY_RUNTIME_EVENTS,
+            livePanelEvents,
+          );
       const panelIndexes = isHistoryPanel
         ? buildRuntimeIndexes(panelEvents, [])
         : runtimeIndexes;

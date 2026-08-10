@@ -20,6 +20,10 @@ import {
 } from "../../lib/app-models";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  benchmarkForegroundUsage,
+  benchmarkResultAccepted,
+} from "./benchmark-attempt-usage";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
 type TrainingController = ReturnType<typeof useTraining>;
@@ -64,6 +68,7 @@ export function LabModelBenchmarksSection({
   );
   const latest = runs[0] ?? null;
   const receipt = evaluationReceipt(latest?.receipt ?? null);
+  const foregroundUsage = receipt ? benchmarkForegroundUsage(receipt) : null;
   const stopReceipt = evaluationStopReceipt(latest?.receipt ?? null);
   const taskset = (training.payload?.tasksets ?? []).find(
     (candidate) => candidate.benchmark?.definitionId === "harness-refiner",
@@ -148,20 +153,20 @@ export function LabModelBenchmarksSection({
                 {
                   id: "baseline",
                   label: "Baseline",
-                  inputTokens: receipt.usage.baseline.inputTokens,
-                  outputTokens: receipt.usage.baseline.outputTokens,
-                  tokens: receipt.usage.baseline.totalTokens,
+                  inputTokens: foregroundUsage!.baseline.inputTokens,
+                  outputTokens: foregroundUsage!.baseline.outputTokens,
+                  tokens: foregroundUsage!.baseline.totalTokens,
                   passRate: receipt.quality.baselinePassRate,
-                  costUsd: receipt.usage.baseline.costUsd,
+                  costUsd: foregroundUsage!.baseline.costUsd,
                 },
                 {
                   id: "candidate",
                   label: "Candidate Harness",
-                  inputTokens: receipt.usage.candidate.inputTokens,
-                  outputTokens: receipt.usage.candidate.outputTokens,
-                  tokens: receipt.usage.candidate.totalTokens,
+                  inputTokens: foregroundUsage!.candidate.inputTokens,
+                  outputTokens: foregroundUsage!.candidate.outputTokens,
+                  tokens: foregroundUsage!.candidate.totalTokens,
                   passRate: receipt.quality.candidatePassRate,
-                  costUsd: receipt.usage.candidate.costUsd,
+                  costUsd: foregroundUsage!.candidate.costUsd,
                 },
               ]}
             />
@@ -353,7 +358,8 @@ function tokenDelta(receipt: ModelEvaluationReceipt) {
   const percent = receipt.foregroundTokenDeltaPercent === null
     ? ""
     : ` · ${direction}${receipt.foregroundTokenDeltaPercent.toFixed(1)}%`;
-  return `${direction}${receipt.foregroundTokenDelta.toLocaleString()} tokens${percent}`;
+  const prefix = benchmarkResultAccepted(receipt) ? "" : "Diagnostic · ";
+  return `${prefix}${direction}${receipt.foregroundTokenDelta.toLocaleString()} tokens${percent}`;
 }
 
 function resultLabel(receipt: ModelEvaluationReceipt) {

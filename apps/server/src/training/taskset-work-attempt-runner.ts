@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   FileOutputRefSchema,
   TaskAttemptResultSchema,
+  TurnSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
   type FileOutputRef,
@@ -50,9 +51,11 @@ import {
 } from "./taskset-work-cost-evidence.js";
 import { resolveTasksetWorkAssets } from "./taskset-work-assets.js";
 import {
+  appendTasksetAssistantText,
   appendTasksetToolCompleted,
   appendTasksetToolLifecycle,
   appendTasksetToolStarted,
+  appendTasksetTurnTerminal,
   appendTasksetTurnStarted,
 } from "./taskset-work-lifecycle-events.js";
 import {
@@ -207,6 +210,7 @@ export async function runTasksetWorkAttempt(input: {
   const turnId = `taskset_work_turn_${contentHash([
     attemptId,
     input.task.id,
+    startedAt,
   ]).slice(0, 24)}`;
   const controller = new AbortController();
   let timedOut = false;
@@ -278,6 +282,27 @@ export async function runTasksetWorkAttempt(input: {
         parentModelRunId: input.parentModelRunId ?? null,
       },
     });
+    await input.store.insertTurn(TurnSchema.parse({
+      id: turnId,
+      sessionId: session.id,
+      providerTurnId: null,
+      modelRef: input.model,
+      prompt: tasksetWorkUserPrompt(input.task),
+      startedAt,
+      completedAt: null,
+      status: "in_progress",
+      error: null,
+      metadata: {
+        automatedTasksetWorkAttempt: true,
+        tasksetId: input.taskset.id,
+        taskId: input.task.id,
+        attemptId,
+        parentModelRunId: input.parentModelRunId ?? null,
+      },
+      createImproveRun: null,
+      profileSnapshot: null,
+      harnessSnapshot: null,
+    }));
     await appendTasksetTurnStarted({
       store: input.store,
       session,
@@ -381,6 +406,12 @@ export async function runTasksetWorkAttempt(input: {
       }
       throwIfAborted(controller.signal);
       const toolCalls = accumulator.completed();
+      await appendTasksetAssistantText({
+        store: input.store,
+        session,
+        turnId,
+        text: turnText,
+      });
       trace.push({
         kind: "model",
         turn,
@@ -669,6 +700,26 @@ export async function runTasksetWorkAttempt(input: {
     artifactIdByOutputPath.set(saved.relativePath, artifact.id);
   }
   const completedAt = timestamp();
+  if (session) {
+    const turnStatus = status === "cancelled" || status === "timeout"
+      ? "interrupted"
+      : status === "environment_failure" || status === "infrastructure_failure"
+        ? "failed"
+        : "completed";
+    await appendTasksetTurnTerminal({
+      store: input.store,
+      session,
+      turnId,
+      status: turnStatus,
+      error: turnStatus === "completed" ? null : infrastructureError,
+    });
+    await input.store.updateTurn(turnId, (turn) => ({
+      ...turn,
+      completedAt,
+      status: turnStatus,
+      error: turnStatus === "completed" ? null : infrastructureError,
+    }));
+  }
   const runtimeEvents = session
     ? await input.runtime.runtimeEventsForSession(session.id)
     : [];
