@@ -19,21 +19,21 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  margin: 0 65px 6px;
+  margin: 0 14px -1px;
 }
 
 .composer-steer-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 7px;
   min-width: 0;
-  min-height: 33px;
+  min-height: 40px;
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 9px;
-  background: #282828;
+  border-radius: 20px;
+  background: #272727;
   color: #e8e8e8;
-  padding: 5px 7px 5px 10px;
+  padding: 5px 9px 5px 12px;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
 }
 
@@ -72,10 +72,10 @@
 
 .composer-steer-row-action {
   gap: 5px;
-  min-width: 58px;
+  min-width: 0;
   padding: 0 7px;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 550;
 }
 
 .composer-steer-row-action.primary {
@@ -99,91 +99,6 @@
 .composer-steer-row-action:disabled,
 .composer-steer-row-icon-button:disabled {
   opacity: 0.46;
-}
-
-.composer-steer-edit-backdrop {
-  position: fixed;
-  z-index: 80;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.42);
-}
-
-.composer-steer-edit-dialog {
-  display: grid;
-  gap: 12px;
-  width: min(520px, 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  background: #252525;
-  color: #f3f3f3;
-  padding: 14px;
-  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.42);
-}
-
-.composer-steer-edit-field {
-  display: grid;
-  gap: 8px;
-  color: #dcdcdc;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.composer-steer-edit-field textarea {
-  min-height: 128px;
-  resize: vertical;
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 8px;
-  background: #1d1d1d;
-  color: #f2f2f2;
-  padding: 10px;
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
-.composer-steer-edit-field textarea:focus {
-  outline: 0;
-}
-
-.composer-steer-edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.composer-steer-edit-actions button {
-  height: 30px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #ededed;
-  padding: 0 10px;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.composer-steer-edit-actions button.primary {
-  background: #e7e7e7;
-  color: #191919;
-}
-
-.composer-steer-edit-actions button:hover:not(:disabled),
-.composer-steer-edit-actions button:focus-visible {
-  outline: 0;
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.composer-steer-edit-actions button.primary:hover:not(:disabled),
-.composer-steer-edit-actions button.primary:focus-visible {
-  background: #fff;
-}
-
-.composer-steer-edit-actions button:disabled {
-  opacity: 0.45;
 }
 
 .submit-issue-dialog {
@@ -1030,19 +945,6 @@
   .composer-goal-strip,
   .composer-create-strip {
     margin-inline: 24px;
-  }
-
-  .composer-steer-row {
-    grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
-  }
-
-  .composer-steer-row-action span {
-    display: none;
-  }
-
-  .composer-steer-row-action {
-    min-width: 24px;
-    padding: 0;
   }
 
   .composer-create-options,
