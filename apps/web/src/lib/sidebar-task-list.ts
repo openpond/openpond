@@ -12,6 +12,12 @@ export type SidebarTaskFilter =
 
 export type SidebarTaskSort = "recent" | "manual";
 
+export type SidebarTasksetFilterOption = {
+  id: string;
+  name: string;
+  chatCount: number;
+};
+
 export type SidebarTaskShortcutState = {
   count: number;
   label: "In Progress" | "Later";
@@ -45,6 +51,7 @@ export function sidebarTaskRows(input: {
   doneSessions: readonly Session[];
   filter: SidebarTaskFilter;
   inProgressSessionIds: ReadonlySet<string>;
+  selectedTasksetId?: string | null;
   previewSessionIds?: readonly string[] | null;
   sort: SidebarTaskSort;
 }): Session[] {
@@ -55,12 +62,16 @@ export function sidebarTaskRows(input: {
   } else if (input.filter === "all") {
     rows.push(
       ...input.activeSessions.filter((session) => !sessionTaskset(session)),
-      ...input.doneSessions.filter((session) => !sessionTaskset(session)),
+      ...input.doneSessions.filter((session) => !sessionTaskset(session))
     );
   } else if (input.filter === "tasksets") {
     rows.push(
-      ...input.activeSessions.filter((session) => sessionTaskset(session)),
-      ...input.doneSessions.filter((session) => sessionTaskset(session)),
+      ...input.activeSessions.filter((session) =>
+        matchesSelectedTaskset(session, input.selectedTasksetId)
+      ),
+      ...input.doneSessions.filter((session) =>
+        matchesSelectedTaskset(session, input.selectedTasksetId)
+      ),
     );
   } else {
     for (const session of input.activeSessions) {
@@ -108,6 +119,16 @@ export function sidebarTaskRows(input: {
     if (left.order !== right.order) return left.order - right.order;
     return compareRecentSessions(left, right);
   });
+}
+
+function matchesSelectedTaskset(
+  session: Session,
+  selectedTasksetId: string | null | undefined
+): boolean {
+  const taskset = sessionTaskset(session);
+  return Boolean(
+    taskset && (!selectedTasksetId || taskset.id === selectedTasksetId)
+  );
 }
 
 export function sidebarTaskShortcutState(input: {

@@ -103,7 +103,7 @@ describe("sidebar task list controls", () => {
     expect(markup).not.toContain(">Show less<");
   });
 
-  test("offers Tasksets as a top-level task mode and hides linked chats by default", () => {
+  test("offers individual Tasksets in the filter menu and hides linked chats by default", () => {
     const regularSession = session({ id: "regular", title: "Normal task" });
     const firstAttempt = session({
       id: "attempt-one",
@@ -124,17 +124,20 @@ describe("sidebar task list controls", () => {
         sidebarProps({
           activeSessions: [regularSession, firstAttempt, modelChat],
           chatRows: [regularSession, firstAttempt, modelChat],
+          sectionMenuOpen: "tasks-filter",
           visibleChatRows: [regularSession, firstAttempt, modelChat],
         }),
       ),
     );
 
-    expect(markup).toContain('aria-label="Show 2 Taskset chats"');
     expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain(">Support benchmark<");
+    expect(markup).toContain('class="section-menu-option-count"');
     expect(markup).toContain(">Normal task<");
     expect(markup).not.toContain(">Benchmark · First case<");
     expect(markup).not.toContain(">Try the trained model<");
     expect(markup.match(/data-session-id=/g)).toHaveLength(1);
+    expect(markup).not.toContain('data-tooltip="Filter:');
   });
 
   test("renders project detail and updated date for development tasks without elapsed runtime", () => {
@@ -356,6 +359,28 @@ describe("sidebar task filters", () => {
         sort: "manual",
       }).map((row) => row.id)
     ).toEqual(["active", "running", "pinned", "saved", "done"]);
+  });
+
+  test("Taskset mode can narrow linked chats to one Taskset", () => {
+    const first = session({
+      id: "taskset-first",
+      metadata: { tasksetId: "support", tasksetName: "Support" },
+    });
+    const second = session({
+      id: "taskset-second",
+      metadata: { tasksetId: "finance", tasksetName: "Finance" },
+    });
+
+    expect(
+      sidebarTaskRows({
+        activeSessions: [active, first, second],
+        doneSessions: [],
+        filter: "tasksets",
+        inProgressSessionIds: new Set(),
+        selectedTasksetId: "support",
+        sort: "recent",
+      }).map((row) => row.id),
+    ).toEqual(["taskset-first"]);
   });
 
   test("reordering a filtered view preserves hidden task positions", () => {

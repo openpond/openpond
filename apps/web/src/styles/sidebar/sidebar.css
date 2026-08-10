@@ -761,6 +761,29 @@
   display: inline-flex;
   align-items: center;
   gap: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+  visibility: hidden;
+}
+
+.sidebar-task-section .section-header:hover .sidebar-task-mode-buttons,
+.sidebar-task-section .section-header:focus-within .sidebar-task-mode-buttons,
+.sidebar-task-mode-buttons.visible {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.section-menu-popover .section-menu-taskset-option {
+  padding-left: 12px;
+}
+
+.section-menu-option-count {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .sidebar-project-group,

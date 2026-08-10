@@ -16,6 +16,7 @@ import {
   sidebarTaskShortcutState,
   type SidebarTaskFilter,
   type SidebarTaskSort,
+  type SidebarTasksetFilterOption,
 } from "../../lib/sidebar-task-list";
 import {
   sidebarTerminalIndicator,
@@ -107,6 +108,9 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
+  const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
+    null
+  );
   const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] =
     useState<Set<string>>(() => new Set());
   const taskNoun = experience === "chat" ? "chats" : "tasks";
@@ -178,6 +182,7 @@ export function SidebarSectionList({
         doneSessions: archivedSessions,
         filter: taskFilter,
         inProgressSessionIds,
+        selectedTasksetId,
         previewSessionIds: taskPreviewSessionIds,
         sort: taskSort,
       }),
@@ -185,17 +190,27 @@ export function SidebarSectionList({
       activeSessions,
       archivedSessions,
       inProgressSessionIds,
+      selectedTasksetId,
       taskFilter,
       taskPreviewSessionIds,
       taskSort,
     ]
   );
-  const tasksetChatCount = useMemo(
-    () =>
-      [...activeSessions, ...archivedSessions].filter((session) =>
-        sessionTaskset(session),
-      ).length,
-    [activeSessions, archivedSessions],
+  const tasksetOptions = useMemo<SidebarTasksetFilterOption[]>(
+    () => {
+      const byId = new Map<string, SidebarTasksetFilterOption>();
+      for (const session of [...activeSessions, ...archivedSessions]) {
+        const taskset = sessionTaskset(session);
+        if (!taskset) continue;
+        const current = byId.get(taskset.id);
+        if (current) current.chatCount += 1;
+        else byId.set(taskset.id, { ...taskset, chatCount: 1 });
+      }
+      return [...byId.values()].sort((left, right) =>
+        left.name.localeCompare(right.name)
+      );
+    },
+    [activeSessions, archivedSessions]
   );
   const visibleTaskRows = filteredTaskRows.slice(
     0,
@@ -421,7 +436,14 @@ export function SidebarSectionList({
   }
 
   function changeTaskFilter(nextFilter: SidebarTaskFilter) {
+    if (nextFilter !== "tasksets") setSelectedTasksetId(null);
     setTaskFilter(nextFilter);
+    setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+  }
+
+  function changeTasksetFilter(tasksetId: string | null) {
+    setSelectedTasksetId(tasksetId);
+    setTaskFilter("tasksets");
     setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
   }
 
@@ -451,7 +473,13 @@ export function SidebarSectionList({
         }`}
         titleAccessory={
           experience !== "chat" ? (
-            <div className="sidebar-task-mode-buttons">
+            <div
+              className={`sidebar-task-mode-buttons${
+                taskFilter === "saved_for_later" || taskFilter === "tasksets"
+                  ? " visible"
+                  : ""
+              }`}
+            >
               <button
                 type="button"
                 className={`section-icon sidebar-task-count-bubble${
@@ -467,23 +495,6 @@ export function SidebarSectionList({
                   {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
                 </span>
               </button>
-              <button
-                type="button"
-                className={`section-icon sidebar-task-count-bubble${
-                  taskFilter === "tasksets" ? " active" : ""
-                }`}
-                aria-label={`Show ${tasksetChatCount} Taskset ${
-                  tasksetChatCount === 1 ? "chat" : "chats"
-                }`}
-                onClick={() =>
-                  changeTaskFilter(taskFilter === "tasksets" ? "active" : "tasksets")
-                }
-              >
-                <span>Tasksets</span>
-                <span className="sidebar-task-count-badge" aria-hidden="true">
-                  {tasksetChatCount > 99 ? "99+" : tasksetChatCount}
-                </span>
-              </button>
             </div>
           ) : null
         }
@@ -495,10 +506,13 @@ export function SidebarSectionList({
             filter={taskFilter}
             noun={taskNoun}
             onFilterChange={changeTaskFilter}
+            onTasksetChange={changeTasksetFilter}
             onSortChange={changeTaskSort}
             openMenu={sectionMenuOpen}
             setOpenMenu={setSectionMenuOpen}
             sort={taskSort}
+            selectedTasksetId={selectedTasksetId}
+            tasksets={tasksetOptions}
           />
         }
       >
