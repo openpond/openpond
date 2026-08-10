@@ -11,8 +11,7 @@ import {
   streamOpenAiCompatibleChatCompletion,
 } from "../openpond/openai-compatible-provider.js";
 import type { ProviderSecrets } from "../openpond/provider-secrets.js";
-import { LOCAL_ADAPTER_PROVIDER_ID } from "./local-adapter-models.js";
-import type { createTrainedAdapterChatRuntime } from "./trained-adapter-chat-runtime.js";
+import type { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingModelRuntime(deps: {
@@ -20,10 +19,7 @@ export function createTrainingModelRuntime(deps: {
     settings: ProviderSettings;
     secrets: ProviderSecrets;
   }>;
-  getTrainedAdapterChatRuntime(): Pick<
-    ReturnType<typeof createTrainedAdapterChatRuntime>,
-    "stream"
-  >;
+  managedAdapterChatRuntime: Pick<ReturnType<typeof createManagedAdapterChatRuntime>, "appliesTo" | "stream">;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
 }) {
   async function trainingModelText(input: {
@@ -39,8 +35,8 @@ export function createTrainingModelRuntime(deps: {
     onUsage?: (usage: unknown, costUsd?: number) => void;
   }): Promise<string> {
     let text = "";
-    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of deps.getTrainedAdapterChatRuntime().stream({
+    if (input.model.providerId === "openpond" && await deps.managedAdapterChatRuntime.appliesTo(input.model.modelId)) {
+      for await (const delta of deps.managedAdapterChatRuntime.stream({
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
@@ -107,8 +103,8 @@ export function createTrainingModelRuntime(deps: {
 
   const trainingModelStream: TasksetWorkModelStream =
     async function* (input) {
-      if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        for await (const delta of deps.getTrainedAdapterChatRuntime().stream({
+      if (input.model.providerId === "openpond" && await deps.managedAdapterChatRuntime.appliesTo(input.model.modelId)) {
+        for await (const delta of deps.managedAdapterChatRuntime.stream({
           modelId: input.model.modelId,
           messages: input.messages,
           requestId: input.requestId,
