@@ -767,9 +767,8 @@
   visibility: hidden;
 }
 
-.sidebar-task-section .section-header:hover .sidebar-task-mode-buttons,
-.sidebar-task-section .section-header:focus-within .sidebar-task-mode-buttons,
-.sidebar-task-mode-buttons.visible {
+.sidebar-task-section:hover .sidebar-task-mode-buttons,
+.sidebar-task-section:focus-within .sidebar-task-mode-buttons {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;

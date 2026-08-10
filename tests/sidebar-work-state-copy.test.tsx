@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import { SidebarSectionList } from "../apps/web/src/components/sidebar/SidebarSectionList";
 import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.types";
 import type { SidebarProjectItem } from "../apps/web/src/lib/app-models";
+import { tasksetNameFromId } from "../apps/web/src/lib/session-tasksets";
 import {
   mergeSidebarTaskOrder,
   sidebarTaskEmptyLabel,
@@ -131,13 +132,23 @@ describe("sidebar task list controls", () => {
     );
 
     expect(markup).toContain(">Tasksets<");
-    expect(markup).toContain(">Support benchmark<");
-    expect(markup).toContain('class="section-menu-option-count"');
+    expect(markup).toContain('role="menuitem" aria-expanded="false"');
+    expect(markup).not.toContain(">Support benchmark<");
+    expect(markup).not.toContain('class="section-menu-option-count"');
     expect(markup).toContain(">Normal task<");
     expect(markup).not.toContain(">Benchmark · First case<");
     expect(markup).not.toContain(">Try the trained model<");
     expect(markup.match(/data-session-id=/g)).toHaveLength(1);
     expect(markup).not.toContain('data-tooltip="Filter:');
+  });
+
+  test("derives a readable legacy Taskset name when stored metadata lacks one", () => {
+    expect(
+      tasksetNameFromId("benchmark-harness-refiner-b227699dcd0c5007")
+    ).toBe("Harness Refiner");
+    expect(tasksetNameFromId("taskset_work_fixture_portability")).toBe(
+      "Work Fixture Portability"
+    );
   });
 
   test("renders project detail and updated date for development tasks without elapsed runtime", () => {

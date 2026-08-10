@@ -1,5 +1,16 @@
-import { Fragment, type Dispatch, type SetStateAction } from "react";
-import { Check, ListFilter, MoreHorizontal } from "../icons";
+import {
+  Fragment,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  ListFilter,
+  MoreHorizontal,
+} from "../icons";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import {
   SIDEBAR_TASK_FILTER_OPTIONS,
@@ -32,6 +43,7 @@ export function SidebarTaskListControls({
   selectedTasksetId: string | null;
   tasksets: readonly SidebarTasksetFilterOption[];
 }) {
+  const [tasksetsExpanded, setTasksetsExpanded] = useState(false);
   const selectedTaskset = tasksets.find(
     (taskset) => taskset.id === selectedTasksetId
   );
@@ -110,25 +122,58 @@ export function SidebarTaskListControls({
           >
             {SIDEBAR_TASK_FILTER_OPTIONS.map((option) => (
               <Fragment key={option.value}>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={filter === option.value && !selectedTasksetId}
-                  onClick={() => {
-                    if (option.value === "tasksets") onTasksetChange(null);
-                    else onFilterChange(option.value);
-                    setOpenMenu(null);
-                  }}
-                >
-                  <span className="section-menu-check" aria-hidden="true">
-                    {filter === option.value && !selectedTasksetId ? (
-                      <Check size={13} />
-                    ) : null}
-                  </span>
-                  <span>{option.label}</span>
-                </button>
-                {option.value === "tasksets"
-                  ? tasksets.map((taskset) => (
+                {option.value === "tasksets" ? (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-expanded={tasksetsExpanded}
+                    onClick={() => setTasksetsExpanded((current) => !current)}
+                  >
+                    <span className="section-menu-check" aria-hidden="true">
+                      {tasksetsExpanded ? (
+                        <ChevronDown size={13} />
+                      ) : (
+                        <ChevronRight size={13} />
+                      )}
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={filter === option.value}
+                    onClick={() => {
+                      onFilterChange(option.value);
+                      setOpenMenu(null);
+                    }}
+                  >
+                    <span className="section-menu-check" aria-hidden="true">
+                      {filter === option.value ? <Check size={13} /> : null}
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                )}
+                {option.value === "tasksets" && tasksetsExpanded ? (
+                  <>
+                    <button
+                      className="section-menu-taskset-option"
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={filter === "tasksets" && !selectedTasksetId}
+                      onClick={() => {
+                        onTasksetChange(null);
+                        setOpenMenu(null);
+                      }}
+                    >
+                      <span className="section-menu-check" aria-hidden="true">
+                        {filter === "tasksets" && !selectedTasksetId ? (
+                          <Check size={13} />
+                        ) : null}
+                      </span>
+                      <span>All Tasksets</span>
+                    </button>
+                    {tasksets.map((taskset) => (
                       <button
                         className="section-menu-taskset-option"
                         key={taskset.id}
@@ -157,8 +202,9 @@ export function SidebarTaskListControls({
                           {taskset.chatCount}
                         </span>
                       </button>
-                    ))
-                  : null}
+                    ))}
+                  </>
+                ) : null}
               </Fragment>
             ))}
           </div>

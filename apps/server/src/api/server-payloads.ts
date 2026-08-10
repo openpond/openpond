@@ -91,6 +91,7 @@ import {
   parseProviderValidationRequest,
   providerAllowsLocalCredential,
 } from "../openpond/provider-registry.js";
+import { sessionsWithTasksetNames } from "./session-taskset-names.js";
 import {
   isOpenAiCompatibleProviderId,
   listOpenAiCompatibleProviderModels,
@@ -889,6 +890,10 @@ export function createServerPayloads(deps: {
       localProjects,
       openPond.apps
     );
+    const namedSessionShells = await sessionsWithTasksetNames(
+      sessionShells,
+      (tasksetId) => store.getTaskset(tasksetId)
+    );
     const scope = openPondCacheScope(openPond.account);
     const [sidebarAppPreferences, sidebarFileBookmarks] = await Promise.all([
       store.getSidebarAppPreferences(scope),
@@ -929,7 +934,7 @@ export function createServerPayloads(deps: {
       appsError: openPond.appsError,
       appsMeta: openPond.appsMeta,
       accountMeta: openPond.accountMeta,
-      sessions: validBootstrapSessions(sessionShells),
+      sessions: validBootstrapSessions(namedSessionShells),
       events: eventWindow.entries.map((entry) => entry.event),
       eventWindow: {
         latestSequence: eventWindow.latestSequence,

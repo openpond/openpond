@@ -473,13 +473,7 @@ export function SidebarSectionList({
         }`}
         titleAccessory={
           experience !== "chat" ? (
-            <div
-              className={`sidebar-task-mode-buttons${
-                taskFilter === "saved_for_later" || taskFilter === "tasksets"
-                  ? " visible"
-                  : ""
-              }`}
-            >
+            <div className="sidebar-task-mode-buttons">
               <button
                 type="button"
                 className={`section-icon sidebar-task-count-bubble${
