@@ -757,6 +757,12 @@
   gap: 3px;
 }
 
+.sidebar-task-mode-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .sidebar-project-group,
 .sidebar-project-children {
   display: grid;

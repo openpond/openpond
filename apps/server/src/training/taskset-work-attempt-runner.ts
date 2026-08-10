@@ -254,6 +254,7 @@ export async function runTasksetWorkAttempt(input: {
       metadata: {
         automatedTasksetWorkAttempt: true,
         tasksetId: input.taskset.id,
+        tasksetName: input.taskset.name,
         tasksetHash: input.taskset.contentHash,
         taskId: input.task.id,
         attemptId,

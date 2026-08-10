@@ -85,6 +85,7 @@ export function trainingModelChatTurnMetadata(
       ? { crossSystemTaskId: task.generatedTaskId }
       : { trainingHarnessTaskId: task.generatedTaskId }),
     trainingTasksetId: handoff.tasksetId,
+    trainingTasksetName: handoff.tasksetName,
     source: "training_model_chat_handoff",
   };
 }

@@ -6,6 +6,7 @@ import {
 } from "../../lib/app-models";
 import { projectlessSidebarSessionLabel } from "../../lib/experience-sessions";
 import { isTaskDraftSession } from "../../lib/task-drafts";
+import { sessionTaskset } from "../../lib/session-tasksets";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import {
@@ -110,14 +111,22 @@ export function SidebarSectionList({
     useState<Set<string>>(() => new Set());
   const taskNoun = experience === "chat" ? "chats" : "tasks";
   const taskSectionLabel = experience === "chat" ? "Chats" : "Tasks";
+  const regularActiveSessions = useMemo(
+    () => activeSessions.filter((session) => sessionTaskset(session) === null),
+    [activeSessions],
+  );
+  const regularSavedForLaterSessions = useMemo(
+    () => savedForLaterSessions.filter((session) => sessionTaskset(session) === null),
+    [savedForLaterSessions],
+  );
   const activeTaskCount = Math.max(
     0,
-    activeSessions.length - savedForLaterSessions.length
+    regularActiveSessions.length - regularSavedForLaterSessions.length
   );
   const taskShortcut = sidebarTaskShortcutState({
     activeCount: activeTaskCount,
     filter: taskFilter,
-    savedForLaterCount: savedForLaterSessions.length,
+    savedForLaterCount: regularSavedForLaterSessions.length,
   });
   const projectsSectionRows = projectRows ?? [
     ...localProjectRows,
@@ -180,6 +189,13 @@ export function SidebarSectionList({
       taskPreviewSessionIds,
       taskSort,
     ]
+  );
+  const tasksetChatCount = useMemo(
+    () =>
+      [...activeSessions, ...archivedSessions].filter((session) =>
+        sessionTaskset(session),
+      ).length,
+    [activeSessions, archivedSessions],
   );
   const visibleTaskRows = filteredTaskRows.slice(
     0,
@@ -435,21 +451,40 @@ export function SidebarSectionList({
         }`}
         titleAccessory={
           experience !== "chat" ? (
-            <button
-              type="button"
-              className={`section-icon sidebar-task-count-bubble${
-                taskFilter === "saved_for_later" ? " active" : ""
-              }`}
-              aria-label={`Show ${taskShortcut.count} ${
-                taskShortcut.targetLabel
-              } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
-              onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
-            >
-              <span>{taskShortcut.label}</span>
-              <span className="sidebar-task-count-badge" aria-hidden="true">
-                {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
-              </span>
-            </button>
+            <div className="sidebar-task-mode-buttons">
+              <button
+                type="button"
+                className={`section-icon sidebar-task-count-bubble${
+                  taskFilter === "saved_for_later" ? " active" : ""
+                }`}
+                aria-label={`Show ${taskShortcut.count} ${
+                  taskShortcut.targetLabel
+                } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
+                onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
+              >
+                <span>{taskShortcut.label}</span>
+                <span className="sidebar-task-count-badge" aria-hidden="true">
+                  {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`section-icon sidebar-task-count-bubble${
+                  taskFilter === "tasksets" ? " active" : ""
+                }`}
+                aria-label={`Show ${tasksetChatCount} Taskset ${
+                  tasksetChatCount === 1 ? "chat" : "chats"
+                }`}
+                onClick={() =>
+                  changeTaskFilter(taskFilter === "tasksets" ? "active" : "tasksets")
+                }
+              >
+                <span>Tasksets</span>
+                <span className="sidebar-task-count-badge" aria-hidden="true">
+                  {tasksetChatCount > 99 ? "99+" : tasksetChatCount}
+                </span>
+              </button>
+            </div>
           ) : null
         }
         actionsVisible={

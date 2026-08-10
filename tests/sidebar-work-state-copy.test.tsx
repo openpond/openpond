@@ -103,6 +103,40 @@ describe("sidebar task list controls", () => {
     expect(markup).not.toContain(">Show less<");
   });
 
+  test("offers Tasksets as a top-level task mode and hides linked chats by default", () => {
+    const regularSession = session({ id: "regular", title: "Normal task" });
+    const firstAttempt = session({
+      id: "attempt-one",
+      title: "Benchmark · First case",
+      metadata: { tasksetId: "taskset-one", tasksetName: "Support benchmark" },
+    });
+    const modelChat = session({
+      id: "model-chat",
+      title: "Try the trained model",
+      metadata: {
+        trainingTasksetId: "taskset-one",
+        trainingTasksetName: "Support benchmark",
+      },
+    });
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          activeSessions: [regularSession, firstAttempt, modelChat],
+          chatRows: [regularSession, firstAttempt, modelChat],
+          visibleChatRows: [regularSession, firstAttempt, modelChat],
+        }),
+      ),
+    );
+
+    expect(markup).toContain('aria-label="Show 2 Taskset chats"');
+    expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain(">Normal task<");
+    expect(markup).not.toContain(">Benchmark · First case<");
+    expect(markup).not.toContain(">Try the trained model<");
+    expect(markup.match(/data-session-id=/g)).toHaveLength(1);
+  });
+
   test("renders project detail and updated date for development tasks without elapsed runtime", () => {
     const project = localProject();
     const projectItem: SidebarProjectItem = {
