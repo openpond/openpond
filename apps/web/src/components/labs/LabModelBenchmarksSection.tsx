@@ -45,7 +45,6 @@ export function LabModelBenchmarksSection({
   onToast: ShowAppToast;
 }) {
   const [effort, setEffort] = useState<CodexReasoningEffort>("high");
-  const [mode, setMode] = useState<"smoke" | "full">("full");
   const [configuredModel, setConfiguredModel] = useState<ChatModelRef>(
     initialModel ?? defaultModel,
   );
@@ -79,7 +78,6 @@ export function LabModelBenchmarksSection({
         workproduct.id,
         configuredModel,
         effort,
-        mode,
       );
       if (!run) throw new Error("Benchmark start returned no Model Run.");
       onOpenEntry(`model-run:${run.id}`);
@@ -228,18 +226,6 @@ export function LabModelBenchmarksSection({
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
                 <option value="high">High</option>
-              </select>
-            </label>
-            <label>
-              <span>Run</span>
-              <select
-                value={mode}
-                onChange={(event) =>
-                  setMode(event.target.value === "smoke" ? "smoke" : "full")
-                }
-              >
-                <option value="full">Full · 30 attempts</option>
-                <option value="smoke">Smoke · 6 attempts</option>
               </select>
             </label>
             <button

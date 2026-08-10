@@ -224,7 +224,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       modelId: string,
       model: ChatModelRef,
       reasoningEffort: CodexReasoningEffort | "none" | null,
-      mode: "smoke" | "full",
     ) => mutate<TrainingStateResponse["modelRuns"][number]>(
       "run-harness-refiner-benchmark",
       `/models/${encodeURIComponent(modelId)}/harness-refiner-benchmark`,
@@ -232,7 +231,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         profileId,
         model,
         reasoningEffort,
-        mode,
         seeds: [17],
         repetitions: 1,
         maximumSpendUsd: 0,
