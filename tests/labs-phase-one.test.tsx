@@ -46,7 +46,7 @@ function modelCandidate(input: {
   const destinationId =
     input.source === "managed"
       ? "openpond_managed"
-      : "local_cpu_fixture";
+      : "openpond_managed";
   return {
     schemaVersion: "openpond.baseModelCandidate.v1",
     selectionKey: input.selectionKey,
@@ -153,6 +153,64 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain(">Active release<");
   });
 
+  test("names Harness Refiner benchmark results on the Models index", () => {
+    const state = {
+      modelRuns: [
+        {
+          id: "model_run_benchmark",
+          modelId: "model_fixture",
+          kind: "evaluation",
+          status: "succeeded",
+          updatedAt: "2026-08-09T12:00:00.000Z",
+          evaluation: { benchmarkId: "harness-refiner" },
+          receipt: {
+            schemaVersion: "openpond.modelEvaluationReceipt.v1",
+            terminalClassification: "inconclusive",
+          },
+        },
+      ],
+      modelVersions: [],
+      jobs: [],
+      plans: [],
+      models: [],
+      modelBindings: [],
+      tasksets: [],
+      modelTasksets: [],
+    } as unknown as TrainingStateResponse;
+    const markup = renderToStaticMarkup(
+      createElement(ModelsTable, {
+        items: [
+          {
+            key: "model:model_fixture",
+            kind: "model",
+            id: "model_fixture",
+            name: "Fixture Model",
+            description: "A focused model summary.",
+            status: "Succeeded",
+            updatedAt: "2026-08-09T12:00:00.000Z",
+            path: null,
+            enabled: false,
+            runIds: [],
+            conversationId: null,
+            tasksetId: null,
+            trainingRunCount: 1,
+            evaluationStatus: "not_run",
+            useActionId: null,
+            ownerProfileId: "default",
+          },
+        ],
+        loading: false,
+        runs: [],
+        state,
+        onSelect: noop,
+        onUseModel: noop,
+      }),
+    );
+
+    expect(markup).toContain("Harness Refiner · Inconclusive");
+    expect(markup).not.toContain(">1 run<");
+  });
+
   test("projects managed publication in Serving", () => {
     const rows = labServingRows({
       modelProjects: [
@@ -219,10 +277,15 @@ describe("Lab workspace", () => {
       createElement(LabModelCreateDialog, {
         baseModelCandidates,
         busy: false,
+        defaultBenchmarkModel: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
         initialName: "Model 1",
         onClose: noop,
         onCreate: async () => true,
         onManageModels: noop,
+        providerSettings: null,
       }),
     );
 
@@ -378,6 +441,142 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Taskset checks");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
+  });
+
+  test("does not expose benchmark installation as a Tasksets UI action", () => {
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        defaultModel: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        runs: [],
+        selectedId: null,
+        state: {
+          tasksets: [],
+          plans: [],
+          jobs: [],
+          models: [],
+        } as unknown as TrainingStateResponse,
+        training: {
+          busyAction: null,
+          actions: {},
+        } as never,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onImproveInChat: noop,
+        onTrainModel: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).not.toContain("Add Harness Refiner benchmark");
+  });
+
+  test("renders paired benchmark controls as a Taskset scoring workflow", () => {
+    const base = tasksetFixture({ ready: true });
+    const taskset = {
+      ...base,
+      purpose: "benchmark" as const,
+      benchmark: {
+        schemaVersion: "openpond.tasksetBenchmark.v1" as const,
+        definitionId: "harness-refiner",
+        releaseId: "harness-refiner-public-v1",
+        releaseHash: "a".repeat(64),
+        managedReleasePath: "benchmark/taskset.release.json",
+        adaptationSplit: "validation" as const,
+        evaluationSplit: "frozen_eval" as const,
+        primaryMetric: "foreground_tokens" as const,
+        qualityGate: "non_regression" as const,
+        source: "builtin" as const,
+        metadata: {},
+      },
+    };
+    const markup = renderToStaticMarkup(
+      createElement(LabModelDataset, {
+        artifact: null,
+        defaultModel: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        tab: "scoring",
+        taskset,
+        onOpenFiles: noop,
+        onToast: noop,
+        training: {
+          busyAction: null,
+          actions: {
+            datasetRows: async () => null,
+            runBenchmark: async () => null,
+            auditGraders: async () => null,
+            refreshReadiness: async () => null,
+          },
+        } as never,
+      }),
+    );
+
+    expect(markup).toContain("Benchmark runs");
+    expect(markup).toContain("Run Refiner Benchmark");
+    expect(markup).toContain("Open a Model");
+    expect(markup).not.toContain("Run Baseline");
+    expect(markup).not.toContain("Run Candidate");
+    expect(markup).not.toContain("Train Model");
+  });
+
+  test("shows a shipped benchmark as runnable but not authorable", () => {
+    const base = tasksetFixture({ ready: true });
+    const taskset = {
+      ...base,
+      purpose: "benchmark" as const,
+      benchmark: {
+        schemaVersion: "openpond.tasksetBenchmark.v1" as const,
+        definitionId: "harness-refiner",
+        releaseId: "harness-refiner-public-v1",
+        releaseHash: "a".repeat(64),
+        managedReleasePath: "benchmark/taskset.release.json",
+        adaptationSplit: "validation" as const,
+        evaluationSplit: "frozen_eval" as const,
+        primaryMetric: "foreground_tokens" as const,
+        qualityGate: "non_regression" as const,
+        source: "builtin" as const,
+        metadata: {},
+      },
+    };
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        defaultModel: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        runs: [],
+        selectedId: taskset.id,
+        state: {
+          profileId: taskset.profileId,
+          tasksets: [taskset],
+          plans: [],
+          jobs: [],
+          models: [],
+          modelTasksets: [],
+          datasetArtifacts: [],
+          modelProjects: [],
+          benchmarkRuns: [],
+          benchmarkComparisons: [],
+        } as unknown as TrainingStateResponse,
+        training: {
+          busyAction: null,
+          actions: {},
+        } as never,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onImproveInChat: noop,
+        onTrainModel: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Run Benchmark");
+    expect(markup).not.toContain("Improve in Chat");
+    expect(markup).not.toContain("Train Model");
   });
 
   test("uses semantic status tones", () => {

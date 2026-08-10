@@ -346,7 +346,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "training",
-    usage: "openpond training <start|status|watch|logs|cancel|artifacts> <model-run-id|run-id>",
+    usage: "openpond training <start|status|watch|logs|cancel|artifacts|benchmark> <model-run-id|run-id|model-id>",
     usages: [
       "openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]",
       "openpond training status <run-id> [--json]",
@@ -354,6 +354,7 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       "openpond training logs <run-id> [--json]",
       "openpond training cancel <run-id> [--json]",
       "openpond training artifacts <run-id> [--json]",
+      "openpond training benchmark <model-id> [--provider <id>] [--model <id>] [--reasoning-effort <level>] [--mode <smoke|full>] [--seed <n>] [--repetitions <n>] [--max-spend <usd>] [--detach] [--json]",
     ],
     optionSchema: {
       apiBaseUrl: "string",
@@ -362,7 +363,13 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
       json: "boolean",
       manifest: "string",
       maxSpend: "number",
+      mode: "string",
+      model: "string",
+      provider: "string",
+      reasoningEffort: "string",
+      repetitions: "integer",
       retentionDays: "integer",
+      seed: "integer",
       yes: "boolean",
     },
     handler: async ({ options, rest }) =>

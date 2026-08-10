@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 40;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 41;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -439,6 +439,23 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     created_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS evaluation_results_taskset_kind_idx ON evaluation_results(taskset_id, kind, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS benchmark_runs (
+    id TEXT PRIMARY KEY,
+    taskset_id TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS benchmark_runs_taskset_created_idx ON benchmark_runs(taskset_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS benchmark_comparisons (
+    id TEXT PRIMARY KEY,
+    taskset_id TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS benchmark_comparisons_taskset_created_idx ON benchmark_comparisons(taskset_id, created_at DESC);
 
   CREATE TABLE IF NOT EXISTS grader_audit_reports (
     id TEXT PRIMARY KEY,

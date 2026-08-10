@@ -15,7 +15,7 @@ import {
 import { withTurnRunnerTestStore } from "./turn-runner-test-harness";
 
 export function createByokTurnRunnerHarness(input: {
-  providerId?: "local-adapter" | "openpond" | "openrouter" | "zai";
+  providerId?: "openpond" | "openrouter" | "zai";
   modelId?: string;
   toolArgs?: Record<string, unknown> | null;
   toolCallsByPass?: Record<

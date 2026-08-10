@@ -90,6 +90,10 @@ import {
 } from "./openpond/provider-secrets.js";
 import { streamOpenAiCompatibleChatCompletion } from "./openpond/openai-compatible-provider.js";
 import { createWebSearchExecutorFromEnv } from "./openpond/web-search.js";
+import {
+  createWebFetchModelToolDefinition,
+  createWebSearchModelToolDefinition,
+} from "./openpond/model-tool-registry.js";
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createOpenPondCommandAccessService } from "./openpond/command-access.js";
 import { runOpenPondDirectCommand } from "./openpond/direct-command.js";
@@ -154,12 +158,10 @@ import {
 import { createTaskMinerService } from "./training/task-miner.js";
 import { createTaskMinerBackgroundLoop } from "./training/task-miner-background-loop.js";
 import { createTaskEvaluationService } from "./training/evaluation-service.js";
-import { waitForWorkReceiptSettlement } from "./openpond/work-runtime-service.js";
 import {
   createImproveLimit,
   createImproveTargetKind,
   findRecentCodexCompactionCompleted,
-  parseModelJudgeResult,
   resolveMaxHostedWorkspaceToolRounds,
 } from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
@@ -168,24 +170,24 @@ import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-tasks
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
 import { createDatasetArtifactService } from "./training/dataset-artifact-service.js";
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
-import { createComputeService } from "./compute/compute-service.js";
+import { createHarnessRefinerBenchmarkService } from "./training/harness-refiner-benchmark-service.js";
+import { createTaskAttemptModelJudge } from "./training/task-attempt-grader-evidence.js";
+import { createHarnessRefinerBenchmarkModelStream } from "./training/harness-refiner-benchmark-model.js";
+import { createBenchmarkRuntimeComposition } from "./training/benchmark-runtime-composition.js";
+import { createDatasetStorageService } from "./training/dataset-storage-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
 import { createMediaPayloads } from "./api/media-payloads.js";
 import { createProfileTurnDependencies } from "./runtime/profile-turn-dependencies.js";
 import { normalizeAppPreferences } from "./preferences.js";
-import { createLocalAdapterChatRuntime } from "./training/local-adapter-chat-runtime.js";
 import { createManagedAdapterRegistryClient } from "./training/managed-adapter-registry-client.js";
 import { resolveManagedAdapterUserAccess } from "./openpond/hosted-api-access.js";
 import { createManagedAdapterSyncService } from "./training/managed-adapter-sync-service.js";
 import { createManagedAdapterChatRuntime } from "./training/managed-adapter-chat-runtime.js";
-import { createTrainedAdapterChatRuntime } from "./training/trained-adapter-chat-runtime.js";
 import { createTrainingModelRuntime } from "./training/training-model-runtime.js";
-import { createCrossSystemChatToolRuntime } from "./training/cross-system-operations/index.js";
 import {
-  LOCAL_ADAPTER_PROVIDER_ID,
-  listLocalAdapterProviderModels,
-  withLocalAdapterProviderModels,
-} from "./training/local-adapter-models.js";
+  listManagedAdapterProviderModels,
+  withManagedAdapterProviderModels,
+} from "./training/managed-adapter-models.js";
 
 export type { OpenPondServerInstance, OpenPondServerOptions } from "./types.js";
 
@@ -236,12 +238,6 @@ export async function createOpenPondServer(
       error,
     });
   });
-  const resolveReleasedHarness = async () => {
-    const release = await resolveSelectedLocalHarnessRelease(store);
-    return release
-      ? { agentSnapshot: release.agentSnapshot, harnessRelease: release.harnessRelease }
-      : null;
-  };
   const workEvidenceApi = createDesktopWorkEvidenceApi({ store, storeDir });
   const startedAt = now();
   const serverId = randomUUID();
@@ -497,28 +493,28 @@ export async function createOpenPondServer(
   });
 
   async function localByokRuntimeState() {
-    const [file, secrets, localAdapterModels] = await Promise.all([
+    const [file, secrets, managedAdapterModels] = await Promise.all([
       readProvidersFile(providersFilePath),
       readProviderSecrets(providerSecretPaths),
-      listLocalAdapterProviderModels(store),
+      listManagedAdapterProviderModels(store),
     ]);
     return {
       secrets,
-      settings: withLocalAdapterProviderModels(
+      settings: withManagedAdapterProviderModels(
         buildProviderSettings({
           file,
           secrets,
           codex: codexStatusService.get(),
           catalog: cachedProviderCatalog(file),
         }),
-        localAdapterModels
+        managedAdapterModels
       ),
     };
   }
   const { trainingModelText, trainingModelStream } =
     createTrainingModelRuntime({
       loadLocalByokRuntimeState: localByokRuntimeState,
-      getTrainedAdapterChatRuntime: () => trainedAdapterChatRuntime,
+      getManagedAdapterChatRuntime: () => managedAdapterChatRuntime,
       streamOpenPondHostedChatTurn,
     });
 
@@ -557,77 +553,60 @@ export async function createOpenPondServer(
   });
   const datasetArtifactService = createDatasetArtifactService({
     store,
-    workerProjectDir: path.resolve(
-      process.cwd(),
-      "python",
-      "openpond-training"
-    ),
+    workerProjectDir: path.resolve(process.cwd(), "python", "openpond-datasets"),
   });
-  const tasksetWorkRuntime = {
+  const {
+    benchmarkTasksets,
+    localTasksetWorkRuntime,
+    resolveReleasedHarness,
+    tasksetWorkRuntime,
+  } = createBenchmarkRuntimeComposition({
+    store,
+    storeDir,
+    deviceId: serverId,
     createSession,
     getSession,
     executeWorkspaceTool,
-    runtimeEventsForSession: (sessionId: string) =>
-      store.runtimeEventsForSession(sessionId),
-    settleCostEvidence: (
-      sessionId: string,
-      options?: { turnId?: string },
-    ) =>
-      waitForWorkReceiptSettlement(() =>
-        executeWorkspaceTool(
-          sessionId,
-          {
-            action: "sandbox_receipts",
-            args: {},
-            source: "chat_action",
-          },
-          { turnId: options?.turnId },
-        )
-      ),
-  };
+  });
+  const taskEvaluationModelJudge = createTaskAttemptModelJudge({
+    store,
+    modelText: trainingModelText,
+  });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
     modelText: trainingModelText,
     modelStream: trainingModelStream,
     workRuntime: tasksetWorkRuntime,
+    additionalWorkToolDefinitions: () => [
+      createWebFetchModelToolDefinition(),
+      createWebSearchModelToolDefinition({ executeWebSearch }),
+    ],
+    resolveTasksetRelease: (taskset) =>
+      benchmarkTasksets.releaseForTaskset(taskset),
     resolveReleasedHarness,
     resolveTask: ({ tasksetId, taskId, split }) =>
       datasetArtifactService.task(tasksetId, taskId, split),
-    modelJudge: async ({ grader, task, attempt }) => {
-      const raw = await trainingModelText({
-        model: grader.judge,
-        signal: new AbortController().signal,
-        requestId: `task-judge:${attempt.id}:${grader.id}`,
-        messages: [
-          {
-            role: "system",
-            content: `Apply this rubric and return JSON only with score (0..1), passed, and feedback.\n\n${grader.rubric}`,
-          },
-          {
-            role: "user",
-            content: JSON.stringify({
-              input: task.input,
-              expectedOutput: task.expectedOutput,
-              output: attempt.output,
-            }),
-          },
-        ],
-      });
-      const parsed = parseModelJudgeResult(raw);
-      if (!parsed)
-        throw new Error("Model judge returned invalid structured output.");
-      return parsed;
-    },
+    modelJudge: taskEvaluationModelJudge,
   });
-  const computeService = createComputeService({
+  const localBenchmarkEvaluationService = createTaskEvaluationService({
+    store,
     storeDir,
-    localWorkerProjectDir: path.resolve(
-      process.cwd(),
-      "python",
-      "openpond-training"
-    ),
+    modelText: trainingModelText,
+    modelStream: trainingModelStream,
+    workRuntime: localTasksetWorkRuntime,
+    additionalWorkToolDefinitions: () => [
+      createWebFetchModelToolDefinition(),
+      createWebSearchModelToolDefinition({ executeWebSearch }),
+    ],
+    resolveTasksetRelease: (taskset) =>
+      benchmarkTasksets.releaseForTaskset(taskset),
+    resolveReleasedHarness,
+    resolveTask: ({ tasksetId, taskId, split }) =>
+      datasetArtifactService.task(tasksetId, taskId, split),
+    modelJudge: taskEvaluationModelJudge,
   });
+  const datasetStorageService = createDatasetStorageService({ storeDir });
   const managedAdapterRegistryClient = createManagedAdapterRegistryClient();
   const managedAdapterSyncService = createManagedAdapterSyncService({
     store,
@@ -640,48 +619,17 @@ export async function createOpenPondServer(
       return normalizeAppPreferences(entry?.payload).defaultTeamId;
     },
   });
-  const computePayload = async (action: string, payload: unknown) => {
-    if (action === "state") return computeService.state();
-    if (action === "scan") return computeService.scan();
-    if (action === "update_settings") {
-      const settings = await computeService.updateSettings(payload);
-      await computeService.scan();
-      return settings;
-    }
-    if (action === "download_smollm2")
-      return computeService.startModelDownload();
-    if (action === "cancel_download") {
-      const input =
-        payload && typeof payload === "object"
-          ? (payload as Record<string, unknown>)
-          : {};
-      if (typeof input.jobId !== "string" || !input.jobId)
-        throw new Error("jobId is required.");
-      return computeService.cancelModelDownload(input.jobId);
-    }
-    throw new Error(`Unknown compute action ${action}.`);
-  };
+  const datasetStoragePayload = async (action: "state" | "update", payload?: unknown) =>
+    action === "state" ? datasetStorageService.state() : datasetStorageService.update(payload);
   const portableTrainingDependencies = createPortableTrainingServerDependencies(
     {
       storeDir,
       environment: process.env,
-      computeInventory: computeService.inventory,
     }
   );
   const trainingService = createTrainingService({
     store,
     storeDir,
-    localWorkerProjectDir: path.resolve(
-      process.cwd(),
-      "python",
-      "openpond-training"
-    ),
-    revalidateCompute: async () => void (await computeService.scan()),
-    resolveModelPath: computeService.modelPath,
-    prepareModel: (model) => computeService.ensureModel(model),
-    modelArtifactStore: async () =>
-      (await computeService.settings()).modelStorePath,
-    computeInventory: computeService.inventory,
     ...portableTrainingDependencies,
     resolveManagedTrainingAccess: async () => {
       const entry = await store.getCacheEntry<unknown>(
@@ -707,36 +655,34 @@ export async function createOpenPondServer(
     reactivateManagedBinding: managedAdapterSyncService.reactivateBinding,
     activateManagedBinding: managedAdapterSyncService.activateBinding,
   });
-  const localAdapterChatRuntime = createLocalAdapterChatRuntime({
-    store,
-    projectDir: path.resolve(process.cwd(), "python", "openpond-training"),
-    resolveModelPath: computeService.modelPath,
-  });
   const managedAdapterChatRuntime = createManagedAdapterChatRuntime({
     store,
     client: managedAdapterRegistryClient,
   });
-  const trainedAdapterChatRuntime = createTrainedAdapterChatRuntime({
-    managed: managedAdapterChatRuntime,
-    local: localAdapterChatRuntime,
-  });
   managedAdapterSyncService.start();
-  const crossSystemChatToolRuntime = createCrossSystemChatToolRuntime({
-    store,
-    gradeAttempt: taskEvaluationService.grade,
-  });
   const trainingChatSearchService = createTrainingChatSearchService({ store });
   const datasetImportService = createDatasetImportService({
     store,
     workerProjectDir: path.resolve(
       process.cwd(),
       "python",
-      "openpond-training"
+      "openpond-datasets"
     ),
     datasetStorageRoot: async () =>
-      (await computeService.settings()).datasetStorePath,
+      (await datasetStorageService.settings()).datasetStorePath,
   });
   await datasetImportService.reconcile();
+  const harnessRefinerBenchmarks = createHarnessRefinerBenchmarkService({
+    store,
+    storeDir,
+    evaluation: localBenchmarkEvaluationService,
+    benchmarkTasksets,
+    loadProfileState: loadOpenPondProfileState,
+    refinerStream: createHarnessRefinerBenchmarkModelStream(
+      streamOpenPondHostedChatTurn,
+    ),
+  });
+  await harnessRefinerBenchmarks.reconcileInterrupted();
   const trainingApi = createTrainingApi({
     store,
     taskCreator: taskCreatorService,
@@ -746,6 +692,8 @@ export async function createOpenPondServer(
     chatSearch: trainingChatSearchService,
     datasetArtifacts: datasetArtifactService,
     datasetImports: datasetImportService,
+    benchmarkTasksets,
+    harnessRefinerBenchmarks,
   });
   const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({
@@ -933,8 +881,6 @@ export async function createOpenPondServer(
         selectionStrategy: "rft_easy_curriculum_v1",
       });
     },
-    executeCrossSystemTool: crossSystemChatToolRuntime.execute,
-    finalizeCrossSystemTurn: crossSystemChatToolRuntime.finalize,
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
@@ -1029,8 +975,8 @@ export async function createOpenPondServer(
     appendAssistantText,
     appendHostedContextUsage,
     streamLocalByokChatTurn: async function* (input) {
-      if (input.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        yield* trainedAdapterChatRuntime.stream({
+      if (input.providerId === "openpond" && await managedAdapterChatRuntime.appliesTo(input.modelId)) {
+        yield* managedAdapterChatRuntime.stream({
           modelId: input.modelId,
           messages: input.messages,
           tools: input.tools,
@@ -1764,7 +1710,7 @@ export async function createOpenPondServer(
       usageSummaryPayload: usageSummaryRoutePayload,
       usageRecordsPayload: usageRecordsRoutePayload,
       trainingPayload,
-      computePayload,
+      datasetStoragePayload,
       listLocalAgentSchedulesPayload,
       syncLocalAgentSchedulesPayload,
       patchLocalAgentSchedulePayload,
@@ -1955,13 +1901,10 @@ export async function createOpenPondServer(
       waitForOpenPondRefresh,
       turnRunner.close,
       teamChatAiExecutions.close,
-      trainedAdapterChatRuntime.close,
       managedAdapterSyncService.close,
-      crossSystemChatToolRuntime.close,
       taskMinerService.close,
       taskEvaluationService.close,
       trainingService.close,
-      computeService.close,
       closeCloudWorkspaceReadiness,
       closeWorkspaceLsp,
       voiceTranscription.close,

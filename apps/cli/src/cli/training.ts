@@ -42,13 +42,14 @@ export async function runTrainingCommand(
       "logs",
       "cancel",
       "artifacts",
+      "benchmark",
     ].includes(
       subcommand,
     ) ||
     !id
   ) {
     throw new Error(
-      "usage: training <start|status|watch|logs|cancel|artifacts> <model-run-id|run-id>",
+      "usage: training <start|status|watch|logs|cancel|artifacts|benchmark> <model-run-id|run-id|model-id>",
     );
   }
   if (rest.length > 2) {
@@ -66,6 +67,17 @@ export async function runTrainingCommand(
       await createLocalAuthenticatedRequest(baseUrl),
   });
   const json = parseBooleanOption(options.json);
+
+  if (subcommand === "benchmark") {
+    await startHarnessRefinerBenchmark({
+      client,
+      modelId: id,
+      options,
+      json,
+      sleep: dependencies.sleep,
+    });
+    return;
+  }
 
   if (subcommand === "start") {
     await startTraining({
@@ -223,6 +235,18 @@ export class TrainingApiClient {
     );
   }
 
+  trainingState(): Promise<unknown> {
+    return this.json("/v1/training", "GET");
+  }
+
+  startHarnessRefinerBenchmark(modelId: string, body: unknown): Promise<unknown> {
+    return this.json(
+      `/v1/training/models/${encodeURIComponent(modelId)}/harness-refiner-benchmark`,
+      "POST",
+      body,
+    );
+  }
+
   private async json(
     pathname: string,
     method: "GET" | "POST",
@@ -259,6 +283,73 @@ export class TrainingApiClient {
     }
     return payload;
   }
+}
+
+async function startHarnessRefinerBenchmark(input: {
+  client: TrainingApiClient;
+  modelId: string;
+  options: Record<string, string | boolean>;
+  json: boolean;
+  sleep?: (milliseconds: number) => Promise<void>;
+}) {
+  const state = await input.client.trainingState();
+  const project = modelProject(state, input.modelId);
+  const providerId = optionString(input.options, "provider") ?? "openpond";
+  const modelId = optionString(input.options, "model") ?? "openpond-chat";
+  const effort = optionString(input.options, "reasoningEffort") ?? "high";
+  const mode = optionString(input.options, "mode") === "smoke" ? "smoke" : "full";
+  const seed = parseIntegerOption(input.options.seed, "seed") ?? 17;
+  const repetitions = parseIntegerOption(input.options.repetitions, "repetitions") ?? 1;
+  if (repetitions < 1 || repetitions > 20) {
+    throw new Error("repetitions must be between 1 and 20");
+  }
+  const maximumSpendUsd = parseNumberOption(input.options.maxSpend, "max-spend") ?? 0;
+  if (maximumSpendUsd < 0) throw new Error("max-spend must be non-negative");
+  const run = await input.client.startHarnessRefinerBenchmark(input.modelId, {
+    profileId: project.profileId,
+    model: { providerId, modelId },
+    reasoningEffort: effort === "none" ? "none" : effort,
+    mode,
+    seeds: [seed],
+    repetitions,
+    maximumSpendUsd,
+  });
+  printResult(run, input.json);
+  if (parseBooleanOption(input.options.detach)) return;
+  const runId = objectString(run, "id");
+  if (!runId) throw new Error("Benchmark start did not return a Model Run id.");
+  await watchTraining({
+    client: input.client,
+    runId,
+    json: input.json,
+    intervalMs: parseIntegerOption(input.options.intervalMs, "interval-ms") ?? 2_000,
+    sleep: input.sleep,
+  });
+}
+
+function modelProject(value: unknown, modelId: string): { profileId: string } {
+  if (!value || typeof value !== "object" || !("modelProjects" in value)) {
+    throw new Error("Training state did not include Models.");
+  }
+  const projects = Array.isArray(value.modelProjects) ? value.modelProjects : [];
+  const project = projects.find(
+    (candidate) =>
+      candidate
+      && typeof candidate === "object"
+      && "id" in candidate
+      && candidate.id === modelId,
+  );
+  const profileId = project && typeof project === "object"
+    ? objectString(project, "profileId")
+    : null;
+  if (!profileId) throw new Error(`Model ${modelId} was not found.`);
+  return { profileId };
+}
+
+function objectString(value: unknown, key: string): string | null {
+  if (!value || typeof value !== "object" || !(key in value)) return null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "string" && candidate ? candidate : null;
 }
 
 async function startTraining(input: {

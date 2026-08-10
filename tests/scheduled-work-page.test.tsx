@@ -55,7 +55,9 @@ describe("ScheduledWorkPage", () => {
     const markup = renderToStaticMarkup(
       createElement(ScheduledWorkPage, {
         connection: null,
+        detailOpen: false,
         detailExpanded: false,
+        onDetailOpenChange: () => undefined,
         onDetailResizeStart: () => undefined,
         onToggleDetailExpanded: () => undefined,
       }),
@@ -63,6 +65,8 @@ describe("ScheduledWorkPage", () => {
 
     expect(markup).toContain('aria-label="Refresh schedules"');
     expect(markup).toContain('aria-label="Schedule filter"');
+    expect(markup).toContain('aria-label="Scheduled view"');
+    expect(markup).toContain('aria-selected="true" class="active" role="tab" type="button">Calendar');
     expect(markup).toContain('<option value="all" selected="">All</option>');
     expect(markup).not.toContain("Ask OpenPond to schedule");
     expect(markup).not.toContain("Describe what you want to schedule");

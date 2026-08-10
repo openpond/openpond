@@ -48,7 +48,6 @@ import type {
 } from "../../openpond/hosted-turn-helpers.js";
 import type { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import type { ProfileSkillReadResult } from "../../openpond/model-tool-registry.js";
-import type { NativeModelToolResult } from "../../openpond/native-tool-calls.js";
 import type { WebSearchExecutor } from "../../openpond/web-search.js";
 import type { RuntimeCodexSession } from "../../types.js";
 import type { BackgroundWorkerQueue } from "../background-worker-queue.js";
@@ -375,35 +374,6 @@ export type TurnRunnerDependencies = {
     action: OpenPondDatasetBuilderAction;
     payload: Record<string, unknown>;
   }) => Promise<unknown>;
-  executeCrossSystemTool?: (input: {
-    modelId: string;
-    localProjectId: string | null;
-    turnId: string;
-    callId: string;
-    name: string;
-    args: Record<string, unknown>;
-    userPrompt: string;
-    taskId?: string;
-    signal: AbortSignal;
-  }) => Promise<NativeModelToolResult>;
-  finalizeCrossSystemTurn?: (input: {
-    modelId: string;
-    localProjectId: string | null;
-    sessionId: string;
-    turnId: string;
-    userPrompt: string;
-    taskId: string;
-    startedAt: string;
-    completedAt: string;
-    terminalFailure?: {
-      message: string;
-      failureClass: "policy_failure" | "infrastructure_failure";
-    } | null;
-  }) => Promise<{
-    attemptId: string;
-    gradeId: string;
-    generatedTaskId: string;
-  } | null>;
   loadOpenPondProfileState?: () => Promise<OpenPondProfileState>;
   loadOpenPondProfileStateForRef?: (
     ref: OpenPondProfileRef | null | undefined

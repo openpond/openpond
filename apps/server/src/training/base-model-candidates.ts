@@ -1,35 +1,23 @@
-import { createHash } from "node:crypto";
-
 import {
   BaseModelCandidateSchema,
   type BaseModelCandidate,
   type BaseModelExecutionOption,
   type BaseModelPreference,
-  type ComputeInventory,
-  type ModelAsset,
   type TrainingDestinationCapabilities,
 } from "@openpond/contracts";
 import { managedRlBaseProfileForModel } from "./managed-rl-base-profile.js";
 
-const LOCAL_DESTINATIONS = new Set(["local_cpu_fixture"]);
-const TINY_CPU_MODEL = "openpond/tiny-cpu-gpt2-fixture";
-const TINY_CPU_CHAT_TEMPLATE_HASH = createHash("sha256")
-  .update("openpond-tiny-cpu-chat-template-v1")
-  .digest("hex");
-
 export function projectBaseModelCandidates(input: {
   destinations: TrainingDestinationCapabilities[];
-  inventory: ComputeInventory | null;
 }): BaseModelCandidate[] {
   const candidates: BaseModelCandidate[] = [];
   const managedModelIds = new Set(
     input.destinations
-      .filter((destination) => !LOCAL_DESTINATIONS.has(destination.destinationId))
       .flatMap((destination) => destination.modelAllowlist),
   );
 
   for (const modelId of managedModelIds) {
-    const options = executionOptions(input.destinations, modelId, false);
+    const options = executionOptions(input.destinations, modelId);
     if (!options.length) continue;
     const managedProfile = managedRlBaseProfileForModel(modelId);
     candidates.push(
@@ -51,68 +39,6 @@ export function projectBaseModelCandidates(input: {
     );
   }
 
-  const builtinOptions = executionOptions(input.destinations, TINY_CPU_MODEL, true);
-  if (builtinOptions.length) {
-    candidates.push(
-      candidate({
-        preference: {
-          schemaVersion: "openpond.baseModelPreference.v1",
-          modelId: TINY_CPU_MODEL,
-          revision: "architecture-v2-seed-17-context-512",
-          tokenizerRevision: "wordlevel-v1",
-          chatTemplateHash: TINY_CPU_CHAT_TEMPLATE_HASH,
-          modelAssetId: null,
-          source: "builtin",
-        },
-        label: "Tiny CPU correctness fixture",
-        sourceLabel: "This machine",
-        options: builtinOptions,
-        compatibilityReason: null,
-      }),
-    );
-  }
-
-  const localByLineage = new Map<string, ModelAsset>();
-  for (const model of input.inventory?.models ?? []) {
-    if (
-      !model.trainingCompatible ||
-      !model.modelId ||
-      !model.revision ||
-      !model.tokenizerRevision ||
-      !model.chatTemplateHash
-    )
-      continue;
-    const lineage = [
-      model.modelId,
-      model.revision,
-      model.tokenizerRevision,
-      model.chatTemplateHash,
-    ].join("\n");
-    if (!localByLineage.has(lineage)) localByLineage.set(lineage, model);
-  }
-
-  for (const model of localByLineage.values()) {
-    const options = executionOptions(input.destinations, model.modelId!, true);
-    if (!options.length) continue;
-    candidates.push(
-      candidate({
-        preference: {
-          schemaVersion: "openpond.baseModelPreference.v1",
-          modelId: model.modelId!,
-          revision: model.revision!,
-          tokenizerRevision: model.tokenizerRevision!,
-          chatTemplateHash: model.chatTemplateHash!,
-          modelAssetId: model.id,
-          source: "local",
-        },
-        label: model.name,
-        sourceLabel: localSourceLabel(model),
-        options,
-        compatibilityReason: model.compatibilityReason,
-      }),
-    );
-  }
-
   return candidates.sort(compareCandidates);
 }
 
@@ -124,19 +50,17 @@ export function legacyBaseModelPreference(modelId: string): BaseModelPreference 
     tokenizerRevision: null,
     chatTemplateHash: null,
     modelAssetId: null,
-    source: modelId === TINY_CPU_MODEL ? "builtin" : "managed",
+    source: "managed",
   };
 }
 
 function executionOptions(
   destinations: TrainingDestinationCapabilities[],
   modelId: string,
-  local: boolean,
 ): BaseModelExecutionOption[] {
   return destinations
     .filter(
       (destination) =>
-        LOCAL_DESTINATIONS.has(destination.destinationId) === local &&
         destination.modelAllowlist.includes(modelId),
     )
     .map((destination) => ({
@@ -198,16 +122,9 @@ function sourceLabel(options: BaseModelExecutionOption[]): string {
   return labels.length === 1 ? labels[0]! : "Managed";
 }
 
-function localSourceLabel(model: ModelAsset): string {
-  if (model.source === "huggingface") return "Hugging Face · This machine";
-  if (model.source === "mlx") return "MLX · This machine";
-  return "This machine";
-}
-
 function destinationLabel(destinationId: BaseModelExecutionOption["destinationId"]): string {
   const labels: Partial<Record<BaseModelExecutionOption["destinationId"], string>> = {
     openpond_managed: "OpenPond Managed",
-    local_cpu_fixture: "Local CPU",
   };
   return labels[destinationId] ?? destinationId.replaceAll("_", " ");
 }
@@ -220,3 +137,4 @@ function modelLabel(modelId: string): string {
     .replaceAll("-", " ")
     .replace(/\b\w/g, (value) => value.toUpperCase());
 }
+import { createHash } from "node:crypto";

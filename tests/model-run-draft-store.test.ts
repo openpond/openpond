@@ -3,37 +3,6 @@ import { ModelProjectSchema, ModelRunDraftSchema } from "../packages/contracts/s
 import { withTrainingStore } from "./helpers/training-fixtures";
 
 describe("Model run draft store", () => {
-  test("clears the retired Prime destination from persisted model projects", async () =>
-    withTrainingStore(async ({ store }) => {
-      const timestamp = "2026-07-23T12:00:00.000Z";
-      const project = ModelProjectSchema.parse({
-        schemaVersion: "openpond.modelProject.v1",
-        id: "model_retired_prime",
-        profileId: "default",
-        name: "Retired Prime model",
-        objective: null,
-        defaultBaseModel: null,
-        defaultDestinationId: null,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-      });
-      await store.saveModelProject(project);
-      await (store as unknown as {
-        run(sql: string, params: unknown[]): Promise<void>;
-      }).run(
-        "UPDATE model_projects SET payload = ? WHERE id = ?",
-        [JSON.stringify({ ...project, defaultDestinationId: "prime_hosted" }), project.id],
-      );
-
-      await expect(store.getModelProject(project.id)).resolves.toMatchObject({
-        id: project.id,
-        defaultDestinationId: null,
-      });
-      await expect(store.listModelProjects()).resolves.toEqual([
-        expect.objectContaining({ id: project.id, defaultDestinationId: null }),
-      ]);
-    }));
-
   test("persists a stable Model and updates, restores, and deletes its draft", async () =>
     withTrainingStore(async ({ store }) => {
       const timestamp = "2026-07-23T12:00:00.000Z";

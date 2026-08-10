@@ -250,7 +250,7 @@ async function reconcileLineage(input: {
   const jobArtifacts = await input.store.listTrainingArtifacts(input.lineage.jobId);
   const source = lineageSource(input.lineage, jobArtifacts);
   if (!source) return;
-  const managedRlJobId = source === "sandbox_managed_rl" ? sandboxManagedJobId(jobArtifacts) : null;
+  const managedRlJobId = sandboxManagedJobId(jobArtifacts);
   const timestamp = input.now().toISOString();
   const teamId = input.lineage.managedServing?.canonicalArtifactId
     ? input.lineage.managedServing.teamId
@@ -260,11 +260,7 @@ async function reconcileLineage(input: {
       throw new Error("Select an OpenPond team before reconciling managed adapters.");
     }
     const baseProfiles = await input.baseProfilesForTeam(teamId);
-    if (source === "openpond_training") {
-      assertRetainedProjectionBase(input.lineage, baseProfiles);
-    } else {
-      assertQualifiedManagedBase(jobArtifacts, baseProfiles);
-    }
+    assertQualifiedManagedBase(jobArtifacts, baseProfiles);
     const registry = await input.registryForTeam(teamId);
     let artifact =
       registry.artifacts.find(
@@ -273,25 +269,15 @@ async function reconcileLineage(input: {
       registry.artifacts.find(
         (candidate) =>
           candidate.source === source &&
-          (source === "sandbox_managed_rl"
-            ? Boolean(
-                managedRlJobId &&
-                candidate.sourceRef.endsWith(`/jobs/${managedRlJobId}/candidate.json`),
-              )
-            : candidate.sourceRef === input.lineage.id),
+          Boolean(
+            managedRlJobId &&
+            candidate.sourceRef.endsWith(`/jobs/${managedRlJobId}/candidate.json`),
+          ),
       );
     if (!artifact) {
-      if (source === "sandbox_managed_rl") {
-        throw new Error(
-          "Sandbox has not finished canonical publication for this managed training job.",
-        );
-      }
-      if (source === "openpond_training") {
-        throw new Error(
-          "Sandbox no longer exposes the retained canonical OpenPond training artifact.",
-        );
-      }
-      throw new Error("Managed adapter registry did not return a canonical artifact.");
+      throw new Error(
+        "Sandbox has not finished canonical publication for this managed training job.",
+      );
     }
     const deployment =
       registry.deployments.find(
@@ -370,40 +356,18 @@ async function managedBindingTarget(
   };
 }
 
-type ManagedLineageSource = "openpond_training" | "sandbox_managed_rl";
+type ManagedLineageSource = "sandbox_managed_rl";
 
 function lineageSource(
   lineage: ModelArtifactLineage,
   artifacts: TrainingArtifact[],
 ): ManagedLineageSource | null {
   if (
-    lineage.managedServing?.source === "openpond_training" &&
-    lineage.managedServing.canonicalArtifactId
-  ) {
-    return "openpond_training";
-  }
-  if (
     lineage.status === "imported" &&
     artifacts.some((artifact) => artifact.metadata.provider === "sandbox")
   )
     return "sandbox_managed_rl";
   return null;
-}
-
-function assertRetainedProjectionBase(
-  lineage: ModelArtifactLineage,
-  baseProfiles: ManagedRegistryBaseProfile[],
-): string {
-  const baseProfileId = lineage.managedServing?.baseProfileId?.trim();
-  const profile = baseProfiles.find(
-    (candidate) => candidate.id === baseProfileId && candidate.status === "qualified",
-  );
-  if (!baseProfileId || !profile) {
-    throw new Error(
-      "The retained OpenPond training artifact no longer matches a Sandbox-qualified base profile.",
-    );
-  }
-  return baseProfileId;
 }
 
 function assertQualifiedManagedBase(

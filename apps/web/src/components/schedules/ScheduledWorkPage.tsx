@@ -19,6 +19,11 @@ import { useErrorToast } from "../../app/AppToastContext";
 import { useHostedSavedWork } from "../../hooks/useHostedSavedWork";
 import { useLocalAgentSchedules } from "../../hooks/useLocalAgentSchedules";
 import {
+  readScheduledWorkViewMode,
+  writeScheduledWorkViewMode,
+  type ScheduledWorkViewMode,
+} from "../../lib/scheduled-work-view-preference";
+import {
   ExternalLink,
   ListFilter,
   Pause,
@@ -37,6 +42,11 @@ import {
   ScheduleDetailPanel,
   ScheduleRunRow,
 } from "./ScheduledWorkDetailParts";
+import {
+  ScheduledWorkCalendar,
+  type ScheduledCalendarItem,
+} from "./ScheduledWorkCalendar";
+import { HostedScheduleRow, LocalScheduleRow } from "./ScheduledWorkRows";
 import {
   capitalize,
   formatScheduledRunAt,
@@ -66,18 +76,26 @@ const WEEKDAYS: SavedWorkWeekday[] = [
 
 export function ScheduledWorkPage({
   connection,
+  detailOpen,
   detailExpanded,
+  onDetailOpenChange,
   onDetailResizeStart,
   onToggleDetailExpanded,
 }: {
   connection: ClientConnection | null;
+  detailOpen: boolean;
   detailExpanded: boolean;
+  onDetailOpenChange: (open: boolean) => void;
   onDetailResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onToggleDetailExpanded: () => void;
 }) {
   const savedWork = useHostedSavedWork(connection);
   const localSchedules = useLocalAgentSchedules(connection);
   const [filter, setFilter] = useState<ScheduleFilter>("all");
+  const [viewMode, setViewMode] = useState<ScheduledWorkViewMode>(
+    readScheduledWorkViewMode,
+  );
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [selectedScheduleKey, setSelectedScheduleKey] = useState<string | null>(null);
   const rows = useMemo(
     () => scheduledRows(savedWork.definitions),
@@ -104,6 +122,10 @@ export function ScheduledWorkPage({
     () => combineScheduleRows(visibleLocalSchedules, visibleRows),
     [visibleLocalSchedules, visibleRows]
   );
+  const calendarItems = useMemo<ScheduledCalendarItem[]>(
+    () => combinedRows.map(calendarItemForRow),
+    [combinedRows],
+  );
 
   useErrorToast(savedWork.error, { prefix: "Scheduled Work" });
   useErrorToast(localSchedules.error, { prefix: "Local schedules" });
@@ -114,6 +136,39 @@ export function ScheduledWorkPage({
     }
   }, [selectedHosted, selectedLocal, selectedScheduleKey]);
 
+  useEffect(() => {
+    if (!detailOpen && selectedScheduleKey) setSelectedScheduleKey(null);
+  }, [detailOpen, selectedScheduleKey]);
+
+  useEffect(
+    () => () => onDetailOpenChange(false),
+    [onDetailOpenChange],
+  );
+
+  function selectSchedule(key: string) {
+    setSelectedScheduleKey(key);
+    onDetailOpenChange(true);
+  }
+
+  function closeDetail() {
+    setSelectedScheduleKey(null);
+    onDetailOpenChange(false);
+  }
+
+  function selectViewMode(mode: ScheduledWorkViewMode) {
+    setViewMode(mode);
+    writeScheduledWorkViewMode(mode);
+  }
+
+  async function refreshSchedules() {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([savedWork.refresh(), localSchedules.refresh()]);
+    } finally {
+      setManualRefreshing(false);
+    }
+  }
+
   return (
     <section
       aria-label="Scheduled work"
@@ -122,27 +177,49 @@ export function ScheduledWorkPage({
       <div className="scheduled-work-scroll">
         <div className="scheduled-work-content">
           <header className="scheduled-work-header">
+            <div
+              aria-label="Scheduled view"
+              className="scheduled-view-tabs"
+              role="tablist"
+            >
+              <button
+                aria-selected={viewMode === "calendar"}
+                className={viewMode === "calendar" ? "active" : undefined}
+                onClick={() => selectViewMode("calendar")}
+                role="tab"
+                type="button"
+              >
+                Calendar
+              </button>
+              <button
+                aria-selected={viewMode === "list"}
+                className={viewMode === "list" ? "active" : undefined}
+                onClick={() => selectViewMode("list")}
+                role="tab"
+                type="button"
+              >
+                List
+              </button>
+            </div>
             <div className="scheduled-work-header-actions">
               <button
                 aria-label="Refresh schedules"
                 className="scheduled-icon-button"
                 disabled={!connection || savedWork.loading || localSchedules.loading}
-                onClick={() =>
-                  void Promise.all([savedWork.refresh(), localSchedules.refresh()])
-                }
+                onClick={() => void refreshSchedules()}
                 title="Refresh schedules"
                 type="button"
               >
                 <RefreshCw
                   className={
-                    savedWork.loading || localSchedules.loading
+                    manualRefreshing
                       ? "scheduled-spin"
                       : undefined
                   }
                   size={16}
                 />
               </button>
-              <label className="scheduled-filter" title="Filter schedules">
+              <label className="scheduled-filter">
                 <ListFilter aria-hidden="true" size={16} />
                 <select
                   aria-label="Schedule filter"
@@ -176,14 +253,21 @@ export function ScheduledWorkPage({
               <EmptyMessage>Schedules are unavailable. Refresh to try again.</EmptyMessage>
             ) : combinedRows.length === 0 ? (
               <EmptyMessage>Create a scheduled task here or ask for one in Work.</EmptyMessage>
+            ) : viewMode === "calendar" ? (
+              <ScheduledWorkCalendar
+                items={calendarItems}
+                onSelect={selectSchedule}
+                selectedKey={selectedScheduleKey}
+              />
             ) : (
               <div className="scheduled-list-rows">
                 {combinedRows.map((item) =>
                   item.kind === "local" ? (
                     <LocalScheduleRow
+                      cadence={localScheduleCadence(item.schedule)}
                       key={localScheduleKey(item.schedule.id)}
                       onSelect={() =>
-                        setSelectedScheduleKey(localScheduleKey(item.schedule.id))
+                        selectSchedule(localScheduleKey(item.schedule.id))
                       }
                       schedule={item.schedule}
                       selected={
@@ -192,11 +276,13 @@ export function ScheduledWorkPage({
                     />
                   ) : (
                     <HostedScheduleRow
+                      cadence={scheduleCadence(item.row.schedule)}
+                      definition={item.row.definition}
                       key={hostedScheduleKey(item.row.schedule.id)}
                       onSelect={() =>
-                        setSelectedScheduleKey(hostedScheduleKey(item.row.schedule.id))
+                        selectSchedule(hostedScheduleKey(item.row.schedule.id))
                       }
-                      row={item.row}
+                      schedule={item.row.schedule}
                       selected={
                         selectedScheduleKey === hostedScheduleKey(item.row.schedule.id)
                       }
@@ -212,10 +298,10 @@ export function ScheduledWorkPage({
       {selectedHosted ? (
         <ScheduleDetail
           key={`${selectedHosted.schedule.id}:${selectedHosted.definition.version}:${selectedHosted.schedule.configurationVersion}`}
-          onClose={() => setSelectedScheduleKey(null)}
+          onClose={closeDetail}
           onDelete={async () => {
             await savedWork.remove(selectedHosted.schedule.id);
-            setSelectedScheduleKey(null);
+            closeDetail();
           }}
           onRun={() => savedWork.run(selectedHosted.schedule.id)}
           onSave={(input) => savedWork.update(selectedHosted.schedule.id, input)}
@@ -236,7 +322,7 @@ export function ScheduledWorkPage({
         <LocalScheduleDetail
           connection={connection}
           key={selectedLocal.id}
-          onClose={() => setSelectedScheduleKey(null)}
+          onClose={closeDetail}
           onRun={() => localSchedules.run(selectedLocal)}
           onToggle={() => localSchedules.toggle(selectedLocal)}
           pending={localSchedules.pendingScheduleIds.has(selectedLocal.id)}
@@ -247,82 +333,6 @@ export function ScheduledWorkPage({
         />
       ) : null}
     </section>
-  );
-}
-
-function LocalScheduleRow({
-  onSelect,
-  schedule,
-  selected,
-}: {
-  onSelect: () => void;
-  schedule: LocalAgentSchedule;
-  selected: boolean;
-}) {
-  return (
-    <button
-      aria-current={selected ? "true" : undefined}
-      className="scheduled-list-row"
-      onClick={onSelect}
-      type="button"
-    >
-      <span
-        className={`scheduled-status-dot ${schedule.enabled ? "active" : "paused"}`}
-      />
-      <span className="scheduled-list-copy">
-        <span className="scheduled-list-title">
-          <strong>{schedule.scheduleName}</strong>
-        </span>
-        <span>{schedule.localProjectName}</span>
-        <small>
-          {localScheduleCadence(schedule)}
-          {schedule.nextRunAt
-            ? ` · Next ${formatScheduledRunAt(schedule.nextRunAt, schedule.timezone)}`
-            : " · No next run"}
-        </small>
-      </span>
-    </button>
-  );
-}
-
-function HostedScheduleRow({
-  onSelect,
-  row,
-  selected,
-}: {
-  onSelect: () => void;
-  row: ScheduledRow;
-  selected: boolean;
-}) {
-  return (
-    <button
-      aria-current={selected ? "true" : undefined}
-      className="scheduled-list-row"
-      onClick={onSelect}
-      type="button"
-    >
-      <span
-        className={`scheduled-status-dot ${
-          row.schedule.enabled ? "active" : "paused"
-        }`}
-      />
-      <span className="scheduled-list-copy">
-        <span className="scheduled-list-title">
-          <strong>{row.definition.name}</strong>
-          <small className="scheduled-environment-badge hosted">Hosted</small>
-        </span>
-        <span>{row.definition.prompt}</span>
-        <small>
-          {scheduleCadence(row.schedule)}
-          {row.schedule.nextRunAt
-            ? ` · Next ${formatScheduledRunAt(
-                row.schedule.nextRunAt,
-                row.schedule.timeZone
-              )}`
-            : " · No next run"}
-        </small>
-      </span>
-    </button>
   );
 }
 
@@ -745,6 +755,23 @@ export function combineScheduleRows(
         : right.row.definition.name;
     return leftName.localeCompare(rightName);
   });
+}
+
+function calendarItemForRow(item: CombinedScheduleRow): ScheduledCalendarItem {
+  if (item.kind === "local") {
+    return {
+      enabled: item.schedule.enabled,
+      key: localScheduleKey(item.schedule.id),
+      nextRunAt: item.schedule.nextRunAt,
+      title: item.schedule.scheduleName,
+    };
+  }
+  return {
+    enabled: item.row.schedule.enabled,
+    key: hostedScheduleKey(item.row.schedule.id),
+    nextRunAt: item.row.schedule.nextRunAt,
+    title: item.row.definition.name,
+  };
 }
 
 export function scheduleCadence(schedule: HostedSavedWorkSchedule): string {

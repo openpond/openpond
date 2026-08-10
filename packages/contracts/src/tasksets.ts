@@ -67,6 +67,26 @@ export const TasksetStatusSchema = z.enum([
   "failed",
   "archived",
 ]);
+export const TasksetPurposeSchema = z.enum(["general", "benchmark"]);
+export const TasksetBenchmarkBindingSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetBenchmark.v1"),
+  definitionId: IdSchema,
+  releaseId: IdSchema,
+  releaseHash: Sha256Schema,
+  managedReleasePath: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Benchmark release paths must remain relative."),
+  adaptationSplit: TasksetSplitSchema,
+  evaluationSplit: TasksetSplitSchema,
+  primaryMetric: z.enum([
+    "foreground_tokens",
+    "success_rate",
+    "latency_ms",
+    "cost_usd",
+  ]),
+  qualityGate: z.enum(["none", "non_regression", "all_pass"]),
+  source: z.enum(["builtin", "imported"]),
+  metadata: MetadataSchema,
+});
 export const TaskCreationSurfaceSchema = z.enum([
   "slash_train",
   "session_menu",
@@ -568,7 +588,7 @@ export const TasksetReadinessReportSchema = z.object({
   trainingPath: TrainingPathRecommendationSchema.nullable().default(null),
   methodReadiness: z.array(TrainingMethodReadinessSchema).default([]),
   compatibleDestinationClasses: z.array(
-    z.enum(["export", "local_cpu_fixture", "custom", "hosted_managed"]),
+    z.enum(["export", "custom", "hosted_managed"]),
   ),
   blockers: z.array(z.object({ code: IdSchema, message: z.string().trim().min(1).max(5_000), path: z.string().trim().max(2_000).nullable() })).default([]),
   warnings: z.array(z.string().trim().min(1).max(5_000)).default([]),
@@ -624,6 +644,8 @@ export const TasksetSchema = z.object({
   createImproveRunId: NullableIdSchema.default(null),
   name: z.string().trim().min(1).max(500),
   objective: z.string().trim().min(1).max(20_000),
+  purpose: TasksetPurposeSchema.default("general"),
+  benchmark: TasksetBenchmarkBindingSchema.nullable().default(null),
   status: TasksetStatusSchema,
   sourceRefs: z.array(TasksetSourceRefSchema).min(1).max(100_000),
   datasetArtifact: DatasetArtifactManifestSchema.nullable().optional(),
@@ -641,6 +663,20 @@ export const TasksetSchema = z.object({
   updatedAt: TimestampSchema,
   metadata: MetadataSchema,
 }).superRefine((taskset, context) => {
+  if (taskset.purpose === "benchmark" && !taskset.benchmark) {
+    context.addIssue({
+      code: "custom",
+      message: "Benchmark Tasksets require an immutable benchmark binding.",
+      path: ["benchmark"],
+    });
+  }
+  if (taskset.purpose !== "benchmark" && taskset.benchmark) {
+    context.addIssue({
+      code: "custom",
+      message: "Only benchmark Tasksets may carry a benchmark binding.",
+      path: ["benchmark"],
+    });
+  }
   if (taskset.datasetArtifact && taskset.tasks.length > 0) {
     context.addIssue({
       code: "custom",
@@ -822,6 +858,8 @@ export type TaskExampleProposal = z.infer<typeof TaskExampleProposalSchema>;
 export type AuthoringProvenance = z.infer<typeof AuthoringProvenanceSchema>;
 export type AuthoringRepair = z.infer<typeof AuthoringRepairSchema>;
 export type Taskset = z.infer<typeof TasksetSchema>;
+export type TasksetPurpose = z.infer<typeof TasksetPurposeSchema>;
+export type TasksetBenchmarkBinding = z.infer<typeof TasksetBenchmarkBindingSchema>;
 export type TaskDesignProposal = z.infer<typeof TaskDesignProposalSchema>;
 export type TaskCreationTranscript = z.infer<typeof TaskCreationTranscriptSchema>;
 export type BaseModelPreference = z.infer<typeof BaseModelPreferenceSchema>;

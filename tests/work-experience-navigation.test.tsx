@@ -16,10 +16,9 @@ import {
   newExperienceTitle,
 } from "../apps/web/src/lib/experience-options";
 import {
-  WORK_STARTER_PROMPTS,
-  WorkStarterPrompts,
-} from "../apps/web/src/components/app-shell/WorkStarterPrompts";
-import { sidebarSessionsForExperience } from "../apps/web/src/lib/experience-sessions";
+  projectlessSidebarSessionLabel,
+  sidebarSessionsForExperience,
+} from "../apps/web/src/lib/experience-sessions";
 import {
   chatTaskModeForExperience,
   LAST_CHAT_TASK_MODE_STORAGE_KEY,
@@ -101,19 +100,25 @@ describe("Work experience navigation", () => {
     ).toEqual(["work", "development"]);
   });
 
-  test("renders the wordmark trigger and truthful Work starter examples", () => {
+  test("labels projectless saved items from their persisted experience", () => {
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "chat" }))
+    ).toBe("Chat");
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "work" }))
+    ).toBe("Work");
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "development" }))
+    ).toBe("Work");
+  });
+
+  test("renders the wordmark trigger and Work mode switcher", () => {
     const menu = renderToStaticMarkup(
       createElement(SidebarProductMenu, {
         value: "chat",
         onChange: () => undefined,
       })
     );
-    const starters = renderToStaticMarkup(
-      createElement(WorkStarterPrompts, {
-        onSelect: () => undefined,
-      })
-    );
-
     const switcher = renderToStaticMarkup(
       createElement(NewExperienceSwitcher, {
         value: "work",
@@ -122,7 +127,7 @@ describe("Work experience navigation", () => {
     );
 
     expect(PRODUCT_AREA_OPTIONS.map((option) => option.label)).toEqual([
-      "Chat",
+      "Work",
       "Models",
     ]);
     expect(CHAT_TASK_MODE_OPTIONS.map((option) => option.label)).toEqual([
@@ -134,20 +139,15 @@ describe("Work experience navigation", () => {
     expect(newExperienceTitle("development")).toBe("New task");
     expect(menu).toContain("sidebar-experience-trigger");
     expect(menu).toContain(
-      '<span class="sidebar-experience-label">Chat</span>'
+      '<span class="sidebar-experience-label">Work</span>'
     );
-    expect(menu).toContain("OpenPond product: Chat");
+    expect(menu).toContain("OpenPond product: Work");
     expect(menu).toContain('aria-haspopup="menu"');
     expect(switcher).toContain('role="radiogroup"');
     expect(switcher).toContain('aria-label="Choose task mode"');
     expect(switcher).not.toContain('data-experience="development"');
     expect(switcher).toContain('data-experience="work"');
     expect(switcher).toContain('aria-checked="true"');
-    expect(WORK_STARTER_PROMPTS).toHaveLength(4);
-    for (const starter of WORK_STARTER_PROMPTS) {
-      expect(starters).toContain(starter.label);
-      expect(starter.prompt.length).toBeGreaterThan(40);
-    }
   });
 });
 

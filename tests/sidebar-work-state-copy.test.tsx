@@ -6,6 +6,7 @@ import { describe, expect, test } from "vitest";
 import { SidebarSectionList } from "../apps/web/src/components/sidebar/SidebarSectionList";
 import type { SidebarProps } from "../apps/web/src/components/sidebar/Sidebar.types";
 import type { SidebarProjectItem } from "../apps/web/src/lib/app-models";
+import { tasksetNameFromId } from "../apps/web/src/lib/session-tasksets";
 import {
   mergeSidebarTaskOrder,
   sidebarTaskEmptyLabel,
@@ -70,7 +71,7 @@ describe("sidebar task list controls", () => {
       "sidebar-session-group pinned-group-first pinned-group-last"
     );
     expect(markup.match(/draggable="true"/g)).toHaveLength(1);
-    expect(markup).toContain(">Chat<");
+    expect(markup).toContain(">Work<");
     expect(markup).not.toContain(">No project<");
     expect(markup).not.toContain('aria-label="New task"');
     expect(markup).not.toContain('aria-label="Collapse Tasks"');
@@ -101,6 +102,53 @@ describe("sidebar task list controls", () => {
     expect(markup.match(/data-session-id=/g)).toHaveLength(15);
     expect(markup).toContain(">Show more<");
     expect(markup).not.toContain(">Show less<");
+  });
+
+  test("offers individual Tasksets in the filter menu and hides linked chats by default", () => {
+    const regularSession = session({ id: "regular", title: "Normal task" });
+    const firstAttempt = session({
+      id: "attempt-one",
+      title: "Benchmark · First case",
+      metadata: { tasksetId: "taskset-one", tasksetName: "Support benchmark" },
+    });
+    const modelChat = session({
+      id: "model-chat",
+      title: "Try the trained model",
+      metadata: {
+        trainingTasksetId: "taskset-one",
+        trainingTasksetName: "Support benchmark",
+      },
+    });
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          activeSessions: [regularSession, firstAttempt, modelChat],
+          chatRows: [regularSession, firstAttempt, modelChat],
+          sectionMenuOpen: "tasks-filter",
+          visibleChatRows: [regularSession, firstAttempt, modelChat],
+        }),
+      ),
+    );
+
+    expect(markup).toContain(">Tasksets<");
+    expect(markup).toContain('role="menuitem" aria-expanded="false"');
+    expect(markup).not.toContain(">Support benchmark<");
+    expect(markup).not.toContain('class="section-menu-option-count"');
+    expect(markup).toContain(">Normal task<");
+    expect(markup).not.toContain(">Benchmark · First case<");
+    expect(markup).not.toContain(">Try the trained model<");
+    expect(markup.match(/data-session-id=/g)).toHaveLength(1);
+    expect(markup).not.toContain('data-tooltip="Filter:');
+  });
+
+  test("derives a readable legacy Taskset name when stored metadata lacks one", () => {
+    expect(
+      tasksetNameFromId("benchmark-harness-refiner-b227699dcd0c5007")
+    ).toBe("Harness Refiner");
+    expect(tasksetNameFromId("taskset_work_fixture_portability")).toBe(
+      "Work Fixture Portability"
+    );
   });
 
   test("renders project detail and updated date for development tasks without elapsed runtime", () => {
@@ -141,7 +189,7 @@ describe("sidebar task list controls", () => {
     expect(developmentMarkup).toContain(
       '<time class="sidebar-row-updated-at" dateTime="2026-07-29T12:00:00.000Z"'
     );
-    expect(developmentMarkup).toContain(">Jul 29</time>");
+    expect(developmentMarkup).toContain(">Jul 29 ");
     expect(developmentMarkup).not.toContain(" · ");
     expect(developmentMarkup).not.toContain(">Projects<");
 
@@ -166,7 +214,7 @@ describe("sidebar task list controls", () => {
     expect(workMarkup).toContain(">Refine sidebar<");
     expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
-    expect(workMarkup).toContain(">Jul 29</time>");
+    expect(workMarkup).toContain(">Jul 29 ");
   });
 });
 
@@ -322,6 +370,28 @@ describe("sidebar task filters", () => {
         sort: "manual",
       }).map((row) => row.id)
     ).toEqual(["active", "running", "pinned", "saved", "done"]);
+  });
+
+  test("Taskset mode can narrow linked chats to one Taskset", () => {
+    const first = session({
+      id: "taskset-first",
+      metadata: { tasksetId: "support", tasksetName: "Support" },
+    });
+    const second = session({
+      id: "taskset-second",
+      metadata: { tasksetId: "finance", tasksetName: "Finance" },
+    });
+
+    expect(
+      sidebarTaskRows({
+        activeSessions: [active, first, second],
+        doneSessions: [],
+        filter: "tasksets",
+        inProgressSessionIds: new Set(),
+        selectedTasksetId: "support",
+        sort: "recent",
+      }).map((row) => row.id),
+    ).toEqual(["taskset-first"]);
   });
 
   test("reordering a filtered view preserves hidden task positions", () => {

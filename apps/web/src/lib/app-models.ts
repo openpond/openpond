@@ -57,7 +57,6 @@ export type SettingsSection =
   | "subagents"
   | "editor"
   | "providers"
-  | "compute"
   | "dataset-storage"
   | "remote"
   | "usage"
@@ -260,14 +259,42 @@ export const EMPTY_PERSONALIZATION: PersonalizationSettings = {
 };
 
 const OPENPOND_MODEL_OPTIONS = [
-  { value: DEFAULT_OPENPOND_CHAT_MODEL, label: "OpenPond Chat" },
+  {
+    value: DEFAULT_OPENPOND_CHAT_MODEL,
+    label: "DeepSeek V4 Pro",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/kimi-k3",
+    label: "Kimi K3",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/glm-5p2",
+    label: "GLM-5.2",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/deepseek-v4-pro",
+    label: "DeepSeek V4 Pro (Fireworks)",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/deepseek-v4-flash",
+    label: "DeepSeek V4 Flash (Fireworks)",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/minimax-m3",
+    label: "MiniMax M3",
+    description: "reasoning",
+  },
 ];
 export const PROVIDER_OPTIONS: Array<DropdownOption & { value: ChatProvider }> = [
-  { value: "openpond", label: "OpenPond Chat", description: "OpChat" },
+  { value: "openpond", label: "OpenPond Chat" },
   { value: "codex", label: "OpenAI Codex", description: "Codex login" },
 ];
 export const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
-  "local-adapter",
   "openai",
   "xai",
   "openrouter",
@@ -535,15 +562,18 @@ export function providerOptionsFromSettings(
     rows.push({
       value: providerId,
       label: providerId === "openpond" ? "OpenPond Chat" : status.displayName,
-      description: status.available
-        ? "Connected"
-        : status.credential.connected
-          ? "Configured"
-          : status.routing.localByok
-            ? "Set up key"
-            : status.enabled
-              ? "Enabled"
-              : undefined,
+      description:
+        providerId === "openpond"
+          ? undefined
+          : status.available
+            ? "Connected"
+            : status.credential.connected
+              ? "Configured"
+              : status.routing.localByok
+                ? "Set up key"
+                : status.enabled
+                  ? "Enabled"
+                  : undefined,
     });
   }
   return rows.length > 0 ? rows : PROVIDER_OPTIONS;

@@ -31,6 +31,10 @@ import { useWorkspaceActions } from "../hooks/useWorkspaceActions";
 import { teamChatThreadTitle } from "../lib/team-chat-thread";
 import type { AppPrimaryRuntime } from "./useAppPrimaryRuntime";
 import type { TrainingLaunchRequest } from "../components/training/training-workspace-types";
+import {
+  isTaskDraftSession,
+  withoutTaskDraftMetadata,
+} from "../lib/task-drafts";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 
@@ -171,9 +175,9 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       : view === "labs"
       ? "Models"
       : view === "scheduled"
-      ? "Schedule"
+      ? "Scheduled"
       : view === "outputs"
-      ? "Outputs"
+      ? "My files"
       : view === "team"
       ? teamChat.detail
         ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)
@@ -679,6 +683,27 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
     bindTrainingSession: bindTrainingModelChatSession,
     composerDraftStore,
     onSessionCreated: () => setDraftSubagentDelegationMode(null),
+    onSubmitted: async () => {
+      const currentSession = selectedSession;
+      if (!connection || !currentSession || !isTaskDraftSession(currentSession)) return;
+      try {
+        const updated = await api.patchSession(connection, currentSession.id, {
+          metadata: withoutTaskDraftMetadata(currentSession.metadata),
+        });
+        setSessions((current) =>
+          current.map((session) =>
+            session.id === updated.id ? updated : session
+          )
+        );
+      } catch (error) {
+        showToast(
+          error instanceof Error
+            ? `Task started, but its Draft label could not be cleared: ${error.message}`
+            : "Task started, but its Draft label could not be cleared.",
+          "error"
+        );
+      }
+    },
     prepareTrainingTurn: prepareTrainingModelChatTurn,
     sendPrompt,
     setMentionedAppId,

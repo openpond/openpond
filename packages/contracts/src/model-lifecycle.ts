@@ -7,7 +7,11 @@ import {
   ReleaseTimestampSchema,
   VersionedReleaseRefSchema,
 } from "./release-core.js";
-import { BaseModelPreferenceSchema } from "./tasksets.js";
+import {
+  BaseModelPreferenceSchema,
+  TaskFailureClassSchema,
+} from "./tasksets.js";
+import { ChatModelRefSchema } from "./providers.js";
 import { CorrelatedTelemetryReceiptSchema } from "./training-benchmark.js";
 
 export const ModelVersionKindSchema = z.enum([
@@ -99,6 +103,90 @@ export const ModelRunReceiptSchema = z
   })
   .strict();
 
+const EvaluationUsageCategorySchema = z.object({
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative().nullable(),
+}).strict();
+const GitObjectIdSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+const ModelEvaluationAttemptSchema = z.object({
+  phase: z.enum(["baseline", "adaptation", "candidate"]),
+  taskId: ReleaseIdSchema,
+  attemptId: ReleaseIdSchema,
+  sessionId: ReleaseIdSchema.nullable(),
+  turnId: ReleaseIdSchema.nullable(),
+  passed: z.boolean(),
+  score: z.number().min(0).max(1),
+  failureClass: TaskFailureClassSchema.nullable(),
+  inputTokens: z.number().int().nonnegative(),
+  outputTokens: z.number().int().nonnegative(),
+  totalTokens: z.number().int().nonnegative(),
+  latencyMs: z.number().int().nonnegative(),
+  costUsd: z.number().nonnegative().nullable(),
+  startedAt: ReleaseTimestampSchema,
+}).strict();
+
+export const ModelEvaluationReceiptSchema = z.object({
+  schemaVersion: z.literal("openpond.modelEvaluationReceipt.v1"),
+  benchmarkId: ReleaseIdSchema,
+  resultManifest: z.object({
+    id: ReleaseIdSchema,
+    contentHash: ReleaseHashSchema,
+    artifactPath: z.string().trim().min(1).max(2_000),
+  }).strict(),
+  stages: z.object({
+    baseline: ImmutableReleaseRefSchema,
+    adaptation: ImmutableReleaseRefSchema,
+    refiner: ImmutableReleaseRefSchema,
+    candidate: ImmutableReleaseRefSchema,
+    comparison: ImmutableReleaseRefSchema,
+  }).strict(),
+  usage: z.object({
+    baseline: EvaluationUsageCategorySchema,
+    candidate: EvaluationUsageCategorySchema,
+    refiner: EvaluationUsageCategorySchema,
+    grader: EvaluationUsageCategorySchema,
+  }).strict(),
+  quality: z.object({
+    baselinePassRate: z.number().min(0).max(1),
+    candidatePassRate: z.number().min(0).max(1),
+    passed: z.boolean(),
+  }).strict(),
+  foregroundTokenDelta: z.number().int(),
+  foregroundTokenDeltaPercent: z.number().finite().nullable(),
+  attempts: z.array(ModelEvaluationAttemptSchema).max(10_000).default([]),
+  terminalClassification: z.enum([
+    "improved",
+    "no_improvement",
+    "regressed",
+    "inconclusive",
+    "cancelled",
+    "infrastructure_failure",
+  ]),
+  profileGit: z.object({
+    ref: z.string().trim().min(1).max(2_000),
+    commit: GitObjectIdSchema,
+    baseCommit: GitObjectIdSchema,
+  }).strict().nullable(),
+  contentHash: ReleaseHashSchema,
+}).strict();
+
+export const ModelEvaluationConfigurationSchema = z.object({
+  benchmarkId: ReleaseIdSchema,
+  mode: z.enum(["smoke", "full"]),
+  model: ChatModelRefSchema,
+  upstreamModel: z.object({
+    providerId: ReleaseIdSchema,
+    modelId: z.string().trim().min(1).max(300),
+    revision: z.string().trim().min(1).max(300).nullable(),
+  }).strict().nullable(),
+  reasoningEffort: z.string().trim().min(1).max(100).nullable(),
+  seeds: z.array(z.number().int()).min(1).max(100),
+  repetitions: z.number().int().positive().max(20),
+  maximumSpendUsd: z.number().nonnegative(),
+}).strict();
+
 export const ModelRunSchema = z
   .object({
     schemaVersion: z.literal("openpond.modelRun.v1"),
@@ -123,8 +211,8 @@ export const ModelRunSchema = z
       "opd",
       "opsd",
       "sdpo",
-    ]),
-    destinationId: ReleaseIdSchema,
+    ]).nullable(),
+    destinationId: ReleaseIdSchema.nullable(),
     taskset: VersionedReleaseRefSchema,
     harnessRelease: ImmutableReleaseRefSchema.nullable().optional(),
     quote: z
@@ -132,7 +220,20 @@ export const ModelRunSchema = z
         maximumSpendUsd: z.number().nonnegative(),
         hourlyCostUsd: z.number().nonnegative().nullable(),
       })
-      .strict(),
+      .strict()
+      .nullable(),
+    evaluation: ModelEvaluationConfigurationSchema.nullable().default(null),
+    evaluationProgress: z.object({
+      stage: z.enum([
+        "baseline",
+        "adaptation",
+        "refiner",
+        "candidate",
+        "comparison",
+      ]),
+      completedAttempts: z.number().int().nonnegative(),
+      totalAttempts: z.number().int().positive(),
+    }).strict().nullable().default(null),
     reward: z
       .object({
         raw: z.number(),
@@ -140,7 +241,7 @@ export const ModelRunSchema = z
       })
       .strict()
       .nullable(),
-    receipt: ModelRunReceiptSchema.nullable(),
+    receipt: z.union([ModelRunReceiptSchema, ModelEvaluationReceiptSchema]).nullable(),
     adapterArtifactLineageId: ReleaseIdSchema.nullable(),
     failure: z.string().trim().min(1).max(5_000).nullable(),
     startedAt: ReleaseTimestampSchema,
@@ -153,6 +254,40 @@ export const ModelRunSchema = z
       context.addIssue({
         code: "custom",
         message: "A successful Model Run requires a canonical receipt.",
+      });
+    }
+    if (
+      run.kind === "evaluation"
+      && (
+        run.method !== null
+        || run.destinationId !== null
+        || !run.evaluation
+        || run.adapterArtifactLineageId !== null
+      )
+    ) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "An evaluation Model Run requires evaluation configuration and cannot claim training method, destination, or adapter lineage.",
+      });
+    }
+    if (
+      run.kind === "evaluation"
+      && run.receipt
+      && run.receipt.schemaVersion !== "openpond.modelEvaluationReceipt.v1"
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "An evaluation Model Run requires an evaluation receipt.",
+      });
+    }
+    if (
+      run.kind !== "evaluation"
+      && (run.method === null || run.destinationId === null || run.quote === null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "A training or rollout Model Run requires method, destination, and quote.",
       });
     }
     if (
@@ -169,4 +304,6 @@ export const ModelRunSchema = z
 export type ModelVersionKind = z.infer<typeof ModelVersionKindSchema>;
 export type ModelVersion = z.infer<typeof ModelVersionSchema>;
 export type ModelRunReceipt = z.infer<typeof ModelRunReceiptSchema>;
+export type ModelEvaluationReceipt = z.infer<typeof ModelEvaluationReceiptSchema>;
+export type ModelEvaluationConfiguration = z.infer<typeof ModelEvaluationConfigurationSchema>;
 export type ModelRun = z.infer<typeof ModelRunSchema>;

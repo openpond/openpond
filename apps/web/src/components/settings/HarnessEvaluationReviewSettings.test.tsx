@@ -66,8 +66,10 @@ describe("HarnessEvaluationReviewSettings", () => {
     );
 
     expect(html).not.toContain("Build training Taskset");
-    expect(html).toContain("Refine completed turns");
-    expect(html).toContain("Review recurring patterns");
+    expect(html).toContain("Refiner");
+    expect(html).toContain("RL review");
+    expect(html).toContain("enabled by default for new users");
+    expect(html).toContain("provider-toggle harness-learning-toggle");
   });
 });
 

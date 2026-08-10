@@ -4,6 +4,9 @@ import {
   SIDEBAR_CHAT_PAGE_SIZE,
   SIDEBAR_TASK_INITIAL_LIMIT,
 } from "../../lib/app-models";
+import { projectlessSidebarSessionLabel } from "../../lib/experience-sessions";
+import { isTaskDraftSession } from "../../lib/task-drafts";
+import { sessionTaskset } from "../../lib/session-tasksets";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import {
@@ -13,6 +16,7 @@ import {
   sidebarTaskShortcutState,
   type SidebarTaskFilter,
   type SidebarTaskSort,
+  type SidebarTasksetFilterOption,
 } from "../../lib/sidebar-task-list";
 import {
   sidebarTerminalIndicator,
@@ -104,18 +108,29 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
+  const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
+    null
+  );
   const [expandedChildSessionParentIds, setExpandedChildSessionParentIds] =
     useState<Set<string>>(() => new Set());
   const taskNoun = experience === "chat" ? "chats" : "tasks";
   const taskSectionLabel = experience === "chat" ? "Chats" : "Tasks";
+  const regularActiveSessions = useMemo(
+    () => activeSessions.filter((session) => sessionTaskset(session) === null),
+    [activeSessions],
+  );
+  const regularSavedForLaterSessions = useMemo(
+    () => savedForLaterSessions.filter((session) => sessionTaskset(session) === null),
+    [savedForLaterSessions],
+  );
   const activeTaskCount = Math.max(
     0,
-    activeSessions.length - savedForLaterSessions.length
+    regularActiveSessions.length - regularSavedForLaterSessions.length
   );
   const taskShortcut = sidebarTaskShortcutState({
     activeCount: activeTaskCount,
     filter: taskFilter,
-    savedForLaterCount: savedForLaterSessions.length,
+    savedForLaterCount: regularSavedForLaterSessions.length,
   });
   const projectsSectionRows = projectRows ?? [
     ...localProjectRows,
@@ -167,6 +182,7 @@ export function SidebarSectionList({
         doneSessions: archivedSessions,
         filter: taskFilter,
         inProgressSessionIds,
+        selectedTasksetId,
         previewSessionIds: taskPreviewSessionIds,
         sort: taskSort,
       }),
@@ -174,10 +190,27 @@ export function SidebarSectionList({
       activeSessions,
       archivedSessions,
       inProgressSessionIds,
+      selectedTasksetId,
       taskFilter,
       taskPreviewSessionIds,
       taskSort,
     ]
+  );
+  const tasksetOptions = useMemo<SidebarTasksetFilterOption[]>(
+    () => {
+      const byId = new Map<string, SidebarTasksetFilterOption>();
+      for (const session of [...activeSessions, ...archivedSessions]) {
+        const taskset = sessionTaskset(session);
+        if (!taskset) continue;
+        const current = byId.get(taskset.id);
+        if (current) current.chatCount += 1;
+        else byId.set(taskset.id, { ...taskset, chatCount: 1 });
+      }
+      return [...byId.values()].sort((left, right) =>
+        left.name.localeCompare(right.name)
+      );
+    },
+    [activeSessions, archivedSessions]
   );
   const visibleTaskRows = filteredTaskRows.slice(
     0,
@@ -249,6 +282,7 @@ export function SidebarSectionList({
   }
 
   function projectLabelForSession(session: Session): string | null {
+    if (isTaskDraftSession(session)) return "Draft";
     if (experience === "chat") return null;
     const projectId = sidebarProjectIdBySessionId[session.id];
     if (projectId) {
@@ -256,7 +290,7 @@ export function SidebarSectionList({
         projectLabelById.get(projectId) ?? session.workspaceName ?? "Project"
       );
     }
-    return "Chat";
+    return projectlessSidebarSessionLabel(session);
   }
 
   function selectSession(session: Session) {
@@ -402,7 +436,14 @@ export function SidebarSectionList({
   }
 
   function changeTaskFilter(nextFilter: SidebarTaskFilter) {
+    if (nextFilter !== "tasksets") setSelectedTasksetId(null);
     setTaskFilter(nextFilter);
+    setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
+  }
+
+  function changeTasksetFilter(tasksetId: string | null) {
+    setSelectedTasksetId(tasksetId);
+    setTaskFilter("tasksets");
     setChatRowsVisibleCount(SIDEBAR_TASK_INITIAL_LIMIT);
   }
 
@@ -432,21 +473,23 @@ export function SidebarSectionList({
         }`}
         titleAccessory={
           experience !== "chat" ? (
-            <button
-              type="button"
-              className={`section-icon sidebar-task-count-bubble${
-                taskFilter === "saved_for_later" ? " active" : ""
-              }`}
-              aria-label={`Show ${taskShortcut.count} ${
-                taskShortcut.targetLabel
-              } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
-              onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
-            >
-              <span>{taskShortcut.label}</span>
-              <span className="sidebar-task-count-badge" aria-hidden="true">
-                {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
-              </span>
-            </button>
+            <div className="sidebar-task-mode-buttons">
+              <button
+                type="button"
+                className={`section-icon sidebar-task-count-bubble${
+                  taskFilter === "saved_for_later" ? " active" : ""
+                }`}
+                aria-label={`Show ${taskShortcut.count} ${
+                  taskShortcut.targetLabel
+                } ${taskShortcut.count === 1 ? "task" : "tasks"}`}
+                onClick={() => changeTaskFilter(taskShortcut.targetFilter)}
+              >
+                <span>{taskShortcut.label}</span>
+                <span className="sidebar-task-count-badge" aria-hidden="true">
+                  {taskShortcut.count > 99 ? "99+" : taskShortcut.count}
+                </span>
+              </button>
+            </div>
           ) : null
         }
         actionsVisible={
@@ -457,10 +500,13 @@ export function SidebarSectionList({
             filter={taskFilter}
             noun={taskNoun}
             onFilterChange={changeTaskFilter}
+            onTasksetChange={changeTasksetFilter}
             onSortChange={changeTaskSort}
             openMenu={sectionMenuOpen}
             setOpenMenu={setSectionMenuOpen}
             sort={taskSort}
+            selectedTasksetId={selectedTasksetId}
+            tasksets={tasksetOptions}
           />
         }
       >

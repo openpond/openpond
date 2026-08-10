@@ -1,13 +1,31 @@
 import { describe, expect, test } from "vitest";
-import { ModelArtifactLineageSchema, TrainingArtifactSchema, TrainingJobEventSchema, TrainingJobSchema } from "../packages/contracts/src";
+import {
+  ModelArtifactLineageSchema,
+  ModelProjectSchema,
+  TrainingArtifactSchema,
+  TrainingJobEventSchema,
+  TrainingJobSchema,
+} from "../packages/contracts/src";
 import { contentHash } from "../packages/taskset-sdk/src";
 import { tasksetFixture, planFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("local training job store", () => {
-  test("removes retired hosted destination classes from persisted readiness", async () => withTrainingStore(async ({ store }) => {
+  test("normalizes retired destinations in persisted training state", async () => withTrainingStore(async ({ store }) => {
     const taskset = tasksetFixture({ ready: true });
+    const modelProject = ModelProjectSchema.parse({
+      schemaVersion: "openpond.modelProject.v1",
+      id: "model_project_fixture",
+      profileId: "default",
+      name: "Fixture model",
+      objective: null,
+      defaultBaseModel: null,
+      defaultDestinationId: null,
+      createdAt: "2026-07-12T00:00:00Z",
+      updatedAt: "2026-07-12T00:00:00Z",
+    });
     await store.upsertTaskset(taskset);
     await store.saveReadinessReport(taskset.readiness!);
+    await store.saveModelProject(modelProject);
     const retiredClasses = [
       ...taskset.readiness!.compatibleDestinationClasses,
       "openpond_managed",
@@ -25,12 +43,22 @@ describe("local training job store", () => {
       "UPDATE readiness_reports SET payload = ? WHERE taskset_id = ?",
       [JSON.stringify({ ...taskset.readiness, compatibleDestinationClasses: retiredClasses }), taskset.id],
     );
+    await (store as unknown as {
+      run(sql: string, params: unknown[]): Promise<void>;
+    }).run(
+      "UPDATE model_projects SET payload = ? WHERE id = ?",
+      [JSON.stringify({ ...modelProject, defaultDestinationId: "prime_hosted" }), modelProject.id],
+    );
 
     await expect(store.getTaskset(taskset.id)).resolves.toMatchObject({
       readiness: { compatibleDestinationClasses: taskset.readiness!.compatibleDestinationClasses },
     });
     await expect(store.getReadinessReport(taskset.id)).resolves.toMatchObject({
       compatibleDestinationClasses: taskset.readiness!.compatibleDestinationClasses,
+    });
+    await expect(store.getModelProject(modelProject.id)).resolves.toMatchObject({
+      id: modelProject.id,
+      defaultDestinationId: null,
     });
   }));
 
@@ -39,7 +67,7 @@ describe("local training job store", () => {
     const plan = planFixture(taskset);
     await store.upsertTaskset(taskset);
     await store.saveTrainingPlan(plan);
-    const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_fixture", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "local_cpu_fixture", status: "running", nonProduction: true, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
+    const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_fixture", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "openpond_managed", status: "running", nonProduction: false, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
     await store.saveTrainingJob(job);
     for (const sequence of [1, 0]) await store.saveTrainingJobEvent(TrainingJobEventSchema.parse({ schemaVersion: "openpond.trainingJobEvent.v1", id: `event_${sequence}`, jobId: job.id, sequence, type: sequence ? "metric" : "start", timestamp: "2026-07-12T00:00:00Z", payload: {} }));
     const artifact = TrainingArtifactSchema.parse({ schemaVersion: "openpond.trainingArtifact.v1", id: "artifact_fixture", jobId: job.id, kind: "adapter", path: "/tmp/adapter.safetensors", sha256: contentHash("adapter"), sizeBytes: 10, baseModelId: "base", baseModelRevision: "rev", tokenizerRevision: "tok", chatTemplateHash: contentHash("template"), nonProduction: true, createdAt: "2026-07-12T00:00:00Z", metadata: {} });
@@ -50,60 +78,59 @@ describe("local training job store", () => {
     expect((await store.listModelArtifactLineage())[0]).toMatchObject({ id: "lineage_fixture", status: "imported", promotable: false });
   }));
 
-  test("ignores lineage persisted by the retired Fireworks serving path", async () => withTrainingStore(async ({ store }) => {
-    const taskset = tasksetFixture({ ready: true });
-    const plan = planFixture(taskset);
-    await store.upsertTaskset(taskset);
-    await store.saveTrainingPlan(plan);
+  test("preserves lineage while removing retired managed-serving projections", async () => withTrainingStore(async ({ store }) => {
     const lineage = ModelArtifactLineageSchema.parse({
       schemaVersion: "openpond.modelArtifactLineage.v1",
-      id: "lineage_retired_fireworks",
-      modelId: plan.modelId,
-      artifactId: "artifact_retired_fireworks",
-      jobId: "job_retired_fireworks",
-      tasksetId: taskset.id,
-      tasksetHash: taskset.contentHash,
-      graderHash: contentHash(taskset.graders),
-      planHash: plan.contentHash,
-      bundleHash: "bundlehash",
-      recipeHash: contentHash(plan.recipe),
+      id: "lineage_retired_serving",
+      modelId: "model_fixture",
+      artifactId: "artifact_fixture",
+      jobId: "job_fixture",
+      tasksetId: "taskset_fixture",
+      tasksetHash: contentHash("taskset"),
+      graderHash: contentHash("graders"),
+      planHash: contentHash("plan"),
+      bundleHash: contentHash("bundle"),
+      recipeHash: contentHash("recipe"),
       workerVersion: "worker",
       trainerVersion: "trainer",
       importedAt: "2026-07-12T00:00:00Z",
       frozenEvaluationArtifactId: null,
       promotable: false,
+      managedServing: {
+        schemaVersion: "openpond.managedAdapterServingProjection.v1",
+        teamId: null,
+        source: "sandbox_managed_rl",
+        sourceRef: "serving_fixture",
+        canonicalArtifactId: null,
+        canonicalArtifactState: null,
+        canonicalDeploymentId: null,
+        canonicalDeploymentState: null,
+        state: "failed",
+        customerBindingAllowed: false,
+        artifactContentHash: null,
+        baseProfileId: null,
+        publishedAt: null,
+        lastSyncedAt: "2026-07-12T00:00:00Z",
+        lastError: "Retired provider",
+      },
     });
     await store.saveModelArtifactLineage(lineage);
-    await (store as unknown as {
-      run(sql: string, params: unknown[]): Promise<void>;
-    }).run(
-      "UPDATE model_artifact_lineage SET payload = ? WHERE id = ?",
-      [
-        JSON.stringify({
-          ...lineage,
-          managedServing: {
-            schemaVersion: "openpond.managedAdapterServingProjection.v1",
-            teamId: null,
-            source: "openpond_fireworks",
-            sourceRef: "fireworks_deployment_retired",
-            canonicalArtifactId: null,
-            canonicalArtifactState: null,
-            canonicalDeploymentId: null,
-            canonicalDeploymentState: null,
-            state: "ready",
-            customerBindingAllowed: false,
-            artifactContentHash: null,
-            baseProfileId: null,
-            publishedAt: null,
-            lastSyncedAt: "2026-07-12T00:00:00Z",
-            lastError: null,
-          },
-        }),
-        lineage.id,
-      ],
-    );
 
-    await expect(store.listModelArtifactLineage()).resolves.toEqual([]);
-    await expect(store.getModelArtifactLineage(lineage.id)).resolves.toBeNull();
+    for (const source of ["openpond_training", "openpond_fireworks"]) {
+      await (store as unknown as {
+        run(sql: string, params: unknown[]): Promise<void>;
+      }).run(
+        "UPDATE model_artifact_lineage SET payload = ? WHERE id = ?",
+        [JSON.stringify({ ...lineage, managedServing: { ...lineage.managedServing, source } }), lineage.id],
+      );
+
+      await expect(store.getModelArtifactLineage(lineage.id)).resolves.toMatchObject({
+        id: lineage.id,
+        managedServing: null,
+      });
+      await expect(store.listModelArtifactLineage()).resolves.toEqual([
+        expect.objectContaining({ id: lineage.id, managedServing: null }),
+      ]);
+    }
   }));
 });

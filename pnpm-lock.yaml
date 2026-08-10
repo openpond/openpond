@@ -177,9 +177,6 @@ importers:
       '@openpond/taskset-sdk':
         specifier: workspace:*
         version: link:../../packages/taskset-sdk
-      '@openpond/trainer-local':
-        specifier: workspace:*
-        version: link:../../packages/trainer-local
       '@openpond/training-sdk':
         specifier: workspace:*
         version: link:../../packages/training-sdk
@@ -456,25 +453,6 @@ importers:
       '@openpond/harness':
         specifier: workspace:*
         version: link:../harness
-    devDependencies:
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.13.3
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/trainer-local:
-    dependencies:
-      '@openpond/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@openpond/taskset-sdk':
-        specifier: workspace:*
-        version: link:../taskset-sdk
-      '@openpond/training-sdk':
-        specifier: workspace:*
-        version: link:../training-sdk
     devDependencies:
       '@types/node':
         specifier: ^24.10.1

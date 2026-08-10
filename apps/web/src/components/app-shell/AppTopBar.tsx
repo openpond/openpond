@@ -25,6 +25,7 @@ import {
 import type { CommitNextStep } from "../workspace/WorkspaceGitDialogs";
 import type { ClientConnection } from "../../api";
 import { copyToClipboard } from "../../lib/clipboard";
+import { CollaborationHeaderActions } from "../collaboration/CollaborationHeaderActions";
 
 const WorkspaceEnvironmentMenu = lazy(() =>
   import("../chat/WorkspaceEnvironmentMenu").then((module) => ({
@@ -72,6 +73,9 @@ export function AppTopBar({
   onBootstrap,
   onOpenSandboxWorkspace,
   onShowSidebar,
+  onOpenTeamChat,
+  onDiscoverCommunities,
+  collaborationView = null,
   platform,
   showWorkspaceControls = true,
 }: {
@@ -115,13 +119,19 @@ export function AppTopBar({
     name: string | null;
   }) => Promise<void> | void;
   onShowSidebar: () => void;
+  onOpenTeamChat: () => void;
+  onDiscoverCommunities: () => void;
+  collaborationView?: "team" | "community" | null;
   platform?: string | null;
   showWorkspaceControls?: boolean;
 }) {
   const filesChanged = workspaceDiff?.filesChanged ?? 0;
   const showWindowControls = isDesktopShell() && !isMacPlatform(platform);
   const showRightControls =
-    showWorkspaceControls || rightSidebarAvailable || showWindowControls;
+    Boolean(onOpenTeamChat || onDiscoverCommunities) ||
+    showWorkspaceControls ||
+    rightSidebarAvailable ||
+    showWindowControls;
   const [titleMenu, setTitleMenu] = useState<{ x: number; y: number } | null>(
     null
   );
@@ -214,6 +224,11 @@ export function AppTopBar({
       </div>
       {showRightControls && (
         <div className="titlebar-right">
+          <CollaborationHeaderActions
+            activeView={collaborationView}
+            onDiscoverCommunities={onDiscoverCommunities}
+            onOpenTeamChat={onOpenTeamChat}
+          />
           {showWorkspaceControls && (
             <div className="titlebar-actions">
               <Suspense fallback={null}>

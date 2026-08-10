@@ -40,7 +40,7 @@ export function buildTrainingModelChatHandoff({
         : null;
   const tasks = taskRuntime ? generatedChatTasks(taskset, taskRuntime) : [];
   return {
-    model: { providerId: "local-adapter", modelId },
+    model: { providerId: "openpond", modelId },
     tasksetId: taskset.id,
     tasksetName: taskset.name,
     taskRuntime,
@@ -85,6 +85,7 @@ export function trainingModelChatTurnMetadata(
       ? { crossSystemTaskId: task.generatedTaskId }
       : { trainingHarnessTaskId: task.generatedTaskId }),
     trainingTasksetId: handoff.tasksetId,
+    trainingTasksetName: handoff.tasksetName,
     source: "training_model_chat_handoff",
   };
 }
@@ -108,7 +109,7 @@ export async function refreshModelCatalogBeforeChat<Payload>({
   loadBootstrap: (connection: ClientConnection) => Promise<Payload>;
   applyBootstrap: (payload: Payload) => void;
 }): Promise<void> {
-  if (model.providerId !== "local-adapter" || !connection) return;
+  if (model.providerId !== "openpond" || !connection) return;
   applyBootstrap(await loadBootstrap(connection));
 }
 

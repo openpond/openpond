@@ -200,6 +200,24 @@ describe("Taskset Work attempt runner", () => {
         },
       });
       expect(attempt.runtimeEventRefs.length).toBeGreaterThan(0);
+      expect(await store.runtimeEventsForSession(session.id)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "turn.started",
+            status: "started",
+          }),
+          expect.objectContaining({
+            name: "tool.started",
+            action: "work_write_file",
+            status: "started",
+          }),
+          expect.objectContaining({
+            name: "tool.completed",
+            action: "work_write_file",
+            status: "completed",
+          }),
+        ]),
+      );
       expect(artifacts.map((artifact) => artifact.kind).sort()).toEqual([
         "output_artifact",
         "runtime_trace",

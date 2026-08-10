@@ -1,6 +1,6 @@
 ---
 name: openpond-taskset-authoring
-description: Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use when the user asks for training or evaluation tasks, graders, GRPO/RFT environments, baseline evaluation, Taskset readiness, or help deciding what a model should practice.
+description: Create, improve, inspect, test, or prepare an OpenPond Taskset from a capability, Profile Agent, consented conversations, imported datasets, examples, and traces. Use when the user asks for training or evaluation tasks, controlled benchmarks, graders, GRPO/RFT environments, baseline evaluation, Taskset readiness, or help deciding what a model should practice.
 ---
 
 # OpenPond Taskset Authoring
@@ -69,6 +69,13 @@ general capability. Historical assistant messages are candidate outcomes, not
 automatically approved demonstrations. Frozen evaluation tasks never become
 prompt examples, repair context, demonstrations, or grader calibration data.
 
+When the user asks for a benchmark, distinguish a normal Taskset that happens
+to contain frozen evaluation cases from a controlled benchmark that compares
+two policies, Models, or Harness releases. Author the latter from the user's
+claim and evidence, freeze its protocol and held-out cases, and keep its run
+separate from training. Do not substitute a built-in catalog fixture merely
+because its name sounds related.
+
 Read only the reference needed for the current decision:
 
 - Task contracts, task reconstruction, and split isolation:
@@ -78,3 +85,4 @@ Read only the reference needed for the current decision:
 - Method selection and readiness: `references/method-selection.md`
 - Privacy, consent, and provenance:
   `references/privacy-and-provenance.md`
+- Controlled benchmark design and comparison: `references/benchmarking.md`

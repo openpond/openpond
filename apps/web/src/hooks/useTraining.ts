@@ -201,6 +201,43 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       : Promise.resolve({ schemaVersion: "openpond.trainingChatSearchResult.v1" as const, query, offset, limit, total: 0, hasMore: false, indexedChats: 0, totalChats: 0, indexing: false, entries: [] }),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
+    runBenchmark: (
+      tasksetId: string,
+      phase: "baseline" | "candidate",
+      model: ChatModelRef,
+      reasoningEffort: CodexReasoningEffort | "none" | null,
+    ) => mutate<{
+      run: TrainingStateResponse["benchmarkRuns"][number];
+      comparison: TrainingStateResponse["benchmarkComparisons"][number] | null;
+    }>(
+      `run-benchmark-${phase}`,
+      `/tasksets/${encodeURIComponent(tasksetId)}/benchmark-runs`,
+      {
+        phase,
+        model,
+        reasoningEffort,
+        seeds: [17],
+        repetitions: 1,
+      },
+    ),
+    startHarnessRefinerBenchmark: (
+      modelId: string,
+      model: ChatModelRef,
+      reasoningEffort: CodexReasoningEffort | "none" | null,
+      mode: "smoke" | "full",
+    ) => mutate<TrainingStateResponse["modelRuns"][number]>(
+      "run-harness-refiner-benchmark",
+      `/models/${encodeURIComponent(modelId)}/harness-refiner-benchmark`,
+      {
+        profileId,
+        model,
+        reasoningEffort,
+        mode,
+        seeds: [17],
+        repetitions: 1,
+        maximumSpendUsd: 0,
+      },
+    ),
     acceptHarnessReview: (
       workspaceId: string,
       reviewRef: { id: string; contentHash: string },
@@ -225,7 +262,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       if (!connection) return null;
       setBusyAction("scan-base-models");
       try {
-        await api.scanCompute(connection);
         const next = await refresh();
         setError(null);
         return next;
@@ -340,7 +376,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     }>("start-prepared-training", "/start/prepared", body),
     startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
-    importArtifact: (planId: string, bundleId: string, artifactDirectory: string) => mutate("import-artifact", "/import", { planId, bundleId, artifactDirectory }),
     rejectModel: (modelId: string, reason: string) => mutate("reject-model", `/models/${encodeURIComponent(modelId)}/reject`, { reason }),
     bindModel: (
       modelId: string,
@@ -371,7 +406,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         const response = await fetch(`${connection.serverUrl}/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`, { headers: { Authorization: `Bearer ${connection.token}` } });
         if (!response.ok) throw new Error(await response.text());
         const disposition = response.headers.get("content-disposition") ?? "";
-        const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "openpond-training-artifact";
+        const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "openpond-model-artifact";
         const url = URL.createObjectURL(await response.blob());
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -389,7 +424,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/models/${encodeURIComponent(modelId)}/download`,
         `${modelId}.openpond-lora.tar`,
       ),
-    downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-training-bundle.json"),
+    downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-model-improvement-bundle.json"),
   }), [connection, mutate, profileId, refresh]);
 
   async function downloadAuthenticated(path: string, fallbackName: string) {

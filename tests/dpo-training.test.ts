@@ -28,13 +28,13 @@ describe("native DPO", () => {
       const initial = createTrainingPlan({
         modelId: "model_dpo_fixture",
         taskset,
-        destinationId: "local_cpu_fixture",
+        destinationId: "openpond_managed",
         recipe,
         exportApproved: true,
       });
       const capabilities = {
         schemaVersion: "openpond.trainingDestinationCapabilities.v1" as const,
-        destinationId: "local_cpu_fixture" as const,
+        destinationId: "openpond_managed" as const,
         available: true,
         methods: ["sft", "dpo", "ppo"] as const,
         parameterizations: ["lora"] as const,
@@ -145,7 +145,7 @@ function preferenceTaskset(chosen = "Hello friend."): Taskset {
         reasonCodes: [],
         reasons: [],
       }],
-      compatibleDestinationClasses: ["local_cpu_fixture"],
+      compatibleDestinationClasses: ["hosted_managed"],
       blockers: [],
       warnings: [],
       baselineReward: null,

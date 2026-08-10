@@ -80,6 +80,7 @@ export type ComposerProps = {
   onOpenPondCommandAccessModeChange: (value: OpenPondCommandAccessMode) => void;
   onPromptChange: (value: string) => void;
   onMentionAppSelect?: (appId: string | null) => void;
+  onSaveTaskDraft?: (prompt: string) => Promise<boolean>;
   showToast: ShowAppToast;
   onSubmit: (
     attachments?: ChatAttachment[],

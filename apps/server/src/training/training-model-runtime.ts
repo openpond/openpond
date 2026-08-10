@@ -11,8 +11,7 @@ import {
   streamOpenAiCompatibleChatCompletion,
 } from "../openpond/openai-compatible-provider.js";
 import type { ProviderSecrets } from "../openpond/provider-secrets.js";
-import { LOCAL_ADAPTER_PROVIDER_ID } from "./local-adapter-models.js";
-import type { createTrainedAdapterChatRuntime } from "./trained-adapter-chat-runtime.js";
+import type { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
 
 export function createTrainingModelRuntime(deps: {
@@ -20,10 +19,7 @@ export function createTrainingModelRuntime(deps: {
     settings: ProviderSettings;
     secrets: ProviderSecrets;
   }>;
-  getTrainedAdapterChatRuntime(): Pick<
-    ReturnType<typeof createTrainedAdapterChatRuntime>,
-    "stream"
-  >;
+  getManagedAdapterChatRuntime(): Pick<ReturnType<typeof createManagedAdapterChatRuntime>, "appliesTo" | "stream">;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
 }) {
   async function trainingModelText(input: {
@@ -36,16 +32,20 @@ export function createTrainingModelRuntime(deps: {
     temperature?: number;
     topP?: number;
     seed?: number;
+    onUsage?: (usage: unknown, costUsd?: number) => void;
   }): Promise<string> {
     let text = "";
-    if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-      for await (const delta of deps.getTrainedAdapterChatRuntime().stream({
+    if (input.model.providerId === "openpond" && await deps.getManagedAdapterChatRuntime().appliesTo(input.model.modelId)) {
+      for await (const delta of deps.getManagedAdapterChatRuntime().stream({
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
+        maxNewTokens: input.maxOutputTokens,
+        temperature: input.temperature,
         signal: input.signal,
       })) {
         if (delta.text) text += delta.text;
+        if (delta.usage !== undefined) input.onUsage?.(delta.usage);
       }
       return text;
     }
@@ -54,9 +54,23 @@ export function createTrainingModelRuntime(deps: {
         model: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
+        reasoningEffort:
+          input.reasoningEffort === "none"
+            ? undefined
+            : input.reasoningEffort ?? undefined,
+        maxTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
         signal: input.signal,
       })) {
         if (delta.type === "text_delta" && delta.text) text += delta.text;
+        if (delta.type === "usage") {
+          const cost = costFromUsage(delta.usage);
+          input.onUsage?.(
+            delta.usage,
+            "costUsd" in cost ? cost.costUsd : undefined,
+          );
+        }
       }
       return text;
     }
@@ -76,14 +90,21 @@ export function createTrainingModelRuntime(deps: {
       seed: input.seed,
     })) {
       if (delta.type === "text_delta" && delta.text) text += delta.text;
+      if (delta.type === "usage") {
+        const cost = costFromUsage(delta.usage);
+        input.onUsage?.(
+          delta.usage,
+          "costUsd" in cost ? cost.costUsd : undefined,
+        );
+      }
     }
     return text;
   }
 
   const trainingModelStream: TasksetWorkModelStream =
     async function* (input) {
-      if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
-        for await (const delta of deps.getTrainedAdapterChatRuntime().stream({
+      if (input.model.providerId === "openpond" && await deps.getManagedAdapterChatRuntime().appliesTo(input.model.modelId)) {
+        for await (const delta of deps.getManagedAdapterChatRuntime().stream({
           modelId: input.model.modelId,
           messages: input.messages,
           requestId: input.requestId,
@@ -112,6 +133,9 @@ export function createTrainingModelRuntime(deps: {
             input.reasoningEffort === "none"
               ? undefined
               : input.reasoningEffort ?? undefined,
+          maxTokens: input.maxOutputTokens,
+          temperature: input.temperature,
+          topP: input.topP,
           signal: input.signal,
         })) {
           if (delta.type === "text_delta" && delta.text) {

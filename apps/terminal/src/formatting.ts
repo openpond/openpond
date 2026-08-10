@@ -38,7 +38,6 @@ const TERMINAL_MODEL_OPTIONS: TerminalModelOption[] = [
 ];
 
 const OPENAI_COMPATIBLE_CHAT_PROVIDER_IDS = [
-  "local-adapter",
   "openai",
   "xai",
   "openrouter",

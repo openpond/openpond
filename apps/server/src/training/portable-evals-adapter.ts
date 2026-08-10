@@ -46,6 +46,8 @@ export function compileDesktopHarnessContext(input: {
   selectedTask?: TaskDataRecord;
   profile?: OpenPondProfileState | null;
   releasedHarness?: Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> | null;
+  tasksetRelease?: TasksetRelease | null;
+  reasoningEffort?: string | null;
   model: ChatModelRef;
   now?: () => string;
 }): DesktopHarnessContext {
@@ -104,10 +106,12 @@ export function compileDesktopHarnessContext(input: {
       sourceTasksetHash: input.taskset.contentHash,
     },
   };
-  const tasksetRelease = TasksetReleaseSchema.parse({
-    ...tasksetContent,
-    contentHash: contentHash(tasksetContent),
-  });
+  const tasksetRelease = input.tasksetRelease
+    ? TasksetReleaseSchema.parse(input.tasksetRelease)
+    : TasksetReleaseSchema.parse({
+        ...tasksetContent,
+        contentHash: contentHash(tasksetContent),
+      });
   const now = input.now ?? (() => new Date().toISOString());
   const runManifest = createRunManifest({
     schemaVersion: "openpond.runManifest.v1",
@@ -139,6 +143,7 @@ export function compileDesktopHarnessContext(input: {
     metadata: {
       sourceTasksetId: input.taskset.id,
       sourceTasksetRevision: input.taskset.revision,
+      reasoningEffort: input.reasoningEffort ?? null,
     },
   });
   return { agentSnapshot, harnessRelease, tasksetRelease, runManifest };
@@ -265,6 +270,7 @@ export function projectDesktopAttemptReceipt(input: {
       rewardEligible: input.grade.rewardEligible,
       score: input.grade.score,
       passed: input.grade.passed,
+      usage: input.attempt.metadata.usage ?? [],
     },
   }));
 }

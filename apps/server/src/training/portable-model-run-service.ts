@@ -243,7 +243,7 @@ export function createPortableModelRunService(deps: {
         approvalId: approval.id,
         destinationId: modelRun.destinationId,
         status: "queued",
-        nonProduction: modelRun.destinationId === "local_cpu_fixture",
+        nonProduction: false,
         workerPid: null,
         startedAt: null,
         completedAt: null,

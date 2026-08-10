@@ -16,15 +16,6 @@ export type ComposerSteerAutoDispatchInput = {
   wasRunning: boolean;
 };
 
-export type ComposerSteerEditTarget = "dialog" | "load_composer";
-
-export type ComposerSteerEditTargetInput = {
-  attachmentCount: number;
-  hasSelectedAction: boolean;
-  hasSelectedCommand: boolean;
-  prompt: string;
-};
-
 function nextSteerDraftId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -58,21 +49,16 @@ export function removeComposerSteerDraft(
   return drafts.filter((draft) => draft.id !== draftId);
 }
 
-export function updateComposerSteerDraft(
+export function replaceComposerSteerDraftForEdit(
   drafts: ComposerSteerDraft[],
   draftId: string,
-  prompt: string,
-  now = new Date().toISOString(),
+  displacedComposerPrompt?: string,
 ): ComposerSteerDraft[] {
-  return drafts.map((draft) =>
-    draft.id === draftId
-      ? {
-          ...draft,
-          prompt,
-          updatedAt: now,
-        }
-      : draft,
-  );
+  const displacedPrompt = displacedComposerPrompt?.trim();
+  return drafts.flatMap((draft) => {
+    if (draft.id !== draftId) return [draft];
+    return displacedPrompt ? [createComposerSteerDraft(displacedPrompt)] : [];
+  });
 }
 
 export function composerSteerDraftsAfterSubmit(
@@ -104,12 +90,6 @@ export function updateComposerSteerDraftScope(
     ...draftsByScope,
     [scopeKey]: nextDrafts,
   };
-}
-
-export function composerSteerEditTarget(input: ComposerSteerEditTargetInput): ComposerSteerEditTarget {
-  return input.prompt.trim() || input.attachmentCount > 0 || input.hasSelectedAction || input.hasSelectedCommand
-    ? "dialog"
-    : "load_composer";
 }
 
 export function shouldAutoDispatchComposerSteer(input: ComposerSteerAutoDispatchInput): boolean {

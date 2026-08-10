@@ -1,5 +1,9 @@
 import {
+  BenchmarkComparisonSchema,
+  BenchmarkRunSummarySchema,
   EvaluationResultSchema,
+  type BenchmarkComparison,
+  type BenchmarkRunSummary,
   type EvaluationResult,
 } from "@openpond/evals";
 import { assertContentHash } from "@openpond/harness";
@@ -7,9 +11,55 @@ import { assertContentHash } from "@openpond/harness";
 import { SqliteDatasetStore } from "./store-datasets.js";
 
 export class SqliteEvaluationResultStore extends SqliteDatasetStore {
+  async saveBenchmarkRun(input: {
+    tasksetId: string;
+    run: BenchmarkRunSummary;
+  }): Promise<BenchmarkRunSummary> {
+    const run = BenchmarkRunSummarySchema.parse(input.run);
+    assertContentHash(run, "Benchmark run");
+    await this.upsertPayload(
+      `INSERT INTO benchmark_runs (id, taskset_id, phase, payload, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+      [run.id, input.tasksetId, run.phase, JSON.stringify(run), run.createdAt],
+    );
+    return run;
+  }
+
+  async listBenchmarkRuns(tasksetId: string): Promise<BenchmarkRunSummary[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM benchmark_runs WHERE taskset_id = ? ORDER BY created_at DESC, id ASC",
+      [tasksetId],
+      BenchmarkRunSummarySchema.parse,
+    );
+  }
+
+  async saveBenchmarkComparison(input: {
+    tasksetId: string;
+    comparison: BenchmarkComparison;
+  }): Promise<BenchmarkComparison> {
+    const comparison = BenchmarkComparisonSchema.parse(input.comparison);
+    assertContentHash(comparison, "Benchmark comparison");
+    await this.upsertPayload(
+      `INSERT INTO benchmark_comparisons (id, taskset_id, payload, created_at)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+      [comparison.id, input.tasksetId, JSON.stringify(comparison), comparison.createdAt],
+    );
+    return comparison;
+  }
+
+  async listBenchmarkComparisons(tasksetId: string): Promise<BenchmarkComparison[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM benchmark_comparisons WHERE taskset_id = ? ORDER BY created_at DESC, id ASC",
+      [tasksetId],
+      BenchmarkComparisonSchema.parse,
+    );
+  }
+
   async saveEvaluationResult(input: {
     tasksetId: string;
-    kind: "baseline" | "candidate";
+    kind: "baseline" | "adaptation" | "candidate";
     result: EvaluationResult;
     createdAt: string;
   }): Promise<EvaluationResult> {

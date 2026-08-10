@@ -11,9 +11,7 @@ import type {
   TrainingCatalog,
   TrainingRunDetail,
   DatasetCatalogResponse,
-  ComputeStateResponse,
-  ComputeSettings,
-  ModelDownloadJob,
+  DatasetStorageState,
   OpenPondExtension,
   OpenPondExtensionCatalog,
   OpenPondExtensionPreview,
@@ -675,42 +673,13 @@ export const api = {
           ? undefined
           : JSON.stringify(input),
     }),
-  computeState: (connection: ClientConnection) =>
-    apiFetch<ComputeStateResponse>(connection, "/v1/compute"),
-  scanCompute: (connection: ClientConnection) =>
-    apiFetch<ComputeStateResponse["inventory"]>(
-      connection,
-      "/v1/compute/scan",
-      {
-        method: "POST",
-        body: JSON.stringify({}),
-      }
-    ),
-  updateComputeSettings: (
-    connection: ClientConnection,
-    input: {
-      modelStorePath?: string | null;
-      datasetStorePath?: string | null;
-      defaultDeviceIds?: string[];
-      additionalModelPaths?: string[];
-    }
-  ) =>
-    apiFetch<ComputeSettings>(connection, "/v1/compute/settings", {
+  datasetStorageState: (connection: ClientConnection) =>
+    apiFetch<DatasetStorageState>(connection, "/v1/settings/dataset-storage"),
+  updateDatasetStorage: (connection: ClientConnection, datasetStorePath: string) =>
+    apiFetch<DatasetStorageState>(connection, "/v1/settings/dataset-storage", {
       method: "PATCH",
-      body: JSON.stringify(input),
+      body: JSON.stringify({ datasetStorePath }),
     }),
-  downloadSmolLm2: (connection: ClientConnection) =>
-    apiFetch<ModelDownloadJob>(
-      connection,
-      "/v1/compute/models/smollm2/download",
-      { method: "POST", body: JSON.stringify({}) }
-    ),
-  cancelModelDownload: (connection: ClientConnection, jobId: string) =>
-    apiFetch<ModelDownloadJob>(
-      connection,
-      `/v1/compute/downloads/${encodeURIComponent(jobId)}/cancel`,
-      { method: "POST", body: JSON.stringify({}) }
-    ),
   hostedSavedWork: (connection: ClientConnection) =>
     apiFetch<HostedSavedWorkResponse>(connection, "/v1/saved-work"),
   createHostedSavedWork: (

@@ -4,10 +4,8 @@ import {
   SidebarNavigation,
   SidebarUtilityNavigation,
 } from "./SidebarNavigation";
-import { SidebarCommunitySection } from "./SidebarCommunitySection";
 import { SidebarSectionList } from "./SidebarSectionList";
 import { SidebarProductMenu } from "./SidebarProductMenu";
-import { SidebarTeamSection } from "./SidebarTeamSection";
 import type { SidebarProps } from "./Sidebar.types";
 import { UserAuthFooter } from "./UserAuthFooter";
 import { useReleaseUpdateCheck } from "../../hooks/useReleaseUpdateCheck";
@@ -46,7 +44,6 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar-toolbar">
         <button
           className="sidebar-icon"
-          data-tooltip="Hide sidebar"
           aria-label="Hide sidebar"
           onClick={() => setSidebarOpen(false)}
         >
@@ -84,51 +81,27 @@ export function Sidebar(props: SidebarProps) {
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}
 
-      {productArea === "models" ? null : (
-        <div className="sidebar-collaboration-sections">
-          <SidebarCommunitySection
-            communities={props.communityItems}
-            channels={props.communityChannels}
-            loading={props.communityLoading}
-            error={props.communityError}
-            selectedCommunityId={props.selectedCommunityId}
-            selectedChannelId={props.selectedCommunityChannelId}
-            view={view}
-            onDiscover={props.discoverCommunities}
-            onSelectCommunity={props.selectCommunity}
-            onSelectChannel={props.selectCommunityChannel}
-          />
-          <SidebarTeamSection
-            currentUserId={props.currentUserId}
-            enabled={props.teamChatEnabled}
-            loading={props.teamChatLoading ?? false}
-            members={props.teamMembers}
-            onOpen={() => {
-              setSelectedAppId(null);
-              setSelectedProjectId(null);
-              setSelectedSessionId(null);
-              setSectionMenuOpen(null);
-              setView("team");
-            }}
-            openTeamDm={props.openTeamDm}
-            organization={props.teamChatOrganization}
-            selectedTeamThreadId={props.selectedTeamThreadId}
-            selectTeamThread={props.selectTeamThread}
-            threads={props.teamThreads}
-            view={view}
-          />
-        </div>
-      )}
-
       <div className="sidebar-bottom-stack">
         {productArea === "models" ? null : (
           <HarnessLearningSidebarCard
             connection={props.connection}
+            onOpenSettings={() => {
+              setSectionMenuOpen(null);
+              setSettingsSection("harness");
+              setView("settings");
+            }}
           />
         )}
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}
+            onOpenApps={productArea === "development" || productArea === "chat" ? () => {
+              setSectionMenuOpen(null);
+              setSelectedAppId(null);
+              setSelectedProjectId(null);
+              setSelectedSessionId(null);
+              setView("apps");
+            } : undefined}
             onOpenActivity={() => {
               setSectionMenuOpen(null);
               setSettingsSection("usage");

@@ -178,6 +178,10 @@ export function LabsRoute({
     null,
   );
   const [modelCreateOpen, setModelCreateOpen] = useState(false);
+  const [benchmarkLaunch, setBenchmarkLaunch] = useState<{
+    modelId: string;
+    model: ChatModelRef;
+  } | null>(null);
   const [datasetCreateRoute, setDatasetCreateRoute] = useState<
     "source" | DatasetCreateSource | null
   >(null);
@@ -409,6 +413,12 @@ export function LabsRoute({
     setModelCreateOpen(false);
     setActiveTab("models");
     setSelectedKey(workproductKey("model", saved.id));
+    if (input.purpose === "benchmark") {
+      setBenchmarkLaunch({
+        modelId: saved.id,
+        model: input.benchmarkModel ?? training.defaultModel,
+      });
+    }
     profileView.onToast?.(`${saved.name} created.`, "success");
     return true;
   }
@@ -548,12 +558,22 @@ export function LabsRoute({
           )}
           onStartAgentChange={() => undefined}
           onToast={training.onToast}
+          benchmarkDefaultModel={training.defaultModel}
+          benchmarkProviderSettings={training.providerSettings}
+          initialBenchmarkModel={
+            benchmarkLaunch?.modelId === selected.id
+              ? benchmarkLaunch.model
+              : null
+          }
+          initialBenchmarkOpen={benchmarkLaunch?.modelId === selected.id}
+          onInitialBenchmarkOpenConsumed={() => setBenchmarkLaunch(null)}
         />
       ) : (
         <LabModelsPage
           activeProfileId={profileId}
           items={models}
           loading={training.training.loading && !models.length}
+          providerSettings={training.providerSettings}
           runs={createImprove.runs}
           state={training.training.payload}
           onSelect={setSelectedKey}
@@ -567,6 +587,7 @@ export function LabsRoute({
             training.training.payload?.baseModelCandidates ?? []
           }
           busy={training.training.busyAction === "save-model-project"}
+          defaultBenchmarkModel={training.defaultModel}
           initialName={nextModelName(
             training.training.payload?.modelProjects ?? [],
           )}
@@ -574,8 +595,9 @@ export function LabsRoute({
           onCreate={createModel}
           onManageModels={() => {
             setModelCreateOpen(false);
-            training.onOpenComputeSettings();
+            training.onOpenTrainingSettings();
           }}
+          providerSettings={training.providerSettings}
         />
       ) : null}
       {datasetCreateRoute === "source" ? (

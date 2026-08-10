@@ -1,6 +1,12 @@
 import path from "node:path";
 import { aggregateEvaluationReceipts } from "@openpond/evals";
 import {
+  compareBenchmarkRuns,
+  createBenchmarkRunSummary,
+  type BenchmarkRunPhase,
+  type TasksetRelease,
+} from "@openpond/evals";
+import {
   GraderAuditReportSchema,
   TasksetSchema,
   TaskAttemptResultSchema,
@@ -33,6 +39,7 @@ import type {
   TasksetWorkRequiredOutputValidator,
 } from "./taskset-work-attempt-runner.js";
 import { linkHarnessReviewTaskset } from "./harness-review-taskset.js";
+import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 
 type AuditFixtureInput = {
   label:
@@ -64,15 +71,26 @@ export function createTaskEvaluationService(deps: {
   modelStream?: TasksetWorkModelStream;
   workRuntime?: TasksetWorkAttemptRuntime;
   validateWorkRequiredOutput?: TasksetWorkRequiredOutputValidator;
+  additionalWorkToolDefinitions?: () => import("../openpond/model-tool-registry.js").ModelToolDefinition[];
+  resolveTasksetRelease?: (taskset: import("@openpond/contracts").Taskset) => Promise<TasksetRelease | null>;
   resolveReleasedHarness?: () => Promise<{
     agentSnapshot: import("@openpond/harness").AgentSnapshot;
     harnessRelease: import("@openpond/harness").HarnessRelease;
+    instructionContext?: string;
   } | null>;
 }) {
+  const graderUsageByAttemptId = new Map<string, {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costUsd: number | null;
+  }>();
+
   async function execute(input: {
     tasksetId: string;
     taskId: string;
     model: ChatModelRef;
+    reasoningEffort?: import("@openpond/contracts").CodexReasoningEffort | "none" | null;
     seed: number;
     attempt: number;
     sampling?: {
@@ -83,6 +101,11 @@ export function createTaskEvaluationService(deps: {
     signal?: AbortSignal;
     resultId?: string;
     admittedAt?: string;
+    releasedHarness?: {
+      agentSnapshot: import("@openpond/harness").AgentSnapshot;
+      harnessRelease: import("@openpond/harness").HarnessRelease;
+      instructionContext?: string;
+    };
   }) {
     if (
       !deps.storeDir
@@ -98,13 +121,18 @@ export function createTaskEvaluationService(deps: {
     // Profile source may change while an Evaluation is running, but the
     // attempt, grade, and receipt must remain bound to the release selected at
     // admission time.
-    const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
+    const releasedHarness = input.releasedHarness
+      ?? await deps.resolveReleasedHarness?.()
+      ?? null;
+    const boundTasksetRelease = await deps.resolveTasksetRelease?.(taskset) ?? null;
     const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
     const portable = compileDesktopHarnessContext({
       taskset,
       selectedTask: task,
       profile,
       releasedHarness,
+      tasksetRelease: boundTasksetRelease,
+      reasoningEffort: input.reasoningEffort ?? null,
       model: input.model,
       now: input.admittedAt ? () => input.admittedAt! : undefined,
     });
@@ -117,12 +145,15 @@ export function createTaskEvaluationService(deps: {
         stream: deps.modelStream,
         runtime: deps.workRuntime,
         validateRequiredOutput: deps.validateWorkRequiredOutput,
+        additionalToolDefinitions: deps.additionalWorkToolDefinitions?.(),
       },
       resultId: input.resultId,
+      harnessInstructionContext: releasedHarness?.instructionContext,
       attemptInput: {
         tasksetId: taskset.id,
         task,
         model: input.model,
+        reasoningEffort: input.reasoningEffort,
         seed: input.seed,
         attempt: input.attempt,
         sampling: input.sampling,
@@ -189,17 +220,70 @@ export function createTaskEvaluationService(deps: {
     const attempt = TaskAttemptResultSchema.parse(input.attempt);
     const task = await findTask(taskset, input.taskId, attempt.split);
     const customVerifier = await customVerifierFor(taskset.id);
+    const rawUsages: unknown[] = [];
+    let explicitCostUsd = 0;
     const result = await gradeTasksetEvaluationAttempt({
       task,
       attempt,
       graders: taskset.graders,
-      modelJudge: deps.modelJudge ?? undefined,
+      modelJudge: deps.modelJudge
+        ? async (judgeInput) => {
+            const judged = await deps.modelJudge!(judgeInput);
+            if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
+            else if (judged.usage !== undefined) rawUsages.push(judged.usage);
+            if (
+              typeof judged.costUsd === "number"
+              && Number.isFinite(judged.costUsd)
+              && judged.costUsd >= 0
+            ) explicitCostUsd += judged.costUsd;
+            return judged;
+          }
+        : undefined,
       customVerifier,
       now: () => new Date().toISOString(),
     });
     await deps.store.saveTaskAttempt(attempt);
     await deps.store.saveGradeResult(result);
+    const usage = rawUsages.reduce<{
+      inputTokens: number;
+      outputTokens: number;
+      totalTokens: number;
+    }>(
+      (total, raw) => {
+        const normalized = normalizeModelUsageTokens(raw);
+        total.inputTokens += normalized.promptTokens ?? 0;
+        total.outputTokens += normalized.completionTokens ?? 0;
+        total.totalTokens += normalized.totalTokens ?? 0;
+        return total;
+      },
+      { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+    );
+    if (usage.totalTokens > 0 || explicitCostUsd > 0) {
+      graderUsageByAttemptId.set(attempt.id, {
+        ...usage,
+        costUsd: explicitCostUsd > 0 ? explicitCostUsd : null,
+      });
+    }
     return result;
+  }
+
+  function consumeGraderUsage(attemptIds: readonly string[]) {
+    const total = {
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+      costUsd: null as number | null,
+    };
+    for (const attemptId of attemptIds) {
+      const usage = graderUsageByAttemptId.get(attemptId);
+      graderUsageByAttemptId.delete(attemptId);
+      if (!usage) continue;
+      total.inputTokens += usage.inputTokens;
+      total.outputTokens += usage.outputTokens;
+      total.totalTokens += usage.totalTokens;
+      if (usage.costUsd !== null) total.costUsd = (total.costUsd ?? 0) + usage.costUsd;
+    }
+    return total;
   }
 
   async function auditFixtures(input: {
@@ -442,10 +526,12 @@ export function createTaskEvaluationService(deps: {
     if (!deps.storeDir) {
       throw new Error("Managed Taskset storage is required for judge calibration.");
     }
-    await buildTaskset(
-      updated,
-      path.join(deps.storeDir, "training", "tasksets", updated.id),
-    );
+    if (updated.purpose !== "benchmark") {
+      await buildTaskset(
+        updated,
+        path.join(deps.storeDir, "training", "tasksets", updated.id),
+      );
+    }
     await deps.store.upsertTaskset(updated);
     return {
       taskset: updated,
@@ -601,6 +687,177 @@ export function createTaskEvaluationService(deps: {
     return { evaluationResult, attempts: executions, reused: false };
   }
 
+  async function executeBenchmark(input: {
+    tasksetId: string;
+    phase: BenchmarkRunPhase;
+    model: ChatModelRef;
+    reasoningEffort?: import("@openpond/contracts").CodexReasoningEffort | "none" | null;
+    split?: DatasetSplit;
+    seeds?: number[];
+    repetitions?: number;
+    taskIds?: string[];
+    sampling?: {
+      maxOutputTokens: number;
+      temperature: number;
+      topP: number;
+    };
+    signal?: AbortSignal;
+    releasedHarness?: {
+      agentSnapshot: import("@openpond/harness").AgentSnapshot;
+      harnessRelease: import("@openpond/harness").HarnessRelease;
+      instructionContext?: string;
+    };
+  }) {
+    const taskset = await requireTaskset(input.tasksetId);
+    if (taskset.purpose !== "benchmark" || !taskset.benchmark) {
+      throw new Error("This Taskset does not define a benchmark protocol.");
+    }
+    const split = input.split ?? taskset.benchmark.evaluationSplit;
+    const requestedTaskIds = input.taskIds?.length
+      ? new Set(input.taskIds)
+      : null;
+    const tasks = taskset.tasks.filter(
+      (task) =>
+        task.split === split
+        && (!requestedTaskIds || requestedTaskIds.has(task.id)),
+    );
+    if (
+      requestedTaskIds
+      && tasks.length !== requestedTaskIds.size
+    ) {
+      throw new Error("Benchmark task selection contains an id outside the pinned split.");
+    }
+    if (!tasks.length) throw new Error(`Benchmark split ${split} has no cases.`);
+    const seeds = [...new Set(input.seeds?.length ? input.seeds : [17])].slice(0, 100);
+    const repetitions = Math.max(1, Math.min(20, Math.trunc(input.repetitions ?? 1)));
+    const admittedAt = new Date().toISOString();
+    const executions: Awaited<ReturnType<typeof execute>>[] = [];
+    for (const task of tasks) {
+      for (const seed of seeds) {
+        for (let attempt = 0; attempt < repetitions; attempt += 1) {
+          if (input.signal?.aborted) throw input.signal.reason;
+          executions.push(await execute({
+            tasksetId: taskset.id,
+            taskId: task.id,
+            model: input.model,
+            reasoningEffort: input.reasoningEffort ?? null,
+            seed,
+            attempt,
+            sampling: input.sampling,
+            signal: input.signal,
+            releasedHarness: input.releasedHarness,
+            admittedAt,
+            resultId: `benchmark-attempt-${contentHash({
+              tasksetRelease: taskset.benchmark.releaseHash,
+              phase: input.phase,
+              model: input.model,
+              reasoningEffort: input.reasoningEffort ?? null,
+              split,
+              taskId: task.id,
+              seed,
+              attempt,
+              admittedAt,
+            }).slice(0, 24)}`,
+          }));
+        }
+      }
+    }
+    const manifest = executions[0]!.portable.runManifest;
+    if (executions.some((execution) => execution.portable.runManifest.contentHash !== manifest.contentHash)) {
+      throw new Error("Benchmark attempts did not share one pinned Run Manifest.");
+    }
+    const receipts = executions.map((execution) => execution.portable.receipt);
+    const evaluationResult = aggregateEvaluationReceipts({
+      id: `benchmark-evaluation-${contentHash({
+        manifest: manifest.contentHash,
+        phase: input.phase,
+        receipts: receipts.map((receipt) => receipt.contentHash),
+      }).slice(0, 24)}`,
+      manifest,
+      receipts,
+      metadata: {
+        kind: "benchmark",
+        phase: input.phase,
+        split,
+        reasoningEffort: input.reasoningEffort ?? null,
+        sourceTasksetId: taskset.id,
+        sourceTasksetRevision: taskset.revision,
+        sourceTasksetHash: taskset.contentHash,
+        benchmarkDefinitionId: taskset.benchmark.definitionId,
+        admittedAt,
+      },
+    });
+    await deps.store.saveEvaluationResult({
+      tasksetId: taskset.id,
+      kind: input.phase,
+      result: evaluationResult,
+      createdAt: admittedAt,
+    });
+    const run = createBenchmarkRunSummary({
+      id: `benchmark-run-${evaluationResult.contentHash.slice(0, 24)}`,
+      phase: input.phase,
+      evaluation: evaluationResult,
+      receipts,
+      reasoningEffort: input.reasoningEffort ?? null,
+      protocol: {
+        split,
+        taskIds: tasks.map((task) => task.id),
+        seeds: seeds.map(String),
+        repetitions,
+        runtimeTargetHash: contentHash(manifest.runtimeTarget),
+        environmentHash: contentHash(executions[0]!.portable.tasksetRelease.environment),
+        toolContractHash: contentHash({
+          tasksetTools: executions[0]!.portable.tasksetRelease.tools,
+          harnessTools: executions[0]!.portable.harnessRelease.tools,
+        }),
+        limitsHash: contentHash(manifest.limits),
+      },
+      createdAt: admittedAt,
+      metadata: { sourceTasksetId: taskset.id, split, seeds, repetitions },
+    });
+    await deps.store.saveBenchmarkRun({ tasksetId: taskset.id, run });
+
+    const priorRuns = await deps.store.listBenchmarkRuns(taskset.id);
+    const baseline = input.phase === "baseline"
+      ? run
+      : priorRuns.find((candidate) =>
+          candidate.phase === "baseline"
+          && candidate.tasksetRelease.contentHash === run.tasksetRelease.contentHash
+          && candidate.model.provider === run.model.provider
+          && candidate.model.model === run.model.model
+          && candidate.reasoningEffort === run.reasoningEffort
+          && contentHash(candidate.protocol) === contentHash(run.protocol)
+        ) ?? null;
+    const candidate = input.phase === "candidate"
+      ? run
+      : priorRuns.find((item) =>
+          item.phase === "candidate"
+          && item.tasksetRelease.contentHash === run.tasksetRelease.contentHash
+          && item.model.provider === run.model.provider
+          && item.model.model === run.model.model
+          && item.reasoningEffort === run.reasoningEffort
+          && contentHash(item.protocol) === contentHash(run.protocol)
+        ) ?? null;
+    const comparison = baseline && candidate
+      ? compareBenchmarkRuns({
+          id: `benchmark-comparison-${contentHash([baseline.contentHash, candidate.contentHash]).slice(0, 24)}`,
+          baseline,
+          candidate,
+          primaryMetric: taskset.benchmark.primaryMetric,
+          qualityGate: taskset.benchmark.qualityGate,
+          createdAt: admittedAt,
+          metadata: {
+            sourceTasksetId: taskset.id,
+            benchmarkDefinitionId: taskset.benchmark.definitionId,
+          },
+        })
+      : null;
+    if (comparison) {
+      await deps.store.saveBenchmarkComparison({ tasksetId: taskset.id, comparison });
+    }
+    return { evaluationResult, run, comparison, attempts: executions };
+  }
+
   async function requireTaskset(id: string) {
     const taskset = await deps.store.getTaskset(id);
     if (!taskset) throw new Error("Taskset not found.");
@@ -640,7 +897,7 @@ export function createTaskEvaluationService(deps: {
     const proposal = creationSnapshotId
       ? await deps.store.getTaskDesignProposal(creationSnapshotId)
       : null;
-    if (tasksetRoot) {
+    if (tasksetRoot && taskset.purpose !== "benchmark") {
       await buildTaskset(taskset, tasksetRoot, {
         generatedFiles: proposal?.generatedFiles ?? [],
       });
@@ -667,10 +924,12 @@ export function createTaskEvaluationService(deps: {
   return {
     execute,
     grade,
+    consumeGraderUsage,
     auditFixtures,
     calibrateModelJudges,
     readiness,
     executeBaseline,
+    executeBenchmark,
     close: async () => {},
   };
 }

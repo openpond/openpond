@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
   CROSS_SYSTEM_TOOL_CONTRACT_HASH,
@@ -8,314 +7,106 @@ import {
   type ChatModelRef,
   type CodexReasoningEffort,
   type CrossSystemToolName,
-  type CrossSystemTrajectory,
-  type CrossSystemTrajectoryStep,
 } from "@openpond/contracts";
-import type {
-  HostedChatContinuation,
-  HostedChatMessage,
-  HostedChatTool,
-  HostedChatToolCall,
-  HostedChatToolChoice,
-} from "@openpond/cloud";
-
-import {
-  assistantMessageForNativeToolCalls,
-  invalidNativeToolArgumentsResult,
-  NativeToolCallAccumulator,
-  parseNativeToolArguments,
-  toolResultMessage,
-  unknownNativeToolResult,
-} from "../../openpond/native-tool-calls.js";
-import { crossSystemToolsFromRequest } from "../local-adapter-tool-protocol.js";
+import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
+import type { TasksetWorkModelStream } from "../taskset-work-attempt-runner.js";
 import { CrossSystemEnvironment, CrossSystemToolError } from "./environment.js";
 import type { CrossSystemTask, CrossSystemWorld } from "./types.js";
-import { parseCrossSystemAnswer } from "./verifier.js";
 
-export type CrossSystemModelDelta = {
-  text?: string;
-  continuation?: HostedChatContinuation;
-  toolCalls?: HostedChatToolCall[];
-  responseFacts?: {
-    providerResponseIdentity: string;
-    promptTokens: number | null;
-    generatedTokens: number | null;
-    samplingSupport: {
-      seed: boolean;
-      temperature: boolean;
-      topP: boolean;
-    };
-  };
-};
-
-export type CrossSystemModelStream = (input: {
-  model: ChatModelRef;
-  reasoningEffort: CodexReasoningEffort | null;
-  messages: HostedChatMessage[];
-  tools: HostedChatTool[];
-  toolChoice: HostedChatToolChoice;
-  requestId: string;
-  signal: AbortSignal;
-  maxOutputTokens?: number;
-  temperature?: number;
-  topP?: number;
-  seed?: number;
-}) => AsyncIterable<CrossSystemModelDelta>;
+export type CrossSystemModelStream = TasksetWorkModelStream;
 
 export async function runCrossSystemRollout(input: {
   world: CrossSystemWorld;
   task: CrossSystemTask;
   model: ChatModelRef;
-  reasoningEffort: CodexReasoningEffort | null;
+  reasoningEffort: CodexReasoningEffort | "none" | null;
   stream: CrossSystemModelStream;
   signal: AbortSignal;
-  trajectoryId?: string;
+  trajectoryId: string;
   metadata?: Record<string, unknown>;
-  maxTurns?: number;
-  maxFormatRepairs?: number;
-}): Promise<CrossSystemTrajectory> {
-  const id = input.trajectoryId ?? `cso_rollout_${randomUUID()}`;
+}) {
   const startedAt = new Date().toISOString();
   const environment = new CrossSystemEnvironment({
-    attemptId: id,
+    attemptId: input.trajectoryId,
     world: input.world,
     task: input.task,
   });
-  const steps: CrossSystemTrajectoryStep[] = [];
-  const tools = crossSystemTools();
+  const steps: Array<Record<string, unknown>> = [];
   const messages: HostedChatMessage[] = [
-    {
-      role: "system",
-      content: [
-        "You are being evaluated in the bounded synthetic Cross-System Operations environment.",
-        `Use only the four registered tools under contract ${CROSS_SYSTEM_TOOL_CONTRACT_HASH}; never infer operational facts without tool evidence.`,
-        "Reconcile identifiers across systems, respect pagination and budgets, and use run_python for exact arithmetic when useful.",
-        'Use search_crm query "*" to enumerate all synthetic accounts when a task requires a full-world scan; do not guess customer names.',
-        "Follow the response shape in the task exactly and omit every field that shape does not declare.",
-        "When the answer is ready, stop calling tools and return exactly ANSWER: followed by one JSON object with no surrounding prose.",
-      ].join("\n"),
-    },
+    { role: "system", content: "Use the registered synthetic data tools. Finish with ANSWER: followed by one JSON object." },
     { role: "user", content: input.task.prompt },
   ];
-  let status: CrossSystemTrajectory["status"] = "completed";
+  let status: "completed" | "budget_exhausted" | "cancelled" | "infrastructure_failure" = "completed";
   let infrastructureError: string | null = null;
-  let formatRepairAttempts = 0;
-  let toolNudgeAttempts = 0;
-  let forceFinalAnswer = false;
-
   try {
-    const maxTurns = Math.max(
-      1,
-      Math.min(
-        input.task.budget.maxTurns,
-        input.maxTurns ?? input.task.budget.maxTurns,
-      ),
-    );
-    const maxFormatRepairs = Math.max(
-      0,
-      Math.min(2, input.maxFormatRepairs ?? 1),
-    );
-    for (let turn = 0; turn < maxTurns; turn += 1) {
-      throwIfAborted(input.signal);
-      const accumulator = new NativeToolCallAccumulator();
-      let text = "";
-      let continuation: HostedChatContinuation | null = null;
-      const requestTools = forceFinalAnswer ? [] : tools;
+    for (let turn = 0; turn <= input.task.budget.maxTurns; turn += 1) {
+      if (input.signal.aborted) throw input.signal.reason ?? new Error("Cross-system rollout cancelled.");
+      let content = "";
+      const toolCalls: import("@openpond/cloud").HostedChatToolCall[] = [];
       for await (const delta of input.stream({
         model: input.model,
         reasoningEffort: input.reasoningEffort,
         messages,
-        tools: requestTools,
-        toolChoice: forceFinalAnswer ? "none" : "auto",
-        requestId: `cso-rollout:${id.slice(-36)}:${turn}`,
+        tools: crossSystemTools(),
+        toolChoice: "auto",
+        requestId: `${input.trajectoryId}:${turn}`,
         signal: input.signal,
       })) {
-        if (delta.text) text += delta.text;
-        if (delta.continuation) continuation = delta.continuation;
-        if (delta.toolCalls?.length) accumulator.append(delta.toolCalls);
+        if (delta.text) content += delta.text;
+        if (delta.toolCalls) toolCalls.push(...delta.toolCalls);
       }
-      const toolCalls = accumulator.completed();
+      if (content) steps.push({ kind: "model", turn, content });
       if (!toolCalls.length) {
-        messages.push({
-          role: "assistant",
-          content: text,
-          ...(continuation ? { continuation } : {}),
-        });
-        const invalidAnswer = !hasValidAnswerEnvelope(text);
-        const canContinue = turn < maxTurns - 1;
-        if (
-          formatRepairAttempts < maxFormatRepairs
-          && canContinue
-          && invalidAnswer
-          && (
-            looksLikeAnswerAttempt(text)
-            || hasRequiredToolEvidence(input.task, steps)
-          )
-        ) {
-          steps.push({ kind: "model", turn, content: text });
-          formatRepairAttempts += 1;
-          forceFinalAnswer = true;
-          messages.push({
-            role: "user",
-            content:
-              "Return only ANSWER: followed by one JSON object matching the task shape. Do not include analysis, markdown, or surrounding prose.",
-          });
-          continue;
-        }
-        if (
-          canContinue
-          && invalidAnswer
-          && !looksLikeAnswerAttempt(text)
-          && !hasRequiredToolEvidence(input.task, steps)
-        ) {
-          steps.push({ kind: "model", turn, content: text });
-          toolNudgeAttempts += 1;
-          forceFinalAnswer = false;
-          const completedTools = successfulToolNames(steps);
-          const missingTools = [
-            ...new Set(
-              input.task.queryPlan
-                .map((item) => item.tool)
-                .filter((name) => !completedTools.has(name)),
-            ),
-          ];
-          messages.push({
-            role: "user",
-            content:
-              "Continue with the registered tools before answering. "
-              + `Collect the remaining evidence from: ${missingTools.join(", ")}.`,
-          });
-          continue;
-        }
-        steps.push({ kind: "final", turn, content: text });
+        steps.push({ kind: "final", turn, content });
         break;
       }
-      forceFinalAnswer = false;
-      if (text.trim()) steps.push({ kind: "model", turn, content: text });
-      messages.push(
-        assistantMessageForNativeToolCalls(text, toolCalls, { continuation }),
-      );
-      for (const call of toolCalls) {
-        if (!isCrossSystemToolName(call.name)) {
-          messages.push(toolResultMessage(unknownNativeToolResult(call)));
-          continue;
+      messages.push({ role: "assistant", content: content || null, tool_calls: toolCalls });
+      for (const [index, call] of toolCalls.entries()) {
+        const callId = call.id?.trim() || `${input.trajectoryId}:${turn}:${index}`;
+        const name = call.function?.name;
+        if (!name || !(CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(name)) {
+          throw new Error(`Model requested unknown cross-system tool ${name ?? "<missing>"}.`);
         }
         let args: Record<string, unknown>;
         try {
-          args = parseNativeToolArguments(call);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          steps.push({
-            kind: "tool_call",
-            turn,
-            callId: call.id,
-            name: call.name,
-            arguments: {},
-          });
-          steps.push({
-            kind: "tool_result",
-            turn,
-            callId: call.id,
-            name: call.name,
-            ok: false,
-            result: null,
-            rows: 0,
-            bytes: 0,
-            durationMs: 0,
-            error: `Schema violation: ${message}`,
-          });
-          messages.push(
-            toolResultMessage(
-              invalidNativeToolArgumentsResult(call, message),
-            ),
-          );
-          continue;
+          const parsed = JSON.parse(call.function?.arguments ?? "{}");
+          args = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+        } catch {
+          args = {};
         }
-        steps.push({
-          kind: "tool_call",
-          turn,
-          callId: call.id,
-          name: call.name,
-          arguments: args,
-        });
+        steps.push({ kind: "tool_call", turn, callId, name, arguments: args });
+        const before = environment.evidence.length;
         try {
-          const result = await environment.execute(
-            call.name,
-            args,
-            input.signal,
-          );
-          const evidence = environment.evidence.at(-1)!;
-          steps.push({
-            kind: "tool_result",
-            turn,
-            callId: call.id,
-            name: call.name,
-            ok: true,
-            result,
-            rows: evidence.rows,
-            bytes: evidence.bytes,
-            durationMs: evidence.durationMs,
-            error: null,
-          });
-          messages.push(
-            toolResultMessage({
-              toolCallId: call.id,
-              name: call.name,
-              ok: true,
-              contentText: JSON.stringify({ ok: true, result }),
-            }),
-          );
+          const result = await environment.execute(name as CrossSystemToolName, args, input.signal);
+          const evidence = environment.evidence[before]!;
+          steps.push({ kind: "tool_result", turn, callId, name, ok: true, result, rows: evidence.rows, bytes: evidence.bytes, durationMs: evidence.durationMs, error: null });
+          messages.push({ role: "tool", tool_call_id: callId, name, content: JSON.stringify(result) });
         } catch (error) {
-          const evidence = environment.evidence.at(-1);
-          const message =
-            error instanceof Error ? error.message : String(error);
-          steps.push({
-            kind: "tool_result",
-            turn,
-            callId: call.id,
-            name: call.name,
-            ok: false,
-            result: null,
-            rows: evidence?.rows ?? 0,
-            bytes: evidence?.bytes ?? 0,
-            durationMs: evidence?.durationMs ?? 0,
-            error: message,
-          });
-          messages.push(
-            toolResultMessage({
-              toolCallId: call.id,
-              name: call.name,
-              ok: false,
-              contentText: JSON.stringify({ ok: false, error: message }),
-            }),
-          );
-          if (
-            error instanceof CrossSystemToolError
-            && error.code === "budget_exhausted"
-          ) {
+          const evidence = environment.evidence[before];
+          const message = error instanceof Error ? error.message : String(error);
+          steps.push({ kind: "tool_result", turn, callId, name, ok: false, result: null, rows: evidence?.rows ?? 0, bytes: evidence?.bytes ?? 0, durationMs: evidence?.durationMs ?? 0, error: message });
+          messages.push({ role: "tool", tool_call_id: callId, name, content: JSON.stringify({ ok: false, error: message }) });
+          if (error instanceof CrossSystemToolError && error.code === "budget_exhausted") {
             status = "budget_exhausted";
+            break;
           }
         }
       }
       if (status === "budget_exhausted") break;
-      if (turn === maxTurns - 1) status = "budget_exhausted";
+      if (turn === input.task.budget.maxTurns) status = "budget_exhausted";
     }
   } catch (error) {
-    if (input.signal.aborted) {
-      status = "cancelled";
-    } else {
+    if (input.signal.aborted) status = "cancelled";
+    else {
       status = "infrastructure_failure";
-      infrastructureError =
-        error instanceof Error ? error.message : String(error);
+      infrastructureError = error instanceof Error ? error.message : String(error);
     }
   } finally {
     await environment.close();
   }
-
   return CrossSystemTrajectorySchema.parse({
     schemaVersion: CROSS_SYSTEM_OPERATIONS_SCHEMA_VERSION,
-    id,
+    id: input.trajectoryId,
     worldId: input.world.id,
     taskId: input.task.id,
     toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
@@ -325,73 +116,17 @@ export async function runCrossSystemRollout(input: {
     startedAt,
     completedAt: new Date().toISOString(),
     infrastructureError,
-    metadata: {
-      execution: "provider_tool_loop",
-      worldSeed: input.world.seed,
-      worldSplit: input.world.split,
-      worldDifficulty: input.world.difficulty,
-      formatRepairAttempts,
-      toolNudgeAttempts,
-      ...input.metadata,
-    },
+    metadata: input.metadata ?? {},
   });
 }
 
-function hasValidAnswerEnvelope(value: string): boolean {
-  try {
-    parseCrossSystemAnswer(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function looksLikeAnswerAttempt(value: string): boolean {
-  const trimmed = value.trim();
-  return /(?:^|\s)ANSWER\s*:/i.test(trimmed) || trimmed.startsWith("{");
-}
-
-function successfulToolNames(
-  steps: CrossSystemTrajectoryStep[],
-): Set<CrossSystemToolName> {
-  return new Set(
-    steps.flatMap((step) =>
-      step.kind === "tool_result"
-      && step.ok
-      && isCrossSystemToolName(step.name)
-        ? [step.name]
-        : [],
-    ),
-  );
-}
-
-function hasRequiredToolEvidence(
-  task: CrossSystemTask,
-  steps: CrossSystemTrajectoryStep[],
-): boolean {
-  const completedTools = successfulToolNames(steps);
-  return task.queryPlan.every((item) => completedTools.has(item.tool));
-}
-
 function crossSystemTools(): HostedChatTool[] {
-  const requested = CROSS_SYSTEM_TOOL_DEFINITIONS.map((definition) => ({
-    type: "function" as const,
+  return CROSS_SYSTEM_TOOL_DEFINITIONS.map((definition) => ({
+    type: "function",
     function: {
       name: definition.name,
       description: definition.description,
-      parameters: structuredClone(
-        definition.parameters,
-      ) as Record<string, unknown>,
+      parameters: structuredClone(definition.parameters) as Record<string, unknown>,
     },
   }));
-  return crossSystemToolsFromRequest(requested, "auto");
-}
-
-function isCrossSystemToolName(value: string): value is CrossSystemToolName {
-  return (CROSS_SYSTEM_TOOL_NAMES as readonly string[]).includes(value);
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (!signal.aborted) return;
-  throw signal.reason ?? new Error("Cross-System rollout was cancelled.");
 }

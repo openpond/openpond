@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { TrainingDestinationId } from "@openpond/contracts";
 import { X } from "../icons";
 import { TrainingCatalogSetup } from "./TrainingCatalogSetup";
@@ -107,7 +107,6 @@ export function TrainingStartDialog({
     runPreset,
   });
   const {
-    compute,
     catalog,
     catalogError,
     catalogTargets,
@@ -128,18 +127,6 @@ export function TrainingStartDialog({
       ? taskset.learningSignals.preferences.filter((pair) => pair.approved).length
       : taskset.learningSignals.demonstrations.filter((example) => example.approved).length;
   const evaluationExamples = trainingSplitCount(taskset, "frozen_eval");
-  const trainableModels = useMemo(
-    () =>
-      compute?.inventory?.models.filter(
-        (model) =>
-          model.trainingCompatible &&
-          model.modelId &&
-          model.revision &&
-          model.tokenizerRevision &&
-          model.chatTemplateHash,
-      ) ?? [],
-    [compute?.inventory?.models],
-  );
   const selectedBaseModel =
     baseModelCandidates.find((candidate) => candidate.selectionKey === baseModelKey) ?? null;
   const selectedExecutionOption =
@@ -147,10 +134,6 @@ export function TrainingStartDialog({
       (option) => option.destinationId === destinationId && option.methods.includes(method),
     ) ?? null;
   const baseModelId = selectedBaseModel?.preference.modelId ?? "";
-  const selectedModel = selectedBaseModel?.preference.modelAssetId
-    ? (trainableModels.find((model) => model.id === selectedBaseModel.preference.modelAssetId) ??
-      null)
-    : (trainableModels.find((model) => model.modelId === baseModelId) ?? null);
   const selectedComputeTarget =
     catalogTargets.find((target) => target.id === computeTargetId) ?? null;
   const initializedTargetDefaultsRef = useRef<string | null>(null);
@@ -251,7 +234,7 @@ export function TrainingStartDialog({
     selectedExecutionOption?.available &&
     selectedCatalogCompatibility?.state !== "unsupported" &&
     selectedCatalogCompatibility?.state !== "compute_setup_required" &&
-    (selectedBaseModel?.preference.source !== "local" || Boolean(selectedModel)),
+    selectedBaseModel?.preference.source !== "local",
   );
   const compatible = configurationCompatible && approvalReady;
   const configurationIncompatibility = !taskset.readiness?.ready
@@ -267,9 +250,7 @@ export function TrainingStartDialog({
           : !selectedExecutionOption?.available
             ? (selectedExecutionOption?.unavailableReason ??
               "The selected base model cannot run on this compute destination.")
-            : selectedBaseModel.preference.source === "local" && !selectedModel
-              ? "The selected local model is no longer present in the verified compute inventory. Scan Compute and select it again."
-              : !destination?.methods.includes(method as never)
+            : !destination?.methods.includes(method as never)
                 ? `${destinationLabel(destinationId)} does not execute ${method.toUpperCase()}.`
                 : (destination?.unavailableReason ?? null);
   const launchIncompatibility =
@@ -296,7 +277,6 @@ export function TrainingStartDialog({
     sequenceLength,
     rank,
     learningRate,
-    model: selectedModel,
     rolloutGroupSize,
     rolloutConcurrency,
     rolloutMaxOutputTokens,
@@ -562,13 +542,10 @@ export function TrainingStartDialog({
         evaluationExamples={evaluationExamples}
         preparedQuote={preparedQuote}
         selectedComputeTarget={selectedComputeTarget}
-        selectedModel={Boolean(selectedModel)}
-        maxSteps={maxSteps}
-        sequenceLength={sequenceLength}
         approvalPresentation={approvalPresentation}
         maximumCostUsd={maximumCostUsd}
         providerManaged={providerManaged}
-        storagePath={compute?.settings.modelStorePath ?? null}
+        storagePath={null}
       />
       {approvalPresentation === "inline" && currentPrepared ? (
         <TrainingPreparedConfirmation

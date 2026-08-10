@@ -17,8 +17,7 @@
     { "path": "../../packages/runtime" },
     { "path": "../../packages/sdk/tsconfig.build.json" },
     { "path": "../../packages/taskset-sdk" },
-    { "path": "../../packages/training-sdk" },
-    { "path": "../../packages/trainer-local" }
+    { "path": "../../packages/training-sdk" }
   ],
   "include": ["src/**/*.ts"]
 }

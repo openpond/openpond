@@ -1,7 +1,6 @@
 import { access, cp, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
 import {
-  type ComputeInventory,
   type GradeResult,
   type OpenPondProfileState,
   type TaskAttemptResult,
@@ -14,7 +13,6 @@ import type { SqliteStore } from "../store/store.js";
 import {
   PortablePreparationTrainingDestination,
 } from "./destinations.js";
-import { LocalCpuTrainingDestination } from "./local-cpu-destination.js";
 import { createCrossSystemExpertBootstrapService } from "./cross-system-operations/expert-bootstrap-service.js";
 import { projectBaseModelCandidates } from "./base-model-candidates.js";
 import type { ManagedModelBindingCallbacks } from "./managed-model-binding-coordinator.js";
@@ -23,7 +21,7 @@ import {
   type ProjectDatasetArtifact,
 } from "./training-dataset-selection.js";
 import { isInside } from "./training-service-helpers.js";
-import { createDestinationTrainingEngineRegistry } from "./destination-training-engine-adapter.js";
+import { createDestinationTrainingEngineRegistry } from "./managed-training-engine-registry.js";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
 import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
@@ -37,12 +35,7 @@ import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js
 export function createTrainingService(deps: {
   store: SqliteStore;
   storeDir: string;
-  localWorkerProjectDir: string;
   registerDestinations?: (registry: TrainingDestinationRegistry) => void;
-  revalidateCompute?: () => Promise<void>;
-  resolveModelPath?: (modelId: string, revision: string) => Promise<string | null>;
-  modelArtifactStore?: () => Promise<string | null>;
-  computeInventory?: () => Promise<ComputeInventory | null>;
   resolveApprovalActor?: () => Promise<string | null>;
   gradeTaskAttempt?: (input: {
     tasksetId: string;
@@ -56,10 +49,6 @@ export function createTrainingService(deps: {
     split: "train" | "frozen_eval";
   }) => Promise<import("@openpond/contracts").TaskDataRecord>;
   tasksetWorkRuntime?: TasksetWorkAttemptRuntime;
-  prepareModel?: (input: {
-    modelId: string;
-    revision: string | null;
-  }) => Promise<unknown>;
   registerPortableAdapters?: (registry: TrainingAdapterRegistry) => void;
   resolveManagedTrainingAccess?: () => Promise<{
     apiBaseUrl: string;
@@ -83,8 +72,6 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     projectDatasetArtifact: deps.projectDatasetArtifact,
   });
-  const localCpu = new LocalCpuTrainingDestination({ store: deps.store, storeDir: deps.storeDir, projectDir: deps.localWorkerProjectDir, resolveModelPath: deps.resolveModelPath, modelArtifactStore: deps.modelArtifactStore });
-  registry.register(localCpu);
   registry.register(
     new PortablePreparationTrainingDestination("openpond_managed", {
       resolveTaskset,
@@ -112,7 +99,6 @@ export function createTrainingService(deps: {
   const artifactExports = createTrainingArtifactExportService({
     store: deps.store,
     storeDir: deps.storeDir,
-    localCpu,
   });
   deps.registerDestinations?.(registry);
   const portableAdapters = createDestinationTrainingEngineRegistry({
@@ -123,7 +109,6 @@ export function createTrainingService(deps: {
     catalog: () => portableCatalog(),
   });
   deps.registerPortableAdapters?.(portableAdapters);
-  void localCpu.reconcile();
 
   async function destinations() { return Promise.all(registry.list().map((destination) => destination.capabilities())); }
 
@@ -131,8 +116,6 @@ export function createTrainingService(deps: {
     store: deps.store,
     destinations,
     adapters: portableAdapters,
-    computeInventory: deps.computeInventory,
-    revalidateCompute: deps.revalidateCompute,
     searchTrainingModels: deps.searchTrainingModels,
   });
   const portableCatalog = portableSupport.catalog;
@@ -151,12 +134,14 @@ export function createTrainingService(deps: {
     storeDir: deps.storeDir,
     registry,
     projectArtifactRows,
-    revalidateCompute: deps.revalidateCompute,
   });
 
   async function deleteTaskset(tasksetId: string) {
     const taskset = await deps.store.getTaskset(tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
+    if (taskset.purpose === "benchmark" && taskset.benchmark?.source === "builtin") {
+      throw new Error("Built-in benchmark Tasksets are read-only.");
+    }
     const [plans, jobs, artifacts] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingJobs(),
@@ -186,7 +171,6 @@ export function createTrainingService(deps: {
     prepare: prepareModelRun,
     prepareStart,
     approve,
-    prepareModel: deps.prepareModel,
     resolveReleasedHarness: async ({ taskset, modelRun }) => {
       const releasedHarness = await deps.resolveReleasedHarness?.() ?? null;
       const profile = !releasedHarness && deps.loadProfileState ? await deps.loadProfileState() : null;
@@ -236,7 +220,6 @@ export function createTrainingService(deps: {
       rolloutReceipts,
       modelBindings,
       destinationCapabilities,
-      computeInventory,
     ] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingBundles(),
@@ -246,7 +229,6 @@ export function createTrainingService(deps: {
       deps.store.listRolloutTrajectoryReceipts(),
       deps.store.listModelBindings(),
       destinations(),
-      deps.computeInventory?.() ?? Promise.resolve(null),
     ]);
     return {
       plans,
@@ -257,15 +239,11 @@ export function createTrainingService(deps: {
       rolloutReceipts,
       modelBindings,
       destinations: destinationCapabilities,
-      baseModelCandidates: projectBaseModelCandidates({
-        destinations: destinationCapabilities,
-        inventory: computeInventory,
-      }),
+      baseModelCandidates: projectBaseModelCandidates({ destinations: destinationCapabilities }),
     };
   }
 
   const {
-    importExternal,
     exportBundle,
     artifactDownload,
     modelPackageDownload,
@@ -291,7 +269,6 @@ export function createTrainingService(deps: {
 
   async function close(): Promise<void> {
     await Promise.all([
-      localCpu.close(),
       portableAdapters.close(),
     ]);
   }
@@ -320,7 +297,6 @@ export function createTrainingService(deps: {
     startPrepared,
     activity,
     state,
-    importExternal,
     exportBundle,
     artifactDownload,
     modelPackageDownload,

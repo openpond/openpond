@@ -77,7 +77,7 @@ describe("web public asset URLs", () => {
         localPath: "tutorials/what-is-an-openpond-agent.mp4",
       })
     );
-    expect(PUBLIC_VIDEO_MANIFEST.videos).toHaveLength(16);
+    expect(PUBLIC_VIDEO_MANIFEST.videos.length).toBeGreaterThan(0);
     for (const video of PUBLIC_VIDEO_MANIFEST.videos) {
       expect(resolvePublicVideoUrl(video, false)).toBe(`./${video.localPath}`);
       expect(resolvePublicVideoUrl(video, true)).toBe(

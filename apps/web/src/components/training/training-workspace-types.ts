@@ -30,7 +30,7 @@ export type TrainingWorkspaceProps = {
   onError: (message: string | null) => void;
   onToast: ShowAppToast;
   onSettingsPreferences: (payload: PreferencesPayload) => void;
-  onOpenComputeSettings: () => void;
+  onOpenTrainingSettings: () => void;
   onOpenProviderSettings: () => void;
   onOpenDatasetStorageSettings: () => void;
   onOpenChat: (sessionId: string) => void;

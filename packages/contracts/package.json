@@ -13,10 +13,7 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "scripts": {
-    "build": "tsc -b",
-    "generate:training-schemas": "tsx scripts/generate-training-schemas.ts"
-  },
+  "scripts": { "build": "tsc -b" },
   "dependencies": {
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",

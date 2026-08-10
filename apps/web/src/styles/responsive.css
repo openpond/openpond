@@ -182,3 +182,12 @@
     grid-column: 2;
   }
 }
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .main-pane,
+  .scheduled-work-view,
+  .outputs-view {
+    transition: none;
+  }
+}

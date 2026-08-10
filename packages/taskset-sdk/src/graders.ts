@@ -11,7 +11,14 @@ export type ModelJudgeRunner = (input: {
   grader: Extract<GraderSpec, { kind: "model_judge" }>;
   task: TaskDataRecord;
   attempt: TaskAttemptResult;
-}) => Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }>;
+}) => Promise<{
+  score: number;
+  passed: boolean;
+  feedback: string;
+  evidenceRefs?: string[];
+  usage?: unknown;
+  costUsd?: number;
+}>;
 
 export type CustomVerifierRunner = (input: {
   grader: Extract<GraderSpec, { kind: "custom_verifier" }>;

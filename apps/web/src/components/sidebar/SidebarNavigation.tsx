@@ -11,7 +11,6 @@ import {
   ChartColumnStacked,
   Cloud,
   FileText,
-  Plug,
   Plus,
 } from "../icons";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
@@ -141,43 +140,30 @@ export function SidebarNavigation({
       {productArea === "chat" ? (
         <>
           <button
-            className={`nav-command ${view === "scheduled" ? "active" : ""}`}
-            aria-label="Schedule"
+            className={`nav-command nav-command-prominent ${view === "scheduled" ? "active" : ""}`}
+            aria-label="Scheduled"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
               setView("scheduled");
             }}
           >
-            <CalendarClock size={16} />
-            <span>Schedule</span>
+            <CalendarClock size={18} />
+            <span>Scheduled</span>
           </button>
           <button
-            className={`nav-command ${view === "outputs" ? "active" : ""}`}
-            aria-label="Outputs"
+            className={`nav-command nav-command-prominent ${view === "outputs" ? "active" : ""}`}
+            aria-label="My files"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
               setView("outputs");
             }}
           >
-            <FileText size={16} />
-            <span>Outputs</span>
+            <FileText size={18} />
+            <span>My files</span>
           </button>
         </>
-      ) : null}
-      {productArea === "development" || productArea === "chat" ? (
-        <button
-          className={`nav-command ${view === "apps" ? "active" : ""}`}
-          onClick={() => {
-            clearWorkspaceSelection();
-            setView("apps");
-          }}
-          type="button"
-        >
-          <Plug size={16} />
-          <span>Apps</span>
-        </button>
       ) : null}
     </nav>
   );

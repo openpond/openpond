@@ -119,6 +119,14 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
+          name: "runtime",
+          include: ["packages/runtime/tests/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
           name: "evals",
           include: ["packages/evals/test/**/*.test.ts"],
         },

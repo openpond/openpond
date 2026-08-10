@@ -1,5 +1,4 @@
 import { describe, expect, test } from "vitest";
-import { readFile } from "node:fs/promises";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
@@ -29,18 +28,4 @@ describe("Sidebar experience wordmark", () => {
     ]);
   });
 
-  test("places the experience wordmark in the sidebar toggle toolbar", async () => {
-    const source = await readFile(
-      "apps/web/src/components/sidebar/Sidebar.tsx",
-      "utf8"
-    );
-    const toolbarStart = source.indexOf('<div className="sidebar-toolbar">');
-    const navigationStart = source.indexOf("<SidebarNavigation");
-    const brand = source.indexOf("<SidebarProductMenu", toolbarStart);
-
-    expect(toolbarStart).toBeGreaterThan(-1);
-    expect(brand).toBeGreaterThan(toolbarStart);
-    expect(brand).toBeLessThan(navigationStart);
-    expect(source).not.toContain("<SidebarBrandButton");
-  });
 });

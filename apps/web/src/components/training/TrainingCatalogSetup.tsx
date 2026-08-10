@@ -218,9 +218,7 @@ export function TrainingCatalogSetup({
           <div>
             <dt>Worker image</dt>
             <dd>
-              {selectedComputeTarget?.engineAdapterId === "local-trl"
-                ? "Bundled CPU reference worker"
-                : "Backend-pinned immutable image"}
+              Backend-pinned immutable image
             </dd>
           </div>
           <div>
@@ -232,9 +230,7 @@ export function TrainingCatalogSetup({
           <div>
             <dt>Data movement</dt>
             <dd>
-              {selectedComputeTarget?.computeAdapterId === "local-cpu"
-                ? "No remote transfer"
-                : "Exact upload and artifact return shown before approval"}
+              Exact upload and artifact return shown before approval
             </dd>
           </div>
         </dl>

@@ -61,7 +61,6 @@ import { selectComposerProfileTransaction } from "../../lib/profile-selection-tr
 import { AppTerminalPanel } from "./AppTerminalPanel";
 import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
 import { WorkSidebarPanel } from "./WorkSidebarPanel";
-import { WorkStarterPrompts } from "./WorkStarterPrompts";
 import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
@@ -92,6 +91,7 @@ import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
+import { CollaborationTabs } from "../collaboration/CollaborationTabs";
 
 import {
   AppsView,
@@ -141,7 +141,6 @@ export function MainPane({
   selectedSessionId,
   composerDraftStore,
   mainComposerFocusRequestId,
-  onRequestComposerFocus,
   labCloseDetailRequestId,
   labCloseDetailKind,
   sideChatTrainingLaunchRequest,
@@ -212,7 +211,7 @@ export function MainPane({
   setView,
   onOpenProfileSettings,
   onOpenProviderSettings,
-  onOpenComputeSettings,
+  onOpenTrainingSettings,
   onOpenDatasetStorageSettings,
   changeDraftProvider,
   changeProjectTarget,
@@ -236,6 +235,7 @@ export function MainPane({
   reviseCreateImproveRun,
   setMentionedAppId,
   showToast,
+  onSaveTaskDraft,
   sendPrompt,
   stopTurn,
   syncWorkspaceLocally,
@@ -249,6 +249,8 @@ export function MainPane({
   onAddRightChat,
   onOpenRightChatForSession,
   onLabDetailOpenChange,
+  scheduledDetailOpen,
+  onScheduledDetailOpenChange,
   onTerminalTabsChange,
   onCloseRightChatPanel,
   onCloseNativeSkillSidebar,
@@ -1454,6 +1456,9 @@ export function MainPane({
         rightPanelExpanded ? "diff-expanded" : ""
       }`}
     >
+      {view === "team" || view === "community" ? (
+        <CollaborationTabs onSelect={setView} view={view} />
+      ) : null}
       {view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
@@ -1484,7 +1489,9 @@ export function MainPane({
         <Suspense fallback={null}>
           <ScheduledWorkPage
             connection={connection}
+            detailOpen={scheduledDetailOpen}
             detailExpanded={diffPanelExpanded}
+            onDetailOpenChange={onScheduledDetailOpenChange}
             onDetailResizeStart={onDiffPanelResizeStart}
             onToggleDetailExpanded={onToggleDiffPanelExpanded}
           />
@@ -1560,7 +1567,7 @@ export function MainPane({
                         preferences: payload.preferences,
                       });
                   },
-                  onOpenComputeSettings,
+                  onOpenTrainingSettings,
                   onOpenProviderSettings,
                   onOpenDatasetStorageSettings,
                   onOpenChat: onOpenSession,
@@ -1736,6 +1743,7 @@ export function MainPane({
                   changeOpenPondCommandAccessMode
                 }
                 onMentionAppSelect={setMentionedAppId}
+                onSaveTaskDraft={onSaveTaskDraft}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
@@ -1754,14 +1762,6 @@ export function MainPane({
             />
             <div className="start-welcome">
               <h1>{startMessage}</h1>
-              {experience === "work" ? (
-                <WorkStarterPrompts
-                  onSelect={(prompt) => {
-                    composerDraftStore.set(prompt);
-                    onRequestComposerFocus();
-                  }}
-                />
-              ) : null}
               {canSyncWorkspace && (
                 <WorkspaceSyncButton
                   busy={workspaceBusy}
@@ -1836,6 +1836,7 @@ export function MainPane({
                   changeOpenPondCommandAccessMode
                 }
                 onMentionAppSelect={setMentionedAppId}
+                onSaveTaskDraft={onSaveTaskDraft}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}

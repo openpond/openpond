@@ -1,9 +1,3 @@
-import type {
-  ComputeInventory,
-  ComputeTargetCapabilities,
-} from "@openpond/contracts";
-import { contentHash } from "@openpond/taskset-sdk";
-import { LocalComputeTargetAdapter } from "@openpond/trainer-local";
 import {
   RoutedTrainingEngineAdapter,
   type ComputeTargetAdapter,
@@ -24,36 +18,12 @@ export type PortableTrainingAdapterComposition = {
  * is a Sandbox API adapter and does not give the desktop raw worker leases.
  */
 export function createPortableTrainingServerDependencies(input: {
-  computeInventory?: () => Promise<ComputeInventory | null>;
   adapters?: PortableTrainingAdapterComposition;
   storeDir?: string;
   environment?: NodeJS.ProcessEnv;
 }) {
   return {
     registerPortableAdapters(registry: TrainingAdapterRegistry) {
-      registry.registerCompute(
-        new LocalComputeTargetAdapter(
-          {
-            discover: async () => {
-              const inventory = (await input.computeInventory?.()) ?? null;
-              const devices = localComputeDevices(inventory);
-              const checkedAt =
-                inventory?.scannedAt ?? new Date().toISOString();
-              return {
-                devices,
-                workerImagesSupported: false,
-                capabilityReceipt: contentHash({
-                  adapterId: "local-cpu",
-                  devices,
-                  checkedAt,
-                }),
-                checkedAt,
-              };
-            },
-          },
-          "local-cpu",
-        ),
-      );
       for (const adapter of input.adapters?.compute ?? []) {
         registry.registerCompute(adapter);
       }
@@ -71,31 +41,4 @@ export function createPortableTrainingServerDependencies(input: {
       }
     },
   };
-}
-
-function localComputeDevices(
-  inventory: ComputeInventory | null,
-): ComputeTargetCapabilities["devices"] {
-  const devices =
-    inventory?.devices
-      .filter((device) => device.available && device.kind === "cpu")
-      .map((device) => ({
-        id: device.id,
-        kind: device.kind,
-        vendor: device.vendor,
-        name: device.name,
-        memoryBytes: device.totalMemoryBytes,
-        runtime: "cpu",
-      })) ?? [];
-  if (devices.length > 0) return devices;
-  return [
-    {
-      id: "cpu",
-      kind: "cpu",
-      vendor: "other",
-      name: "Local CPU",
-      memoryBytes: null,
-      runtime: "cpu",
-    },
-  ];
 }

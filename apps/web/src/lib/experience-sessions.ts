@@ -11,3 +11,9 @@ export function sidebarSessionsForExperience(
     session.experience === "work" || session.experience === "development"
   );
 }
+
+export function projectlessSidebarSessionLabel(
+  session: Pick<Session, "experience">
+): "Chat" | "Work" {
+  return session.experience === "chat" ? "Chat" : "Work";
+}

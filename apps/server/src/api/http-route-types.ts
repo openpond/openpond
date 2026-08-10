@@ -101,7 +101,7 @@ export type HttpRouteDeps = {
     payload: unknown,
     requestUrl?: URL
   ) => Promise<unknown>;
-  computePayload: (action: string, payload: unknown) => Promise<unknown>;
+  datasetStoragePayload: (action: "state" | "update", payload?: unknown) => Promise<unknown>;
   listLocalAgentSchedulesPayload: (payload?: unknown) => Promise<unknown>;
   syncLocalAgentSchedulesPayload: () => Promise<unknown>;
   patchLocalAgentSchedulePayload: (

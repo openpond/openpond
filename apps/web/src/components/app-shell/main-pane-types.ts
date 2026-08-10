@@ -79,7 +79,6 @@ export type MainPaneProps = {
   selectedSessionId: string | null;
   composerDraftStore: ComposerDraftStore;
   mainComposerFocusRequestId: number;
-  onRequestComposerFocus: () => void;
   labCloseDetailRequestId: number;
   labCloseDetailKind: LabDetailLocation["kind"] | null;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
@@ -162,7 +161,7 @@ export type MainPaneProps = {
   setView: (view: AppView) => void;
   onOpenProfileSettings: () => void;
   onOpenProviderSettings: () => void;
-  onOpenComputeSettings: () => void;
+  onOpenTrainingSettings: () => void;
   onOpenDatasetStorageSettings: () => void;
   changeDraftProvider: (provider: ChatProvider) => void;
   changeProjectTarget: (target: string) => void;
@@ -219,6 +218,7 @@ export type MainPaneProps = {
   ) => Promise<void>;
   setMentionedAppId: (appId: string | null) => void;
   showToast: ShowAppToast;
+  onSaveTaskDraft: (prompt: string) => Promise<boolean>;
   sendPrompt: (
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,
@@ -243,6 +243,8 @@ export type MainPaneProps = {
   onAddRightChat: () => void;
   onOpenRightChatForSession: (sessionId: string, session?: Session) => void;
   onLabDetailOpenChange: (location: LabDetailLocation | null) => void;
+  scheduledDetailOpen: boolean;
+  onScheduledDetailOpenChange: (open: boolean) => void;
   onTerminalTabsChange: Dispatch<SetStateAction<TerminalTab[]>>;
   onCloseRightChatPanel: (panelId: string) => void;
   onCloseNativeSkillSidebar: () => void;

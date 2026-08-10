@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
+  type CloudProject,
   type Experience,
   OpenPondExtension,
   type OutputRef,
@@ -43,13 +44,17 @@ import {
   productAreaForAppView,
   readLastChatTaskModeFromBrowser,
 } from "../lib/product-area";
+import { useTaskDraftActions } from "../hooks/useTaskDraftActions";
 
 interface AppRuntimeViewProps {
   primary: AppPrimaryRuntime;
   secondary: AppSecondaryRuntime;
 }
 
+const EMPTY_CLOUD_PROJECTS: CloudProject[] = [];
+
 export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
+  const [scheduledDetailOpen, setScheduledDetailOpen] = useState(false);
   const {
     composerDraftStore,
     appDispatch,
@@ -155,6 +160,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     startSidebarResize,
     startDiffPanelResize,
     selectedApp,
+    selectedCloudProject,
     selectedProject,
     selectedProjectLinkedApp,
     selectedSession,
@@ -324,6 +330,54 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     useState<SkillPackageSourceSelection | null>(null);
   const [sidebarFileOpenRequest, setSidebarFileOpenRequest] =
     useState<SidebarFileOpenRequest | null>(null);
+
+  const openTeamChatFromHeader = useCallback(() => {
+    setSelectedAppId(null);
+    setSelectedProjectId(null);
+    setSelectedSessionId(null);
+    setSectionMenuOpen(null);
+    setView("team");
+  }, [
+    setSectionMenuOpen,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+    setView,
+  ]);
+
+  const discoverCommunitiesFromHeader = useCallback(() => {
+    setSelectedAppId(null);
+    setSelectedProjectId(null);
+    setSelectedSessionId(null);
+    setSectionMenuOpen(null);
+    communitySidebar.discoverCommunities();
+  }, [
+    communitySidebar.discoverCommunities,
+    setSectionMenuOpen,
+    setSelectedAppId,
+    setSelectedProjectId,
+    setSelectedSessionId,
+  ]);
+
+  const saveTaskDraft = useTaskDraftActions({
+    activeExperience,
+    activeModel,
+    activeOpenPondCommandAccessMode,
+    activeProvider,
+    cloudProjects: bootstrap?.cloudProjects ?? EMPTY_CLOUD_PROJECTS,
+    composerDraftStore,
+    connection,
+    requestComposerFocus: requestMainComposerFocus,
+    selectedCloudProject,
+    selectedProject,
+    selectedSession,
+    setMentionedAppId,
+    setSelectedSessionId,
+    setSessions,
+    setView,
+    showToast,
+    workspaceTarget: workspaceTarget.value,
+  });
   const handoffExperience = useCallback(
     async (input: {
       target: Experience;
@@ -643,6 +697,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const rightSidebarAvailableForView =
     (view === "chat" && activeExperience !== "chat") ||
     view === "labs" ||
+    (view === "scheduled" && scheduledDetailOpen) ||
     (view === "team" && Boolean(teamAiThreadId));
   const appShellClassName = [
     "app-shell",
@@ -805,10 +860,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           diffPanelOpen,
           terminalOpen,
           rightSidebarAvailable: rightSidebarAvailableForView,
-          rightSidebarOpen: diffPanelOpen,
+          rightSidebarOpen: view === "scheduled" ? scheduledDetailOpen : diffPanelOpen,
           onToggleDiffPanel: toggleRightSidebar,
           onToggleRightSidebar:
-            view === "team" && Boolean(teamAiThreadId)
+            view === "scheduled"
+              ? () => setScheduledDetailOpen((open) => !open)
+              : view === "team" && Boolean(teamAiThreadId)
               ? toggleTeamAiSidebar
               : toggleRightSidebar,
           onOpenSearch: () => {
@@ -832,6 +889,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onBootstrap: applyBootstrapPayload,
           onOpenSandboxWorkspace: openSandboxWorkspace,
           onShowSidebar: () => setSidebarOpen(true),
+          onOpenTeamChat: openTeamChatFromHeader,
+          onDiscoverCommunities: discoverCommunitiesFromHeader,
+          collaborationView:
+            view === "team" || view === "community" ? view : null,
           platform,
           showWorkspaceControls:
             view !== "team" &&
@@ -924,7 +985,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           selectedSessionId,
           composerDraftStore,
           mainComposerFocusRequestId,
-          onRequestComposerFocus: requestMainComposerFocus,
           labCloseDetailRequestId: labDetailNavigation.closeDetailRequestId,
           labCloseDetailKind: labDetailNavigation.closeDetailKind,
           sideChatTrainingLaunchRequest: rightChatTrainingLaunchRequest,
@@ -1013,6 +1073,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             if (session) openRightChatPanel(session, { preserveView: true });
           },
           onLabDetailOpenChange: labDetailNavigation.onDetailOpenChange,
+          scheduledDetailOpen,
+          onScheduledDetailOpenChange: setScheduledDetailOpen,
           onTerminalTabsChange: setTerminalTabs,
           onCloseRightChatPanel: closeRightChatPanel,
           onCloseNativeSkillSidebar: closeNativeSkillSidebar,
@@ -1035,8 +1097,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             setSettingsSection("providers");
             setView("settings");
           },
-          onOpenComputeSettings: () => {
-            setSettingsSection("compute");
+          onOpenTrainingSettings: () => {
+            setSettingsSection("training");
             setView("settings");
           },
           onOpenDatasetStorageSettings: () => {
@@ -1065,6 +1127,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           reviseCreateImproveRun,
           setMentionedAppId,
           showToast,
+          onSaveTaskDraft: saveTaskDraft,
           sendPrompt: sendPromptFromMainComposer,
           stopTurn,
           syncWorkspaceLocally,

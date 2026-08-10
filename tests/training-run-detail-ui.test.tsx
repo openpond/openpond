@@ -16,7 +16,7 @@ const detail = TrainingRunDetailSchema.parse({
     planId: "plan_detail_fixture",
     bundleHash: "bundle00000000",
     approvalId: "approval_detail_fixture",
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     status: "succeeded",
     nonProduction: true,
     workerPid: null,

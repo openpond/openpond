@@ -28,6 +28,10 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS grade_results_attempt_idx ON grade_results(attempt_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS evaluation_results (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS evaluation_results_taskset_kind_idx ON evaluation_results(taskset_id, kind, created_at DESC);
+  CREATE TABLE IF NOT EXISTS benchmark_runs (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, phase TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS benchmark_runs_taskset_created_idx ON benchmark_runs(taskset_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS benchmark_comparisons (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS benchmark_comparisons_taskset_created_idx ON benchmark_comparisons(taskset_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS readiness_reports (taskset_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS task_miner_configs (profile_id TEXT PRIMARY KEY, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS task_miner_runs (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);

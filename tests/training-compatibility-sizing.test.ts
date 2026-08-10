@@ -241,7 +241,7 @@ function planFor(taskset: Taskset, maxSequenceLength: number): TrainingPlan {
     id: `plan-${maxSequenceLength}`,
     tasksetId: taskset.id,
     tasksetHash: taskset.contentHash,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe: {
       schemaVersion: "openpond.sftRecipe.v1",
       method: "sft",
@@ -264,7 +264,7 @@ function planFor(taskset: Taskset, maxSequenceLength: number): TrainingPlan {
 function capabilities() {
   return {
     schemaVersion: "openpond.trainingDestinationCapabilities.v1" as const,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     available: true,
     methods: ["sft" as const],
     parameterizations: ["lora" as const],

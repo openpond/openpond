@@ -82,7 +82,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
-  "('local_cpu_fixture', 'openpond_managed')";
+  "('openpond_managed')";
 
 export class SqliteTrainingStore extends SqliteEvaluationResultStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
@@ -487,6 +487,8 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
       try {
         await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM evaluation_results WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM benchmark_runs WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM benchmark_comparisons WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
@@ -859,53 +861,21 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
   }
 
   async listModelArtifactLineage(tasksetId?: string): Promise<ModelArtifactLineage[]> {
-    await this.ready;
-    await this.writeQueue;
-    const rows = await this.all<PayloadRow>(
-      tasksetId ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC" : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
+    return this.listParsedPayloads(
+      tasksetId
+        ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC"
+        : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
       tasksetId ? [tasksetId] : [],
+      parseStoredModelArtifactLineage,
     );
-    const lineages: ModelArtifactLineage[] = [];
-    for (const row of rows) {
-      const value = JSON.parse(row.payload);
-      const parsed = ModelArtifactLineageSchema.safeParse(value);
-      if (parsed.success) {
-        lineages.push(parsed.data);
-        continue;
-      }
-      const managedServingSource = retiredManagedServingSource(value);
-      if (managedServingSource) {
-        this.logger?.warn("retired Model artifact lineage ignored", {
-          lineageId: storedPayloadId(value),
-          managedServingSource,
-        });
-        continue;
-      }
-      throw parsed.error;
-    }
-    return lineages;
   }
 
   async getModelArtifactLineage(id: string): Promise<ModelArtifactLineage | null> {
-    await this.ready;
-    await this.writeQueue;
-    const row = await this.get<PayloadRow>(
+    return this.getParsedPayload(
       "SELECT payload FROM model_artifact_lineage WHERE id = ?",
       [id],
+      parseStoredModelArtifactLineage,
     );
-    if (!row) return null;
-    const value = JSON.parse(row.payload);
-    const parsed = ModelArtifactLineageSchema.safeParse(value);
-    if (parsed.success) return parsed.data;
-    const managedServingSource = retiredManagedServingSource(value);
-    if (managedServingSource) {
-      this.logger?.warn("retired Model artifact lineage ignored", {
-        lineageId: storedPayloadId(value),
-        managedServingSource,
-      });
-      return null;
-    }
-    throw parsed.error;
   }
 
 }
@@ -934,11 +904,23 @@ function parseStoredModelProject(value: unknown): ModelProject {
 function normalizeStoredModelProjectDestination(value: unknown): unknown {
   if (
     !isRecord(value)
-    || !isRetiredTrainingDestination(value.defaultDestinationId)
+    || typeof value.defaultDestinationId !== "string"
+    || value.defaultDestinationId === "openpond_managed"
   ) {
     return value;
   }
   return { ...value, defaultDestinationId: null };
+}
+
+function parseStoredModelArtifactLineage(value: unknown): ModelArtifactLineage {
+  return ModelArtifactLineageSchema.parse(normalizeStoredManagedServingProjection(value));
+}
+
+function normalizeStoredManagedServingProjection(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.managedServing)) return value;
+  const source = value.managedServing.source;
+  if (source !== "openpond_fireworks" && source !== "openpond_training") return value;
+  return { ...value, managedServing: null };
 }
 
 function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
@@ -966,24 +948,6 @@ function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
       buildSpecification: null,
     },
   };
-}
-
-function retiredManagedServingSource(value: unknown): "openpond_fireworks" | null {
-  if (!isRecord(value) || !isRecord(value.managedServing)) return null;
-  return value.managedServing.source === "openpond_fireworks" ? "openpond_fireworks" : null;
-}
-
-function isRetiredTrainingDestination(value: unknown): boolean {
-  return typeof value === "string"
-    && [
-      "export",
-      "prime_hosted",
-      "ssh_gpu",
-      "custom",
-      "local_cuda",
-      "local_mlx",
-      "runpod_byoc",
-    ].includes(value);
 }
 
 function storedPayloadId(value: unknown): string | null {

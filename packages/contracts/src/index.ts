@@ -44,7 +44,6 @@ export * from "./training.js";
 export * from "./model-lifecycle.js";
 export * from "./training-benchmark.js";
 export * from "./training-sizing.js";
-export * from "./compute.js";
 export * from "./cross-system-operations.js";
 export * from "./release-core.js";
 export * from "./learning-signals.js";

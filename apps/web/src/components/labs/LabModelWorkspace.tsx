@@ -239,11 +239,13 @@ export function LabModelRunsPage({
                     />
                   </td>
                   <td>
-                    {trainingMethodLabel(
-                      entry.draft?.method ??
-                        entry.lifecycleRun?.method ??
-                        plan?.recipe.method
-                    )}
+                    {entry.lifecycleRun?.kind === "evaluation"
+                      ? "Evaluation"
+                      : trainingMethodLabel(
+                          entry.draft?.method ??
+                            entry.lifecycleRun?.method ??
+                            plan?.recipe.method
+                        )}
                   </td>
                   <td>
                     {dataset ? (
@@ -642,6 +644,15 @@ function runResult(entry: RunEntry) {
       : "Resume draft";
   }
   if (entry.version) return `Version ${entry.version.number}`;
+  if (
+    entry.lifecycleRun?.kind === "evaluation"
+    && entry.lifecycleRun.receipt?.schemaVersion
+      === "openpond.modelEvaluationReceipt.v1"
+  ) {
+    const delta = entry.lifecycleRun.receipt.foregroundTokenDelta;
+    const prefix = delta > 0 ? "+" : "";
+    return `${prefix}${delta.toLocaleString()} tokens`;
+  }
   if (entry.lifecycleRun?.reward) {
     return `Reward ${entry.lifecycleRun.reward.raw.toFixed(3)}`;
   }

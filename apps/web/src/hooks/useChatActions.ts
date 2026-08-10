@@ -163,6 +163,7 @@ type SendPromptOptions = {
   usageAttribution?: UsageRequestAttribution;
   openPondCommandAccessMode?: OpenPondCommandAccessMode;
   turnMetadata?: Record<string, unknown>;
+  sessionMetadata?: Record<string, unknown>;
 };
 
 export function sendTurnModelSelectionPayload({
@@ -1062,17 +1063,24 @@ export function useChatActions({
           sessionProvider,
           openPondCommandAccessModeForTurn
         );
+        const hybridSessionRequest = useHybridWorkspace
+          ? buildHybridWorkspaceSessionRequest({
+              modelRef: sessionModelRef,
+              provider: sessionProvider,
+              target: hybridWorkspaceTarget,
+              title: value.slice(0, 64),
+            })
+          : null;
         session = await api.createSession(
           connection,
-          useHybridWorkspace
+          hybridSessionRequest
             ? {
-                ...buildHybridWorkspaceSessionRequest({
-                  modelRef: sessionModelRef,
-                  provider: sessionProvider,
-                  target: hybridWorkspaceTarget,
-                  title: value.slice(0, 64),
-                }),
+                ...hybridSessionRequest,
                 subagentDelegationMode,
+                metadata: {
+                  ...hybridSessionRequest.metadata,
+                  ...(options.sessionMetadata ?? {}),
+                },
                 ...(sessionCommandAccessMode
                   ? { openPondCommandAccessMode: sessionCommandAccessMode }
                   : {}),
@@ -1110,11 +1118,19 @@ export function useChatActions({
                 !selectedProjectForTurn &&
                 !selectedAppForTurn &&
                 workspaceTarget === "local"
-                  ? { metadata: localWorkspaceSessionMetadata() }
+                  ? {
+                      metadata: {
+                        ...localWorkspaceSessionMetadata(),
+                        ...(options.sessionMetadata ?? {}),
+                      },
+                    }
                   : {
                       cwd: selectedProjectForTurn
                         ? selectedProjectForTurn.workspacePath
                         : null,
+                      ...(options.sessionMetadata
+                        ? { metadata: options.sessionMetadata }
+                        : {}),
                     }),
                 title: value.slice(0, 64),
               }

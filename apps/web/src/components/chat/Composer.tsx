@@ -63,12 +63,11 @@ import { ComposerSteerQueue } from "./ComposerSteerQueue";
 import {
   composerSteerDraftsForScope,
   composerSteerDraftsAfterSubmit,
-  composerSteerEditTarget,
   createComposerSteerDraft,
   removeComposerSteerDraft,
+  replaceComposerSteerDraftForEdit,
   shouldAutoDispatchComposerSteer,
   updateComposerSteerDraftScope,
-  updateComposerSteerDraft,
   type ComposerSteerDraft,
   type ComposerSteerDraftScopeState,
 } from "./composer-steer-queue";
@@ -77,6 +76,7 @@ import {
   type ComposerInlineInputHandle,
   type ComposerInlineToken,
 } from "./ComposerInlineInput";
+import { composerPlaceholder, composerTaskDraftShortcut, saveComposerTaskDraft } from "./composer-task-draft";
 import {
   ComposerCommandMenu,
   filterComposerCommandMenuSections,
@@ -195,6 +195,7 @@ export function Composer({
   onOpenPondCommandAccessModeChange,
   onPromptChange,
   onMentionAppSelect,
+  onSaveTaskDraft,
   showToast,
   onSubmit,
   onStop,
@@ -242,6 +243,7 @@ export function Composer({
     string | null
   >(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [savingTaskDraft, setSavingTaskDraft] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(
     initialRequestedAction?.actionId ?? null
   );
@@ -265,10 +267,6 @@ export function Composer({
     draftId: string;
     scopeKey: string;
   } | null>(null);
-  const [editingSteerDraftId, setEditingSteerDraftId] = useState<string | null>(
-    null
-  );
-  const [editSteerDraftValue, setEditSteerDraftValue] = useState("");
   const [submitIssueDialogOpen, setSubmitIssueDialogOpen] = useState(false);
   const [submitIssueInitialDescription, setSubmitIssueInitialDescription] =
     useState("");
@@ -307,17 +305,9 @@ export function Composer({
     },
     [addFiles, attachments],
   );
-  const placeholder =
-    surface === "team"
-      ? "Message team"
-      : mode === "start"
-      ? experience === "chat"
-        ? "Ask anything"
-        : "What should we work on?"
-      : "Ask for follow-up changes";
-  const repositoryWork =
-    experience === "development" ||
-    (experience === "work" && projectTarget.value !== "none");
+  const placeholder = composerPlaceholder({ experience, mode, surface });
+  const repositoryWork = experience === "development"
+    || (experience === "work" && projectTarget.value !== "none");
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   // Composer controls sit against the lower edge of the input surface. Opening
   // upward keeps provider/model/permission menus inside the viewport instead
@@ -747,11 +737,6 @@ export function Composer({
     sendingSteerDraft?.scopeKey === submissionScopeKey
       ? sendingSteerDraft.draftId
       : null;
-  const editingSteerDraft = useMemo(
-    () => steerDrafts.find((draft) => draft.id === editingSteerDraftId) ?? null,
-    [editingSteerDraftId, steerDrafts]
-  );
-
   function updateSteerDraftsForScope(
     scopeKey: string,
     updateDrafts: (drafts: ComposerSteerDraft[]) => ComposerSteerDraft[]
@@ -1330,65 +1315,27 @@ export function Composer({
 
   function deleteQueuedSteerDraft(draftId: string) {
     if (sendingSteerDraftId === draftId) return;
-    if (editingSteerDraftId === draftId) {
-      setEditingSteerDraftId(null);
-      setEditSteerDraftValue("");
-    }
     updateSteerDraftsForScope(submissionScopeKey, (current) =>
       removeComposerSteerDraft(current, draftId)
     );
   }
 
   function editQueuedSteerDraft(draft: ComposerSteerDraft) {
-    const editTarget = composerSteerEditTarget({
-      attachmentCount: attachments.length,
-      hasSelectedAction: Boolean(selectedActionId),
-      hasSelectedCommand: Boolean(selectedCommandId),
-      prompt,
-    });
-    if (editTarget === "load_composer") {
-      updateSteerDraftsForScope(submissionScopeKey, (current) =>
-        removeComposerSteerDraft(current, draft.id)
+    if (sendingSteerDraftId === draft.id) return;
+    if (attachments.length > 0 || selectedActionId || selectedCommandId) {
+      showToast(
+        "Finish the current composer before editing a queued message.",
+        "info"
       );
-      onPromptChange(draft.prompt);
-      setCursorIndex(draft.prompt.length);
-      window.requestAnimationFrame(() => {
-        inputRef.current?.focusAtPromptIndex(draft.prompt.length);
-      });
       return;
     }
-    setEditingSteerDraftId(draft.id);
-    setEditSteerDraftValue(draft.prompt);
-  }
-
-  function cancelQueuedSteerEdit() {
-    setEditingSteerDraftId(null);
-    setEditSteerDraftValue("");
-  }
-
-  function saveQueuedSteerEdit() {
-    if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
     updateSteerDraftsForScope(submissionScopeKey, (current) =>
-      updateComposerSteerDraft(
-        current,
-        editingSteerDraft.id,
-        editSteerDraftValue.trim()
-      )
+      replaceComposerSteerDraftForEdit(current, draft.id, prompt)
     );
-    cancelQueuedSteerEdit();
-  }
-
-  function replaceComposerWithQueuedSteerEdit() {
-    if (!editingSteerDraft || !editSteerDraftValue.trim()) return;
-    const nextPrompt = editSteerDraftValue.trim();
-    updateSteerDraftsForScope(submissionScopeKey, (current) =>
-      removeComposerSteerDraft(current, editingSteerDraft.id)
-    );
-    cancelQueuedSteerEdit();
-    onPromptChange(nextPrompt);
-    setCursorIndex(nextPrompt.length);
+    onPromptChange(draft.prompt);
+    setCursorIndex(draft.prompt.length);
     window.requestAnimationFrame(() => {
-      inputRef.current?.focusAtPromptIndex(nextPrompt.length);
+      inputRef.current?.focusAtPromptIndex(draft.prompt.length);
     });
   }
 
@@ -1658,15 +1605,9 @@ export function Composer({
       ) : null}
       <ComposerSteerQueue
         drafts={steerDrafts}
-        editDraftValue={editSteerDraftValue}
-        editingDraft={editingSteerDraft}
         sendingDraftId={sendingSteerDraftId}
-        onCancelEdit={cancelQueuedSteerEdit}
         onDeleteDraft={deleteQueuedSteerDraft}
         onEditDraft={editQueuedSteerDraft}
-        onEditDraftValueChange={setEditSteerDraftValue}
-        onReplaceComposerDraft={replaceComposerWithQueuedSteerEdit}
-        onSaveQueuedDraft={saveQueuedSteerEdit}
         onSteerDraft={(draftId) => {
           void submitQueuedSteerDraft(draftId);
         }}
@@ -1847,6 +1788,20 @@ export function Composer({
               ) {
                 event.preventDefault();
                 clearSelectedInvocation();
+                return;
+              }
+              if (composerTaskDraftShortcut(event.key, event.shiftKey, experience, surface, Boolean(onSaveTaskDraft))) {
+                event.preventDefault();
+                saveComposerTaskDraft({
+                  attachmentsCount: attachments.length,
+                  hasSelectedInvocation: Boolean(selectedAction || selectedCommand),
+                  onSave: onSaveTaskDraft!,
+                  onSaved: clearSelectedInvocation,
+                  prompt,
+                  saving: savingTaskDraft,
+                  setSaving: setSavingTaskDraft,
+                  showInfo: (message) => showToast(message, "info"),
+                });
                 return;
               }
               if (event.key === "Enter" && !event.shiftKey) {

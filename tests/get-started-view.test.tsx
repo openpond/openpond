@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readFileSync } from "node:fs";
 
 import { GetStartedView } from "../apps/web/src/components/get-started/GetStartedView";
 import {
@@ -148,50 +147,6 @@ describe("GetStartedView", () => {
     expect(html).toContain("Full course · 29:20");
     expect(html).not.toContain("Lesson 1 of 10");
     expect(html).not.toContain('data-auto-advance="true"');
-  });
-
-  test("keeps restored learning players self-contained in Get started", () => {
-    const mainPane = readFileSync(
-      new URL(
-        "../apps/web/src/components/app-shell/MainPane.tsx",
-        import.meta.url
-      ),
-      "utf8"
-    );
-    const runtimeView = readFileSync(
-      new URL("../apps/web/src/app/AppRuntimeView.tsx", import.meta.url),
-      "utf8"
-    );
-    const getStartedView = readFileSync(
-      new URL(
-        "../apps/web/src/components/get-started/GetStartedView.tsx",
-        import.meta.url
-      ),
-      "utf8"
-    );
-    const postTrainingSeries = readFileSync(
-      new URL(
-        "../apps/web/src/components/get-started/PostTrainingSeries.tsx",
-        import.meta.url
-      ),
-      "utf8"
-    );
-
-    expect(mainPane).toContain("<GetStartedView />");
-    expect(mainPane).not.toContain("<PostTrainingLearningPanel");
-    expect(mainPane).not.toContain("<MakeAgentTutorialLearningPanel");
-    expect(runtimeView).not.toContain(
-      '(view === "get-started" && Boolean(postTrainingCourse || makeAgentTutorial))'
-    );
-    expect(getStartedView).toContain("setLocalMakeAgentTutorial");
-    expect(getStartedView).toContain("setLocalPostTrainingCourse");
-    expect(getStartedView).toContain("playRequestId: 0");
-    expect(getStartedView).toContain(
-      "playRequestId: current.playRequestId + 1"
-    );
-    expect(getStartedView).toContain('videoId: "create"');
-    expect(postTrainingSeries).toContain("if (playRequestId > 0)");
-    expect(postTrainingSeries).not.toContain("if (open) void player.play()");
   });
 
   test("keeps the learning series ordered and individually loadable", () => {

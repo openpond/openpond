@@ -66,7 +66,7 @@ describe("training CLI", () => {
   test("submits an exact manifest and can detach", async () => {
     console.log = (message?: unknown) => logs.push(String(message ?? ""));
     const directory = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-training-cli-"),
+      path.join(os.tmpdir(), "openpond-model-improvement-cli-"),
     );
     const manifestPath = path.join(directory, "manifest.json");
     try {
@@ -109,6 +109,61 @@ describe("training CLI", () => {
         { request: request as typeof fetch },
       ),
     ).rejects.toThrow("requires --yes");
+  });
+
+  test("starts and watches the canonical Harness Refiner evaluation run", async () => {
+    console.log = (message?: unknown) => logs.push(String(message ?? ""));
+    const requests: Array<{ url: string; body: unknown }> = [];
+    let statusCount = 0;
+    const request = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(url),
+        body: init?.body ? JSON.parse(String(init.body)) : null,
+      });
+      if (String(url) === "http://local.test/v1/training") {
+        return jsonResponse({
+          modelProjects: [{ id: "model_1", profileId: "personal" }],
+        });
+      }
+      if (String(url).endsWith("/harness-refiner-benchmark")) {
+        return jsonResponse({ id: "model_run_eval_1", status: "running" }, 202);
+      }
+      statusCount += 1;
+      return jsonResponse({
+        runId: "model_run_eval_1",
+        state: statusCount === 1 ? "running" : "succeeded",
+      });
+    });
+
+    await runTrainingCommand(
+      {
+        apiBaseUrl: "http://local.test",
+        json: "true",
+        model: "openpond-chat",
+        provider: "openpond",
+        reasoningEffort: "high",
+        mode: "smoke",
+        seed: "17",
+        repetitions: "1",
+        maxSpend: "2",
+      },
+      ["benchmark", "model_1"],
+      { request: request as typeof fetch, sleep: async () => undefined },
+    );
+
+    expect(requests[1]).toEqual({
+      url: "http://local.test/v1/training/models/model_1/harness-refiner-benchmark",
+      body: {
+        profileId: "personal",
+        model: { providerId: "openpond", modelId: "openpond-chat" },
+        reasoningEffort: "high",
+        mode: "smoke",
+        seeds: [17],
+        repetitions: 1,
+        maximumSpendUsd: 2,
+      },
+    });
+    expect(requests.at(-1)?.url).toContain("model_run_eval_1/status");
   });
 
 });

@@ -172,28 +172,43 @@ export function LabModelDataset({
           <Fact label="Reward specs" value={String(approvedRewards)} />
           <Fact label="Rubrics" value={String(rubricLabels)} />
         </dl>
-        <div className="labs-dataset-method-readiness">
-          <strong>Training compatibility</strong>
-          <div className="training-pills">
-            {taskset.readiness?.methodReadiness.length
-              ? taskset.readiness.methodReadiness.map((entry) => (
+        {taskset.purpose === "benchmark" && taskset.benchmark ? (
+          <div className="labs-dataset-method-readiness">
+            <strong>Benchmark protocol</strong>
+            <div className="training-pills">
+              <span>{titleCase(taskset.benchmark.primaryMetric.replaceAll("_", " "))}</span>
+              <span>{titleCase(taskset.benchmark.qualityGate.replaceAll("_", " "))}</span>
+              <span>Immutable release</span>
+            </div>
+            <p className="labs-detail-copy">
+              Adapt on {titleCase(taskset.benchmark.adaptationSplit)} cases and compare
+              paired {titleCase(taskset.benchmark.evaluationSplit.replaceAll("_", " "))} runs.
+            </p>
+          </div>
+        ) : (
+          <div className="labs-dataset-method-readiness">
+            <strong>Training compatibility</strong>
+            <div className="training-pills">
+              {taskset.readiness?.methodReadiness.length
+                ? taskset.readiness.methodReadiness.map((entry) => (
                   <span key={entry.method} title={entry.reasons.join(" ")}>
                     {entry.method.toUpperCase()} · {titleCase(entry.status)}
                   </span>
                 ))
-              : taskset.capabilities.compatibleMethods
-                  .filter((method) => !["none", "retrieval"].includes(method))
-                  .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
+                : taskset.capabilities.compatibleMethods
+                    .filter((method) => !["none", "retrieval"].includes(method))
+                    .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
+            </div>
+            {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
+              <ul>
+                {taskset.readiness.methodReadiness.flatMap((entry) =>
+                  entry.reasons.map((reason) => (
+                    <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
+                  )))}
+              </ul>
+            ) : null}
           </div>
-          {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
-            <ul>
-              {taskset.readiness.methodReadiness.flatMap((entry) =>
-                entry.reasons.map((reason) => (
-                  <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
-                )))}
-            </ul>
-          ) : null}
-        </div>
+        )}
         <details className="labs-dataset-advanced-details">
           <summary>Technical details</summary>
           <dl className="training-configuration-list">
@@ -239,6 +254,16 @@ export function LabModelDataset({
   if (tab === "scoring") {
     return (
       <>
+        {taskset.purpose === "benchmark" ? (
+          <DetailSection title="Benchmark runs">
+            <p className="labs-detail-copy">
+              Harness Refiner runs start from a Model so the selected Model,
+              effort, full protocol, result charts, and Git-backed receipt stay
+              together in one evaluation run. Open a Model and choose
+              <strong> Run Refiner Benchmark</strong>.
+            </p>
+          </DetailSection>
+        ) : null}
         <DetailSection title="Taskset checks">
           <p className="labs-detail-copy">
             Audit the reward and graders before creating a Model run.

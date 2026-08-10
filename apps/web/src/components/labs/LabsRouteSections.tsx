@@ -1,5 +1,6 @@
 import type {
   CreateImproveRun,
+  ModelRun,
   TaskCreationSnapshot,
   TrainingStateResponse,
 } from "@openpond/contracts";
@@ -277,8 +278,10 @@ export function ModelsTable({
                       value={recentRunStatus}
                     />
                     <span>
-                      {item.trainingRunCount}{" "}
-                      {item.trainingRunCount === 1 ? "run" : "runs"}
+                      {recentModelRunLabel(
+                        recentRun?.lifecycleRun ?? null,
+                        item.trainingRunCount,
+                      )}
                     </span>
                   </div>
                 </td>
@@ -311,6 +314,21 @@ export function ModelsTable({
       </table>
     </div>
   );
+}
+
+function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
+  if (run?.kind === "evaluation") {
+    const benchmark = run.evaluation?.benchmarkId === "harness-refiner"
+      ? "Harness Refiner"
+      : "Benchmark";
+    const outcome = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
+      ? titleCase(run.receipt.terminalClassification.replaceAll("_", " "))
+      : run.evaluationProgress
+        ? `${titleCase(run.evaluationProgress.stage)} ${run.evaluationProgress.completedAttempts}/${run.evaluationProgress.totalAttempts}`
+        : statusLabel(run.status);
+    return `${benchmark} · ${outcome}`;
+  }
+  return `${runCount} ${runCount === 1 ? "run" : "runs"}`;
 }
 
 function workproductTraining(item: LabWorkproductSummary) {

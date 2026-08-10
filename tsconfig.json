@@ -14,7 +14,6 @@
     { "path": "packages/sdk/tsconfig.build.json" },
     { "path": "packages/taskset-sdk" },
     { "path": "packages/training-sdk" },
-    { "path": "packages/trainer-local" },
     { "path": "apps/server" },
     { "path": "apps/web" },
     { "path": "apps/terminal" },

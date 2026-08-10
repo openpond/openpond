@@ -1,5 +1,9 @@
 import { z } from "zod";
-import type { EvaluationResult } from "@openpond/evals";
+import type {
+  BenchmarkComparison,
+  BenchmarkRunSummary,
+  EvaluationResult,
+} from "@openpond/evals";
 import {
   BaseModelPreferenceSchema,
   DatasetBuildIntentSchema,
@@ -68,7 +72,6 @@ export const TrainingMethodSchema = z.enum([
 ]);
 export const TrainingParameterizationSchema = z.enum(["lora", "full"]);
 export const TrainingDestinationIdSchema = z.enum([
-  "local_cpu_fixture",
   "openpond_managed",
 ]);
 
@@ -832,6 +835,8 @@ export const TrainingStateResponseSchema = z.object({
   sources: z.array(TrainingSourceRefSchema),
   creations: z.array(TaskCreationSnapshotSchema),
   tasksets: z.array(TasksetSchema),
+  benchmarkRuns: z.array(z.custom<BenchmarkRunSummary>()).default([]),
+  benchmarkComparisons: z.array(z.custom<BenchmarkComparison>()).default([]),
   datasetImports: z.array(DatasetImportJobSchema).default([]),
   datasetArtifacts: z.array(DatasetArtifactSummarySchema).default([]),
   graderAuditReports: z.array(GraderAuditReportSchema),

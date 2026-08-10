@@ -42,7 +42,6 @@ import { RemoteAccessSettingsSection } from "./RemoteAccessSettingsSection";
 import { SettingsNavigation } from "./SettingsNavigation";
 import { SkillsSettingsSection } from "./SkillsSettingsSection";
 import { TrainingSettingsSection } from "./TrainingSettingsSection";
-import { ComputeSettingsSection } from "./ComputeSettingsSection";
 import { DatasetStorageSettingsSection } from "./DatasetStorageSettingsSection";
 import { HarnessHistorySettingsSection } from "./HarnessHistorySettingsSection";
 import {
@@ -56,7 +55,7 @@ import { useEditorSettings } from "./useEditorSettings";
 import { usePersonalizationSettings } from "./usePersonalizationSettings";
 import { useProviderSettings } from "./useProviderSettings";
 import { useRemoteAccessSettings } from "./useRemoteAccessSettings";
-import { useComputeSettings } from "./useComputeSettings";
+import { useDatasetStorageState } from "./useDatasetStorageState";
 import { useDatasetStorageSettings } from "./useDatasetStorageSettings";
 import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/WindowControls";
 import { PanelRight } from "../icons";
@@ -178,9 +177,9 @@ export function SettingsView({
   const diagnosticsSettings = useDiagnosticsSettings({ onError, section });
   const remoteAccessSettings = useRemoteAccessSettings({ connection, enabled: section === "remote", onError, onToast });
   const datasetStorageEnabled = section === "dataset-storage";
-  const computeSettings = useComputeSettings({
+  const datasetStorageState = useDatasetStorageState({
     connection,
-    enabled: section === "compute" || datasetStorageEnabled,
+    enabled: datasetStorageEnabled,
     onError,
   });
   const datasetStorageSettings = useDatasetStorageSettings({
@@ -189,26 +188,15 @@ export function SettingsView({
     onError,
     profileId: payload?.profile.activeProfile ?? "default",
   });
-  const saveDatasetStorage = useCallback(
-    (datasetStorePath: string | null) => computeSettings.save(
-      computeSettings.state?.settings.modelStorePath ?? null,
-      datasetStorePath,
-      computeSettings.state?.settings.defaultDeviceIds ?? [],
-    ),
-    [
-      computeSettings.save,
-      computeSettings.state?.settings.defaultDeviceIds,
-      computeSettings.state?.settings.modelStorePath,
-    ],
-  );
+  const saveDatasetStorage = datasetStorageState.save;
   const refreshDatasetStorage = useCallback(
     async () => {
       await Promise.all([
-        computeSettings.refresh(),
+        datasetStorageState.refresh(),
         datasetStorageSettings.refresh(),
       ]);
     },
-    [computeSettings.refresh, datasetStorageSettings.refresh],
+    [datasetStorageState.refresh, datasetStorageSettings.refresh],
   );
   const confirmSubagentsNavigation = useCallback(() => {
     if (section !== "subagents" || !defaultsSettings.subagentsDirty) return true;
@@ -338,20 +326,11 @@ export function SettingsView({
             providers={payload?.providers ?? null}
             {...providerSettings}
           />
-        ) : section === "compute" ? (
-          <ComputeSettingsSection
-            state={computeSettings.state}
-            busy={computeSettings.busy}
-            onScan={computeSettings.scan}
-            onSave={computeSettings.save}
-            onDownloadSmolLm2={computeSettings.downloadSmolLm2}
-            onCancelDownload={computeSettings.cancelDownload}
-          />
         ) : section === "dataset-storage" ? (
           <DatasetStorageSettingsSection
-            state={computeSettings.state}
+            state={datasetStorageState.state}
             catalog={datasetStorageSettings.catalog}
-            busy={computeSettings.busy}
+            busy={datasetStorageState.busy}
             catalogLoading={datasetStorageSettings.loading}
             onRefresh={refreshDatasetStorage}
             onSave={saveDatasetStorage}

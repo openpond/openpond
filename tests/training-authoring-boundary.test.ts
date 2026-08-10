@@ -24,12 +24,12 @@ describe("New model authoring boundary", () => {
       methodHint: null,
       preferredBaseModel: {
         schemaVersion: "openpond.baseModelPreference.v1" as const,
-        modelId: "HuggingFaceTB/SmolLM2-135M-Instruct",
-        revision: "12fd25f77366fa6b3b4b768ec3050bf629380bac",
-        tokenizerRevision: "12fd25f77366fa6b3b4b768ec3050bf629380bac",
-        chatTemplateHash: "smollm2-template",
-        modelAssetId: "model_smollm2",
-        source: "local" as const,
+        modelId: "Qwen/Qwen3-0.6B",
+        revision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        tokenizerRevision: "c1899de289a04d12100db370d81485cdf75e47ca",
+        chatTemplateHash: "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+        modelAssetId: null,
+        source: "managed" as const,
       },
       analysisModel: {
         providerId: "custom-openai-compatible" as const,
@@ -55,8 +55,8 @@ describe("New model authoring boundary", () => {
       modelId: "fixture-local-author",
     });
     expect(manual.request.preferredBaseModel).toMatchObject({
-      modelId: "HuggingFaceTB/SmolLM2-135M-Instruct",
-      source: "local",
+      modelId: "Qwen/Qwen3-0.6B",
+      source: "managed",
     });
   }));
 });

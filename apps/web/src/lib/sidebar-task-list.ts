@@ -1,14 +1,22 @@
 import type { Session } from "@openpond/contracts";
+import { sessionTaskset } from "./session-tasksets";
 
 export type SidebarTaskFilter =
   | "active"
   | "in_progress"
   | "pinned"
   | "saved_for_later"
+  | "tasksets"
   | "done"
   | "all";
 
 export type SidebarTaskSort = "recent" | "manual";
+
+export type SidebarTasksetFilterOption = {
+  id: string;
+  name: string;
+  chatCount: number;
+};
 
 export type SidebarTaskShortcutState = {
   count: number;
@@ -25,6 +33,7 @@ export const SIDEBAR_TASK_FILTER_OPTIONS: ReadonlyArray<{
   { value: "in_progress", label: "In progress" },
   { value: "pinned", label: "Pinned" },
   { value: "saved_for_later", label: "Save for later" },
+  { value: "tasksets", label: "Tasksets" },
   { value: "done", label: "Done" },
   { value: "all", label: "All" },
 ];
@@ -42,17 +51,31 @@ export function sidebarTaskRows(input: {
   doneSessions: readonly Session[];
   filter: SidebarTaskFilter;
   inProgressSessionIds: ReadonlySet<string>;
+  selectedTasksetId?: string | null;
   previewSessionIds?: readonly string[] | null;
   sort: SidebarTaskSort;
 }): Session[] {
   const rows: Session[] = [];
 
   if (input.filter === "done") {
-    rows.push(...input.doneSessions);
+    rows.push(...input.doneSessions.filter((session) => !sessionTaskset(session)));
   } else if (input.filter === "all") {
-    rows.push(...input.activeSessions, ...input.doneSessions);
+    rows.push(
+      ...input.activeSessions.filter((session) => !sessionTaskset(session)),
+      ...input.doneSessions.filter((session) => !sessionTaskset(session))
+    );
+  } else if (input.filter === "tasksets") {
+    rows.push(
+      ...input.activeSessions.filter((session) =>
+        matchesSelectedTaskset(session, input.selectedTasksetId)
+      ),
+      ...input.doneSessions.filter((session) =>
+        matchesSelectedTaskset(session, input.selectedTasksetId)
+      ),
+    );
   } else {
     for (const session of input.activeSessions) {
+      if (sessionTaskset(session)) continue;
       if (input.filter === "active") {
         if (!session.savedForLater) rows.push(session);
       } else if (input.filter === "in_progress") {
@@ -98,12 +121,22 @@ export function sidebarTaskRows(input: {
   });
 }
 
+function matchesSelectedTaskset(
+  session: Session,
+  selectedTasksetId: string | null | undefined
+): boolean {
+  const taskset = sessionTaskset(session);
+  return Boolean(
+    taskset && (!selectedTasksetId || taskset.id === selectedTasksetId)
+  );
+}
+
 export function sidebarTaskShortcutState(input: {
   activeCount: number;
   filter: SidebarTaskFilter;
   savedForLaterCount: number;
 }): SidebarTaskShortcutState {
-  if (input.filter === "saved_for_later") {
+  if (input.filter === "saved_for_later" || input.filter === "tasksets") {
     return {
       count: Math.max(0, input.activeCount),
       label: "In Progress",
@@ -132,6 +165,8 @@ export function sidebarTaskEmptyLabel(
       return `No pinned ${noun}`;
     case "saved_for_later":
       return "Nothing saved for later";
+    case "tasksets":
+      return "No Taskset chats yet";
     case "done":
       return `No done ${noun}`;
     case "all":
