@@ -4,6 +4,8 @@ import { describe, expect, test } from "vitest";
 import {
   type BaseModelCandidate,
   CrossSystemExpertBootstrapPreviewSchema,
+  type ModelEvaluationReceipt,
+  type ModelRun,
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
@@ -22,6 +24,7 @@ import {
 import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
+import { BenchmarkComparisonSummary } from "../apps/web/src/components/labs/LabModelEvaluationBenchmarkDetails";
 import {
   labWorkproductProjection,
 } from "../apps/web/src/components/labs/lab-workproducts";
@@ -209,6 +212,57 @@ describe("Lab workspace", () => {
 
     expect(markup).toContain("Harness Refiner · Inconclusive");
     expect(markup).not.toContain(">1 run<");
+  });
+
+  test("labels efficiency as diagnostic when a completed benchmark fails its quality gate", () => {
+    const receipt = {
+      schemaVersion: "openpond.modelEvaluationReceipt.v1",
+      terminalClassification: "regressed",
+      quality: { passed: false },
+      lineage: { valid: true },
+      invalidReasons: ["Candidate held-out quality did not pass every case."],
+      foregroundTokenDelta: -1_429_821,
+      usage: {
+        refiner: { totalTokens: 60_648 },
+        grader: { totalTokens: 105_675 },
+      },
+      efficiency: {
+        grossForegroundTokenSavings: 1_429_821,
+        firstPassNetTokenSavings: 1_263_498,
+        breakEvenReuseCount: 1,
+        amortizedReuseCount: 10,
+        amortizedTokenSavings: 14_131_887,
+      },
+      budget: { observedSpendUsd: 0.990634722, maximumSpendUsd: 2 },
+      resultManifest: { contentHash: "a".repeat(64) },
+      profileGit: null,
+    } as unknown as ModelEvaluationReceipt;
+    const run = {
+      status: "succeeded",
+      evaluation: {
+        upstreamModel: {
+          providerId: "deepseek",
+          modelId: "deepseek-v4-pro",
+          revision: "catalog-created:1779926400",
+        },
+      },
+    } as unknown as ModelRun;
+
+    const markup = renderToStaticMarkup(
+      createElement(BenchmarkComparisonSummary, {
+        receipt,
+        run,
+        tasksetName: "Harness Refiner public v1",
+      }),
+    );
+
+    expect(markup).toContain("No accepted Harness improvement");
+    expect(markup).toContain("Execution completed, but the benchmark classification is regressed");
+    expect(markup).toContain("Efficiency accounting below is diagnostic only");
+    expect(markup).toContain(">Execution</dt><dd>Succeeded<");
+    expect(markup).toContain(">Quality gate</dt><dd>Failed<");
+    expect(markup).toContain(">Diagnostic gross token savings<");
+    expect(markup).toContain("Candidate held-out quality did not pass every case.");
   });
 
   test("projects managed publication in Serving", () => {

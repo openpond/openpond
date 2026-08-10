@@ -4,6 +4,7 @@ import type {
   ModelRun,
 } from "@openpond/contracts";
 
+import { statusLabel } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
 
 export function StoppedEvaluationDetail({
@@ -125,6 +126,125 @@ export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationRe
         summarize={average}
       />
     </div>
+  );
+}
+
+export function BenchmarkComparisonSummary({
+  receipt,
+  run,
+  tasksetName,
+  onOpenTaskset,
+}: {
+  receipt: ModelEvaluationReceipt;
+  run: ModelRun;
+  tasksetName: string;
+  onOpenTaskset?: () => void;
+}) {
+  const acceptedImprovement =
+    receipt.terminalClassification === "improved"
+    && receipt.quality.passed
+    && receipt.lineage.valid
+    && receipt.invalidReasons.length === 0;
+  const diagnosticLabel = (label: string) =>
+    acceptedImprovement ? label : `Diagnostic ${label.toLowerCase()}`;
+
+  return (
+    <section className="labs-run-summary-card">
+      <header><h3>Comparison</h3></header>
+      {!acceptedImprovement ? (
+        <div className="training-run-placeholder">
+          <strong>No accepted Harness improvement</strong>
+          <p>
+            Execution completed, but the benchmark classification is{" "}
+            {receipt.terminalClassification.replaceAll("_", " ")}.
+            Efficiency accounting below is diagnostic only and must not be
+            treated as published token savings.
+          </p>
+          {receipt.invalidReasons.length ? (
+            <ul>
+              {receipt.invalidReasons.map((reason) => <li key={reason}>{reason}</li>)}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      <dl className="labs-run-detail-list">
+        <Fact label="Execution" value={statusLabel(run.status)} />
+        <Fact
+          label="Benchmark classification"
+          value={receipt.terminalClassification.replaceAll("_", " ")}
+        />
+        <Fact
+          label="Quality gate"
+          value={receipt.quality.passed ? "Passed" : "Failed"}
+        />
+        <Fact
+          label="Result lineage"
+          value={receipt.lineage.valid ? "Valid" : "Invalid"}
+        />
+        <Fact
+          label={diagnosticLabel("Foreground token delta")}
+          value={`${receipt.foregroundTokenDelta > 0 ? "+" : ""}${receipt.foregroundTokenDelta.toLocaleString()}`}
+        />
+        <Fact
+          label="Refiner tokens"
+          value={receipt.usage.refiner.totalTokens.toLocaleString()}
+        />
+        <Fact
+          label="Grader tokens"
+          value={receipt.usage.grader.totalTokens.toLocaleString()}
+        />
+        <Fact
+          label={diagnosticLabel("Gross token savings")}
+          value={receipt.efficiency.grossForegroundTokenSavings.toLocaleString()}
+        />
+        <Fact
+          label={diagnosticLabel("First-pass net savings")}
+          value={receipt.efficiency.firstPassNetTokenSavings.toLocaleString()}
+        />
+        <Fact
+          label={diagnosticLabel("Break-even reuse")}
+          value={receipt.efficiency.breakEvenReuseCount === null
+            ? "No break-even"
+            : `${receipt.efficiency.breakEvenReuseCount} reuse${receipt.efficiency.breakEvenReuseCount === 1 ? "" : "s"}`}
+        />
+        <Fact
+          label={diagnosticLabel(`Amortized savings · ${receipt.efficiency.amortizedReuseCount} reuses`)}
+          value={receipt.efficiency.amortizedTokenSavings.toLocaleString()}
+        />
+        <Fact
+          label="Observed / maximum spend"
+          value={`$${receipt.budget.observedSpendUsd.toFixed(4)} / ${receipt.budget.maximumSpendUsd > 0 ? `$${receipt.budget.maximumSpendUsd.toFixed(2)}` : "unlimited"}`}
+        />
+        <Fact
+          label="Upstream revision"
+          value={run.evaluation
+            ? `${run.evaluation.upstreamModel.providerId}/${run.evaluation.upstreamModel.modelId}@${run.evaluation.upstreamModel.revision}`
+            : "Unavailable"}
+        />
+        <Fact
+          label="Result manifest"
+          value={receipt.resultManifest.contentHash.slice(0, 16)}
+        />
+        <Fact
+          label="Profile Git ref"
+          value={receipt.profileGit?.ref ?? "Managed storage only"}
+        />
+        <div>
+          <dt>Taskset</dt>
+          <dd>
+            {onOpenTaskset ? (
+              <button
+                className="labs-run-taskset-link"
+                type="button"
+                onClick={onOpenTaskset}
+              >
+                {tasksetName}
+              </button>
+            ) : tasksetName}
+          </dd>
+        </div>
+      </dl>
+    </section>
   );
 }
 
