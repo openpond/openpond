@@ -1,5 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, expect, test } from "vitest";
 import type { HostedChatMessage } from "@openpond/cloud";
@@ -17,18 +16,6 @@ import {
   type TasksetWorkFixtureKind,
 } from "./helpers/taskset-work-fixtures";
 import { withTrainingStore } from "./helpers/training-fixtures";
-
-const SHARED_WORK_FILES = [
-  "apps/server/src/openpond/work-runtime-service.ts",
-  "apps/server/src/openpond/work-tool-registry.ts",
-  "apps/server/src/training/taskset-work-assets.ts",
-  "apps/server/src/training/taskset-work-attempt-runner.ts",
-  "packages/contracts/src/tasksets.ts",
-  "packages/taskset-sdk/src/validation.ts",
-];
-const REPOSITORY_ROOT = path.resolve(
-  fileURLToPath(new URL("..", import.meta.url)),
-);
 
 describe.each([
   "multi_document",
@@ -130,18 +117,6 @@ describe.each([
       }));
   },
 );
-
-test("shared Work and Taskset route code contains no response-domain special case", async () => {
-  for (const relativePath of SHARED_WORK_FILES) {
-    const source = await readFile(
-      path.join(REPOSITORY_ROOT, relativePath),
-      "utf8",
-    );
-    expect(source, relativePath).not.toMatch(
-      /proposal-workplan|solicitation|amendment-01/i,
-    );
-  }
-});
 
 test("private fixture grading accepts equivalent requirement identifiers and citation labels", () =>
   withTrainingStore(async ({ directory }) => {

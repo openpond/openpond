@@ -1,6 +1,5 @@
 export const ROOT_INTEGRATION_TESTS = [
-  "tests/training-local-cpu-fixture.test.ts",
-  "tests/training-start-orchestration.test.ts",
+  "tests/local-image-tool-registry.test.ts",
 ] as const;
 
 export const CLI_INTEGRATION_TESTS = [

@@ -60,9 +60,6 @@ export function TrainingStartSummary({
   evaluationExamples,
   preparedQuote,
   selectedComputeTarget,
-  selectedModel,
-  maxSteps,
-  sequenceLength,
   approvalPresentation,
   maximumCostUsd,
   providerManaged,
@@ -75,9 +72,6 @@ export function TrainingStartSummary({
   evaluationExamples: number;
   preparedQuote: number | null;
   selectedComputeTarget: TrainingTarget | null;
-  selectedModel: boolean;
-  maxSteps: number;
-  sequenceLength: number;
   approvalPresentation: "inline" | "dialog";
   maximumCostUsd: number | null;
   providerManaged: boolean;
@@ -90,12 +84,7 @@ export function TrainingStartSummary({
       : method === "dpo"
         ? `${Math.min(trainingExamples, approvedExamples)} of ${approvedExamples} approved preference pairs`
         : `${Math.min(trainingExamples, approvedExamples || availableTrainExamples)} approved example${trainingExamples === 1 ? "" : "s"}`;
-  const estimate =
-    selectedComputeTarget?.computeAdapterId === "local-cpu"
-      ? selectedModel
-        ? `$0 · ${maxSteps} steps × ${sequenceLength} tokens · 15-minute hard stop`
-        : "$0 · 2-minute hard stop"
-      : approvalPolicy
+  const estimate = approvalPolicy
         ? approvalPresentation === "dialog"
           ? "Reviewed when you Run"
           : preparedQuote == null

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { ComputeStorageRootSchema } from "./compute.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -176,10 +175,23 @@ export const DatasetStorageSettingsSchema = z.object({
   updatedAt: TimestampSchema,
 });
 
+export const DatasetStorageRootSchema = z.object({
+  id: IdSchema,
+  label: z.string().trim().min(1).max(500),
+  path: z.string().trim().min(1).max(4_000),
+  datasetStorePath: z.string().trim().min(1).max(4_000),
+  kind: z.enum(["local", "network", "removable", "cache"]),
+  configured: z.boolean(),
+  mounted: z.boolean(),
+  writable: z.boolean(),
+  totalBytes: z.number().int().nonnegative().nullable(),
+  freeBytes: z.number().int().nonnegative().nullable(),
+});
+
 export const DatasetStorageStateSchema = z.object({
   schemaVersion: z.literal("openpond.datasetStorageState.v1"),
   settings: DatasetStorageSettingsSchema,
-  storageRoots: z.array(ComputeStorageRootSchema),
+  storageRoots: z.array(DatasetStorageRootSchema),
 });
 
 export const UpdateDatasetStorageSettingsRequestSchema = z.object({
@@ -209,3 +221,4 @@ export type DatasetRowPageRequest = z.infer<
 export type DatasetRowPage = z.infer<typeof DatasetRowPageSchema>;
 export type DatasetStorageSettings = z.infer<typeof DatasetStorageSettingsSchema>;
 export type DatasetStorageState = z.infer<typeof DatasetStorageStateSchema>;
+export type DatasetStorageRoot = z.infer<typeof DatasetStorageRootSchema>;

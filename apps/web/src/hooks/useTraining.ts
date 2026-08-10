@@ -262,7 +262,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       if (!connection) return null;
       setBusyAction("scan-base-models");
       try {
-        await api.scanCompute(connection);
         const next = await refresh();
         setError(null);
         return next;
@@ -407,7 +406,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         const response = await fetch(`${connection.serverUrl}/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`, { headers: { Authorization: `Bearer ${connection.token}` } });
         if (!response.ok) throw new Error(await response.text());
         const disposition = response.headers.get("content-disposition") ?? "";
-        const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "openpond-training-artifact";
+        const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "openpond-model-artifact";
         const url = URL.createObjectURL(await response.blob());
         const anchor = document.createElement("a");
         anchor.href = url;
@@ -425,7 +424,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         `/models/${encodeURIComponent(modelId)}/download`,
         `${modelId}.openpond-lora.tar`,
       ),
-    downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-training-bundle.json"),
+    downloadBundle: async (bundleId: string) => downloadAuthenticated(`/bundles/${encodeURIComponent(bundleId)}/download`, "openpond-model-improvement-bundle.json"),
   }), [connection, mutate, profileId, refresh]);
 
   async function downloadAuthenticated(path: string, fallbackName: string) {

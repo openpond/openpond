@@ -66,7 +66,7 @@ describe("training CLI", () => {
   test("submits an exact manifest and can detach", async () => {
     console.log = (message?: unknown) => logs.push(String(message ?? ""));
     const directory = await mkdtemp(
-      path.join(os.tmpdir(), "openpond-training-cli-"),
+      path.join(os.tmpdir(), "openpond-model-improvement-cli-"),
     );
     const manifestPath = path.join(directory, "manifest.json");
     try {

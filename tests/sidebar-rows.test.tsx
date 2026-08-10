@@ -34,7 +34,10 @@ describe("sidebar row updated dates", () => {
     expect(markup).not.toContain("Aug 9, 2026</time>");
     expect(markup).toContain('dateTime="2026-08-09T12:30:00.000Z"');
     expect(markup).toContain(
-      '<span class="sidebar-session-detail-line"><span class="sidebar-session-project-label">OpenPond</span><time class="sidebar-row-updated-at"',
+      '<span class="sidebar-session-detail-line"><span class="sidebar-session-project-label">OpenPond</span><div class="sidebar-row-actions sidebar-task-inline-actions">',
+    );
+    expect(markup.indexOf("sidebar-task-inline-actions")).toBeLessThan(
+      markup.indexOf("sidebar-row-updated-at"),
     );
   });
 

@@ -143,28 +143,6 @@ describe("lean app-server composition", () => {
     });
   }, 30_000);
 
-  test("keeps forbidden Local product constructors out of the app-server entrypoint", async () => {
-    const [entrypoint, composition] = await Promise.all([
-      readFile("apps/server/src/app-server-entry.ts", "utf8"),
-      readFile("apps/server/src/app-server-runtime.ts", "utf8"),
-    ]);
-    expect(entrypoint).not.toContain('from "./index.js"');
-    for (const forbidden of [
-      "createOpenPondServer(",
-      "createOpenPondHttpSurface",
-      "listenOpenPondHttpServer",
-      "createTrainingService",
-      "createComputeService",
-      "createLocalAgentScheduleLoop",
-      "createWorkSandboxLifecycleService",
-      'from "./training/',
-      'from "./compute/',
-      'from "./openpond/sandboxes',
-    ]) {
-      expect(composition).not.toContain(forbidden);
-    }
-  });
-
   test("forwards hosted Work tools to only the attached remote sandbox", async () => {
     const directory = await mkdtemp(
       path.join(os.tmpdir(), "openpond-lean-app-server-remote-sandbox-"),

@@ -113,9 +113,10 @@ function createHarnessEvaluationService(input: {
     loadLocalByokRuntimeState: async () => {
       throw new Error("Hosted Harness baseline Evaluation does not load Local BYOK state.");
     },
-    getTrainedAdapterChatRuntime: () => ({
+    getManagedAdapterChatRuntime: () => ({
+      appliesTo: async () => false,
       stream: async function* () {
-        throw new Error("Hosted Harness baseline Evaluation does not use a trained Local adapter.");
+        throw new Error("Hosted Harness baseline Evaluation does not use a managed adapter.");
       },
     }),
     streamOpenPondHostedChatTurn: input.streamOpenPondHostedChatTurn,

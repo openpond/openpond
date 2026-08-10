@@ -46,7 +46,7 @@ function modelCandidate(input: {
   const destinationId =
     input.source === "managed"
       ? "openpond_managed"
-      : "local_cpu_fixture";
+      : "openpond_managed";
   return {
     schemaVersion: "openpond.baseModelCandidate.v1",
     selectionKey: input.selectionKey,

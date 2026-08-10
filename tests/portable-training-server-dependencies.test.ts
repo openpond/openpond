@@ -7,26 +7,16 @@ import { describe, expect, test, vi } from "vitest";
 import { createPortableTrainingServerDependencies } from "../apps/server/src/training/portable-training-server-dependencies.js";
 
 describe("portable training server composition", () => {
-  test("registers the concrete local compute targets used by the catalog", async () => {
+  test("does not register desktop compute or engine adapters", async () => {
     const registry = new TrainingAdapterRegistry();
     const dependencies = createPortableTrainingServerDependencies({
       storeDir: "/tmp/openpond-portable-training-test",
       environment: {},
-      computeInventory: async () => null,
     });
 
     dependencies.registerPortableAdapters(registry);
 
-    expect(registry.computeTargetIds()).toEqual([
-      "local-cpu",
-    ]);
-    await expect(
-      registry.computeTarget("local-cpu").discover(),
-    ).resolves.toMatchObject({
-      adapterId: "local-cpu",
-      available: true,
-      devices: [{ id: "cpu", runtime: "cpu" }],
-    });
+    expect(registry.computeTargetIds()).toEqual([]);
     expect(registry.engineIds()).toEqual([]);
   });
 
@@ -73,7 +63,7 @@ describe("portable training server composition", () => {
       },
     });
     dependencies.registerPortableAdapters(registry);
-    expect(registry.computeTargetIds()).toEqual(["local-cpu"]);
+    expect(registry.computeTargetIds()).toEqual([]);
     expect(registry.engineIds()).toEqual([]);
   });
 });

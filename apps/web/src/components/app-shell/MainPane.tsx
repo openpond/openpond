@@ -211,7 +211,7 @@ export function MainPane({
   setView,
   onOpenProfileSettings,
   onOpenProviderSettings,
-  onOpenComputeSettings,
+  onOpenTrainingSettings,
   onOpenDatasetStorageSettings,
   changeDraftProvider,
   changeProjectTarget,
@@ -1567,7 +1567,7 @@ export function MainPane({
                         preferences: payload.preferences,
                       });
                   },
-                  onOpenComputeSettings,
+                  onOpenTrainingSettings,
                   onOpenProviderSettings,
                   onOpenDatasetStorageSettings,
                   onOpenChat: onOpenSession,

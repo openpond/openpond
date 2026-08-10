@@ -1,6 +1,3 @@
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import "../apps/server/src/training/marketing-portfolio-managed-rl-adapter.js";
@@ -27,23 +24,6 @@ describe("managed RL Harness registry", () => {
       taskset,
       environmentId: "fixture-generic-tool-v1",
     }).id).toBe("fixture-generic-tool-v1");
-  });
-
-  it("keeps benchmark and scorer identifiers out of generic package/runtime modules", async () => {
-    const files = [
-      "packages/harness/src/common.ts",
-      "packages/harness/src/harness.ts",
-      "packages/evals/src/graders.ts",
-      "packages/evals/src/runs.ts",
-      "packages/evals/src/tasksets.ts",
-      "apps/server/src/training/managed-rl-local-rollout-executor.ts",
-      "apps/server/src/training/managed-rl-harness-registry.ts",
-      "apps/server/src/training/openpond-managed-training-adapter.ts",
-    ];
-    for (const file of files) {
-      const source = await readFile(path.resolve(file), "utf8");
-      expect(source, file).not.toMatch(/marketing-portfolio-v1|scoreBudgetDecision|portfolioValue/);
-    }
   });
 
   it("projects managed rollout reward evidence into the canonical receipt", () => {

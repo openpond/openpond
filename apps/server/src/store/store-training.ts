@@ -82,7 +82,7 @@ type TrainingChatSearchEvidenceRow = {
 };
 
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
-  "('local_cpu_fixture', 'openpond_managed')";
+  "('openpond_managed')";
 
 export class SqliteTrainingStore extends SqliteEvaluationResultStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {

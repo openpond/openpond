@@ -281,12 +281,6 @@ function methodExecutionTargets(
   return [
     executionTarget(
       method,
-      "local_cpu_fixture",
-      "Local CPU · Experimental",
-      destinations,
-    ),
-    executionTarget(
-      method,
       "openpond_managed",
       "OpenPond Managed",
       destinations,
@@ -296,7 +290,7 @@ function methodExecutionTargets(
 
 function executionTarget(
   method: TrainingMethod,
-  destinationId: "local_cpu_fixture" | "openpond_managed",
+  destinationId: "openpond_managed",
   label: string,
   destinations: NonNullable<
     TrainingWorkspaceProps["training"]["payload"]
@@ -305,8 +299,7 @@ function executionTarget(
   const destination = destinations.find(
     (candidate) => candidate.destinationId === destinationId,
   );
-  const destinationName =
-    destinationId === "local_cpu_fixture" ? "Local CPU" : "OpenPond Managed";
+  const destinationName = "OpenPond Managed";
   const supportsMethod = Boolean(destination?.methods.includes(method));
   return {
     id: destinationId,

@@ -106,7 +106,16 @@ async function createIsolatedTestEnv(): Promise<NodeJS.ProcessEnv> {
 
 async function runUnitTests(env: NodeJS.ProcessEnv): Promise<void> {
   await ensureServerWorkspaceBuild(env);
-  await runVitestProjects(["root-unit", "cli-unit"], env);
+  await runVitestProjects([
+    "root-unit",
+    "cli-unit",
+    "agent-runtime",
+    "app-server",
+    "sdk",
+    "harness",
+    "runtime",
+    "evals",
+  ], env);
 }
 
 async function runIntegrationTests(env: NodeJS.ProcessEnv): Promise<void> {

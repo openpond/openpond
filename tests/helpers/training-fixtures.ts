@@ -48,7 +48,7 @@ export function tasksetFixture(options: { ready?: boolean; profileId?: string; g
   ];
   const draft = TasksetSchema.parse({ schemaVersion: "openpond.taskset.v1", id: "taskset_fixture", profileId: options.profileId ?? "default", name: "Fixture Taskset", objective: "Reproduce an approved greeting style.", status: "needs_review", sourceRefs: [trainSource, evalSource], policy: { policyVisibleFields: ["input.prompt"], privilegedFields: ["expectedOutput.text"], hiddenGraderRefs: ["expected_output"], connectedAppScopes: [] }, environment: { protocolVersion: "openpond.taskEnvironment.v1", kind: "chat", entrypoint: "environment/taskset.ts", stateful: false, deterministicSeeds: true, toolNames: [], lifecycle: ["create", "reset", "step", "grade", "cleanup"], defaultTimeoutMs: 120_000, networkPolicy: "none", metadata: {} }, capabilities: { schemaVersion: "openpond.tasksetCapabilities.v1", taskKind: "chat", supportedSignals: ["demonstration"], compatibleMethods: ["sft"], rewardKinds: ["deterministic"], requiresTools: false, requiresState: false, requiresPrivilegedGrading: true, environmentPlacements: ["local", "remote"], exportable: true, portabilityBlockers: [] }, tasks, graders, graderFixtures, learningSignals: { demonstrations: [{ id: "demo_train", kind: "demonstration", taskId: "task_train", sourceRefs: [trainSource.id], artifactRef: "expected_train", approved: true, confidence: 1, metadata: {} }], preferences: [], corrections: [], feedback: [], rewards: [], labels: [] }, authoringProvenance: { schemaVersion: "openpond.taskAuthoringProvenance.v1", model: null, modelConfig: {}, skillHash: contentHash("skill"), promptTemplateVersion: "task-authoring.v1", evidenceHashes: [trainSource.sourceHash, evalSource.sourceHash], tasksetSdkVersion: "0.0.1", sourceCommit: null, repairHistory: [], createdAt: FIXED_TIME }, readiness: null, contentHash: "00000000", createdAt: FIXED_TIME, updatedAt: FIXED_TIME, metadata: { trainingMethod: "sft", diagnosis: { schemaVersion: "openpond.capabilityDiagnosis.v1", summary: "Reproduce a stable greeting style.", stableBehavior: ["Use the approved greeting style."], changingKnowledge: [], requiredContext: [], requiredTools: [], intervention: "sft", trainingEligible: true, rationale: ["Independent examples demonstrate the stable behavior."], confidence: 0.9 } } });
   const hash = computeTasksetHash(draft);
-  const readiness = options.ready ? { schemaVersion: "openpond.tasksetReadiness.v1" as const, tasksetId: draft.id, tasksetHash: hash, ready: true, recommendedMethod: "sft" as const, compatibleDestinationClasses: ["export" as const, "local_cpu_fixture" as const, "custom" as const], blockers: [], warnings: [], generatedAt: FIXED_TIME } : null;
+  const readiness = options.ready ? { schemaVersion: "openpond.tasksetReadiness.v1" as const, tasksetId: draft.id, tasksetHash: hash, ready: true, recommendedMethod: "sft" as const, compatibleDestinationClasses: ["export" as const, "hosted_managed" as const, "custom" as const], blockers: [], warnings: [], generatedAt: FIXED_TIME } : null;
   return TasksetSchema.parse({ ...draft, status: readiness ? "ready" : "needs_review", readiness, contentHash: hash });
 }
 
@@ -56,7 +56,7 @@ export function sftRecipeFixture() {
   return SftRecipeSchema.parse({ schemaVersion: "openpond.sftRecipe.v1", method: "sft", parameterization: "lora", baseModel: { id: "openpond/tiny-cpu-gpt2-fixture", revision: "architecture-v2-seed-17-context-512", tokenizerRevision: "wordlevel-v1", chatTemplateHash: "fixture00000000" }, dataset: { trainSplit: "train", validationSplit: "frozen_eval", completionOnly: true, maxSequenceLength: 64 }, lora: { rank: 2, alpha: 4, dropout: 0, targetModules: ["c_attn"] }, optimizer: { learningRate: 0.01, epochs: 1, maxSteps: 2, batchSize: 1, gradientAccumulationSteps: 1, seed: 17 }, resourceLimits: { cpuThreads: 2, memoryBytes: 2_000_000_000, wallTimeMs: 120_000 } });
 }
 
-export function planFixture(taskset = tasksetFixture({ ready: true }), destinationId: TrainingDestinationId = "local_cpu_fixture"): TrainingPlan {
+export function planFixture(taskset = tasksetFixture({ ready: true }), destinationId: TrainingDestinationId = "openpond_managed"): TrainingPlan {
   const draft = createTrainingPlan({ modelId: "model_fixture", taskset, destinationId, recipe: sftRecipeFixture(), exportApproved: true });
   const compatibility = { schemaVersion: "openpond.trainingCompatibility.v1" as const, compatible: true, destinationId, tasksetId: taskset.id, recipeMethod: "sft" as const, issues: [], checkedAt: FIXED_TIME };
   return TrainingPlanSchema.parse({ ...draft, compatibility, contentHash: contentHash({ ...draft, compatibility, contentHash: "" }) });
@@ -111,7 +111,7 @@ export function preferenceTasksetFixture(): Taskset {
       recommendedMethod: "dpo",
       trainingPath: { primaryMethod: "dpo", bootstrap: null },
       methodReadiness: [{ method: "dpo", status: "recommended", reasonCodes: [], reasons: [] }],
-      compatibleDestinationClasses: ["local_cpu_fixture"],
+      compatibleDestinationClasses: ["hosted_managed"],
       blockers: [],
       warnings: [],
       baselineReward: null,
@@ -172,7 +172,7 @@ export function rewardTasksetFixture(): Taskset {
         { method: "grpo", status: "compatible", reasonCodes: [], reasons: [] },
         { method: "ppo", status: "recommended", reasonCodes: ["value_model_required"], reasons: ["Bind the recipe value model."] },
       ],
-      compatibleDestinationClasses: ["local_cpu_fixture"],
+      compatibleDestinationClasses: ["hosted_managed"],
       blockers: [],
       warnings: [],
       baselineReward: null,
@@ -235,14 +235,14 @@ export function executablePlanFixture(
   const draft = createTrainingPlan({
     modelId: `model_${recipe.method}_fixture`,
     taskset,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe,
     exportApproved: true,
   });
   const compatibility = {
     schemaVersion: "openpond.trainingCompatibility.v1" as const,
     compatible: true,
-    destinationId: "local_cpu_fixture" as const,
+    destinationId: "openpond_managed" as const,
     tasksetId: taskset.id,
     recipeMethod: recipe.method,
     issues: [],
@@ -276,7 +276,7 @@ export function proposalFixture(sourceIds = ["source_train", "source_eval"]) {
 }
 
 export async function withTrainingStore<T>(run: (input: { store: SqliteStore; directory: string }) => Promise<T>): Promise<T> {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-training-test-"));
+  const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-model-improvement-test-"));
   const store = new SqliteStore(directory);
   try { return await run({ store, directory }); }
   finally { await store.close(); await rm(directory, { recursive: true, force: true }); }

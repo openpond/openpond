@@ -46,7 +46,7 @@ describe("resolved training bundle release isolation", () => {
         source: "local",
       },
       method: "sft",
-      destinationId: "local_cpu_fixture",
+      destinationId: "openpond_managed",
       runPreset: "small",
       recipe,
       createdAt: FIXED_TIME,
@@ -65,7 +65,7 @@ describe("resolved training bundle release isolation", () => {
           dataPlane: null,
         },
         compute: {
-          adapterId: "local-cpu",
+          adapterId: "openpond-managed",
           kind: "local",
           deviceOrPool: "cpu",
           capabilityReceipt,

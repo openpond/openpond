@@ -133,13 +133,13 @@ test("two Models can train from one Dataset without sharing plan identity", () =
   const first = createTrainingPlan({
     modelId: "model_alpha",
     taskset,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe: sftRecipeFixture(),
   });
   const second = createTrainingPlan({
     modelId: "model_beta",
     taskset,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe: sftRecipeFixture(),
   });
 
@@ -173,13 +173,13 @@ test("one Model can bind distinct immutable Dataset revisions across plans", () 
   const first = createTrainingPlan({
     modelId: "model_long_lived",
     taskset: firstRevision,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe: sftRecipeFixture(),
   });
   const second = createTrainingPlan({
     modelId: "model_long_lived",
     taskset: secondRevision,
-    destinationId: "local_cpu_fixture",
+    destinationId: "openpond_managed",
     recipe: sftRecipeFixture(),
   });
 

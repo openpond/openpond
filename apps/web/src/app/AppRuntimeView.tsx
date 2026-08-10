@@ -1097,8 +1097,8 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             setSettingsSection("providers");
             setView("settings");
           },
-          onOpenComputeSettings: () => {
-            setSettingsSection("compute");
+          onOpenTrainingSettings: () => {
+            setSettingsSection("training");
             setView("settings");
           },
           onOpenDatasetStorageSettings: () => {

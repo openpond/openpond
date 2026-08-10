@@ -23,26 +23,16 @@ export function createPortableTrainingServiceSupport(input: {
     query = "",
     preferredMethod?: "sft" | "dpo" | "grpo" | "ppo",
   ) {
-    const [
-      destinationCapabilities,
-      compute,
-      searchResults,
-      adapterCompute,
-    ] = await Promise.all([
+    const [destinationCapabilities, searchResults, adapterCompute] = await Promise.all([
       input.destinations(),
-      Promise.resolve(null),
       query.trim().length >= 2
         ? (input.searchTrainingModels ?? searchHuggingFaceModels)(query)
         : Promise.resolve([]),
       input.adapters.computeCapabilities(),
     ]);
     return createPortableTrainingCatalog({
-      candidates: projectBaseModelCandidates({
-        destinations: destinationCapabilities,
-        inventory: compute,
-      }),
+      candidates: projectBaseModelCandidates({ destinations: destinationCapabilities }),
       destinations: destinationCapabilities,
-      inventory: compute,
       searchResults,
       registeredEngineIds: input.adapters.engineIds(),
       adapterCompute,

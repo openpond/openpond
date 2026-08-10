@@ -219,7 +219,7 @@ export function ScheduledWorkPage({
                   size={16}
                 />
               </button>
-              <label className="scheduled-filter" title="Filter schedules">
+              <label className="scheduled-filter">
                 <ListFilter aria-hidden="true" size={16} />
                 <select
                   aria-label="Schedule filter"

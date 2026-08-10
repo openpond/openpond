@@ -38,7 +38,6 @@ export function createDatasetStorageService(input: { storeDir: string }) {
         datasetStorePath: current.datasetStorePath,
         kind: storageKindForPath(current.datasetStorePath),
         label: "Configured location",
-        modelStorePath: current.datasetStorePath,
         path: current.datasetStorePath,
       });
     }
@@ -47,6 +46,9 @@ export function createDatasetStorageService(input: { storeDir: string }) {
       const stats = await statfs(candidate.path).catch(() => null);
       return {
         ...candidate,
+        id: `dataset-storage-${Buffer.from(candidate.path).toString("base64url").slice(0, 120)}`,
+        configured: path.resolve(candidate.datasetStorePath) === path.resolve(current.datasetStorePath),
+        mounted: stats !== null,
         freeBytes: stats ? Number(stats.bavail) * Number(stats.bsize) : null,
         totalBytes: stats ? Number(stats.blocks) * Number(stats.bsize) : null,
         writable,

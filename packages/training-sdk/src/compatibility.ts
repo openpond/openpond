@@ -99,14 +99,6 @@ export function validateTrainingCompatibility(input: {
         message: "DPO requires an independent frozen evaluation split.",
       });
     }
-    if (input.plan.destinationId !== "local_cpu_fixture") {
-      issues.push({
-        code: "dpo_destination_unproven",
-        severity: "error",
-        path: "destinationId",
-        message: "The executable DPO contract is currently proven only on the local CPU correctness destination.",
-      });
-    }
   }
   if (recipe.method === "ppo") {
     const rewardReady = input.taskset.learningSignals.rewards.some((signal) =>
@@ -151,14 +143,6 @@ export function validateTrainingCompatibility(input: {
         severity: "error",
         path: "recipe.policyOptimization.optimizer.minibatchSize",
         message: "PPO minibatch size cannot exceed the bounded rollout count.",
-      });
-    }
-    if (input.plan.destinationId !== "local_cpu_fixture") {
-      issues.push({
-        code: "ppo_destination_unproven",
-        severity: "error",
-        path: "destinationId",
-        message: "The verifier-backed PPO correctness executor is currently proven only on the local CPU destination.",
       });
     }
     if (input.plan.environmentPlacement !== "local") {

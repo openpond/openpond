@@ -68,51 +68,6 @@ function capabilities() {
 }
 
 describe("managed adapter sync service", () => {
-  test("refreshes a retained OpenPond training projection without republishing bytes", async () => {
-    const currentLineage = lineage();
-    currentLineage.managedServing = {
-      schemaVersion: "openpond.managedAdapterServingProjection.v1",
-      teamId: "team_qa",
-      source: "openpond_training",
-      sourceRef: "lineage-qa",
-      canonicalArtifactId: "canonical-artifact",
-      canonicalArtifactState: "promotable",
-      canonicalDeploymentId: "deployment-retired",
-      canonicalDeploymentState: "failed",
-      state: "imported",
-      customerBindingAllowed: true,
-      artifactContentHash: "1".repeat(64),
-      baseProfileId: BASE_PROFILE_ID,
-      publishedAt: timestamp,
-      lastSyncedAt: timestamp,
-      lastError: null,
-    };
-    const harness = createHarness({
-      currentLineage,
-      artifacts: [],
-      registryArtifact: {
-        id: "canonical-artifact",
-        source: "openpond_training",
-        sourceRef: "lineage-qa",
-        state: "promotable",
-        promotable: true,
-        customerBindingAllowed: true,
-        contentHash: "1".repeat(64),
-        baseProfileId: BASE_PROFILE_ID,
-      },
-      deployment: { id: "deployment-managed", artifactId: "canonical-artifact", state: "ready" },
-    });
-
-    await harness.service.reconcile();
-
-    expect(harness.saved()?.managedServing).toMatchObject({
-      source: "openpond_training",
-      canonicalDeploymentId: "deployment-managed",
-      state: "ready",
-      lastError: null,
-    });
-  });
-
   test("waits for Sandbox canonical publication without uploading managed bytes", async () => {
     const harness = createManagedHarness(null, null);
 

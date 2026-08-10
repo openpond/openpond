@@ -154,7 +154,10 @@ export function HarnessEvaluationReviewSettings({
         <div className="harness-section-heading">
           <div>
             <h2>Continuous learning</h2>
-            <p>Review completed turns immediately, then run scheduled RL reviews across recurring evidence. Neither process starts training or activates a Model.</p>
+            <p>
+              Review completed turns immediately, then run scheduled RL reviews
+              across recurring evidence.
+            </p>
           </div>
           <div className="harness-section-actions">
             <button

@@ -1332,12 +1332,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             (candidate) => candidate.id.trim()
           )?.id ??
           null;
-        const providerModel = providerSettings?.modelCaches[
-          session.provider
-        ]?.models.find((candidate) => candidate.id === runtimeModel);
-        const contextLimitTokens =
-          localModelConfiguration?.contextWindowTokens ??
-          trustedProviderContextLimit({
+        const contextLimitTokens = trustedProviderContextLimit({
             provider: session.provider,
             model: runtimeModel,
             settings: providerSettings,
@@ -1346,11 +1341,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           ...current,
           providerTurnId,
         }));
-        const systemPrompt =
-          localModelConfiguration &&
-          localModelConfiguration.systemPromptMode !== "full_harness"
-            ? localModelSystemPrompt(localModelConfiguration)
-            : await hostedSystemPrompt(
+        const systemPrompt = await hostedSystemPrompt(
                 HOSTED_CHAT_SYSTEM_PROMPT,
                 personalizationSoul,
                 session,
@@ -1380,12 +1371,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                   extraSystemContext,
                 }
               );
-        const canCompactLocalModel =
-          !localModelConfiguration ||
-          (localModelConfiguration.compaction === "when_needed" &&
-            priorEvents.some((item) => item.name === "turn.started"));
-        const hostedPriorEvents = canCompactLocalModel
-          ? await maybeAutoCompactHostedContext({
+        const hostedPriorEvents = await maybeAutoCompactHostedContext({
               session,
               turn,
               provider: session.provider,
@@ -1418,8 +1404,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
                   if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
                 }
               },
-            })
-          : priorEvents;
+            });
         const messages = buildChatMessagesForProvider(
           hostedPriorEvents,
           providerPrompt,

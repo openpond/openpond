@@ -338,11 +338,9 @@ describe("sidebar terminal indicators", () => {
 
     expect(markup).toContain("has-running-dot");
     expect(markup).toContain("sidebar-running-dot goal");
-    expect(markup).toContain(
-      "sidebar-project-locations-popover sidebar-session-running-popover"
-    );
     expect(markup).toContain("Pursuing goal");
-    expect(markup).toContain("Review command access doc");
+    expect(markup).not.toContain("sidebar-session-running-popover");
+    expect(markup).not.toContain("Review command access doc");
     expect(markup).not.toContain("Pursuing goal: Review command access doc");
     expect(markup).not.toContain(
       'data-tooltip="Pursuing goal: Review command access doc"'
@@ -383,45 +381,6 @@ describe("sidebar terminal indicators", () => {
     expect(markup).not.toContain("Wait for continuation worker");
   });
 
-  test("truncates long goal objectives in the running tooltip body", () => {
-    const markup = renderToStaticMarkup(
-      createElement(SidebarSessionRow, {
-        session: sessionFixture(),
-        selected: false,
-        hideIcon: true,
-        running: true,
-        goalRuntime: {
-          objective: [
-            "line 1",
-            "line 2",
-            "line 3",
-            "line 4",
-            "line 5",
-            "line 6",
-          ].join("\n"),
-          status: "active",
-          timeUsedSeconds: 12,
-          tokensUsed: null,
-          tokenBudget: null,
-          actionLabel: "Pursuing goal",
-          timeLabel: "12s",
-          label: "Goal 12s",
-          detail: "Active",
-          tooltip: "Goal runtime: 12 seconds. Active.",
-          tone: "active",
-        },
-        onSelect: () => undefined,
-        onTogglePin: () => undefined,
-        onToggleSaveForLater: () => undefined,
-        onArchive: () => undefined,
-      })
-    );
-
-    expect(markup).toContain("line 5");
-    expect(markup).toContain("...");
-    expect(markup).not.toContain("line 6");
-  });
-
   test("renders active subagents with purple running state ahead of goal state", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarSessionRow, {
@@ -452,9 +411,9 @@ describe("sidebar terminal indicators", () => {
     );
 
     expect(markup).toContain("sidebar-running-dot subagent");
-    expect(markup).toContain("sidebar-running-popover-dot subagent");
     expect(markup).toContain("2 subagents running");
-    expect(markup).toContain("Subagents: Coding running, Review queued");
+    expect(markup).not.toContain("sidebar-session-running-popover");
+    expect(markup).not.toContain("Subagents: Coding running, Review queued");
     expect(markup).not.toContain("sidebar-running-dot goal");
   });
 });

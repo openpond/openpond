@@ -39,7 +39,7 @@ describe("local training job store", () => {
     const plan = planFixture(taskset);
     await store.upsertTaskset(taskset);
     await store.saveTrainingPlan(plan);
-    const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_fixture", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "local_cpu_fixture", status: "running", nonProduction: true, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
+    const job = TrainingJobSchema.parse({ schemaVersion: "openpond.trainingJob.v1", id: "job_fixture", planId: plan.id, bundleHash: "bundlehash", approvalId: "approval", destinationId: "openpond_managed", status: "running", nonProduction: false, workerPid: null, startedAt: "2026-07-12T00:00:00Z", completedAt: null, error: null, createdAt: "2026-07-12T00:00:00Z", updatedAt: "2026-07-12T00:00:00Z", metadata: {} });
     await store.saveTrainingJob(job);
     for (const sequence of [1, 0]) await store.saveTrainingJobEvent(TrainingJobEventSchema.parse({ schemaVersion: "openpond.trainingJobEvent.v1", id: `event_${sequence}`, jobId: job.id, sequence, type: sequence ? "metric" : "start", timestamp: "2026-07-12T00:00:00Z", payload: {} }));
     const artifact = TrainingArtifactSchema.parse({ schemaVersion: "openpond.trainingArtifact.v1", id: "artifact_fixture", jobId: job.id, kind: "adapter", path: "/tmp/adapter.safetensors", sha256: contentHash("adapter"), sizeBytes: 10, baseModelId: "base", baseModelRevision: "rev", tokenizerRevision: "tok", chatTemplateHash: contentHash("template"), nonProduction: true, createdAt: "2026-07-12T00:00:00Z", metadata: {} });

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type {
-  ComputeStateResponse,
+  DatasetStorageState,
   DatasetCatalogItem,
   DatasetCatalogResponse,
 } from "@openpond/contracts";
 import { RefreshCw } from "../icons";
-import { ModelStoragePicker } from "./ModelStoragePicker";
-import type { ComputeSettingsBusy } from "./useComputeSettings";
+import { DatasetStoragePicker } from "./DatasetStoragePicker";
 
 export function DatasetStorageSettingsSection({
   state,
@@ -16,9 +15,9 @@ export function DatasetStorageSettingsSection({
   onRefresh,
   onSave,
 }: {
-  state: ComputeStateResponse | null;
+  state: DatasetStorageState | null;
   catalog: DatasetCatalogResponse | null;
-  busy: ComputeSettingsBusy;
+  busy: "load" | "save" | null;
   catalogLoading: boolean;
   onRefresh: () => Promise<void>;
   onSave: (datasetStorePath: string | null) => Promise<boolean>;
@@ -31,12 +30,12 @@ export function DatasetStorageSettingsSection({
   }, [state?.settings.datasetStorePath]);
 
   const selectedStorage = useMemo(
-    () => state?.inventory?.storageRoots.find(
+    () => state?.storageRoots.find(
       (root) =>
         normalizedPath(root.datasetStorePath)
         === normalizedPath(datasetStorePath),
     ) ?? null,
-    [datasetStorePath, state?.inventory?.storageRoots],
+    [datasetStorePath, state?.storageRoots],
   );
   const unchanged =
     datasetStorePath === (state?.settings.datasetStorePath ?? null);
@@ -101,11 +100,10 @@ export function DatasetStorageSettingsSection({
         onSubmit={(event) => void save(event)}
       >
         <div className="account-list-heading"><span>Location</span></div>
-        <ModelStoragePicker
+        <DatasetStoragePicker
           disabled={busy !== null}
           onChange={setDatasetStorePath}
-          purpose="dataset"
-          storageRoots={state?.inventory?.storageRoots ?? []}
+          storageRoots={state?.storageRoots ?? []}
           value={datasetStorePath}
         />
         <button

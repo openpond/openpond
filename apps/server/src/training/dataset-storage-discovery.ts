@@ -1,12 +1,12 @@
 import { readdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { ComputeStorageRoot } from "@openpond/contracts";
+import type { DatasetStorageRoot } from "@openpond/contracts";
 import type { CommandProbe } from "./dataset-storage-probe.js";
 
 export type StorageCandidate = Pick<
-  ComputeStorageRoot,
-  "datasetStorePath" | "kind" | "label" | "modelStorePath" | "path"
+  DatasetStorageRoot,
+  "datasetStorePath" | "kind" | "label" | "path"
 >;
 
 const NETWORK_FILE_SYSTEMS = new Set([
@@ -100,7 +100,6 @@ export function parseLinuxMountInfo(value: string, storeDir: string): StorageCan
     candidates.push({
       kind,
       label: driveLabel(mountPath, source, kind),
-      modelStorePath: mountPath === "/" ? path.join(storeDir, "models") : mountPath,
       datasetStorePath: mountPath === "/"
         ? path.join(storeDir, "datasets")
         : path.join(mountPath, "OpenPond", "datasets"),
@@ -123,7 +122,6 @@ export function parseMacMountOutput(value: string, storeDir: string): StorageCan
     candidates.push({
       kind,
       label: driveLabel(mountPath, source, kind),
-      modelStorePath: mountPath === "/" ? path.join(storeDir, "models") : mountPath,
       datasetStorePath: mountPath === "/"
         ? path.join(storeDir, "datasets")
         : path.join(mountPath, "OpenPond", "datasets"),
@@ -151,7 +149,6 @@ export function parseWindowsLogicalDisks(value: string, storeDir: string): Stora
     return [{
       kind,
       label: volumeName || (root.toLowerCase() === storeRoot ? "System disk" : deviceId.toUpperCase()),
-      modelStorePath: root.toLowerCase() === storeRoot ? path.win32.join(storeDir, "models") : root,
       datasetStorePath: root.toLowerCase() === storeRoot
         ? path.win32.join(storeDir, "datasets")
         : path.win32.join(root, "OpenPond", "datasets"),
@@ -160,7 +157,7 @@ export function parseWindowsLogicalDisks(value: string, storeDir: string): Stora
   });
 }
 
-export function storageKindForPath(value: string): ComputeStorageRoot["kind"] {
+export function storageKindForPath(value: string): DatasetStorageRoot["kind"] {
   const normalized = value.toLowerCase();
   if (normalized.includes("/gvfs/") || normalized.startsWith("//") || normalized.startsWith("\\\\")) return "network";
   if (normalized.startsWith("/media/") || normalized.startsWith("/run/media/") || normalized.startsWith("/volumes/")) return "removable";
@@ -178,7 +175,6 @@ async function discoverGvfsCandidates(): Promise<StorageCandidate[]> {
     return [{
       kind: "network",
       label: labelForGvfsMount(entry.name),
-      modelStorePath: mountedPath,
       datasetStorePath: path.join(mountedPath, "OpenPond", "datasets"),
       path: mountedPath,
     } satisfies StorageCandidate];
@@ -190,7 +186,6 @@ function systemStorageCandidate(storeDir: string, platform: NodeJS.Platform): St
   return {
     kind: "local",
     label: "System disk",
-    modelStorePath: path.join(storeDir, "models"),
     datasetStorePath: path.join(storeDir, "datasets"),
     path: platform === "win32" ? root : root || "/",
   };
@@ -205,13 +200,13 @@ function isRelevantLinuxMount(mountPath: string, source: string, fileSystem: str
   return /^(?:\/media\/|\/mnt\/|\/run\/media\/)/.test(mountPath);
 }
 
-function storageKind(input: { fileSystem: string; mountPath: string; source: string }): ComputeStorageRoot["kind"] {
+function storageKind(input: { fileSystem: string; mountPath: string; source: string }): DatasetStorageRoot["kind"] {
   if (NETWORK_FILE_SYSTEMS.has(input.fileSystem) || input.source.startsWith("//")) return "network";
   if (/^(?:\/media\/|\/run\/media\/)/.test(input.mountPath)) return "removable";
   return "local";
 }
 
-function driveLabel(mountPath: string, source: string, kind: ComputeStorageRoot["kind"]): string {
+function driveLabel(mountPath: string, source: string, kind: DatasetStorageRoot["kind"]): string {
   if (mountPath === "/") return "System disk";
   const mountName = path.basename(mountPath);
   if (kind === "network") {

@@ -20,7 +20,7 @@ export function createTrainingArtifactExportService(deps: {
     );
     const exported = await createTrainingBundleExport(directory);
     return {
-      filename: `${bundle.id}.openpond-training-bundle.json`,
+      filename: `${bundle.id}.openpond-model-improvement-bundle.json`,
       content: JSON.stringify(exported),
     };
   }

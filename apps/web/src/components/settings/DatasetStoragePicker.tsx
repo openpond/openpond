@@ -1,28 +1,25 @@
 import { useEffect, useId, useState, type FormEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import type { ComputeStorageRoot } from "@openpond/contracts";
+import type { DatasetStorageRoot } from "@openpond/contracts";
 import "../../styles/workspace/git-dialogs.css";
 import { FolderPlus, Plus, X } from "../icons";
 
-export function ModelStoragePicker({
+export function DatasetStoragePicker({
   disabled,
   onChange,
-  purpose = "model",
   storageRoots,
   value,
 }: {
   disabled: boolean;
   onChange: (value: string | null) => void;
-  purpose?: "dataset" | "model";
-  storageRoots: ComputeStorageRoot[];
+  storageRoots: DatasetStorageRoot[];
   value: string | null;
 }) {
   const selectId = useId();
   const [manualOpen, setManualOpen] = useState(false);
   const selectedPath = normalizedPath(value);
-  const storagePath = (storage: ComputeStorageRoot) =>
-    purpose === "dataset" ? storage.datasetStorePath : storage.modelStorePath;
-  const label = purpose === "dataset" ? "Dataset" : "Model";
+  const storagePath = (storage: DatasetStorageRoot) => storage.datasetStorePath;
+  const label = "Dataset";
   const selectedStorage =
     storageRoots.find(
       (storage) => normalizedPath(storagePath(storage)) === selectedPath,
@@ -37,7 +34,7 @@ export function ModelStoragePicker({
           className="model-storage-select"
           disabled={disabled}
           id={selectId}
-          title={value ?? `No ${purpose} storage configured`}
+          title={value ?? "No Dataset storage configured"}
           value={value ?? ""}
           onChange={(event) => onChange(event.target.value || null)}
         >
@@ -54,7 +51,7 @@ export function ModelStoragePicker({
             </option>
           ))}
         </select>
-        <button className="settings-icon-button model-storage-add" disabled={disabled} type="button" title="Add manual location" aria-label={`Add manual ${purpose} storage location`} onClick={() => setManualOpen(true)}>
+        <button className="settings-icon-button model-storage-add" disabled={disabled} type="button" title="Add manual location" aria-label="Add manual Dataset storage location" onClick={() => setManualOpen(true)}>
           <Plus size={15} />
         </button>
       </div>
@@ -62,7 +59,7 @@ export function ModelStoragePicker({
       {manualOpen ? renderDialog(
         <ManualModelStorageDialog
           initialPath={value ?? ""}
-          purpose={purpose}
+          purpose="dataset"
           onClose={() => setManualOpen(false)}
           onUse={(path) => {
             onChange(path);
@@ -143,14 +140,14 @@ export function manualStoragePathError(value: string): string | null {
   return "Enter an absolute mounted folder path.";
 }
 
-function storageKindLabel(kind: ComputeStorageRoot["kind"]): string {
+function storageKindLabel(kind: DatasetStorageRoot["kind"]): string {
   if (kind === "network") return "Network";
   if (kind === "removable") return "Removable";
   if (kind === "cache") return "Cache";
   return "Local";
 }
 
-function storageStatus(storage: ComputeStorageRoot): string {
+function storageStatus(storage: DatasetStorageRoot): string {
   if (!storage.mounted) return "Not mounted";
   if (!storage.writable) return "Read only";
   return `${formatBytes(storage.freeBytes)} free`;

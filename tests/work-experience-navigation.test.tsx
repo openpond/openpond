@@ -127,7 +127,7 @@ describe("Work experience navigation", () => {
     );
 
     expect(PRODUCT_AREA_OPTIONS.map((option) => option.label)).toEqual([
-      "Chat",
+      "Work",
       "Models",
     ]);
     expect(CHAT_TASK_MODE_OPTIONS.map((option) => option.label)).toEqual([
@@ -139,9 +139,9 @@ describe("Work experience navigation", () => {
     expect(newExperienceTitle("development")).toBe("New task");
     expect(menu).toContain("sidebar-experience-trigger");
     expect(menu).toContain(
-      '<span class="sidebar-experience-label">Chat</span>'
+      '<span class="sidebar-experience-label">Work</span>'
     );
-    expect(menu).toContain("OpenPond product: Chat");
+    expect(menu).toContain("OpenPond product: Work");
     expect(menu).toContain('aria-haspopup="menu"');
     expect(switcher).toContain('role="radiogroup"');
     expect(switcher).toContain('aria-label="Choose task mode"');

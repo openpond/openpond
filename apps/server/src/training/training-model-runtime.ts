@@ -19,7 +19,7 @@ export function createTrainingModelRuntime(deps: {
     settings: ProviderSettings;
     secrets: ProviderSecrets;
   }>;
-  managedAdapterChatRuntime: Pick<ReturnType<typeof createManagedAdapterChatRuntime>, "appliesTo" | "stream">;
+  getManagedAdapterChatRuntime(): Pick<ReturnType<typeof createManagedAdapterChatRuntime>, "appliesTo" | "stream">;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
 }) {
   async function trainingModelText(input: {
@@ -35,8 +35,8 @@ export function createTrainingModelRuntime(deps: {
     onUsage?: (usage: unknown, costUsd?: number) => void;
   }): Promise<string> {
     let text = "";
-    if (input.model.providerId === "openpond" && await deps.managedAdapterChatRuntime.appliesTo(input.model.modelId)) {
-      for await (const delta of deps.managedAdapterChatRuntime.stream({
+    if (input.model.providerId === "openpond" && await deps.getManagedAdapterChatRuntime().appliesTo(input.model.modelId)) {
+      for await (const delta of deps.getManagedAdapterChatRuntime().stream({
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
@@ -103,8 +103,8 @@ export function createTrainingModelRuntime(deps: {
 
   const trainingModelStream: TasksetWorkModelStream =
     async function* (input) {
-      if (input.model.providerId === "openpond" && await deps.managedAdapterChatRuntime.appliesTo(input.model.modelId)) {
-        for await (const delta of deps.managedAdapterChatRuntime.stream({
+      if (input.model.providerId === "openpond" && await deps.getManagedAdapterChatRuntime().appliesTo(input.model.modelId)) {
+        for await (const delta of deps.getManagedAdapterChatRuntime().stream({
           modelId: input.model.modelId,
           messages: input.messages,
           requestId: input.requestId,

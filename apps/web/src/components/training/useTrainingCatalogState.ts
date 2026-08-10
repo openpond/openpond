@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  type ComputeStateResponse,
   type TrainingCatalog,
   type TrainingDestinationCapabilities,
   type TrainingDestinationId,
@@ -18,7 +17,6 @@ export function useTrainingCatalogState(input: {
   initialDestination: TrainingDestinationId;
   method: "sft" | "dpo" | "grpo" | "ppo";
 }) {
-  const [compute, setCompute] = useState<ComputeStateResponse | null>(null);
   const [catalog, setCatalog] = useState<TrainingCatalog | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [modelSearch, setModelSearch] = useState("");
@@ -83,17 +81,6 @@ export function useTrainingCatalogState(input: {
   useEffect(() => {
     if (!input.connection) return;
     let active = true;
-    void api.computeState(input.connection).then((state) => {
-      if (active) setCompute(state);
-    });
-    return () => {
-      active = false;
-    };
-  }, [input.connection]);
-
-  useEffect(() => {
-    if (!input.connection) return;
-    let active = true;
     const query =
       modelSearch.trim().length >= 2 ? modelSearch.trim() : "";
     const timeout = window.setTimeout(() => {
@@ -123,7 +110,6 @@ export function useTrainingCatalogState(input: {
   }, [input.connection, input.method, modelSearch]);
 
   return {
-    compute,
     catalog,
     catalogError,
     catalogTargets,

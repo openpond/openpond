@@ -1,7 +1,6 @@
 import {
   TrainingCatalogSchema,
   type BaseModelCandidate,
-  type ComputeInventory,
   type ComputeTargetBinding,
   type ComputeTargetCapabilities,
   type HarnessRuntimeCapabilities,
@@ -18,22 +17,6 @@ import { prepareTrainingSelection } from "@openpond/training-sdk";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 
 const MANAGED_RL_REVISION = "e0d60e4d85ea636873acb2e7083e794740d20226";
-const LOCAL_TARGET_POLICY = {
-  executionMode: "local_worker" as const,
-  approvalPolicy: null,
-  limits: {
-    maximumSequenceLength: 4_096,
-    maximumOutputTokens: 4_096,
-    maximumTrainingExamples: null,
-  },
-  defaults: {
-    loraRank: 2,
-    maxSteps: 8,
-    rolloutGroupSize: 4,
-    rolloutConcurrency: 1,
-    rolloutOutputTokens: 64,
-  },
-};
 const MANAGED_TARGET_POLICY = {
   executionMode: "provider_native" as const,
   approvalPolicy: {
@@ -68,7 +51,6 @@ const MANAGED_TARGET_POLICY = {
 export function createPortableTrainingCatalog(input: {
   candidates: BaseModelCandidate[];
   destinations: TrainingDestinationCapabilities[];
-  inventory: ComputeInventory | null;
   searchResults?: RegistryModelSearchResult[];
   registeredEngineIds?: string[];
   adapterCompute?: ComputeTargetCapabilities[];
@@ -76,7 +58,7 @@ export function createPortableTrainingCatalog(input: {
   now?: string;
 }): TrainingCatalog {
   const generatedAt = input.now ?? new Date().toISOString();
-  const compute = computeCapabilities(input.inventory, generatedAt, input.adapterCompute ?? []);
+  const compute = computeCapabilities(generatedAt, input.adapterCompute ?? []);
   const engines = engineCapabilities({
     destinations: input.destinations,
     generatedAt,
@@ -91,16 +73,13 @@ export function createPortableTrainingCatalog(input: {
     preferredMethod: input.preferredMethod,
   });
   const models: TrainingCatalog["models"] = input.candidates.map((candidate) => {
-    const asset = input.inventory?.models.find(
-      (model) => model.id === candidate.preference.modelAssetId,
-    );
     const computeAdapterIds = candidate.executionOptions.map((option) =>
       computeIdForDestination(option.destinationId),
     );
     const engineAdapterIds = candidate.executionOptions.map((option) =>
       engineIdForDestination(option.destinationId),
     );
-    const cached = Boolean(asset) || candidate.preference.source === "builtin";
+    const cached = false;
     const providerManaged = candidate.preference.source === "managed";
     const chatTemplateHash =
       candidate.preference.chatTemplateHash &&
@@ -122,10 +101,7 @@ export function createPortableTrainingCatalog(input: {
     return {
       selectionKey: candidate.selectionKey,
       label: candidate.label,
-      source:
-        candidate.preference.source === "local" && asset?.source === "huggingface"
-          ? ("huggingface" as const)
-          : candidate.preference.source,
+      source: candidate.preference.source,
       modelId: candidate.preference.modelId,
       revision:
         candidate.preference.revision ??
@@ -135,7 +111,7 @@ export function createPortableTrainingCatalog(input: {
         (providerManaged ? "provider-managed-tokenizer-v1" : null),
       chatTemplateHash,
       modelAssetId: candidate.preference.modelAssetId,
-      expectedBytes: asset?.sizeBytes ?? null,
+      expectedBytes: null,
       cached,
       known: true,
       searchResolved: false,
@@ -401,27 +377,9 @@ export function resolvePortableBindings(input: {
 }
 
 function computeCapabilities(
-  inventory: ComputeInventory | null,
   checkedAt: string,
   adapters: ComputeTargetCapabilities[],
 ): ComputeTargetCapabilities[] {
-  const localDevices: ComputeTargetCapabilities["devices"] = inventory?.devices.map((device) => ({
-    id: device.id,
-    kind: device.kind,
-    vendor: device.vendor,
-    name: device.name,
-    memoryBytes: device.totalMemoryBytes,
-    runtime: device.vendor === "nvidia" ? "cuda" : device.vendor === "apple" ? "mlx" : "cpu",
-  })) ?? [
-    {
-      id: "cpu",
-      kind: "cpu",
-      vendor: "other",
-      name: "Local CPU",
-      memoryBytes: null,
-      runtime: "cpu",
-    },
-  ];
   const capability = (
     adapterId: string,
     kind: ComputeTargetCapabilities["kind"],
@@ -436,7 +394,7 @@ function computeCapabilities(
     provider,
     available,
     devices,
-    supportsWorkerImages: adapterId !== "local-cpu",
+    supportsWorkerImages: true,
     supportsArtifactTransfer: true,
     supportsCancellation: true,
     capabilityReceipt: contentHash({
@@ -449,14 +407,6 @@ function computeCapabilities(
     unavailableReason: reason,
   });
   const defaults = [
-    capability(
-      "local-cpu",
-      "local",
-      null,
-      localDevices.filter((device) => device.kind === "cpu"),
-      true,
-      null,
-    ),
     capability("openpond-managed", "managed", "openpond", [], true, null),
   ];
   return mergeAdapterCapabilities(defaults, adapters);
@@ -483,9 +433,7 @@ function engineCapabilities(input: {
     modelFamilies: ["transformers"],
     precisions: ["fp32", "fp16", "bf16"],
     topologies: ["single_worker", "single_gpu_phased"],
-    workerProtocolVersion: adapterId === "sandbox-managed-rl"
-      ? "openpond.managedRlWorker.v2"
-      : "openpond.localTrainingWorker.v1",
+    workerProtocolVersion: "openpond.managedRlWorker.v2",
     upstreamRevision,
     capabilityReceipt: contentHash({
       adapterId,
@@ -499,14 +447,6 @@ function engineCapabilities(input: {
   });
   const registered = new Set(input.registeredEngineIds);
   return [
-    engine(
-      "local-trl",
-      ["sft", "dpo", "ppo"],
-      ["demonstration", "preference", "trajectory", "reward"],
-      registered.has("local-trl"),
-      "trl-0.26.2",
-      registered.has("local-trl") ? null : "The local TRL adapter is not registered.",
-    ),
     engine(
       "sandbox-managed-rl",
       ["grpo"],
@@ -561,7 +501,6 @@ function mergeAdapterCapabilities<T extends { adapterId: string }>(
 
 function computeIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
-    local_cpu_fixture: "local-cpu",
     openpond_managed: "openpond-managed",
   };
   return values[destinationId] ?? "unsupported";
@@ -569,7 +508,6 @@ function computeIdForDestination(destinationId: string): string {
 
 function engineIdForDestination(destinationId: string): string {
   const values: Record<string, string> = {
-    local_cpu_fixture: "local-trl",
     openpond_managed: "sandbox-managed-rl",
   };
   return values[destinationId] ?? "unsupported";

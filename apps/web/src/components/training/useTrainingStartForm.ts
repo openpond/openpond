@@ -62,14 +62,9 @@ export function useTrainingStartForm(input: {
     preferredOption?.destinationId
     ?? input.destinations.find(
       (destination) =>
-        destination.destinationId === "local_cpu_fixture"
-        && destination.available,
-    )?.destinationId
-    ?? input.destinations.find(
-      (destination) =>
         destination.available,
     )?.destinationId
-    ?? "local_cpu_fixture";
+    ?? "openpond_managed";
   const initialCandidate = preferredOption
     ? preferredCandidate
     : defaultCandidateForDestination(

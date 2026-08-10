@@ -159,7 +159,7 @@ describe("release workflow", () => {
     expect(releaseWorkflow).toContain("cancel-in-progress: ${{ github.event_name == 'schedule' }}");
     expect(releaseWorkflow).toContain("checks: read");
     expect(ciWorkflow).toContain("name: Checks");
-    expect(ciWorkflow).toContain("needs: [quality, unit, integration, contract, release_smoke]");
+    expect(ciWorkflow).toContain("needs: [scope, targeted, quality, unit, integration, contract, release_smoke]");
     expect(ciWorkflow).toContain("pnpm run test:unit");
     expect(ciWorkflow).toContain("pnpm run test:integration");
     expect(ciWorkflow).toContain("pnpm run test:contract");

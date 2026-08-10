@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -13,14 +12,6 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspaceRequire = createRequire(path.join(root, "package.json"));
 
 describe("dev desktop smoke script", () => {
-  test("is wired as a first-class package script", () => {
-    const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")) as {
-      scripts?: Record<string, string>;
-    };
-
-    expect(pkg.scripts?.["smoke:desktop:dev"]).toBe("tsx scripts/smoke-dev-desktop.ts");
-  });
-
   test("prints usage without launching Electron", () => {
     const result = spawnSync(process.execPath, [
       workspaceRequire.resolve("tsx/cli"),

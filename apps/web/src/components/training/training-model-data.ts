@@ -166,7 +166,6 @@ export function statusLabel(status: string): string {
 export function destinationLabel(destination: string): string {
   const labels: Record<string, string> = {
     export: "Export only",
-    local_cpu_fixture: "Local CPU",
     openpond_managed: "OpenPond Managed",
   };
   return (

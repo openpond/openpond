@@ -21,7 +21,7 @@ import {
   type ProjectDatasetArtifact,
 } from "./training-dataset-selection.js";
 import { isInside } from "./training-service-helpers.js";
-import { createDestinationTrainingEngineRegistry } from "./destination-training-engine-adapter.js";
+import { createDestinationTrainingEngineRegistry } from "./managed-training-engine-registry.js";
 import type { RegistryModelSearchResult } from "./model-registry-search.js";
 import { createPortableModelRunService } from "./portable-model-run-service.js";
 import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
@@ -239,10 +239,7 @@ export function createTrainingService(deps: {
       rolloutReceipts,
       modelBindings,
       destinations: destinationCapabilities,
-      baseModelCandidates: projectBaseModelCandidates({
-        destinations: destinationCapabilities,
-        inventory: null,
-      }),
+      baseModelCandidates: projectBaseModelCandidates({ destinations: destinationCapabilities }),
     };
   }
 

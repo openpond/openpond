@@ -15,8 +15,118 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  scope:
+    name: Select CI scope
+    runs-on: ubuntu-latest
+    outputs:
+      affected_tests: ${{ steps.scope.outputs.affected_tests }}
+      agent_sdk: ${{ steps.scope.outputs.agent_sdk }}
+      base: ${{ steps.scope.outputs.base }}
+      cli: ${{ steps.scope.outputs.cli }}
+      full: ${{ steps.scope.outputs.full }}
+      head: ${{ steps.scope.outputs.head }}
+      image: ${{ steps.scope.outputs.image }}
+      install: ${{ steps.scope.outputs.install }}
+      node_contracts: ${{ steps.scope.outputs.node_contracts }}
+      python: ${{ steps.scope.outputs.python }}
+      reason: ${{ steps.scope.outputs.reason }}
+      release: ${{ steps.scope.outputs.release }}
+      repository_checks: ${{ steps.scope.outputs.repository_checks }}
+      typecheck: ${{ steps.scope.outputs.typecheck }}
+      workflow: ${{ steps.scope.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+      - id: scope
+        name: Classify changed files
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || github.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-change-scope.mjs --event "${GITHUB_EVENT_NAME}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+  targeted:
+    name: Targeted PR checks
+    needs: scope
+    if: needs.scope.outputs.full == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - if: needs.scope.outputs.install == 'true'
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: "11.13.0"
+          cache: true
+          cache_dependency_path: pnpm-lock.yaml
+
+      - if: needs.scope.outputs.install == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.18.0"
+          package-manager-cache: false
+
+      - if: needs.scope.outputs.install == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Check repository invariants
+        if: needs.scope.outputs.repository_checks == 'true'
+        run: |
+          pnpm run structure:check
+          pnpm run reachability:check
+          pnpm run dependencies:check
+          pnpm run hygiene:check
+
+      - name: Check workflow definitions
+        if: needs.scope.outputs.workflow == 'true'
+        run: pnpm run workflows:check
+
+      - name: Typecheck affected workspace
+        if: needs.scope.outputs.typecheck == 'true'
+        run: pnpm run typecheck
+
+      - name: Typecheck CLI
+        if: needs.scope.outputs.cli == 'true'
+        run: pnpm run cli:typecheck
+
+      - name: Typecheck agent SDK
+        if: needs.scope.outputs.agent_sdk == 'true'
+        run: pnpm run agent-sdk:typecheck
+
+      - name: Install image inspection dependency
+        if: needs.scope.outputs.image == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Run affected tests
+        if: needs.scope.outputs.affected_tests == 'true' || needs.scope.outputs.node_contracts == 'true'
+        env:
+          BASE_SHA: ${{ needs.scope.outputs.base }}
+          HEAD_SHA: ${{ needs.scope.outputs.head }}
+        run: pnpm exec tsx scripts/run-affected-tests.ts --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+      - name: Check release and workflow behavior
+        if: needs.scope.outputs.release == 'true' || needs.scope.outputs.workflow == 'true'
+        run: pnpm exec vitest run --project root-unit tests/release-workflow.test.ts
+
+      - name: Run Python tests
+        if: needs.scope.outputs.python == 'true'
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+
+      - if: needs.scope.outputs.python == 'true'
+        run: pnpm run test:python
+
+      - name: Record documentation-only result
+        if: needs.scope.outputs.install == 'false'
+        run: echo "No executable files changed; full CI is unnecessary."
+
   quality:
     name: Quality and build
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -36,7 +146,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm run cli:typecheck
       - run: pnpm run agent-sdk:typecheck
-      - run: pnpm run sdk:check
+      - run: pnpm run sdk:typecheck
       - run: pnpm run build:artifacts
       - run: pnpm run cli:build
       - run: pnpm run budgets:cli:check
@@ -61,6 +171,8 @@ jobs:
 
   unit:
     name: Unit tests
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -73,15 +185,13 @@ jobs:
         with:
           node-version: "24.18.0"
           package-manager-cache: false
-      - name: Install image inspection dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y imagemagick
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:unit
 
   integration:
     name: Integration tests
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -95,12 +205,18 @@ jobs:
           node-version: "24.18.0"
           package-manager-cache: false
       - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+      - name: Install image inspection dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
       - run: pnpm install --frozen-lockfile
       - run: pnpm run test:integration
       - run: pnpm run test:python
 
   contract:
     name: Runtime contract tests
+    needs: scope
+    if: needs.scope.outputs.full == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -118,7 +234,8 @@ jobs:
 
   release_smoke:
     name: Release artifact smoke
-    needs: quality
+    needs: [scope, quality]
+    if: needs.scope.outputs.full == 'true' && needs.quality.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -144,11 +261,14 @@ jobs:
   checks:
     name: Checks
     if: always()
-    needs: [quality, unit, integration, contract, release_smoke]
+    needs: [scope, targeted, quality, unit, integration, contract, release_smoke]
     runs-on: ubuntu-latest
     steps:
-      - name: Require every CI lane
+      - name: Require the selected CI lanes
         env:
+          SCOPE: ${{ needs.scope.result }}
+          FULL: ${{ needs.scope.outputs.full }}
+          TARGETED: ${{ needs.targeted.result }}
           QUALITY: ${{ needs.quality.result }}
           UNIT: ${{ needs.unit.result }}
           INTEGRATION: ${{ needs.integration.result }}
@@ -156,7 +276,14 @@ jobs:
           RELEASE_SMOKE: ${{ needs.release_smoke.result }}
         run: |
           set -euo pipefail
-          results=("${QUALITY}" "${UNIT}" "${INTEGRATION}" "${CONTRACT}" "${RELEASE_SMOKE}")
-          for result in "${results[@]}"; do
-            test "${result}" = "success"
-          done
+          test "${SCOPE}" = "success"
+          if test "${FULL}" = "true"; then
+            test "${TARGETED}" = "skipped"
+            results=("${QUALITY}" "${UNIT}" "${INTEGRATION}" "${CONTRACT}" "${RELEASE_SMOKE}")
+          else
+            test "${TARGETED}" = "success"
+            results=("${QUALITY}" "${UNIT}" "${INTEGRATION}" "${CONTRACT}" "${RELEASE_SMOKE}")
+            for result in "${results[@]}"; do test "${result}" = "skipped"; done
+            exit 0
+          fi
+          for result in "${results[@]}"; do test "${result}" = "success"; done

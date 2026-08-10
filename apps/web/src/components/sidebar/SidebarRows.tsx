@@ -1,6 +1,5 @@
 import {
   useCallback,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -273,43 +272,44 @@ export function SidebarSessionRow({
   ]
     .filter(Boolean)
     .join(" ");
-  const rowShellRef = useRef<HTMLDivElement | null>(null);
-  const runningPopoverId = useId();
-  const [runningPopoverStyle, setRunningPopoverStyle] =
-    useState<ProjectLocationsPopoverStyle>({});
-  const updateRunningPopoverPosition = useCallback(() => {
-    if (typeof window === "undefined") return;
-    const rect = rowShellRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const maxLeft = Math.max(
-      12,
-      window.innerWidth - PROJECT_LOCATIONS_POPOVER_WIDTH - 12
-    );
-    const maxTop = Math.max(
-      12,
-      window.innerHeight - PROJECT_LOCATIONS_POPOVER_BOTTOM_RESERVE
-    );
-    const left = Math.max(12, Math.min(rect.right + 10, maxLeft));
-    const top = Math.max(12, Math.min(rect.top - 4, maxTop));
-    const nextStyle: ProjectLocationsPopoverStyle = {
-      "--sidebar-project-locations-left": `${Math.round(left)}px`,
-      "--sidebar-project-locations-top": `${Math.round(top)}px`,
-    };
-
-    setRunningPopoverStyle((current) => {
-      if (
-        current["--sidebar-project-locations-left"] ===
-          nextStyle["--sidebar-project-locations-left"] &&
-        current["--sidebar-project-locations-top"] ===
-          nextStyle["--sidebar-project-locations-top"]
-      ) {
-        return current;
-      }
-      return nextStyle;
-    });
-  }, []);
   const runningDotStyle = useMemo(syncedRunningPulseStyle, []);
+  const taskActions = (
+    <div
+      className={`sidebar-row-actions${
+        projectLabel ? " sidebar-task-inline-actions" : ""
+      }`}
+    >
+      {onDockRight ? (
+        <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
+          <PanelRight size={13} />
+        </SidebarRowAction>
+      ) : null}
+      <SidebarRowAction
+        label={session.pinned ? "Unpin chat" : "Pin chat"}
+        onClick={onTogglePin}
+      >
+        {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
+      </SidebarRowAction>
+      {onToggleSaveForLater ? (
+        <SidebarRowAction
+          label={session.savedForLater ? "Return to active" : "Save for later"}
+          onClick={onToggleSaveForLater}
+        >
+          {session.savedForLater ? (
+            <BookmarkX size={13} />
+          ) : (
+            <Bookmark size={13} />
+          )}
+        </SidebarRowAction>
+      ) : null}
+      <SidebarRowAction
+        label={archived ? "Reopen" : "Mark done"}
+        onClick={onArchive}
+      >
+        {archived ? <ArchiveRestore size={13} /> : <Check size={13} />}
+      </SidebarRowAction>
+    </div>
+  );
   const row = (
     <SidebarInteractiveRow
       selected={selected}
@@ -320,7 +320,6 @@ export function SidebarSessionRow({
       placeholder={placeholder}
       className={rowClassName || undefined}
       ariaExpanded={hasChildSessions ? childSessionsExpanded : undefined}
-      ariaDescribedBy={rowRunning ? runningPopoverId : undefined}
       onSelect={onSelect}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -373,6 +372,7 @@ export function SidebarSessionRow({
         {projectLabel ? (
           <span className="sidebar-session-detail-line">
             <span className="sidebar-session-project-label">{projectLabel}</span>
+            {taskActions}
             <SidebarUpdatedAt value={session.updatedAt} />
           </span>
         ) : null}
@@ -392,39 +392,7 @@ export function SidebarSessionRow({
             />
           ) : null}
         </span>
-        <div className="sidebar-row-actions">
-          {onDockRight ? (
-            <SidebarRowAction label="Open in right panel" onClick={onDockRight}>
-              <PanelRight size={13} />
-            </SidebarRowAction>
-          ) : null}
-          <SidebarRowAction
-            label={session.pinned ? "Unpin chat" : "Pin chat"}
-            onClick={onTogglePin}
-          >
-            {session.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-          </SidebarRowAction>
-          {onToggleSaveForLater ? (
-            <SidebarRowAction
-              label={
-                session.savedForLater ? "Return to active" : "Save for later"
-              }
-              onClick={onToggleSaveForLater}
-            >
-              {session.savedForLater ? (
-                <BookmarkX size={13} />
-              ) : (
-                <Bookmark size={13} />
-              )}
-            </SidebarRowAction>
-          ) : null}
-          <SidebarRowAction
-            label={archived ? "Reopen" : "Mark done"}
-            onClick={onArchive}
-          >
-            {archived ? <ArchiveRestore size={13} /> : <Check size={13} />}
-          </SidebarRowAction>
-        </div>
+        {projectLabel ? null : taskActions}
       </div>
     </SidebarInteractiveRow>
   );
@@ -438,33 +406,11 @@ export function SidebarSessionRow({
       />
     ) : null;
 
-  if (!rowRunning)
-    return (
-      <>
-        {row}
-        {renameDialog}
-      </>
-    );
-
   return (
-    <div
-      ref={rowShellRef}
-      className="sidebar-session-row-shell"
-      onFocusCapture={updateRunningPopoverPosition}
-      onPointerEnter={updateRunningPopoverPosition}
-    >
+    <>
       {row}
       {renameDialog}
-      <SidebarSessionRunningPopover
-        goalRuntime={
-          !subagentRunning && goalRunning ? goalRuntime ?? null : null
-        }
-        id={runningPopoverId}
-        label={runningLabel}
-        style={runningPopoverStyle}
-        subagentRuntime={subagentRunning ? subagentRuntime ?? null : null}
-      />
-    </div>
+    </>
   );
 }
 
@@ -544,86 +490,6 @@ export function SidebarFileRow({
 
 function sidebarGoalRuntimeTooltip(goalRuntime: GoalRuntimeStatus): string {
   return goalRuntime.actionLabel;
-}
-
-function SidebarSessionRunningPopover({
-  goalRuntime,
-  id,
-  label,
-  style,
-  subagentRuntime,
-}: {
-  goalRuntime: GoalRuntimeStatus | null;
-  id: string;
-  label: string;
-  style?: ProjectLocationsPopoverStyle;
-  subagentRuntime: SubagentRuntimeStatus | null;
-}) {
-  const objective = clampGoalObjectiveLines(
-    subagentRuntime
-      ? subagentRuntime.tooltip
-      : goalRuntime?.objective.trim() || "Response in progress",
-    5
-  );
-  const detail = subagentRuntime
-    ? subagentPopoverDetail(subagentRuntime)
-    : goalRuntime
-    ? `${goalRuntime.timeLabel} · ${goalRuntime.detail}`
-    : "Chat response running";
-  const rowKind = subagentRuntime
-    ? "subagent"
-    : goalRuntime
-    ? "goal"
-    : "running";
-  return (
-    <aside
-      className="sidebar-project-locations-popover sidebar-session-running-popover"
-      id={id}
-      role="tooltip"
-      aria-label={label}
-      style={style}
-    >
-      <div className="sidebar-project-locations-title">{label}</div>
-      <div className="sidebar-project-location-list">
-        <div className={`sidebar-project-location-row ${rowKind}`}>
-          <span
-            className="sidebar-project-location-icon running"
-            aria-hidden="true"
-          >
-            <span
-              className={`sidebar-running-popover-dot${
-                subagentRuntime ? " subagent" : goalRuntime ? " goal" : ""
-              }`}
-            />
-          </span>
-          <span className="sidebar-project-location-copy">
-            <span className="sidebar-session-running-objective">
-              {objective}
-            </span>
-            <span className="sidebar-session-running-detail">{detail}</span>
-          </span>
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-function subagentPopoverDetail(runtime: SubagentRuntimeStatus): string {
-  const parts = [
-    runtime.activeCount > 0 ? `${runtime.activeCount} active` : null,
-    runtime.completedCount > 0 ? `${runtime.completedCount} completed` : null,
-    runtime.failedCount > 0 ? `${runtime.failedCount} failed` : null,
-    runtime.cancelledCount > 0 ? `${runtime.cancelledCount} cancelled` : null,
-    runtime.needsResumeCount > 0 ? `${runtime.needsResumeCount} paused` : null,
-    runtime.terminalCount > 0 ? `${runtime.terminalCount} terminal` : null,
-  ].filter(Boolean);
-  return parts.join(" · ") || "Subagent receipts available";
-}
-
-function clampGoalObjectiveLines(value: string, maxLines: number): string {
-  const lines = value.replace(/\r\n?/g, "\n").split("\n");
-  if (lines.length <= maxLines) return value;
-  return `${lines.slice(0, maxLines).join("\n")}\n...`;
 }
 
 export function SidebarProjectRow({

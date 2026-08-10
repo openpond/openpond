@@ -595,7 +595,7 @@ export function LabsRoute({
           onCreate={createModel}
           onManageModels={() => {
             setModelCreateOpen(false);
-            training.onOpenComputeSettings();
+            training.onOpenTrainingSettings();
           }}
           providerSettings={training.providerSettings}
         />

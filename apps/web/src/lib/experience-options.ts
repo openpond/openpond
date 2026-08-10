@@ -23,7 +23,7 @@ export const PRODUCT_AREA_OPTIONS: ReadonlyArray<{
 }> = [
   {
     value: "chat",
-    label: "Chat",
+    label: "Work",
     description: "Chat and complete tasks",
   },
   {

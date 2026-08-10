@@ -57,7 +57,6 @@ export type SettingsSection =
   | "subagents"
   | "editor"
   | "providers"
-  | "compute"
   | "dataset-storage"
   | "remote"
   | "usage"
