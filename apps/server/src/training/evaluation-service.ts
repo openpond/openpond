@@ -101,6 +101,9 @@ export function createTaskEvaluationService(deps: {
     signal?: AbortSignal;
     resultId?: string;
     admittedAt?: string;
+    parentModelRunId?: string;
+    toolEvidence?: import("./taskset-work-attempt-runner.js").TasksetWorkToolEvidence;
+    hostedTokenPricing?: import("./hosted-token-pricing.js").HostedTokenPricing;
     releasedHarness?: {
       agentSnapshot: import("@openpond/harness").AgentSnapshot;
       harnessRelease: import("@openpond/harness").HarnessRelease;
@@ -146,8 +149,30 @@ export function createTaskEvaluationService(deps: {
         runtime: deps.workRuntime,
         validateRequiredOutput: deps.validateWorkRequiredOutput,
         additionalToolDefinitions: deps.additionalWorkToolDefinitions?.(),
+        toolEvidence: input.toolEvidence,
+        harnessCapabilityReceipt: releasedHarness
+          ? {
+              harnessRelease: {
+                id: releasedHarness.harnessRelease.id,
+                contentHash: releasedHarness.harnessRelease.contentHash,
+              },
+              agentSnapshot: {
+                id: releasedHarness.agentSnapshot.id,
+                contentHash: releasedHarness.agentSnapshot.contentHash,
+              },
+              instructionAssets: releasedHarness.agentSnapshot.instructions,
+              skillAssets: releasedHarness.agentSnapshot.skills,
+              agentAssets: releasedHarness.agentSnapshot.agents,
+              fileAssets: releasedHarness.harnessRelease.files,
+              declaredToolNames: releasedHarness.agentSnapshot.toolDeclarations.map(
+                (tool) => tool.name,
+              ),
+            }
+          : undefined,
+        hostedTokenPricing: input.hostedTokenPricing,
       },
       resultId: input.resultId,
+      parentModelRunId: input.parentModelRunId,
       harnessInstructionContext: releasedHarness?.instructionContext,
       attemptInput: {
         tasksetId: taskset.id,
@@ -613,7 +638,7 @@ export function createTaskEvaluationService(deps: {
       for (const seed of seeds) {
         for (let attempt = 0; attempt < attemptsPerTask; attempt += 1) {
           if (input.signal?.aborted) throw input.signal.reason;
-          executions.push(await execute({
+          const execution = await execute({
             tasksetId: taskset.id,
             taskId: task.id,
             model: input.model,
@@ -630,7 +655,8 @@ export function createTaskEvaluationService(deps: {
               seed,
               attempt,
             }).slice(0, 24)}`,
-          }));
+          });
+          executions.push(execution);
         }
       }
     }
@@ -707,6 +733,12 @@ export function createTaskEvaluationService(deps: {
       harnessRelease: import("@openpond/harness").HarnessRelease;
       instructionContext?: string;
     };
+    parentModelRunId?: string;
+    toolEvidence?: import("./taskset-work-attempt-runner.js").TasksetWorkToolEvidence;
+    hostedTokenPricing?: import("./hosted-token-pricing.js").HostedTokenPricing;
+    onAttemptComplete?: (
+      result: Awaited<ReturnType<typeof execute>>,
+    ) => Promise<void> | void;
   }) {
     const taskset = await requireTaskset(input.tasksetId);
     if (taskset.purpose !== "benchmark" || !taskset.benchmark) {
@@ -736,7 +768,7 @@ export function createTaskEvaluationService(deps: {
       for (const seed of seeds) {
         for (let attempt = 0; attempt < repetitions; attempt += 1) {
           if (input.signal?.aborted) throw input.signal.reason;
-          executions.push(await execute({
+          const execution = await execute({
             tasksetId: taskset.id,
             taskId: task.id,
             model: input.model,
@@ -747,6 +779,9 @@ export function createTaskEvaluationService(deps: {
             signal: input.signal,
             releasedHarness: input.releasedHarness,
             admittedAt,
+            parentModelRunId: input.parentModelRunId,
+            toolEvidence: input.toolEvidence,
+            hostedTokenPricing: input.hostedTokenPricing,
             resultId: `benchmark-attempt-${contentHash({
               tasksetRelease: taskset.benchmark.releaseHash,
               phase: input.phase,
@@ -758,7 +793,9 @@ export function createTaskEvaluationService(deps: {
               attempt,
               admittedAt,
             }).slice(0, 24)}`,
-          }));
+          });
+          executions.push(execution);
+          await input.onAttemptComplete?.(execution);
         }
       }
     }
@@ -785,6 +822,7 @@ export function createTaskEvaluationService(deps: {
         sourceTasksetHash: taskset.contentHash,
         benchmarkDefinitionId: taskset.benchmark.definitionId,
         admittedAt,
+        parentModelRunId: input.parentModelRunId ?? null,
       },
     });
     await deps.store.saveEvaluationResult({
@@ -813,7 +851,13 @@ export function createTaskEvaluationService(deps: {
         limitsHash: contentHash(manifest.limits),
       },
       createdAt: admittedAt,
-      metadata: { sourceTasksetId: taskset.id, split, seeds, repetitions },
+      metadata: {
+        sourceTasksetId: taskset.id,
+        split,
+        seeds,
+        repetitions,
+        parentModelRunId: input.parentModelRunId ?? null,
+      },
     });
     await deps.store.saveBenchmarkRun({ tasksetId: taskset.id, run });
 

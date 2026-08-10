@@ -43,6 +43,7 @@ import {
   createModelLifecycleTables as migrateModelLifecycleTables,
 } from "./store-model-lifecycle-migration.js";
 import { retireGoalAndInsightsStorageState } from "./store-goal-insights-retirement.js";
+import { retireLegacyHarnessBenchmarkRuns } from "./store-harness-benchmark-retirement.js";
 import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
 
 type UserVersionRow = { user_version: number };
@@ -490,6 +491,13 @@ export class SqliteStoreCore {
       run: (sql, params = []) => this.run(sql, params),
       exec: (sql) => this.exec(sql),
       createSubagentTables: () => this.createSubagentTables(),
+    });
+  }
+
+  async retireLegacyHarnessBenchmarkRuns(): Promise<void> {
+    await retireLegacyHarnessBenchmarkRuns({
+      all: <T>(sql: string, params: unknown[] = []) => this.all<T>(sql, params),
+      run: (sql, params = []) => this.run(sql, params),
     });
   }
 

@@ -59,6 +59,7 @@ import {
   tasksetWorkMessages,
   tasksetWorkUserPrompt,
 } from "./taskset-work-prompt.js";
+import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 
 const DEFAULT_MAX_WORK_TOOL_TURNS = 24;
 const MAX_WORK_TOOL_TURNS = 100;
@@ -83,6 +84,7 @@ export type TasksetWorkModelStream = (input: {
   temperature?: number;
   topP?: number;
   seed?: number;
+  hostedTokenPricing?: HostedTokenPricing;
 }) => AsyncIterable<TasksetWorkModelDelta>;
 
 export type TasksetWorkRequiredOutputValidator = (input: {
@@ -90,6 +92,15 @@ export type TasksetWorkRequiredOutputValidator = (input: {
   outputRef: FileOutputRef;
   artifactPath: string;
 }) => Promise<{ passed: boolean; detail: string }>;
+
+export type TasksetWorkToolEvidence = {
+  execute(input: {
+    taskId: string;
+    toolName: string;
+    args: Record<string, unknown>;
+    execute: () => Promise<NativeModelToolResult>;
+  }): Promise<NativeModelToolResult>;
+};
 
 export type TasksetWorkAttemptRuntime = {
   createSession(payload: unknown): Promise<Session>;
@@ -168,9 +179,13 @@ export async function runTasksetWorkAttempt(input: {
   runtime: TasksetWorkAttemptRuntime;
   timestamp?: () => string;
   resultId?: string;
+  parentModelRunId?: string;
   harnessInstructionContext?: string;
   validateRequiredOutput?: TasksetWorkRequiredOutputValidator;
   additionalToolDefinitions?: ModelToolDefinition[];
+  toolEvidence?: TasksetWorkToolEvidence;
+  harnessCapabilityReceipt?: Record<string, unknown>;
+  hostedTokenPricing?: HostedTokenPricing;
 }) {
   if (input.taskset.environment.kind !== "work") {
     throw new Error(`Taskset ${input.taskset.id} does not select Work.`);
@@ -259,6 +274,7 @@ export async function runTasksetWorkAttempt(input: {
         taskId: input.task.id,
         attemptId,
         requestId,
+        parentModelRunId: input.parentModelRunId ?? null,
       },
     });
     await appendTasksetTurnStarted({
@@ -348,6 +364,7 @@ export async function runTasksetWorkAttempt(input: {
         temperature: input.sampling?.temperature ?? 0,
         topP: input.sampling?.topP ?? 1,
         seed: input.seed + input.attempt,
+        hostedTokenPricing: input.hostedTokenPricing,
       })) {
         if (delta.text) turnText += delta.text;
         if (delta.continuation) continuation = delta.continuation;
@@ -445,10 +462,10 @@ export async function runTasksetWorkAttempt(input: {
           name: call.name,
           args,
         });
-        const result = await executeDefinition({
+        const executeTool = () => executeDefinition({
           definition,
           runtime: input.runtime,
-          sessionId: session.id,
+          sessionId: session!.id,
           turnId,
           model: input.model,
           callId: call.id,
@@ -456,6 +473,14 @@ export async function runTasksetWorkAttempt(input: {
           signal: controller.signal,
           userPrompt: tasksetWorkUserPrompt(input.task),
         });
+        const result = input.toolEvidence
+          ? await input.toolEvidence.execute({
+              taskId: input.task.id,
+              toolName: call.name,
+              args,
+              execute: executeTool,
+            })
+          : await executeTool();
         await appendTasksetToolCompleted({
           store: input.store,
           session,
@@ -752,6 +777,7 @@ export async function runTasksetWorkAttempt(input: {
     userInterventions: 0,
     metadata: {
       requestId,
+      parentModelRunId: input.parentModelRunId ?? null,
       execution: "taskset_work",
       runtimeProfileId: input.taskset.environment.entrypoint,
       tasksetHash: input.taskset.contentHash,
@@ -760,6 +786,13 @@ export async function runTasksetWorkAttempt(input: {
       sessionId: session?.id ?? null,
       turnId,
       toolNames: input.taskset.environment.toolNames,
+      harnessCapabilityReceipt: input.harnessCapabilityReceipt
+        ? {
+            ...input.harnessCapabilityReceipt,
+            executableToolNames: input.taskset.environment.toolNames,
+          }
+        : null,
+      hostedTokenPricing: input.hostedTokenPricing ?? null,
       assetHashes: (input.task.assets ?? []).map((asset) => asset.sha256),
       requiredOutputPaths: (input.task.requiredOutputs ?? []).map(
         (output) => output.path,

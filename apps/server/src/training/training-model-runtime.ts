@@ -3,6 +3,7 @@ import type {
   CodexReasoningEffort,
   ProviderSettings,
 } from "@openpond/contracts";
+import { loadOpenPondHostedModels } from "@openpond/runtime";
 import type {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
@@ -13,6 +14,16 @@ import {
 import type { ProviderSecrets } from "../openpond/provider-secrets.js";
 import type { createManagedAdapterChatRuntime } from "./managed-adapter-chat-runtime.js";
 import type { TasksetWorkModelStream } from "./taskset-work-attempt-runner.js";
+import {
+  hostedTokenPricingFromCatalog,
+  hostedUsageCostUsd,
+  type HostedTokenPricing,
+} from "./hosted-token-pricing.js";
+import {
+  abortableDelay,
+  hostedRetryDelayMs,
+  retryableHostedError,
+} from "./hosted-provider-retry.js";
 
 export function createTrainingModelRuntime(deps: {
   loadLocalByokRuntimeState(): Promise<{
@@ -22,6 +33,24 @@ export function createTrainingModelRuntime(deps: {
   getManagedAdapterChatRuntime(): Pick<ReturnType<typeof createManagedAdapterChatRuntime>, "appliesTo" | "stream">;
   streamOpenPondHostedChatTurn: typeof defaultStreamOpenPondHostedChatTurn;
 }) {
+  const hostedPricing = new Map<string, Promise<HostedTokenPricing>>();
+  const pricingFor = (modelId: string) => {
+    let pending = hostedPricing.get(modelId);
+    if (!pending) {
+      pending = loadOpenPondHostedModels().then((catalog) => {
+        if (catalog.error) throw new Error(`Hosted model pricing failed: ${catalog.error}`);
+        const selected = catalog.models.find((candidate) => candidate.id === modelId);
+        if (!selected) throw new Error(`Hosted model ${modelId} is unavailable.`);
+        return hostedTokenPricingFromCatalog(selected.raw as Record<string, unknown>);
+      });
+      hostedPricing.set(modelId, pending);
+      void pending.catch(() => {
+        if (hostedPricing.get(modelId) === pending) hostedPricing.delete(modelId);
+      });
+    }
+    return pending;
+  };
+
   async function trainingModelText(input: {
     model: ChatModelRef;
     reasoningEffort?: CodexReasoningEffort | "none" | null;
@@ -33,6 +62,7 @@ export function createTrainingModelRuntime(deps: {
     topP?: number;
     seed?: number;
     onUsage?: (usage: unknown, costUsd?: number) => void;
+    hostedTokenPricing?: HostedTokenPricing;
   }): Promise<string> {
     let text = "";
     if (input.model.providerId === "openpond" && await deps.getManagedAdapterChatRuntime().appliesTo(input.model.modelId)) {
@@ -50,29 +80,40 @@ export function createTrainingModelRuntime(deps: {
       return text;
     }
     if (input.model.providerId === "openpond") {
-      for await (const delta of deps.streamOpenPondHostedChatTurn({
-        model: input.model.modelId,
-        messages: input.messages,
-        requestId: input.requestId,
-        reasoningEffort:
-          input.reasoningEffort === "none"
-            ? undefined
-            : input.reasoningEffort ?? undefined,
-        maxTokens: input.maxOutputTokens,
-        temperature: input.temperature,
-        topP: input.topP,
-        signal: input.signal,
-      })) {
-        if (delta.type === "text_delta" && delta.text) text += delta.text;
-        if (delta.type === "usage") {
-          const cost = costFromUsage(delta.usage);
-          input.onUsage?.(
-            delta.usage,
-            "costUsd" in cost ? cost.costUsd : undefined,
-          );
+      const pricing = input.hostedTokenPricing
+        ?? await pricingFor(input.model.modelId);
+      for (let retry = 0; ; retry += 1) {
+        let emitted = false;
+        try {
+          for await (const delta of deps.streamOpenPondHostedChatTurn({
+            model: input.model.modelId,
+            messages: input.messages,
+            requestId: `${input.requestId}:retry-${retry}`,
+            reasoningEffort:
+              input.reasoningEffort === "none"
+                ? undefined
+                : input.reasoningEffort ?? undefined,
+            maxTokens: input.maxOutputTokens,
+            temperature: input.temperature,
+            topP: input.topP,
+            signal: input.signal,
+          })) {
+            emitted = true;
+            if (delta.type === "text_delta" && delta.text) text += delta.text;
+            if (delta.type === "usage") {
+              const cost = costFromUsage(delta.usage, pricing);
+              input.onUsage?.(
+                delta.usage,
+                "costUsd" in cost ? cost.costUsd : undefined,
+              );
+            }
+          }
+          return text;
+        } catch (error) {
+          if (emitted || retry >= 2 || !retryableHostedError(error)) throw error;
+          await abortableDelay(hostedRetryDelayMs(error, retry), input.signal);
         }
       }
-      return text;
     }
     const state = await deps.loadLocalByokRuntimeState();
     for await (const delta of streamOpenAiCompatibleChatCompletion({
@@ -123,38 +164,49 @@ export function createTrainingModelRuntime(deps: {
         return;
       }
       if (input.model.providerId === "openpond") {
-        for await (const delta of deps.streamOpenPondHostedChatTurn({
-          model: input.model.modelId,
-          messages: input.messages,
-          tools: input.tools,
-          toolChoice: input.toolChoice,
-          requestId: input.requestId,
-          reasoningEffort:
-            input.reasoningEffort === "none"
-              ? undefined
-              : input.reasoningEffort ?? undefined,
-          maxTokens: input.maxOutputTokens,
-          temperature: input.temperature,
-          topP: input.topP,
-          signal: input.signal,
-        })) {
-          if (delta.type === "text_delta" && delta.text) {
-            yield { text: delta.text };
-          }
-          if (delta.type === "tool_call_delta") {
-            yield { toolCalls: delta.toolCalls };
-          }
-          if (delta.type === "usage") {
-            yield {
-              usage: delta.usage,
-              ...costFromUsage(delta.usage),
-            };
-          }
-          if (delta.type === "continuation") {
-            yield { continuation: delta.continuation };
+        const pricing = input.hostedTokenPricing
+          ?? await pricingFor(input.model.modelId);
+        for (let retry = 0; ; retry += 1) {
+          let emitted = false;
+          try {
+            for await (const delta of deps.streamOpenPondHostedChatTurn({
+              model: input.model.modelId,
+              messages: input.messages,
+              tools: input.tools,
+              toolChoice: input.toolChoice,
+              requestId: `${input.requestId}:retry-${retry}`,
+              reasoningEffort:
+                input.reasoningEffort === "none"
+                  ? undefined
+                  : input.reasoningEffort ?? undefined,
+              maxTokens: input.maxOutputTokens,
+              temperature: input.temperature,
+              topP: input.topP,
+              signal: input.signal,
+            })) {
+              emitted = true;
+              if (delta.type === "text_delta" && delta.text) {
+                yield { text: delta.text };
+              }
+              if (delta.type === "tool_call_delta") {
+                yield { toolCalls: delta.toolCalls };
+              }
+              if (delta.type === "usage") {
+                yield {
+                  usage: delta.usage,
+                  ...costFromUsage(delta.usage, pricing),
+                };
+              }
+              if (delta.type === "continuation") {
+                yield { continuation: delta.continuation };
+              }
+            }
+            return;
+          } catch (error) {
+            if (emitted || retry >= 2 || !retryableHostedError(error)) throw error;
+            await abortableDelay(hostedRetryDelayMs(error, retry), input.signal);
           }
         }
-        return;
       }
       const state = await deps.loadLocalByokRuntimeState();
       for await (const delta of streamOpenAiCompatibleChatCompletion({
@@ -197,7 +249,92 @@ export function createTrainingModelRuntime(deps: {
   };
 }
 
-function costFromUsage(usage: unknown): { costUsd: number } | Record<string, never> {
+
+export async function resolveBenchmarkUpstreamModel(model: ChatModelRef): Promise<{
+  providerId: string;
+  modelId: string;
+  revision: string;
+  pricing: HostedTokenPricing;
+}> {
+  if (model.providerId !== "openpond") {
+    throw new Error(
+      `Benchmark model ${model.providerId}/${model.modelId} does not expose a provider-authoritative revision.`,
+    );
+  }
+  const hosted = await loadOpenPondHostedModels();
+  if (hosted.error) throw new Error(`Hosted model admission failed: ${hosted.error}`);
+  const selected = hosted.models.find((candidate) => candidate.id === model.modelId);
+  if (!selected) throw new Error(`Hosted model ${model.modelId} is unavailable.`);
+  return benchmarkUpstreamModelFromCatalog(
+    model,
+    selected.raw as Record<string, unknown>,
+  );
+}
+
+export function benchmarkUpstreamModelFromCatalog(
+  model: ChatModelRef,
+  raw: Record<string, unknown>,
+): {
+  providerId: string;
+  modelId: string;
+  revision: string;
+  pricing: HostedTokenPricing;
+} {
+  const metadata = record(raw.metadata);
+  const providerId = firstString(
+    raw.upstream_provider,
+    raw.provider_id,
+    metadata.upstreamProvider,
+    metadata.upstream_provider,
+    model.modelId === "openpond-chat" ? "deepseek" : null,
+  );
+  const modelId = firstString(
+    raw.upstream_model,
+    raw.model_id,
+    metadata.upstreamModel,
+    metadata.upstream_model,
+    model.modelId === "openpond-chat" ? "deepseek-v4-pro" : model.modelId,
+  );
+  const revision = firstString(
+    raw.revision,
+    raw.revision_id,
+    raw.deployment_id,
+    metadata.revision,
+    metadata.revisionId,
+    metadata.upstreamRevision,
+    metadata.upstream_revision,
+    typeof raw.created === "number" ? `catalog-created:${raw.created}` : null,
+  );
+  if (!providerId || !modelId || !revision) {
+    throw new Error(
+      `Hosted model ${model.modelId} did not provide concrete upstream identity and revision.`,
+    );
+  }
+  return {
+    providerId,
+    modelId,
+    revision,
+    pricing: hostedTokenPricingFromCatalog(raw),
+  };
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function costFromUsage(
+  usage: unknown,
+  pricing?: HostedTokenPricing,
+): { costUsd: number } | Record<string, never> {
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return {};
   const record = usage as Record<string, unknown>;
   for (const key of ["costUsd", "cost_usd", "totalCostUsd", "total_cost_usd"]) {
@@ -206,5 +343,7 @@ function costFromUsage(usage: unknown): { costUsd: number } | Record<string, nev
       return { costUsd: value };
     }
   }
+  const estimated = pricing ? hostedUsageCostUsd(usage, pricing) : null;
+  if (estimated !== null) return { costUsd: estimated };
   return {};
 }

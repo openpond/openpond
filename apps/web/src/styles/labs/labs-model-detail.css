@@ -921,6 +921,14 @@
   stroke: var(--accent-primary);
 }
 
+.labs-benchmark-line-chart svg circle.baseline {
+  fill: var(--text-secondary);
+}
+
+.labs-benchmark-line-chart svg circle.candidate {
+  fill: var(--accent-primary);
+}
+
 .labs-benchmark-attempt-table td:first-child {
   min-width: 220px;
 }

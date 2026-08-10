@@ -23,6 +23,7 @@ import {
   type TasksetWorkAttemptRuntime,
   type TasksetWorkModelStream,
 } from "./taskset-work-attempt-runner.js";
+import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 
 type ModelTextRunner = (input: {
   model: ChatModelRef;
@@ -34,6 +35,7 @@ type ModelTextRunner = (input: {
   temperature?: number;
   topP?: number;
   seed?: number;
+  hostedTokenPricing?: HostedTokenPricing;
 }) => Promise<string>;
 
 type TrainingEvaluationAttemptInput = {
@@ -60,12 +62,16 @@ export async function runPostTrainingEvaluationAttempt(input: {
     stream: TasksetWorkModelStream;
     runtime: TasksetWorkAttemptRuntime;
     additionalToolDefinitions?: import("../openpond/model-tool-registry.js").ModelToolDefinition[];
+    toolEvidence?: import("./taskset-work-attempt-runner.js").TasksetWorkToolEvidence;
+    harnessCapabilityReceipt?: Record<string, unknown>;
+    hostedTokenPricing?: HostedTokenPricing;
     validateRequiredOutput?: Parameters<
       typeof runTasksetWorkAttempt
     >[0]["validateRequiredOutput"];
   };
   timestamp?: () => string;
   resultId?: string;
+  parentModelRunId?: string;
   harnessInstructionContext?: string;
   attemptInput: TrainingEvaluationAttemptInput;
 }) {
@@ -95,9 +101,13 @@ export async function runPostTrainingEvaluationAttempt(input: {
       runtime: input.work.runtime,
       timestamp: input.timestamp,
       resultId: input.resultId,
+      parentModelRunId: input.parentModelRunId,
       harnessInstructionContext: input.harnessInstructionContext,
       validateRequiredOutput: input.work.validateRequiredOutput,
       additionalToolDefinitions: input.work.additionalToolDefinitions,
+      toolEvidence: input.work.toolEvidence,
+      harnessCapabilityReceipt: input.work.harnessCapabilityReceipt,
+      hostedTokenPricing: input.work.hostedTokenPricing,
     });
   }
   return isCrossSystemTaskset(taskset)

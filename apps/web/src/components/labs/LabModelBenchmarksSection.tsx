@@ -4,6 +4,7 @@ import {
   type ChatProvider,
   type CodexReasoningEffort,
   type ModelEvaluationReceipt,
+  type ModelEvaluationStopReceipt,
   type ProviderSettings,
 } from "@openpond/contracts";
 
@@ -63,6 +64,7 @@ export function LabModelBenchmarksSection({
   );
   const latest = runs[0] ?? null;
   const receipt = evaluationReceipt(latest?.receipt ?? null);
+  const stopReceipt = evaluationStopReceipt(latest?.receipt ?? null);
   const taskset = (training.payload?.tasksets ?? []).find(
     (candidate) => candidate.benchmark?.definitionId === "harness-refiner",
   );
@@ -121,13 +123,18 @@ export function LabModelBenchmarksSection({
             <h3>Harness Refiner</h3>
             <p>
               Tests whether an evidence-driven Harness update preserves quality
-              while reducing held-out foreground tokens.
+              while reducing held-out foreground tokens. Each run is watched to
+              terminal state with a $10 maximum provider spend.
             </p>
           </div>
           {latest ? (
             <LabStatusBadge
-              label={receipt ? resultLabel(receipt) : statusLabel(latest.status)}
-              value={receipt?.terminalClassification ?? latest.status}
+              label={receipt
+                ? resultLabel(receipt)
+                : stopReceipt
+                  ? "Inconclusive"
+                  : statusLabel(latest.status)}
+              value={receipt?.terminalClassification ?? stopReceipt?.terminalClassification ?? latest.status}
             />
           ) : (
             <LabStatusBadge label="Not run" value="not_run" />
@@ -170,6 +177,20 @@ export function LabModelBenchmarksSection({
               </button>
             </div>
           </>
+        ) : stopReceipt ? (
+          <div className="labs-model-benchmark-result-row">
+            <span>Inconclusive · candidate replay skipped</span>
+            <strong>
+              {stopReceipt.attempts.length} attempts · ${stopReceipt.budget.observedSpendUsd.toFixed(4)}
+            </strong>
+            <button
+              className="training-button secondary labs-compact-button"
+              type="button"
+              onClick={() => latest && onOpenEntry(`model-run:${latest.id}`)}
+            >
+              View run
+            </button>
+          </div>
         ) : latest ? (
           <button
             className="labs-model-benchmark-running"
@@ -242,6 +263,17 @@ export function LabModelBenchmarksSection({
       </div>
     </AppDialog>
   );
+}
+
+function evaluationStopReceipt(
+  receipt: unknown,
+): ModelEvaluationStopReceipt | null {
+  return receipt
+    && typeof receipt === "object"
+    && "schemaVersion" in receipt
+    && receipt.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
+      ? receipt as ModelEvaluationStopReceipt
+      : null;
 }
 
 function evaluationReceipt(

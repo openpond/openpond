@@ -10,9 +10,8 @@ import { contentHash } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
 
 import {
-  benchmarkUpstreamModel,
-  selectSmokeTaskIds,
-} from "../apps/server/src/training/harness-refiner-benchmark-service.js";
+  benchmarkUpstreamModelFromCatalog,
+} from "../apps/server/src/training/training-model-runtime.js";
 
 const tasksetDirectory = path.join(
   process.cwd(),
@@ -67,26 +66,39 @@ describe("public Harness Refiner benchmark Taskset", () => {
     }
   });
 
-  test("uses one artifact and one research case in each smoke cohort", async () => {
+  test("admits every unique case without a smoke subset", async () => {
     const taskset = await loadTaskset();
-    expect(selectSmokeTaskIds(taskset.tasks, "validation")).toEqual([
-      "adaptation-board-launch-brief",
-      "adaptation-nextjs-security-audit",
-    ]);
-    expect(selectSmokeTaskIds(taskset.tasks, "frozen_eval")).toEqual([
-      "frozen-clinic-relocation-brief",
-      "frozen-python-requests-security-audit",
-    ]);
+    expect(new Set(taskset.tasks.map((task) => task.id)).size).toBe(20);
+    expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
+    expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
   });
 
-  test("resolves the OpenPond Chat alias to its admitted upstream model", () => {
-    expect(benchmarkUpstreamModel({
-      providerId: "openpond",
-      modelId: "openpond-chat",
-    })).toEqual({
+  test("requires a concrete catalog revision for the admitted upstream model", () => {
+    expect(benchmarkUpstreamModelFromCatalog(
+      { providerId: "openpond", modelId: "openpond-chat" },
+      {
+        revision: "deepseek-v4-pro-2026-08-09",
+        metadata: { billing: { pricing: {
+          version: "test-v1",
+          source: "provider",
+          effectiveAt: "2026-08-09T00:00:00.000Z",
+          inputUsdPerMillionTokens: 0.4,
+          cachedInputUsdPerMillionTokens: 0.04,
+          outputUsdPerMillionTokens: 0.8,
+        } } },
+      },
+    )).toEqual({
       providerId: "deepseek",
       modelId: "deepseek-v4-pro",
-      revision: null,
+      revision: "deepseek-v4-pro-2026-08-09",
+      pricing: {
+        version: "test-v1",
+        source: "provider",
+        effectiveAt: "2026-08-09T00:00:00.000Z",
+        inputUsdPerMillionTokens: 0.4,
+        cachedInputUsdPerMillionTokens: 0.04,
+        outputUsdPerMillionTokens: 0.8,
+      },
     });
   });
 

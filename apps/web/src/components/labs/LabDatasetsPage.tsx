@@ -338,14 +338,20 @@ function TasksetHistory({
                 === "openpond.modelEvaluationReceipt.v1"
                 ? run.receipt
                 : null;
+              const stopReceipt = run.receipt?.schemaVersion
+                === "openpond.modelEvaluationStopReceipt.v1"
+                ? run.receipt
+                : null;
               const delta = receipt?.foregroundTokenDelta ?? null;
               return (
                 <tr key={run.id}>
                   <td>{modelNames.get(run.modelId) ?? run.modelId}</td>
-                  <td>{run.status}</td>
+                  <td>{stopReceipt ? "inconclusive" : run.status}</td>
                   <td>
                     {receipt
                       ? `${Math.round(receipt.quality.candidatePassRate * 100)}% candidate`
+                      : stopReceipt
+                        ? "Candidate skipped"
                       : "Pending"}
                   </td>
                   <td>
@@ -353,7 +359,11 @@ function TasksetHistory({
                       ? "—"
                       : `${delta > 0 ? "+" : ""}${delta.toLocaleString()}`}
                   </td>
-                  <td>{run.evaluation?.mode ?? "—"}</td>
+                  <td>
+                    {run.evaluation
+                      ? `${run.evaluation.attemptPlan.reduce((sum, stage) => sum + stage.attemptCount, 0)} attempts`
+                      : "—"}
+                  </td>
                   <td>{formatCompactDate(run.updatedAt)}</td>
                 </tr>
               );

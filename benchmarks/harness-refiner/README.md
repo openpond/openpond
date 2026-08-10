@@ -75,8 +75,11 @@ Each complete pass uses the following sequence:
    expected-output contract as the learning label; frozen-evaluation labels
    are never included in Refiner context.
 4. Require an immutable candidate Harness Release before continuing.
-5. Run the frozen-evaluation cases with the candidate Harness.
-6. Compare paired results. Repeat the full pass once after the protocol works
+5. Replay all ten adaptation cases with the candidate Harness and report the
+   repairs separately from the held-out causal metric.
+6. Run the frozen-evaluation cases with the candidate Harness using the same
+   content-addressed web-evidence snapshot as the baseline.
+7. Compare paired held-out results. Repeat the full pass once after the protocol works
    end to end.
 
 The baseline and candidate Run Manifests must pin the same model identity,

@@ -231,9 +231,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         profileId,
         model,
         reasoningEffort,
-        seeds: [17],
-        repetitions: 1,
-        maximumSpendUsd: 0,
+        maximumSpendUsd: 10,
       },
     ),
     acceptHarnessReview: (

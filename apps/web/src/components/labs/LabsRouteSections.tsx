@@ -323,6 +323,8 @@ function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
       : "Benchmark";
     const outcome = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
       ? titleCase(run.receipt.terminalClassification.replaceAll("_", " "))
+      : run.receipt?.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
+        ? "Inconclusive"
       : run.evaluationProgress
         ? `${titleCase(run.evaluationProgress.stage)} ${run.evaluationProgress.completedAttempts}/${run.evaluationProgress.totalAttempts}`
         : statusLabel(run.status);

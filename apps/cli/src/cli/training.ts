@@ -41,6 +41,7 @@ export async function runTrainingCommand(
       "watch",
       "logs",
       "cancel",
+      "resume",
       "artifacts",
       "benchmark",
     ].includes(
@@ -49,7 +50,7 @@ export async function runTrainingCommand(
     !id
   ) {
     throw new Error(
-      "usage: training <start|status|watch|logs|cancel|artifacts|benchmark> <model-run-id|run-id|model-id>",
+      "usage: training <start|status|watch|logs|cancel|resume|artifacts|benchmark> <model-run-id|run-id|model-id>",
     );
   }
   if (rest.length > 2) {
@@ -74,6 +75,19 @@ export async function runTrainingCommand(
       modelId: id,
       options,
       json,
+      sleep: dependencies.sleep,
+    });
+    return;
+  }
+
+  if (subcommand === "resume") {
+    const run = await client.modelRun(id, "resume", "POST");
+    printResult(run, json);
+    await watchTraining({
+      client,
+      runId: id,
+      json,
+      intervalMs: parseIntegerOption(options.intervalMs, "interval-ms") ?? 2_000,
       sleep: dependencies.sleep,
     });
     return;
@@ -224,7 +238,7 @@ export class TrainingApiClient {
 
   modelRun(
     id: string,
-    action: "prepare" | "start" | "status" | "logs" | "artifacts" | "cancel",
+    action: "prepare" | "start" | "status" | "logs" | "artifacts" | "cancel" | "resume",
     method: "GET" | "POST",
     body?: unknown,
   ): Promise<unknown> {
@@ -297,25 +311,18 @@ async function startHarnessRefinerBenchmark(input: {
   const providerId = optionString(input.options, "provider") ?? "openpond";
   const modelId = optionString(input.options, "model") ?? "openpond-chat";
   const effort = optionString(input.options, "reasoningEffort") ?? "high";
-  const mode = optionString(input.options, "mode") === "smoke" ? "smoke" : "full";
-  const seed = parseIntegerOption(input.options.seed, "seed") ?? 17;
-  const repetitions = parseIntegerOption(input.options.repetitions, "repetitions") ?? 1;
-  if (repetitions < 1 || repetitions > 20) {
-    throw new Error("repetitions must be between 1 and 20");
+  const maximumSpendUsd = parseNumberOption(input.options.maxSpend, "max-spend") ?? 10;
+  if (maximumSpendUsd <= 0) throw new Error("max-spend must be greater than zero");
+  if (parseBooleanOption(input.options.detach)) {
+    throw new Error("Harness Refiner benchmark runs must be watched to terminal state.");
   }
-  const maximumSpendUsd = parseNumberOption(input.options.maxSpend, "max-spend") ?? 0;
-  if (maximumSpendUsd < 0) throw new Error("max-spend must be non-negative");
   const run = await input.client.startHarnessRefinerBenchmark(input.modelId, {
     profileId: project.profileId,
     model: { providerId, modelId },
     reasoningEffort: effort === "none" ? "none" : effort,
-    mode,
-    seeds: [seed],
-    repetitions,
     maximumSpendUsd,
   });
   printResult(run, input.json);
-  if (parseBooleanOption(input.options.detach)) return;
   const runId = objectString(run, "id");
   if (!runId) throw new Error("Benchmark start did not return a Model Run id.");
   await watchTraining({

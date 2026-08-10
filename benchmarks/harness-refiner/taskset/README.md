@@ -13,7 +13,7 @@ this benchmark does not start a training job.
 - Release id: `harness-refiner-public-v1`
 - Revision: `1`
 - Content hash:
-  `f62b572eb5ef29f470f53d34fb9ae861bbd350756cee913e4c5701dd13bcc346`
+  `1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695`
 - Rebuild: `pnpm exec tsx benchmarks/harness-refiner/taskset/build.ts`
 
 ## Split

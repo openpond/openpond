@@ -221,6 +221,10 @@ describe("local Harness Refiner worker", () => {
       store: current.store,
       storeDir: current.directory,
       trigger: current.trigger,
+      additionalEvidence: {
+        schemaVersion: "openpond.harnessRefinerBenchmarkCohortEvidence.v1",
+        adaptationEvidenceHash: "a".repeat(64),
+      },
       signal: new AbortController().signal,
       now: () => LATER,
       refine: async ({ request }) => {
@@ -230,6 +234,10 @@ describe("local Harness Refiner worker", () => {
         expect(serializedEvidence).toContain("access_token=[redacted]");
         expect(serializedEvidence).not.toContain("fixture-secret");
         expect(serializedEvidence).not.toContain("fixture-token");
+        expect(request.evidence.additionalEvidence).toEqual({
+          schemaVersion: "openpond.harnessRefinerBenchmarkCohortEvidence.v1",
+          adaptationEvidenceHash: "a".repeat(64),
+        });
         return hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",

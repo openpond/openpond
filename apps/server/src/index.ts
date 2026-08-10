@@ -173,6 +173,7 @@ import { createDatasetImportService } from "./training/dataset-imports/import-se
 import { createHarnessRefinerBenchmarkService } from "./training/harness-refiner-benchmark-service.js";
 import { createTaskAttemptModelJudge } from "./training/task-attempt-grader-evidence.js";
 import { createHarnessRefinerBenchmarkModelStream } from "./training/harness-refiner-benchmark-model.js";
+import { resolveBenchmarkUpstreamModel } from "./training/training-model-runtime.js";
 import { createBenchmarkRuntimeComposition } from "./training/benchmark-runtime-composition.js";
 import { createDatasetStorageService } from "./training/dataset-storage-service.js";
 import { createPortableTrainingServerDependencies } from "./training/portable-training-server-dependencies.js";
@@ -681,6 +682,7 @@ export async function createOpenPondServer(
     refinerStream: createHarnessRefinerBenchmarkModelStream(
       streamOpenPondHostedChatTurn,
     ),
+    resolveUpstreamModel: resolveBenchmarkUpstreamModel,
   });
   await harnessRefinerBenchmarks.reconcileInterrupted();
   const trainingApi = createTrainingApi({

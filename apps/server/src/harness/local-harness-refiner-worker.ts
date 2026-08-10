@@ -68,6 +68,7 @@ export async function runLocalHarnessRefinerWorker(input: {
   store: SqliteStore;
   storeDir: string;
   trigger: RefinementTriggerDecision;
+  additionalEvidence?: unknown;
   stream?: LocalHarnessRefinerModelStream;
   refine?: (input: {
     request: HostedHarnessRefinerRequest;
@@ -195,6 +196,7 @@ export async function runLocalHarnessRefinerWorker(input: {
     recentOutcomes,
     sourceFiles: source.files,
     sourceCatalog: source.catalog,
+    additionalEvidence: input.additionalEvidence ?? null,
   };
   let decision: LocalHarnessRefinerDecision;
   if (input.stream) {

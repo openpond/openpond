@@ -101,6 +101,7 @@ export class SqliteTrainingModelStore extends SqliteStoreCore {
       existing
       && ["succeeded", "failed", "cancelled"].includes(existing.status)
       && JSON.stringify(existing) !== JSON.stringify(modelRun)
+      && !isCheckpointResumeTransition(existing, modelRun)
     ) {
       throw new Error(`Terminal Model Run ${modelRun.id} is immutable.`);
     }
@@ -387,4 +388,39 @@ export class SqliteTrainingModelStore extends SqliteStoreCore {
     const row = await this.get<PayloadRow>(sql, params);
     return row ? parse(JSON.parse(row.payload)) : null;
   }
+}
+
+export function isCheckpointResumeTransition(
+  existing: ModelRun,
+  candidate: ModelRun,
+): boolean {
+  if (
+    existing.kind !== "evaluation"
+    || existing.status !== "failed"
+    || candidate.status !== "running"
+    || existing.receipt !== null
+    || candidate.receipt !== null
+    || candidate.failure !== null
+    || candidate.completedAt !== null
+    || existing.evaluationProgress?.stage !== "refiner"
+    || !existing.evaluation
+  ) {
+    return false;
+  }
+  const completedAdaptationAttempts = existing.evaluation.attemptPlan
+    .filter((item) => item.stage === "baseline" || item.stage === "adaptation")
+    .reduce((total, item) => total + item.attemptCount, 0);
+  if (
+    existing.evaluationProgress.completedAttempts !== completedAdaptationAttempts
+    || !existing.evaluationProgress.accounting
+  ) {
+    return false;
+  }
+  return JSON.stringify({
+    ...existing,
+    status: "running",
+    failure: null,
+    completedAt: null,
+    updatedAt: candidate.updatedAt,
+  }) === JSON.stringify(candidate);
 }

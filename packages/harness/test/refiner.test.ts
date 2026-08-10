@@ -41,6 +41,20 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("Never force a change");
   });
 
+  test("treats benchmark adaptation evidence as a cohort rather than one turn", () => {
+    const system = refinerMessages({
+      ...evidence,
+      additionalEvidence: {
+        reviewScope: "adaptation_cohort",
+        attempts: [],
+      },
+    })[0]!.content;
+    expect(system).toContain("review every supplied cohort attempt together");
+    expect(system).toContain("primary turn is only an evidence anchor");
+    expect(system).toContain("Valid passing grades do not erase avoidable tool detours");
+    expect(system).toContain("high usage alone does not justify a Harness change");
+  });
+
   test("authors and repairs validated public decisions", async () => {
     let calls = 0;
     const decision = await authorLocalHarnessRefinementWithModel({

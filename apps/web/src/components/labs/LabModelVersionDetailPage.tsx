@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   type ModelEvaluationReceipt,
+  type ModelEvaluationStopReceipt,
   type ModelRun,
   type ManagedAdapterServingProjection,
   type TrainingJobEvent,
@@ -20,6 +21,12 @@ import {
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import { LabModelRunSummary } from "./LabModelRunSummary";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
+import {
+  BenchmarkAttemptCharts,
+  BenchmarkAttemptTable,
+  BenchmarkProgress,
+  StoppedEvaluationDetail,
+} from "./LabModelEvaluationBenchmarkDetails";
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
   labLifecycleModelRuns,
@@ -455,6 +462,9 @@ function LabModelEvaluationRunDetail({
   const receipt = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
     ? run.receipt as ModelEvaluationReceipt
     : null;
+  const stopReceipt = run.receipt?.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
+    ? run.receipt as ModelEvaluationStopReceipt
+    : null;
   return (
     <div className="labs-model-version-detail labs-model-evaluation-detail">
       <section className="labs-run-outcome-card">
@@ -465,13 +475,17 @@ function LabModelEvaluationRunDetail({
               <LabStatusBadge
                 label={receipt
                   ? evaluationResultLabel(receipt)
-                  : statusLabel(run.status)}
-                value={receipt?.terminalClassification ?? run.status}
+                  : stopReceipt
+                    ? "Inconclusive"
+                    : statusLabel(run.status)}
+                value={receipt?.terminalClassification ?? stopReceipt?.terminalClassification ?? run.status}
               />
             </div>
             <p>
               Harness Refiner benchmark · {tasksetName}
-              {receipt ? ` · execution ${statusLabel(run.status).toLowerCase()}` : ""}
+              {receipt || stopReceipt
+                ? ` · execution ${statusLabel(run.status).toLowerCase()}`
+                : ""}
             </p>
           </div>
         </header>
@@ -483,7 +497,7 @@ function LabModelEvaluationRunDetail({
             series={[
               {
                 id: "baseline",
-                label: "Baseline",
+                label: "Held-out baseline",
                 inputTokens: receipt.usage.baseline.inputTokens,
                 outputTokens: receipt.usage.baseline.outputTokens,
                 tokens: receipt.usage.baseline.totalTokens,
@@ -492,12 +506,34 @@ function LabModelEvaluationRunDetail({
               },
               {
                 id: "candidate",
-                label: "Candidate Harness",
+                label: "Held-out candidate",
                 inputTokens: receipt.usage.candidate.inputTokens,
                 outputTokens: receipt.usage.candidate.outputTokens,
                 tokens: receipt.usage.candidate.totalTokens,
                 passRate: receipt.quality.candidatePassRate,
                 costUsd: receipt.usage.candidate.costUsd,
+              },
+            ]}
+          />
+          <EvaluationComparisonCharts
+            series={[
+              {
+                id: "adaptation-baseline",
+                label: "Adaptation baseline",
+                inputTokens: receipt.usage.adaptation.inputTokens,
+                outputTokens: receipt.usage.adaptation.outputTokens,
+                tokens: receipt.usage.adaptation.totalTokens,
+                passRate: receipt.quality.adaptationBaselinePassRate,
+                costUsd: receipt.usage.adaptation.costUsd,
+              },
+              {
+                id: "adaptation-candidate",
+                label: "Adaptation replay",
+                inputTokens: receipt.usage.candidateAdaptation.inputTokens,
+                outputTokens: receipt.usage.candidateAdaptation.outputTokens,
+                tokens: receipt.usage.candidateAdaptation.totalTokens,
+                passRate: receipt.quality.adaptationCandidatePassRate,
+                costUsd: receipt.usage.candidateAdaptation.costUsd,
               },
             ]}
           />
@@ -524,6 +560,34 @@ function LabModelEvaluationRunDetail({
                 value={receipt.usage.grader.totalTokens.toLocaleString()}
               />
               <Fact
+                label="Gross token savings"
+                value={receipt.efficiency.grossForegroundTokenSavings.toLocaleString()}
+              />
+              <Fact
+                label="First-pass net savings"
+                value={receipt.efficiency.firstPassNetTokenSavings.toLocaleString()}
+              />
+              <Fact
+                label="Break-even reuse"
+                value={receipt.efficiency.breakEvenReuseCount === null
+                  ? "No break-even"
+                  : `${receipt.efficiency.breakEvenReuseCount} reuse${receipt.efficiency.breakEvenReuseCount === 1 ? "" : "s"}`}
+              />
+              <Fact
+                label={`Amortized savings · ${receipt.efficiency.amortizedReuseCount} reuses`}
+                value={receipt.efficiency.amortizedTokenSavings.toLocaleString()}
+              />
+              <Fact
+                label="Observed / maximum spend"
+                value={`$${receipt.budget.observedSpendUsd.toFixed(4)} / ${receipt.budget.maximumSpendUsd > 0 ? `$${receipt.budget.maximumSpendUsd.toFixed(2)}` : "unlimited"}`}
+              />
+              <Fact
+                label="Upstream revision"
+                value={run.evaluation
+                  ? `${run.evaluation.upstreamModel.providerId}/${run.evaluation.upstreamModel.modelId}@${run.evaluation.upstreamModel.revision}`
+                  : "Unavailable"}
+              />
+              <Fact
                 label="Result manifest"
                 value={receipt.resultManifest.contentHash.slice(0, 16)}
               />
@@ -546,6 +610,14 @@ function LabModelEvaluationRunDetail({
                 </dd>
               </div>
             </dl>
+            {receipt.invalidReasons.length ? (
+              <div className="training-run-placeholder">
+                <strong>Comparison is not publishable</strong>
+                <ul>
+                  {receipt.invalidReasons.map((reason) => <li key={reason}>{reason}</li>)}
+                </ul>
+              </div>
+            ) : null}
           </section>
           {(receipt.attempts ?? []).length ? (
             <BenchmarkAttemptTable
@@ -554,6 +626,11 @@ function LabModelEvaluationRunDetail({
             />
           ) : null}
         </>
+      ) : stopReceipt ? (
+        <StoppedEvaluationDetail
+          receipt={stopReceipt}
+          onOpenConversation={onOpenConversation}
+        />
       ) : (
         <section className="labs-run-summary-card">
           {run.failure ? (
@@ -565,166 +642,6 @@ function LabModelEvaluationRunDetail({
       )}
     </div>
   );
-}
-
-function BenchmarkProgress({ run }: { run: ModelRun }) {
-  const stages = ["baseline", "adaptation", "refiner", "candidate", "comparison"] as const;
-  const currentIndex = Math.max(
-    0,
-    stages.indexOf(run.evaluationProgress?.stage ?? "baseline"),
-  );
-  const completed = run.evaluationProgress?.completedAttempts ?? 0;
-  const total = run.evaluationProgress?.totalAttempts ?? 1;
-  return (
-    <div className="labs-benchmark-progress">
-      <header>
-        <h3>Benchmark progress</h3>
-        <strong>{completed} of {total} attempts</strong>
-      </header>
-      <div className="labs-benchmark-progress-track" aria-hidden="true">
-        <span style={{ width: `${Math.min(100, (completed / total) * 100)}%` }} />
-      </div>
-      <ol>
-        {stages.map((stage, index) => (
-          <li
-            className={index < currentIndex ? "complete" : index === currentIndex ? "active" : undefined}
-            key={stage}
-          >
-            <span />
-            {stage.replace(/^./, (character) => character.toUpperCase())}
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
-}
-
-function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationReceipt }) {
-  const attempts = receipt.attempts ?? [];
-  const baseline = attempts.filter((attempt) => attempt.phase === "baseline");
-  const candidate = attempts.filter((attempt) => attempt.phase === "candidate");
-  return (
-    <div className="labs-benchmark-attempt-charts">
-      <AttemptLineChart
-        title="Held-out quality by task"
-        baseline={baseline.map((attempt) => attempt.score)}
-        candidate={candidate.map((attempt) => attempt.score)}
-        format={(value) => value.toFixed(2)}
-        summarize={(values) => values.length
-          ? values.reduce((sum, value) => sum + value, 0) / values.length
-          : 0}
-      />
-      <AttemptLineChart
-        title="Held-out tokens by task"
-        baseline={baseline.map((attempt) => attempt.totalTokens)}
-        candidate={candidate.map((attempt) => attempt.totalTokens)}
-        format={(value) => Math.round(value).toLocaleString()}
-      />
-    </div>
-  );
-}
-
-function AttemptLineChart({
-  title,
-  baseline,
-  candidate,
-  format,
-  summarize = (values) => values.reduce((sum, value) => sum + value, 0),
-}: {
-  title: string;
-  baseline: number[];
-  candidate: number[];
-  format: (value: number) => string;
-  summarize?: (values: number[]) => number;
-}) {
-  const values = [...baseline, ...candidate];
-  const maximum = Math.max(1, ...values);
-  const count = Math.max(2, baseline.length, candidate.length);
-  const points = (series: number[]) => series.map((value, index) => {
-    const x = 6 + (index / (count - 1)) * 88;
-    const y = 44 - (value / maximum) * 36;
-    return `${x},${y}`;
-  }).join(" ");
-  const baselineTotal = summarize(baseline);
-  const candidateTotal = summarize(candidate);
-  return (
-    <section className="labs-benchmark-line-chart">
-      <header>
-        <h4>{title}</h4>
-        <div>
-          <span>Baseline {format(baselineTotal)}</span>
-          <span>Candidate {format(candidateTotal)}</span>
-        </div>
-      </header>
-      <svg aria-label={title} role="img" viewBox="0 0 100 50" preserveAspectRatio="none">
-        <line x1="6" x2="94" y1="44" y2="44" />
-        <polyline className="baseline" points={points(baseline)} />
-        <polyline className="candidate" points={points(candidate)} />
-      </svg>
-    </section>
-  );
-}
-
-function BenchmarkAttemptTable({
-  receipt,
-  onOpenConversation,
-}: {
-  receipt: ModelEvaluationReceipt;
-  onOpenConversation: (conversationId: string) => void;
-}) {
-  return (
-    <section className="labs-run-summary-card">
-      <header><h3>Task attempts</h3></header>
-      <div className="training-table-wrap">
-        <table className="training-data-table labs-benchmark-attempt-table">
-          <thead>
-            <tr>
-              <th>Task</th>
-              <th>Phase</th>
-              <th>Result</th>
-              <th>Score</th>
-              <th>Tokens</th>
-              <th>Work chat</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(receipt.attempts ?? []).map((attempt) => (
-              <tr key={`${attempt.phase}:${attempt.attemptId}`}>
-                <td>{humanizeTaskId(attempt.taskId)}</td>
-                <td>{attempt.phase}</td>
-                <td>
-                  <LabStatusBadge
-                    label={attempt.passed ? "Passed" : "Failed"}
-                    value={attempt.passed ? "succeeded" : "failed"}
-                  />
-                </td>
-                <td>{attempt.score.toFixed(2)}</td>
-                <td>{attempt.totalTokens.toLocaleString()}</td>
-                <td>
-                  {attempt.sessionId ? (
-                    <button
-                      className="labs-run-taskset-link"
-                      type="button"
-                      onClick={() => onOpenConversation(attempt.sessionId!)}
-                    >
-                      Open chat
-                    </button>
-                  ) : "Not retained"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-function humanizeTaskId(taskId: string): string {
-  return taskId
-    .replace(/^(?:adaptation|frozen)-/, "")
-    .replaceAll("-", " ")
-    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function evaluationResultLabel(receipt: ModelEvaluationReceipt): string {
