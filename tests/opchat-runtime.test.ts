@@ -129,23 +129,26 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(result.data.map((provider) => provider.id)).toEqual(["openpond", "openrouter"]);
   });
 
-  test("requests complete chat responses so whitespace survives provider chunk boundaries", async () => {
+  test("buffers live chat streams so whitespace and proxy keepalives survive provider chunk boundaries", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
       requests.push({
         url: String(input),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
-      return jsonResponse({
-        choices: [{
-          message: {
-            content: "hello world\n\n- one\n- two",
-            reasoning_content: "thinking clearly",
-          },
-          finish_reason: "stop",
-        }],
-        usage: { total_tokens: 12 },
-      });
+      return sseResponse([
+        { choices: [{ delta: { role: "assistant" }, finish_reason: null }] },
+        { choices: [{ delta: { reasoning_content: "thinking " }, finish_reason: null }] },
+        ": openpond-pending",
+        { choices: [{ delta: { reasoning_content: "clearly" }, finish_reason: null }] },
+        { choices: [{ delta: { content: "hello " }, finish_reason: null }] },
+        { choices: [{ delta: { content: "world\n\n- one\n- two" }, finish_reason: null }] },
+        {
+          choices: [{ delta: {}, finish_reason: "stop" }],
+          usage: { total_tokens: 12 },
+        },
+        "[DONE]",
+      ]);
     };
 
     const deltas = await collectStream({ reasoningEffort: "high" });
@@ -157,7 +160,7 @@ describe("OpenPond runtime OpChat routing", () => {
           model: "openpond-chat",
           messages: [{ role: "user", content: "hello" }],
           reasoning_effort: "high",
-          stream: false,
+          stream: true,
           thinking: { type: "enabled" },
         },
       },
@@ -183,22 +186,37 @@ describe("OpenPond runtime OpChat routing", () => {
         url: String(input),
         body: JSON.parse(String(init?.body)) as Record<string, unknown>,
       });
-      return jsonResponse({
-        choices: [{
-          message: {
-            reasoning_content: "I should inspect the workspace.",
-            tool_calls: [{
-              id: "call_1",
-              type: "function",
-              function: {
-                name: "resource_search",
-                arguments: '{"query":"README"}',
-              },
-            }],
-          },
-          finish_reason: "tool_calls",
-        }],
-      });
+      return sseResponse([
+        {
+          choices: [{
+            delta: {
+              reasoning_content: "I should inspect the workspace.",
+              tool_calls: [{
+                index: 0,
+                id: "call_1",
+                type: "function",
+                function: {
+                  name: "resource_search",
+                  arguments: '{"query"',
+                },
+              }],
+            },
+            finish_reason: null,
+          }],
+        },
+        {
+          choices: [{
+            delta: {
+              tool_calls: [{
+                index: 0,
+                function: { arguments: ':"README"}' },
+              }],
+            },
+            finish_reason: "tool_calls",
+          }],
+        },
+        "[DONE]",
+      ]);
     };
 
     const tools = [
@@ -235,7 +253,7 @@ describe("OpenPond runtime OpChat routing", () => {
         body: {
           model: "openpond-chat",
           messages: [{ role: "user", content: "find README" }],
-          stream: false,
+          stream: true,
           tools,
           tool_choice: "auto",
         },
@@ -274,12 +292,11 @@ describe("OpenPond runtime OpChat routing", () => {
     const requests: Array<Record<string, unknown>> = [];
     globalThis.fetch = async (_input, init) => {
       requests.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
-      return jsonResponse({
-        choices: [{
-          message: { content: "done" },
-          finish_reason: "stop",
-        }],
-      });
+      return sseResponse([
+        { choices: [{ delta: { content: "done" }, finish_reason: null }] },
+        { choices: [{ delta: {}, finish_reason: "stop" }] },
+        "[DONE]",
+      ]);
     };
 
     for await (const _delta of streamOpChatChatCompletion({
@@ -375,6 +392,18 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
+  });
+}
+
+function sseResponse(events: Array<unknown | string>): Response {
+  const body = events.map((event) => {
+    if (typeof event === "string" && event.startsWith(":")) {
+      return `${event}\n\n`;
+    }
+    return `data: ${typeof event === "string" ? event : JSON.stringify(event)}\n\n`;
+  }).join("");
+  return new Response(body, {
+    headers: { "content-type": "text/event-stream" },
   });
 }
 

@@ -22,6 +22,7 @@ import type { SqliteStore } from "../store/store.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
 import {
   BenchmarkEvidenceSnapshot,
+  FrozenToolEvidenceExhaustedError,
   type BenchmarkEvidenceSnapshotManifest,
   type FrozenToolObservation,
   type HarnessRefinerExecutionPlanItem,
@@ -746,12 +747,40 @@ export function frozenToolEvidence(
   cohort: "adaptation" | "held_out",
 ) {
   return {
-    execute: (input: {
+    execute: async (input: {
       taskId: string;
+      callId: string;
       toolName: string;
       args: Record<string, unknown>;
       execute: () => Promise<import("../openpond/native-tool-calls.js").NativeModelToolResult>;
-    }) => snapshot.execute({ ...input, mode, cohort }),
+    }) => {
+      try {
+        const result = await snapshot.execute({ ...input, mode, cohort });
+        return {
+          ...result,
+          // Frozen evidence preserves the baseline result bytes, not the
+          // baseline model's tool-call identity. Candidate turns author fresh
+          // call IDs and provider protocols require each replayed tool message
+          // to answer those current IDs exactly.
+          toolCallId: input.callId,
+        };
+      } catch (error) {
+        if (mode !== "replay" || !(error instanceof FrozenToolEvidenceExhaustedError)) {
+          throw error;
+        }
+        return {
+          toolCallId: input.callId,
+          name: input.toolName,
+          ok: false,
+          contentText: JSON.stringify({
+            ok: false,
+            action: input.toolName,
+            output: "The benchmark's frozen external-evidence budget is exhausted for this task.",
+            repairHint: "Do not call web tools again. Finish the task using the frozen evidence already returned.",
+          }),
+        };
+      }
+    },
   };
 }
 

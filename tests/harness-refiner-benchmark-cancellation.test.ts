@@ -134,6 +134,24 @@ describe("Harness Refiner benchmark cancellation", () => {
       updatedAt: "2026-08-10T00:02:00.000Z",
     });
     expect(isCheckpointResumeTransition(failedComparison, resumedComparison)).toBe(true);
+
+    const cancelledRecovery = ModelRunSchema.parse({
+      ...failedComparison,
+      status: "cancelled",
+      evaluationProgress: {
+        ...failedComparison.evaluationProgress!,
+        stage: "candidate_adaptation",
+      },
+      failure: "Benchmark cancelled by operator.",
+    });
+    const resumedRecovery = ModelRunSchema.parse({
+      ...cancelledRecovery,
+      status: "running",
+      failure: null,
+      completedAt: null,
+      updatedAt: "2026-08-10T00:02:00.000Z",
+    });
+    expect(isCheckpointResumeTransition(cancelledRecovery, resumedRecovery)).toBe(true);
   });
 
   test("reconciles only interrupted Harness Refiner evaluations", async () => {

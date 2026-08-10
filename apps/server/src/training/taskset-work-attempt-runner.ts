@@ -96,6 +96,7 @@ export type TasksetWorkRequiredOutputValidator = (input: {
 export type TasksetWorkToolEvidence = {
   execute(input: {
     taskId: string;
+    callId: string;
     toolName: string;
     args: Record<string, unknown>;
     execute: () => Promise<NativeModelToolResult>;
@@ -476,6 +477,7 @@ export async function runTasksetWorkAttempt(input: {
         const result = input.toolEvidence
           ? await input.toolEvidence.execute({
               taskId: input.task.id,
+              callId: call.id,
               toolName: call.name,
               args,
               execute: executeTool,

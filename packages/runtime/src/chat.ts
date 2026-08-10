@@ -263,36 +263,31 @@ export async function* streamOpChatChatCompletion(
     headers: opChatHeaders(
       requestUrl,
       options.token,
-      "application/json",
+      "text/event-stream",
       options.requestId
     ),
-    // Hosted turns are published only after the provider finishes. Requesting
-    // the complete response also preserves whitespace that some upstream
-    // token streams omit at chunk boundaries.
-    body: JSON.stringify(buildOpChatBody(options, false)),
+    body: JSON.stringify(buildOpChatBody(options, true)),
     signal: options.signal,
   });
   if (!response.ok) {
     throw new Error(`OpenPond OpChat request failed: ${response.status} ${await readOpChatError(response)}`);
   }
-  const raw = await response.json() as unknown;
-  if (raw && typeof raw === "object" && "error" in raw) {
-    throw new Error(`OpenPond OpChat request failed: ${errorMessageFromPayload(raw)}`);
+  if (!response.body) {
+    throw new Error("OpenPond OpChat request failed: streaming response body is missing.");
   }
-  const record = raw && typeof raw === "object"
-    ? raw as Record<string, unknown>
-    : {};
-  const choices = Array.isArray(record.choices) ? record.choices : [];
-  const choice = choices[0] && typeof choices[0] === "object"
-    ? choices[0] as Record<string, unknown>
-    : {};
-  const message = choice.message && typeof choice.message === "object"
-    ? choice.message as Record<string, unknown>
-    : {};
-  const reasoningText = streamTextValue(message.reasoning_content);
-  const content = streamTextValue(message.content);
-  const toolCalls = parseToolCalls(message.tool_calls);
-  const usage = parseUsage(raw);
+
+  // Consume the live SSE stream so proxy keepalives remain effective, but
+  // publish one complete turn only after the provider finishes. This preserves
+  // the runtime's atomic turn semantics and exact whitespace across chunks.
+  const completion = await readBufferedOpChatStream(response.body);
+  const {
+    content,
+    finishReason,
+    raw,
+    reasoningText,
+    toolCalls,
+    usage,
+  } = completion;
 
   if (reasoningText) yield { type: "reasoning_delta", text: reasoningText, raw };
   if (content) yield { type: "text_delta", text: content, raw };
@@ -312,9 +307,158 @@ export async function* streamOpChatChatCompletion(
   if (usage) yield { type: "usage", usage, raw };
   yield {
     type: "finish",
-    finishReason: stringValue(choice.finish_reason),
+    finishReason,
     raw,
   };
+}
+
+type PendingOpChatToolCall = {
+  id?: string;
+  name?: string;
+  arguments: string;
+};
+
+async function readBufferedOpChatStream(
+  body: ReadableStream<Uint8Array>,
+): Promise<{
+  content: string | null;
+  finishReason: string | null;
+  raw: unknown;
+  reasoningText: string | null;
+  toolCalls: HostedChatToolCall[];
+  usage: HostedChatUsage | null;
+}> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  const toolCalls = new Map<number, PendingOpChatToolCall>();
+  let buffer = "";
+  let content = "";
+  let dataLines: string[] = [];
+  let finishReason: string | null = null;
+  let lastPayload: unknown = {};
+  let reasoningText = "";
+  let sawDone = false;
+  let usage: HostedChatUsage | null = null;
+
+  const consumeEvent = () => {
+    if (dataLines.length === 0) return;
+    const data = dataLines.join("\n");
+    dataLines = [];
+    if (data === "[DONE]") {
+      sawDone = true;
+      return;
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(data) as unknown;
+    } catch {
+      throw new Error("OpenPond OpChat request failed: malformed streaming event.");
+    }
+    if (payload && typeof payload === "object" && "error" in payload) {
+      throw new Error(`OpenPond OpChat request failed: ${errorMessageFromPayload(payload)}`);
+    }
+    lastPayload = payload;
+    const record = payload && typeof payload === "object"
+      ? payload as Record<string, unknown>
+      : {};
+    const choices = Array.isArray(record.choices) ? record.choices : [];
+    const choice = choices[0] && typeof choices[0] === "object"
+      ? choices[0] as Record<string, unknown>
+      : {};
+    const delta = choice.delta && typeof choice.delta === "object"
+      ? choice.delta as Record<string, unknown>
+      : {};
+    content += streamTextValue(delta.content) ?? "";
+    reasoningText += streamTextValue(delta.reasoning_content) ?? "";
+    mergeOpChatToolCallDeltas(toolCalls, delta.tool_calls);
+    finishReason = stringValue(choice.finish_reason) ?? finishReason;
+    usage = parseUsage(payload) ?? usage;
+  };
+
+  const consumeLine = (line: string) => {
+    const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
+    if (!normalized) {
+      consumeEvent();
+      return;
+    }
+    if (normalized.startsWith(":")) return;
+    if (normalized.startsWith("data:")) {
+      dataLines.push(normalized.slice("data:".length).trimStart());
+    }
+  };
+
+  try {
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+      for (const line of lines) consumeLine(line);
+    }
+    buffer += decoder.decode();
+    if (buffer) consumeLine(buffer);
+    consumeEvent();
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (!sawDone) {
+    throw new Error("OpenPond OpChat request failed: stream ended before [DONE].");
+  }
+  return {
+    content: content || null,
+    finishReason,
+    raw: lastPayload,
+    reasoningText: reasoningText || null,
+    toolCalls: completedOpChatToolCalls(toolCalls),
+    usage,
+  };
+}
+
+function mergeOpChatToolCallDeltas(
+  calls: Map<number, PendingOpChatToolCall>,
+  value: unknown,
+): void {
+  if (!Array.isArray(value)) return;
+  value.forEach((item, position) => {
+    if (!item || typeof item !== "object") return;
+    const record = item as Record<string, unknown>;
+    const index = typeof record.index === "number" && Number.isInteger(record.index)
+      ? record.index
+      : position;
+    const current = calls.get(index) ?? { arguments: "" };
+    if (typeof record.id === "string") current.id = record.id;
+    const fn = record.function && typeof record.function === "object"
+      ? record.function as Record<string, unknown>
+      : {};
+    if (typeof fn.name === "string") {
+      current.name = `${current.name ?? ""}${fn.name}`;
+    }
+    if (typeof fn.arguments === "string") {
+      current.arguments += fn.arguments;
+    }
+    calls.set(index, current);
+  });
+}
+
+function completedOpChatToolCalls(
+  calls: Map<number, PendingOpChatToolCall>,
+): HostedChatToolCall[] {
+  return [...calls.entries()]
+    .sort(([left], [right]) => left - right)
+    .flatMap(([, call]) =>
+      call.id && call.name
+        ? [{
+            id: call.id,
+            type: "function" as const,
+            function: {
+              name: call.name,
+              arguments: call.arguments,
+            },
+          }]
+        : []
+    );
 }
 
 export function buildOpChatBody(options: {
@@ -429,12 +573,6 @@ function errorMessageFromPayload(payload: unknown): string {
       .join(": ");
   }
   return [stringValue(record.error), stringValue(record.message)].filter(Boolean).join(": ") || JSON.stringify(payload);
-}
-
-function parseToolCalls(value: unknown): HostedChatToolCall[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is HostedChatToolCall => Boolean(item) && typeof item === "object")
-    : [];
 }
 
 function parseUsage(raw: unknown): HostedChatUsage | null {

@@ -104,6 +104,19 @@ export type BenchmarkEvidenceSnapshotManifest = {
   contentHash: string;
 };
 
+export class FrozenToolEvidenceExhaustedError extends Error {
+  constructor(
+    readonly taskId: string,
+    readonly toolName: "web_search" | "web_fetch",
+    readonly ordinal: number,
+  ) {
+    super(
+      `Frozen web evidence is unavailable for ${taskId} ${toolName} call ${ordinal + 1}.`,
+    );
+    this.name = "FrozenToolEvidenceExhaustedError";
+  }
+}
+
 export class BenchmarkEvidenceSnapshot {
   #observations = new Map<string, FrozenToolObservation>();
   #callCounts = new Map<string, number>();
@@ -142,8 +155,10 @@ export class BenchmarkEvidenceSnapshot {
     if (input.mode === "replay") {
       const observation = this.#observations.get(key);
       if (!observation) {
-        throw new Error(
-          `Frozen web evidence is unavailable for ${input.taskId} ${input.toolName} call ${ordinal + 1}.`,
+        throw new FrozenToolEvidenceExhaustedError(
+          input.taskId,
+          input.toolName,
+          ordinal,
         );
       }
       // Replay is deliberately keyed by the admitted task/tool ordinal instead

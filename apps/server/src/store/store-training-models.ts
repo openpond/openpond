@@ -396,7 +396,7 @@ export function isCheckpointResumeTransition(
 ): boolean {
   if (
     existing.kind !== "evaluation"
-    || existing.status !== "failed"
+    || !["failed", "cancelled"].includes(existing.status)
     || candidate.status !== "running"
     || candidate.receipt !== null
     || candidate.failure !== null
@@ -415,8 +415,10 @@ export function isCheckpointResumeTransition(
   const checkpointIsDurable =
     (existing.evaluationProgress?.stage === "refiner"
       && existing.evaluationProgress.completedAttempts === completedAdaptationAttempts)
-    || (existing.evaluationProgress?.stage === "comparison"
-      && existing.evaluationProgress.completedAttempts === completedAllAttempts);
+    || (["candidate_adaptation", "candidate", "comparison"].includes(
+      existing.evaluationProgress?.stage ?? "",
+    )
+      && existing.evaluationProgress?.completedAttempts === completedAllAttempts);
   if (!checkpointIsDurable || !existing.evaluationProgress?.accounting) {
     return false;
   }

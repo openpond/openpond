@@ -14,6 +14,7 @@ import {
 } from "../apps/server/src/training/harness-refiner-benchmark-protocol.js";
 import {
   benchmarkLineage,
+  frozenToolEvidence,
   loadCompletedBenchmarkStage,
 } from "../apps/server/src/training/harness-refiner-benchmark-service-support.js";
 
@@ -136,6 +137,58 @@ describe("Harness Refiner benchmark protocol", () => {
       args: { query: "different source" },
       execute: async () => { throw new Error("live provider must stay disabled"); },
     })).resolves.toMatchObject({ ok: true, contentText: "frozen result" });
+  });
+
+  test("rebinds frozen evidence to the candidate model's current tool-call id", async () => {
+    const snapshot = new BenchmarkEvidenceSnapshot();
+    await snapshot.execute({
+      mode: "record",
+      cohort: "held_out",
+      taskId: "held-out-1",
+      toolName: "web_search",
+      args: { query: "baseline wording" },
+      execute: async () => ({
+        toolCallId: "baseline-call-id",
+        name: "web_search",
+        ok: true,
+        contentText: "frozen result bytes",
+      }),
+    });
+
+    const replay = frozenToolEvidence(snapshot, "replay", "held_out");
+    await expect(replay.execute({
+      taskId: "held-out-1",
+      callId: "candidate-call-id",
+      toolName: "web_search",
+      args: { query: "candidate wording" },
+      execute: async () => { throw new Error("live provider must stay disabled"); },
+    })).resolves.toMatchObject({
+      toolCallId: "candidate-call-id",
+      name: "web_search",
+      ok: true,
+      contentText: "frozen result bytes",
+    });
+  });
+
+  test("turns extra candidate web calls into deterministic frozen-evidence exhaustion", async () => {
+    const replay = frozenToolEvidence(
+      new BenchmarkEvidenceSnapshot(),
+      "replay",
+      "held_out",
+    );
+
+    await expect(replay.execute({
+      taskId: "held-out-1",
+      callId: "candidate-extra-call-id",
+      toolName: "web_fetch",
+      args: { url: "https://example.test/unrecorded" },
+      execute: async () => { throw new Error("live provider must stay disabled"); },
+    })).resolves.toMatchObject({
+      toolCallId: "candidate-extra-call-id",
+      name: "web_fetch",
+      ok: false,
+      contentText: expect.stringContaining("Do not call web tools again"),
+    });
   });
 
   test("enforces spend and computes publication accounting", () => {

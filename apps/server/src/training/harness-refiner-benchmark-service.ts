@@ -35,6 +35,7 @@ import { runHarnessRefinerBenchmarkRefinerStage } from "./harness-refiner-benchm
 import {
   createResultManifest,
   ensureBaseVersion,
+  loadLatestManagedResult,
   preserveProfileResult,
   writeManagedResult,
 } from "./harness-refiner-benchmark-result-persistence.js";
@@ -253,13 +254,20 @@ export function createHarnessRefinerBenchmarkService(deps: {
     if (activeRuns.has(modelRunId) || run.status === "running") return run;
     const canResumeFromRefiner =
       run.evaluationProgress?.stage === "refiner"
-      && run.evaluationProgress.completedAttempts
+      && run.evaluationProgress?.completedAttempts
         === completedBeforeStage(run.evaluation.attemptPlan, "candidate_adaptation");
-    const canResumeFromComparison =
-      run.evaluationProgress?.stage === "comparison"
-      && run.evaluationProgress.completedAttempts
+    const hasCompletedComparisonCheckpoint =
+      ["candidate_adaptation", "candidate", "comparison"].includes(
+        run.evaluationProgress?.stage ?? "",
+      )
+      && run.evaluationProgress?.completedAttempts
         === totalPlannedAttempts(run.evaluation.attemptPlan);
-    if (run.status !== "failed" || (!canResumeFromRefiner && !canResumeFromComparison)) {
+    const canResumeFromComparison = hasCompletedComparisonCheckpoint
+      && Boolean(await loadLatestManagedResult(deps.storeDir, run.id));
+    if (
+      !["failed", "cancelled"].includes(run.status)
+      || (!canResumeFromRefiner && !canResumeFromComparison)
+    ) {
       throw new Error(
         "Only a Harness Refiner run with a durable Refiner or comparison checkpoint can resume.",
       );
@@ -374,8 +382,10 @@ export function createHarnessRefinerBenchmarkService(deps: {
         && modelRun.evaluationProgress.completedAttempts
           === completedBeforeStage(executionPlan, "candidate_adaptation");
       const resumeFromComparison =
-        modelRun.evaluationProgress?.stage === "comparison"
-        && modelRun.evaluationProgress.completedAttempts === totalAttempts;
+        ["candidate_adaptation", "candidate", "comparison"].includes(
+          modelRun.evaluationProgress?.stage ?? "",
+        )
+        && modelRun.evaluationProgress?.completedAttempts === totalAttempts;
       const budget = new BenchmarkSpendBudget(
         input.maximumSpendUsd,
         resumeFromRefiner || resumeFromComparison
