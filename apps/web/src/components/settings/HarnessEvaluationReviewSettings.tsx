@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   HarnessEvaluationReviewCadence,
   HarnessEvaluationReviewReceipt,
@@ -138,8 +138,6 @@ export function HarnessEvaluationReviewSettings({
   onReview,
   onSaveSchedule,
 }: Props) {
-  const refinerToggleId = useId();
-  const recurringReviewToggleId = useId();
   const [cadence, setCadence] = useState<HarnessEvaluationReviewCadence>(schedule.cadence);
   const [enabled, setEnabled] = useState(schedule.enabled);
 
@@ -156,7 +154,7 @@ export function HarnessEvaluationReviewSettings({
         <div className="harness-section-heading">
           <div>
             <h2>Continuous learning</h2>
-            <p>Refine completed turns quickly, then review related evidence over time. Neither loop starts training or activates a Model.</p>
+            <p>Review completed turns immediately, then run scheduled RL reviews across recurring evidence. Neither process starts training or activates a Model.</p>
           </div>
           <div className="harness-section-actions">
             <button
@@ -183,30 +181,28 @@ export function HarnessEvaluationReviewSettings({
         </div>
 
         <section className="harness-learning-card" aria-label="Continuous learning controls">
-          <div className="harness-learning-setting">
-            <label className="harness-learning-copy" htmlFor={refinerToggleId}>
-              <strong>Refine completed turns</strong>
-              <span>Run the fast model-driven Refiner after each completed turn. Already queued work may finish after this is turned off.</span>
-            </label>
-            <label className="provider-toggle harness-learning-toggle" aria-label="Refine completed turns">
+          <label className="harness-learning-setting">
+            <span className="harness-learning-copy">
+              <strong>Refiner</strong>
+              <small>Review each completed turn for reusable improvements. This is enabled by default for new users.</small>
+            </span>
+            <span className="provider-toggle harness-learning-toggle">
               <input
-                id={refinerToggleId}
                 checked={backgroundReviewEnabled}
                 disabled={backgroundReviewBusy}
                 onChange={(event) => onBackgroundReviewChange(event.target.checked)}
                 type="checkbox"
               />
               <span aria-hidden="true" />
-            </label>
-          </div>
-          <div className="harness-learning-setting">
-            <label className="harness-learning-copy" htmlFor={recurringReviewToggleId}>
-              <strong>Review recurring patterns</strong>
-              <span>Let the model compare authorized evidence and prior Harness outcomes. Unchanged windows do not call the model.</span>
-            </label>
-            <label className="provider-toggle harness-learning-toggle" aria-label="Review recurring patterns">
+            </span>
+          </label>
+          <label className="harness-learning-setting">
+            <span className="harness-learning-copy">
+              <strong>RL review</strong>
+              <small>Compare recurring evidence on a schedule and propose evaluation or training work. Unchanged evidence does not call the model.</small>
+            </span>
+            <span className="provider-toggle harness-learning-toggle">
               <input
-                id={recurringReviewToggleId}
                 checked={enabled}
                 disabled={busy}
                 onChange={(event) => {
@@ -218,8 +214,8 @@ export function HarnessEvaluationReviewSettings({
                 type="checkbox"
               />
               <span aria-hidden="true" />
-            </label>
-          </div>
+            </span>
+          </label>
           <div className="harness-learning-schedule">
             <label className="settings-select-field">
               <span>Cadence</span>

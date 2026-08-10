@@ -11,7 +11,9 @@ import {
   resolveModelBindingPromotionGate,
   type CreateImproveCandidate,
   type CreateImproveRun,
+  type ChatModelRef,
   type OpenPondProfileState,
+  type ProviderSettings,
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 
@@ -34,7 +36,7 @@ import type { LabDetailLocation } from "./lab-detail-navigation";
 import { LabAgentEvalActions } from "./LabEvalActions";
 import { LabAgentChanges } from "./LabAgentChanges";
 import { LabAgentChangeHistory } from "./LabAgentChangeHistory";
-import { LabModelOverview } from "./LabModelOverview";
+import { LabModelBenchmarksSection } from "./LabModelBenchmarksSection";
 import {
   LabModelRunsPage,
   LabModelVersionsPage,
@@ -109,6 +111,11 @@ export function LabWorkproductDetail({
   onResume,
   onRevise,
   renderModelRunEditor,
+  benchmarkDefaultModel,
+  benchmarkProviderSettings,
+  initialBenchmarkModel = null,
+  initialBenchmarkOpen = false,
+  onInitialBenchmarkOpenConsumed,
 }: {
   workproduct: LabWorkproductSummary;
   runs: CreateImproveRun[];
@@ -175,6 +182,11 @@ export function LabWorkproductDetail({
     error: string | null;
     loading: boolean;
   };
+  benchmarkDefaultModel: ChatModelRef;
+  benchmarkProviderSettings: ProviderSettings | null;
+  initialBenchmarkModel?: ChatModelRef | null;
+  initialBenchmarkOpen?: boolean;
+  onInitialBenchmarkOpenConsumed?: () => void;
 }) {
   const workproductRuns = useMemo(
     () => runsForWorkproduct(workproduct, runs),
@@ -202,6 +214,13 @@ export function LabWorkproductDetail({
   const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
     null
   );
+  const [benchmarkOpen, setBenchmarkOpen] = useState(initialBenchmarkOpen);
+
+  useEffect(() => {
+    if (!initialBenchmarkOpen) return;
+    setBenchmarkOpen(true);
+    onInitialBenchmarkOpenConsumed?.();
+  }, [initialBenchmarkOpen, onInitialBenchmarkOpenConsumed]);
   const selectedRun =
     workproductRuns.find((run) => run.id === selectedRunId) ??
     workproductRuns[0] ??
@@ -595,6 +614,13 @@ export function LabWorkproductDetail({
                 Download receipt
               </button>
             ) : null}
+            <button
+              className="training-button secondary"
+              type="button"
+              onClick={() => setBenchmarkOpen(true)}
+            >
+              Benchmark
+            </button>
             {!readOnlyModel ? (
               <button
                 className="training-button"
@@ -678,15 +704,11 @@ export function LabWorkproductDetail({
               training={training}
               workproduct={workproduct}
               onOpenDataset={onOpenDataset}
+              onOpenConversation={onOpenConversation}
             />
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
-            <LabModelOverview
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-            />
             <LabModelRunsPage
               runs={runs}
               training={training}
@@ -862,6 +884,23 @@ export function LabWorkproductDetail({
           </>
         )}
       </div>
+
+      {workproduct.kind === "model" && benchmarkOpen ? (
+        <LabModelBenchmarksSection
+          workproduct={workproduct}
+          training={training}
+          readOnly={false}
+          defaultModel={benchmarkDefaultModel}
+          initialModel={initialBenchmarkModel}
+          providerSettings={benchmarkProviderSettings}
+          onClose={() => setBenchmarkOpen(false)}
+          onOpenEntry={(entryKey) => {
+            setBenchmarkOpen(false);
+            setSelectedModelEntryKey(entryKey);
+          }}
+          onToast={onToast}
+        />
+      ) : null}
 
       {modelUseVersionId
         ? (() => {

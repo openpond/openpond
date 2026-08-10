@@ -109,6 +109,8 @@ export type HostedChatTurnInput = {
   requestId?: string;
   reasoningEffort?: CodexReasoningEffort | null;
   maxTokens?: number;
+  temperature?: number;
+  topP?: number;
   signal?: AbortSignal;
 };
 

@@ -375,7 +375,8 @@ export function useSidebarData({
 
 function isVisibleSidebarParentSession(session: Session): boolean {
   if (isSubagentChildSession(session)) return false;
-  return !session.hiddenFromDefaultSidebar;
+  if (!session.hiddenFromDefaultSidebar) return true;
+  return session.metadata?.benchmarkRuntime === "desktop_local_work";
 }
 
 function isSubagentChildSession(

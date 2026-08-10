@@ -123,6 +123,7 @@
 .titlebar-left,
 .titlebar-right,
 .titlebar-actions,
+.titlebar-collaboration-actions,
 .window-controls,
 .titlebar-title,
 .titlebar-breadcrumbs,
@@ -138,6 +139,10 @@
 
 .titlebar-actions {
   gap: 9px;
+}
+
+.titlebar-collaboration-actions {
+  gap: 4px;
 }
 
 .titlebar-right {

@@ -4,6 +4,8 @@ import {
   SIDEBAR_CHAT_PAGE_SIZE,
   SIDEBAR_TASK_INITIAL_LIMIT,
 } from "../../lib/app-models";
+import { projectlessSidebarSessionLabel } from "../../lib/experience-sessions";
+import { isTaskDraftSession } from "../../lib/task-drafts";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import {
@@ -249,6 +251,7 @@ export function SidebarSectionList({
   }
 
   function projectLabelForSession(session: Session): string | null {
+    if (isTaskDraftSession(session)) return "Draft";
     if (experience === "chat") return null;
     const projectId = sidebarProjectIdBySessionId[session.id];
     if (projectId) {
@@ -256,7 +259,7 @@ export function SidebarSectionList({
         projectLabelById.get(projectId) ?? session.workspaceName ?? "Project"
       );
     }
-    return "Chat";
+    return projectlessSidebarSessionLabel(session);
   }
 
   function selectSession(session: Session) {

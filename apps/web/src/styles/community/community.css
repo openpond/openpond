@@ -1,7 +1,7 @@
 .main-pane.community-active {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -9,7 +9,7 @@
 .main-pane.community-active > .community-view,
 .main-pane.community-active > .community-empty-page {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
 }
 
 .community-view {

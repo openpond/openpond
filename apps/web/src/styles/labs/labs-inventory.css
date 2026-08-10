@@ -38,6 +38,13 @@
   padding-top: 2px;
 }
 
+.labs-model-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .labs-dataset-advanced-details {
   margin-top: 14px;
   border-top: 1px solid var(--border);
@@ -84,12 +91,64 @@
   overflow: visible;
 }
 
+.labs-model-create-purpose {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.labs-model-create-purpose legend {
+  grid-column: 1 / -1;
+  margin-bottom: 1px;
+  color: var(--muted-strong);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.labs-model-create-purpose button {
+  display: grid;
+  gap: 5px;
+  min-height: 82px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.labs-model-create-purpose button:hover,
+.labs-model-create-purpose button.selected {
+  background: var(--panel-soft);
+}
+
+.labs-model-create-purpose button.selected {
+  border-color: var(--muted-strong);
+}
+
+.labs-model-create-purpose small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .labs-model-create-field {
   display: grid;
   gap: 7px;
   color: var(--muted-strong);
   font-size: 11px;
   font-weight: 650;
+}
+
+.labs-model-create-field > small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .labs-model-create-select-row {

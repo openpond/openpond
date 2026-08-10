@@ -191,6 +191,8 @@ export async function* streamOpenPondHostedChatTurn(
     requestId: input.requestId,
     reasoningEffort: input.reasoningEffort,
     maxTokens: input.maxTokens,
+    temperature: input.temperature,
+    topP: input.topP,
     signal: input.signal,
   });
 }
@@ -315,13 +317,15 @@ export async function* streamOpChatChatCompletion(
   };
 }
 
-function buildOpChatBody(options: {
+export function buildOpChatBody(options: {
   model: string;
   messages: HostedChatTurnInput["messages"];
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   reasoningEffort?: HostedChatTurnInput["reasoningEffort"];
   maxTokens?: number;
+  temperature?: number;
+  topP?: number;
 }, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
@@ -336,6 +340,12 @@ function buildOpChatBody(options: {
   }
   if (typeof options.maxTokens === "number") {
     body.max_tokens = options.maxTokens;
+  }
+  if (typeof options.temperature === "number") {
+    body.temperature = options.temperature;
+  }
+  if (typeof options.topP === "number") {
+    body.top_p = options.topP;
   }
   Object.assign(body, opChatReasoningFields(options.reasoningEffort));
   return body;

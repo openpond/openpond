@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { CommunityRulesDialog } from "../apps/web/src/components/community/CommunityRulesDialog";
 import { CommunityComposer } from "../apps/web/src/components/community/CommunityComposer";
 import { CommunityMessageRow } from "../apps/web/src/components/community/CommunityMessageRow";
-import { SidebarCommunitySection } from "../apps/web/src/components/sidebar/SidebarCommunitySection";
+import { CollaborationTabs } from "../apps/web/src/components/collaboration/CollaborationTabs";
 
 describe("community UI", () => {
   test("requires an explicit rules agreement before join", () => {
@@ -26,84 +26,37 @@ describe("community UI", () => {
     expect(html).toMatch(/disabled=""[^>]*>Agree and join/);
   });
 
-  test("renders joined channels with unread and mute state in the desktop sidebar", () => {
-    const html = renderToStaticMarkup(createElement(SidebarCommunitySection, {
-      communities: [{
-        id: "community_1", slug: "openpond", displayName: "OpenPond", description: "Builders",
-        imageUrl: null, status: "published", visibility: "public", joinPolicy: "open",
-        historyVisibility: "public_preview", featuredAt: "2026-07-15T12:00:00.000Z",
-        publishedAt: "2026-07-15T12:00:00.000Z", archivedAt: null, memberCount: 10,
-        membership: { role: "member", status: "active", notificationMode: "mentions" },
-        capabilities: {
-          canPreview: true, canJoin: false, canLeave: true, canRead: true, canPost: true,
-          canUpload: true, canMention: true, canManage: false, requiresRulesAcceptance: false,
-          currentRulesVersionId: "rules_1",
-        },
-        currentRules: {
-          id: "rules_1", communityId: "community_1", version: 1, title: "Rules",
-          requiresReacceptance: false, publishedAt: "2026-07-15T12:00:00.000Z",
-        },
-      }],
-      channels: [{
-        id: "channel_1", communityId: "community_1", chatThreadId: "thread_1", slug: "general",
-        displayName: "general", topic: "Talk", position: 0, visibility: "public_preview",
-        postingPolicy: "members", isDefault: true, archivedAt: null, lastMessageSequence: 8,
-        unreadCount: 3,
-        readState: { lastReadSequence: 5, lastReadAt: null, mutedAt: "2026-07-15T12:00:00.000Z", pinnedAt: null },
-      }],
-      loading: false, error: null, selectedCommunityId: "community_1", selectedChannelId: "channel_1",
-      view: "community", defaultCollapsed: false, onDiscover: () => undefined,
-      onSelectCommunity: () => undefined, onSelectChannel: () => undefined,
+  test("uses one native collaboration switcher for Team Chat and Communities", () => {
+    const html = renderToStaticMarkup(createElement(CollaborationTabs, {
+      view: "community",
+      onSelect: () => undefined,
     }));
-    expect(html).toContain("Discover communities");
-    expect(html).toContain('aria-label="Collapse Communities"');
-    expect(html).toContain("general");
-    expect(html).toContain("3 unread");
-    expect(html).toContain("Muted");
-    expect(html).toContain("team-sidebar-row community-sidebar-community");
-    expect(html).toContain('aria-label="Collapse OpenPond"');
-    expect(html).toContain('aria-expanded="true"');
-    expect(html).toContain('aria-controls="community-sidebar-channels-community_1"');
-    expect(html).toContain("team-sidebar-row community-sidebar-channel-row selected");
-    expect(html).toContain("team-sidebar-unread");
+    expect(html).toContain('aria-label="Collaboration"');
+    expect(html).toContain("Team chat");
+    expect(html).toContain("Communities");
+    expect(html).toContain('aria-current="page"');
   });
 
-  test("keeps Communities collapsed by default in the bottom sidebar area", () => {
-    const html = renderToStaticMarkup(createElement(SidebarCommunitySection, {
-      communities: [],
-      channels: [],
-      loading: false,
-      error: null,
-      selectedCommunityId: null,
-      selectedChannelId: null,
-      view: "chat",
-      onDiscover: () => undefined,
-      onSelectCommunity: () => undefined,
-      onSelectChannel: () => undefined,
-    }));
-
-    expect(html).toContain('aria-label="Expand Communities"');
-    expect(html).not.toContain("Join or feature a community to pin it here");
-  });
-
-  test("keeps the retired continuous-learning promotion out of the sidebar", async () => {
-    const [sidebar, sectionList, sidebarCss] = await Promise.all([
+  test("places collaboration actions in the main header and floats continuous learning above the sidebar footer", async () => {
+    const [sidebar, topBar, sectionList, sidebarCss] = await Promise.all([
       readFile("apps/web/src/components/sidebar/Sidebar.tsx", "utf8"),
+      readFile("apps/web/src/components/app-shell/AppTopBar.tsx", "utf8"),
       readFile("apps/web/src/components/sidebar/SidebarSectionList.tsx", "utf8"),
       readFile("apps/web/src/styles/sidebar/sidebar.css", "utf8"),
     ]);
-    const community = sidebar.indexOf("<SidebarCommunitySection");
-    const teamChat = sidebar.indexOf("<SidebarTeamSection");
-    const utilities = sidebar.indexOf("<SidebarUtilityNavigation");
+    const headerActions = topBar.indexOf("<CollaborationHeaderActions");
+    const workspaceActions = topBar.indexOf('{showWorkspaceControls && (');
 
     expect(sidebar).not.toContain("LocalContinuousLearningSidebarNotice");
-    expect(community).toBeGreaterThan(-1);
-    expect(teamChat).toBeGreaterThan(community);
-    expect(utilities).toBeGreaterThan(teamChat);
+    expect(sidebar).not.toContain("<SidebarCommunitySection");
+    expect(sidebar).not.toContain("<SidebarTeamSection");
+    expect(sidebar).not.toContain("SidebarCollaborationButtons");
+    expect(headerActions).toBeGreaterThan(-1);
+    expect(headerActions).toBeLessThan(workspaceActions);
     expect(sectionList).not.toContain("<SidebarCommunitySection");
     expect(sectionList).not.toContain("<SidebarTeamSection");
     expect(sidebarCss).toMatch(
-      /\.sidebar-collaboration-sections\s*\{[^}]*border-top:/s,
+      /\.sidebar-learning-notice\s*\{[^}]*position:\s*absolute;[^}]*bottom:\s*calc\(100% \+ 8px\);/s,
     );
   });
 

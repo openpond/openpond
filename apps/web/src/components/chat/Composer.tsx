@@ -77,6 +77,7 @@ import {
   type ComposerInlineInputHandle,
   type ComposerInlineToken,
 } from "./ComposerInlineInput";
+import { composerPlaceholder, composerTaskDraftShortcut, saveComposerTaskDraft } from "./composer-task-draft";
 import {
   ComposerCommandMenu,
   filterComposerCommandMenuSections,
@@ -195,6 +196,7 @@ export function Composer({
   onOpenPondCommandAccessModeChange,
   onPromptChange,
   onMentionAppSelect,
+  onSaveTaskDraft,
   showToast,
   onSubmit,
   onStop,
@@ -242,6 +244,7 @@ export function Composer({
     string | null
   >(null);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [savingTaskDraft, setSavingTaskDraft] = useState(false);
   const [selectedActionId, setSelectedActionId] = useState<string | null>(
     initialRequestedAction?.actionId ?? null
   );
@@ -307,17 +310,9 @@ export function Composer({
     },
     [addFiles, attachments],
   );
-  const placeholder =
-    surface === "team"
-      ? "Message team"
-      : mode === "start"
-      ? experience === "chat"
-        ? "Ask anything"
-        : "What should we work on?"
-      : "Ask for follow-up changes";
-  const repositoryWork =
-    experience === "development" ||
-    (experience === "work" && projectTarget.value !== "none");
+  const placeholder = composerPlaceholder({ experience, mode, surface });
+  const repositoryWork = experience === "development"
+    || (experience === "work" && projectTarget.value !== "none");
   const modelValue = normalizeChatModel(provider, model, providerSettings);
   // Composer controls sit against the lower edge of the input surface. Opening
   // upward keeps provider/model/permission menus inside the viewport instead
@@ -1847,6 +1842,20 @@ export function Composer({
               ) {
                 event.preventDefault();
                 clearSelectedInvocation();
+                return;
+              }
+              if (composerTaskDraftShortcut(event.key, event.shiftKey, experience, surface, Boolean(onSaveTaskDraft))) {
+                event.preventDefault();
+                saveComposerTaskDraft({
+                  attachmentsCount: attachments.length,
+                  hasSelectedInvocation: Boolean(selectedAction || selectedCommand),
+                  onSave: onSaveTaskDraft!,
+                  onSaved: clearSelectedInvocation,
+                  prompt,
+                  saving: savingTaskDraft,
+                  setSaving: setSavingTaskDraft,
+                  showInfo: (message) => showToast(message, "info"),
+                });
                 return;
               }
               if (event.key === "Enter" && !event.shiftKey) {

@@ -92,6 +92,7 @@ import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
+import { CollaborationTabs } from "../collaboration/CollaborationTabs";
 
 import {
   AppsView,
@@ -236,6 +237,7 @@ export function MainPane({
   reviseCreateImproveRun,
   setMentionedAppId,
   showToast,
+  onSaveTaskDraft,
   sendPrompt,
   stopTurn,
   syncWorkspaceLocally,
@@ -1454,6 +1456,9 @@ export function MainPane({
         rightPanelExpanded ? "diff-expanded" : ""
       }`}
     >
+      {view === "team" || view === "community" ? (
+        <CollaborationTabs onSelect={setView} view={view} />
+      ) : null}
       {view === "apps" ? (
         <Suspense fallback={null}>
           <AppsView
@@ -1736,6 +1741,7 @@ export function MainPane({
                   changeOpenPondCommandAccessMode
                 }
                 onMentionAppSelect={setMentionedAppId}
+                onSaveTaskDraft={onSaveTaskDraft}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}
@@ -1836,6 +1842,7 @@ export function MainPane({
                   changeOpenPondCommandAccessMode
                 }
                 onMentionAppSelect={setMentionedAppId}
+                onSaveTaskDraft={onSaveTaskDraft}
                 showToast={showToast}
                 onSubmit={submitComposerPrompt}
                 onStop={stopTurn}

@@ -57,6 +57,18 @@ describe("local BYOK provider registry", () => {
     });
 
     expect(Object.keys(settings.statuses)).toContain("openpond");
+    expect(settings.modelCaches.openpond?.models.map((model) => model.id)).toEqual([
+      "openpond-chat",
+      "accounts/fireworks/models/kimi-k3",
+      "accounts/fireworks/models/glm-5p2",
+      "accounts/fireworks/models/deepseek-v4-pro",
+      "accounts/fireworks/models/deepseek-v4-flash",
+      "accounts/fireworks/models/minimax-m3",
+    ]);
+    expect(settings.modelCaches.openpond?.models[0]).toMatchObject({
+      displayName: "DeepSeek V4 Pro",
+      capabilities: { reasoning: true },
+    });
     expect(Object.keys(settings.statuses)).toContain("openrouter");
     expect(settings.providers.openrouter?.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(settings.statuses.openrouter?.available).toBe(false);
@@ -229,19 +241,103 @@ describe("local BYOK provider registry", () => {
       catalog,
     });
 
-    expect(settings.modelCaches.openpond?.models).toEqual([
-      expect.objectContaining({
-        id: "openpond-chat",
-        providerId: "openpond",
-        contextWindow: 1_048_576,
-      }),
-      expect.objectContaining({
-        id: "moonshotai/kimi-k3",
-        providerId: "openpond",
-        displayName: "Kimi K3",
-        contextWindow: 1_048_576,
-      }),
+    expect(settings.modelCaches.openpond?.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "openpond-chat",
+          providerId: "openpond",
+          displayName: "DeepSeek V4 Pro",
+          contextWindow: 1_048_576,
+          capabilities: expect.objectContaining({ reasoning: true }),
+        }),
+        expect.objectContaining({
+          id: "moonshotai/kimi-k3",
+          providerId: "openpond",
+          displayName: "Kimi K3",
+          contextWindow: 1_048_576,
+        }),
+      ]),
+    );
+  });
+
+  test("enriches a stale OpenPond catalog and cached model with the managed minimum", () => {
+    const catalog = ProviderCatalogSchema.parse({
+      version: 1,
+      generatedAt: "2026-07-01T10:00:00.000Z",
+      providers: [
+        {
+          id: "openpond",
+          displayName: "OpenPond Chat",
+          lifecycleStatus: "active",
+          credentialModes: ["openpond-account"],
+          routing: {
+            hostedOpChat: true,
+            localRuntime: true,
+            localByok: false,
+            hostedByok: false,
+          },
+          capabilities: {
+            chatCompletions: true,
+            streaming: true,
+            modelDiscovery: "hosted",
+            toolCalling: true,
+            reasoning: true,
+            imageInput: false,
+            structuredOutput: false,
+          },
+          defaultModel: "openpond-chat",
+          defaultEnabled: true,
+          modelCacheSource: "hosted",
+          models: [
+            {
+              id: "openpond-chat",
+              displayName: "OpenPond Chat",
+              contextWindow: 1_048_576,
+              capabilities: { streaming: true },
+            },
+          ],
+        },
+      ],
+    });
+    const settings = buildProviderSettings({
+      file: {
+        ...emptyProvidersFile(),
+        modelCaches: {
+          openpond: {
+            providerId: "openpond",
+            models: [
+              {
+                id: "openpond-chat",
+                providerId: "openpond",
+                displayName: "OpenPond Chat",
+                contextWindow: 1_048_576,
+                outputLimit: null,
+                lifecycleStatus: "active",
+                source: "hosted",
+                capabilities: {},
+              },
+            ],
+            fetchedAt: "2026-07-01T10:00:00.000Z",
+            lastError: null,
+            source: "hosted",
+          },
+        },
+      },
+      catalog,
+    });
+
+    expect(settings.modelCaches.openpond?.models.map((model) => model.id)).toEqual([
+      "openpond-chat",
+      "accounts/fireworks/models/kimi-k3",
+      "accounts/fireworks/models/glm-5p2",
+      "accounts/fireworks/models/deepseek-v4-pro",
+      "accounts/fireworks/models/deepseek-v4-flash",
+      "accounts/fireworks/models/minimax-m3",
     ]);
+    expect(settings.modelCaches.openpond?.models[0]).toMatchObject({
+      displayName: "DeepSeek V4 Pro",
+      capabilities: { reasoning: true },
+    });
   });
 
   test("enriches stale hosted OpenAI catalog with the current GPT-5.6 family", () => {

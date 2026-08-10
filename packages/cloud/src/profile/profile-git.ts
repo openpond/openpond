@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -169,6 +170,141 @@ export async function profileGitHead(repoPath: string): Promise<string | null> {
   return gitText(repoPath, ["rev-parse", "HEAD"]);
 }
 
+export type ProfileBenchmarkGitReceipt = {
+  ref: string;
+  commit: string;
+  baseCommit: string;
+  paths: string[];
+};
+
+/**
+ * Preserves a benchmark result without changing the checked-out branch, index,
+ * or worktree. The caller supplies the complete bounded files to add on top of
+ * the admitted Profile commit; large run artifacts remain in managed storage.
+ */
+export async function commitProfileBenchmarkRef(input: {
+  repoPath: string;
+  runId: string;
+  baseCommit?: string | null;
+  files: Array<{ path: string; contents: string | Uint8Array }>;
+  message?: string;
+}): Promise<ProfileBenchmarkGitReceipt> {
+  const state = await loadProfileGitState(input.repoPath);
+  if (!state.isRepo) {
+    throw new Error(state.error ?? "Active OpenPond profile source is not a Git repo.");
+  }
+  const baseCommit = input.baseCommit ?? state.head;
+  if (!baseCommit) throw new Error("A Profile benchmark requires an admitted Git commit.");
+  const runSegment = safeGitSegment(input.runId);
+  const ref = `refs/openpond/benchmarks/${runSegment}`;
+  const existing = await gitText(input.repoPath, ["rev-parse", "--verify", ref]);
+  if (existing) {
+    return {
+      ref,
+      commit: existing,
+      baseCommit,
+      paths: input.files.map((file) => safeGitPath(file.path)).sort(),
+    };
+  }
+  const files = input.files
+    .map((file) => ({ ...file, path: safeGitPath(file.path) }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  if (!files.length) throw new Error("A Profile benchmark commit requires at least one file.");
+  if (new Set(files.map((file) => file.path)).size !== files.length) {
+    throw new Error("A Profile benchmark commit cannot contain duplicate paths.");
+  }
+
+  const indexPath = path.join(
+    input.repoPath,
+    ".git",
+    `openpond-benchmark-index-${randomUUID()}`,
+  );
+  const env = {
+    ...process.env,
+    GIT_INDEX_FILE: indexPath,
+    GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || "OpenPond",
+    GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || "openpond@example.invalid",
+    GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || "OpenPond",
+    GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || "openpond@example.invalid",
+  };
+  try {
+    await requireGitSuccess(
+      input.repoPath,
+      ["read-tree", baseCommit],
+      "git read-tree",
+      { env },
+    );
+    for (const file of files) {
+      const blob = await requireGitSuccess(
+        input.repoPath,
+        ["hash-object", "-w", "--stdin"],
+        `git hash-object ${file.path}`,
+        { env, input: file.contents },
+      );
+      await requireGitSuccess(
+        input.repoPath,
+        ["update-index", "--add", "--cacheinfo", `100644,${blob.stdout.trim()},${file.path}`],
+        `git update-index ${file.path}`,
+        { env },
+      );
+    }
+    const tree = await requireGitSuccess(
+      input.repoPath,
+      ["write-tree"],
+      "git write-tree",
+      { env },
+    );
+    const commit = await requireGitSuccess(
+      input.repoPath,
+      [
+        "commit-tree",
+        tree.stdout.trim(),
+        "-p",
+        baseCommit,
+        "-m",
+        input.message ?? `Preserve OpenPond benchmark ${input.runId}`,
+      ],
+      "git commit-tree",
+      { env },
+    );
+    await requireGitSuccess(
+      input.repoPath,
+      ["update-ref", ref, commit.stdout.trim()],
+      "git update-ref",
+      { env },
+    );
+    return {
+      ref,
+      commit: commit.stdout.trim(),
+      baseCommit,
+      paths: files.map((file) => file.path),
+    };
+  } finally {
+    await rm(indexPath, { force: true }).catch(() => undefined);
+  }
+}
+
+function safeGitSegment(value: string): string {
+  const segment = value.trim().replace(/[^A-Za-z0-9._-]+/g, "-");
+  if (!segment || segment === "." || segment === "..") {
+    throw new Error("Benchmark run id cannot form a safe Git ref.");
+  }
+  return segment;
+}
+
+function safeGitPath(value: string): string {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (
+    !normalized
+    || normalized.startsWith("/")
+    || normalized.split("/").some((segment) => !segment || segment === "." || segment === "..")
+    || normalized.includes("\0")
+  ) {
+    throw new Error(`Unsafe benchmark Git path: ${value}`);
+  }
+  return normalized;
+}
+
 async function hasGitHead(repoPath: string): Promise<boolean> {
   const result = await runGitCommand(repoPath, ["rev-parse", "--verify", "HEAD"]);
   return result.code === 0;
@@ -252,7 +388,7 @@ function gitFailureMessage(
 export async function runGitCommand(
   repoPath: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv } = {},
+  options: { env?: NodeJS.ProcessEnv; input?: string | Uint8Array } = {},
 ): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const proc = spawn("git", args, {
@@ -272,5 +408,18 @@ export async function runGitCommand(
     proc.on("close", (code) => {
       resolve({ code, stdout, stderr });
     });
+    if (options.input !== undefined) proc.stdin?.end(options.input);
+    else proc.stdin?.end();
   });
+}
+
+async function requireGitSuccess(
+  repoPath: string,
+  args: string[],
+  label: string,
+  options: { env?: NodeJS.ProcessEnv; input?: string | Uint8Array } = {},
+) {
+  const result = await runGitCommand(repoPath, args, options);
+  if (result.code !== 0) throw new Error(gitFailureMessage(label, result));
+  return result;
 }

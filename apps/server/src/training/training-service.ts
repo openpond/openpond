@@ -157,6 +157,9 @@ export function createTrainingService(deps: {
   async function deleteTaskset(tasksetId: string) {
     const taskset = await deps.store.getTaskset(tasksetId);
     if (!taskset) throw new Error("Taskset not found.");
+    if (taskset.purpose === "benchmark" && taskset.benchmark?.source === "builtin") {
+      throw new Error("Built-in benchmark Tasksets are read-only.");
+    }
     const [plans, jobs, artifacts] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingJobs(),

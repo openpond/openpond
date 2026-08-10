@@ -102,23 +102,26 @@ export async function inspectBoundedPdfArtifactDiagnostics(
   cwd: string | null | undefined,
 ): Promise<Array<Record<string, unknown>>> {
   if (!cwd) return [];
-  let entries;
-  try {
-    entries = await fs.readdir(cwd, { withFileTypes: true });
-  } catch {
-    return [];
+  const pdfs: Array<{ filename: string; displayPath: string }> = [];
+  for (const root of [cwd, path.join(cwd, "outputs")]) {
+    const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".pdf")) continue;
+      pdfs.push({
+        filename: path.join(root, entry.name),
+        displayPath: path.relative(cwd, path.join(root, entry.name)).replaceAll(path.sep, "/"),
+      });
+      if (pdfs.length >= MAX_PDF_ARTIFACTS) break;
+    }
+    if (pdfs.length >= MAX_PDF_ARTIFACTS) break;
   }
-  const pdfs = entries
-    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".pdf"))
-    .slice(0, MAX_PDF_ARTIFACTS);
   return Promise.all(
-    pdfs.map(async (entry) => {
-      const filename = path.join(cwd, entry.name);
+    pdfs.map(async ({ filename, displayPath }) => {
       try {
         const metadata = await fs.stat(filename);
         if (metadata.size > MAX_PDF_BYTES) {
           return {
-            path: entry.name,
+            path: displayPath,
             mediaType: "application/pdf",
             check: "pdf_text_bounds",
             status: "unavailable",
@@ -130,10 +133,10 @@ export async function inspectBoundedPdfArtifactDiagnostics(
           maxBuffer: 8 * 1024 * 1024,
           timeout: 15_000,
         });
-        return pdfTextBoundsDiagnostic(entry.name, stdout);
+        return pdfTextBoundsDiagnostic(displayPath, stdout);
       } catch (error) {
         return {
-          path: entry.name,
+          path: displayPath,
           mediaType: "application/pdf",
           check: "pdf_text_bounds",
           status: "unavailable",
@@ -300,22 +303,10 @@ function selectRefinerEvidenceWindow(input: {
   limit: number;
 }): RuntimeEvent[] {
   const orderedExact = [...input.exactEvents].sort(compareRuntimeEvents);
-  const firstEvidenceSequence = orderedExact.reduce<number | null>(
-    (first, runtimeEvent) => {
-      if (runtimeEvent.sequence === undefined) return first;
-      return first === null
-        ? runtimeEvent.sequence
-        : Math.min(first, runtimeEvent.sequence);
-    },
-    null,
-  );
   const candidates = input.events
     .filter((runtimeEvent) =>
       runtimeEvent.turnId === input.turnId &&
       isRefinerEvidenceEvent(runtimeEvent) &&
-      (firstEvidenceSequence === null ||
-        runtimeEvent.sequence === undefined ||
-        runtimeEvent.sequence >= firstEvidenceSequence) &&
       (runtimeEvent.sequence === undefined || runtimeEvent.sequence <= input.boundarySequence),
     )
     .sort(compareRuntimeEvents);
@@ -330,12 +321,13 @@ function selectRefinerEvidenceWindow(input: {
   return [...retainedExact, ...tail].sort(compareRuntimeEvents);
 }
 
-function isRefinerEvidenceEvent(runtimeEvent: RuntimeEvent): boolean {
+export function isRefinerEvidenceEvent(runtimeEvent: RuntimeEvent): boolean {
   return [
     "tool.completed",
     "workspace_action_result",
     "skill.loaded",
     "validation.completed",
+    "diagnostic",
   ].includes(runtimeEvent.name);
 }
 

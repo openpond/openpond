@@ -40,6 +40,7 @@ type TrainingEvaluationAttemptInput = {
   tasksetId: string;
   task: TaskDataRecord;
   model: ChatModelRef;
+  reasoningEffort?: CodexReasoningEffort | "none" | null;
   seed: number;
   attempt: number;
   sampling?: {
@@ -58,12 +59,14 @@ export async function runPostTrainingEvaluationAttempt(input: {
   work?: {
     stream: TasksetWorkModelStream;
     runtime: TasksetWorkAttemptRuntime;
+    additionalToolDefinitions?: import("../openpond/model-tool-registry.js").ModelToolDefinition[];
     validateRequiredOutput?: Parameters<
       typeof runTasksetWorkAttempt
     >[0]["validateRequiredOutput"];
   };
   timestamp?: () => string;
   resultId?: string;
+  harnessInstructionContext?: string;
   attemptInput: TrainingEvaluationAttemptInput;
 }) {
   const timestamp = input.timestamp ?? (() => new Date().toISOString());
@@ -83,6 +86,7 @@ export async function runPostTrainingEvaluationAttempt(input: {
       taskset,
       task: input.attemptInput.task,
       model: input.attemptInput.model,
+      reasoningEffort: input.attemptInput.reasoningEffort,
       seed: input.attemptInput.seed,
       attempt: input.attemptInput.attempt,
       sampling: input.attemptInput.sampling,
@@ -91,7 +95,9 @@ export async function runPostTrainingEvaluationAttempt(input: {
       runtime: input.work.runtime,
       timestamp: input.timestamp,
       resultId: input.resultId,
+      harnessInstructionContext: input.harnessInstructionContext,
       validateRequiredOutput: input.work.validateRequiredOutput,
+      additionalToolDefinitions: input.work.additionalToolDefinitions,
     });
   }
   return isCrossSystemTaskset(taskset)

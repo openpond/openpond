@@ -68,6 +68,42 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("migrates version 40 stores to benchmark run storage", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.snapshot();
+      await initialStore.close();
+
+      const oldDb = openTestDatabase(storePath);
+      await run(oldDb, "DROP TABLE benchmark_comparisons");
+      await run(oldDb, "DROP TABLE benchmark_runs");
+      await run(oldDb, "PRAGMA user_version = 40");
+      await close(oldDb);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await migratedStore.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const tables = await all<{ name: string }>(
+          migratedDb,
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name IN ('benchmark_runs', 'benchmark_comparisons')
+           ORDER BY name`,
+        );
+        expect(tables.map((table) => table.name)).toEqual([
+          "benchmark_comparisons",
+          "benchmark_runs",
+        ]);
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
+    });
+  });
+
   test("migrates version 34 stores to immutable Work evidence tables", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");

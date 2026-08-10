@@ -60,6 +60,7 @@ export function LabDatasetsPage({
       (taskset) => taskset.id === selectedId,
     ) ?? null;
   const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
+  const builtIn = selected?.benchmark?.source === "builtin";
   const selectedArtifact = selected?.datasetArtifact
     ? state?.datasetArtifacts.find(
         (artifact) =>
@@ -118,32 +119,45 @@ export function LabDatasetsPage({
                 value="available"
               />
             ) : null}
-            <button
-              className="training-button secondary"
-              disabled={readOnly}
-              title={
-                readOnly
-                  ? "Switch to this Taskset's Profile to modify it."
-                  : "Improve this Taskset in Chat."
-              }
-              type="button"
-              onClick={() => onImproveInChat(selected)}
-            >
-              Improve in Chat
-            </button>
-            <button
-              className="training-button"
-              disabled={readOnly || !selected.readiness?.ready}
-              title={readOnly
-                ? "Switch to this Taskset's Profile before launching a Model run."
-                : selected.readiness?.ready
-                  ? "Create a Model run from this ready Taskset."
-                  : selected.readiness?.blockers[0]?.message ?? "Run Taskset checks before training."}
-              type="button"
-              onClick={() => onTrainModel(selected.id)}
-            >
-              Train Model
-            </button>
+            {!builtIn ? (
+              <button
+                className="training-button secondary"
+                disabled={readOnly}
+                title={
+                  readOnly
+                    ? "Switch to this Taskset's Profile to modify it."
+                    : "Improve this Taskset in Chat."
+                }
+                type="button"
+                onClick={() => onImproveInChat(selected)}
+              >
+                Improve in Chat
+              </button>
+            ) : null}
+            {selected.purpose === "benchmark" ? (
+              <button
+                className="training-button"
+                disabled={readOnly}
+                type="button"
+                onClick={() => setDetailTab("scoring")}
+              >
+                Run Benchmark
+              </button>
+            ) : (
+              <button
+                className="training-button"
+                disabled={readOnly || !selected.readiness?.ready}
+                title={readOnly
+                  ? "Switch to this Taskset's Profile before launching a Model run."
+                  : selected.readiness?.ready
+                    ? "Create a Model run from this ready Taskset."
+                    : selected.readiness?.blockers[0]?.message ?? "Run Taskset checks before training."}
+                type="button"
+                onClick={() => onTrainModel(selected.id)}
+              >
+                Train Model
+              </button>
+            )}
             <LabStatusBadge
               label={datasetStatus(selected)}
               value={selected.status}
@@ -229,13 +243,16 @@ export function LabDatasetsPage({
               <th>Validation</th>
               <th>Frozen Eval</th>
               <th>Graders</th>
-              <th>Models</th>
+              <th>Activity</th>
               <th>Updated</th>
             </tr>
           </thead>
           <tbody>
             {visible.map((taskset) => {
               const modelCount = modelCountByDataset.get(taskset.id) ?? 0;
+              const benchmarkRunCount = (state?.benchmarkRuns ?? []).filter(
+                (run) => run.metadata.sourceTasksetId === taskset.id,
+              ).length;
               return (
                 <tr key={taskset.id}>
                   <td>
@@ -252,7 +269,15 @@ export function LabDatasetsPage({
                   <td>{splitCount(taskset, state, "validation")}</td>
                   <td>{splitCount(taskset, state, "frozen_eval")}</td>
                   <td>{taskset.graders.length}</td>
-                  <td>{modelCount || "—"}</td>
+                  <td>
+                    {taskset.purpose === "benchmark"
+                      ? benchmarkRunCount
+                        ? `${benchmarkRunCount} run${benchmarkRunCount === 1 ? "" : "s"}`
+                        : "Not run"
+                      : modelCount
+                        ? `${modelCount} model${modelCount === 1 ? "" : "s"}`
+                        : "—"}
+                  </td>
                   <td>{formatCompactDate(taskset.updatedAt)}</td>
                 </tr>
               );
@@ -285,6 +310,59 @@ function TasksetHistory({
   const modelNames = new Map(
     (state?.modelProjects ?? []).map((project) => [project.id, project.name]),
   );
+  if (taskset.purpose === "benchmark") {
+    const evaluationRuns = runs.filter((run) => run.kind === "evaluation");
+    if (!evaluationRuns.length) {
+      return (
+        <div className="labs-table-empty">
+          This benchmark has not been run yet.
+        </div>
+      );
+    }
+    return (
+      <div className="training-table-wrap">
+        <table className="training-data-table">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Status</th>
+              <th>Quality</th>
+              <th>Token delta</th>
+              <th>Mode</th>
+              <th>Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {evaluationRuns.map((run) => {
+              const receipt = run.receipt?.schemaVersion
+                === "openpond.modelEvaluationReceipt.v1"
+                ? run.receipt
+                : null;
+              const delta = receipt?.foregroundTokenDelta ?? null;
+              return (
+                <tr key={run.id}>
+                  <td>{modelNames.get(run.modelId) ?? run.modelId}</td>
+                  <td>{run.status}</td>
+                  <td>
+                    {receipt
+                      ? `${Math.round(receipt.quality.candidatePassRate * 100)}% candidate`
+                      : "Pending"}
+                  </td>
+                  <td>
+                    {delta === null
+                      ? "—"
+                      : `${delta > 0 ? "+" : ""}${delta.toLocaleString()}`}
+                  </td>
+                  <td>{run.evaluation?.mode ?? "—"}</td>
+                  <td>{formatCompactDate(run.updatedAt)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
   if (!runs.length) {
     return (

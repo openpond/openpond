@@ -487,6 +487,8 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
       try {
         await this.run("DELETE FROM grade_results WHERE attempt_id IN (SELECT id FROM task_attempts WHERE taskset_id = ?)", [id]);
         await this.run("DELETE FROM evaluation_results WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM benchmark_runs WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM benchmark_comparisons WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);

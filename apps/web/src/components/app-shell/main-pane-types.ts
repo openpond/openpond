@@ -219,6 +219,7 @@ export type MainPaneProps = {
   ) => Promise<void>;
   setMentionedAppId: (appId: string | null) => void;
   showToast: ShowAppToast;
+  onSaveTaskDraft: (prompt: string) => Promise<boolean>;
   sendPrompt: (
     attachments?: ChatAttachment[],
     action?: SandboxActionCatalogEntry | null,

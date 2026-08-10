@@ -91,6 +91,10 @@ const CURRENT_OPENAI_MODEL_IDS = new Set([
   "gpt-5.2",
 ]);
 const OPENAI_FAMILY_PROVIDER_IDS = new Set<ProviderId>(["codex", "openai"]);
+const STARTER_MODELS_FIRST_PROVIDER_IDS = new Set<ProviderId>([
+  "openpond",
+  ...OPENAI_FAMILY_PROVIDER_IDS,
+]);
 
 function openAiFamilyModels(
   capabilities: Partial<ProviderModelCapabilities>,
@@ -113,7 +117,6 @@ const ZAI_PREVIOUS_DEFAULT_BASE_URLS = new Set([
   "https://api.z.ai/api/paas/v4",
   "https://open.bigmodel.cn/api/paas/v4",
 ]);
-
 const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
   {
     id: "openpond",
@@ -132,9 +135,40 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     models: [
       {
         id: "openpond-chat",
-        displayName: "OpenPond Chat",
+        displayName: "DeepSeek V4 Pro",
         contextWindow: 1_048_576,
-        capabilities: COMMON_OPENAI_COMPATIBLE_MODELS,
+        outputLimit: 393_216,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "accounts/fireworks/models/kimi-k3",
+        displayName: "Kimi K3",
+        contextWindow: 1_048_576,
+        capabilities: VISION_REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "accounts/fireworks/models/glm-5p2",
+        displayName: "GLM-5.2",
+        contextWindow: 1_048_576,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "accounts/fireworks/models/deepseek-v4-pro",
+        displayName: "DeepSeek V4 Pro (Fireworks)",
+        contextWindow: 1_048_576,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "accounts/fireworks/models/deepseek-v4-flash",
+        displayName: "DeepSeek V4 Flash (Fireworks)",
+        contextWindow: 1_048_576,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
+        id: "accounts/fireworks/models/minimax-m3",
+        displayName: "MiniMax M3",
+        contextWindow: 512_000,
+        capabilities: VISION_REASONING_MODEL_CAPABILITIES,
       },
     ],
   },
@@ -153,9 +187,7 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
     defaultEnabled: true,
     defaultModel: "gpt-5.6-sol",
     modelCacheSource: "curated",
-    models: [
-      ...openAiFamilyModels(REASONING_MODEL_CAPABILITIES),
-    ],
+    models: openAiFamilyModels(REASONING_MODEL_CAPABILITIES),
   },
   {
     id: "local-adapter",
@@ -562,10 +594,31 @@ function normalizeOpenAiFamilyPreset(preset: ServerProviderPreset): ServerProvid
   };
 }
 
+function normalizeOpenPondManagedPreset(
+  preset: ServerProviderPreset,
+): ServerProviderPreset {
+  if (preset.id !== "openpond") return preset;
+  const fallback = FALLBACK_PRESETS_BY_ID.get("openpond");
+  if (!fallback) return preset;
+  const models = new Map<string, ProviderPresetModel>();
+  for (const model of [...fallback.models, ...preset.models]) {
+    if (!models.has(model.id)) models.set(model.id, model);
+  }
+  return {
+    ...preset,
+    defaultModel: preset.defaultModel ?? fallback.defaultModel,
+    models: [...models.values()],
+  };
+}
+
 function providerPresetMap(catalog?: ProviderCatalog | null): Map<ProviderId, ServerProviderPreset> {
   const presets = new Map(FALLBACK_PRESETS_BY_ID);
   for (const provider of catalog?.providers ?? []) {
     presets.set(provider.id, serverPresetFromCatalogProvider(provider));
+  }
+  const openPondPreset = presets.get("openpond");
+  if (openPondPreset) {
+    presets.set("openpond", normalizeOpenPondManagedPreset(openPondPreset));
   }
   for (const providerId of OPENAI_FAMILY_PROVIDER_IDS) {
     const preset = presets.get(providerId);
@@ -595,7 +648,6 @@ export function getProviderPreset(
 export function parseProviderId(providerId: string): ProviderId {
   return ProviderIdSchema.parse(providerId);
 }
-
 export function providerAllowsLocalCredential(
   providerId: ProviderId,
   catalog?: ProviderCatalog | null,
@@ -603,19 +655,15 @@ export function providerAllowsLocalCredential(
   const modes = getProviderPreset(providerId, catalog).credentialModes;
   return modes.includes("local-byok") || modes.includes("custom");
 }
-
 export function parseProviderModelsRequest(input: unknown): ProviderModelsRequest {
   return ProviderModelsRequestSchema.parse(input);
 }
-
 export function parseProviderModelsRefreshRequest(input: unknown): ProviderModelsRefreshRequest {
   return ProviderModelsRefreshRequestSchema.parse(input);
 }
-
 export function parseProviderValidationRequest(input: unknown): ProviderValidationRequest {
   return ProviderValidationRequestSchema.parse(input);
 }
-
 function providerConfigForPreset(
   preset: ServerProviderPreset,
   stored: ProviderConfig | undefined,
@@ -738,7 +786,7 @@ function modelCacheForSettings(
       ? (existing?.models ?? []).filter((model) => model.id !== LEGACY_OPENAI_DEFAULT_MODEL)
       : existing?.models ?? [];
   const starterModels = starterModelsForPreset(preset, config, cacheSource);
-  const modelCandidates = OPENAI_FAMILY_PROVIDER_IDS.has(preset.id)
+  const modelCandidates = STARTER_MODELS_FIRST_PROVIDER_IDS.has(preset.id)
     ? [...starterModels, ...cachedModels]
     : [...cachedModels, ...starterModels];
   const models = uniqueModels(modelCandidates);

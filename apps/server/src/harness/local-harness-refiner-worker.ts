@@ -171,12 +171,28 @@ export async function runLocalHarnessRefinerWorker(input: {
     trigger,
     observations,
   );
+  const recentOutcomes = (await input.store.listHarnessImprovementArtifacts(
+    workspace.id,
+    "refiner_outcome",
+    100,
+  ) as HarnessRefinerOutcome[])
+    .filter((outcome) => outcome.trigger.contentHash !== trigger.contentHash)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 8)
+    .map((outcome) => ({
+      id: outcome.id,
+      decision: outcome.decision,
+      reason: outcome.reason,
+      createdAt: outcome.createdAt,
+      triggerId: outcome.trigger.id,
+    }));
   const refinerEvidence = {
     trigger: boundedTriggerEvidence(trigger),
     observations: observations.map(boundedObservationEvidence),
     task: boundedContext.task,
     eventExcerpts: boundedContext.eventExcerpts,
     artifactDiagnostics: boundedContext.artifactDiagnostics,
+    recentOutcomes,
     sourceFiles: source.files,
     sourceCatalog: source.catalog,
   };

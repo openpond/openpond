@@ -201,6 +201,43 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       : Promise.resolve({ schemaVersion: "openpond.trainingChatSearchResult.v1" as const, query, offset, limit, total: 0, hasMore: false, indexedChats: 0, totalChats: 0, indexing: false, entries: [] }),
     removeSource: (sourceId: string) => mutate("remove-source", `/sources/${encodeURIComponent(sourceId)}`, {}, "DELETE"),
     deleteTaskset: (tasksetId: string) => mutate<{ deleted: boolean; tasksetId: string }>("delete-model", `/tasksets/${encodeURIComponent(tasksetId)}`, {}, "DELETE"),
+    runBenchmark: (
+      tasksetId: string,
+      phase: "baseline" | "candidate",
+      model: ChatModelRef,
+      reasoningEffort: CodexReasoningEffort | "none" | null,
+    ) => mutate<{
+      run: TrainingStateResponse["benchmarkRuns"][number];
+      comparison: TrainingStateResponse["benchmarkComparisons"][number] | null;
+    }>(
+      `run-benchmark-${phase}`,
+      `/tasksets/${encodeURIComponent(tasksetId)}/benchmark-runs`,
+      {
+        phase,
+        model,
+        reasoningEffort,
+        seeds: [17],
+        repetitions: 1,
+      },
+    ),
+    startHarnessRefinerBenchmark: (
+      modelId: string,
+      model: ChatModelRef,
+      reasoningEffort: CodexReasoningEffort | "none" | null,
+      mode: "smoke" | "full",
+    ) => mutate<TrainingStateResponse["modelRuns"][number]>(
+      "run-harness-refiner-benchmark",
+      `/models/${encodeURIComponent(modelId)}/harness-refiner-benchmark`,
+      {
+        profileId,
+        model,
+        reasoningEffort,
+        mode,
+        seeds: [17],
+        repetitions: 1,
+        maximumSpendUsd: 0,
+      },
+    ),
     acceptHarnessReview: (
       workspaceId: string,
       reviewRef: { id: string; contentHash: string },

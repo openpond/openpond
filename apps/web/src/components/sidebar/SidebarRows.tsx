@@ -48,6 +48,7 @@ import type { WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { RenameChatDialog } from "./RenameChatDialog";
+import { isTaskDraftSession } from "../../lib/task-drafts";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -261,6 +262,7 @@ export function SidebarSessionRow({
       : "Running";
   const rowClassName = [
     "sidebar-task-row",
+    isTaskDraftSession(session) ? "is-draft" : "",
     onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "",
     rowRunning ? "has-running-dot" : "",
     projectLabel ? "has-project-detail" : "",

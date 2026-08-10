@@ -10,12 +10,43 @@ import {
 } from "../apps/web/src/components/settings/ProviderSettingsSection";
 import {
   modelOptionsForProvider,
+  providerOptionsFromSettings,
   providerModelSupportsReasoning,
 } from "../apps/web/src/lib/app-models";
 import { buildProviderSettings } from "../apps/server/src/openpond/provider-registry";
 import type { ProviderSecrets } from "../apps/server/src/openpond/provider-secrets";
 
 describe("provider model option capping", () => {
+  test("keeps the managed OpenPond catalog and effort picker available during fallback", () => {
+    const expectedModelIds = [
+      "openpond-chat",
+      "accounts/fireworks/models/kimi-k3",
+      "accounts/fireworks/models/glm-5p2",
+      "accounts/fireworks/models/deepseek-v4-pro",
+      "accounts/fireworks/models/deepseek-v4-flash",
+      "accounts/fireworks/models/minimax-m3",
+    ];
+    const settings = buildProviderSettings({
+      file: { version: 1, providers: {}, modelCaches: {} },
+    });
+
+    expect(modelOptionsForProvider("openpond", null).map((option) => option.value)).toEqual(
+      expectedModelIds,
+    );
+    expect(
+      modelOptionsForProvider("openpond", settings).map((option) => option.value),
+    ).toEqual(expectedModelIds);
+    expect(
+      modelOptionsForProvider("openpond", settings)[0],
+    ).toMatchObject({ value: "openpond-chat", label: "DeepSeek V4 Pro" });
+    expect(
+      providerOptionsFromSettings(settings).find((option) => option.value === "openpond"),
+    ).toEqual({ value: "openpond", label: "OpenPond Chat", description: undefined });
+    for (const modelId of expectedModelIds) {
+      expect(providerModelSupportsReasoning("openpond", modelId, settings)).toBe(true);
+    }
+  });
+
   test("caps large provider model lists", () => {
     const options = Array.from({ length: 200 }, (_, index) => ({
       value: `model-${index}`,

@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 
-import { pdfTextBoundsDiagnostic } from "./local-harness-refiner-context.js";
+import type { RuntimeEvent } from "@openpond/contracts";
+
+import {
+  isRefinerEvidenceEvent,
+  pdfTextBoundsDiagnostic,
+} from "./local-harness-refiner-context.js";
 
 describe("local Harness artifact diagnostics", () => {
   test("reports PDF text that extends beyond a page boundary", () => {
@@ -20,5 +25,12 @@ describe("local Harness artifact diagnostics", () => {
       clippedTextCount: 1,
       examples: [{ page: 1, text: "Summary", xMin: -9.146 }],
     });
+  });
+
+  test("keeps diagnostics in the bounded model-reviewed evidence window", () => {
+    expect(isRefinerEvidenceEvent({
+      name: "diagnostic",
+      action: "taskset_grade",
+    } as RuntimeEvent)).toBe(true);
   });
 });

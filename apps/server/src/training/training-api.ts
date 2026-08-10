@@ -26,6 +26,8 @@ import type { createTrainingService } from "./training-service.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
+import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
+import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
 import { trainingRunDetail } from "./run-detail.js";
 import {
   advanceUnexecutedModelRunTasksetRef,
@@ -59,6 +61,14 @@ import {
   requiredImmutableRef,
   sameImmutableRef,
 } from "./harness-training-api-inputs.js";
+import {
+  evaluationModelRunStatus,
+  loadBenchmarkHistory,
+} from "./training-benchmark-state.js";
+import {
+  runTasksetBenchmark,
+  startHarnessRefinerBenchmark,
+} from "./training-benchmark-actions.js";
 
 type TaskCreator = ReturnType<typeof createTaskCreatorService>;
 type TaskMiner = ReturnType<typeof createTaskMinerService>;
@@ -68,6 +78,8 @@ type StartedTrainingResult = Awaited<ReturnType<Training["start"]>>;
 type TrainingChatSearch = ReturnType<typeof createTrainingChatSearchService>;
 type DatasetArtifacts = ReturnType<typeof createDatasetArtifactService>;
 type DatasetImports = ReturnType<typeof createDatasetImportService>;
+type BenchmarkTasksets = ReturnType<typeof createBenchmarkTasksetService>;
+type HarnessRefinerBenchmarks = ReturnType<typeof createHarnessRefinerBenchmarkService>;
 
 export function createTrainingApi(deps: {
   store: SqliteStore;
@@ -78,6 +90,8 @@ export function createTrainingApi(deps: {
   chatSearch: TrainingChatSearch;
   datasetArtifacts: DatasetArtifacts;
   datasetImports: DatasetImports;
+  benchmarkTasksets: BenchmarkTasksets;
+  harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
 }) {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
@@ -95,6 +109,12 @@ export function createTrainingApi(deps: {
           ?? requestUrl?.searchParams.get("profileId")
           ?? "default",
       );
+    }
+    if (action === "run_taskset_benchmark") {
+      return runTasksetBenchmark(deps.evaluation, input);
+    }
+    if (action === "start_harness_refiner_benchmark") {
+      return startHarnessRefinerBenchmark(deps.harnessRefinerBenchmarks, input);
     }
     if (action === "save_model_project") {
       const project = ModelProjectSchema.parse(input);
@@ -409,7 +429,14 @@ export function createTrainingApi(deps: {
       exportApproved: input.exportApproved === true,
       manifest: input.manifest,
     });
-    if (action === "model_run_status") return deps.training.modelRunStatus(requiredString(input.modelRunId, "modelRunId"));
+    if (action === "model_run_status") {
+      const modelRunId = requiredString(input.modelRunId, "modelRunId");
+      const evaluationRun = await deps.store.getModelRun(modelRunId);
+      if (evaluationRun?.kind === "evaluation") {
+        return evaluationModelRunStatus(evaluationRun);
+      }
+      return deps.training.modelRunStatus(modelRunId);
+    }
     if (action === "model_run_events") return deps.training.modelRunEvents(requiredString(input.modelRunId, "modelRunId"));
     if (action === "model_run_logs") return deps.training.modelRunLogs(requiredString(input.modelRunId, "modelRunId"));
     if (action === "model_run_artifacts") return deps.training.modelRunArtifacts(requiredString(input.modelRunId, "modelRunId"));
@@ -570,6 +597,7 @@ export function createTrainingApi(deps: {
   }
 
   async function state(profileId: string) {
+    await deps.benchmarkTasksets.ensureHarnessRefiner({ profileId });
     const [
       sources,
       creations,
@@ -606,6 +634,10 @@ export function createTrainingApi(deps: {
     const evaluationResults = (await Promise.all(
       tasksets.map((taskset) => deps.store.listEvaluationResults(taskset.id)),
     )).flat();
+    const { benchmarkRuns, benchmarkComparisons } = await loadBenchmarkHistory(
+      deps.store,
+      tasksets,
+    );
     const activity = projectTrainingActivity({
       profileId,
       state: {
@@ -621,6 +653,8 @@ export function createTrainingApi(deps: {
       sources,
       creations,
       tasksets,
+      benchmarkRuns,
+      benchmarkComparisons,
       datasetImports,
       datasetArtifacts,
       graderAuditReports,

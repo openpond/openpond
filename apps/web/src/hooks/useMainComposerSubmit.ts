@@ -22,6 +22,7 @@ export function useMainComposerSubmit({
   bindTrainingSession,
   composerDraftStore,
   onSessionCreated,
+  onSubmitted,
   prepareTrainingTurn,
   sendPrompt,
   setMentionedAppId,
@@ -31,6 +32,7 @@ export function useMainComposerSubmit({
   bindTrainingSession: (sessionId: string) => void;
   composerDraftStore: ComposerDraftStore;
   onSessionCreated: (session: Session) => void;
+  onSubmitted?: () => Promise<void> | void;
   prepareTrainingTurn: (prompt: string) => {
     active: boolean;
     error: string | null;
@@ -68,6 +70,7 @@ export function useMainComposerSubmit({
           ? { ...(trainingTurn.metadata ?? {}), ...(options.turnMetadata ?? {}) }
           : undefined,
     });
+    if (sent) await onSubmitted?.();
     if (sent && trainingTurn.metadata) advanceTrainingTurn();
     return sent;
   }, [
@@ -75,6 +78,7 @@ export function useMainComposerSubmit({
     bindTrainingSession,
     composerDraftStore,
     onSessionCreated,
+    onSubmitted,
     prepareTrainingTurn,
     sendPrompt,
     setMentionedAppId,

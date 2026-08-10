@@ -2,12 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import type { HarnessHistoryPayload } from "@openpond/contracts";
 
 import { api, type ClientConnection } from "../../api";
-import { X } from "../icons";
+import { Settings, X } from "../icons";
 
 export function HarnessLearningSidebarCard({
   connection,
+  onOpenSettings,
 }: {
   connection: ClientConnection | null;
+  onOpenSettings: () => void;
 }) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
   const [busy, setBusy] = useState<"refiner" | "review" | null>(null);
@@ -36,18 +38,28 @@ export function HarnessLearningSidebarCard({
     <section className="sidebar-learning-notice" aria-label="Continuous learning">
       <header>
         <strong>Continuous learning</strong>
-        <button
-          className="sidebar-learning-notice-dismiss"
-          aria-label="Close continuous learning"
-          onClick={() => setDismissed(true)}
-          type="button"
-        >
-          <X size={14} />
-        </button>
+        <div className="sidebar-learning-notice-actions">
+          <button
+            className="sidebar-learning-notice-action"
+            aria-label="Open Continuous learning settings"
+            onClick={onOpenSettings}
+            type="button"
+          >
+            <Settings size={14} />
+          </button>
+          <button
+            className="sidebar-learning-notice-action"
+            aria-label="Close continuous learning"
+            onClick={() => setDismissed(true)}
+            type="button"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </header>
       <label className="sidebar-learning-control">
-        <span><strong>Refiner</strong><small>After each turn</small></span>
-        <span className="provider-toggle sidebar-learning-toggle">
+        <strong>Refiner</strong>
+        <span className="sidebar-learning-toggle">
           <input
             checked={history.backgroundReview.enabled}
             disabled={busy !== null}
@@ -66,8 +78,8 @@ export function HarnessLearningSidebarCard({
         </span>
       </label>
       <label className="sidebar-learning-control">
-        <span><strong>Pattern review</strong><small>{schedule.cadence}</small></span>
-        <span className="provider-toggle sidebar-learning-toggle">
+        <strong>RL review</strong>
+        <span className="sidebar-learning-toggle">
           <input
             checked={schedule.enabled}
             disabled={busy !== null}

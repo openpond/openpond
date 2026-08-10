@@ -19,7 +19,10 @@ import {
   WORK_STARTER_PROMPTS,
   WorkStarterPrompts,
 } from "../apps/web/src/components/app-shell/WorkStarterPrompts";
-import { sidebarSessionsForExperience } from "../apps/web/src/lib/experience-sessions";
+import {
+  projectlessSidebarSessionLabel,
+  sidebarSessionsForExperience,
+} from "../apps/web/src/lib/experience-sessions";
 import {
   chatTaskModeForExperience,
   LAST_CHAT_TASK_MODE_STORAGE_KEY,
@@ -99,6 +102,18 @@ describe("Work experience navigation", () => {
         (item) => item.id
       )
     ).toEqual(["work", "development"]);
+  });
+
+  test("labels projectless saved items from their persisted experience", () => {
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "chat" }))
+    ).toBe("Chat");
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "work" }))
+    ).toBe("Work");
+    expect(
+      projectlessSidebarSessionLabel(session({ experience: "development" }))
+    ).toBe("Work");
   });
 
   test("renders the wordmark trigger and truthful Work starter examples", () => {

@@ -36,6 +36,7 @@ export function createTrainingModelRuntime(deps: {
     temperature?: number;
     topP?: number;
     seed?: number;
+    onUsage?: (usage: unknown, costUsd?: number) => void;
   }): Promise<string> {
     let text = "";
     if (input.model.providerId === LOCAL_ADAPTER_PROVIDER_ID) {
@@ -43,9 +44,12 @@ export function createTrainingModelRuntime(deps: {
         modelId: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
+        maxNewTokens: input.maxOutputTokens,
+        temperature: input.temperature,
         signal: input.signal,
       })) {
         if (delta.text) text += delta.text;
+        if (delta.usage !== undefined) input.onUsage?.(delta.usage);
       }
       return text;
     }
@@ -54,9 +58,23 @@ export function createTrainingModelRuntime(deps: {
         model: input.model.modelId,
         messages: input.messages,
         requestId: input.requestId,
+        reasoningEffort:
+          input.reasoningEffort === "none"
+            ? undefined
+            : input.reasoningEffort ?? undefined,
+        maxTokens: input.maxOutputTokens,
+        temperature: input.temperature,
+        topP: input.topP,
         signal: input.signal,
       })) {
         if (delta.type === "text_delta" && delta.text) text += delta.text;
+        if (delta.type === "usage") {
+          const cost = costFromUsage(delta.usage);
+          input.onUsage?.(
+            delta.usage,
+            "costUsd" in cost ? cost.costUsd : undefined,
+          );
+        }
       }
       return text;
     }
@@ -76,6 +94,13 @@ export function createTrainingModelRuntime(deps: {
       seed: input.seed,
     })) {
       if (delta.type === "text_delta" && delta.text) text += delta.text;
+      if (delta.type === "usage") {
+        const cost = costFromUsage(delta.usage);
+        input.onUsage?.(
+          delta.usage,
+          "costUsd" in cost ? cost.costUsd : undefined,
+        );
+      }
     }
     return text;
   }
@@ -112,6 +137,9 @@ export function createTrainingModelRuntime(deps: {
             input.reasoningEffort === "none"
               ? undefined
               : input.reasoningEffort ?? undefined,
+          maxTokens: input.maxOutputTokens,
+          temperature: input.temperature,
+          topP: input.topP,
           signal: input.signal,
         })) {
           if (delta.type === "text_delta" && delta.text) {

@@ -26,6 +26,10 @@
       "types": "./dist/types/tasksets.d.ts",
       "import": "./dist/tasksets.js"
     },
+    "./benchmarks": {
+      "types": "./dist/types/benchmarks.d.ts",
+      "import": "./dist/benchmarks.js"
+    },
     "./graders": {
       "types": "./dist/types/graders.d.ts",
       "import": "./dist/graders.js"

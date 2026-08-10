@@ -12,6 +12,8 @@ import {
   SidebarUtilityNavigation,
 } from "../apps/web/src/components/sidebar/SidebarNavigation";
 import { SIDEBAR_HELP_ITEMS } from "../apps/web/src/components/sidebar/SidebarHelpMenu";
+import { CollaborationHeaderActions } from "../apps/web/src/components/collaboration/CollaborationHeaderActions";
+import { CollaborationTabs } from "../apps/web/src/components/collaboration/CollaborationTabs";
 import type { SidebarSectionMenuId } from "../apps/web/src/app/app-state";
 import type { AppView } from "../apps/web/src/lib/app-models";
 
@@ -111,6 +113,40 @@ describe("Sidebar navigation", () => {
       label: "Docs",
       url: "https://openpond.ai/docs",
     });
+  });
+
+  test("renders Team chat and Discover as main header icons", () => {
+    const markup = renderToStaticMarkup(
+      createElement(CollaborationHeaderActions, {
+        activeView: "team",
+        onDiscoverCommunities: () => undefined,
+        onOpenTeamChat: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Team chat"');
+    expect(markup).toContain('class="titlebar-icon active"');
+    expect(markup).toContain("lucide-message-square");
+    expect(markup).not.toContain(">Team chat</button>");
+    expect(markup).toContain('aria-label="Discover communities"');
+    expect(markup).toContain("lucide-earth");
+    expect(markup).not.toContain('aria-haspopup="menu"');
+  });
+
+  test("uses tabs for Team chat and Communities", () => {
+    const markup = renderToStaticMarkup(
+      createElement(CollaborationTabs, {
+        onSelect: () => undefined,
+        view: "community",
+      }),
+    );
+
+    expect(markup).toContain('aria-label="Collaboration"');
+    expect(markup).toContain(">Team chat</span>");
+    expect(markup).toContain(">Communities</span>");
+    expect(markup).not.toContain("lucide-message-square");
+    expect(markup).toContain("lucide-earth");
+    expect(markup).toContain('aria-current="page" class="active"');
   });
 
   test("highlights Schedule, Outputs, and Models destinations independently", () => {

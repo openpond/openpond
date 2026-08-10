@@ -1,7 +1,7 @@
 .main-pane.team-active {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
@@ -16,7 +16,12 @@
 
 .main-pane.team-active > .team-chat-view {
   grid-column: 1;
-  grid-row: 1;
+  grid-row: 2;
+}
+
+.main-pane.team-active > .team-ai-thread-panel {
+  grid-column: 2;
+  grid-row: 2;
 }
 
 .team-chat-view {

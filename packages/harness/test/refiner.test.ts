@@ -16,8 +16,9 @@ const evidence: LocalHarnessRefinerEvidence = {
     assistantOutputLinkCount: 0,
     previousAssistantOutput: null,
   },
-    eventExcerpts: [],
-    artifactDiagnostics: [],
+  eventExcerpts: [],
+  artifactDiagnostics: [],
+  recentOutcomes: [],
   sourceFiles: [],
   sourceCatalog: [],
 };
@@ -28,10 +29,15 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("Judge the evidence yourself");
     expect(system).toContain("Do not assume a supplied trigger");
     expect(system).toContain("actual user-visible answer and artifacts");
+    expect(system).toContain("taskset_grade diagnostic");
+    expect(system).toContain("authoritative outcome evidence");
+    expect(system).toContain("bounded adaptation evaluationCriteria");
+    expect(system).toContain("Do not dismiss that evidence merely as a hidden constraint");
     expect(system).toContain("missing requested citations or links");
     expect(system).toContain("assistantOutputLinkCount");
     expect(system).toContain("named sources without clickable links");
     expect(system).toContain("current web verification");
+    expect(system).toContain("recurrence evidence");
     expect(system).toContain("Never force a change");
   });
 

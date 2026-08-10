@@ -1,4 +1,5 @@
 export * from "./compatibility.js";
+export * from "./benchmarks.js";
 export * from "./evidence/index.js";
 export * from "./graders.js";
 export * from "./harness.js";

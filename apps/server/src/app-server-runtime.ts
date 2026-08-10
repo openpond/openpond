@@ -25,6 +25,7 @@ import {
   ensureSelectedLocalHarnessWorkspace,
   resolveSelectedLocalHarnessRelease,
 } from "./harness/local-harness-selection.js";
+import { loadSelectedLocalHarnessRuntime } from "./harness/local-harness-skill-runtime.js";
 import {
   ensureLocalHarnessRunOverlay,
   loadLocalHarnessRuntimeForAgentRun,
@@ -199,11 +200,12 @@ export async function createOpenPondAppServer(
           store.runtimeEventsForSession(sessionId),
       },
       resolveReleasedHarness: async () => {
-        const release = await resolveSelectedLocalHarnessRelease(store);
-        return release
+        const runtime = await loadSelectedLocalHarnessRuntime(store);
+        return runtime
           ? {
-              agentSnapshot: release.agentSnapshot,
-              harnessRelease: release.harnessRelease,
+              agentSnapshot: runtime.release.agentSnapshot,
+              harnessRelease: runtime.release.harnessRelease,
+              instructionContext: runtime.instructionContext,
             }
           : null;
       },

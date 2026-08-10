@@ -1,9 +1,9 @@
 # `@openpond/evals`
 
-Portable evaluation contracts and pure helpers for Tasksets, graders, run
-manifests, attempt and evaluation receipts, execution adapters, conformance
-fixtures, Work-evidence eligibility, and no-training/SFT/preference/RL
-qualification receipts. The package depends on
+Portable evaluation and benchmark contracts plus pure helpers for Tasksets,
+graders, run manifests, attempt and evaluation receipts, paired benchmark
+comparisons, execution adapters, conformance fixtures, Work-evidence
+eligibility, and no-training/SFT/preference/RL qualification receipts. The package depends on
 [`@openpond/harness`](../harness/README.md) for exact Harness identities but
 does not re-export Harness APIs. Applications import the two packages directly,
 which keeps refinement and evaluation authority visibly separate.
@@ -13,6 +13,8 @@ import {
   AttemptReceiptSchema,
   TasksetReleaseSchema,
   ModelImprovementQualificationReceiptSchema,
+  BenchmarkDefinitionSchema,
+  compareBenchmarkRuns,
   validateTasksetRelease,
   verifyAttemptReceipt,
 } from "@openpond/evals";
@@ -26,11 +28,26 @@ import {
 } from "@openpond/evals/evidence";
 ```
 
-Subpath exports are available at `/harness`, `/tasksets`, `/graders`, `/runs`,
+Subpath exports are available at `/harness`, `/tasksets`, `/benchmarks`, `/graders`, `/runs`,
 `/conformance`, `/evidence`, `/review`, and
 `/model-improvement-qualification`. The package is an evaluation protocol library,
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
+
+## Benchmarks
+
+`BenchmarkDefinition` binds a named benchmark to an immutable Taskset Release,
+its adaptation and held-out splits, primary metric, and quality gate.
+`BenchmarkRunSummary` records the pinned model and reasoning effort together
+with pass counts, foreground provider usage, cost, and latency. Compare a
+baseline and candidate with `compareBenchmarkRuns`; it rejects mismatched
+Taskset releases, models, reasoning effort, cases, seeds, repetitions, runtime,
+environment, tools, or limits and never reports an efficiency win when the
+configured quality gate fails.
+
+The package defines portable schemas and comparison math. Hosts remain
+responsible for scheduling cases, pinning runtime and tools, persisting
+receipts, and keeping held-out evidence out of adaptation.
 
 ## Harness Evaluation review
 

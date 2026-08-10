@@ -1,0 +1,115 @@
+.labs-model-compare-dialog {
+  width: min(980px, calc(100vw - 40px));
+  max-height: min(860px, calc(100vh - 40px));
+  overflow: hidden;
+}
+
+.labs-model-compare-dialog > header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.labs-model-compare-body {
+  display: grid;
+  min-height: 0;
+  gap: 18px;
+  overflow: auto;
+  padding: 0 20px 20px;
+}
+
+.labs-model-compare-selectors,
+.labs-model-compare-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.labs-model-compare-selectors label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.labs-model-compare-selectors select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 9px;
+  font: inherit;
+  font-size: 11px;
+}
+
+.labs-model-compare-facts article {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--panel);
+  padding: 14px;
+}
+
+.labs-model-compare-facts article > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.labs-model-compare-facts article > header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.labs-model-compare-facts article > header span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labs-model-compare-facts article > header .training-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.labs-model-compare-facts dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--border-subtle);
+}
+
+.labs-model-compare-facts dl > div {
+  display: grid;
+  gap: 4px;
+  background: var(--panel);
+  padding: 10px;
+}
+
+.labs-model-compare-facts dt {
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.labs-model-compare-facts dd {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 760px) {
+  .labs-model-compare-selectors,
+  .labs-model-compare-facts {
+    grid-template-columns: 1fr;
+  }
+}
