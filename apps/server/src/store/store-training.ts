@@ -866,7 +866,7 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
         ? "SELECT payload FROM model_artifact_lineage WHERE taskset_id = ? ORDER BY created_at DESC"
         : "SELECT payload FROM model_artifact_lineage ORDER BY created_at DESC",
       tasksetId ? [tasksetId] : [],
-      ModelArtifactLineageSchema.parse,
+      parseStoredModelArtifactLineage,
     );
   }
 
@@ -874,7 +874,7 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
     return this.getParsedPayload(
       "SELECT payload FROM model_artifact_lineage WHERE id = ?",
       [id],
-      ModelArtifactLineageSchema.parse,
+      parseStoredModelArtifactLineage,
     );
   }
 
@@ -898,7 +898,29 @@ function parseStoredReadinessReport(value: unknown): TasksetReadinessReport {
 }
 
 function parseStoredModelProject(value: unknown): ModelProject {
-  return ModelProjectSchema.parse(value);
+  return ModelProjectSchema.parse(normalizeStoredModelProjectDestination(value));
+}
+
+function normalizeStoredModelProjectDestination(value: unknown): unknown {
+  if (
+    !isRecord(value)
+    || typeof value.defaultDestinationId !== "string"
+    || value.defaultDestinationId === "openpond_managed"
+  ) {
+    return value;
+  }
+  return { ...value, defaultDestinationId: null };
+}
+
+function parseStoredModelArtifactLineage(value: unknown): ModelArtifactLineage {
+  return ModelArtifactLineageSchema.parse(normalizeStoredManagedServingProjection(value));
+}
+
+function normalizeStoredManagedServingProjection(value: unknown): unknown {
+  if (!isRecord(value) || !isRecord(value.managedServing)) return value;
+  const source = value.managedServing.source;
+  if (source !== "openpond_fireworks" && source !== "openpond_training") return value;
+  return { ...value, managedServing: null };
 }
 
 function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
