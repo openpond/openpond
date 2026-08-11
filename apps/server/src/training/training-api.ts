@@ -62,9 +62,12 @@ import {
   sameImmutableRef,
 } from "./harness-training-api-inputs.js";
 import {
-  evaluationModelRunStatus,
   loadBenchmarkHistory,
 } from "./training-benchmark-state.js";
+import {
+  handleModelRunControl,
+  isModelRunControlAction,
+} from "./training-api-model-run-control.js";
 import {
   runTasksetBenchmark,
   startHarnessRefinerBenchmark,
@@ -429,18 +432,13 @@ export function createTrainingApi(deps: {
       exportApproved: input.exportApproved === true,
       manifest: input.manifest,
     });
-    if (action === "model_run_status") {
-      const modelRunId = requiredString(input.modelRunId, "modelRunId");
-      const evaluationRun = await deps.store.getModelRun(modelRunId);
-      if (evaluationRun?.kind === "evaluation") {
-        return evaluationModelRunStatus(evaluationRun);
-      }
-      return deps.training.modelRunStatus(modelRunId);
-    }
-    if (action === "model_run_events") return deps.training.modelRunEvents(requiredString(input.modelRunId, "modelRunId"));
-    if (action === "model_run_logs") return deps.training.modelRunLogs(requiredString(input.modelRunId, "modelRunId"));
-    if (action === "model_run_artifacts") return deps.training.modelRunArtifacts(requiredString(input.modelRunId, "modelRunId"));
-    if (action === "cancel_model_run") return deps.training.cancelModelRun(requiredString(input.modelRunId, "modelRunId"));
+    if (isModelRunControlAction(action)) return handleModelRunControl({
+      action,
+      modelRunId: input.modelRunId,
+      loadRun: (id) => deps.store.getModelRun(id),
+      training: deps.training,
+      harnessRefinerBenchmarks: deps.harnessRefinerBenchmarks,
+    });
     if (action === "build_bundle") return deps.training.buildBundle(requiredString(input.planId, "planId"));
     if (action === "approve_training") return deps.training.approve({ planId: requiredString(input.planId, "planId"), bundleId: requiredString(input.bundleId, "bundleId"), approvedBy: string(input.approvedBy) ?? undefined, maximumCostUsd: nullableNumber(input.maximumCostUsd) });
     if (action === "launch") return deps.training.launch({ planId: requiredString(input.planId, "planId"), approvalId: requiredString(input.approvalId, "approvalId") });

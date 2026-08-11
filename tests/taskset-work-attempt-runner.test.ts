@@ -216,8 +216,21 @@ describe("Taskset Work attempt runner", () => {
             action: "work_write_file",
             status: "completed",
           }),
+          expect.objectContaining({
+            name: "assistant.delta",
+            output: "Completed the normalized inventory.",
+          }),
+          expect.objectContaining({
+            name: "turn.completed",
+            status: "completed",
+          }),
         ]),
       );
+      expect(await store.getTurn(attempt.metadata.turnId as string)).toMatchObject({
+        prompt: expect.stringContaining("Normalize the staged inventory"),
+        status: "completed",
+        completedAt: expect.any(String),
+      });
       expect(artifacts.map((artifact) => artifact.kind).sort()).toEqual([
         "output_artifact",
         "runtime_trace",

@@ -927,8 +927,15 @@ function normalizeStoredReadinessDestinationClasses(value: unknown): unknown {
   if (!isRecord(value)) return value;
   const readiness = isRecord(value.readiness) ? value.readiness : value;
   if (!Array.isArray(readiness.compatibleDestinationClasses)) return value;
+  const supportedDestinationClasses = new Set([
+    "export",
+    "custom",
+    "hosted_managed",
+  ]);
   const compatibleDestinationClasses = readiness.compatibleDestinationClasses.filter(
-    (destinationClass) => destinationClass !== "openpond_managed" && destinationClass !== "hosted_byok",
+    (destinationClass): destinationClass is string =>
+      typeof destinationClass === "string"
+      && supportedDestinationClasses.has(destinationClass),
   );
   if (compatibleDestinationClasses.length === readiness.compatibleDestinationClasses.length) return value;
   const normalizedReadiness = { ...readiness, compatibleDestinationClasses };

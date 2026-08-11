@@ -7,7 +7,7 @@ import type {
   RuntimeEvent,
   Session,
 } from "@openpond/contracts";
-import type { ClientConnection } from "../api";
+import { api, type ClientConnection } from "../api";
 import type { RightChatPanel, RightPanelMode, ShowAppToast } from "../app/app-state";
 import type { ComposerSubmitOptions } from "../components/chat/Composer";
 import type { WorkspaceDiffTabRequest } from "../components/workspace-diff/workspace-diff-panel-model";
@@ -107,6 +107,48 @@ export function useRightChatPanels(input: {
   } = input;
   const knownSubagentChildSessionIdsRef = useRef<Set<string> | null>(null);
   const pendingAutoDockSubagentSessionsRef = useRef<Map<string, Session>>(new Map());
+  const loadingSessionHistoryIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!connection) return undefined;
+    const sessionIds = rightChatPanels.flatMap((panel) =>
+      panel.sessionId && !isCodexHistorySessionId(panel.sessionId)
+        ? [panel.sessionId]
+        : []
+    );
+    for (const sessionId of sessionIds) {
+      if (
+        Object.hasOwn(rightChatHistoryEvents, sessionId)
+        || loadingSessionHistoryIdsRef.current.has(sessionId)
+      ) continue;
+      loadingSessionHistoryIdsRef.current.add(sessionId);
+      void api.runtimeEventsPage(connection, {
+        sessionId,
+        beforeSequence: Number.MAX_SAFE_INTEGER,
+        limit: 500,
+      }).then((page) => {
+        const events = page.events.map((entry) => entry.event);
+        setRightChatHistoryEvents((current) => ({
+          ...current,
+          [sessionId]: mergeRuntimeEventLists(
+            current[sessionId] ?? EMPTY_RUNTIME_EVENTS,
+            events,
+          ),
+        }));
+      }).catch((historyError) => {
+        setError(historyError instanceof Error ? historyError.message : String(historyError));
+      }).finally(() => {
+        loadingSessionHistoryIdsRef.current.delete(sessionId);
+      });
+    }
+    return undefined;
+  }, [
+    connection,
+    rightChatHistoryEvents,
+    rightChatPanels,
+    setError,
+    setRightChatHistoryEvents,
+  ]);
 
   const showRightPanelDiffTab = useCallback(
     (tab: WorkspaceDiffTabRequest["tab"]) => {

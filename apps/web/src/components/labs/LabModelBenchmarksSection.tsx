@@ -4,6 +4,7 @@ import {
   type ChatProvider,
   type CodexReasoningEffort,
   type ModelEvaluationReceipt,
+  type ModelEvaluationStopReceipt,
   type ProviderSettings,
 } from "@openpond/contracts";
 
@@ -19,6 +20,10 @@ import {
 } from "../../lib/app-models";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
 import { LabStatusBadge } from "./LabStatusBadge";
+import {
+  benchmarkForegroundUsage,
+  benchmarkTaskEfficiency,
+} from "./benchmark-attempt-usage";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
 type TrainingController = ReturnType<typeof useTraining>;
@@ -45,7 +50,6 @@ export function LabModelBenchmarksSection({
   onToast: ShowAppToast;
 }) {
   const [effort, setEffort] = useState<CodexReasoningEffort>("high");
-  const [mode, setMode] = useState<"smoke" | "full">("full");
   const [configuredModel, setConfiguredModel] = useState<ChatModelRef>(
     initialModel ?? defaultModel,
   );
@@ -64,6 +68,9 @@ export function LabModelBenchmarksSection({
   );
   const latest = runs[0] ?? null;
   const receipt = evaluationReceipt(latest?.receipt ?? null);
+  const foregroundUsage = receipt ? benchmarkForegroundUsage(receipt) : null;
+  const taskEfficiency = receipt ? benchmarkTaskEfficiency(receipt) : null;
+  const stopReceipt = evaluationStopReceipt(latest?.receipt ?? null);
   const taskset = (training.payload?.tasksets ?? []).find(
     (candidate) => candidate.benchmark?.definitionId === "harness-refiner",
   );
@@ -79,7 +86,6 @@ export function LabModelBenchmarksSection({
         workproduct.id,
         configuredModel,
         effort,
-        mode,
       );
       if (!run) throw new Error("Benchmark start returned no Model Run.");
       onOpenEntry(`model-run:${run.id}`);
@@ -122,14 +128,21 @@ export function LabModelBenchmarksSection({
           <div>
             <h3>Harness Refiner</h3>
             <p>
-              Tests whether an evidence-driven Harness update preserves quality
-              while reducing held-out foreground tokens.
+              Tests whether every task uses fewer foreground tokens after an
+              evidence-driven Harness update. Quality is measured separately.
+              Each run is watched to terminal state with a $10 maximum provider spend.
             </p>
           </div>
           {latest ? (
             <LabStatusBadge
-              label={receipt ? resultLabel(receipt) : statusLabel(latest.status)}
-              value={receipt?.terminalClassification ?? latest.status}
+              label={receipt
+                ? resultLabel(receipt)
+                : stopReceipt
+                  ? "Inconclusive"
+                  : statusLabel(latest.status)}
+              value={receipt
+                ? taskEfficiency?.passed ? "succeeded" : "failed"
+                : stopReceipt?.terminalClassification ?? latest.status}
             />
           ) : (
             <LabStatusBadge label="Not run" value="not_run" />
@@ -143,20 +156,20 @@ export function LabModelBenchmarksSection({
                 {
                   id: "baseline",
                   label: "Baseline",
-                  inputTokens: receipt.usage.baseline.inputTokens,
-                  outputTokens: receipt.usage.baseline.outputTokens,
-                  tokens: receipt.usage.baseline.totalTokens,
+                  inputTokens: foregroundUsage!.baseline.inputTokens,
+                  outputTokens: foregroundUsage!.baseline.outputTokens,
+                  tokens: foregroundUsage!.baseline.totalTokens,
                   passRate: receipt.quality.baselinePassRate,
-                  costUsd: receipt.usage.baseline.costUsd,
+                  costUsd: foregroundUsage!.baseline.costUsd,
                 },
                 {
                   id: "candidate",
                   label: "Candidate Harness",
-                  inputTokens: receipt.usage.candidate.inputTokens,
-                  outputTokens: receipt.usage.candidate.outputTokens,
-                  tokens: receipt.usage.candidate.totalTokens,
+                  inputTokens: foregroundUsage!.candidate.inputTokens,
+                  outputTokens: foregroundUsage!.candidate.outputTokens,
+                  tokens: foregroundUsage!.candidate.totalTokens,
                   passRate: receipt.quality.candidatePassRate,
-                  costUsd: receipt.usage.candidate.costUsd,
+                  costUsd: foregroundUsage!.candidate.costUsd,
                 },
               ]}
             />
@@ -172,6 +185,20 @@ export function LabModelBenchmarksSection({
               </button>
             </div>
           </>
+        ) : stopReceipt ? (
+          <div className="labs-model-benchmark-result-row">
+            <span>Inconclusive · candidate replay skipped</span>
+            <strong>
+              {stopReceipt.attempts.length} attempts · ${stopReceipt.budget.observedSpendUsd.toFixed(4)}
+            </strong>
+            <button
+              className="training-button secondary labs-compact-button"
+              type="button"
+              onClick={() => latest && onOpenEntry(`model-run:${latest.id}`)}
+            >
+              View run
+            </button>
+          </div>
         ) : latest ? (
           <button
             className="labs-model-benchmark-running"
@@ -230,18 +257,6 @@ export function LabModelBenchmarksSection({
                 <option value="high">High</option>
               </select>
             </label>
-            <label>
-              <span>Run</span>
-              <select
-                value={mode}
-                onChange={(event) =>
-                  setMode(event.target.value === "smoke" ? "smoke" : "full")
-                }
-              >
-                <option value="full">Full · 30 attempts</option>
-                <option value="smoke">Smoke · 6 attempts</option>
-              </select>
-            </label>
             <button
               className="training-button primary"
               disabled={starting || latest?.status === "running"}
@@ -256,6 +271,17 @@ export function LabModelBenchmarksSection({
       </div>
     </AppDialog>
   );
+}
+
+function evaluationStopReceipt(
+  receipt: unknown,
+): ModelEvaluationStopReceipt | null {
+  return receipt
+    && typeof receipt === "object"
+    && "schemaVersion" in receipt
+    && receipt.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
+      ? receipt as ModelEvaluationStopReceipt
+      : null;
 }
 
 function evaluationReceipt(
@@ -331,15 +357,15 @@ function chatModelFromValue(value: string): ChatModelRef | null {
 }
 
 function tokenDelta(receipt: ModelEvaluationReceipt) {
-  const direction = receipt.foregroundTokenDelta > 0 ? "+" : "";
-  const percent = receipt.foregroundTokenDeltaPercent === null
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  const direction = efficiency.tokenDelta > 0 ? "+" : "";
+  const percent = efficiency.tokenDeltaPercent === null
     ? ""
-    : ` · ${direction}${receipt.foregroundTokenDeltaPercent.toFixed(1)}%`;
-  return `${direction}${receipt.foregroundTokenDelta.toLocaleString()} tokens${percent}`;
+    : ` · ${direction}${efficiency.tokenDeltaPercent.toFixed(1)}%`;
+  return `${direction}${efficiency.tokenDelta.toLocaleString()} tokens${percent}`;
 }
 
 function resultLabel(receipt: ModelEvaluationReceipt) {
-  return receipt.terminalClassification
-    .replaceAll("_", " ")
-    .replace(/^./, (character) => character.toUpperCase());
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} efficiency passes`;
 }

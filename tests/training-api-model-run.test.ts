@@ -41,4 +41,52 @@ describe("training API Model Run approval forwarding", () => {
       expect.objectContaining({ exportApproved: false }),
     );
   });
+
+  test("routes evaluation cancellation to the Harness Refiner execution", async () => {
+    const cancelEvaluation = vi.fn(async (id: string) => ({ id, status: "cancelled" }));
+    const cancelTraining = vi.fn();
+    const api = createTrainingApi({
+      store: {
+        getModelRun: vi.fn(async () => ({ kind: "evaluation" })),
+      },
+      training: { cancelModelRun: cancelTraining },
+      harnessRefinerBenchmarks: { cancel: cancelEvaluation },
+    } as never);
+
+    await api.request("cancel_model_run", { modelRunId: "model_run_eval" });
+
+    expect(cancelEvaluation).toHaveBeenCalledWith("model_run_eval");
+    expect(cancelTraining).not.toHaveBeenCalled();
+  });
+
+  test("keeps non-evaluation cancellation on the training execution", async () => {
+    const cancelEvaluation = vi.fn();
+    const cancelTraining = vi.fn(async (id: string) => ({ id, status: "cancelled" }));
+    const api = createTrainingApi({
+      store: {
+        getModelRun: vi.fn(async () => ({ kind: "training" })),
+      },
+      training: { cancelModelRun: cancelTraining },
+      harnessRefinerBenchmarks: { cancel: cancelEvaluation },
+    } as never);
+
+    await api.request("cancel_model_run", { modelRunId: "model_run_training" });
+
+    expect(cancelTraining).toHaveBeenCalledWith("model_run_training");
+    expect(cancelEvaluation).not.toHaveBeenCalled();
+  });
+
+  test("routes evaluation resume to the durable Harness Refiner checkpoint", async () => {
+    const resume = vi.fn(async (id: string) => ({ id, status: "running" }));
+    const api = createTrainingApi({
+      store: {
+        getModelRun: vi.fn(async () => ({ kind: "evaluation" })),
+      },
+      harnessRefinerBenchmarks: { resume },
+    } as never);
+
+    await api.request("resume_model_run", { modelRunId: "model_run_eval" });
+
+    expect(resume).toHaveBeenCalledWith("model_run_eval");
+  });
 });

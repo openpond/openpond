@@ -42,14 +42,18 @@ export function startHarnessRefinerBenchmark(
     profileId: requiredString(input.profileId, "profileId"),
     model: ChatModelRefSchema.parse(input.model),
     reasoningEffort: reasoningEffort(input.reasoningEffort),
-    mode: input.mode === "smoke" ? "smoke" : "full",
-    seeds: harnessIntegerArray(input.seeds, "seeds") ?? [17],
-    repetitions: boundedInteger(input.repetitions, "repetitions", 1, 20, 1),
-    maximumSpendUsd: nonnegativeHarnessNumber(
-      input.maximumSpendUsd ?? 0,
-      "maximumSpendUsd",
-    ),
+    seeds: [17],
+    repetitions: 1,
+    maximumSpendUsd: positiveHarnessNumber(input.maximumSpendUsd ?? 10),
   });
+}
+
+function positiveHarnessNumber(value: unknown): number {
+  const parsed = nonnegativeHarnessNumber(value, "maximumSpendUsd");
+  if (parsed === 0) {
+    throw new Error("maximumSpendUsd must be greater than zero.");
+  }
+  return parsed;
 }
 
 function reasoningEffort(value: unknown) {

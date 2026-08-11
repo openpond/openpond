@@ -436,7 +436,9 @@ function benchmarkFixtures(taskId: string): GraderFixture[] {
       id: "benchmark-negative",
       taskId,
       label: "negative",
-      output: { text: "The accessibility test failed. Launch timing is unknown." },
+      output: {
+        text: "Draft saved to /workspace/outputs/acme-launch-email.md. Checklist: new date included; accessibility testing mentioned; pilot access preserved; support address included; under 140 words.",
+      },
       infrastructureError: null,
       expectedPassed: false,
       expectedRewardEligible: false,

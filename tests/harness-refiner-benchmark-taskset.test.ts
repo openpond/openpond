@@ -10,9 +10,8 @@ import { contentHash } from "@openpond/harness";
 import { describe, expect, test } from "vitest";
 
 import {
-  benchmarkUpstreamModel,
-  selectSmokeTaskIds,
-} from "../apps/server/src/training/harness-refiner-benchmark-service.js";
+  benchmarkUpstreamModelFromCatalog,
+} from "../apps/server/src/training/training-model-runtime.js";
 
 const tasksetDirectory = path.join(
   process.cwd(),
@@ -34,6 +33,7 @@ describe("public Harness Refiner benchmark Taskset", () => {
 
     expect(validation.issues).toEqual([]);
     expect(taskset.id).toBe("harness-refiner-public-v1");
+    expect(taskset.revision).toBe(3);
     expect(taskset.tasks).toHaveLength(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
@@ -59,34 +59,71 @@ describe("public Harness Refiner benchmark Taskset", () => {
 
   test("keeps family coverage balanced across both splits", async () => {
     const taskset = await loadTaskset();
+    const expected = {
+      "artifact-verification": 3,
+      "research-efficiency": 3,
+      "constraint-following": 4,
+    };
     for (const split of ["validation", "frozen_eval"] as const) {
       const tasks = taskset.tasks.filter((task) => task.split === split);
-      expect(tasks.filter((task) => task.tags.includes("artifact-verification"))).toHaveLength(4);
-      expect(tasks.filter((task) => task.tags.includes("research-efficiency"))).toHaveLength(4);
-      expect(tasks.filter((task) => task.tags.includes("constraint-following"))).toHaveLength(2);
+      for (const [family, count] of Object.entries(expected)) {
+        expect(tasks.filter((task) => task.tags.includes(family))).toHaveLength(count);
+      }
     }
   });
 
-  test("uses one artifact and one research case in each smoke cohort", async () => {
+  test("contains repeated direct-deliverable evidence without source leakage", async () => {
     const taskset = await loadTaskset();
-    expect(selectSmokeTaskIds(taskset.tasks, "validation")).toEqual([
-      "adaptation-board-launch-brief",
-      "adaptation-nextjs-security-audit",
-    ]);
-    expect(selectSmokeTaskIds(taskset.tasks, "frozen_eval")).toEqual([
-      "frozen-clinic-relocation-brief",
-      "frozen-python-requests-security-audit",
-    ]);
+    for (const split of ["validation", "frozen_eval"] as const) {
+      const directDeliverables = taskset.tasks.filter(
+        (task) => task.split === split && task.tags.includes("direct-deliverable"),
+      );
+      expect(directDeliverables).toHaveLength(4);
+      for (const task of directDeliverables) {
+        expect(task.expectedOutput).toMatchObject({ deliverable: "message" });
+        expect(task.expectedOutput.mustInclude).toContainEqual(
+          expect.stringMatching(/complete .*message|complete .*reply/i),
+        );
+        expect(task.expectedOutput.mustNot).toContain(
+          "return only a checklist or file path instead of the message",
+        );
+      }
+    }
   });
 
-  test("resolves the OpenPond Chat alias to its admitted upstream model", () => {
-    expect(benchmarkUpstreamModel({
-      providerId: "openpond",
-      modelId: "openpond-chat",
-    })).toEqual({
+  test("admits every unique case without a smoke subset", async () => {
+    const taskset = await loadTaskset();
+    expect(new Set(taskset.tasks.map((task) => task.id)).size).toBe(20);
+    expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
+    expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
+  });
+
+  test("requires a concrete catalog revision for the admitted upstream model", () => {
+    expect(benchmarkUpstreamModelFromCatalog(
+      { providerId: "openpond", modelId: "openpond-chat" },
+      {
+        revision: "deepseek-v4-pro-2026-08-09",
+        metadata: { billing: { pricing: {
+          version: "test-v1",
+          source: "provider",
+          effectiveAt: "2026-08-09T00:00:00.000Z",
+          inputUsdPerMillionTokens: 0.4,
+          cachedInputUsdPerMillionTokens: 0.04,
+          outputUsdPerMillionTokens: 0.8,
+        } } },
+      },
+    )).toEqual({
       providerId: "deepseek",
       modelId: "deepseek-v4-pro",
-      revision: null,
+      revision: "deepseek-v4-pro-2026-08-09",
+      pricing: {
+        version: "test-v1",
+        source: "provider",
+        effectiveAt: "2026-08-09T00:00:00.000Z",
+        inputUsdPerMillionTokens: 0.4,
+        cachedInputUsdPerMillionTokens: 0.04,
+        outputUsdPerMillionTokens: 0.8,
+      },
     });
   });
 

@@ -673,14 +673,15 @@ Options:
 
 ```text
 Usage:
-  openpond training <start|status|watch|logs|cancel|artifacts|benchmark> <model-run-id|run-id|model-id>
+  openpond training <start|status|watch|logs|cancel|resume|artifacts|benchmark> <model-run-id|run-id|model-id>
   openpond training start <model-run-id> [--manifest <path>] [--yes] [--max-spend <usd>] [--retention-days <days>] [--detach] [--json]
   openpond training status <run-id> [--json]
   openpond training watch <run-id> [--interval-ms <ms>] [--json]
   openpond training logs <run-id> [--json]
   openpond training cancel <run-id> [--json]
+  openpond training resume <model-run-id> [--json]
   openpond training artifacts <run-id> [--json]
-  openpond training benchmark <model-id> [--provider <id>] [--model <id>] [--reasoning-effort <level>] [--mode <smoke|full>] [--seed <n>] [--repetitions <n>] [--max-spend <usd>] [--detach] [--json]
+  openpond training benchmark <model-id> [--provider <id>] [--model <id>] [--reasoning-effort <level>] [--max-spend <usd>] [--json]
 
 Options:
   --api-base-url <string>
@@ -689,13 +690,10 @@ Options:
   --json
   --manifest <string>
   --max-spend <number>
-  --mode <string>
   --model <string>
   --provider <string>
   --reasoning-effort <string>
-  --repetitions <integer>
   --retention-days <integer>
-  --seed <integer>
   --yes
 ```
 ## opchat

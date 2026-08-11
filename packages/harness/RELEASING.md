@@ -11,8 +11,8 @@ these initial schema literals:
 ## Trusted publishing
 
 The package is published through `release-harness.yml` using npm trusted
-publishing. `@openpond/harness@0.1.0` is the current initial release; do not
-publish from a local feature branch or bypass the workflow.
+publishing. `@openpond/harness@0.1.0` was the initial release. Do not publish
+from a local feature branch or bypass the workflow.
 
 To inspect an already-published version:
 

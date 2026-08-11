@@ -51,6 +51,9 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     throw new Error("Harness release does not belong to the requested workspace.");
   }
   const sourceRoot = path.join(release.bundlePath, "source");
+  await Promise.all(release.harnessRelease.files.map((asset) =>
+    verifyAsset(sourceRoot, asset.path, asset.contentHash)
+  ));
   const instructions = await Promise.all(
     release.agentSnapshot.instructions.map(async (asset) => ({
       path: asset.path,
@@ -58,6 +61,7 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     })),
   );
   const skills: OpenPondProfileSkill[] = [];
+  const skillContexts: string[] = [];
   const readers = new Map<string, () => Promise<ProfileSkillReadResult>>();
 
   for (const asset of release.agentSnapshot.skills) {
@@ -88,6 +92,11 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
       resourceFiles,
     };
     skills.push(skill);
+    skillContexts.push([
+      `Harness Skill (${asset.path}, ${parsed.name}):`,
+      parsed.description,
+      parsed.body.trim(),
+    ].filter(Boolean).join("\n"));
     readers.set(skill.name, async () => {
       const currentMarkdown = await readVerifiedAsset(sourceRoot, asset.path, asset.contentHash);
       const current = parseProfileSkillMarkdown(currentMarkdown);
@@ -118,14 +127,52 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
         }
       : null,
   };
-  const instructionContext = instructions
+  const agents = await Promise.all(
+    release.agentSnapshot.agents.map(async (asset) => ({
+      path: asset.path,
+      content: await readVerifiedAsset(sourceRoot, asset.path, asset.contentHash),
+    })),
+  );
+  const instructionSections = instructions
     .sort((left, right) => left.path.localeCompare(right.path))
     .map(({ path: instructionPath, content }) => [
       `Harness instruction (${instructionPath}):`,
       content.trim(),
     ].join("\n"))
-    .filter((content) => content.trim().length > 0)
-    .join("\n\n");
+    .filter((content) => content.trim().length > 0);
+  const agentSections = agents
+    .sort((left, right) => left.path.localeCompare(right.path))
+    .map(({ path: agentPath, content }) => [
+      `Harness Agent (${agentPath}):`,
+      content.trim(),
+    ].join("\n"));
+  const capabilityReceipt = [
+    "Harness capability receipt:",
+    JSON.stringify({
+      harnessRelease: {
+        id: release.harnessRelease.id,
+        contentHash: release.harnessRelease.contentHash,
+      },
+      agentSnapshot: {
+        id: release.agentSnapshot.id,
+        contentHash: release.agentSnapshot.contentHash,
+      },
+      files: release.harnessRelease.files.map((asset) => ({
+        path: asset.path,
+        contentHash: asset.contentHash,
+      })),
+      skills: release.agentSnapshot.skills.map((asset) => asset.path),
+      agents: release.agentSnapshot.agents.map((asset) => asset.path),
+      tools: release.agentSnapshot.toolDeclarations.map((tool) => tool.name),
+      capabilityRequirements: release.agentSnapshot.capabilityRequirements,
+    }),
+  ].join("\n");
+  const instructionContext = [
+    ...instructionSections,
+    ...skillContexts.sort(),
+    ...agentSections,
+    capabilityReceipt,
+  ].filter((content) => content.trim().length > 0).join("\n\n");
   return { workspace, release, instructionContext, skillRuntime };
 }
 
@@ -145,4 +192,20 @@ async function readVerifiedAsset(
     throw new Error(`Released Harness asset ${relativePath} is ${actualHash}; expected ${expectedHash}.`);
   }
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
+async function verifyAsset(
+  sourceRoot: string,
+  relativePath: string,
+  expectedHash: string,
+): Promise<void> {
+  const absolute = path.resolve(sourceRoot, ...relativePath.split("/"));
+  const relative = path.relative(path.resolve(sourceRoot), absolute);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    throw new Error(`Released Harness asset escapes its bundle: ${relativePath}`);
+  }
+  const actualHash = sha256(await fs.readFile(absolute));
+  if (actualHash !== expectedHash) {
+    throw new Error(`Released Harness asset ${relativePath} is ${actualHash}; expected ${expectedHash}.`);
+  }
 }

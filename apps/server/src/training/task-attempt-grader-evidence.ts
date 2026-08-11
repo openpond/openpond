@@ -9,6 +9,7 @@ import type { SqliteStore } from "../store/store.js";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { parseModelJudgeResult } from "../server-entry-helpers.js";
 import type { createTrainingModelRuntime } from "./training-model-runtime.js";
+import { hostedTokenPricingFromValue } from "./hosted-token-pricing.js";
 
 const MAX_ARTIFACTS = 5;
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
@@ -30,8 +31,15 @@ export function createTaskAttemptModelJudge(input: {
       store: input.store,
       attempt,
     });
+    const hostedTokenPricing =
+      attempt.modelRef?.providerId === grader.judge.providerId
+      && attempt.modelRef.modelId === grader.judge.modelId
+        ? hostedTokenPricingFromValue(attempt.metadata.hostedTokenPricing)
+          ?? undefined
+        : undefined;
     const raw = await input.modelText({
       model: grader.judge,
+      hostedTokenPricing,
       signal: new AbortController().signal,
       requestId: `task-judge:${attempt.id}:${grader.id}`,
       onUsage: (usage, cost) => {

@@ -11,6 +11,10 @@ import { AppDialog } from "../dialogs/AppDialog";
 import { X } from "../icons";
 import { formatDateTime } from "../training/training-model-data";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
+import {
+  benchmarkForegroundUsage,
+  benchmarkTaskEfficiency,
+} from "./benchmark-attempt-usage";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
 type ComparableRun = {
@@ -82,15 +86,18 @@ export function LabModelComparisonDialog({
             {selected.length === 2 ? (
               <>
                 <EvaluationComparisonCharts
-                  series={selected.map((entry) => ({
-                    id: entry.run.id,
-                    label: comparisonLabel(entry, providerSettings),
-                    inputTokens: entry.receipt.usage.candidate.inputTokens,
-                    outputTokens: entry.receipt.usage.candidate.outputTokens,
-                    tokens: entry.receipt.usage.candidate.totalTokens,
-                    passRate: entry.receipt.quality.candidatePassRate,
-                    costUsd: entry.receipt.usage.candidate.costUsd,
-                  }))}
+                  series={selected.map((entry) => {
+                    const usage = benchmarkForegroundUsage(entry.receipt).candidate;
+                    return {
+                      id: entry.run.id,
+                      label: comparisonLabel(entry, providerSettings),
+                      inputTokens: usage.inputTokens,
+                      outputTokens: usage.outputTokens,
+                      tokens: usage.totalTokens,
+                      passRate: entry.receipt.quality.candidatePassRate,
+                      costUsd: usage.costUsd,
+                    };
+                  })}
                 />
                 <div className="labs-model-compare-facts">
                   {selected.map((entry) => (
@@ -111,7 +118,7 @@ export function LabModelComparisonDialog({
                       <dl>
                         <div>
                           <dt>Result</dt>
-                          <dd>{titleCase(entry.receipt.terminalClassification)}</dd>
+                          <dd>{efficiencyResult(entry.receipt)}</dd>
                         </div>
                         <div>
                           <dt>Quality</dt>
@@ -120,8 +127,10 @@ export function LabModelComparisonDialog({
                           </dd>
                         </div>
                         <div>
-                          <dt>Token change</dt>
-                          <dd>{signedPercent(entry.receipt.foregroundTokenDeltaPercent)}</dd>
+                          <dt>All-task token change</dt>
+                          <dd>{signedPercent(
+                            benchmarkTaskEfficiency(entry.receipt).tokenDeltaPercent,
+                          )}</dd>
                         </div>
                         <div>
                           <dt>Harness</dt>
@@ -147,6 +156,11 @@ export function LabModelComparisonDialog({
       </div>
     </AppDialog>
   );
+}
+
+function efficiencyResult(receipt: ModelEvaluationReceipt): string {
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} passed`;
 }
 
 function RunSelect({
@@ -229,10 +243,4 @@ function compactTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function titleCase(value: string): string {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

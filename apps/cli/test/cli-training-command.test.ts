@@ -142,9 +142,6 @@ describe("training CLI", () => {
         model: "openpond-chat",
         provider: "openpond",
         reasoningEffort: "high",
-        mode: "smoke",
-        seed: "17",
-        repetitions: "1",
         maxSpend: "2",
       },
       ["benchmark", "model_1"],
@@ -157,13 +154,53 @@ describe("training CLI", () => {
         profileId: "personal",
         model: { providerId: "openpond", modelId: "openpond-chat" },
         reasoningEffort: "high",
-        mode: "smoke",
-        seeds: [17],
-        repetitions: 1,
         maximumSpendUsd: 2,
       },
     });
     expect(requests.at(-1)?.url).toContain("model_run_eval_1/status");
+  });
+
+  test("rejects detached Harness Refiner runs before starting provider work", async () => {
+    const request = vi.fn(async () => jsonResponse({
+      modelProjects: [{ id: "model_1", profileId: "personal" }],
+    }));
+
+    await expect(runTrainingCommand(
+      { apiBaseUrl: "http://local.test", detach: "true" },
+      ["benchmark", "model_1"],
+      { request: request as typeof fetch },
+    )).rejects.toThrow("must be watched to terminal state");
+
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(String(request.mock.calls[0]?.[0])).toBe("http://local.test/v1/training");
+  });
+
+  test("resumes and watches a checkpointed Harness Refiner evaluation", async () => {
+    const requests: string[] = [];
+    let statusCount = 0;
+    const request = vi.fn(async (url: string | URL | Request) => {
+      requests.push(String(url));
+      if (String(url).endsWith("/resume")) {
+        return jsonResponse({ id: "model_run_eval_1", status: "running" });
+      }
+      statusCount += 1;
+      return jsonResponse({
+        runId: "model_run_eval_1",
+        state: statusCount === 1 ? "running" : "succeeded",
+      });
+    });
+
+    await runTrainingCommand(
+      { apiBaseUrl: "http://local.test", json: "true" },
+      ["resume", "model_run_eval_1"],
+      { request: request as typeof fetch, sleep: async () => undefined },
+    );
+
+    expect(requests).toEqual([
+      "http://local.test/v1/training/model-runs/model_run_eval_1/resume",
+      "http://local.test/v1/training/model-runs/model_run_eval_1/status",
+      "http://local.test/v1/training/model-runs/model_run_eval_1/status",
+    ]);
   });
 
 });

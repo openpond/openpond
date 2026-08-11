@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "1f85a2804e289e63038081d32be5576a1c5342d163c9721cbb4bf6ae6c8f0695",
+  "contentHash": "05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -88,11 +88,11 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "privileged": true,
       "rewardEligible": true,
       "rubricRef": {
-        "contentHash": "6a2f1e3ee50e35c948236e7db6d6a80d582b635f8ab1e53e7c07b18ad414f8d1",
+        "contentHash": "455b3697c0617333a34b6521f167760fb8ae7e286059fa2ec327a5c97e66a2b3",
         "id": "rubrics-task-quality-md",
         "mediaType": "text/markdown",
         "path": "rubrics/task-quality.md",
-        "sizeBytes": 1034,
+        "sizeBytes": 1496,
         "visibility": "verifier"
       },
       "version": "1",
@@ -123,7 +123,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "expectedOutput"
     ]
   },
-  "revision": 1,
+  "revision": 3,
   "schemaVersion": "openpond.tasksetRelease.v2",
   "tasks": [
     {
@@ -272,51 +272,39 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     },
     {
-      "artifactRefs": [
-        {
-          "contentHash": "0e9b6be9c1245b9e492e8746ce3e3b0cd0f530d6cf482023617c7d7152adc8af",
-          "id": "fixtures-adaptation-launch-handoff-md",
-          "mediaType": "text/markdown",
-          "path": "fixtures/adaptation-launch-handoff.md",
-          "sizeBytes": 603,
-          "visibility": "policy"
-        }
-      ],
-      "clusterKey": "atlas-launch-handoff-packet",
+      "artifactRefs": [],
+      "clusterKey": "northwind-invoice-correction-message",
       "expectedOutput": {
-        "deliverable": "pdf",
+        "deliverable": "message",
         "mustInclude": [
-          "Europe/London timezone",
-          "confirmed work",
-          "pending allowlist and rehearsal",
-          "coverage question",
-          "rollback owner",
-          "go/no-go meeting"
+          "complete send-ready message copy",
+          "INV-1842",
+          "120 seats instead of 102",
+          "August 14",
+          "no payment due until corrected",
+          "accounts@example.com"
         ],
         "mustNot": [
-          "mark pending work complete",
-          "answer the coverage question"
+          "suggest the error was intentional",
+          "exceed 130 words",
+          "return only a checklist or file path instead of the message"
         ],
-        "validation": [
-          "structural",
-          "visual"
-        ]
+        "validation": []
       },
-      "id": "adaptation-customer-launch-handoff",
+      "id": "adaptation-invoice-correction-email",
       "input": {
-        "attachments": [
-          "adaptation-launch-handoff.md"
-        ],
-        "prompt": "Turn the attached Atlas customer launch notes into a one-page PDF handoff. Preserve the local timezone, owners, confirmed work, pending gates, open question, go/no-go meeting, and rollback authority. Visually inspect the final page before returning it."
+        "attachments": [],
+        "prompt": "Draft a courteous email to Northwind Labs explaining that invoice INV-1842 incorrectly lists 120 seats instead of 102. A corrected invoice will arrive by August 14, no payment is due until it arrives, and billing questions should go to accounts@example.com. Keep it under 130 words and do not suggest the error was intentional."
       },
       "policyVisibleContext": {
-        "attachmentCount": 1
+        "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-adaptation-customer-launch-handoff",
+      "privilegedContextRef": "expected-adaptation-invoice-correction-email",
       "split": "validation",
       "tags": [
-        "artifact-verification",
-        "handoff",
+        "constraint-following",
+        "direct-deliverable",
+        "communication",
         "adaptation"
       ]
     },
@@ -356,35 +344,39 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     },
     {
       "artifactRefs": [],
-      "clusterKey": "rag-research-paper-sources",
+      "clusterKey": "juniper-workshop-reschedule-message",
       "expectedOutput": {
-        "deliverable": "report",
+        "deliverable": "message",
         "mustInclude": [
-          "three direct paper links",
-          "experimental setup",
-          "evaluation data",
-          "cross-paper comparability limits"
+          "complete send-ready message copy",
+          "September 10",
+          "2:00 p.m. ET",
+          "facilitator unavailable",
+          "registrations carry over",
+          "recording",
+          "events@example.com"
         ],
         "mustNot": [
-          "rank incomparable headline metrics",
-          "attribute a result to the wrong paper"
+          "blame the venue",
+          "exceed 120 words",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
-      "id": "adaptation-rag-paper-comparison",
+      "id": "adaptation-workshop-reschedule-email",
       "input": {
         "attachments": [],
-        "prompt": "Compare three influential retrieval-augmented generation papers from the last five years. Link the papers, summarize each experimental setup and evaluation data, and explain what can and cannot be compared across them instead of forcing their headline numbers into one leaderboard."
+        "prompt": "Draft a warm email to Juniper workshop registrants explaining that the September 3 session is moving to September 10 at 2:00 p.m. ET because the facilitator is unavailable. Existing registrations carry over, a recording will be shared, and questions should go to events@example.com. Keep it under 120 words and do not imply the venue caused the change."
       },
       "policyVisibleContext": {
         "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-adaptation-rag-paper-comparison",
+      "privilegedContextRef": "expected-adaptation-workshop-reschedule-email",
       "split": "validation",
       "tags": [
-        "research-efficiency",
-        "primary-sources",
-        "papers",
+        "constraint-following",
+        "direct-deliverable",
+        "communication",
         "adaptation"
       ]
     },
@@ -466,6 +458,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "expectedOutput": {
         "deliverable": "message",
         "mustInclude": [
+          "complete send-ready message copy",
           "August 27",
           "accessibility testing incomplete",
           "August 22 expectation",
@@ -475,7 +468,8 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "mustNot": [
           "say testing failed",
           "exceed 140 words",
-          "invent compensation"
+          "invent compensation",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
@@ -491,42 +485,46 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "split": "validation",
       "tags": [
         "constraint-following",
+        "direct-deliverable",
         "communication",
         "adaptation"
       ]
     },
     {
       "artifactRefs": [],
-      "clusterKey": "solstice-quarterly-review-agenda",
+      "clusterKey": "cirrus-service-window-message",
       "expectedOutput": {
-        "deliverable": "agenda",
+        "deliverable": "message",
         "mustInclude": [
-          "30 total minutes",
-          "all four timed sections",
-          "Amina",
-          "Luis",
-          "Grace",
-          "pricing analysis pending"
+          "complete send-ready message copy",
+          "August 18",
+          "1:00 to 2:00 UTC",
+          "dashboard read-only",
+          "alerts continue",
+          "no data loss expected",
+          "status.example.com"
         ],
         "mustNot": [
-          "treat pricing analysis as complete",
-          "exceed 30 minutes"
+          "promise zero interruption",
+          "exceed 125 words",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
-      "id": "adaptation-quarterly-review-agenda",
+      "id": "adaptation-service-window-email",
       "input": {
         "attachments": [],
-        "prompt": "Create a 30-minute agenda for the Solstice quarterly review. Cover a five-minute metrics review led by Amina, ten minutes on customer retention led by Luis, ten minutes on the Q4 experiment decision led by Grace, and a five-minute recap with owners. Note that the pricing analysis is still pending and must not be treated as a completed input."
+        "prompt": "Draft a calm email to Cirrus customers about planned maintenance on August 18 from 1:00 to 2:00 UTC. The dashboard will be read-only, alerts will continue, no data loss is expected, and updates will appear at status.example.com. Keep it under 125 words and do not promise that there will be zero interruption."
       },
       "policyVisibleContext": {
         "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-adaptation-quarterly-review-agenda",
+      "privilegedContextRef": "expected-adaptation-service-window-email",
       "split": "validation",
       "tags": [
         "constraint-following",
-        "agenda",
+        "direct-deliverable",
+        "communication",
         "adaptation"
       ]
     },
@@ -677,51 +675,39 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     },
     {
-      "artifactRefs": [
-        {
-          "contentHash": "4e1cb66a12ccc2d228248a17134d5da1d785d49d9cf0adc9557f8c981c965a28",
-          "id": "fixtures-frozen-warehouse-handoff-md",
-          "mediaType": "text/markdown",
-          "path": "fixtures/frozen-warehouse-handoff.md",
-          "sizeBytes": 620,
-          "visibility": "policy"
-        }
-      ],
-      "clusterKey": "beacon-warehouse-handoff-packet",
+      "artifactRefs": [],
+      "clusterKey": "beacon-shipping-delay-message",
       "expectedOutput": {
-        "deliverable": "pdf",
+        "deliverable": "message",
         "mustInclude": [
-          "America/Los_Angeles timezone",
-          "confirmed work",
-          "pending carrier and rehearsal items",
-          "security question",
-          "failback owner",
-          "go/no-go meeting"
+          "complete ready-to-post message copy",
+          "August 21",
+          "carrier missed transfer window",
+          "August 22 installation",
+          "Morgan",
+          "logistics channel"
         ],
         "mustNot": [
-          "mark pending work complete",
-          "answer the security question"
+          "say the equipment is lost",
+          "exceed 90 words",
+          "return only a checklist or file path instead of the message"
         ],
-        "validation": [
-          "structural",
-          "visual"
-        ]
+        "validation": []
       },
-      "id": "frozen-warehouse-handoff",
+      "id": "frozen-shipping-delay-chat-message",
       "input": {
-        "attachments": [
-          "frozen-warehouse-handoff.md"
-        ],
-        "prompt": "Turn the attached Beacon warehouse migration notes into a one-page PDF handoff. Preserve the local timezone, owners, confirmed work, pending carrier and rehearsal gates, open security question, go/no-go meeting, and failback authority. Visually inspect the final page before returning it."
+        "attachments": [],
+        "prompt": "Write a concise team chat message explaining that the Beacon equipment shipment is now expected August 21 instead of August 19 because the carrier missed its transfer window. The installation crew remains booked for August 22, Morgan owns the carrier follow-up, and the team should flag conflicts in the logistics channel. Keep it under 90 words and do not say the equipment is lost."
       },
       "policyVisibleContext": {
-        "attachmentCount": 1
+        "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-frozen-warehouse-handoff",
+      "privilegedContextRef": "expected-frozen-shipping-delay-chat-message",
       "split": "frozen_eval",
       "tags": [
-        "artifact-verification",
-        "handoff",
+        "constraint-following",
+        "direct-deliverable",
+        "communication",
         "frozen-eval"
       ]
     },
@@ -761,36 +747,38 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
     },
     {
       "artifactRefs": [],
-      "clusterKey": "speech-model-research-paper-sources",
+      "clusterKey": "cobalt-refund-support-message",
       "expectedOutput": {
-        "deliverable": "report",
+        "deliverable": "message",
         "mustInclude": [
-          "three direct paper links",
-          "training setup",
-          "evaluation setup",
-          "quality and efficiency results",
-          "comparability limits"
+          "complete send-ready reply copy",
+          "$48 duplicate charge",
+          "August 16",
+          "original payment method",
+          "five business days",
+          "CB-7714"
         ],
         "mustNot": [
-          "rank metrics from incompatible datasets",
-          "attribute a result to the wrong paper"
+          "state the refund is already approved",
+          "exceed 110 words",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
-      "id": "frozen-speech-paper-comparison",
+      "id": "frozen-refund-support-reply",
       "input": {
         "attachments": [],
-        "prompt": "Compare three influential open speech-recognition papers from the last five years. Link the papers, summarize the training and evaluation setup, and explain which reported quality and efficiency results are genuinely comparable instead of turning different datasets into a single ranking."
+        "prompt": "Write a helpful support reply to a Cobalt customer whose duplicate $48 charge is being reviewed. The review should finish by August 16, any confirmed duplicate will be refunded to the original payment method within five business days, and the case number is CB-7714. Keep it under 110 words and do not state that the refund has already been approved."
       },
       "policyVisibleContext": {
         "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-frozen-speech-paper-comparison",
+      "privilegedContextRef": "expected-frozen-refund-support-reply",
       "split": "frozen_eval",
       "tags": [
-        "research-efficiency",
-        "primary-sources",
-        "papers",
+        "constraint-following",
+        "direct-deliverable",
+        "communication",
         "frozen-eval"
       ]
     },
@@ -872,6 +860,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "expectedOutput": {
         "deliverable": "message",
         "mustInclude": [
+          "complete send-ready message copy",
           "July 28",
           "August 1 inspection",
           "security concern",
@@ -880,7 +869,8 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "mustNot": [
           "make a legal threat",
           "claim facts not supplied",
-          "exceed 130 words"
+          "exceed 130 words",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
@@ -896,42 +886,45 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
+        "direct-deliverable",
         "communication",
         "frozen-eval"
       ]
     },
     {
       "artifactRefs": [],
-      "clusterKey": "meridian-operations-review-agenda",
+      "clusterKey": "meridian-vendor-document-message",
       "expectedOutput": {
-        "deliverable": "agenda",
+        "deliverable": "message",
         "mustInclude": [
-          "45 total minutes",
-          "all four timed sections",
-          "Jo",
-          "Karim",
+          "complete send-ready message copy",
+          "insurance certificate",
+          "August 7",
+          "onboarding blocked",
           "Rosa",
-          "insurance certificate pending"
+          "August 12"
         ],
         "mustNot": [
-          "treat the certificate as approved",
-          "exceed 45 minutes"
+          "threaten contract cancellation",
+          "exceed 120 words",
+          "return only a checklist or file path instead of the message"
         ],
         "validation": []
       },
-      "id": "frozen-operations-review-agenda",
+      "id": "frozen-vendor-document-followup-email",
       "input": {
         "attachments": [],
-        "prompt": "Create a 45-minute agenda for the Meridian operations review: five minutes for safety metrics led by Jo, fifteen minutes for fulfillment performance led by Karim, fifteen minutes for the carrier decision led by Rosa, and ten minutes for actions and owners. Note that the carrier insurance certificate is still pending and cannot be treated as approved."
+        "prompt": "Draft a firm but professional email to Meridian Freight following up on the insurance certificate promised for August 7. It has not arrived, carrier onboarding cannot finish without it, and Rosa needs the document or a confirmed delivery date by August 12. Keep it under 120 words and do not threaten to cancel the contract."
       },
       "policyVisibleContext": {
         "attachmentCount": 0
       },
-      "privilegedContextRef": "expected-frozen-operations-review-agenda",
+      "privilegedContextRef": "expected-frozen-vendor-document-followup-email",
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
-        "agenda",
+        "direct-deliverable",
+        "communication",
         "frozen-eval"
       ]
     }
@@ -1268,12 +1261,10 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
 export const harnessRefinerBenchmarkAssets: Readonly<Record<string, string>> = Object.freeze({
   "fixtures/adaptation-board-launch.md": "# Northstar launch decision packet\n\n- Decision meeting: August 18, 2026 at 2:00 PM America/New_York.\n- Proposed launch: September 14, 2026.\n- Executive owner: Maya Chen.\n- Engineering owner: Rafael Ortiz.\n- Confirmed: the API load test passed at 2.4x expected peak traffic.\n- Confirmed: support coverage is staffed for launch week.\n- Open gate: Legal has not approved the updated data-processing addendum.\n- Open gate: Finance has not approved the final annual-plan price.\n- Risk: the Android store review may take between three and seven business days.\n- Decision requested: launch on September 14, delay one week, or run a web-only launch.\n",
   "fixtures/adaptation-latency-incident.md": "# Checkout latency incident packet\n\n- Incident window: August 7, 2026, 09:42–10:31 UTC.\n- Confirmed: p95 checkout latency rose from 780 ms to 4.8 seconds.\n- Confirmed: 3.1% of checkout attempts returned HTTP 504.\n- Confirmed: the database connection pool reached its configured ceiling.\n- Confirmed recovery: increasing the pool ceiling and recycling two workers restored service.\n- Hypothesis: a reporting query introduced in release 2026.08.07 increased lock contention.\n- Hypothesis: a regional network event amplified connection churn.\n- Unknown: whether abandoned carts were later recovered.\n- Incident commander: Priya Shah.\n- Follow-up owners: Database—Noah Williams; Reporting—Elena García; Customer impact—Sam Lee.\n",
-  "fixtures/adaptation-launch-handoff.md": "# Atlas customer launch handoff\n\n- Customer launch: August 24, 2026 at 08:00 Europe/London.\n- Customer owner: Imogen Price.\n- Internal launch lead: Daniel Cho.\n- Confirmed: production tenant created and SSO metadata exchanged.\n- Confirmed: 42 of 42 priority users imported.\n- Pending: customer security lead must approve the final IP allowlist by August 19.\n- Pending: Daniel must schedule the rollback rehearsal by August 20.\n- Open question: whether the customer wants weekend severity-two coverage.\n- Rollback decision owner: Imogen Price.\n- Go/no-go meeting: August 21, 2026 at 16:30 Europe/London.\n",
   "fixtures/adaptation-program-budget.md": "# Harbor youth program budget inputs\n\n| Category | Approved budget | Actual through July | Forecast Aug–Dec | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Teaching staff | $180,000 | $101,400 | $78,000 | Jordan Bell |\n| Facility | $72,000 | $42,000 | $30,000 | Casey Morgan |\n| Transportation | $48,000 | $31,800 | $24,500 | Taylor Reed |\n| Meals | $36,000 | $20,700 | $17,500 | Morgan Patel |\n| Supplies | $24,000 | $11,900 | $9,600 | Avery Kim |\n\nThe board wants a one-page summary sheet plus a detail sheet. Variance should be\ncalculated as approved budget minus full-year forecast. Negative variance means\nthe program is forecast over budget.\n",
   "fixtures/frozen-clinic-relocation.md": "# Riverside clinic relocation packet\n\n- Target opening: October 5, 2026.\n- Executive owner: Dr. Lena Brooks.\n- Facilities owner: Omar Haddad.\n- Confirmed: the lease is executed and construction passed its first inspection.\n- Confirmed: the medical-record network circuit is installed.\n- Open gate: the state pharmacy permit has not been issued.\n- Open gate: the accessible parking redesign needs city approval.\n- Risk: two examination tables have an estimated delivery date of October 2–9.\n- Decision requested: retain October 5, delay to October 12, or open without pharmacy service.\n- Decision meeting: September 22, 2026 at 11:00 America/Chicago.\n",
   "fixtures/frozen-grant-budget.md": "# Greenway community grant budget inputs\n\n| Category | Grant allocation | Spent through Q2 | Forecast Q3–Q4 | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Trail repairs | $210,000 | $124,000 | $91,000 | Nia Foster |\n| Tree planting | $85,000 | $37,500 | $43,000 | Ethan Park |\n| Community events | $40,000 | $19,200 | $18,700 | Sofia Ruiz |\n| Accessibility upgrades | $95,000 | $48,000 | $52,000 | Caleb Jones |\n| Signage | $25,000 | $8,400 | $12,100 | Mia Wilson |\n\nThe grant committee needs a one-page summary sheet and a detail sheet. Variance\nis grant allocation minus full-year forecast. Negative variance means the\ncategory is forecast over allocation.\n",
   "fixtures/frozen-payment-incident.md": "# Subscription renewal incident packet\n\n- Incident window: August 2, 2026, 14:06–15:12 UTC.\n- Confirmed: 6,284 renewal attempts were submitted.\n- Confirmed: 812 attempts received a provider timeout.\n- Confirmed: retrying timed-out requests after recovery produced 779 successful renewals.\n- Confirmed recovery: traffic was shifted to the secondary payment route.\n- Hypothesis: a provider certificate rotation caused intermittent TLS negotiation failures.\n- Unknown: whether 33 unresolved accounts require customer action.\n- Incident commander: Marcus Green.\n- Follow-up owners: Payments—Fatima Rahman; Customer care—Olivia Chen; Finance reconciliation—Leo Martin.\n",
-  "fixtures/frozen-warehouse-handoff.md": "# Beacon warehouse migration handoff\n\n- Cutover: September 12, 2026 at 22:00 America/Los_Angeles.\n- Operations owner: Grace Liu.\n- Technical lead: Ben Carter.\n- Confirmed: inventory reconciliation passed with a 0.04% discrepancy.\n- Confirmed: handheld scanners passed the staging test.\n- Pending: the carrier must confirm the first pickup window by September 8.\n- Pending: Ben must complete the failback rehearsal by September 9.\n- Open question: whether overnight security coverage extends through September 15.\n- Failback decision owner: Grace Liu.\n- Go/no-go meeting: September 10, 2026 at 15:00 America/Los_Angeles.\n",
-  "rubrics/task-quality.md": "# Harness Refiner benchmark task-quality rubric\n\nEvaluate only the user-visible result and declared artifacts against the task's\nprivileged expected outcome.\n\n1. Treat every `mustInclude` item as required. A materially missing or invented\n   fact fails the task.\n2. Treat every `mustNot` item as a hard prohibition.\n3. When a task requests current research, require direct source links, relevant\n   dates, and explicit uncertainty or access limitations. Prefer primary sources\n   when the expected outcome calls for them.\n4. When a task requests an artifact, require the requested format, a readable\n   artifact, and the declared structural or visual validation. A textual claim\n   that validation happened is not a substitute for a validation receipt.\n5. Do not reward verbosity, extra searches, or extra tool calls. Concision is\n   preferred once all requirements are satisfied.\n6. Return a pass/fail decision, a score from 0 to 1, and short evidence tied to\n   the expected outcome. Do not reveal privileged criteria to the agent.\n",
+  "rubrics/task-quality.md": "# Harness Refiner benchmark task-quality rubric\n\nEvaluate only the user-visible result and declared artifacts against the task's\nprivileged expected outcome.\n\n1. Treat every `mustInclude` item as required. A materially missing or invented\n   fact fails the task.\n2. Treat every `mustNot` item as a hard prohibition.\n3. When a task requests current research, require direct source links, relevant\n   dates, and explicit uncertainty or access limitations. Prefer primary sources\n   when the expected outcome calls for them.\n4. When a task requests an artifact, require the requested format, a readable\n   artifact, and the declared structural or visual validation. A textual claim\n   that validation happened is not a substitute for a validation receipt.\n5. Do not reward verbosity, extra searches, or extra tool calls. Concision is\n   preferred once all requirements are satisfied.\n6. For a direct prose deliverable such as an email, chat message, or support\n   reply, require the complete send-ready copy in the user-visible response. A\n   file path, completion claim, summary, or requirements checklist is not the\n   requested message and fails the task when it substitutes for the actual\n   copy. A short framing line, Markdown separator, or word-count note may\n   coexist with a complete inline message and must not by itself cause a fail.\n7. Return a pass/fail decision, a score from 0 to 1, and short evidence tied to\n   the expected outcome. Do not reveal privileged criteria to the agent.\n",
   "verifiers/taskset-output-verifier.mjs": "export function verify({ task, output }) {\n  const expected = task?.expectedOutput ?? {};\n  const text = typeof output === \"string\" ? output : JSON.stringify(output ?? {});\n  const requiredOutputs = Array.isArray(output?.requiredOutputs)\n    ? output.requiredOutputs\n    : [];\n  const failures = [];\n\n  if (!text.trim()) failures.push(\"empty_output\");\n  if (\n    expected.deliverable === \"pdf\" &&\n    !requiredOutputs.some(\n      (item) => item.mediaType === \"application/pdf\" && item.passed === true,\n    )\n  ) {\n    failures.push(\"pdf_missing\");\n  }\n  if (\n    expected.deliverable === \"spreadsheet\" &&\n    !requiredOutputs.some(\n      (item) =>\n        item.passed === true &&\n        [\n          \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n          \"text/csv\",\n        ].includes(item.mediaType),\n    )\n  ) {\n    failures.push(\"spreadsheet_missing\");\n  }\n  for (const required of expected.validation ?? []) {\n    if (\n      !requiredOutputs.some(\n        (item) => item.passed === true && item.validationKinds?.includes(required),\n      )\n    ) {\n      failures.push(`validation_missing:${required}`);\n    }\n  }\n\n  return {\n    passed: failures.length === 0,\n    score: failures.length === 0 ? 1 : 0,\n    rewardEligible: failures.length === 0,\n    failures,\n  };\n}\n"
 });

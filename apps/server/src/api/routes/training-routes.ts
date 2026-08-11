@@ -113,6 +113,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/logs$/, method: "GET", action: "model_run_logs", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/artifacts$/, method: "GET", action: "model_run_artifacts", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_model_run", key: "modelRunId" },
+    { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/resume$/, method: "POST", action: "resume_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/, method: "POST", action: "run_taskset_benchmark", key: "tasksetId" },

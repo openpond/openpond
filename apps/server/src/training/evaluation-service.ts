@@ -40,6 +40,7 @@ import type {
 } from "./taskset-work-attempt-runner.js";
 import { linkHarnessReviewTaskset } from "./harness-review-taskset.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
+import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 
 type AuditFixtureInput = {
   label:
@@ -101,6 +102,9 @@ export function createTaskEvaluationService(deps: {
     signal?: AbortSignal;
     resultId?: string;
     admittedAt?: string;
+    parentModelRunId?: string;
+    toolEvidence?: import("./taskset-work-attempt-runner.js").TasksetWorkToolEvidence;
+    hostedTokenPricing?: import("./hosted-token-pricing.js").HostedTokenPricing;
     releasedHarness?: {
       agentSnapshot: import("@openpond/harness").AgentSnapshot;
       harnessRelease: import("@openpond/harness").HarnessRelease;
@@ -146,8 +150,30 @@ export function createTaskEvaluationService(deps: {
         runtime: deps.workRuntime,
         validateRequiredOutput: deps.validateWorkRequiredOutput,
         additionalToolDefinitions: deps.additionalWorkToolDefinitions?.(),
+        toolEvidence: input.toolEvidence,
+        harnessCapabilityReceipt: releasedHarness
+          ? {
+              harnessRelease: {
+                id: releasedHarness.harnessRelease.id,
+                contentHash: releasedHarness.harnessRelease.contentHash,
+              },
+              agentSnapshot: {
+                id: releasedHarness.agentSnapshot.id,
+                contentHash: releasedHarness.agentSnapshot.contentHash,
+              },
+              instructionAssets: releasedHarness.agentSnapshot.instructions,
+              skillAssets: releasedHarness.agentSnapshot.skills,
+              agentAssets: releasedHarness.agentSnapshot.agents,
+              fileAssets: releasedHarness.harnessRelease.files,
+              declaredToolNames: releasedHarness.agentSnapshot.toolDeclarations.map(
+                (tool) => tool.name,
+              ),
+            }
+          : undefined,
+        hostedTokenPricing: input.hostedTokenPricing,
       },
       resultId: input.resultId,
+      parentModelRunId: input.parentModelRunId,
       harnessInstructionContext: releasedHarness?.instructionContext,
       attemptInput: {
         tasksetId: taskset.id,
@@ -222,12 +248,15 @@ export function createTaskEvaluationService(deps: {
     const customVerifier = await customVerifierFor(taskset.id);
     const rawUsages: unknown[] = [];
     let explicitCostUsd = 0;
+    let modelJudgeCalls = 0;
+    let modelJudgeCostObserved = false;
     const result = await gradeTasksetEvaluationAttempt({
       task,
       attempt,
       graders: taskset.graders,
       modelJudge: deps.modelJudge
         ? async (judgeInput) => {
+            modelJudgeCalls += 1;
             const judged = await deps.modelJudge!(judgeInput);
             if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
             else if (judged.usage !== undefined) rawUsages.push(judged.usage);
@@ -235,7 +264,10 @@ export function createTaskEvaluationService(deps: {
               typeof judged.costUsd === "number"
               && Number.isFinite(judged.costUsd)
               && judged.costUsd >= 0
-            ) explicitCostUsd += judged.costUsd;
+            ) {
+              explicitCostUsd += judged.costUsd;
+              modelJudgeCostObserved = true;
+            }
             return judged;
           }
         : undefined,
@@ -258,12 +290,18 @@ export function createTaskEvaluationService(deps: {
       },
       { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
     );
-    if (usage.totalTokens > 0 || explicitCostUsd > 0) {
-      graderUsageByAttemptId.set(attempt.id, {
-        ...usage,
-        costUsd: explicitCostUsd > 0 ? explicitCostUsd : null,
-      });
-    }
+    graderUsageByAttemptId.set(attempt.id, {
+      ...usage,
+      // Infrastructure and earlier hard-gate failures can skip the model
+      // judge entirely. That is an authoritative zero-cost grading path, not
+      // missing accounting. If a judge did run, retain fail-closed semantics
+      // unless its hosted cost was actually observed.
+      costUsd: modelJudgeCalls === 0
+        ? 0
+        : modelJudgeCostObserved
+          ? explicitCostUsd
+          : null,
+    });
     return result;
   }
 
@@ -613,7 +651,7 @@ export function createTaskEvaluationService(deps: {
       for (const seed of seeds) {
         for (let attempt = 0; attempt < attemptsPerTask; attempt += 1) {
           if (input.signal?.aborted) throw input.signal.reason;
-          executions.push(await execute({
+          const execution = await execute({
             tasksetId: taskset.id,
             taskId: task.id,
             model: input.model,
@@ -630,7 +668,8 @@ export function createTaskEvaluationService(deps: {
               seed,
               attempt,
             }).slice(0, 24)}`,
-          }));
+          });
+          executions.push(execution);
         }
       }
     }
@@ -707,6 +746,12 @@ export function createTaskEvaluationService(deps: {
       harnessRelease: import("@openpond/harness").HarnessRelease;
       instructionContext?: string;
     };
+    parentModelRunId?: string;
+    toolEvidence?: import("./taskset-work-attempt-runner.js").TasksetWorkToolEvidence;
+    hostedTokenPricing?: import("./hosted-token-pricing.js").HostedTokenPricing;
+    onAttemptComplete?: (
+      result: Awaited<ReturnType<typeof execute>>,
+    ) => Promise<void> | void;
   }) {
     const taskset = await requireTaskset(input.tasksetId);
     if (taskset.purpose !== "benchmark" || !taskset.benchmark) {
@@ -736,7 +781,7 @@ export function createTaskEvaluationService(deps: {
       for (const seed of seeds) {
         for (let attempt = 0; attempt < repetitions; attempt += 1) {
           if (input.signal?.aborted) throw input.signal.reason;
-          executions.push(await execute({
+          const execution = await execute({
             tasksetId: taskset.id,
             taskId: task.id,
             model: input.model,
@@ -747,6 +792,9 @@ export function createTaskEvaluationService(deps: {
             signal: input.signal,
             releasedHarness: input.releasedHarness,
             admittedAt,
+            parentModelRunId: input.parentModelRunId,
+            toolEvidence: input.toolEvidence,
+            hostedTokenPricing: input.hostedTokenPricing,
             resultId: `benchmark-attempt-${contentHash({
               tasksetRelease: taskset.benchmark.releaseHash,
               phase: input.phase,
@@ -758,7 +806,9 @@ export function createTaskEvaluationService(deps: {
               attempt,
               admittedAt,
             }).slice(0, 24)}`,
-          }));
+          });
+          executions.push(execution);
+          await input.onAttemptComplete?.(execution);
         }
       }
     }
@@ -785,6 +835,7 @@ export function createTaskEvaluationService(deps: {
         sourceTasksetHash: taskset.contentHash,
         benchmarkDefinitionId: taskset.benchmark.definitionId,
         admittedAt,
+        parentModelRunId: input.parentModelRunId ?? null,
       },
     });
     await deps.store.saveEvaluationResult({
@@ -813,7 +864,13 @@ export function createTaskEvaluationService(deps: {
         limitsHash: contentHash(manifest.limits),
       },
       createdAt: admittedAt,
-      metadata: { sourceTasksetId: taskset.id, split, seeds, repetitions },
+      metadata: {
+        sourceTasksetId: taskset.id,
+        split,
+        seeds,
+        repetitions,
+        parentModelRunId: input.parentModelRunId ?? null,
+      },
     });
     await deps.store.saveBenchmarkRun({ tasksetId: taskset.id, run });
 
@@ -932,23 +989,4 @@ export function createTaskEvaluationService(deps: {
     executeBenchmark,
     close: async () => {},
   };
-}
-
-function reviewRefMatches(
-  value: unknown,
-  expected: { id: string; contentHash: string },
-): boolean {
-  return Boolean(
-    value &&
-    typeof value === "object" &&
-    !Array.isArray(value) &&
-    (value as { id?: unknown }).id === expected.id &&
-    (value as { contentHash?: unknown }).contentHash === expected.contentHash,
-  );
-}
-
-function variance(values: number[]): number {
-  if (values.length < 2) return 0;
-  const mean = values.reduce((total, value) => total + value, 0) / values.length;
-  return values.reduce((total, value) => total + (value - mean) ** 2, 0) / values.length;
 }

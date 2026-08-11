@@ -4,6 +4,8 @@ import { describe, expect, test } from "vitest";
 import {
   type BaseModelCandidate,
   CrossSystemExpertBootstrapPreviewSchema,
+  type ModelEvaluationReceipt,
+  type ModelRun,
   type TrainingStateResponse,
 } from "@openpond/contracts";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
@@ -22,6 +24,15 @@ import {
 import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
+import {
+  BenchmarkAttemptCharts,
+  BenchmarkComparisonSummary,
+} from "../apps/web/src/components/labs/LabModelEvaluationBenchmarkDetails";
+import {
+  benchmarkForegroundUsage,
+  benchmarkSelectedAttempts,
+  benchmarkTaskEfficiency,
+} from "../apps/web/src/components/labs/benchmark-attempt-usage";
 import {
   labWorkproductProjection,
 } from "../apps/web/src/components/labs/lab-workproducts";
@@ -209,6 +220,256 @@ describe("Lab workspace", () => {
 
     expect(markup).toContain("Harness Refiner · Inconclusive");
     expect(markup).not.toContain(">1 run<");
+  });
+
+  test("leads a completed benchmark with paired task-level token efficiency", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+      passed: boolean,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed,
+      score: passed ? 1 : 0,
+      failureClass: passed ? null : "task_failure",
+      inputTokens: totalTokens - 10,
+      outputTokens: 10,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
+    const receipt = {
+      schemaVersion: "openpond.modelEvaluationReceipt.v1",
+      terminalClassification: "regressed",
+      quality: { passed: false },
+      lineage: { valid: true },
+      invalidReasons: ["Candidate held-out quality did not pass every case."],
+      foregroundTokenDelta: -1_429_821,
+      usage: {
+        refiner: { totalTokens: 60_648 },
+        grader: { totalTokens: 105_675 },
+      },
+      efficiency: {
+        grossForegroundTokenSavings: 1_429_821,
+        firstPassNetTokenSavings: 1_263_498,
+        breakEvenReuseCount: 1,
+        amortizedReuseCount: 10,
+        amortizedTokenSavings: 14_131_887,
+      },
+      budget: { observedSpendUsd: 0.990634722, maximumSpendUsd: 2 },
+      resultManifest: { contentHash: "a".repeat(64) },
+      profileGit: null,
+      attempts: [
+        attempt("adaptation", "adaptation-lower", 200, false),
+        attempt("candidate_adaptation", "adaptation-lower", 80, true),
+        attempt("baseline", "held-out-higher", 100, true),
+        attempt("candidate", "held-out-higher", 120, true),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+    const run = {
+      status: "succeeded",
+      evaluation: {
+        upstreamModel: {
+          providerId: "deepseek",
+          modelId: "deepseek-v4-pro",
+          revision: "catalog-created:1779926400",
+        },
+      },
+    } as unknown as ModelRun;
+
+    const markup = renderToStaticMarkup(
+      createElement(BenchmarkComparisonSummary, {
+        receipt,
+        run,
+        tasksetName: "Harness Refiner public v1",
+      }),
+    );
+
+    expect(markup).toContain("Token efficiency");
+    expect(markup).toContain("1 of 2 tasks passed");
+    expect(markup).toContain("1 failed this token-efficiency test");
+    expect(markup).toContain("aggregate usage changed by -33.33%");
+    expect(markup).toContain(">Execution</dt><dd>Succeeded<");
+    expect(markup).toContain(">Token-efficiency result</dt><dd>Failed<");
+    expect(markup).toContain(">Efficiency passes</dt><dd>1/2<");
+    expect(markup).toContain(">Efficiency failures</dt><dd>1/2<");
+    expect(markup).toContain(">All-task foreground tokens</dt><dd>300 → 200<");
+    expect(markup).toContain(">Task quality</dt><dd>1/2 → 2/2<");
+    expect(markup).not.toContain("No accepted Harness improvement");
+    expect(markup).not.toContain("Diagnostic gross token savings");
+  });
+
+  test("charts selected benchmark attempts without counting discarded recovery work", () => {
+    const attempt = (input: {
+      attemptId: string;
+      phase: "candidate" | "candidate_adaptation";
+      taskId: string;
+      inputTokens: number;
+      outputTokens: number;
+      startedAt: string;
+    }) => ({
+      ...input,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score: 1,
+      failureClass: null,
+      totalTokens: input.inputTokens + input.outputTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+    });
+    const receipt = {
+      attempts: [
+        attempt({
+          attemptId: "candidate-discarded",
+          phase: "candidate",
+          taskId: "held-out-task",
+          inputTokens: 47_955,
+          outputTokens: 2_574,
+          startedAt: "2026-08-10T20:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "candidate-selected",
+          phase: "candidate",
+          taskId: "held-out-task",
+          inputTokens: 999_979,
+          outputTokens: 41_114,
+          startedAt: "2026-08-10T21:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "adaptation-discarded",
+          phase: "candidate_adaptation",
+          taskId: "adaptation-task",
+          inputTokens: 562_907,
+          outputTokens: 7_523,
+          startedAt: "2026-08-10T20:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "adaptation-selected",
+          phase: "candidate_adaptation",
+          taskId: "adaptation-task",
+          inputTokens: 2_162_656,
+          outputTokens: 79_062,
+          startedAt: "2026-08-10T21:00:00.000Z",
+        }),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const usage = benchmarkForegroundUsage(receipt);
+
+    expect(benchmarkSelectedAttempts(receipt.attempts)).toHaveLength(2);
+    expect(usage.candidate).toMatchObject({
+      inputTokens: 999_979,
+      outputTokens: 41_114,
+      totalTokens: 1_041_093,
+    });
+    expect(usage.candidate_adaptation).toMatchObject({
+      inputTokens: 2_162_656,
+      outputTokens: 79_062,
+      totalTokens: 2_241_718,
+    });
+  });
+
+  test("pairs benchmark efficiency by task id across both cohorts", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score: 1,
+      failureClass: null,
+      inputTokens: totalTokens,
+      outputTokens: 0,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
+    const receipt = {
+      attempts: [
+        attempt("baseline", "held-out-b", 100),
+        attempt("baseline", "held-out-a", 200),
+        attempt("candidate", "held-out-a", 150),
+        attempt("candidate", "held-out-b", 120),
+        attempt("adaptation", "adaptation-a", 300),
+        attempt("candidate_adaptation", "adaptation-a", 100),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const efficiency = benchmarkTaskEfficiency(receipt);
+
+    expect(efficiency).toMatchObject({
+      comparedTaskCount: 3,
+      passedTaskCount: 2,
+      failedTaskCount: 1,
+      lowerTaskCount: 2,
+      higherTaskCount: 1,
+      unchangedTaskCount: 0,
+      baselineTokens: 600,
+      refinedTokens: 370,
+      tokenDelta: -230,
+      baselinePassedCount: 3,
+      refinedPassedCount: 3,
+      cohorts: {
+        adaptation: { comparedTaskCount: 1, lowerTaskCount: 1 },
+        held_out: { comparedTaskCount: 2, lowerTaskCount: 1, higherTaskCount: 1 },
+      },
+    });
+  });
+
+  test("shows token and quality charts for both benchmark cohorts", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+      score: number,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score,
+      failureClass: null,
+      inputTokens: totalTokens - 10,
+      outputTokens: 10,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
+    const receipt = {
+      attempts: [
+        attempt("baseline", "held-out-task", 100, 0.8),
+        attempt("candidate", "held-out-task", 60, 1),
+        attempt("adaptation", "adaptation-task", 200, 0.6),
+        attempt("candidate_adaptation", "adaptation-task", 80, 1),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const markup = renderToStaticMarkup(
+      createElement(BenchmarkAttemptCharts, { receipt }),
+    );
+
+    expect(markup).toContain("Held-out tokens by task");
+    expect(markup).toContain("Adaptation tokens by task");
+    expect(markup).toContain("Held-out quality by task");
+    expect(markup).toContain("Adaptation quality by task");
+    expect(markup).toContain("Refined 60");
+    expect(markup).toContain("Refined 80");
   });
 
   test("projects managed publication in Serving", () => {
