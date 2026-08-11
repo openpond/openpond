@@ -49,7 +49,8 @@ describe("sequential Harness adaptation", () => {
       harnessRelease: { contentHash: string };
     } }) => {
       releasedHashes.push(input.releasedHarness.harnessRelease.contentHash);
-      const id = `attempt-${attemptOrdinal++}`;
+      const ordinal = attemptOrdinal++;
+      const id = `attempt-${ordinal}`;
       return {
         attempt: {
           id,
@@ -58,7 +59,9 @@ describe("sequential Harness adaptation", () => {
           costUsd: 0.01,
           latencyMs: 100,
           metadata: {
-            usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+            usage: ordinal === 0
+              ? { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
+              : { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
           },
         },
         grade: { id: `grade-${id}`, passed: true },
