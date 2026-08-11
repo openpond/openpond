@@ -33,6 +33,7 @@ import {
   comparisonInvalidReasons,
   emptyEvaluationAccounting,
   frozenToolEvidence,
+  loadBenchmarkAttemptEvidenceByIds,
   loadCompletedBenchmarkStage,
   loadOrReconstructEvidenceSnapshot,
   releasedHarness,
@@ -63,7 +64,6 @@ export async function resumeHarnessRefinerComparison(input: {
   executionPlan: HarnessRefinerExecutionPlanItem[];
   baselinePlan: HarnessRefinerExecutionPlanItem;
   adaptationPlan: HarnessRefinerExecutionPlanItem;
-  candidateAdaptationPlan: HarnessRefinerExecutionPlanItem;
   candidatePlan: HarnessRefinerExecutionPlanItem;
   admittedPricing: HostedTokenPricing;
   budget: BenchmarkSpendBudget;
@@ -81,7 +81,7 @@ export async function resumeHarnessRefinerComparison(input: {
     budget,
     totalAttempts,
   } = input;
-  const [baseline, adaptation, priorCandidateAdaptation, priorCandidate] =
+  const [baseline, adaptation, priorCandidate] =
     await Promise.all([
       loadCompletedBenchmarkStage({
         store: deps.store,
@@ -99,12 +99,6 @@ export async function resumeHarnessRefinerComparison(input: {
         store: deps.store,
         modelRunId: modelRun.id,
         tasksetId: taskset.id,
-        plan: input.candidateAdaptationPlan,
-      }),
-      loadCompletedBenchmarkStage({
-        store: deps.store,
-        modelRunId: modelRun.id,
-        tasksetId: taskset.id,
         plan: input.candidatePlan,
       }),
     ]);
@@ -112,6 +106,14 @@ export async function resumeHarnessRefinerComparison(input: {
   if (!priorManifest) {
     throw new Error("Comparison recovery requires the durable benchmark result manifest.");
   }
+  const sequentialAttemptIds = modelRun.evaluationProgress?.accounting?.attempts
+    .filter((attempt) => attempt.phase === "candidate_adaptation")
+    .map((attempt) => attempt.attemptId) ?? [];
+  const candidateAdaptationAttempts = await loadBenchmarkAttemptEvidenceByIds({
+    store: deps.store,
+    tasksetId: taskset.id,
+    attemptIds: sequentialAttemptIds,
+  });
   if (
     priorManifest.tasksetRelease.contentHash !== taskset.benchmark?.releaseHash
     || priorManifest.harness.baseline.contentHash
@@ -208,12 +210,6 @@ export async function resumeHarnessRefinerComparison(input: {
       createdAt: deps.now(),
     });
   };
-  const candidateAdaptation = await retryStage(
-    priorCandidateAdaptation,
-    input.candidateAdaptationPlan,
-    "candidate_adaptation",
-    "adaptation",
-  );
   const candidate = await retryStage(
     priorCandidate,
     input.candidatePlan,
@@ -253,7 +249,7 @@ export async function resumeHarnessRefinerComparison(input: {
     baseline: baseline.run,
     adaptation: adaptation.run,
     refiner: priorManifest.refiner,
-    candidateAdaptation: candidateAdaptation.run,
+    candidateAdaptation: priorManifest.candidateAdaptation,
     candidate: candidate.run,
     comparison,
     executionPlan,
@@ -273,7 +269,7 @@ export async function resumeHarnessRefinerComparison(input: {
   const infrastructureValid = benchmarkAttemptsInfrastructureValid([
     ...baseline.attempts,
     ...adaptation.attempts,
-    ...candidateAdaptation.attempts,
+    ...candidateAdaptationAttempts,
     ...candidate.attempts,
   ]);
   const harnessChanged = baseline.run.harnessRelease.contentHash
@@ -283,7 +279,7 @@ export async function resumeHarnessRefinerComparison(input: {
     baseline: baseline.run,
     adaptation: adaptation.run,
     candidate: candidate.run,
-    candidateAdaptation: candidateAdaptation.run,
+    candidateAdaptation: priorManifest.candidateAdaptation,
     harnessChanged,
     lineageValid: lineage.valid,
     infrastructureValid,
@@ -291,7 +287,7 @@ export async function resumeHarnessRefinerComparison(input: {
   const invalidReasons = comparisonInvalidReasons({
     baseline: baseline.run,
     adaptation: adaptation.run,
-    candidateAdaptation: candidateAdaptation.run,
+    candidateAdaptation: priorManifest.candidateAdaptation,
     candidate: candidate.run,
     harnessChanged,
     lineageValid: lineage.valid,
@@ -318,8 +314,8 @@ export async function resumeHarnessRefinerComparison(input: {
       baseline: { id: baseline.run.id, contentHash: baseline.run.contentHash },
       adaptation: { id: adaptation.run.id, contentHash: adaptation.run.contentHash },
       candidateAdaptation: {
-        id: candidateAdaptation.run.id,
-        contentHash: candidateAdaptation.run.contentHash,
+        id: priorManifest.candidateAdaptation.id,
+        contentHash: priorManifest.candidateAdaptation.contentHash,
       },
       refiner: {
         id: priorManifest.refiner.id,
@@ -334,13 +330,16 @@ export async function resumeHarnessRefinerComparison(input: {
       candidatePassRate: comparison.candidatePassRate,
       adaptationBaselinePassRate: adaptation.run.passedCount / adaptation.run.attemptCount,
       adaptationCandidatePassRate:
-        candidateAdaptation.run.passedCount / candidateAdaptation.run.attemptCount,
+        priorManifest.candidateAdaptation.passedCount
+          / priorManifest.candidateAdaptation.attemptCount,
       adaptationCandidatePassed:
-        candidateAdaptation.run.passedCount === candidateAdaptation.run.attemptCount,
+        priorManifest.candidateAdaptation.passedCount
+          === priorManifest.candidateAdaptation.attemptCount,
       heldOutCandidatePassed: candidate.run.passedCount === candidate.run.attemptCount,
       passed:
         comparison.qualityPassed
-        && candidateAdaptation.run.passedCount === candidateAdaptation.run.attemptCount
+        && priorManifest.candidateAdaptation.passedCount
+          === priorManifest.candidateAdaptation.attemptCount
         && candidate.run.passedCount === candidate.run.attemptCount
         && infrastructureValid
         && terminalClassification !== "infrastructure_failure",

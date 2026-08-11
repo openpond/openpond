@@ -32,8 +32,8 @@ describe("public Harness Refiner benchmark Taskset", () => {
     const validation = validateTasksetRelease(taskset);
 
     expect(validation.issues).toEqual([]);
-    expect(taskset.id).toBe("harness-refiner-public-v1");
-    expect(taskset.revision).toBe(3);
+    expect(taskset.id).toBe("harness-refiner-08112026");
+    expect(taskset.revision).toBe(1);
     expect(taskset.tasks).toHaveLength(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);

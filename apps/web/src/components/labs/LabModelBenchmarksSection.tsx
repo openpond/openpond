@@ -126,7 +126,7 @@ export function LabModelBenchmarksSection({
         <article className="labs-model-benchmark-card">
         <div className="labs-model-benchmark-heading">
           <div>
-            <h3>Harness Refiner</h3>
+            <h3>Harness Refiner 08112026</h3>
             <p>
               Tests whether every task uses fewer foreground tokens after an
               evidence-driven Harness update. Quality is measured separately.

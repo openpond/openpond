@@ -16,11 +16,47 @@ export type HarnessRefinerExecutionPlanItem = {
   attemptCount: number;
 };
 
+export type SequentialAdaptationStep = {
+  ordinal: number;
+  taskId: string;
+  attemptId: string;
+  inputHarness: { id: string; contentHash: string };
+  outputHarness: { id: string; contentHash: string };
+  trigger: { id: string; contentHash: string; decision: string };
+  outcome: { id: string; contentHash: string; decision: string } | null;
+  changed: boolean;
+};
+
+export type SequentialAdaptationSummary = {
+  schemaVersion: "openpond.sequentialHarnessAdaptation.v1";
+  id: string;
+  initialHarness: { id: string; contentHash: string };
+  finalHarness: { id: string; contentHash: string };
+  attemptCount: number;
+  passedCount: number;
+  terminalCount: number;
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
+  costUsd: number | null;
+  latencyMs: number;
+  steps: SequentialAdaptationStep[];
+  createdAt: string;
+  contentHash: string;
+};
+
 export function createHarnessRefinerExecutionPlan(input: {
   taskset: Taskset;
   seeds: number[];
   repetitions: number;
 }): HarnessRefinerExecutionPlanItem[] {
+  if (input.seeds.length !== 1 || input.repetitions !== 1) {
+    throw new Error(
+      "Sequential Harness Refiner benchmarks require one admitted seed and one trajectory repetition.",
+    );
+  }
   const benchmark = input.taskset.benchmark;
   if (!benchmark) throw new Error("Harness Refiner Taskset has no benchmark definition.");
   const heldOut = taskIdsForSplit(input.taskset, benchmark.evaluationSplit);

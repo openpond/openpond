@@ -10,10 +10,10 @@ while the benchmark protocol controls paired execution and comparison. Running
 this benchmark does not start a training job.
 
 - Release: [`taskset.release.json`](./taskset.release.json)
-- Release id: `harness-refiner-public-v1`
-- Revision: `3`
+- Release id: `harness-refiner-08112026`
+- Revision: `1`
 - Content hash:
-  `05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7`
+  `4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634`
 - Rebuild: `pnpm exec tsx benchmarks/harness-refiner/taskset/build.ts`
 
 ## Split
@@ -32,8 +32,10 @@ workspace layout.
 Every case carries exactly one neutral behavioral-family tag. Adaptation and
 frozen-evaluation cases share those family labels, but may not share a source
 document, expected answer, entity set, or source-cluster key. Refiner receives
-the adaptation families and their fact-distinct attempt evidence as a cohort;
-frozen prompts, labels, and results remain hidden.
+each fact-distinct adaptation attempt after it completes, along with bounded
+prior observations from the same isolated Harness workspace. The next ordered
+adaptation task uses the resulting immutable Harness release. Frozen prompts,
+labels, and results remain hidden until the final Harness is frozen.
 
 ## Case families
 
@@ -67,12 +69,10 @@ manual-review state where required, and authoritative provider usage.
 
 For adaptation cases, Refiner receives bounded neutral facts,
 content-addressed references, requests, user-visible outputs, artifact checks,
-final grader receipts, and bounded expected-output contracts after grading.
-The cohort packet groups those facts by behavior family and lists tool failures
-that recur across at least two distinct adaptation tasks. The primary turn is
-only a transport anchor selected from the strongest repeated signal. The model
-still decides whether the recurrence is meaningful and chooses the smallest
-justified Harness change or external route. Deterministic code enforces
+final grader receipts, bounded expected-output contracts, execution cost, and
+a bounded window of prior raw observations after grading. The model decides
+whether differently worded observations share a reusable root behavior and
+chooses the smallest justified Harness change or external route. Deterministic code enforces
 authorization, budgets, schemas, paths, hashes, validation, atomic application,
 and rollback; it does not choose the semantic diagnosis or route.
 

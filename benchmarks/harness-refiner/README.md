@@ -29,14 +29,14 @@ limitations. It does not post, react, or interact with accounts.
 
 The detailed split and acceptance contract are in the
 [Taskset design](./taskset/README.md). The materialized
-[`harness-refiner-public-v1` Taskset Release](./taskset/taskset.release.json)
+[`harness-refiner-08112026` Taskset Release](./taskset/taskset.release.json)
 contains the frozen prompts, fixtures, grader assets, and production-derived
-tool contracts. Revision 3 intentionally includes four fact-distinct
+tool contracts. The 08112026 release includes four fact-distinct
 direct-deliverable tasks in each split so repeated checklist-or-file
-substitution is visible within one adaptation cohort, and calibrates the judge
+substitution is visible across sequential adaptation, and calibrates the judge
 to accept short framing when the complete requested copy is present inline.
 Its current content hash is
-`05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7`.
+`4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634`.
 
 ## Shipped reference Taskset
 
@@ -74,18 +74,15 @@ Each complete pass uses the following sequence:
 
 1. Run the frozen-evaluation cases with the baseline Harness and Refiner off.
 2. Run the adaptation cases with the same baseline Harness.
-3. Grade each adaptation result and give Refiner one bounded cohort packet with
-   every adaptation request, user-visible output, artifact check, exact grader
-   receipt, and expected-output contract. Group the fact-distinct attempts by
-   their neutral behavior family and expose cross-task failure recurrence; the
-   selected primary turn is only a transport anchor. Frozen-evaluation prompts,
-   labels, and results are never included in Refiner context.
-4. Require an immutable candidate Harness Release before continuing.
-5. Replay all ten adaptation cases with the candidate Harness and report the
-   repairs separately from the held-out causal metric.
-6. Run the frozen-evaluation cases with the candidate Harness using the same
+3. Run the same ordered adaptation tasks once in an isolated treatment
+   workspace. After each task settles and is graded, invoke the real product
+   Refiner boundary. The next distinct task uses the resulting immutable
+   Harness release. Frozen-evaluation prompts, labels, and results are never
+   included in Refiner context.
+4. Freeze the final treatment Harness and its complete step-by-step lineage.
+5. Run the frozen-evaluation cases with the final Harness using the same
    content-addressed web-evidence snapshot as the baseline.
-7. Compare paired held-out results. Repeat the full pass once after the protocol works
+6. Compare paired held-out results. Repeat the full pass once after the protocol works
    end to end.
 
 The baseline and candidate Run Manifests must pin the same model identity,

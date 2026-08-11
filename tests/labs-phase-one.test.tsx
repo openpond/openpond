@@ -218,7 +218,7 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Harness Refiner · Inconclusive");
+    expect(markup).toContain("Harness Refiner 08112026 · Inconclusive");
     expect(markup).not.toContain(">1 run<");
   });
 
@@ -742,7 +742,7 @@ describe("Lab workspace", () => {
       benchmark: {
         schemaVersion: "openpond.tasksetBenchmark.v1" as const,
         definitionId: "harness-refiner",
-        releaseId: "harness-refiner-public-v1",
+        releaseId: "harness-refiner-08112026",
         releaseHash: "a".repeat(64),
         managedReleasePath: "benchmark/taskset.release.json",
         adaptationSplit: "validation" as const,
@@ -792,7 +792,7 @@ describe("Lab workspace", () => {
       benchmark: {
         schemaVersion: "openpond.tasksetBenchmark.v1" as const,
         definitionId: "harness-refiner",
-        releaseId: "harness-refiner-public-v1",
+        releaseId: "harness-refiner-08112026",
         releaseHash: "a".repeat(64),
         managedReleasePath: "benchmark/taskset.release.json",
         adaptationSplit: "validation" as const,

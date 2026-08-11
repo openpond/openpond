@@ -172,6 +172,23 @@ export async function runLocalHarnessRefinerWorker(input: {
     trigger,
     observations,
   );
+  const currentObservationHashes = new Set(
+    observations.map((observation) => observation.contentHash),
+  );
+  const recentObservations = (await input.store.listHarnessImprovementArtifacts(
+    workspace.id,
+    "observation",
+    100,
+  ) as ImprovementObservation[])
+    .filter((observation) => !currentObservationHashes.has(observation.contentHash))
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+    .slice(0, 20)
+    .map((observation) => ({
+      ...boundedObservationEvidence(observation),
+      runRef: observation.runRef,
+      turnId: observation.turnId,
+      createdAt: observation.createdAt,
+    }));
   const recentOutcomes = (await input.store.listHarnessImprovementArtifacts(
     workspace.id,
     "refiner_outcome",
@@ -193,6 +210,8 @@ export async function runLocalHarnessRefinerWorker(input: {
     task: boundedContext.task,
     eventExcerpts: boundedContext.eventExcerpts,
     artifactDiagnostics: boundedContext.artifactDiagnostics,
+    executionProfile: boundedContext.executionProfile,
+    recentObservations,
     recentOutcomes,
     sourceFiles: source.files,
     sourceCatalog: source.catalog,

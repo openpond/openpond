@@ -33,12 +33,23 @@ export async function loadBoundedRefinerContext(
   };
   eventExcerpts: Array<Record<string, unknown>>;
   artifactDiagnostics: Array<Record<string, unknown>>;
+  executionProfile: {
+    modelRequestCount: number;
+    failedModelRequestCount: number;
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+    toolFailureCount: number;
+    retryCount: number;
+    recoveryCount: number;
+  };
 }> {
-  const [session, turn, events, turns] = await Promise.all([
+  const [session, turn, events, turns, usageRecords] = await Promise.all([
     store.getSession(trigger.runRef),
     store.getTurn(trigger.turnId),
     store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
     store.turnsForSession(trigger.runRef, 1_000),
+    store.listModelUsageRecords({ turnId: trigger.turnId, limit: 10_000 }),
   ]);
   const orderedTurns = [...turns].sort((left, right) =>
     left.startedAt.localeCompare(right.startedAt),
@@ -65,6 +76,23 @@ export async function loadBoundedRefinerContext(
     limit: trigger.policy.maxEvidenceEvents,
   });
   const assistantOutput = assistantOutputForTurn(events, trigger.turnId);
+  const observationKinds = observations.map((observation) => observation.kind);
+  const receiptProfile = tasksetGradeExecutionProfile(events, trigger.turnId);
+  const durableUsage = {
+    modelRequestCount: usageRecords.length || receiptProfile.modelRequestCount,
+    promptTokens: usageRecords.reduce(
+      (total, record) => total + (record.promptTokens ?? 0),
+      0,
+    ) || receiptProfile.promptTokens,
+    completionTokens: usageRecords.reduce(
+      (total, record) => total + (record.completionTokens ?? 0),
+      0,
+    ) || receiptProfile.completionTokens,
+    totalTokens: usageRecords.reduce(
+      (total, record) => total + (record.totalTokens ?? 0),
+      0,
+    ) || receiptProfile.totalTokens,
+  };
   return {
     task: {
       prompt: turn?.prompt
@@ -77,6 +105,18 @@ export async function loadBoundedRefinerContext(
         : null,
     },
     artifactDiagnostics: await inspectBoundedPdfArtifactDiagnostics(session?.cwd),
+    executionProfile: {
+      modelRequestCount: durableUsage.modelRequestCount,
+      failedModelRequestCount: usageRecords.filter(
+        (record) => record.status === "failed" || record.status === "interrupted",
+      ).length,
+      promptTokens: durableUsage.promptTokens,
+      completionTokens: durableUsage.completionTokens,
+      totalTokens: durableUsage.totalTokens,
+      toolFailureCount: observationKinds.filter((kind) => kind === "tool_failure").length,
+      retryCount: observationKinds.filter((kind) => kind === "retry").length,
+      recoveryCount: observationKinds.filter((kind) => kind === "recovery").length,
+    },
     eventExcerpts: evidenceEvents.map((runtimeEvent) => {
       const data = asRecord(runtimeEvent.data);
       const result = asRecord(data.result);
@@ -96,6 +136,49 @@ export async function loadBoundedRefinerContext(
       };
     }),
   };
+}
+
+export function tasksetGradeExecutionProfile(
+  events: readonly RuntimeEvent[],
+  turnId: string,
+): {
+  modelRequestCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+} {
+  const fallback = {
+    modelRequestCount: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0,
+  };
+  const diagnostic = [...events].reverse().find((runtimeEvent) =>
+    runtimeEvent.turnId === turnId
+    && runtimeEvent.name === "diagnostic"
+    && runtimeEvent.action === "taskset_grade"
+    && typeof runtimeEvent.output === "string"
+  );
+  if (!diagnostic?.output) return fallback;
+  try {
+    const payload = asRecord(JSON.parse(diagnostic.output));
+    const attempt = asRecord(payload.attempt);
+    const usage = asRecord(attempt.usage);
+    return {
+      modelRequestCount: nonnegativeInteger(attempt.modelRequestCount),
+      promptTokens: nonnegativeInteger(usage.promptTokens),
+      completionTokens: nonnegativeInteger(usage.completionTokens),
+      totalTokens: nonnegativeInteger(usage.totalTokens),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function nonnegativeInteger(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.trunc(value)
+    : 0;
 }
 
 export async function inspectBoundedPdfArtifactDiagnostics(

@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "05dbf9058c09b75bc950ca5cdf4ac03650dba7bb0cb74a3d9e152b16c110a2f7",
+  "contentHash": "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -99,14 +99,15 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "weight": 1
     }
   ],
-  "id": "harness-refiner-public-v1",
+  "id": "harness-refiner-08112026",
   "metadata": {
     "adaptationSplit": "validation",
     "benchmark": "harness-refiner",
     "frozenEvaluationSplit": "frozen_eval",
     "primaryMetric": "paired_foreground_provider_tokens",
-    "protocolVersion": "1",
+    "protocolVersion": "2",
     "qualityPolicy": "hard_non_regression",
+    "refinementMode": "sequential_product_lifecycle",
     "toolDeclarationSource": "openpond-production-model-tool-definitions",
     "trainingSideEffect": false
   },
@@ -123,7 +124,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "expectedOutput"
     ]
   },
-  "revision": 3,
+  "revision": 1,
   "schemaVersion": "openpond.tasksetRelease.v2",
   "tasks": [
     {

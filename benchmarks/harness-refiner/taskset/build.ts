@@ -165,8 +165,8 @@ export async function buildTaskset(): Promise<TasksetRelease> {
 
   const content = {
     schemaVersion: "openpond.tasksetRelease.v2" as const,
-    id: "harness-refiner-public-v1",
-    revision: 3,
+    id: "harness-refiner-08112026",
+    revision: 1,
     policy: {
       policyVisibleFields: ["input"],
       privilegedFields: ["expectedOutput"],
@@ -238,7 +238,8 @@ export async function buildTaskset(): Promise<TasksetRelease> {
     ],
     metadata: {
       benchmark: "harness-refiner",
-      protocolVersion: "1",
+      protocolVersion: "2",
+      refinementMode: "sequential_product_lifecycle",
       adaptationSplit: "validation",
       frozenEvaluationSplit: "frozen_eval",
       primaryMetric: "paired_foreground_provider_tokens",
