@@ -1,17 +1,13 @@
 import path from "node:path";
-import { readFile } from "node:fs/promises";
 import {
-  FileOutputRefSchema,
   TaskAttemptResultSchema,
   TurnSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
-  type FileOutputRef,
   type RuntimeEvent,
   type Session,
   type TaskDataRecord,
   type TaskFailureClass,
-  type TaskRequiredOutput,
   type Taskset,
   type WorkspaceDiffSummary,
   type WorkspaceToolResult,
@@ -36,7 +32,6 @@ import {
 import {
   modelToolDefinitionToHostedTool,
   type ModelToolDefinition,
-  type ModelToolExecutionContext,
 } from "../openpond/model-tool-registry.js";
 import { createWorkModelToolDefinitions } from "../openpond/work-tool-registry.js";
 import type { SqliteStore } from "../store/store.js";
@@ -51,6 +46,15 @@ import {
 } from "./taskset-work-cost-evidence.js";
 import { resolveTasksetWorkAssets } from "./taskset-work-assets.js";
 import {
+  executeDefinition,
+  savedWorkOutput,
+  validateSavedOutput,
+  workToolTurnLimit,
+  type SavedOutputValidation,
+  type SavedWorkOutput,
+  type TasksetWorkRequiredOutputValidator,
+} from "./taskset-work-attempt-support.js";
+import {
   appendTasksetAssistantText,
   appendTasksetToolCompleted,
   appendTasksetToolLifecycle,
@@ -63,9 +67,6 @@ import {
   tasksetWorkUserPrompt,
 } from "./taskset-work-prompt.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
-
-const DEFAULT_MAX_WORK_TOOL_TURNS = 24;
-const MAX_WORK_TOOL_TURNS = 100;
 
 export type TasksetWorkModelDelta = {
   text?: string;
@@ -90,11 +91,7 @@ export type TasksetWorkModelStream = (input: {
   hostedTokenPricing?: HostedTokenPricing;
 }) => AsyncIterable<TasksetWorkModelDelta>;
 
-export type TasksetWorkRequiredOutputValidator = (input: {
-  requiredOutput: TaskRequiredOutput;
-  outputRef: FileOutputRef;
-  artifactPath: string;
-}) => Promise<{ passed: boolean; detail: string }>;
+export type { TasksetWorkRequiredOutputValidator } from "./taskset-work-attempt-support.js";
 
 export type TasksetWorkToolEvidence = {
   execute(input: {
@@ -122,18 +119,6 @@ export type TasksetWorkAttemptRuntime = {
     sessionId: string,
     options?: { turnId?: string },
   ): Promise<WorkspaceToolResult>;
-};
-
-type SavedWorkOutput = {
-  relativePath: string;
-  outputRef: FileOutputRef;
-  artifactPath: string;
-};
-
-type SavedOutputValidation = {
-  passed: boolean;
-  detail: string;
-  parsedJson?: unknown;
 };
 
 type WorkTraceStep =
@@ -865,169 +850,6 @@ export async function runTasksetWorkAttempt(input: {
   });
 }
 
-async function executeDefinition(input: {
-  definition: ModelToolDefinition;
-  runtime: TasksetWorkAttemptRuntime;
-  sessionId: string;
-  turnId: string;
-  model: ChatModelRef;
-  callId: string;
-  args: Record<string, unknown>;
-  signal: AbortSignal;
-  userPrompt: string;
-}): Promise<NativeModelToolResult> {
-  const session = await input.runtime.getSession(input.sessionId);
-  const context: ModelToolExecutionContext = {
-    session,
-    turnId: input.turnId,
-    turnPermissions: {
-      approvalPolicy: "never",
-      sandbox: "workspace-write",
-      codexPermissionMode: "auto-review",
-      codexReasoningEffort: "high",
-    },
-    provider: input.model.providerId,
-    model: input.model.modelId,
-    callId: input.callId,
-    args: input.args,
-    signal: input.signal,
-    workspaceDiffBaseline: null,
-    mentionedApps: [],
-    userPrompt: input.userPrompt,
-    turnMetadata: {
-      automatedTasksetWorkAttempt: true,
-    },
-  };
-  try {
-    return await input.definition.execute(context);
-  } catch (error) {
-    return {
-      toolCallId: input.callId,
-      name: input.definition.name,
-      ok: false,
-      contentText: JSON.stringify({
-        ok: false,
-        action: input.definition.name,
-        output: errorMessage(error),
-      }),
-    };
-  }
-}
-
-function savedWorkOutput(
-  args: Record<string, unknown>,
-  result: NativeModelToolResult,
-): SavedWorkOutput | null {
-  if (!result.ok || result.name !== "work_save_output") return null;
-  const data = asRecord(result.data);
-  const parsed = FileOutputRefSchema.safeParse(data.outputRef);
-  const artifact = asRecord(data.artifact);
-  const artifactPath =
-    typeof artifact.path === "string" ? artifact.path : null;
-  const relativePath =
-    typeof args.path === "string" ? normalizedOutputPath(args.path) : null;
-  if (!parsed.success || !artifactPath || !relativePath) return null;
-  return {
-    relativePath,
-    outputRef: parsed.data,
-    artifactPath,
-  };
-}
-
-async function validateSavedOutput(input: {
-  requiredOutput: TaskRequiredOutput;
-  saved: SavedWorkOutput;
-  validateRequiredOutput?: TasksetWorkRequiredOutputValidator;
-}): Promise<SavedOutputValidation> {
-  if (input.saved.outputRef.contentType !== input.requiredOutput.mediaType) {
-    return {
-      passed: false,
-      detail:
-        `Expected ${input.requiredOutput.mediaType}, received `
-        + `${input.saved.outputRef.contentType}.`,
-    };
-  }
-  if (
-    input.requiredOutput.maxBytes !== undefined
-    && input.saved.outputRef.sizeBytes > input.requiredOutput.maxBytes
-  ) {
-    return {
-      passed: false,
-      detail:
-        `Output exceeds the ${input.requiredOutput.maxBytes} byte task limit.`,
-    };
-  }
-  let parsedJson: unknown;
-  if (input.requiredOutput.metadata.includeParsedJsonInAttempt === true) {
-    if (input.requiredOutput.mediaType !== "application/json") {
-      return {
-        passed: false,
-        detail:
-          "Only application/json outputs may expose parsed content to the Taskset grader.",
-      };
-    }
-    if (input.saved.outputRef.sizeBytes > 1_000_000) {
-      return {
-        passed: false,
-        detail:
-          "Parsed Taskset grader content exceeds the 1,000,000 byte safety limit.",
-      };
-    }
-    try {
-      parsedJson = JSON.parse(
-        await readFile(input.saved.artifactPath, "utf8"),
-      );
-    } catch {
-      return {
-        passed: false,
-        detail: "Required JSON output could not be parsed.",
-      };
-    }
-  }
-  if (input.validateRequiredOutput) {
-    const validation = await input.validateRequiredOutput({
-      requiredOutput: input.requiredOutput,
-      outputRef: input.saved.outputRef,
-      artifactPath: input.saved.artifactPath,
-    });
-    return {
-      ...validation,
-      ...(parsedJson !== undefined ? { parsedJson } : {}),
-    };
-  }
-  return {
-    passed: true,
-    detail: input.requiredOutput.schemaRef
-      ? `Structure and media type passed; schema ${input.requiredOutput.schemaRef} is enforced by the Taskset grader.`
-      : "Structure and media type passed.",
-    ...(parsedJson !== undefined ? { parsedJson } : {}),
-  };
-}
-
-function workToolTurnLimit(taskset: Taskset): number {
-  const configured = taskset.environment.metadata.maxToolTurns;
-  return typeof configured === "number"
-    && Number.isInteger(configured)
-    && configured > 0
-    ? Math.min(configured, MAX_WORK_TOOL_TURNS)
-    : DEFAULT_MAX_WORK_TOOL_TURNS;
-}
-
-function normalizedOutputPath(value: string): string | null {
-  const normalized = value.trim().replaceAll("\\", "/");
-  if (!normalized || normalized.startsWith("/")) return null;
-  const clean = path.posix.normalize(normalized);
-  if (
-    clean === "."
-    || clean === ".."
-    || clean.startsWith("../")
-    || clean.split("/").includes("..")
-  ) {
-    return null;
-  }
-  return clean.startsWith("outputs/") ? clean.slice("outputs/".length) : clean;
-}
-
 function throwIfAborted(signal: AbortSignal): void {
   if (!signal.aborted) return;
   throw signal.reason instanceof Error
@@ -1037,12 +859,6 @@ function throwIfAborted(signal: AbortSignal): void {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }
 
 function elapsedMilliseconds(startedAt: string, completedAt: string): number {
