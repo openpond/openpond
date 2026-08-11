@@ -101,6 +101,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y imagemagick
 
+      - name: Build SDK for affected tests
+        if: needs.scope.outputs.affected_tests == 'true' || needs.scope.outputs.node_contracts == 'true'
+        run: pnpm run build:sdk
+
       - name: Run affected tests
         if: needs.scope.outputs.affected_tests == 'true' || needs.scope.outputs.node_contracts == 'true'
         env:
