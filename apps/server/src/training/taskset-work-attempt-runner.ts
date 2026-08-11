@@ -66,7 +66,10 @@ import {
   tasksetWorkMessages,
   tasksetWorkUserPrompt,
 } from "./taskset-work-prompt.js";
-import type { HostedTokenPricing } from "./hosted-token-pricing.js";
+import {
+  hostedUsageCostUsd,
+  type HostedTokenPricing,
+} from "./hosted-token-pricing.js";
 
 export type TasksetWorkModelDelta = {
   text?: string;
@@ -774,9 +777,19 @@ export async function runTasksetWorkAttempt(input: {
       };
     },
   );
+  const estimatedUsageCosts = input.hostedTokenPricing
+    ? usages.flatMap((usage) => {
+        const cost = hostedUsageCostUsd(usage, input.hostedTokenPricing!);
+        return cost === null ? [] : [cost];
+      })
+    : [];
   const providerInferenceUsd = explicitCosts.length
     ? sumUsd(explicitCosts)
-    : null;
+    : estimatedUsageCosts.length
+      ? sumUsd(estimatedUsageCosts)
+      : infrastructureError && usages.length === 0
+        ? 0
+      : null;
   const costComponents = [
     providerInferenceUsd,
     workRuntimeCost?.billableUsd ?? null,

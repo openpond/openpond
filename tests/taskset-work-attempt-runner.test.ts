@@ -472,6 +472,14 @@ describe("Taskset Work attempt runner", () => {
         seed: 17,
         attempt: 0,
         resultId: "attempt_taskset_work_environment_failure",
+        hostedTokenPricing: {
+          version: "test-v1",
+          source: "test",
+          effectiveAt: "2026-08-11T00:00:00.000Z",
+          inputUsdPerMillionTokens: 2,
+          cachedInputUsdPerMillionTokens: 0.5,
+          outputUsdPerMillionTokens: 4,
+        },
       });
 
       expect(modelCalled).toBe(false);
@@ -486,6 +494,11 @@ describe("Taskset Work attempt runner", () => {
       expect(execution.attempt.infrastructureError).toContain(
         "Sandbox capacity is temporarily unavailable.",
       );
+      expect(execution.attempt.costUsd).toBe(0);
+      expect(execution.attempt.metadata.costEvidence).toMatchObject({
+        providerInferenceUsd: 0,
+        combinedUsd: 0,
+      });
       expect(execution.grade).toMatchObject({
         passed: false,
         score: null,
@@ -710,6 +723,57 @@ describe("Taskset Work attempt runner", () => {
         Date.parse(execution.attempt.completedAt)
           - Date.parse(execution.attempt.startedAt),
       );
+      expect(workspaceActions.at(-1)).toBe("sandbox_stop");
+    }));
+
+  test("derives provider cost from admitted pricing when the stream omits cost", () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const { taskset, task } = await createWorkTaskset(directory);
+      await store.upsertTaskset(taskset);
+      const workspaceActions: string[] = [];
+      const { runtime } = successfulRuntime(workspaceActions);
+      const evaluation = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelText: async () => "",
+        modelStream: async function* () {
+          yield {
+            text: "Completed without a valid output.",
+            usage: {
+              promptTokens: 1_000,
+              completionTokens: 200,
+              promptTokensDetails: { cachedTokens: 400 },
+            },
+          };
+        },
+        workRuntime: runtime,
+      });
+
+      const execution = await evaluation.execute({
+        tasksetId: taskset.id,
+        taskId: task.id,
+        model: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        seed: 17,
+        attempt: 0,
+        resultId: "attempt_taskset_work_pricing_fallback",
+        hostedTokenPricing: {
+          version: "test-v1",
+          source: "test",
+          effectiveAt: "2026-08-11T00:00:00.000Z",
+          inputUsdPerMillionTokens: 2,
+          cachedInputUsdPerMillionTokens: 0.5,
+          outputUsdPerMillionTokens: 4,
+        },
+      });
+
+      expect(execution.attempt.costUsd).toBeCloseTo(0.0022, 8);
+      expect(execution.attempt.metadata.costEvidence).toMatchObject({
+        providerInferenceUsd: 0.0022,
+        combinedUsd: 0.0022,
+      });
       expect(workspaceActions.at(-1)).toBe("sandbox_stop");
     }));
 
