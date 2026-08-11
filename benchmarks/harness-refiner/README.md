@@ -82,8 +82,7 @@ Each complete pass uses the following sequence:
 4. Freeze the final treatment Harness and its complete step-by-step lineage.
 5. Run the frozen-evaluation cases with the final Harness using the same
    content-addressed web-evidence snapshot as the baseline.
-6. Compare paired held-out results. Repeat the full pass once after the protocol works
-   end to end.
+6. Compare paired held-out results under the frozen final Harness.
 
 The baseline and candidate Run Manifests must pin the same model identity,
 reasoning effort, runtime adapter and version, tool declarations, limits, and
@@ -114,12 +113,22 @@ an unchanged Harness are reported but cannot support an improvement claim.
 
 ## Results
 
-No result is published yet. Earlier diagnostic runs replayed the same cases,
-did not provide Refiner with the final grader evidence, and did not produce a
-candidate Harness Release. They are development evidence, not benchmark
-results.
+The locked 08112026 run completed all forty planned attempts with valid
+provider usage, frozen external evidence, and immutable Harness lineage. One
+reusable change was accepted after the ninth adaptation task: return complete
+short messages inline instead of only writing a file or returning its path.
 
-When a clean pass exists, a public Sandbox benchmark page can summarize the
-paired metrics and link back to the exact Taskset Release, Run Manifests, and
-redacted receipts in this directory. The public page must not replace these
-content-addressed source artifacts.
+That change transferred to the related held-out message family: all four tasks
+used fewer tokens, their aggregate fell from 42,866 to 21,823 tokens (49.1%
+fewer), and quality rose from 2/4 to 4/4. The broader claim did not pass. Across
+all ten held-out tasks, seven used fewer tokens, but three unrelated
+artifact/research outliers drove the aggregate from 2,209,073 to 2,998,965
+tokens (35.8% more). Overall held-out quality remained 8/10.
+
+The complete redacted aggregate and all twenty task pairs are in the
+content-addressed [08112026 public result](./results/harness-refiner-08112026.json).
+Earlier incomplete and batch/replay runs remain development evidence and are
+not included in the public result.
+
+Public result content hash:
+`14d622744d9397d415aeda8285b53b7d1c5c5486c45e0e953bb093e714d156b1`.

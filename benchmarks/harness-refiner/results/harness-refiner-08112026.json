@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "openpond.harnessRefinerPublicResult.v1",
+  "id": "harness-refiner-08112026",
+  "completedAt": "2026-08-11T22:04:41.923Z",
+  "outcome": "broad_efficiency_not_improved",
+  "source": {
+    "tasksetRelease": {
+      "id": "harness-refiner-08112026",
+      "contentHash": "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634"
+    },
+    "resultManifestContentHash": "3cd2b1ac1640413f66486f9767193970abe5a27afe2109c686e230d0b81993a8",
+    "evaluationReceiptContentHash": "29cfa79206d6eb6aec449c2d5bd2fb4fe0f43c7e51bc7cdaa657591cb738b8fd",
+    "accounting": "provider_reported_foreground_tokens_from_model_evaluation_receipt",
+    "model": {
+      "provider": "OpenPond",
+      "model": "openpond-chat",
+      "upstreamProvider": "DeepSeek",
+      "upstreamModel": "deepseek-v4-pro",
+      "upstreamRevision": "catalog-created:1779926400",
+      "reasoningEffort": "high"
+    }
+  },
+  "harness": {
+    "baselineContentHash": "939943d4ccdf91c4f6f3569e908672bd415746328ce2072bfa89f32c81282f9d",
+    "finalContentHash": "e189e5e91232dee184eb4e6a8a522f5ab6fc742af23e1a4141245cc75095b738",
+    "lineageValid": true,
+    "acceptedChanges": [
+      {
+        "afterTaskId": "adaptation-launch-delay-email",
+        "summary": "Return complete ready-to-send short messages inline instead of only writing a file or returning a summary or path."
+      }
+    ]
+  },
+  "aggregates": {
+    "adaptation": {
+      "baselineTokens": 1911337,
+      "refinedTokens": 2321819,
+      "tokenDelta": 410482,
+      "tokenDeltaPercent": 21.476170868873464,
+      "lowerTaskCount": 4,
+      "higherTaskCount": 6,
+      "baselineQualityPassCount": 8,
+      "refinedQualityPassCount": 6,
+      "taskCount": 10
+    },
+    "heldOut": {
+      "baselineTokens": 2209073,
+      "refinedTokens": 2998965,
+      "tokenDelta": 789892,
+      "tokenDeltaPercent": 35.75671786310367,
+      "lowerTaskCount": 7,
+      "higherTaskCount": 3,
+      "baselineQualityPassCount": 8,
+      "refinedQualityPassCount": 8,
+      "taskCount": 10
+    },
+    "relatedHeldOutMessages": {
+      "baselineTokens": 42866,
+      "refinedTokens": 21823,
+      "tokenDelta": -21043,
+      "tokenDeltaPercent": -49.090188027807585,
+      "lowerTaskCount": 4,
+      "higherTaskCount": 0,
+      "baselineQualityPassCount": 2,
+      "refinedQualityPassCount": 4,
+      "taskCount": 4,
+      "taskIds": [
+        "frozen-shipping-delay-chat-message",
+        "frozen-refund-support-reply",
+        "frozen-maintenance-followup-email",
+        "frozen-vendor-document-followup-email"
+      ]
+    },
+    "allTasks": {
+      "baselineTokens": 4120410,
+      "refinedTokens": 5320784,
+      "tokenDelta": 1200374,
+      "tokenDeltaPercent": 29.13239216485738,
+      "lowerTaskCount": 11,
+      "higherTaskCount": 9,
+      "taskCount": 20
+    }
+  },
+  "pairs": [
+    { "cohort": "adaptation", "taskId": "adaptation-board-launch-brief", "baselineTokens": 307056, "refinedTokens": 1099981, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "adaptation", "taskId": "adaptation-latency-incident-review", "baselineTokens": 188012, "refinedTokens": 226921, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "adaptation", "taskId": "adaptation-program-budget-workbook", "baselineTokens": 92503, "refinedTokens": 125800, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "adaptation", "taskId": "adaptation-invoice-correction-email", "baselineTokens": 12797, "refinedTokens": 5715, "baselinePassed": false, "refinedPassed": true },
+    { "cohort": "adaptation", "taskId": "adaptation-nextjs-security-audit", "baselineTokens": 872276, "refinedTokens": 410427, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "adaptation", "taskId": "adaptation-workshop-reschedule-email", "baselineTokens": 5459, "refinedTokens": 11595, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "adaptation", "taskId": "adaptation-accessible-boston-dc-plan", "baselineTokens": 210112, "refinedTokens": 164567, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "adaptation", "taskId": "adaptation-chatgpt-public-experiences", "baselineTokens": 211465, "refinedTokens": 258626, "baselinePassed": false, "refinedPassed": true },
+    { "cohort": "adaptation", "taskId": "adaptation-launch-delay-email", "baselineTokens": 6140, "refinedTokens": 12734, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "adaptation", "taskId": "adaptation-service-window-email", "baselineTokens": 5517, "refinedTokens": 5453, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-clinic-relocation-brief", "baselineTokens": 511753, "refinedTokens": 427306, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-payment-incident-review", "baselineTokens": 69719, "refinedTokens": 740606, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-grant-budget-workbook", "baselineTokens": 102844, "refinedTokens": 216674, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-shipping-delay-chat-message", "baselineTokens": 5590, "refinedTokens": 5403, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-python-requests-security-audit", "baselineTokens": 317227, "refinedTokens": 134259, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "held_out", "taskId": "frozen-refund-support-reply", "baselineTokens": 11845, "refinedTokens": 5492, "baselinePassed": false, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-accessible-chicago-stl-plan", "baselineTokens": 534611, "refinedTokens": 485302, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-new-jersey-youth-grants", "baselineTokens": 630053, "refinedTokens": 972995, "baselinePassed": true, "refinedPassed": false },
+    { "cohort": "held_out", "taskId": "frozen-maintenance-followup-email", "baselineTokens": 6287, "refinedTokens": 5491, "baselinePassed": true, "refinedPassed": true },
+    { "cohort": "held_out", "taskId": "frozen-vendor-document-followup-email", "baselineTokens": 19144, "refinedTokens": 5437, "baselinePassed": false, "refinedPassed": true }
+  ],
+  "contentHash": "14d622744d9397d415aeda8285b53b7d1c5c5486c45e0e953bb093e714d156b1"
+}

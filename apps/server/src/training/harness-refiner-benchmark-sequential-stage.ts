@@ -164,11 +164,21 @@ export async function runSequentialHarnessAdaptation(input: {
       for (const value of records) {
         if (!value || typeof value !== "object" || Array.isArray(value)) continue;
         const record = value as Record<string, unknown>;
-        const inputTokens = numericToken(record, ["promptTokens", "inputTokens"]);
-        const outputTokens = numericToken(record, ["completionTokens", "outputTokens"]);
+        const inputTokens = numericToken(record, [
+          "promptTokens",
+          "prompt_tokens",
+          "inputTokens",
+          "input_tokens",
+        ]);
+        const outputTokens = numericToken(record, [
+          "completionTokens",
+          "completion_tokens",
+          "outputTokens",
+          "output_tokens",
+        ]);
         total.inputTokens += inputTokens;
         total.outputTokens += outputTokens;
-        total.totalTokens += numericToken(record, ["totalTokens"])
+        total.totalTokens += numericToken(record, ["totalTokens", "total_tokens"])
           || inputTokens + outputTokens;
       }
       return total;
