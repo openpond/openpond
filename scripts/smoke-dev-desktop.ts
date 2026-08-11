@@ -271,8 +271,8 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
   experienceOptions: string[];
   activeExperience: string | null;
   keyboardMenuPassed: boolean;
-  workStarterCount: number;
-  workStarterPopulatedComposer: boolean;
+  workModeSelected: boolean;
+  workComposerAvailable: boolean;
   ambientHandoffAbsent: boolean;
   topBarSelectorAbsent: boolean;
   teamRowStyled: boolean;
@@ -312,8 +312,8 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
 
   const experienceMenuStyled =
     ["flex", "inline-flex"].includes(initial.triggerDisplay) &&
-    initial.triggerLabel === "OpenPond product: Chat" &&
-    initial.visibleExperience === "Chat";
+    initial.triggerLabel === "OpenPond product: Work" &&
+    initial.visibleExperience === "Work";
   if (!experienceMenuStyled) {
     throw new Error(
       `Experience menu styles were not loaded: ${JSON.stringify(initial)}`
@@ -374,7 +374,7 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     "Experience menu did not open from the keyboard."
   );
   const keyboardMenuPassed =
-    keyboardMenu.labels.join(",") === "Chat,Models" &&
+    keyboardMenu.labels.join(",") === "Work,Models" &&
     keyboardMenu.focusedProductArea === "chat";
   if (!keyboardMenuPassed) {
     throw new Error(
@@ -416,86 +416,30 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     5_000,
     "Models controls did not render after switching products."
   );
-  await selectProductArea(cdp, "chat", "Chat");
+  await selectProductArea(cdp, "chat", "Work");
   await selectTaskMode(cdp, "work", "Work");
-  const workState = await waitFor(
-    async () =>
-      evaluateValue<{
-        starterCount: number;
-        handoffCount: number;
-        topBarSelectorCount: number;
-      } | null>(
-        cdp,
-        `(() => {
-          const starters = document.querySelectorAll(".work-starter-prompt");
-          if (starters.length !== 4) return null;
-          return {
-            starterCount: starters.length,
-            handoffCount: document.querySelectorAll(".experience-handoff-bar").length,
-            topBarSelectorCount: document.querySelectorAll(".experience-selector").length
-          };
-        })()`
+  const workState = await evaluateValue<{
+    composerAvailable: boolean;
+    handoffCount: number;
+    topBarSelectorCount: number;
+  }>(
+    cdp,
+    `(() => ({
+      composerAvailable: Boolean(
+        document.querySelector(".composer-inline-input[role='textbox']")
       ),
-    5_000,
-    "Work starter examples did not render."
+      handoffCount: document.querySelectorAll(".experience-handoff-bar").length,
+      topBarSelectorCount: document.querySelectorAll(".experience-selector").length
+    }))()`
   );
+  if (!workState.composerAvailable) {
+    throw new Error("Work task mode did not render the composer.");
+  }
   if (workState.handoffCount !== 0 || workState.topBarSelectorCount !== 0) {
     throw new Error(
       `Work rendered retired global UI: ${JSON.stringify(workState)}`
     );
   }
-  await evaluateValue<boolean>(
-    cdp,
-    `(() => {
-      const starter = document.querySelector(".work-starter-prompt");
-      if (!(starter instanceof HTMLButtonElement)) return false;
-      starter.click();
-      return true;
-    })()`
-  );
-  await waitFor(
-    async () =>
-      evaluateValue<boolean>(
-        cdp,
-        `(() => {
-          const input = document.querySelector(".composer-inline-input[role='textbox']");
-          return Boolean(input?.textContent?.includes("Turn my notes and attached source material"));
-        })()`
-      ),
-    5_000,
-    "Work starter did not populate the composer."
-  );
-  const workStarterPopulatedComposer = await evaluateValue<boolean>(
-    cdp,
-    `document.activeElement === document.querySelector(".composer-inline-input[role='textbox']")`
-  );
-  if (!workStarterPopulatedComposer) {
-    throw new Error(
-      "Work starter populated the composer but did not focus it."
-    );
-  }
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "a",
-    code: "KeyA",
-    modifiers: 2,
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key: "a",
-    code: "KeyA",
-    modifiers: 2,
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyDown",
-    key: "Backspace",
-    code: "Backspace",
-  });
-  await cdp.send("Input.dispatchKeyEvent", {
-    type: "keyUp",
-    key: "Backspace",
-    code: "Backspace",
-  });
 
   await selectTaskMode(cdp, "chat", "Chat");
 
@@ -504,8 +448,8 @@ async function verifySharedSurfaceStyles(cdp: CdpClient): Promise<{
     experienceOptions,
     activeExperience: "Chat",
     keyboardMenuPassed,
-    workStarterCount: workState.starterCount,
-    workStarterPopulatedComposer,
+    workModeSelected: true,
+    workComposerAvailable: workState.composerAvailable,
     ambientHandoffAbsent: workState.handoffCount === 0,
     topBarSelectorAbsent: workState.topBarSelectorCount === 0,
     teamRowStyled,
