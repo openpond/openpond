@@ -40,6 +40,8 @@ import type {
 } from "./taskset-work-attempt-runner.js";
 import { linkHarnessReviewTaskset } from "./harness-review-taskset.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
+import { hostedModelJudgeCallCost } from "./evaluation-grader-cost.js";
+import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { reviewRefMatches, variance } from "./evaluation-service-statistics.js";
 
 type AuditFixtureInput = {
@@ -190,6 +192,7 @@ export function createTaskEvaluationService(deps: {
       tasksetId: taskset.id,
       taskId: task.id,
       attempt,
+      hostedTokenPricing: input.hostedTokenPricing,
     });
     const artifacts = await deps.store.listTaskAttemptArtifacts({
       attemptId: attempt.id,
@@ -241,6 +244,7 @@ export function createTaskEvaluationService(deps: {
     tasksetId: string;
     taskId: string;
     attempt: unknown;
+    hostedTokenPricing?: HostedTokenPricing;
   }) {
     const taskset = await requireTaskset(input.tasksetId);
     const attempt = TaskAttemptResultSchema.parse(input.attempt);
@@ -249,7 +253,7 @@ export function createTaskEvaluationService(deps: {
     const rawUsages: unknown[] = [];
     let explicitCostUsd = 0;
     let modelJudgeCalls = 0;
-    let modelJudgeCostObserved = false;
+    let modelJudgeCostAccounted = 0;
     const result = await gradeTasksetEvaluationAttempt({
       task,
       attempt,
@@ -260,13 +264,14 @@ export function createTaskEvaluationService(deps: {
             const judged = await deps.modelJudge!(judgeInput);
             if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
             else if (judged.usage !== undefined) rawUsages.push(judged.usage);
-            if (
-              typeof judged.costUsd === "number"
-              && Number.isFinite(judged.costUsd)
-              && judged.costUsd >= 0
-            ) {
-              explicitCostUsd += judged.costUsd;
-              modelJudgeCostObserved = true;
+            const callCostUsd = hostedModelJudgeCallCost({
+              costUsd: judged.costUsd,
+              usage: judged.usage,
+              pricing: input.hostedTokenPricing,
+            });
+            if (callCostUsd !== null) {
+              explicitCostUsd += callCostUsd;
+              modelJudgeCostAccounted += 1;
             }
             return judged;
           }
@@ -298,7 +303,7 @@ export function createTaskEvaluationService(deps: {
       // unless its hosted cost was actually observed.
       costUsd: modelJudgeCalls === 0
         ? 0
-        : modelJudgeCostObserved
+        : modelJudgeCostAccounted === modelJudgeCalls
           ? explicitCostUsd
           : null,
     });
