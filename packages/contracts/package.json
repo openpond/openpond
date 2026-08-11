@@ -1,6 +1,6 @@
 {
   "name": "@openpond/contracts",
-  "version": "0.0.50",
+  "version": "0.0.51",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "private": true,
@@ -13,7 +13,9 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "scripts": { "build": "tsc -b" },
+  "scripts": {
+    "build": "tsc -b"
+  },
   "dependencies": {
     "@openpond/evals": "workspace:*",
     "@openpond/harness": "workspace:*",
