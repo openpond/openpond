@@ -148,14 +148,13 @@ export function BenchmarkComparisonSummary({
 }) {
   const efficiency = benchmarkTaskEfficiency(receipt);
   const pairedEvidenceAvailable = efficiency.comparedTaskCount > 0;
-  const targetMet = pairedEvidenceAvailable
-    && efficiency.lowerTaskCount === efficiency.comparedTaskCount;
+  const targetMet = efficiency.passed;
   const percent = efficiency.tokenDeltaPercent === null
     ? "—"
     : `${efficiency.tokenDeltaPercent > 0 ? "+" : ""}${efficiency.tokenDeltaPercent.toFixed(2)}%`;
   const cohortResult = (cohort: "adaptation" | "held_out") => {
     const result = efficiency.cohorts[cohort];
-    return `${result.lowerTaskCount}/${result.comparedTaskCount} lower`;
+    return `${result.passedTaskCount}/${result.comparedTaskCount} passed`;
   };
 
   return (
@@ -164,14 +163,12 @@ export function BenchmarkComparisonSummary({
       {pairedEvidenceAvailable ? (
         <div className="labs-benchmark-efficiency-summary">
           <strong>
-            {efficiency.lowerTaskCount} of {efficiency.comparedTaskCount} tasks used fewer tokens
+            {efficiency.passedTaskCount} of {efficiency.comparedTaskCount} tasks passed
           </strong>
           <p>
-            The same tasks were measured before and after one Harness refinement.
-            {" "}{efficiency.higherTaskCount} used more
-            {efficiency.unchangedTaskCount
-              ? ` and ${efficiency.unchangedTaskCount} were unchanged`
-              : ""}; total foreground usage changed by {percent}.
+            A task passes only when its refined token count is strictly lower
+            than its own baseline. {efficiency.failedTaskCount} failed this
+            token-efficiency test; aggregate usage changed by {percent}.
           </p>
         </div>
       ) : (
@@ -182,16 +179,16 @@ export function BenchmarkComparisonSummary({
       <dl className="labs-run-detail-list">
         <Fact label="Execution" value={statusLabel(run.status)} />
         <Fact
-          label="All-task reduction target"
-          value={targetMet ? "Met" : "Not met"}
+          label="Token-efficiency result"
+          value={targetMet ? "Passed" : "Failed"}
         />
         <Fact
-          label="Tasks using fewer tokens"
-          value={`${efficiency.lowerTaskCount}/${efficiency.comparedTaskCount}`}
+          label="Efficiency passes"
+          value={`${efficiency.passedTaskCount}/${efficiency.comparedTaskCount}`}
         />
         <Fact
-          label="Tasks using more tokens"
-          value={`${efficiency.higherTaskCount}/${efficiency.comparedTaskCount}`}
+          label="Efficiency failures"
+          value={`${efficiency.failedTaskCount}/${efficiency.comparedTaskCount}`}
         />
         <Fact
           label="All-task foreground tokens"

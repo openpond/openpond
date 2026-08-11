@@ -1,4 +1,9 @@
-import type { ModelEvaluationReceipt } from "@openpond/contracts";
+import {
+  summarizeModelEvaluationTaskEfficiency,
+  type ModelEvaluationReceipt,
+  type ModelEvaluationTaskEfficiency,
+  type ModelEvaluationTaskEfficiencyPair,
+} from "@openpond/contracts";
 
 type BenchmarkAttempt = ModelEvaluationReceipt["attempts"][number];
 type BenchmarkPhase = BenchmarkAttempt["phase"];
@@ -10,28 +15,20 @@ export type BenchmarkForegroundUsage = {
   costUsd: number | null;
 };
 
-export type BenchmarkTaskEfficiencyPair = {
-  cohort: "adaptation" | "held_out";
-  taskId: string;
-  baseline: BenchmarkAttempt;
-  refined: BenchmarkAttempt;
-  tokenDelta: number;
-};
+export type BenchmarkTaskEfficiencyPair = ModelEvaluationTaskEfficiencyPair;
 
-export type BenchmarkTaskEfficiencySummary = {
+export type BenchmarkTaskEfficiencySummary = Omit<
+  ModelEvaluationTaskEfficiency,
+  "cohorts"
+> & {
   pairs: BenchmarkTaskEfficiencyPair[];
-  comparedTaskCount: number;
-  lowerTaskCount: number;
-  higherTaskCount: number;
-  unchangedTaskCount: number;
-  baselineTokens: number;
-  refinedTokens: number;
-  tokenDelta: number;
-  tokenDeltaPercent: number | null;
   baselinePassedCount: number;
   refinedPassedCount: number;
   cohorts: Record<"adaptation" | "held_out", {
+    targetTaskCount: number;
     comparedTaskCount: number;
+    passedTaskCount: number;
+    failedTaskCount: number;
     lowerTaskCount: number;
     higherTaskCount: number;
     unchangedTaskCount: number;
@@ -101,62 +98,18 @@ export function benchmarkTaskEfficiency(
   receipt: ModelEvaluationReceipt,
 ): BenchmarkTaskEfficiencySummary {
   const selected = benchmarkSelectedAttempts(receipt.attempts ?? []);
-  const pairs = ([
-    ["adaptation", "adaptation", "candidate_adaptation"],
-    ["held_out", "baseline", "candidate"],
-  ] as const).flatMap(([cohort, baselinePhase, refinedPhase]) => {
-    const refinedByTask = new Map(
-      selected
-        .filter((attempt) => attempt.phase === refinedPhase)
-        .map((attempt) => [attempt.taskId, attempt]),
-    );
-    return selected
-      .filter((attempt) => attempt.phase === baselinePhase)
-      .flatMap((baseline) => {
-        const refined = refinedByTask.get(baseline.taskId);
-        return refined ? [{
-          cohort,
-          taskId: baseline.taskId,
-          baseline,
-          refined,
-          tokenDelta: refined.totalTokens - baseline.totalTokens,
-        }] : [];
-      });
-  });
-  const baselineTokens = pairs.reduce(
-    (sum, pair) => sum + pair.baseline.totalTokens,
-    0,
-  );
-  const refinedTokens = pairs.reduce(
-    (sum, pair) => sum + pair.refined.totalTokens,
-    0,
-  );
-  const tokenDelta = refinedTokens - baselineTokens;
-  const summarizePairs = (items: BenchmarkTaskEfficiencyPair[]) => ({
-    comparedTaskCount: items.length,
-    lowerTaskCount: items.filter((pair) => pair.tokenDelta < 0).length,
-    higherTaskCount: items.filter((pair) => pair.tokenDelta > 0).length,
-    unchangedTaskCount: items.filter((pair) => pair.tokenDelta === 0).length,
+  const { summary, pairs } = summarizeModelEvaluationTaskEfficiency({
+    attempts: selected,
   });
 
   return {
+    ...summary,
     pairs,
-    ...summarizePairs(pairs),
-    baselineTokens,
-    refinedTokens,
-    tokenDelta,
-    tokenDeltaPercent: baselineTokens > 0
-      ? (tokenDelta / baselineTokens) * 100
-      : null,
     baselinePassedCount: pairs.filter((pair) => pair.baseline.passed).length,
     refinedPassedCount: pairs.filter((pair) => pair.refined.passed).length,
     cohorts: {
-      adaptation: summarizePairs(
-        pairs.filter((pair) => pair.cohort === "adaptation"),
-      ),
-      held_out: summarizePairs(
-        pairs.filter((pair) => pair.cohort === "held_out"),
-      ),
+      adaptation: summary.cohorts.adaptation,
+      held_out: summary.cohorts.heldOut,
     },
   };
 }

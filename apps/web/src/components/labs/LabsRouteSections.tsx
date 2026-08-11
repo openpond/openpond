@@ -18,6 +18,7 @@ import {
 } from "../icons";
 import { workproductKey, type LabWorkproductSummary } from "./lab-workproducts";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { benchmarkTaskEfficiency } from "./benchmark-attempt-usage";
 import {
   labLifecycleModelRuns,
   labModelJobs,
@@ -322,7 +323,12 @@ function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
       ? "Harness Refiner"
       : "Benchmark";
     const outcome = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
-      ? titleCase(run.receipt.terminalClassification.replaceAll("_", " "))
+      ? run.receipt.attempts?.length
+        ? (() => {
+            const efficiency = benchmarkTaskEfficiency(run.receipt);
+            return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} passed`;
+          })()
+        : titleCase(run.receipt.terminalClassification.replaceAll("_", " "))
       : run.receipt?.schemaVersion === "openpond.modelEvaluationStopReceipt.v1"
         ? "Inconclusive"
       : run.evaluationProgress

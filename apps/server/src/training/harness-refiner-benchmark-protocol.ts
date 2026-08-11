@@ -38,6 +38,10 @@ export function totalPlannedAttempts(plan: HarnessRefinerExecutionPlanItem[]): n
   return plan.reduce((total, item) => total + item.attemptCount, 0);
 }
 
+export function totalPlannedTasks(plan: HarnessRefinerExecutionPlanItem[]): number {
+  return new Set(plan.flatMap((item) => item.taskIds)).size;
+}
+
 export function completedBeforeStage(
   plan: HarnessRefinerExecutionPlanItem[],
   stage: HarnessRefinerBenchmarkStage,

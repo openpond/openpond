@@ -292,10 +292,13 @@ describe("Lab workspace", () => {
     );
 
     expect(markup).toContain("Token efficiency");
-    expect(markup).toContain("1 of 2 tasks used fewer tokens");
-    expect(markup).toContain("1 used more; total foreground usage changed by -33.33%");
+    expect(markup).toContain("1 of 2 tasks passed");
+    expect(markup).toContain("1 failed this token-efficiency test");
+    expect(markup).toContain("aggregate usage changed by -33.33%");
     expect(markup).toContain(">Execution</dt><dd>Succeeded<");
-    expect(markup).toContain(">All-task reduction target</dt><dd>Not met<");
+    expect(markup).toContain(">Token-efficiency result</dt><dd>Failed<");
+    expect(markup).toContain(">Efficiency passes</dt><dd>1/2<");
+    expect(markup).toContain(">Efficiency failures</dt><dd>1/2<");
     expect(markup).toContain(">All-task foreground tokens</dt><dd>300 → 200<");
     expect(markup).toContain(">Task quality</dt><dd>1/2 → 2/2<");
     expect(markup).not.toContain("No accepted Harness improvement");
@@ -409,6 +412,8 @@ describe("Lab workspace", () => {
 
     expect(efficiency).toMatchObject({
       comparedTaskCount: 3,
+      passedTaskCount: 2,
+      failedTaskCount: 1,
       lowerTaskCount: 2,
       higherTaskCount: 1,
       unchangedTaskCount: 0,

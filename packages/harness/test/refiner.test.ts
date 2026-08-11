@@ -54,7 +54,12 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("behaviorFamilies and crossTaskToolFailureGroups");
     expect(system).toContain("minimum number of materially different adaptation tasks");
     expect(system).toContain("Valid passing grades do not erase avoidable tool detours");
-    expect(system).toContain("high usage alone does not justify a Harness change");
+    expect(system).toContain("foreground-token efficiency is the optimization objective");
+    expect(system).toContain("same request with fewer foreground tokens");
+    expect(system).toContain("answer-quality grades are separate safety evidence");
+    expect(system).toContain("Prefer subtractive or constraining changes");
+    expect(system).toContain("Reject a broad quality-only guardrail");
+    expect(system).toContain("high usage on one task alone does not justify");
   });
 
   test("authors and repairs validated public decisions", async () => {
@@ -115,5 +120,8 @@ describe("public model-driven Harness Refiner", () => {
     expect(messagesSeen).toHaveLength(2);
     expect(messagesSeen[1]!.at(-1)!.content).toContain("mandatory independent critique");
     expect(messagesSeen[1]!.at(-1)!.content).toContain("materially different future tasks");
+    expect(messagesSeen[1]!.at(-1)!.content).toContain(
+      "reject the draft if it primarily adds quality requirements",
+    );
   });
 });

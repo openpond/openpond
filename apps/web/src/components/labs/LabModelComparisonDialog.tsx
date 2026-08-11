@@ -13,7 +13,7 @@ import { formatDateTime } from "../training/training-model-data";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
 import {
   benchmarkForegroundUsage,
-  benchmarkResultAccepted,
+  benchmarkTaskEfficiency,
 } from "./benchmark-attempt-usage";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
@@ -118,7 +118,7 @@ export function LabModelComparisonDialog({
                       <dl>
                         <div>
                           <dt>Result</dt>
-                          <dd>{titleCase(entry.receipt.terminalClassification)}</dd>
+                          <dd>{efficiencyResult(entry.receipt)}</dd>
                         </div>
                         <div>
                           <dt>Quality</dt>
@@ -127,12 +127,10 @@ export function LabModelComparisonDialog({
                           </dd>
                         </div>
                         <div>
-                          <dt>
-                            {benchmarkResultAccepted(entry.receipt)
-                              ? "Token change"
-                              : "Diagnostic token change"}
-                          </dt>
-                          <dd>{signedPercent(entry.receipt.foregroundTokenDeltaPercent)}</dd>
+                          <dt>All-task token change</dt>
+                          <dd>{signedPercent(
+                            benchmarkTaskEfficiency(entry.receipt).tokenDeltaPercent,
+                          )}</dd>
                         </div>
                         <div>
                           <dt>Harness</dt>
@@ -158,6 +156,11 @@ export function LabModelComparisonDialog({
       </div>
     </AppDialog>
   );
+}
+
+function efficiencyResult(receipt: ModelEvaluationReceipt): string {
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} passed`;
 }
 
 function RunSelect({
@@ -240,10 +243,4 @@ function compactTime(value: string): string {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function titleCase(value: string): string {
-  return value
-    .replaceAll("_", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
 }

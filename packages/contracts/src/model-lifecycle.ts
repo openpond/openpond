@@ -110,7 +110,7 @@ const EvaluationUsageCategorySchema = z.object({
   costUsd: z.number().nonnegative().nullable(),
 }).strict();
 const GitObjectIdSchema = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
-const ModelEvaluationAttemptSchema = z.object({
+export const ModelEvaluationAttemptSchema = z.object({
   phase: z.enum([
     "baseline",
     "adaptation",
@@ -130,6 +130,37 @@ const ModelEvaluationAttemptSchema = z.object({
   latencyMs: z.number().int().nonnegative(),
   costUsd: z.number().nonnegative().nullable(),
   startedAt: ReleaseTimestampSchema,
+}).strict();
+
+const ModelEvaluationTaskEfficiencyCohortSchema = z.object({
+  targetTaskCount: z.number().int().nonnegative(),
+  comparedTaskCount: z.number().int().nonnegative(),
+  passedTaskCount: z.number().int().nonnegative(),
+  failedTaskCount: z.number().int().nonnegative(),
+  lowerTaskCount: z.number().int().nonnegative(),
+  higherTaskCount: z.number().int().nonnegative(),
+  unchangedTaskCount: z.number().int().nonnegative(),
+}).strict();
+
+export const ModelEvaluationTaskEfficiencySchema = z.object({
+  target: z.literal("all_tasks_lower"),
+  targetTaskCount: z.number().int().nonnegative(),
+  comparedTaskCount: z.number().int().nonnegative(),
+  passedTaskCount: z.number().int().nonnegative(),
+  failedTaskCount: z.number().int().nonnegative(),
+  lowerTaskCount: z.number().int().nonnegative(),
+  higherTaskCount: z.number().int().nonnegative(),
+  unchangedTaskCount: z.number().int().nonnegative(),
+  baselineTokens: z.number().int().nonnegative(),
+  refinedTokens: z.number().int().nonnegative(),
+  tokenDelta: z.number().int(),
+  tokenDeltaPercent: z.number().finite().nullable(),
+  complete: z.boolean(),
+  passed: z.boolean(),
+  cohorts: z.object({
+    adaptation: ModelEvaluationTaskEfficiencyCohortSchema,
+    heldOut: ModelEvaluationTaskEfficiencyCohortSchema,
+  }).strict(),
 }).strict();
 
 const ModelEvaluationUsageSchema = z.object({
@@ -181,6 +212,7 @@ export const ModelEvaluationReceiptSchema = z.object({
   }).strict(),
   foregroundTokenDelta: z.number().int(),
   foregroundTokenDeltaPercent: z.number().finite().nullable(),
+  taskEfficiency: ModelEvaluationTaskEfficiencySchema.optional(),
   efficiency: z.object({
     grossForegroundTokenSavings: z.number().int(),
     overheadTokens: z.number().int().nonnegative(),
@@ -407,3 +439,128 @@ export type ModelEvaluationReceipt = z.infer<typeof ModelEvaluationReceiptSchema
 export type ModelEvaluationStopReceipt = z.infer<typeof ModelEvaluationStopReceiptSchema>;
 export type ModelEvaluationConfiguration = z.infer<typeof ModelEvaluationConfigurationSchema>;
 export type ModelRun = z.infer<typeof ModelRunSchema>;
+export type ModelEvaluationAttempt = z.infer<typeof ModelEvaluationAttemptSchema>;
+export type ModelEvaluationTaskEfficiency = z.infer<
+  typeof ModelEvaluationTaskEfficiencySchema
+>;
+export type ModelEvaluationTaskEfficiencyPair = {
+  cohort: "adaptation" | "held_out";
+  taskId: string;
+  baseline: ModelEvaluationAttempt;
+  refined: ModelEvaluationAttempt;
+  tokenDelta: number;
+};
+
+export function summarizeModelEvaluationTaskEfficiency(input: {
+  attempts: readonly ModelEvaluationAttempt[];
+  targetTaskCount?: number;
+}): {
+  summary: ModelEvaluationTaskEfficiency;
+  pairs: ModelEvaluationTaskEfficiencyPair[];
+} {
+  const selected = new Map<string, ModelEvaluationAttempt>();
+  for (const attempt of input.attempts) {
+    const key = `${attempt.phase}\u0000${attempt.taskId}`;
+    const current = selected.get(key);
+    if (
+      !current
+      || attempt.startedAt > current.startedAt
+      || (
+        attempt.startedAt === current.startedAt
+        && attempt.attemptId > current.attemptId
+      )
+    ) {
+      selected.set(key, attempt);
+    }
+  }
+  const attempts = [...selected.values()];
+  const pairs = ([
+    ["adaptation", "adaptation", "candidate_adaptation"],
+    ["held_out", "baseline", "candidate"],
+  ] as const).flatMap(([cohort, baselinePhase, refinedPhase]) => {
+    const refinedByTask = new Map(
+      attempts
+        .filter((attempt) => attempt.phase === refinedPhase)
+        .map((attempt) => [attempt.taskId, attempt]),
+    );
+    return attempts
+      .filter((attempt) => attempt.phase === baselinePhase)
+      .flatMap((baseline) => {
+        const refined = refinedByTask.get(baseline.taskId);
+        return refined ? [{
+          cohort,
+          taskId: baseline.taskId,
+          baseline,
+          refined,
+          tokenDelta: refined.totalTokens - baseline.totalTokens,
+        }] : [];
+      });
+  });
+  const defaultTargetTaskCount = new Set(
+    attempts
+      .filter((attempt) => attempt.phase === "baseline" || attempt.phase === "adaptation")
+      .map((attempt) => attempt.taskId),
+  ).size;
+  const targetTaskCount = input.targetTaskCount ?? defaultTargetTaskCount;
+  if (!Number.isInteger(targetTaskCount) || targetTaskCount < 0) {
+    throw new Error("Benchmark task-efficiency target must be a non-negative integer.");
+  }
+  const cohortTargetTaskCount = {
+    adaptation: new Set(
+      attempts
+        .filter((attempt) => attempt.phase === "adaptation")
+        .map((attempt) => attempt.taskId),
+    ).size,
+    held_out: new Set(
+      attempts
+        .filter((attempt) => attempt.phase === "baseline")
+        .map((attempt) => attempt.taskId),
+    ).size,
+  };
+  const summarizePairs = (
+    items: ModelEvaluationTaskEfficiencyPair[],
+    cohortTarget: number,
+  ) => ({
+    targetTaskCount: cohortTarget,
+    comparedTaskCount: items.length,
+    passedTaskCount: items.filter((pair) => pair.tokenDelta < 0).length,
+    failedTaskCount: items.filter((pair) => pair.tokenDelta >= 0).length,
+    lowerTaskCount: items.filter((pair) => pair.tokenDelta < 0).length,
+    higherTaskCount: items.filter((pair) => pair.tokenDelta > 0).length,
+    unchangedTaskCount: items.filter((pair) => pair.tokenDelta === 0).length,
+  });
+  const counts = summarizePairs(pairs, targetTaskCount);
+  const baselineTokens = pairs.reduce(
+    (sum, pair) => sum + pair.baseline.totalTokens,
+    0,
+  );
+  const refinedTokens = pairs.reduce(
+    (sum, pair) => sum + pair.refined.totalTokens,
+    0,
+  );
+  const tokenDelta = refinedTokens - baselineTokens;
+  const complete = pairs.length === targetTaskCount;
+  const summary = ModelEvaluationTaskEfficiencySchema.parse({
+    target: "all_tasks_lower",
+    ...counts,
+    baselineTokens,
+    refinedTokens,
+    tokenDelta,
+    tokenDeltaPercent: baselineTokens > 0
+      ? (tokenDelta / baselineTokens) * 100
+      : null,
+    complete,
+    passed: complete && counts.passedTaskCount === targetTaskCount,
+    cohorts: {
+      adaptation: summarizePairs(
+        pairs.filter((pair) => pair.cohort === "adaptation"),
+        cohortTargetTaskCount.adaptation,
+      ),
+      heldOut: summarizePairs(
+        pairs.filter((pair) => pair.cohort === "held_out"),
+        cohortTargetTaskCount.held_out,
+      ),
+    },
+  });
+  return { summary, pairs };
+}

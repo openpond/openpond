@@ -3,6 +3,7 @@ import {
   ModelEvaluationReceiptSchema,
   ModelEvaluationStopReceiptSchema,
   ModelRunSchema,
+  summarizeModelEvaluationTaskEfficiency,
   type ChatModelRef,
   type CodexReasoningEffort,
   type ModelProject,
@@ -27,6 +28,7 @@ import {
   completedBeforeStage,
   createHarnessRefinerExecutionPlan,
   totalPlannedAttempts,
+  totalPlannedTasks,
   type HarnessRefinerExecutionPlanItem,
 } from "./harness-refiner-benchmark-protocol.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
@@ -823,6 +825,10 @@ export function createHarnessRefinerBenchmarkService(deps: {
       const finalRunCheckpoint = await deps.store.getModelRun(modelRun.id) ?? modelRun;
       const finalAccounting = finalRunCheckpoint.evaluationProgress?.accounting
         ?? emptyEvaluationAccounting();
+      const taskEfficiency = summarizeModelEvaluationTaskEfficiency({
+        attempts: finalAccounting.attempts,
+        targetTaskCount: totalPlannedTasks(executionPlan),
+      }).summary;
       const efficiency = benchmarkEfficiency({
         baselineTokens: baseline.run.usage.totalTokens,
         candidateTokens: candidate.run.usage.totalTokens,
@@ -876,6 +882,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
         foregroundTokenDelta: candidate.comparison.foregroundTokenDelta,
         foregroundTokenDeltaPercent:
           candidate.comparison.foregroundTokenDeltaPercent,
+        taskEfficiency,
         efficiency,
         budget: {
           maximumSpendUsd: budget.maximumSpendUsd,

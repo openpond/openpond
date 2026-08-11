@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from "vitest";
 import {
   ModelEvaluationReceiptSchema,
   ModelEvaluationStopReceiptSchema,
+  summarizeModelEvaluationTaskEfficiency,
 } from "@openpond/contracts";
 
 import {
@@ -11,6 +12,7 @@ import {
   benchmarkEfficiency,
   createHarnessRefinerExecutionPlan,
   totalPlannedAttempts,
+  totalPlannedTasks,
 } from "../apps/server/src/training/harness-refiner-benchmark-protocol.js";
 import {
   benchmarkLineage,
@@ -49,6 +51,109 @@ describe("Harness Refiner benchmark protocol", () => {
       ["candidate", 10],
     ]);
     expect(totalPlannedAttempts(plan)).toBe(40);
+    expect(totalPlannedTasks(plan)).toBe(20);
+  });
+
+  test("passes a task only when its selected refined attempt uses fewer tokens", () => {
+    const attempt = (input: {
+      attemptId: string;
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation";
+      taskId: string;
+      totalTokens: number;
+      startedAt?: string;
+    }) => ({
+      ...input,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score: 1,
+      failureClass: null,
+      inputTokens: input.totalTokens,
+      outputTokens: 0,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: input.startedAt ?? "2026-08-10T21:00:00.000Z",
+    });
+    const result = summarizeModelEvaluationTaskEfficiency({
+      targetTaskCount: 3,
+      attempts: [
+        attempt({
+          attemptId: "held-out-lower-baseline",
+          phase: "baseline",
+          taskId: "held-out-lower",
+          totalTokens: 100,
+        }),
+        attempt({
+          attemptId: "held-out-lower-discarded",
+          phase: "candidate",
+          taskId: "held-out-lower",
+          totalTokens: 150,
+          startedAt: "2026-08-10T20:00:00.000Z",
+        }),
+        attempt({
+          attemptId: "held-out-lower-selected",
+          phase: "candidate",
+          taskId: "held-out-lower",
+          totalTokens: 80,
+        }),
+        attempt({
+          attemptId: "held-out-equal-baseline",
+          phase: "baseline",
+          taskId: "held-out-equal",
+          totalTokens: 50,
+        }),
+        attempt({
+          attemptId: "held-out-equal-refined",
+          phase: "candidate",
+          taskId: "held-out-equal",
+          totalTokens: 50,
+        }),
+        attempt({
+          attemptId: "adaptation-higher-baseline",
+          phase: "adaptation",
+          taskId: "adaptation-higher",
+          totalTokens: 200,
+        }),
+        attempt({
+          attemptId: "adaptation-higher-refined",
+          phase: "candidate_adaptation",
+          taskId: "adaptation-higher",
+          totalTokens: 220,
+        }),
+      ],
+    });
+
+    expect(result.summary).toMatchObject({
+      target: "all_tasks_lower",
+      targetTaskCount: 3,
+      comparedTaskCount: 3,
+      passedTaskCount: 1,
+      failedTaskCount: 2,
+      lowerTaskCount: 1,
+      higherTaskCount: 1,
+      unchangedTaskCount: 1,
+      baselineTokens: 350,
+      refinedTokens: 350,
+      tokenDelta: 0,
+      complete: true,
+      passed: false,
+      cohorts: {
+        adaptation: {
+          targetTaskCount: 1,
+          passedTaskCount: 0,
+          failedTaskCount: 1,
+        },
+        heldOut: {
+          targetTaskCount: 2,
+          passedTaskCount: 1,
+          failedTaskCount: 1,
+        },
+      },
+    });
+    expect(result.pairs).toHaveLength(3);
+    expect(() => ModelEvaluationReceiptSchema.shape.taskEfficiency
+      .unwrap()
+      .parse(result.summary)).not.toThrow();
   });
 
   test("records web evidence once and replays the exact immutable result", async () => {

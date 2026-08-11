@@ -1,6 +1,7 @@
 import {
   ModelEvaluationReceiptSchema,
   ModelRunSchema,
+  summarizeModelEvaluationTaskEfficiency,
   type ChatModelRef,
   type CodexReasoningEffort,
   type ModelRun,
@@ -16,6 +17,7 @@ import {
   BenchmarkSpendBudget,
   benchmarkAttemptsInfrastructureValid,
   benchmarkEfficiency,
+  totalPlannedTasks,
   type HarnessRefinerExecutionPlanItem,
 } from "./harness-refiner-benchmark-protocol.js";
 import {
@@ -298,6 +300,10 @@ export async function resumeHarnessRefinerComparison(input: {
   const finalRunCheckpoint = await deps.store.getModelRun(modelRun.id) ?? modelRun;
   const finalAccounting = finalRunCheckpoint.evaluationProgress?.accounting
     ?? emptyEvaluationAccounting();
+  const taskEfficiency = summarizeModelEvaluationTaskEfficiency({
+    attempts: finalAccounting.attempts,
+    targetTaskCount: totalPlannedTasks(executionPlan),
+  }).summary;
   const efficiency = benchmarkEfficiency({
     baselineTokens: baseline.run.usage.totalTokens,
     candidateTokens: candidate.run.usage.totalTokens,
@@ -341,6 +347,7 @@ export async function resumeHarnessRefinerComparison(input: {
     },
     foregroundTokenDelta: comparison.foregroundTokenDelta,
     foregroundTokenDeltaPercent: comparison.foregroundTokenDeltaPercent,
+    taskEfficiency,
     efficiency,
     budget: {
       maximumSpendUsd: budget.maximumSpendUsd,

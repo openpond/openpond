@@ -22,7 +22,7 @@ import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
   benchmarkForegroundUsage,
-  benchmarkResultAccepted,
+  benchmarkTaskEfficiency,
 } from "./benchmark-attempt-usage";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 
@@ -69,6 +69,7 @@ export function LabModelBenchmarksSection({
   const latest = runs[0] ?? null;
   const receipt = evaluationReceipt(latest?.receipt ?? null);
   const foregroundUsage = receipt ? benchmarkForegroundUsage(receipt) : null;
+  const taskEfficiency = receipt ? benchmarkTaskEfficiency(receipt) : null;
   const stopReceipt = evaluationStopReceipt(latest?.receipt ?? null);
   const taskset = (training.payload?.tasksets ?? []).find(
     (candidate) => candidate.benchmark?.definitionId === "harness-refiner",
@@ -127,9 +128,9 @@ export function LabModelBenchmarksSection({
           <div>
             <h3>Harness Refiner</h3>
             <p>
-              Tests whether an evidence-driven Harness update preserves quality
-              while reducing held-out foreground tokens. Each run is watched to
-              terminal state with a $10 maximum provider spend.
+              Tests whether every task uses fewer foreground tokens after an
+              evidence-driven Harness update. Quality is measured separately.
+              Each run is watched to terminal state with a $10 maximum provider spend.
             </p>
           </div>
           {latest ? (
@@ -139,7 +140,9 @@ export function LabModelBenchmarksSection({
                 : stopReceipt
                   ? "Inconclusive"
                   : statusLabel(latest.status)}
-              value={receipt?.terminalClassification ?? stopReceipt?.terminalClassification ?? latest.status}
+              value={receipt
+                ? taskEfficiency?.passed ? "succeeded" : "failed"
+                : stopReceipt?.terminalClassification ?? latest.status}
             />
           ) : (
             <LabStatusBadge label="Not run" value="not_run" />
@@ -354,16 +357,15 @@ function chatModelFromValue(value: string): ChatModelRef | null {
 }
 
 function tokenDelta(receipt: ModelEvaluationReceipt) {
-  const direction = receipt.foregroundTokenDelta > 0 ? "+" : "";
-  const percent = receipt.foregroundTokenDeltaPercent === null
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  const direction = efficiency.tokenDelta > 0 ? "+" : "";
+  const percent = efficiency.tokenDeltaPercent === null
     ? ""
-    : ` · ${direction}${receipt.foregroundTokenDeltaPercent.toFixed(1)}%`;
-  const prefix = benchmarkResultAccepted(receipt) ? "" : "Diagnostic · ";
-  return `${prefix}${direction}${receipt.foregroundTokenDelta.toLocaleString()} tokens${percent}`;
+    : ` · ${direction}${efficiency.tokenDeltaPercent.toFixed(1)}%`;
+  return `${direction}${efficiency.tokenDelta.toLocaleString()} tokens${percent}`;
 }
 
 function resultLabel(receipt: ModelEvaluationReceipt) {
-  return receipt.terminalClassification
-    .replaceAll("_", " ")
-    .replace(/^./, (character) => character.toUpperCase());
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  return `${efficiency.passedTaskCount}/${efficiency.comparedTaskCount} efficiency passes`;
 }

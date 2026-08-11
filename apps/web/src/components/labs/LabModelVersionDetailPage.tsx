@@ -482,14 +482,14 @@ function LabModelEvaluationRunDetail({
               <LabStatusBadge
                 label={receipt
                   ? taskEfficiency?.comparedTaskCount
-                    ? `${taskEfficiency.lowerTaskCount}/${taskEfficiency.comparedTaskCount} lower`
+                    ? `${taskEfficiency.passedTaskCount}/${taskEfficiency.comparedTaskCount} passed`
                     : "No paired result"
                   : stopReceipt
                     ? "Inconclusive"
                     : statusLabel(run.status)}
                 value={receipt
                   ? taskEfficiency?.comparedTaskCount
-                    && taskEfficiency.lowerTaskCount === taskEfficiency.comparedTaskCount
+                    && taskEfficiency.passed
                     ? "succeeded"
                     : "neutral"
                   : stopReceipt?.terminalClassification ?? run.status}
