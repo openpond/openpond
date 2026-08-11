@@ -31,6 +31,7 @@ import {
 import {
   benchmarkForegroundUsage,
   benchmarkSelectedAttempts,
+  benchmarkTaskEfficiency,
 } from "../apps/web/src/components/labs/benchmark-attempt-usage";
 import {
   labWorkproductProjection,
@@ -221,7 +222,28 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain(">1 run<");
   });
 
-  test("labels efficiency as diagnostic when a completed benchmark fails its quality gate", () => {
+  test("leads a completed benchmark with paired task-level token efficiency", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+      passed: boolean,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed,
+      score: passed ? 1 : 0,
+      failureClass: passed ? null : "task_failure",
+      inputTokens: totalTokens - 10,
+      outputTokens: 10,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
     const receipt = {
       schemaVersion: "openpond.modelEvaluationReceipt.v1",
       terminalClassification: "regressed",
@@ -243,6 +265,12 @@ describe("Lab workspace", () => {
       budget: { observedSpendUsd: 0.990634722, maximumSpendUsd: 2 },
       resultManifest: { contentHash: "a".repeat(64) },
       profileGit: null,
+      attempts: [
+        attempt("adaptation", "adaptation-lower", 200, false),
+        attempt("candidate_adaptation", "adaptation-lower", 80, true),
+        attempt("baseline", "held-out-higher", 100, true),
+        attempt("candidate", "held-out-higher", 120, true),
+      ],
     } as unknown as ModelEvaluationReceipt;
     const run = {
       status: "succeeded",
@@ -263,13 +291,15 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("No accepted Harness improvement");
-    expect(markup).toContain("Execution completed, but the benchmark classification is regressed");
-    expect(markup).toContain("Efficiency accounting below is diagnostic only");
+    expect(markup).toContain("Token efficiency");
+    expect(markup).toContain("1 of 2 tasks used fewer tokens");
+    expect(markup).toContain("1 used more; total foreground usage changed by -33.33%");
     expect(markup).toContain(">Execution</dt><dd>Succeeded<");
-    expect(markup).toContain(">Quality gate</dt><dd>Failed<");
-    expect(markup).toContain(">Diagnostic gross token savings<");
-    expect(markup).toContain("Candidate held-out quality did not pass every case.");
+    expect(markup).toContain(">All-task reduction target</dt><dd>Not met<");
+    expect(markup).toContain(">All-task foreground tokens</dt><dd>300 → 200<");
+    expect(markup).toContain(">Task quality</dt><dd>1/2 → 2/2<");
+    expect(markup).not.toContain("No accepted Harness improvement");
+    expect(markup).not.toContain("Diagnostic gross token savings");
   });
 
   test("charts selected benchmark attempts without counting discarded recovery work", () => {
@@ -340,6 +370,57 @@ describe("Lab workspace", () => {
       inputTokens: 2_162_656,
       outputTokens: 79_062,
       totalTokens: 2_241_718,
+    });
+  });
+
+  test("pairs benchmark efficiency by task id across both cohorts", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score: 1,
+      failureClass: null,
+      inputTokens: totalTokens,
+      outputTokens: 0,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
+    const receipt = {
+      attempts: [
+        attempt("baseline", "held-out-b", 100),
+        attempt("baseline", "held-out-a", 200),
+        attempt("candidate", "held-out-a", 150),
+        attempt("candidate", "held-out-b", 120),
+        attempt("adaptation", "adaptation-a", 300),
+        attempt("candidate_adaptation", "adaptation-a", 100),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const efficiency = benchmarkTaskEfficiency(receipt);
+
+    expect(efficiency).toMatchObject({
+      comparedTaskCount: 3,
+      lowerTaskCount: 2,
+      higherTaskCount: 1,
+      unchangedTaskCount: 0,
+      baselineTokens: 600,
+      refinedTokens: 370,
+      tokenDelta: -230,
+      baselinePassedCount: 3,
+      refinedPassedCount: 3,
+      cohorts: {
+        adaptation: { comparedTaskCount: 1, lowerTaskCount: 1 },
+        held_out: { comparedTaskCount: 2, lowerTaskCount: 1, higherTaskCount: 1 },
+      },
     });
   });
 

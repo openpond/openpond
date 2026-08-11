@@ -785,6 +785,27 @@
   gap: 16px;
 }
 
+.labs-benchmark-efficiency-summary {
+  display: grid;
+  gap: 5px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--blue) 7%, var(--panel));
+  padding: 15px 16px;
+}
+
+.labs-benchmark-efficiency-summary strong {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.labs-benchmark-efficiency-summary p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
 .labs-benchmark-progress > header,
 .labs-benchmark-progress ol {
   display: flex;

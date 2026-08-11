@@ -21,7 +21,10 @@ import {
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
 import { LabModelRunSummary } from "./LabModelRunSummary";
 import { EvaluationComparisonCharts } from "./EvaluationComparisonCharts";
-import { benchmarkForegroundUsage } from "./benchmark-attempt-usage";
+import {
+  benchmarkForegroundUsage,
+  benchmarkTaskEfficiency,
+} from "./benchmark-attempt-usage";
 import {
   BenchmarkAttemptCharts,
   BenchmarkAttemptTable,
@@ -468,6 +471,7 @@ function LabModelEvaluationRunDetail({
     ? run.receipt as ModelEvaluationStopReceipt
     : null;
   const foregroundUsage = receipt ? benchmarkForegroundUsage(receipt) : null;
+  const taskEfficiency = receipt ? benchmarkTaskEfficiency(receipt) : null;
   return (
     <div className="labs-model-version-detail labs-model-evaluation-detail">
       <section className="labs-run-outcome-card">
@@ -477,11 +481,18 @@ function LabModelEvaluationRunDetail({
               <h2>{runNumber ? `Run ${runNumber}` : "Evaluation run"}</h2>
               <LabStatusBadge
                 label={receipt
-                  ? evaluationResultLabel(receipt)
+                  ? taskEfficiency?.comparedTaskCount
+                    ? `${taskEfficiency.lowerTaskCount}/${taskEfficiency.comparedTaskCount} lower`
+                    : "No paired result"
                   : stopReceipt
                     ? "Inconclusive"
                     : statusLabel(run.status)}
-                value={receipt?.terminalClassification ?? stopReceipt?.terminalClassification ?? run.status}
+                value={receipt
+                  ? taskEfficiency?.comparedTaskCount
+                    && taskEfficiency.lowerTaskCount === taskEfficiency.comparedTaskCount
+                    ? "succeeded"
+                    : "neutral"
+                  : stopReceipt?.terminalClassification ?? run.status}
               />
             </div>
             <p>
@@ -509,7 +520,7 @@ function LabModelEvaluationRunDetail({
               },
               {
                 id: "candidate",
-                label: "Held-out candidate",
+                label: "Held-out refined",
                 inputTokens: foregroundUsage!.candidate.inputTokens,
                 outputTokens: foregroundUsage!.candidate.outputTokens,
                 tokens: foregroundUsage!.candidate.totalTokens,
@@ -572,12 +583,6 @@ function LabModelEvaluationRunDetail({
       )}
     </div>
   );
-}
-
-function evaluationResultLabel(receipt: ModelEvaluationReceipt): string {
-  return receipt.terminalClassification
-    .replaceAll("_", " ")
-    .replace(/^./, (character) => character.toUpperCase());
 }
 
 function baseModelName(

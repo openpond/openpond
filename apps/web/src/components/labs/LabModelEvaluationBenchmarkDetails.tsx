@@ -7,8 +7,8 @@ import type {
 import { statusLabel } from "../training/training-model-data";
 import { LabStatusBadge } from "./LabStatusBadge";
 import {
-  benchmarkResultAccepted,
   benchmarkSelectedAttempts,
+  benchmarkTaskEfficiency,
 } from "./benchmark-attempt-usage";
 
 export function StoppedEvaluationDetail({
@@ -97,13 +97,9 @@ export function BenchmarkProgress({ run }: { run: ModelRun }) {
 }
 
 export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationReceipt }) {
-  const attempts = benchmarkSelectedAttempts(receipt.attempts ?? []);
-  const baseline = attempts.filter((attempt) => attempt.phase === "baseline");
-  const candidate = attempts.filter((attempt) => attempt.phase === "candidate");
-  const adaptation = attempts.filter((attempt) => attempt.phase === "adaptation");
-  const candidateAdaptation = attempts.filter(
-    (attempt) => attempt.phase === "candidate_adaptation",
-  );
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  const heldOut = efficiency.pairs.filter((pair) => pair.cohort === "held_out");
+  const adaptation = efficiency.pairs.filter((pair) => pair.cohort === "adaptation");
   const average = (values: number[]) => values.length
     ? values.reduce((sum, value) => sum + value, 0) / values.length
     : 0;
@@ -111,27 +107,27 @@ export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationRe
     <div className="labs-benchmark-attempt-charts">
       <AttemptLineChart
         title="Held-out tokens by task"
-        baseline={baseline.map((attempt) => attempt.totalTokens)}
-        candidate={candidate.map((attempt) => attempt.totalTokens)}
+        baseline={heldOut.map((pair) => pair.baseline.totalTokens)}
+        candidate={heldOut.map((pair) => pair.refined.totalTokens)}
         format={(value) => Math.round(value).toLocaleString()}
       />
       <AttemptLineChart
         title="Adaptation tokens by task"
-        baseline={adaptation.map((attempt) => attempt.totalTokens)}
-        candidate={candidateAdaptation.map((attempt) => attempt.totalTokens)}
+        baseline={adaptation.map((pair) => pair.baseline.totalTokens)}
+        candidate={adaptation.map((pair) => pair.refined.totalTokens)}
         format={(value) => Math.round(value).toLocaleString()}
       />
       <AttemptLineChart
         title="Held-out quality by task"
-        baseline={baseline.map((attempt) => attempt.score)}
-        candidate={candidate.map((attempt) => attempt.score)}
+        baseline={heldOut.map((pair) => pair.baseline.score)}
+        candidate={heldOut.map((pair) => pair.refined.score)}
         format={(value) => value.toFixed(2)}
         summarize={average}
       />
       <AttemptLineChart
         title="Adaptation quality by task"
-        baseline={adaptation.map((attempt) => attempt.score)}
-        candidate={candidateAdaptation.map((attempt) => attempt.score)}
+        baseline={adaptation.map((pair) => pair.baseline.score)}
+        candidate={adaptation.map((pair) => pair.refined.score)}
         format={(value) => value.toFixed(2)}
         summarize={average}
       />
@@ -150,90 +146,76 @@ export function BenchmarkComparisonSummary({
   tasksetName: string;
   onOpenTaskset?: () => void;
 }) {
-  const acceptedImprovement = benchmarkResultAccepted(receipt);
-  const diagnosticLabel = (label: string) =>
-    acceptedImprovement ? label : `Diagnostic ${label.toLowerCase()}`;
+  const efficiency = benchmarkTaskEfficiency(receipt);
+  const pairedEvidenceAvailable = efficiency.comparedTaskCount > 0;
+  const targetMet = pairedEvidenceAvailable
+    && efficiency.lowerTaskCount === efficiency.comparedTaskCount;
+  const percent = efficiency.tokenDeltaPercent === null
+    ? "—"
+    : `${efficiency.tokenDeltaPercent > 0 ? "+" : ""}${efficiency.tokenDeltaPercent.toFixed(2)}%`;
+  const cohortResult = (cohort: "adaptation" | "held_out") => {
+    const result = efficiency.cohorts[cohort];
+    return `${result.lowerTaskCount}/${result.comparedTaskCount} lower`;
+  };
 
   return (
     <section className="labs-run-summary-card">
-      <header><h3>Comparison</h3></header>
-      {!acceptedImprovement ? (
-        <div className="training-run-placeholder">
-          <strong>No accepted Harness improvement</strong>
+      <header><h3>Token efficiency</h3></header>
+      {pairedEvidenceAvailable ? (
+        <div className="labs-benchmark-efficiency-summary">
+          <strong>
+            {efficiency.lowerTaskCount} of {efficiency.comparedTaskCount} tasks used fewer tokens
+          </strong>
           <p>
-            Execution completed, but the benchmark classification is{" "}
-            {receipt.terminalClassification.replaceAll("_", " ")}.
-            Efficiency accounting below is diagnostic only and must not be
-            treated as published token savings.
+            The same tasks were measured before and after one Harness refinement.
+            {" "}{efficiency.higherTaskCount} used more
+            {efficiency.unchangedTaskCount
+              ? ` and ${efficiency.unchangedTaskCount} were unchanged`
+              : ""}; total foreground usage changed by {percent}.
           </p>
-          {receipt.invalidReasons.length ? (
-            <ul>
-              {receipt.invalidReasons.map((reason) => <li key={reason}>{reason}</li>)}
-            </ul>
-          ) : null}
         </div>
-      ) : null}
+      ) : (
+        <p className="training-run-placeholder">
+          Paired task-level token evidence is unavailable for this run.
+        </p>
+      )}
       <dl className="labs-run-detail-list">
         <Fact label="Execution" value={statusLabel(run.status)} />
         <Fact
-          label="Benchmark classification"
-          value={receipt.terminalClassification.replaceAll("_", " ")}
+          label="All-task reduction target"
+          value={targetMet ? "Met" : "Not met"}
         />
         <Fact
-          label="Quality gate"
-          value={receipt.quality.passed ? "Passed" : "Failed"}
+          label="Tasks using fewer tokens"
+          value={`${efficiency.lowerTaskCount}/${efficiency.comparedTaskCount}`}
+        />
+        <Fact
+          label="Tasks using more tokens"
+          value={`${efficiency.higherTaskCount}/${efficiency.comparedTaskCount}`}
+        />
+        <Fact
+          label="All-task foreground tokens"
+          value={`${efficiency.baselineTokens.toLocaleString()} → ${efficiency.refinedTokens.toLocaleString()}`}
+        />
+        <Fact
+          label="Aggregate token change"
+          value={percent}
+        />
+        <Fact
+          label="Adaptation replay"
+          value={cohortResult("adaptation")}
+        />
+        <Fact
+          label="Held-out replay"
+          value={cohortResult("held_out")}
+        />
+        <Fact
+          label="Task quality"
+          value={`${efficiency.baselinePassedCount}/${efficiency.comparedTaskCount} → ${efficiency.refinedPassedCount}/${efficiency.comparedTaskCount}`}
         />
         <Fact
           label="Result lineage"
           value={receipt.lineage.valid ? "Valid" : "Invalid"}
-        />
-        <Fact
-          label={diagnosticLabel("Foreground token delta")}
-          value={`${receipt.foregroundTokenDelta > 0 ? "+" : ""}${receipt.foregroundTokenDelta.toLocaleString()}`}
-        />
-        <Fact
-          label="Refiner tokens"
-          value={receipt.usage.refiner.totalTokens.toLocaleString()}
-        />
-        <Fact
-          label="Grader tokens"
-          value={receipt.usage.grader.totalTokens.toLocaleString()}
-        />
-        <Fact
-          label={diagnosticLabel("Gross token savings")}
-          value={receipt.efficiency.grossForegroundTokenSavings.toLocaleString()}
-        />
-        <Fact
-          label={diagnosticLabel("First-pass net savings")}
-          value={receipt.efficiency.firstPassNetTokenSavings.toLocaleString()}
-        />
-        <Fact
-          label={diagnosticLabel("Break-even reuse")}
-          value={receipt.efficiency.breakEvenReuseCount === null
-            ? "No break-even"
-            : `${receipt.efficiency.breakEvenReuseCount} reuse${receipt.efficiency.breakEvenReuseCount === 1 ? "" : "s"}`}
-        />
-        <Fact
-          label={diagnosticLabel(`Amortized savings · ${receipt.efficiency.amortizedReuseCount} reuses`)}
-          value={receipt.efficiency.amortizedTokenSavings.toLocaleString()}
-        />
-        <Fact
-          label="Observed / maximum spend"
-          value={`$${receipt.budget.observedSpendUsd.toFixed(4)} / ${receipt.budget.maximumSpendUsd > 0 ? `$${receipt.budget.maximumSpendUsd.toFixed(2)}` : "unlimited"}`}
-        />
-        <Fact
-          label="Upstream revision"
-          value={run.evaluation
-            ? `${run.evaluation.upstreamModel.providerId}/${run.evaluation.upstreamModel.modelId}@${run.evaluation.upstreamModel.revision}`
-            : "Unavailable"}
-        />
-        <Fact
-          label="Result manifest"
-          value={receipt.resultManifest.contentHash.slice(0, 16)}
-        />
-        <Fact
-          label="Profile Git ref"
-          value={receipt.profileGit?.ref ?? "Managed storage only"}
         />
         <div>
           <dt>Taskset</dt>
