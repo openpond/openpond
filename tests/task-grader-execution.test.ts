@@ -24,6 +24,67 @@ describe("grader execution", () => {
     expect(grade).toMatchObject({ score: null, passed: false, rewardEligible: false, failureClass: "infrastructure_failure" });
   });
 
+  test("derives model-judge cost from admitted pricing when explicit cost is omitted", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const judge = {
+        id: "judge",
+        version: "1",
+        label: "Judge",
+        kind: "model_judge" as const,
+        weight: 1,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: true,
+        rubric: "Match intent",
+        judge: { providerId: "openpond", modelId: "judge-v1" },
+        calibrationFixtureRefs: ["fixture_positive"],
+        calibrationStatus: "passed" as const,
+        temperature: 0,
+        metadata: {},
+      };
+      const taskset = tasksetFixture({ graders: [judge] });
+      await store.upsertTaskset(taskset);
+      const attempt = attemptFixture({
+        tasksetId: taskset.id,
+        taskId: taskset.tasks[1]!.id,
+      });
+      const service = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelJudge: async () => ({
+          score: 1,
+          passed: true,
+          feedback: "matched",
+          usage: {
+            promptTokens: 1_000,
+            completionTokens: 200,
+            promptTokensDetails: { cachedTokens: 400 },
+          },
+        }),
+      });
+
+      await service.grade({
+        tasksetId: taskset.id,
+        taskId: taskset.tasks[1]!.id,
+        attempt,
+        hostedTokenPricing: {
+          version: "test-v1",
+          source: "test",
+          effectiveAt: "2026-08-11T00:00:00.000Z",
+          inputUsdPerMillionTokens: 2,
+          cachedInputUsdPerMillionTokens: 0.5,
+          outputUsdPerMillionTokens: 4,
+        },
+      });
+
+      expect(service.consumeGraderUsage([attempt.id])).toEqual({
+        inputTokens: 1_000,
+        outputTokens: 200,
+        totalTokens: 1_200,
+        costUsd: 0.0022,
+      });
+    }));
+
   test("runs generated verifier code without process, imports, network, or path escape", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "verifier-sandbox-"));
     try {
