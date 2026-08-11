@@ -7,7 +7,7 @@ import { sourceFixture, withTrainingStore } from "./helpers/training-fixtures";
 
 describe("task mining", () => {
   test("clusters three consented recurring sources and deduplicates reruns", async () => withTrainingStore(async ({ store }) => {
-    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`source_${index}`, `cluster_${index}`), title: `Weekly research workflow ${index}`, metadata: { workflowSignature: "weekly-research", verifiableOutcome: true, frontierCost: true } });
+    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...recentSourceFixture(`source_${index}`, `cluster_${index}`), title: `Weekly research workflow ${index}`, metadata: { workflowSignature: "weekly-research", verifiableOutcome: true, frontierCost: true } });
     const service = createTaskMinerService({ store });
     const first = await service.run({ profileId: "default" });
     const second = await service.run({ profileId: "default" });
@@ -18,7 +18,7 @@ describe("task mining", () => {
   }));
 
   test("automatically scans an enabled active profile without uploading evidence", async () => withTrainingStore(async ({ store }) => {
-    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`auto_${index}`, `cluster_${index}`), metadata: { workflowSignature: "automatic-workflow" } });
+    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...recentSourceFixture(`auto_${index}`, `cluster_${index}`), metadata: { workflowSignature: "automatic-workflow" } });
     const service = createTaskMinerService({ store });
     await service.updateConfig("default", { schemaVersion: "openpond.taskMinerConfig.v1", enabled: true, localOnly: true, observationWindowDays: 30, minimumRecurrence: 3, clustering: "hybrid_deterministic_first", consentRequired: true });
     const loop = createTaskMinerBackgroundLoop({ service, loadProfileState: async () => ({ activeProfile: "default" } as any), isClosing: () => false });
@@ -29,7 +29,7 @@ describe("task mining", () => {
   }));
 
   test("persists user-triggered scan progress and candidate lineage", async () => withTrainingStore(async ({ store }) => {
-    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`run_${index}`, `cluster_${index}`), metadata: { workflowSignature: "persisted-run" } });
+    for (let index = 0; index < 3; index += 1) await store.upsertTrainingSource({ ...recentSourceFixture(`run_${index}`, `cluster_${index}`), metadata: { workflowSignature: "persisted-run" } });
     const service = createTaskMinerService({ store });
     const started = await service.startRun({ profileId: "default" });
     expect(started).toMatchObject({ status: "queued", progress: { stage: "queued" }, candidateIds: [] });
@@ -40,7 +40,7 @@ describe("task mining", () => {
   }));
 
   test("persists cancellation for an active scan", async () => withTrainingStore(async ({ store }) => {
-    for (let index = 0; index < 200; index += 1) await store.upsertTrainingSource({ ...sourceFixture(`cancel_${index}`, `cluster_${index}`), metadata: { workflowSignature: `cancel-${index}` } });
+    for (let index = 0; index < 200; index += 1) await store.upsertTrainingSource({ ...recentSourceFixture(`cancel_${index}`, `cluster_${index}`), metadata: { workflowSignature: `cancel-${index}` } });
     const service = createTaskMinerService({ store });
     const started = await service.startRun({ profileId: "default" });
     await service.cancelRun(started.id);
@@ -57,7 +57,7 @@ describe("task mining", () => {
       addSessionSource: async ({ sessionId }) => {
         ingestedSessionIds.push(sessionId);
         const source = {
-          ...sourceFixture(`ingested_${sessionId}`, "ingested", sessionId),
+          ...recentSourceFixture(`ingested_${sessionId}`, "ingested", sessionId),
           metadata: { workflowSignature: "ingested-workflow" },
         };
         await store.upsertTrainingSource(source);
@@ -87,7 +87,7 @@ describe("task mining", () => {
       store,
       addSessionSource: async ({ sessionId }) => {
         await delay(100);
-        const source = sourceFixture(`cancel_ingest_${sessionId}`, "cancel-ingest", sessionId);
+        const source = recentSourceFixture(`cancel_ingest_${sessionId}`, "cancel-ingest", sessionId);
         await store.upsertTrainingSource(source);
         return source;
       },
@@ -109,7 +109,7 @@ describe("task mining", () => {
       addSessionSource: async ({ sessionId }) => {
         if (sessionId === "session_empty") throw new Error("No completed turns were selected.");
         const source = {
-          ...sourceFixture(`skip_${sessionId}`, "skip", sessionId),
+          ...recentSourceFixture(`skip_${sessionId}`, "skip", sessionId),
           metadata: { workflowSignature: "skip-workflow" },
         };
         await store.upsertTrainingSource(source);
@@ -134,7 +134,7 @@ describe("task mining", () => {
       store,
       addSessionSource: async ({ sessionId }) => {
         if (sessionId === "session_failure") throw new Error("Synthetic source storage failure.");
-        const source = sourceFixture(`preserved_${sessionId}`, "preserved", sessionId);
+        const source = recentSourceFixture(`preserved_${sessionId}`, "preserved", sessionId);
         await store.upsertTrainingSource(source);
         return source;
       },
@@ -193,6 +193,13 @@ describe("task mining", () => {
     await service.close();
   }));
 });
+
+function recentSourceFixture(...args: Parameters<typeof sourceFixture>) {
+  return {
+    ...sourceFixture(...args),
+    occurredAt: new Date().toISOString(),
+  };
+}
 
 async function waitForMinerRun(store: any, id: string) {
   const deadline = Date.now() + 5_000;
