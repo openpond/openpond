@@ -35,8 +35,10 @@ export function createHarnessRefinerBenchmarkModelStream(
     }
     const requestId = `harness-refiner-benchmark:${randomUUID()}`;
     for (let retry = 0; ; retry += 1) {
-      let emitted = false;
+      let received = false;
       try {
+        const text: string[] = [];
+        const usage: Array<{ usage: unknown; costUsd?: number }> = [];
         for await (const delta of streamOpenPondHostedChatTurn({
           model: model.modelId,
           messages,
@@ -45,17 +47,25 @@ export function createHarnessRefinerBenchmarkModelStream(
           maxTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
           signal,
         })) {
-          emitted = true;
+          received = true;
           if (delta.type === "text_delta" && delta.text) {
-            yield { text: delta.text };
+            text.push(delta.text);
           }
           if (delta.type === "usage") {
-            yield { usage: delta.usage, ...usageCost(delta.usage, pricing) };
+            usage.push({ usage: delta.usage, ...usageCost(delta.usage, pricing) });
           }
         }
+        if (usage.length === 0) {
+          throw new Error("Harness Refiner benchmark provider response is missing usage.");
+        }
+        // The Refiner decision parser may stop consuming as soon as it has a
+        // complete JSON value. Publish accounting first so early termination
+        // cannot discard the provider's trailing usage event.
+        for (const item of usage) yield item;
+        if (text.length > 0) yield { text: text.join("") };
         return;
       } catch (error) {
-        if (emitted || retry >= 2 || !retryableHostedError(error)) throw error;
+        if (received || retry >= 2 || !retryableHostedError(error)) throw error;
         await abortableDelay(hostedRetryDelayMs(error, retry), signal);
       }
     }
