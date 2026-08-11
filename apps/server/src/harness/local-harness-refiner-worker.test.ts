@@ -238,6 +238,12 @@ describe("local Harness Refiner worker", () => {
           schemaVersion: "openpond.harnessRefinerBenchmarkCohortEvidence.v1",
           adaptationEvidenceHash: "a".repeat(64),
         });
+        expect(request.evidence.executionProfile).toMatchObject({
+          modelRequestCount: 0,
+          totalTokens: 0,
+          toolFailureCount: 0,
+        });
+        expect(request.evidence.recentObservations).toEqual([]);
         return hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",

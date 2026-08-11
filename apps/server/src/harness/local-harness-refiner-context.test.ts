@@ -5,6 +5,7 @@ import type { RuntimeEvent } from "@openpond/contracts";
 import {
   isRefinerEvidenceEvent,
   pdfTextBoundsDiagnostic,
+  tasksetGradeExecutionProfile,
 } from "./local-harness-refiner-context.js";
 
 describe("local Harness artifact diagnostics", () => {
@@ -32,5 +33,28 @@ describe("local Harness artifact diagnostics", () => {
       name: "diagnostic",
       action: "taskset_grade",
     } as RuntimeEvent)).toBe(true);
+  });
+
+  test("uses the benchmark attempt receipt when per-request usage rows are unavailable", () => {
+    expect(tasksetGradeExecutionProfile([{
+      turnId: "turn-1",
+      name: "diagnostic",
+      action: "taskset_grade",
+      output: JSON.stringify({
+        attempt: {
+          modelRequestCount: 6,
+          usage: {
+            promptTokens: 120,
+            completionTokens: 30,
+            totalTokens: 150,
+          },
+        },
+      }),
+    } as RuntimeEvent], "turn-1")).toEqual({
+      modelRequestCount: 6,
+      promptTokens: 120,
+      completionTokens: 30,
+      totalTokens: 150,
+    });
   });
 });

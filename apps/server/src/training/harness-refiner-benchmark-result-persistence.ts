@@ -24,6 +24,7 @@ import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import type {
   BenchmarkEvidenceSnapshotManifest,
   HarnessRefinerExecutionPlanItem,
+  SequentialAdaptationSummary,
 } from "./harness-refiner-benchmark-protocol.js";
 import type {
   BenchmarkAttemptEvidence,
@@ -32,7 +33,7 @@ import type {
 } from "./harness-refiner-benchmark-service-support.js";
 
 export type ManagedResultManifest = {
-  schemaVersion: "openpond.harnessRefinerBenchmarkResult.v1";
+  schemaVersion: "openpond.harnessRefinerBenchmarkResult.v2";
   id: string;
   modelRunId: string;
   benchmarkId: "harness-refiner";
@@ -48,7 +49,7 @@ export type ManagedResultManifest = {
   baseline: BenchmarkRunSummary;
   adaptation: BenchmarkRunSummary;
   refiner: { id: string; contentHash: string; outcomeCount: number };
-  candidateAdaptation: BenchmarkRunSummary;
+  candidateAdaptation: SequentialAdaptationSummary;
   candidate: BenchmarkRunSummary;
   comparison: BenchmarkComparison;
   executionPlan: HarnessRefinerExecutionPlanItem[];
@@ -81,7 +82,7 @@ export function createResultManifest(
   >,
 ): ManagedResultManifest {
   const core = {
-    schemaVersion: "openpond.harnessRefinerBenchmarkResult.v1" as const,
+    schemaVersion: "openpond.harnessRefinerBenchmarkResult.v2" as const,
     id: `benchmark-result-${input.modelRunId}`,
     modelRunId: input.modelRunId,
     benchmarkId: "harness-refiner" as const,
@@ -141,7 +142,7 @@ export async function loadLatestManagedResult(
     const value = JSON.parse(
       await fs.readFile(path.join(root, entry), "utf8"),
     ) as ManagedResultManifest;
-    return value.schemaVersion === "openpond.harnessRefinerBenchmarkResult.v1"
+    return value.schemaVersion === "openpond.harnessRefinerBenchmarkResult.v2"
         && value.modelRunId === modelRunId
       ? value
       : null;

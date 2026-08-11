@@ -18,6 +18,17 @@ const evidence: LocalHarnessRefinerEvidence = {
   },
   eventExcerpts: [],
   artifactDiagnostics: [],
+  executionProfile: {
+    modelRequestCount: 2,
+    failedModelRequestCount: 0,
+    promptTokens: 100,
+    completionTokens: 20,
+    totalTokens: 120,
+    toolFailureCount: 0,
+    retryCount: 0,
+    recoveryCount: 0,
+  },
+  recentObservations: [],
   recentOutcomes: [],
   sourceFiles: [],
   sourceCatalog: [],
@@ -39,6 +50,9 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("current web verification");
     expect(system).toContain("recurrence evidence");
     expect(system).toContain("Never force a change");
+    expect(system).toContain("executionProfile is bounded cost evidence");
+    expect(system).toContain("recentObservations is a bounded window");
+    expect(system).toContain("Optimize future related work");
   });
 
   test("treats benchmark adaptation evidence as a cohort rather than one turn", () => {

@@ -100,6 +100,21 @@ export const LocalHarnessRefinerEvidenceSchema = z
       .strict(),
     eventExcerpts: z.array(z.record(z.string(), z.unknown())).max(20),
     artifactDiagnostics: z.array(z.record(z.string(), z.unknown())).max(20),
+    executionProfile: z
+      .object({
+        modelRequestCount: z.number().int().nonnegative(),
+        failedModelRequestCount: z.number().int().nonnegative(),
+        promptTokens: z.number().int().nonnegative(),
+        completionTokens: z.number().int().nonnegative(),
+        totalTokens: z.number().int().nonnegative(),
+        toolFailureCount: z.number().int().nonnegative(),
+        retryCount: z.number().int().nonnegative(),
+        recoveryCount: z.number().int().nonnegative(),
+      })
+      .strict(),
+    recentObservations: z
+      .array(z.record(z.string(), z.unknown()))
+      .max(20),
     recentOutcomes: z
       .array(
         z
@@ -260,7 +275,10 @@ export function refinerMessages(
           "The task's assistantOutputLinkCount and artifactDiagnostics are objective observations, not decision rules. Failed artifact diagnostics can contradict a claimed successful visual check; decide whether the evidence supports a reusable Harness correction, an external route, or no action. When a user requests linked evidence, named sources without clickable links do not satisfy the request; an explicit request for links authorizes including them and must not be excused as a generic URL-formatting constraint.",
         "For claims presented as current web verification, consider whether user-visible citations let the user inspect the supporting evidence even when the request did not literally say 'include links'. Source names and hidden retrieval metadata alone do not make a current factual claim verifiable.",
         "A recovered error can still justify improvement when the same avoidable first attempt is likely to recur. Ordinary successful work, one-off artifact details, and continuation of the current task usually require no_action.",
+        "executionProfile is bounded cost evidence for the completed turn. Use request, token, tool-failure, retry, and recovery counts to distinguish a cheap recovery from a material recurring tax. High cost alone is not a reason to edit the Harness, but repeated repair loops supported by recentObservations can justify removing the failed first strategy for future related work.",
+        "recentObservations is a bounded window of earlier raw improvement observations from this Harness workspace. Use it to detect recurrence across distinct real turns even when an earlier Refiner outcome was no_action. Match the reusable root behavior, not merely a shared tool name, topic, artifact type, or benchmark family.",
         "recentOutcomes is a small bounded window of earlier Refiner decisions from this Harness workspace. Use it as recurrence evidence only when you judge the underlying behavior to be related; repeated no_action decisions do not force a proposal, and differently worded incidents may still share one root behavior.",
+        "Optimize future related work, not the already completed turn. Prefer a small instruction or workflow correction that removes the repeated failed attempt, redundant search, full rewrite, or unnecessary output while preserving the requested result. Do not prescribe a library, command, file format, or subject-specific workaround unless the durable Harness already standardizes that workflow.",
         "Propose only the reusable root behavior. Do not encode the task's subject, named entities, business facts, requested artifact outline, benchmark wording, or transient paths. A durable proposal must plausibly help materially different future tasks with the same failure class; otherwise choose no_action or route the underlying runtime/product concern.",
         "Choose the smallest correct layer. Use memory for durable user facts or preferences, prompt for broad behavior, skill for a reusable workflow, and agent for a reusable role. Use route for runtime, product, taskset, or training concerns that this step must not mutate.",
         "Do not confuse 'no safe Harness edit' with no_action. If the evidence exposes a durable defect owned by runtime, product, evaluation, or training, return route even when the agent recovered and completed the task.",

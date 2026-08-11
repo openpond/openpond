@@ -54,6 +54,29 @@ describe("Harness Refiner benchmark protocol", () => {
     expect(totalPlannedTasks(plan)).toBe(20);
   });
 
+  test("admits one sequential treatment trajectory per Model Run", () => {
+    const taskset = {
+      benchmark: {
+        adaptationSplit: "validation",
+        evaluationSplit: "frozen_eval",
+      },
+      tasks: [
+        { id: "adaptation", split: "validation" },
+        { id: "held-out", split: "frozen_eval" },
+      ],
+    } as never;
+    expect(() => createHarnessRefinerExecutionPlan({
+      taskset,
+      seeds: [17, 23],
+      repetitions: 1,
+    })).toThrow(/one admitted seed and one trajectory repetition/i);
+    expect(() => createHarnessRefinerExecutionPlan({
+      taskset,
+      seeds: [17],
+      repetitions: 2,
+    })).toThrow(/one admitted seed and one trajectory repetition/i);
+  });
+
   test("passes a task only when its selected refined attempt uses fewer tokens", () => {
     const attempt = (input: {
       attemptId: string;

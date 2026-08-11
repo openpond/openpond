@@ -320,7 +320,7 @@ export function ModelsTable({
 function recentModelRunLabel(run: ModelRun | null, runCount: number): string {
   if (run?.kind === "evaluation") {
     const benchmark = run.evaluation?.benchmarkId === "harness-refiner"
-      ? "Harness Refiner"
+      ? "Harness Refiner 08112026"
       : "Benchmark";
     const outcome = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
       ? run.receipt.attempts?.length

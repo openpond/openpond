@@ -62,7 +62,7 @@ export function BenchmarkProgress({ run }: { run: ModelRun }) {
     baseline: "Baseline",
     adaptation: "Adaptation",
     refiner: "Refiner",
-    candidate_adaptation: "Candidate adaptation",
+    candidate_adaptation: "Sequential adaptation",
     candidate: "Candidate",
     comparison: "Comparison",
   };

@@ -1,7 +1,6 @@
 import {
   CodexReasoningEffortSchema,
   ModelEvaluationReceiptSchema,
-  ModelEvaluationStopReceiptSchema,
   ModelRunSchema,
   summarizeModelEvaluationTaskEfficiency,
   type ChatModelRef,
@@ -33,7 +32,7 @@ import {
 } from "./harness-refiner-benchmark-protocol.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { resumeHarnessRefinerComparison } from "./harness-refiner-benchmark-comparison-recovery.js";
-import { runHarnessRefinerBenchmarkRefinerStage } from "./harness-refiner-benchmark-refiner-stage.js";
+import { runSequentialHarnessAdaptation } from "./harness-refiner-benchmark-sequential-stage.js";
 import {
   createResultManifest,
   ensureBaseVersion,
@@ -411,7 +410,6 @@ export function createHarnessRefinerBenchmarkService(deps: {
           executionPlan,
           baselinePlan,
           adaptationPlan,
-          candidateAdaptationPlan,
           candidatePlan,
           admittedPricing,
           budget,
@@ -477,228 +475,85 @@ export function createHarnessRefinerBenchmarkService(deps: {
           ],
         });
       } else {
-      const executedBaseline = await deps.evaluation.executeBenchmark({
-        tasksetId: taskset.id,
-        phase: "baseline",
-        model: input.model,
-        reasoningEffort: input.reasoningEffort,
-        seeds: input.seeds,
-        repetitions: input.repetitions,
-        split: baselinePlan.split as never,
-        taskIds: baselinePlan.taskIds,
-        sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
-        releasedHarness: baselineHarness,
-        hostedTokenPricing: admittedPricing,
-        parentModelRunId: modelRun.id,
-        signal: context.signal,
-        toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
-        onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
-      });
-      baseline = completedStage(executedBaseline);
-      await ensureBaseVersion({
-        store: deps.store,
-        project: context.project,
-        modelRun,
-        model: input.model,
-        baseline: executedBaseline.attempts[0]!,
-      });
-      if (
-        baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
-        || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
-      ) {
-        throw new Error("Baseline execution drifted from the admitted Harness release.");
-      }
-
-      await checkpointEvidenceSnapshot(
-        deps.store,
-        deps.storeDir,
-        modelRun.id,
-        evidenceSnapshot.manifest(),
-      );
-
-      await updateProgress(deps.store, modelRun.id, {
-        stage: "adaptation",
-        completedAttempts: completedBeforeStage(executionPlan, "adaptation"),
-        totalAttempts,
-      });
-
-      await deps.store.setHarnessBackgroundReviewSettings({
-        workspaceId: isolated.workspace.id,
-        enabled: true,
-        updatedAt: now(),
-      });
-      const executedAdaptation = await deps.evaluation.executeBenchmark({
-        tasksetId: taskset.id,
-        phase: "baseline",
-        model: input.model,
-        reasoningEffort: input.reasoningEffort,
-        seeds: input.seeds,
-        repetitions: input.repetitions,
-        split: adaptationPlan.split as never,
-        taskIds: adaptationPlan.taskIds,
-        sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
-        releasedHarness: baselineHarness,
-        hostedTokenPricing: admittedPricing,
-        parentModelRunId: modelRun.id,
-        signal: context.signal,
-        toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "adaptation"),
-        onAttemptComplete: observeStageAttempts("adaptation", "adaptation baseline"),
-      });
-      adaptation = completedStage(executedAdaptation);
-      adaptationAttempts = adaptation.attempts;
-      await checkpointEvidenceSnapshot(
-        deps.store,
-        deps.storeDir,
-        modelRun.id,
-        evidenceSnapshot.manifest(),
-      );
-      await updateProgress(deps.store, modelRun.id, {
-        stage: "refiner",
-        completedAttempts: completedBeforeStage(executionPlan, "candidate_adaptation"),
-        totalAttempts,
-      });
-      }
-      if (resumeFromRefiner) {
-        const priorOutcomes = await deps.store.listHarnessImprovementArtifacts(
-          isolated.workspace.id,
-          "refiner_outcome",
-          1_000,
-        );
-        const currentWorkspace = await deps.store.getHarnessWorkspace(isolated.workspace.id);
-        const currentReleaseRef = currentWorkspace?.currentChannel.release;
-        if (
-          priorOutcomes.length > 0
-          && currentReleaseRef
-          && currentReleaseRef.contentHash === baseline.run.harnessRelease.contentHash
-        ) {
-          await deps.store.setHarnessBackgroundReviewSettings({
-            workspaceId: isolated.workspace.id,
-            enabled: false,
-            updatedAt: now(),
-          });
-          const latestRun = await deps.store.getModelRun(modelRun.id) ?? modelRun;
-          const accounting = latestRun.evaluationProgress?.accounting
-            ?? emptyEvaluationAccounting();
-          const frozenEvidence = evidenceSnapshot.manifest();
-          const refinerStage = {
-            id: `benchmark-refiner-${modelRun.id}`,
-            contentHash: contentHash(priorOutcomes),
-            outcomeCount: priorOutcomes.length,
-          };
-          const receiptCore = {
-            schemaVersion: "openpond.modelEvaluationStopReceipt.v1" as const,
-            benchmarkId: "harness-refiner",
-            terminalClassification: "inconclusive" as const,
-            stopReason: "candidate_harness_unchanged" as const,
-            reason:
-              "Refiner produced no changed Harness candidate. Candidate replay was skipped because no effect can be attributed to refinement.",
-            stoppedAfter: "refiner" as const,
-            baselineHarness: baseline.run.harnessRelease,
-            candidateHarness: currentReleaseRef,
-            refiner: refinerStage,
-            usage: accounting.usage,
-            budget: {
-              maximumSpendUsd: budget.maximumSpendUsd,
-              observedSpendUsd: accounting.observedSpendUsd,
-              enforced: true,
-            },
-            evidenceSnapshot: {
-              id: frozenEvidence.id,
-              contentHash: frozenEvidence.contentHash,
-            },
-            attempts: accounting.attempts,
-          };
-          const receipt = ModelEvaluationStopReceiptSchema.parse({
-            ...receiptCore,
-            contentHash: contentHash(receiptCore),
-          });
-          const completedAt = now();
-          return deps.store.saveModelRun(ModelRunSchema.parse({
-            ...latestRun,
-            status: "succeeded",
-            receipt,
-            failure: null,
-            completedAt,
-            updatedAt: completedAt,
-          }));
-        }
-      }
-      const {
-        candidateRecord,
-        candidateRuntime,
-        refinerStage,
-        lineage,
-        frozenEvidence,
-      } = await runHarnessRefinerBenchmarkRefinerStage({
-        store: deps.store,
-        storeDir: deps.storeDir,
-        modelRun,
-        model: input.model,
-        taskset,
-        baselineRuntime,
-        adaptationAttempts,
-        evidenceSnapshot,
-        budget,
-        admittedPricing,
-        refinerStream: deps.refinerStream,
-        signal: context.signal,
-        now,
-      });
-      const harnessChanged =
-        baseline.run.harnessRelease.contentHash
-        !== candidateRecord.harnessRelease.contentHash;
-      if (!harnessChanged || !lineage.valid) {
-        const stopReason = harnessChanged
-          ? "candidate_lineage_invalid" as const
-          : "candidate_harness_unchanged" as const;
-        const reason = harnessChanged
-          ? "Refiner produced a candidate whose causal lineage did not validate. Candidate replay was skipped."
-          : "Refiner produced no changed Harness candidate. Candidate replay was skipped because no effect can be attributed to refinement.";
-        const latestRun = await deps.store.getModelRun(modelRun.id) ?? modelRun;
-        const accounting = latestRun.evaluationProgress?.accounting
-          ?? emptyEvaluationAccounting();
-        const receiptCore = {
-          schemaVersion: "openpond.modelEvaluationStopReceipt.v1" as const,
-          benchmarkId: "harness-refiner",
-          terminalClassification: "inconclusive" as const,
-          stopReason,
-          reason,
-          stoppedAfter: "refiner" as const,
-          baselineHarness: baseline.run.harnessRelease,
-          candidateHarness: {
-            id: candidateRecord.harnessRelease.id,
-            contentHash: candidateRecord.harnessRelease.contentHash,
-          },
-          refiner: refinerStage,
-          usage: accounting.usage,
-          budget: {
-            maximumSpendUsd: budget.maximumSpendUsd,
-            observedSpendUsd: budget.observedSpendUsd,
-            enforced: true,
-          },
-          evidenceSnapshot: {
-            id: frozenEvidence.id,
-            contentHash: frozenEvidence.contentHash,
-          },
-          attempts: accounting.attempts,
-        };
-        const receipt = ModelEvaluationStopReceiptSchema.parse({
-          ...receiptCore,
-          contentHash: contentHash(receiptCore),
+        const executedBaseline = await deps.evaluation.executeBenchmark({
+          tasksetId: taskset.id,
+          phase: "baseline",
+          model: input.model,
+          reasoningEffort: input.reasoningEffort,
+          seeds: input.seeds,
+          repetitions: input.repetitions,
+          split: baselinePlan.split as never,
+          taskIds: baselinePlan.taskIds,
+          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
+          releasedHarness: baselineHarness,
+          hostedTokenPricing: admittedPricing,
+          parentModelRunId: modelRun.id,
+          signal: context.signal,
+          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
+          onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
         });
-        const completedAt = now();
-        return deps.store.saveModelRun(ModelRunSchema.parse({
-          ...latestRun,
-          status: "succeeded",
-          receipt,
-          failure: null,
-          completedAt,
-          updatedAt: completedAt,
-        }));
+        baseline = completedStage(executedBaseline);
+        await ensureBaseVersion({
+          store: deps.store,
+          project: context.project,
+          modelRun,
+          model: input.model,
+          baseline: executedBaseline.attempts[0]!,
+        });
+        if (
+          baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
+          || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
+        ) {
+          throw new Error("Baseline execution drifted from the admitted Harness release.");
+        }
+
+        await checkpointEvidenceSnapshot(
+          deps.store,
+          deps.storeDir,
+          modelRun.id,
+          evidenceSnapshot.manifest(),
+        );
+
+        await updateProgress(deps.store, modelRun.id, {
+          stage: "adaptation",
+          completedAttempts: completedBeforeStage(executionPlan, "adaptation"),
+          totalAttempts,
+        });
+
+        const executedAdaptation = await deps.evaluation.executeBenchmark({
+          tasksetId: taskset.id,
+          phase: "baseline",
+          model: input.model,
+          reasoningEffort: input.reasoningEffort,
+          seeds: input.seeds,
+          repetitions: input.repetitions,
+          split: adaptationPlan.split as never,
+          taskIds: adaptationPlan.taskIds,
+          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
+          releasedHarness: baselineHarness,
+          hostedTokenPricing: admittedPricing,
+          parentModelRunId: modelRun.id,
+          signal: context.signal,
+          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "adaptation"),
+          onAttemptComplete: observeStageAttempts("adaptation", "adaptation baseline"),
+        });
+        adaptation = completedStage(executedAdaptation);
+        adaptationAttempts = adaptation.attempts;
+        await checkpointEvidenceSnapshot(
+          deps.store,
+          deps.storeDir,
+          modelRun.id,
+          evidenceSnapshot.manifest(),
+        );
+        await updateProgress(deps.store, modelRun.id, {
+          stage: "refiner",
+          completedAttempts: completedBeforeStage(executionPlan, "candidate_adaptation"),
+          totalAttempts,
+        });
       }
       if (resumeFromRefiner && !modelRun.evaluationProgress?.evidenceSnapshot) {
         throw new Error(
-          "Candidate replay cannot resume because the interrupted run did not preserve its exact frozen evidence snapshot. Start a new run to preserve a valid causal comparison.",
+          "Sequential adaptation cannot resume because the interrupted run did not preserve its exact frozen evidence snapshot. Start a new run to preserve a valid causal comparison.",
         );
       }
       await updateProgress(deps.store, modelRun.id, {
@@ -706,33 +561,38 @@ export function createHarnessRefinerBenchmarkService(deps: {
         completedAttempts: completedBeforeStage(executionPlan, "candidate_adaptation"),
         totalAttempts,
       });
+      const candidateAdaptation = await runSequentialHarnessAdaptation({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        evaluation: deps.evaluation,
+        modelRun,
+        model: input.model,
+        reasoningEffort: input.reasoningEffort,
+        taskset,
+        taskIds: candidateAdaptationPlan.taskIds,
+        seed: input.seeds[0]!,
+        initialRuntime: baselineRuntime,
+        evidenceSnapshot,
+        budget,
+        admittedPricing,
+        refinerStream: deps.refinerStream,
+        signal: context.signal,
+        onAttemptComplete: observeStageAttempts(
+          "candidate_adaptation",
+          "sequential adaptation treatment",
+        ),
+        now,
+      });
+      const candidateRuntime = candidateAdaptation.runtime;
+      const refinerStage = candidateAdaptation.refinerStage;
+      const lineage = candidateAdaptation.lineage;
+      const frozenEvidence = evidenceSnapshot.manifest();
+      const harnessChanged = baseline.run.harnessRelease.contentHash
+        !== candidateAdaptation.summary.finalHarness.contentHash;
       const candidateHarness = releasedHarness(
         candidateRuntime.release,
         candidateRuntime.instructionContext,
       );
-      const candidateAdaptation = await deps.evaluation.executeBenchmark({
-        tasksetId: taskset.id,
-        phase: "candidate",
-        model: input.model,
-        reasoningEffort: input.reasoningEffort,
-        seeds: input.seeds,
-        repetitions: input.repetitions,
-        split: candidateAdaptationPlan.split as never,
-        taskIds: candidateAdaptationPlan.taskIds,
-        sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
-        releasedHarness: candidateHarness,
-        hostedTokenPricing: admittedPricing,
-        parentModelRunId: modelRun.id,
-        signal: context.signal,
-        toolEvidence: frozenToolEvidence(evidenceSnapshot, "replay", "adaptation"),
-        onAttemptComplete: observeStageAttempts(
-          "candidate_adaptation",
-          "candidate adaptation replay",
-        ),
-      });
-      if (!candidateAdaptation.comparison) {
-        throw new Error("Adaptation replay comparison was not produced.");
-      }
       await updateProgress(deps.store, modelRun.id, {
         stage: "candidate",
         completedAttempts: completedBeforeStage(executionPlan, "candidate"),
@@ -769,7 +629,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
         baseline: baseline.run,
         adaptation: adaptation.run,
         refiner: refinerStage,
-        candidateAdaptation: candidateAdaptation.run,
+        candidateAdaptation: candidateAdaptation.summary,
         candidate: candidate.run,
         comparison: candidate.comparison,
         executionPlan,
@@ -804,21 +664,17 @@ export function createHarnessRefinerBenchmarkService(deps: {
         baseline: baseline.run,
         adaptation: adaptation.run,
         candidate: candidate.run,
-        harnessChanged:
-          baseline.run.harnessRelease.contentHash
-          !== candidate.run.harnessRelease.contentHash,
-        candidateAdaptation: candidateAdaptation.run,
+        harnessChanged,
+        candidateAdaptation: candidateAdaptation.summary,
         lineageValid: lineage.valid,
         infrastructureValid,
       });
       const invalidReasons = comparisonInvalidReasons({
         baseline: baseline.run,
         adaptation: adaptation.run,
-        candidateAdaptation: candidateAdaptation.run,
+        candidateAdaptation: candidateAdaptation.summary,
         candidate: candidate.run,
-        harnessChanged:
-          baseline.run.harnessRelease.contentHash
-          !== candidate.run.harnessRelease.contentHash,
+        harnessChanged,
         lineageValid: lineage.valid,
         infrastructureValid,
       });
@@ -850,8 +706,8 @@ export function createHarnessRefinerBenchmarkService(deps: {
             contentHash: adaptation.run.contentHash,
           },
           candidateAdaptation: {
-            id: candidateAdaptation.run.id,
-            contentHash: candidateAdaptation.run.contentHash,
+            id: candidateAdaptation.summary.id,
+            contentHash: candidateAdaptation.summary.contentHash,
           },
           refiner: { id: refinerStage.id, contentHash: refinerStage.contentHash },
           candidate: { id: candidate.run.id, contentHash: candidate.run.contentHash },
@@ -867,14 +723,17 @@ export function createHarnessRefinerBenchmarkService(deps: {
           adaptationBaselinePassRate:
             adaptation.run.passedCount / adaptation.run.attemptCount,
           adaptationCandidatePassRate:
-            candidateAdaptation.run.passedCount / candidateAdaptation.run.attemptCount,
+            candidateAdaptation.summary.passedCount
+              / candidateAdaptation.summary.attemptCount,
           adaptationCandidatePassed:
-            candidateAdaptation.run.passedCount === candidateAdaptation.run.attemptCount,
+            candidateAdaptation.summary.passedCount
+              === candidateAdaptation.summary.attemptCount,
           heldOutCandidatePassed:
             candidate.run.passedCount === candidate.run.attemptCount,
           passed:
             candidate.comparison.qualityPassed
-            && candidateAdaptation.run.passedCount === candidateAdaptation.run.attemptCount
+            && candidateAdaptation.summary.passedCount
+              === candidateAdaptation.summary.attemptCount
             && candidate.run.passedCount === candidate.run.attemptCount
             && infrastructureValid
             && terminalClassification !== "infrastructure_failure",

@@ -90,9 +90,9 @@ function definitionForRelease(release: TasksetRelease): BenchmarkDefinition {
   return createBenchmarkDefinition({
     schemaVersion: "openpond.benchmarkDefinition.v1",
     id: BUILTIN_DEFINITION_ID,
-    title: "Harness Refiner",
+    title: "Harness Refiner 08112026",
     description:
-      "Measures whether evidence-driven Harness improvements preserve quality while reducing held-out foreground tokens.",
+      "Measures whether sequential, evidence-driven Harness improvements preserve quality while reducing future-task foreground tokens.",
     tasksetRelease: { id: release.id, contentHash: release.contentHash },
     adaptationSplit: "validation",
     evaluationSplit: "frozen_eval",
@@ -102,7 +102,7 @@ function definitionForRelease(release: TasksetRelease): BenchmarkDefinition {
       adaptation: release.tasks.filter((task) => task.split === "validation").length,
       evaluation: release.tasks.filter((task) => task.split === "frozen_eval").length,
     },
-    metadata: { builtin: true },
+    metadata: { builtin: true, protocol: "sequential_product_lifecycle" },
   });
 }
 

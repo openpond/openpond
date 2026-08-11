@@ -230,6 +230,35 @@ export async function loadCompletedBenchmarkStage(input: {
   return { run, attempts: evidence };
 }
 
+export async function loadBenchmarkAttemptEvidenceByIds(input: {
+  store: SqliteStore;
+  tasksetId: string;
+  attemptIds: readonly string[];
+}): Promise<BenchmarkAttemptEvidence[]> {
+  const wanted = new Set(input.attemptIds);
+  const [attempts, grades] = await Promise.all([
+    input.store.listTaskAttempts(input.tasksetId),
+    input.store.listGradeResultsForTaskset(input.tasksetId),
+  ]);
+  const selected = attempts.filter((attempt) => wanted.has(attempt.id));
+  if (selected.length !== wanted.size) {
+    throw new Error(
+      `Sequential adaptation evidence has ${selected.length}/${wanted.size} attempts.`,
+    );
+  }
+  const gradesByAttempt = new Map(grades.map((grade) => [grade.attemptId, grade]));
+  return Promise.all(selected.map(async (attempt) => {
+    const grade = gradesByAttempt.get(attempt.id);
+    if (!grade) throw new Error(`Attempt ${attempt.id} has no durable grade.`);
+    return {
+      attempt,
+      grade,
+      artifacts: await input.store.listTaskAttemptArtifacts({ attemptId: attempt.id }),
+      receiptContentHash: portableReceiptContentHash(attempt),
+    };
+  }));
+}
+
 function attemptHarnessReleaseHash(attempt: StoredTaskAttempt): string | null {
   const capability = objectRecord(attempt.metadata.harnessCapabilityReceipt);
   const release = objectRecord(capability?.harnessRelease);
@@ -851,10 +880,15 @@ export async function benchmarkLineage(input: {
   };
 }
 
+type AttemptStageSummary = Pick<
+  BenchmarkRunSummary,
+  "attemptCount" | "passedCount" | "terminalCount"
+>;
+
 export function comparisonInvalidReasons(input: {
   baseline: BenchmarkRunSummary;
   adaptation: BenchmarkRunSummary;
-  candidateAdaptation: BenchmarkRunSummary;
+  candidateAdaptation: AttemptStageSummary;
   candidate: BenchmarkRunSummary;
   harnessChanged: boolean;
   lineageValid: boolean;
@@ -864,7 +898,7 @@ export function comparisonInvalidReasons(input: {
   for (const [label, run] of [
     ["held-out baseline", input.baseline],
     ["adaptation baseline", input.adaptation],
-    ["candidate adaptation replay", input.candidateAdaptation],
+    ["sequential adaptation treatment", input.candidateAdaptation],
     ["held-out candidate", input.candidate],
   ] as const) {
     if (run.terminalCount !== run.attemptCount) {
@@ -877,7 +911,7 @@ export function comparisonInvalidReasons(input: {
   if (!input.harnessChanged) reasons.push("The candidate Harness is unchanged.");
   if (!input.lineageValid) reasons.push("Candidate Harness lineage is incomplete.");
   if (input.candidateAdaptation.passedCount !== input.candidateAdaptation.attemptCount) {
-    reasons.push("Candidate adaptation replay did not pass every case.");
+    reasons.push("Sequential adaptation treatment did not pass every case.");
   }
   if (input.candidate.passedCount !== input.candidate.attemptCount) {
     reasons.push("Candidate held-out quality did not pass every case.");
@@ -890,7 +924,7 @@ export function classifyComparison(input: {
   baseline: BenchmarkRunSummary;
   adaptation: BenchmarkRunSummary;
   candidate: BenchmarkRunSummary;
-  candidateAdaptation: BenchmarkRunSummary;
+  candidateAdaptation: AttemptStageSummary;
   harnessChanged: boolean;
   lineageValid: boolean;
   infrastructureValid: boolean;
