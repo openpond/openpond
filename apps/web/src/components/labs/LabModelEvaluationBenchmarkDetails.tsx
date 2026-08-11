@@ -110,6 +110,18 @@ export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationRe
   return (
     <div className="labs-benchmark-attempt-charts">
       <AttemptLineChart
+        title="Held-out tokens by task"
+        baseline={baseline.map((attempt) => attempt.totalTokens)}
+        candidate={candidate.map((attempt) => attempt.totalTokens)}
+        format={(value) => Math.round(value).toLocaleString()}
+      />
+      <AttemptLineChart
+        title="Adaptation tokens by task"
+        baseline={adaptation.map((attempt) => attempt.totalTokens)}
+        candidate={candidateAdaptation.map((attempt) => attempt.totalTokens)}
+        format={(value) => Math.round(value).toLocaleString()}
+      />
+      <AttemptLineChart
         title="Held-out quality by task"
         baseline={baseline.map((attempt) => attempt.score)}
         candidate={candidate.map((attempt) => attempt.score)}
@@ -117,13 +129,7 @@ export function BenchmarkAttemptCharts({ receipt }: { receipt: ModelEvaluationRe
         summarize={average}
       />
       <AttemptLineChart
-        title="Held-out tokens by task"
-        baseline={baseline.map((attempt) => attempt.totalTokens)}
-        candidate={candidate.map((attempt) => attempt.totalTokens)}
-        format={(value) => Math.round(value).toLocaleString()}
-      />
-      <AttemptLineChart
-        title="Adaptation replay quality by task"
+        title="Adaptation quality by task"
         baseline={adaptation.map((attempt) => attempt.score)}
         candidate={candidateAdaptation.map((attempt) => attempt.score)}
         format={(value) => value.toFixed(2)}
@@ -295,7 +301,7 @@ function AttemptLineChart({
         <h4>{title}</h4>
         <div>
           <span>Baseline {format(summarize(baselineValues))}</span>
-          <span>Candidate {format(summarize(candidateValues))}</span>
+          <span>Refined {format(summarize(candidateValues))}</span>
         </div>
       </header>
       <svg aria-label={title} role="img" viewBox="0 0 100 50" preserveAspectRatio="none">

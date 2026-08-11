@@ -24,7 +24,10 @@ import {
 import { ModelsTable } from "../apps/web/src/components/labs/LabsRouteSections";
 import { buildLabDetailBreadcrumbs } from "../apps/web/src/hooks/useLabDetailNavigation";
 import { labStatusTone } from "../apps/web/src/components/labs/LabStatusBadge";
-import { BenchmarkComparisonSummary } from "../apps/web/src/components/labs/LabModelEvaluationBenchmarkDetails";
+import {
+  BenchmarkAttemptCharts,
+  BenchmarkComparisonSummary,
+} from "../apps/web/src/components/labs/LabModelEvaluationBenchmarkDetails";
 import {
   benchmarkForegroundUsage,
   benchmarkSelectedAttempts,
@@ -338,6 +341,49 @@ describe("Lab workspace", () => {
       outputTokens: 79_062,
       totalTokens: 2_241_718,
     });
+  });
+
+  test("shows token and quality charts for both benchmark cohorts", () => {
+    const attempt = (
+      phase: "baseline" | "candidate" | "adaptation" | "candidate_adaptation",
+      taskId: string,
+      totalTokens: number,
+      score: number,
+    ) => ({
+      attemptId: `${phase}-${taskId}`,
+      phase,
+      taskId,
+      sessionId: null,
+      turnId: null,
+      passed: true,
+      score,
+      failureClass: null,
+      inputTokens: totalTokens - 10,
+      outputTokens: 10,
+      totalTokens,
+      latencyMs: 1,
+      costUsd: 0.01,
+      startedAt: "2026-08-10T21:00:00.000Z",
+    });
+    const receipt = {
+      attempts: [
+        attempt("baseline", "held-out-task", 100, 0.8),
+        attempt("candidate", "held-out-task", 60, 1),
+        attempt("adaptation", "adaptation-task", 200, 0.6),
+        attempt("candidate_adaptation", "adaptation-task", 80, 1),
+      ],
+    } as unknown as ModelEvaluationReceipt;
+
+    const markup = renderToStaticMarkup(
+      createElement(BenchmarkAttemptCharts, { receipt }),
+    );
+
+    expect(markup).toContain("Held-out tokens by task");
+    expect(markup).toContain("Adaptation tokens by task");
+    expect(markup).toContain("Held-out quality by task");
+    expect(markup).toContain("Adaptation quality by task");
+    expect(markup).toContain("Refined 60");
+    expect(markup).toContain("Refined 80");
   });
 
   test("projects managed publication in Serving", () => {
