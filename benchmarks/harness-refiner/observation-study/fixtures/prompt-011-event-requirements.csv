@@ -1,0 +1,16 @@
+event_day,shift_id,start,end,role,people_needed,notes
+2026-09-18,D1-A,07:00,11:00,Setup Lead,1,Coordinates room setup and vendor arrival
+2026-09-18,D1-B,07:00,11:00,Setup Crew,3,Lifting up to 30 pounds
+2026-09-18,D1-C,08:30,13:00,Registration,2,One person must know the check-in system
+2026-09-18,D1-D,09:00,13:00,Room Host,2,One per breakout room
+2026-09-18,D1-E,10:30,15:00,Catering Liaison,1,Food-safety orientation required
+2026-09-18,D1-F,12:30,17:00,Registration,1,Check-in system experience preferred
+2026-09-18,D1-G,12:30,17:30,Room Host,2,One per breakout room
+2026-09-18,D1-H,16:30,19:00,Closing Crew,3,Lifting up to 30 pounds
+2026-09-19,D2-A,07:30,11:30,Setup Lead,1,Coordinates reset and vendor arrival
+2026-09-19,D2-B,08:00,12:30,Registration,2,One person must know the check-in system
+2026-09-19,D2-C,08:30,13:00,Room Host,2,One per breakout room
+2026-09-19,D2-D,10:30,15:00,Catering Liaison,1,Food-safety orientation required
+2026-09-19,D2-E,12:00,16:30,Registration,1,Check-in system experience preferred
+2026-09-19,D2-F,12:30,17:00,Room Host,2,One per breakout room
+2026-09-19,D2-G,16:00,19:00,Closing Crew,3,Lifting up to 30 pounds

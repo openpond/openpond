@@ -534,9 +534,6 @@ function classifyToolFailure(event: HarnessRefinerRuntimeEvent): string {
   const data = asRecord(event.data);
   const result = asRecord(data.result);
   if (result.timedOut === true) return "timeout";
-  if (typeof result.exitCode === "number" && result.exitCode !== 0) {
-    return "command_exit_nonzero";
-  }
   const structuredStatus = String(data.status ?? result.status ?? "").toLowerCase();
   if (["timed_out", "timeout"].includes(structuredStatus)) return "timeout";
   const text = [
@@ -546,6 +543,16 @@ function classifyToolFailure(event: HarnessRefinerRuntimeEvent): string {
     result.stderr,
     result.stdout,
   ].filter((value): value is string => typeof value === "string").join("\n").toLowerCase();
+  if (
+    text.includes("unicodeencodeerror")
+    || text.includes("unicodedecodeerror")
+    || text.includes("invalid utf-8")
+    || text.includes("invalid utf8")
+    || /codec can't (?:en|de)code/.test(text)
+    || /can't encode character/.test(text)
+  ) {
+    return "text_encoding_incompatible";
+  }
   if (
     text.includes("modulenotfounderror") ||
     text.includes("module_not_found") ||
@@ -572,6 +579,9 @@ function classifyToolFailure(event: HarnessRefinerRuntimeEvent): string {
     return "missing_file_or_resource";
   }
   if (text.includes("exit code") || text.includes("non-zero") || text.includes("nonzero")) {
+    return "command_exit_nonzero";
+  }
+  if (typeof result.exitCode === "number" && result.exitCode !== 0) {
     return "command_exit_nonzero";
   }
   return "unclassified_tool_failure";

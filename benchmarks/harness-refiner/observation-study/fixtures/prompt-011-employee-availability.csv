@@ -1,0 +1,21 @@
+employee,available_day,start,end,qualified_roles,max_hours_per_day
+Avery,2026-09-18,06:30,14:00,Setup Lead|Setup Crew|Room Host,7
+Avery,2026-09-19,07:00,15:00,Setup Lead|Setup Crew|Room Host,7
+Blair,2026-09-18,06:30,12:00,Setup Crew|Closing Crew,5
+Blair,2026-09-19,15:00,20:00,Setup Crew|Closing Crew,5
+Casey,2026-09-18,08:00,17:30,Registration|Room Host,8
+Casey,2026-09-19,08:00,17:30,Registration|Room Host,8
+Devon,2026-09-18,08:00,15:30,Registration|Catering Liaison,7
+Devon,2026-09-19,08:00,15:30,Registration|Catering Liaison,7
+Emery,2026-09-18,06:30,12:00,Setup Crew|Room Host,5
+Emery,2026-09-19,07:00,13:00,Setup Crew|Room Host,6
+Finley,2026-09-18,09:00,19:30,Room Host|Closing Crew,8
+Finley,2026-09-19,09:00,19:30,Room Host|Closing Crew,8
+Gray,2026-09-18,08:00,17:00,Registration|Room Host,8
+Gray,2026-09-19,08:00,17:00,Registration|Room Host,8
+Harper,2026-09-18,10:00,19:30,Catering Liaison|Closing Crew,8
+Harper,2026-09-19,10:00,19:30,Catering Liaison|Closing Crew,8
+Indigo,2026-09-18,06:30,11:30,Setup Crew,5
+Indigo,2026-09-19,15:30,19:30,Closing Crew,4
+Jordan,2026-09-18,12:00,19:30,Registration|Room Host|Closing Crew,7
+Jordan,2026-09-19,12:00,19:30,Registration|Room Host|Closing Crew,7
