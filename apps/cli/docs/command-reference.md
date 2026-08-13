@@ -97,15 +97,21 @@ Options:
 
 ```text
 Usage:
-  openpond actions <check|build|run|dev> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]
+  openpond actions <check|build|run|dev|publish> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]
 
 Options:
+  --api-key <string>
+  --base-url <string>
   --cwd <string>
   --input <string>
   --input-file <string>
   --json
   --output-directory <string>
+  --project-id <string>
+  --source-commit-sha <string>
   --source-directory <string>
+  --source-ref <string>
+  --team-id <string>
   --timeout-ms <integer>
 ```
 ## inspect

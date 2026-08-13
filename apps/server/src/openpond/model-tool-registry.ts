@@ -31,6 +31,7 @@ import {
 import type { WebSearchExecutor, WebSearchResult, WebSearchResultItem } from "./web-search.js";
 import { isSandboxExecutionTarget, resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 import { discoverCommandArtifacts } from "./command-artifacts.js";
+import { executeHostedProjectActionModelTool } from "../project-actions/hosted-project-action-model-tool.js";
 
 export type ToolVisibilityContext = {
   session: Session;
@@ -1365,65 +1366,15 @@ async function executeScopedOpenPondAction(input: {
     };
   }
   if (implementation?.type === "openpond-hosted-project-action") {
-    if (!deps.executeProjectAction) {
-      return failedActionToolResult(
-        context.callId,
-        resultToolName,
-        `Action ${action.id} is a hosted Project Action, but hosted action execution is not configured.`,
-      );
-    }
-    const projectId = stringValue(implementation.projectId);
-    const teamId = stringValue(implementation.teamId);
-    const releaseId = stringValue(implementation.releaseId);
-    const projectActionId = stringValue(implementation.actionId) ?? action.id;
-    if (!projectId || !teamId || !releaseId) {
-      return failedActionToolResult(
-        context.callId,
-        resultToolName,
-        `Action ${action.id} is missing its hosted Project Action release binding.`,
-      );
-    }
-    if (input.requestedProjectId && input.requestedProjectId !== projectId) {
-      return failedActionToolResult(
-        context.callId,
-        resultToolName,
-        `Project ${input.requestedProjectId} is not authorized for action ${action.id}.`,
-      );
-    }
-    const result = await deps.executeProjectAction({
-      action: projectActionId,
-      input: input.input,
-      metadata: {
-        source: "openpond_hosted_project_action",
-        execution: "hosted",
-        projectId,
-        teamId,
-        releaseId,
-        selectedActionId: projectActionId,
-        selectedActionLabel: action.label ?? action.name ?? projectActionId,
-        selectedBy: "native_model_tool",
-        displayPrompt: context.userPrompt,
-        sessionId: context.session.id,
-        turnId: context.turnId,
-        toolCallId: context.callId,
-      },
+    return executeHostedProjectActionModelTool({
+      action,
+      context,
+      implementation,
+      actionInput: input.input,
+      requestedProjectId: input.requestedProjectId,
+      resultToolName,
+      executeProjectAction: deps.executeProjectAction,
     });
-    return {
-      toolCallId: context.callId,
-      name: resultToolName,
-      ok: true,
-      contentText: JSON.stringify(
-        {
-          ok: true,
-          action: resultToolName,
-          output: `Ran hosted Project Action ${projectActionId}.`,
-          data: { result },
-        },
-        null,
-        2,
-      ),
-      data: { result },
-    };
   }
 
   const payloadArgs: Record<string, unknown> = {
