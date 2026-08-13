@@ -238,12 +238,19 @@ describe("local Harness Refiner worker", () => {
           schemaVersion: "openpond.harnessRefinerBenchmarkCohortEvidence.v1",
           adaptationEvidenceHash: "a".repeat(64),
         });
-        expect(request.evidence.executionProfile).toMatchObject({
+        expect(request.evidence.reviewPacket.executionProfile).toMatchObject({
           modelRequestCount: 0,
           totalTokens: 0,
           toolFailureCount: 0,
         });
-        expect(request.evidence.recentObservations).toEqual([]);
+        expect(request.evidence.reviewPacket.timeline).toEqual([
+          expect.objectContaining({
+            name: "tool.completed",
+            action: "exec_command",
+            status: "failed",
+          }),
+        ]);
+        expect(request.evidence.reviewPacket.priorIncidents).toEqual([]);
         return hostedResult(request, {
             schemaVersion: "openpond.localHarnessRefinerDecision.v1",
             decision: "propose",
@@ -364,6 +371,21 @@ describe("local Harness Refiner worker", () => {
         );
         expect(request.harness.currentRelease).toEqual(
           first.workspace.currentChannel.release,
+        );
+        expect(request.evidence.reviewPacket.priorIncidents).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              runRef: current.trigger.runRef,
+              turnId: current.trigger.turnId,
+              timeline: expect.arrayContaining([
+                expect.objectContaining({
+                  name: "tool.completed",
+                  status: "failed",
+                  occurrenceCount: 1,
+                }),
+              ]),
+            }),
+          ]),
         );
         const source = request.evidence.sourceFiles.find(
           (candidate) => candidate.path === "instructions/system.md",

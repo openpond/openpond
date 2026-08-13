@@ -204,6 +204,28 @@ describe("Harness improvement trigger detector", () => {
     );
   });
 
+  test("preserves a text-encoding failure class instead of collapsing it to a nonzero exit", () => {
+    const result = detect([
+      toolEvent({
+        id: "failed-encoding",
+        sequence: 1,
+        status: "failed",
+        output: "UnicodeEncodeError: 'latin-1' codec can't encode character '\\u2014'",
+        data: {
+          result: {
+            exitCode: 1,
+            timedOut: false,
+            stderr: "UnicodeEncodeError: 'latin-1' codec can't encode character '\\u2014'",
+          },
+        },
+      }),
+    ], "turn_completed");
+
+    expect(result.observations[0]?.deterministicClass).toBe(
+      "text_encoding_incompatible",
+    );
+  });
+
   test("marks an earlier failure recovered when the turn later succeeds", () => {
     const result = detect(
       [

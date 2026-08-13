@@ -10,26 +10,36 @@ import {
 const evidence: LocalHarnessRefinerEvidence = {
   trigger: { decision: "queue_refiner", suggestedRoutes: ["runtime"] },
   observations: [{ kind: "recovery", rawError: "PDF edit failed", recovered: true }],
-  task: {
-    prompt: "Update the chart labels in the attached report.",
-    assistantOutput: "The report was updated after retrying with another supported method.",
-    assistantOutputLinkCount: 0,
-    previousAssistantOutput: null,
+  reviewPacket: {
+    currentTurn: {
+      id: "turn-1",
+      status: "completed",
+      error: null,
+      prompt: "Update the chart labels in the attached report.",
+      assistantOutput: "The report was updated after retrying with another supported method.",
+      assistantOutputLinkCount: 0,
+    },
+    priorConversation: [],
+    timeline: [],
+    artifacts: [],
+    artifactDiagnostics: [],
+    executionProfile: {
+      modelRequestCount: 2,
+      failedModelRequestCount: 0,
+      promptTokens: 100,
+      completionTokens: 20,
+      totalTokens: 120,
+      toolFailureCount: 0,
+      retryCount: 0,
+      recoveryCount: 0,
+    },
+    priorIncidents: [],
+    truncation: {
+      timelineEventCount: 0,
+      includedTimelineEventCount: 0,
+      timelineTruncated: false,
+    },
   },
-  eventExcerpts: [],
-  artifactDiagnostics: [],
-  executionProfile: {
-    modelRequestCount: 2,
-    failedModelRequestCount: 0,
-    promptTokens: 100,
-    completionTokens: 20,
-    totalTokens: 120,
-    toolFailureCount: 0,
-    retryCount: 0,
-    recoveryCount: 0,
-  },
-  recentObservations: [],
-  recentOutcomes: [],
   sourceFiles: [],
   sourceCatalog: [],
 };
@@ -38,21 +48,18 @@ describe("public model-driven Harness Refiner", () => {
   test("treats trigger labels as evidence rather than routing authority", () => {
     const system = refinerMessages(evidence)[0]!.content;
     expect(system).toContain("Judge the evidence yourself");
-    expect(system).toContain("Do not assume a supplied trigger");
-    expect(system).toContain("actual user-visible answer and artifacts");
+    expect(system).toContain("chronological incident record");
+    expect(system).toContain("visible answer and artifact inventory");
     expect(system).toContain("taskset_grade diagnostic");
-    expect(system).toContain("authoritative outcome evidence");
-    expect(system).toContain("bounded adaptation evaluationCriteria");
-    expect(system).toContain("Do not dismiss that evidence merely as a hidden constraint");
-    expect(system).toContain("missing requested citations or links");
-    expect(system).toContain("assistantOutputLinkCount");
-    expect(system).toContain("named sources without clickable links");
-    expect(system).toContain("current web verification");
-    expect(system).toContain("recurrence evidence");
+    expect(system).toContain("authoritative evaluation evidence");
+    expect(system).toContain("one high-confidence deterministic failure");
+    expect(system).toContain("Recurrence strengthens confidence");
+    expect(system).toContain("Routing records ownership");
+    expect(system).toContain("does not blame the agent");
+    expect(system).toContain("does not require recurrence");
+    expect(system).toContain("good fallback");
     expect(system).toContain("Never force a change");
-    expect(system).toContain("executionProfile is bounded cost evidence");
-    expect(system).toContain("recentObservations is a bounded window");
-    expect(system).toContain("Optimize future related work");
+    expect(system).toContain("Optimize future work");
   });
 
   test("treats benchmark adaptation evidence as a cohort rather than one turn", () => {
@@ -63,17 +70,15 @@ describe("public model-driven Harness Refiner", () => {
         attempts: [],
       },
     })[0]!.content;
-    expect(system).toContain("review every supplied cohort attempt together");
+    expect(system).toContain("Review every supplied attempt");
     expect(system).toContain("primary turn is only a transport anchor");
-    expect(system).toContain("behaviorFamilies and crossTaskToolFailureGroups");
-    expect(system).toContain("minimum number of materially different adaptation tasks");
-    expect(system).toContain("Valid passing grades do not erase avoidable tool detours");
-    expect(system).toContain("foreground-token efficiency is the optimization objective");
-    expect(system).toContain("same request with fewer foreground tokens");
-    expect(system).toContain("answer-quality grades are separate safety evidence");
-    expect(system).toContain("Prefer subtractive or constraining changes");
-    expect(system).toContain("Reject a broad quality-only guardrail");
-    expect(system).toContain("high usage on one task alone does not justify");
+    expect(system).toContain("behaviorFamilies");
+    expect(system).toContain("crossTaskToolFailureGroups");
+    expect(system).toContain("materially different tasks");
+    expect(system).toContain("Foreground-token efficiency is the cohort objective");
+    expect(system).toContain("Quality grades are a separate safety gate");
+    expect(system).toContain("Prefer subtractive changes");
+    expect(system).toContain("Reject a broad quality guardrail");
   });
 
   test("authors and repairs validated public decisions", async () => {
@@ -133,9 +138,9 @@ describe("public model-driven Harness Refiner", () => {
     expect(decision.decision).toBe("no_action");
     expect(messagesSeen).toHaveLength(2);
     expect(messagesSeen[1]!.at(-1)!.content).toContain("mandatory independent critique");
-    expect(messagesSeen[1]!.at(-1)!.content).toContain("materially different future tasks");
+    expect(messagesSeen[1]!.at(-1)!.content).toContain("failure mechanism");
     expect(messagesSeen[1]!.at(-1)!.content).toContain(
-      "reject the draft if it primarily adds quality requirements",
+      "Do not reject a concise correction merely because",
     );
   });
 });
