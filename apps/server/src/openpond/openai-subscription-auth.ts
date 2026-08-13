@@ -281,6 +281,11 @@ export async function refreshOpenAiSubscriptionToken(refreshToken: string): Prom
       client_id: OPENAI_OAUTH_CLIENT_ID,
     }).toString(),
   });
+  if (response.status === 401) {
+    throw new Error(
+      "Your OpenAI ChatGPT sign-in has expired or was invalidated. Reconnect it in Settings > Providers > OpenAI > Subscription by selecting Connect ChatGPT. This is an authentication issue, not a billing or model-access error.",
+    );
+  }
   if (!response.ok) throw new Error(`OpenAI token refresh failed: ${response.status}`);
   return (await response.json()) as OpenAiOAuthTokenResponse;
 }
