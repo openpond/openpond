@@ -1,23 +1,29 @@
-import { createHash, randomUUID } from "node:crypto";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
-import { request as httpsRequest } from "node:https";
+import { createHash } from "node:crypto";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+
 import type {
-  ChatAttachment,
+  ChatModelRef,
   HarnessRefinerOutcome,
   RefinementTriggerDecision,
-  RuntimeEvent,
   Session,
-  Turn,
+  TaskDataRecord,
+  Taskset,
 } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
+import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
+
+import { ensureLocalHarnessRunOverlay } from "../../../apps/server/src/harness/local-harness-run-overlay.js";
+import { recordLocalHarnessImprovementBoundary } from "../../../apps/server/src/harness/local-harness-improvement-observer.js";
+import { runLocalHarnessRefinerWorker } from "../../../apps/server/src/harness/local-harness-refiner-worker.js";
+import { loadSelectedLocalHarnessRuntime } from "../../../apps/server/src/harness/local-harness-skill-runtime.js";
 import { SqliteStore } from "../../../apps/server/src/store/store.js";
+import { createLocalTasksetWorkRuntime } from "../../../apps/server/src/training/local-taskset-work-runtime.js";
 import {
-  cleanupObserved,
-  fileOutputRefsFromEvents,
-  terminalTurnEvent,
-  workRuntimeCostFromEvents,
-} from "../../../scripts/rfp-work-proof-support.js";
+  runTasksetWorkAttempt,
+  type TasksetWorkModelStream,
+} from "../../../apps/server/src/training/taskset-work-attempt-runner.js";
+import { event } from "../../../apps/server/src/utils.js";
 
 const ROOT = path.resolve(import.meta.dirname);
 const FIXTURE_ROOT = path.join(ROOT, "fixtures");
@@ -25,14 +31,23 @@ const SERVER_URL = process.env.OPENPOND_APP_SERVER_URL?.trim() || "http://127.0.
 const STORE_DIR = process.env.OPENPOND_APP_HOME?.trim();
 const OUTPUT_PATH = path.resolve(
   process.env.OPENPOND_REFINER_OBSERVATION_OUTPUT?.trim()
-    || path.join("output", "harness-refiner-observation-study", "2026-08-12", "batch-01.json"),
+    || path.join("output", "harness-refiner-observation-study", "2026-08-12", "local-batch-01.json"),
 );
-const TURN_TIMEOUT_MS = 20 * 60_000;
-const REFINER_TIMEOUT_MS = 5 * 60_000;
-const MODEL = { providerId: "openpond", modelId: "openpond-chat" } as const;
+const MODEL: ChatModelRef = { providerId: "openpond", modelId: "openpond-chat" };
 const ORDER_SEED = "refiner-observation-2026-08-12-v1";
+const TASKSET_ID = "harness-refiner-observation-local-batch-01";
+const WORK_TOOL_NAMES = [
+  "work_environment",
+  "work_list_files",
+  "work_read_file",
+  "work_write_file",
+  "work_edit_file",
+  "work_exec",
+  "work_save_output",
+  "work_stop",
+];
 
-if (!STORE_DIR) throw new Error("OPENPOND_APP_HOME is required for an isolated observation run.");
+if (!STORE_DIR) throw new Error("OPENPOND_APP_HOME is required for an isolated local observation run.");
 
 type StudyTask = {
   id: number;
@@ -76,6 +91,7 @@ const BATCH_ONE: StudyTask[] = [
     expectedOutputKind: "xlsx",
   },
 ];
+
 const requestedTaskIds = new Set(
   (process.env.OPENPOND_REFINER_OBSERVATION_TASK_IDS ?? "")
     .split(",")
@@ -91,358 +107,414 @@ if (selectedTasks.length === 0) {
 
 const token = (await readFile(path.join(STORE_DIR, "token"), "utf8")).trim();
 if (!token) throw new Error("The isolated OpenPond capability token is empty.");
+const store = new SqliteStore(STORE_DIR);
 
-const initialHistory = await api<Record<string, unknown>>("/v1/harness", { method: "GET" });
-const workspaceId = nestedString(initialHistory, ["workspace", "id"]);
-if (!workspaceId) throw new Error("The isolated Personal Local Harness workspace is unavailable.");
-await api("/v1/harness/background-review", {
-  method: "POST",
-  body: { workspaceId, enabled: true },
-});
-
-const receipt: Record<string, unknown> = {
-  schemaVersion: "openpond.harnessRefinerObservationBatch.v1",
-  study: "2026-08-11-harness-refiner-50-prompt-observation-study",
-  batch: 1,
-  orderSeed: ORDER_SEED,
-  batchTaskIds: selectedTasks.map((task) => task.id),
-  runtime: { model: MODEL, serverUrl: SERVER_URL },
-  startedAt: new Date().toISOString(),
-  initialHarness: releaseRef(initialHistory),
-  tasks: [],
-};
-await persistReceipt(receipt);
-
-for (const [batchIndex, task] of selectedTasks.entries()) {
-  process.stdout.write(`TASK_START ${batchIndex + 1}/${selectedTasks.length} prompt-${String(task.id).padStart(3, "0")}\n`);
-  const historyBefore = await api<Record<string, unknown>>("/v1/harness", { method: "GET" });
-  const attachments = await fixtureAttachments(task.fixtures);
-  const taskStartedAt = new Date().toISOString();
-  const session = await api<Session>("/v1/sessions", {
-    method: "POST",
-    body: {
-      experience: "work",
-      provider: MODEL.providerId,
-      modelRef: MODEL,
-      openPondCommandAccessMode: "disabled",
-      hiddenFromDefaultSidebar: true,
-      title: `Refiner observation prompt ${task.id}`,
-      cwd: null,
-      metadata: {
-        harnessRefinerObservationStudy: true,
-        observationBatch: 1,
-        observationPromptId: task.id,
-        orderSeed: ORDER_SEED,
-      },
-    },
+try {
+  const selectedHarness = await loadSelectedLocalHarnessRuntime(store);
+  if (!selectedHarness) throw new Error("A selected Local Harness release is required.");
+  await store.setHarnessBackgroundReviewSettings({
+    workspaceId: selectedHarness.workspace.id,
+    enabled: true,
+    updatedAt: new Date().toISOString(),
   });
-  const turn = await api<Turn>(`/v1/sessions/${encodeURIComponent(session.id)}/turns`, {
-    method: "POST",
-    timeoutMs: TURN_TIMEOUT_MS + 60_000,
-    body: {
-      prompt: task.prompt,
-      model: MODEL.modelId,
-      modelRef: MODEL,
-      approvalPolicy: "never",
-      sandbox: "workspace-write",
-      attachments,
-      metadata: {
-        harnessRefinerObservationStudy: true,
-        observationBatch: 1,
-        observationPromptId: task.id,
-        orderSeed: ORDER_SEED,
-        userInterventions: 0,
-      },
+  const taskset = await localObservationTaskset(selectedTasks);
+  const localRuntime = createLocalTasksetWorkRuntime({
+    storeDir: STORE_DIR,
+    deviceId: `observation-${process.pid}`,
+    createSession: (payload) => api<Session>("/v1/sessions", { method: "POST", body: payload }),
+    getSession: async (sessionId) => {
+      const session = await store.getSession(sessionId);
+      if (!session) throw new Error(`Local Work session ${sessionId} was not found.`);
+      return session;
     },
+    runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
   });
-  let settled = await waitForTurn(session.id, turn.id, TURN_TIMEOUT_MS);
-  process.stdout.write(
-    `TURN_COMPLETE prompt-${String(task.id).padStart(3, "0")} ${settled.terminal.name}\n`,
-  );
+  const receipt: Record<string, unknown> = {
+    schemaVersion: "openpond.harnessRefinerObservationBatch.v2",
+    study: "2026-08-11-harness-refiner-50-prompt-observation-study",
+    execution: "desktop_local_work",
+    batch: 1,
+    orderSeed: ORDER_SEED,
+    batchTaskIds: selectedTasks.map((task) => task.id),
+    runtime: { model: MODEL, serverUrl: SERVER_URL, workspace: "local" },
+    startedAt: new Date().toISOString(),
+    initialHarness: releaseRef(selectedHarness),
+    tasks: [],
+  };
+  await persistReceipt(receipt);
 
-  let cleanupError: string | null = null;
-  if (!cleanupObserved(settled.events)) {
-    try {
-      await api(`/v1/sessions/${encodeURIComponent(session.id)}/workspace-tools`, {
-        method: "POST",
-        body: { action: "sandbox_stop", args: {}, source: "chat_action" },
-      });
-    } catch (error) {
-      cleanupError = errorMessage(error);
-    }
-  }
-
-  const refinement = await waitForRefiner(session.id, turn.id, REFINER_TIMEOUT_MS);
-  settled = await readTurn(session.id, turn.id);
-  const historyAfter = await api<Record<string, unknown>>("/v1/harness", { method: "GET" });
-  const store = new SqliteStore(STORE_DIR);
-  try {
-    const usage = await store.listModelUsageRecords({ turnId: turn.id, limit: 10_000 });
-    const triggers = (await store.listHarnessImprovementArtifacts(
-      workspaceId,
-      "trigger_decision",
-      1_000,
-    ) as RefinementTriggerDecision[]).filter((candidate) => candidate.turnId === turn.id);
-    const trigger = triggers.at(-1) ?? null;
-    const outcomes = (await store.listHarnessImprovementArtifacts(
-      workspaceId,
-      "refiner_outcome",
-      1_000,
-    ) as HarnessRefinerOutcome[]).filter(
-      (candidate) => trigger && candidate.trigger.contentHash === trigger.contentHash,
+  for (const [batchIndex, studyTask] of selectedTasks.entries()) {
+    process.stdout.write(
+      `TASK_START ${batchIndex + 1}/${selectedTasks.length} prompt-${String(studyTask.id).padStart(3, "0")} local\n`,
     );
-    const outcome = outcomes.at(-1) ?? null;
-    const outputRefs = fileOutputRefsFromEvents(settled.events);
-    const taskReceipt = {
-      promptId: task.id,
-      batchIndex,
-      expectedOutputKind: task.expectedOutputKind,
-      prompt: task.prompt,
-      promptSha256: sha256(task.prompt),
-      fixtures: attachments.map((attachment) => ({
-        name: attachment.name,
-        mediaType: attachment.mediaType,
-        sizeBytes: attachment.sizeBytes,
-        sha256: sha256(Buffer.from(attachment.contentsBase64 ?? "", "base64")),
-      })),
-      startedAt: taskStartedAt,
-      completedAt: settled.terminal.timestamp,
-      sessionId: session.id,
-      turnId: turn.id,
-      terminalEvent: {
-        name: settled.terminal.name,
-        status: settled.terminal.status ?? null,
-        error: settled.terminal.error ?? null,
+    const task = taskset.tasks.find((candidate) => candidate.id === taskId(studyTask.id));
+    if (!task) throw new Error(`Local Taskset task ${studyTask.id} is missing.`);
+    const attempt = await runTasksetWorkAttempt({
+      store,
+      storeDir: STORE_DIR,
+      taskset,
+      task,
+      model: MODEL,
+      reasoningEffort: "low",
+      seed: 17,
+      attempt: 0,
+      sampling: { maxOutputTokens: 8_192, temperature: 0, topP: 1 },
+      stream: hostedModelStream,
+      runtime: localRuntime,
+      harnessInstructionContext: selectedHarness.instructionContext,
+      harnessCapabilityReceipt: {
+        execution: "desktop_local_work",
+        harnessRelease: selectedHarness.release.harnessRelease,
+        agentSnapshot: selectedHarness.release.agentSnapshot,
       },
-      harnessBefore: releaseRef(historyBefore),
-      harnessAfter: releaseRef(historyAfter),
-      harnessChanged:
-        releaseRef(historyBefore)?.contentHash !== releaseRef(historyAfter)?.contentHash,
-      outputs: outputRefs.map((output) => ({
-        id: output.id,
-        title: output.title,
-        contentType: output.contentType,
-        sizeBytes: output.sizeBytes,
-        sha256: output.sha256,
-        revision: output.revision,
-        validation: output.validation,
-      })),
-      usage: usage.map((record) => ({
-        requestId: record.requestId,
-        requestKind: record.requestKind,
-        visibility: record.visibility,
-        status: record.status,
-        provider: record.provider,
-        model: record.model,
-        promptTokens: record.promptTokens,
-        completionTokens: record.completionTokens,
-        totalTokens: record.totalTokens,
-        durationMs: record.durationMs,
-        firstTokenMs: record.firstTokenMs,
-      })),
-      workRuntimeCost: workRuntimeCostFromEvents(settled.events),
-      cleanupObserved: cleanupObserved(settled.events),
-      cleanupError,
-      refinerEvent: refinement
-        ? {
-            name: refinement.name,
-            status: refinement.status ?? null,
-            output: refinement.output ?? null,
-            error: refinement.error ?? null,
-            data: refinement.data ?? null,
+    });
+    const sessionId = stringMetadata(attempt.metadata, "sessionId");
+    const turnId = stringMetadata(attempt.metadata, "turnId");
+    if (!sessionId || !turnId) throw new Error(`Prompt ${studyTask.id} has no local session boundary.`);
+    const storedSession = await store.getSession(sessionId);
+    const originalTurn = await store.getTurn(turnId);
+    if (!storedSession || !originalTurn) throw new Error(`Prompt ${studyTask.id} local boundary is missing.`);
+    const session = await store.updateSession(sessionId, (current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        harnessRefinerObservationStudy: true,
+        observationBatch: 1,
+        observationPromptId: studyTask.id,
+        orderSeed: ORDER_SEED,
+        execution: "desktop_local_work",
+      },
+    }));
+    if (!session) throw new Error(`Prompt ${studyTask.id} local session could not be updated.`);
+    const overlay = await ensureLocalHarnessRunOverlay({
+      store,
+      runId: session.id,
+      workspace: selectedHarness.workspace,
+      harnessRelease: {
+        id: selectedHarness.release.harnessRelease.id,
+        contentHash: selectedHarness.release.harnessRelease.contentHash,
+      },
+      admittedAt: attempt.startedAt,
+    });
+    const turn = await store.updateTurn(turnId, (current) => ({
+      ...current,
+      harnessSnapshot: {
+        schemaVersion: "openpond.harnessTurnSnapshot.v1",
+        workspaceId: selectedHarness.workspace.id,
+        workspaceRevision: selectedHarness.workspace.revision,
+        sourceRevision: selectedHarness.workspace.sourceRevision,
+        channelName: selectedHarness.workspace.currentChannel.name,
+        channelRevision: selectedHarness.workspace.currentChannel.revision,
+        harnessRelease: overlay.baseHarnessRelease,
+        overlay: { id: overlay.id, revision: overlay.revision, contentHash: overlay.contentHash },
+      },
+    }));
+    if (!turn) throw new Error(`Prompt ${studyTask.id} local turn could not be updated.`);
+    const foregroundUsage = usageSummary(attempt.metadata.usage);
+    const attemptOutput = recordValue(attempt.output);
+    const requiredOutputRows = Array.isArray(attemptOutput.requiredOutputs)
+      ? attemptOutput.requiredOutputs
+      : [];
+    const attemptText = typeof attemptOutput.text === "string" ? attemptOutput.text : "";
+    const outputsPassed = requiredOutputRows.length === 0
+      ? attempt.infrastructureError === null && attemptText.trim().length > 0
+      : attemptOutput.outputsPassed === true;
+    const completionCheck = JSON.stringify({
+      schemaVersion: "openpond.localObservationCompletionCheck.v1",
+      passed: outputsPassed,
+      score: outputsPassed ? 1 : 0,
+      failureClass: attempt.infrastructureError ? attempt.metadata.failureClass : null,
+      feedback: outputsPassed
+        ? "The requested output was structurally materialized; this check does not assert subjective quality."
+        : "The requested output was not structurally materialized.",
+      evaluationCriteria: task.expectedOutput,
+      attempt: {
+        status: attempt.metadata.status,
+        infrastructureError: attempt.infrastructureError,
+        outputPresent: attemptText.trim().length > 0,
+        artifactCount: attempt.artifactRefs.length,
+        outputsPassed: attemptOutput.outputsPassed === true,
+        toolFailureCount: numeric(attemptOutput.toolFailureCount),
+        modelRequestCount: foregroundUsage.modelRequestCount,
+        latencyMs: attempt.latencyMs,
+        usage: foregroundUsage,
+      },
+    });
+    await store.appendRuntimeEvent(event({
+      sessionId,
+      turnId,
+      name: "diagnostic",
+      source: "server",
+      action: "taskset_grade",
+      status: outputsPassed ? "completed" : "failed",
+      output: completionCheck,
+      error: outputsPassed ? undefined : completionCheck,
+      data: { result: { output: completionCheck, passed: outputsPassed, score: outputsPassed ? 1 : 0 } },
+    }));
+    const detection = await recordLocalHarnessImprovementBoundary({
+      store,
+      session,
+      turn,
+      boundaryKind: "turn_completed",
+    });
+    let outcome: HarnessRefinerOutcome | null = null;
+    const refinerUsage: unknown[] = [];
+    if (detection?.trigger.decision === "queue_refiner") {
+      const result = await runLocalHarnessRefinerWorker({
+        store,
+        storeDir: STORE_DIR,
+        trigger: detection.trigger,
+        signal: new AbortController().signal,
+        stream: async function* ({ messages, signal }) {
+          for await (const delta of streamOpenPondHostedChatTurn({
+            model: MODEL.modelId,
+            messages,
+            requestId: `observation-refiner:${detection.trigger.id}`,
+            reasoningEffort: "low",
+            maxTokens: 4_096,
+            signal,
+          })) {
+            if (delta.type === "text_delta" && delta.text) yield { text: delta.text };
+            if (delta.type === "usage") refinerUsage.push(delta.usage);
           }
-        : null,
-      trigger: trigger
-        ? {
-            id: trigger.id,
-            contentHash: trigger.contentHash,
-            decision: trigger.decision,
-            reason: trigger.reason,
-            observationCount: trigger.observations.length,
-          }
-        : null,
-      outcome: outcome
-        ? {
-            id: outcome.id,
-            contentHash: outcome.contentHash,
-            decision: outcome.decision,
-            reason: outcome.reason,
-            proposal: outcome.proposal,
-            metadata: outcome.metadata,
-          }
-        : null,
+        },
+      });
+      outcome = result.outcome;
+    }
+    const taskReceipt = {
+      promptId: studyTask.id,
+      expectedOutputKind: studyTask.expectedOutputKind,
+      fixtureNames: studyTask.fixtures,
+      sessionId,
+      turnId,
+      attempt,
+      foregroundUsage: attempt.metadata.usage ?? [],
+      trigger: detection?.trigger ?? null,
+      outcome,
+      refinerUsage,
+      harnessChanged: outcome?.decision === "proposed",
     };
     (receipt.tasks as unknown[]).push(taskReceipt);
     await persistReceipt(receipt);
-    const routedTo = outcome?.metadata?.routed === true
-      && typeof outcome.metadata.route === "string"
-      ? outcome.metadata.route
-      : null;
+    const classification = classifyOutcome(outcome, detection?.trigger ?? null);
     process.stdout.write(
-      `REFINER_COMPLETE prompt-${String(task.id).padStart(3, "0")} `
-      + `${routedTo ? `route_${routedTo}` : outcome?.decision ?? refinement?.name ?? "missing"} `
-      + `changed=${taskReceipt.harnessChanged} `
-      + `foreground_tokens=${foregroundTokens(usage)}\n`,
+      `TASK_COMPLETE prompt-${String(studyTask.id).padStart(3, "0")} ${classification} `
+      + `foreground_tokens=${usageTotal(attempt.metadata.usage)} `
+      + `refiner_tokens=${usageTotal(refinerUsage)}\n`,
     );
-    if (settled.terminal.name !== "turn.completed") {
-      throw new Error(
-        `Prompt ${task.id} stopped the batch because its Work turn ended as ${settled.terminal.name}.`,
-      );
-    }
-    if (!refinement || refinement.name !== "harness.refiner.completed") {
-      throw new Error(
-        `Prompt ${task.id} stopped the batch because its Harness Refiner review did not complete.`,
-      );
-    }
-  } finally {
-    await store.close();
+  }
+  receipt.completedAt = new Date().toISOString();
+  receipt.finalHarness = releaseRef(await loadSelectedLocalHarnessRuntime(store));
+  await persistReceipt(receipt);
+  process.stdout.write(
+    `BATCH_COMPLETE ${selectedTasks.length}/${selectedTasks.length} local receipt=${OUTPUT_PATH}\n`,
+  );
+} finally {
+  await store.close();
+}
+
+async function* hostedModelStream(
+  input: Parameters<TasksetWorkModelStream>[0],
+): ReturnType<TasksetWorkModelStream> {
+  for await (const delta of streamOpenPondHostedChatTurn({
+    model: input.model.modelId,
+    messages: input.messages,
+    tools: input.tools,
+    toolChoice: input.toolChoice,
+    requestId: input.requestId,
+    reasoningEffort: input.reasoningEffort === "none" ? undefined : input.reasoningEffort ?? undefined,
+    maxTokens: input.maxOutputTokens,
+    temperature: input.temperature,
+    topP: input.topP,
+    signal: input.signal,
+  })) {
+    if (delta.type === "text_delta" && delta.text) yield { text: delta.text };
+    if (delta.type === "tool_call_delta") yield { toolCalls: delta.toolCalls };
+    if (delta.type === "usage") yield { usage: delta.usage };
+    if (delta.type === "continuation") yield { continuation: delta.continuation };
   }
 }
 
-receipt.completedAt = new Date().toISOString();
-receipt.finalHarness = releaseRef(await api<Record<string, unknown>>("/v1/harness", { method: "GET" }));
-await persistReceipt(receipt);
-process.stdout.write(`BATCH_COMPLETE ${selectedTasks.length}/${selectedTasks.length} receipt=${OUTPUT_PATH}\n`);
-
-async function fixtureAttachments(fileNames: string[]): Promise<ChatAttachment[]> {
-  const values: ChatAttachment[] = [];
-  for (const fileName of fileNames) {
-    const bytes = await readFile(path.join(FIXTURE_ROOT, fileName));
-    const mediaType = fileName.endsWith(".csv") ? "text/csv" : "text/markdown";
-    values.push({
-      id: `attachment_${randomUUID()}`,
-      name: fileName,
-      relativePath: fileName,
-      mediaType,
+async function localObservationTaskset(tasks: StudyTask[]): Promise<Taskset> {
+  const sourceId = "source-harness-refiner-observation-local";
+  const tasksetRoot = path.join(STORE_DIR!, "training", "tasksets", TASKSET_ID);
+  const assetRoot = path.join(tasksetRoot, "assets");
+  await mkdir(assetRoot, { recursive: true });
+  const fileMetadata = new Map<string, { sha256: string; sizeBytes: number; mediaType: string }>();
+  for (const fixtureName of [...new Set(tasks.flatMap((task) => task.fixtures))]) {
+    const sourcePath = path.join(FIXTURE_ROOT, fixtureName);
+    const bytes = await readFile(sourcePath);
+    await copyFile(sourcePath, path.join(assetRoot, fixtureName));
+    fileMetadata.set(fixtureName, {
+      sha256: sha256(bytes),
       sizeBytes: bytes.byteLength,
-      kind: "file",
-      lineCount: bytes.toString("utf8").split(/\r?\n/).length,
-      text: bytes.toString("utf8"),
-      contentsBase64: bytes.toString("base64"),
+      mediaType: fixtureName.endsWith(".csv") ? "text/csv" : "text/markdown",
     });
   }
-  return values;
+  const taskRows: TaskDataRecord[] = tasks.map((task) => ({
+    schemaVersion: "openpond.taskData.v1",
+    id: taskId(task.id),
+    clusterKey: `observation-${task.expectedOutputKind}`,
+    split: "validation",
+    input: { prompt: task.prompt },
+    expectedOutput: { kind: task.expectedOutputKind },
+    policyVisibleContext: {},
+    privilegedContextRef: null,
+    sourceRefs: [sourceId],
+    assets: task.fixtures.map((fixtureName) => {
+      const metadata = fileMetadata.get(fixtureName)!;
+      return {
+        id: `asset-${contentHash([task.id, fixtureName]).slice(0, 24)}`,
+        sourceRefId: sourceId,
+        artifactRef: `assets/${fixtureName}`,
+        fileName: fixtureName,
+        mediaType: metadata.mediaType,
+        sha256: metadata.sha256,
+        sizeBytes: metadata.sizeBytes,
+        split: "validation" as const,
+        metadata: {},
+      };
+    }),
+    requiredOutputs: requiredOutputs(task),
+    tags: [task.expectedOutputKind],
+    metadata: { observationPromptId: task.id },
+  }));
+  const sourceFileHashes = [...fileMetadata.values()].map((metadata) => metadata.sha256);
+  const hash = contentHash({ tasks: taskRows, tools: WORK_TOOL_NAMES, orderSeed: ORDER_SEED });
+  return {
+    id: TASKSET_ID,
+    name: "Harness Refiner local observation batch 1",
+    contentHash: hash,
+    sourceRefs: [{
+      id: sourceId,
+      kind: "uploaded_file",
+      sourceFileHashes,
+      originalFileNames: [...fileMetadata.keys()],
+      mediaTypes: [...new Set([...fileMetadata.values()].map((metadata) => metadata.mediaType))],
+      secretScanStatus: "passed",
+      piiScanStatus: "passed",
+      licensingStatus: "approved",
+    }],
+    environment: {
+      kind: "work",
+      entrypoint: "openpond-local-work-v1",
+      toolNames: WORK_TOOL_NAMES,
+      defaultTimeoutMs: 20 * 60_000,
+      metadata: { maxToolTurns: 40, execution: "desktop_local_work" },
+    },
+    tasks: taskRows,
+  } as unknown as Taskset;
 }
 
-async function waitForTurn(sessionId: string, turnId: string, timeoutMs: number) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const current = await readTurn(sessionId, turnId);
-    if (current.terminal) return current as { events: RuntimeEvent[]; terminal: RuntimeEvent };
-    await delay(2_000);
+function requiredOutputs(task: StudyTask): TaskDataRecord["requiredOutputs"] {
+  if (task.expectedOutputKind === "text") return [];
+  const output = {
+    pdf: { path: "welcome-packet.pdf", mediaType: "application/pdf" },
+    html: { path: "operations-dashboard.html", mediaType: "text/html" },
+    xlsx: {
+      path: "staffing-schedule.xlsx",
+      mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    },
+  }[task.expectedOutputKind];
+  return output ? [{ ...output, maxBytes: 10_000_000, metadata: {} }] : [];
+}
+
+function classifyOutcome(
+  outcome: HarnessRefinerOutcome | null,
+  trigger: RefinementTriggerDecision | null,
+): string {
+  if (!outcome) return trigger?.decision ?? "not_reviewed";
+  if (outcome.metadata.routed === true) {
+    return `route_${typeof outcome.metadata.route === "string" ? outcome.metadata.route : "unknown"}`;
   }
-  throw new Error(`Timed out waiting for Work turn ${turnId}.`);
+  return outcome.decision;
 }
 
-async function readTurn(sessionId: string, turnId: string) {
-  const store = new SqliteStore(STORE_DIR!);
-  try {
-    const events = await store.runtimeEventsForSession(sessionId, { limit: 10_000 });
-    return { events, terminal: terminalTurnEvent(events, turnId) };
-  } finally {
-    await store.close();
-  }
-}
-
-async function waitForRefiner(sessionId: string, turnId: string, timeoutMs: number) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    const { events } = await readTurn(sessionId, turnId);
-    const event = events.find(
-      (candidate) => candidate.turnId === turnId
-        && (candidate.name === "harness.refiner.completed" || candidate.name === "harness.refiner.failed"),
-    );
-    if (event) return event;
-    await delay(2_000);
-  }
-  throw new Error(`Timed out waiting for Harness Refiner on turn ${turnId}.`);
-}
-
-async function api<T = unknown>(pathname: string, input: {
-  method: "GET" | "POST";
-  body?: unknown;
-  timeoutMs?: number;
-}): Promise<T> {
-  const target = new URL(`${SERVER_URL}${pathname}`);
-  const request = target.protocol === "https:" ? httpsRequest : httpRequest;
-  const body = input.body === undefined ? null : JSON.stringify(input.body);
-  const response = await new Promise<{ status: number; text: string }>((resolve, reject) => {
-    const clientRequest = request(target, {
-      method: input.method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        ...(body === null
-          ? {}
-          : {
-              "Content-Type": "application/json",
-              "Content-Length": Buffer.byteLength(body),
-            }),
-      },
-    }, (clientResponse) => {
-      const chunks: Buffer[] = [];
-      clientResponse.on("data", (chunk: Buffer | string) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      clientResponse.on("end", () => {
-        resolve({
-          status: clientResponse.statusCode ?? 0,
-          text: Buffer.concat(chunks).toString("utf8"),
-        });
-      });
-    });
-    clientRequest.setTimeout(input.timeoutMs ?? 30_000, () => {
-      clientRequest.destroy(new Error(`${pathname} timed out after ${input.timeoutMs ?? 30_000}ms.`));
-    });
-    clientRequest.on("error", reject);
-    if (body !== null) clientRequest.write(body);
-    clientRequest.end();
-  });
-  if (response.status < 200 || response.status >= 300) {
-    throw new Error(`${pathname} returned HTTP ${response.status}: ${response.text.slice(0, 4_000)}`);
-  }
-  return JSON.parse(response.text) as T;
-}
-
-function releaseRef(history: Record<string, unknown>): { id: string; contentHash: string } | null {
-  const workspace = record(history.workspace);
-  const currentChannel = record(workspace.currentChannel);
-  const release = record(currentChannel.release);
-  return typeof release.id === "string" && typeof release.contentHash === "string"
-    ? { id: release.id, contentHash: release.contentHash }
+function releaseRef(runtime: Awaited<ReturnType<typeof loadSelectedLocalHarnessRuntime>>) {
+  return runtime
+    ? { id: runtime.release.harnessRelease.id, contentHash: runtime.release.harnessRelease.contentHash }
     : null;
 }
 
-function nestedString(value: unknown, keys: string[]): string | null {
-  let current: unknown = value;
-  for (const key of keys) current = record(current)[key];
-  return typeof current === "string" && current ? current : null;
+function taskId(id: number): string {
+  return `observation-prompt-${String(id).padStart(3, "0")}`;
 }
 
-function record(value: unknown): Record<string, unknown> {
+function stringMetadata(metadata: Record<string, unknown>, key: string): string | null {
+  const value = metadata[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function usageTotal(value: unknown): number {
+  const usages = Array.isArray(value) ? value : value ? [value] : [];
+  return usages.reduce((total, usage) => {
+    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return total;
+    const record = usage as Record<string, unknown>;
+    const totalTokens = record.total_tokens ?? record.totalTokens;
+    if (typeof totalTokens === "number") return total + totalTokens;
+    const inputTokens = record.input_tokens ?? record.prompt_tokens ?? record.promptTokens ?? 0;
+    const outputTokens = record.output_tokens ?? record.completion_tokens ?? record.completionTokens ?? 0;
+    return total + (typeof inputTokens === "number" ? inputTokens : 0)
+      + (typeof outputTokens === "number" ? outputTokens : 0);
+  }, 0);
+}
+
+function usageSummary(value: unknown): {
+  modelRequestCount: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+} {
+  const usages = Array.isArray(value) ? value : value ? [value] : [];
+  return usages.reduce(
+    (total, usage) => {
+      if (!usage || typeof usage !== "object" || Array.isArray(usage)) return total;
+      const record = usage as Record<string, unknown>;
+      const prompt = numeric(record.prompt_tokens ?? record.promptTokens ?? record.input_tokens);
+      const completion = numeric(
+        record.completion_tokens ?? record.completionTokens ?? record.output_tokens,
+      );
+      const reportedTotal = numeric(record.total_tokens ?? record.totalTokens);
+      return {
+        modelRequestCount: total.modelRequestCount + 1,
+        promptTokens: total.promptTokens + prompt,
+        completionTokens: total.completionTokens + completion,
+        totalTokens: total.totalTokens + (reportedTotal || prompt + completion),
+      };
+    },
+    { modelRequestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+  );
+}
+
+function numeric(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : {};
 }
 
-function foregroundTokens(records: Awaited<ReturnType<SqliteStore["listModelUsageRecords"]>>) {
-  return records
-    .filter((record) => record.visibility === "user_facing")
-    .reduce((total, record) => total + (record.totalTokens ?? 0), 0);
-}
-
-function sha256(value: string | Buffer): string {
-  return createHash("sha256").update(value).digest("hex");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-async function persistReceipt(value: Record<string, unknown>): Promise<void> {
+async function persistReceipt(receipt: Record<string, unknown>): Promise<void> {
   await mkdir(path.dirname(OUTPUT_PATH), { recursive: true });
-  await writeFile(OUTPUT_PATH, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  await writeFile(OUTPUT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
 }
 
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+async function api<T>(pathname: string, input: { method?: string; body?: unknown } = {}): Promise<T> {
+  const response = await fetch(`${SERVER_URL}${pathname}`, {
+    method: input.method ?? "GET",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(input.body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`${pathname} returned HTTP ${response.status}: ${text.slice(0, 4_000)}`);
+  return JSON.parse(text) as T;
+}
+
+function sha256(value: Buffer): string {
+  return createHash("sha256").update(value).digest("hex");
 }
