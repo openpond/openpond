@@ -14,13 +14,18 @@ await rm(dist, { force: true, recursive: true });
 await mkdir(dist, { recursive: true });
 
 await build({
-  entryPoints: [path.join(root, "src/index.ts")],
-  outfile: path.join(dist, "index.js"),
+  entryPoints: {
+    index: path.join(root, "src/index.ts"),
+    actions: path.join(root, "src/actions.ts"),
+    "actions-local": path.join(root, "src/actions-local.ts"),
+  },
+  outdir: dist,
   bundle: true,
   platform: "node",
   target: "node22.14",
   format: "esm",
   legalComments: "none",
+  external: ["esbuild"],
   sourcemap: true,
   logLevel: "info",
 });

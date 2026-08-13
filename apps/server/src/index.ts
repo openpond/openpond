@@ -76,6 +76,8 @@ import { loadGitCommitDiffAtPath } from "./workspace/workspace-diff.js";
 import { createCodexBridge } from "./runtime/codex-bridge.js";
 import { createCodexRuntimeManager } from "./runtime/codex-runtime.js";
 import { createServerPayloads } from "./api/server-payloads.js";
+import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
+import { findLocalProject } from "./workspace/local-projects.js";
 import {
   runtimeEventPageRequestFromUrl,
   runtimeEventsPagePayloadFromEntries,
@@ -350,6 +352,7 @@ export async function createOpenPondServer(
     updateLocalProjectAgentSetupPayload,
     previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
+    localProjectActionCatalogPayload,
     patchSidebarAppPreference,
     listSidebarFileBookmarksPayload,
     patchSidebarFileBookmarkPayload,
@@ -400,6 +403,11 @@ export async function createOpenPondServer(
     refreshCodexStatus,
     appendRuntimeEvent,
     isClosing: () => closing,
+  });
+  const projectActionRunPayload = createProjectActionRunPayload({
+    appendRuntimeEvent,
+    resolveProjectRoot: async (projectId) =>
+      (await findLocalProject(store, projectId))?.workspacePath ?? null,
   });
 
   const {
@@ -778,6 +786,7 @@ export async function createOpenPondServer(
     workInputsForSession: workOutputService.workInputsForSession,
     executeOpenPondCommand: openPondCommandAccess.executeCommand,
     executeProfileAction: profileRunPayload,
+    executeProjectAction: projectActionRunPayload,
     executeDatasetBuilderAction: async ({
       session,
       provider,
@@ -1689,6 +1698,7 @@ export async function createOpenPondServer(
       openEventSubscriber,
       refreshCodexStatus,
       bootstrapPayload,
+      localProjectActionCatalogPayload,
       skillSourceFilePayload,
       extensionCatalogPayload,
       extensionPreviewPayload,

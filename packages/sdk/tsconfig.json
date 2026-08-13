@@ -13,5 +13,5 @@
     "target": "ES2022",
     "types": ["node", "vitest"]
   },
-  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "test/**/*.ts", "../actions/src/**/*.ts"]
 }

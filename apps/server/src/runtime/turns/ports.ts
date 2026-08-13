@@ -367,6 +367,7 @@ export type TurnRunnerDependencies = {
     input: OpenPondCommandExecutionInput
   ) => Promise<OpenPondCommandRunResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeProjectAction?: (payload: unknown) => Promise<unknown>;
   executeDatasetBuilderAction?: (input: {
     session: Session;
     provider: ChatProvider;

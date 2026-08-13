@@ -14,7 +14,7 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
       entryNames: "cli",
       chunkNames: "chunks/[name]-[hash]",
       define: { __OPENPOND_COMPILED_CLI__: "false" },
-      external: ["node-pty"],
+      external: ["esbuild", "node-pty"],
     });
     await makeExecutable(cliOutput);
   }
@@ -32,7 +32,7 @@ export async function bundleCli(surface: CliBundleSurface = "all"): Promise<void
         ),
       },
       outdir: fromRoot("apps", "cli", "dist"),
-      external: ["node-pty"],
+      external: ["esbuild", "node-pty"],
     });
   }
 }

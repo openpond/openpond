@@ -236,6 +236,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     workInputsForSession,
     executeOpenPondCommand,
     executeProfileAction,
+    executeProjectAction,
     executeDatasetBuilderAction,
     loadOpenPondProfileState,
     loadOpenPondProfileStateForRef,
@@ -761,6 +762,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     executeWebSearch,
     createScheduledWork,
     executeProfileAction,
+    executeProjectAction,
     loadOpenPondProfileStateForRef,
   });
 

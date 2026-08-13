@@ -96,6 +96,60 @@ console.log(result.command.output);
 
 The package also exports `createOpenPondSandboxClient`, all public sandbox input and response types, and the OpChat helpers used by the Work loop.
 
+## Project Actions
+
+Project Actions expose typed business functions from a normal Git Project to local OpenPond Work. The website and action wrapper can import the same neutral domain module, so the harness does not duplicate application logic.
+
+```ts
+// openpond/actions/analytics.ts
+import { defineAction } from "openpond-sdk/actions";
+import { z } from "zod";
+
+import { getAnalyticsSummary } from "../../packages/domain/analytics.js";
+
+export const getAnalytics = defineAction("analytics.get_summary", {
+  description: "Get the current operating summary.",
+  input: z.object({ businessId: z.string() }),
+  output: z.object({ activeMoves: z.number(), bookedRevenueUsd: z.number() }),
+  run(context, input) {
+    context.trace("analytics.loaded", { businessId: input.businessId });
+    return getAnalyticsSummary(input.businessId);
+  },
+});
+```
+
+The local-only runner does not require an OpenPond API key:
+
+```ts
+import { createLocalActionRunner } from "openpond-sdk/actions/local";
+
+const runner = createLocalActionRunner({ projectRoot: process.cwd() });
+const result = await runner.run({
+  actionId: "analytics.get_summary",
+  input: { businessId: "relocation" },
+});
+```
+
+The default source directory is `openpond/actions`; generated files live in `.openpond/actions`. Override either path and map explicit runtime setup with `openpond/project-actions.json`:
+
+```json
+{
+  "sourceDirectory": "src/actions",
+  "outputDirectory": ".openpond/project-actions",
+  "environment": {
+    "apiToken": "CUSTOMER_API_TOKEN"
+  },
+  "connections": {
+    "analytics-db": {
+      "values": { "provider": "postgres" },
+      "environment": { "url": "CUSTOMER_DATABASE_URL" }
+    }
+  }
+}
+```
+
+Only declared values are forwarded into the child process. Use `context.env(name)` and `context.connection(name)` inside an action. Output files must be written inside `context.outputDirectory` and registered with `context.output(...)`.
+
 ## Lifecycle, persistence, and cleanup
 
 The generic SDK defaults to `cleanup: "keep"` for backwards compatibility. Applications can choose one of three explicit terminal policies:

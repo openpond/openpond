@@ -52,6 +52,8 @@ openpond health
 openpond extension add owner/repo
 openpond extension list
 openpond extension update --all
+openpond actions check --cwd ./customer-project
+openpond actions run analytics.get_summary --cwd ./customer-project --input '{"businessId":"relocation"}'
 openpond --account production apps list
 openpond tool list <handle>/<repo>
 openpond tool run <handle>/<repo> <tool> --body '{"foo":"bar"}'
@@ -89,6 +91,7 @@ Command reference:
 - `openpond account`: fetch current account/profile fields and active products for the selected API key.
 - `openpond health`: check public API reachability and selected API-key auth health when a key is configured.
 - `openpond extension <add|preview|list|inspect|update|remove>`: manage Agent Skills-compatible GitHub packs installed under `~/.openpond/extensions`. Repositories use standard `SKILL.md` packages and do not need an OpenPond-specific manifest.
+- `openpond actions <check|build|run|dev>`: validate, bundle, invoke, or watch typed Project Actions under `openpond/actions` in a local Project. This path is local and does not require an API key.
 - `openpond tool list <handle>/<repo>`: list tools for the latest deployment.
 - `openpond tool run <handle>/<repo> <tool> [--body <json>] [--method <METHOD>]`: run a tool on the latest deployment.
 - `openpond deploy watch <handle>/<repo> [--branch <branch>]`: stream deployment logs for the latest deployment.

@@ -95,6 +95,14 @@ export default defineConfig({
         extends: true,
         test: {
           ...shared,
+          name: "actions",
+          include: ["packages/actions/test/**/*.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          ...shared,
           name: "agent-sdk",
           include: ["packages/agent-sdk/test/**/*.test.{ts,tsx}"],
         },

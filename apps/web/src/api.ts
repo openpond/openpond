@@ -43,6 +43,7 @@ import type {
   CreateHostedSavedWorkRequest,
   UpdateHostedSavedWorkRequest,
   LocalProject,
+  OpenPondActionCatalogEntry,
   UpdateLocalProjectAgentSetupRequest,
   PatchSessionRequest,
   PatchSidebarAppPreferenceRequest,
@@ -198,6 +199,11 @@ export const api = {
   ...communityApi,
   bootstrap: (connection: ClientConnection) =>
     apiFetch<BootstrapPayload>(connection, "/v1/bootstrap?refreshCodex=1"),
+  localProjectActions: (connection: ClientConnection, projectId: string) =>
+    apiFetch<{ projectId: string; actions: OpenPondActionCatalogEntry[] }>(
+      connection,
+      `/v1/projects/${encodeURIComponent(projectId)}/actions`,
+    ),
   extensionCatalog: (connection: ClientConnection) =>
     apiFetch<OpenPondExtensionCatalog>(connection, "/v1/extensions"),
   extensionPreview: (

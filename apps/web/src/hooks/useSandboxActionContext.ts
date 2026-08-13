@@ -7,7 +7,6 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 import { actionCatalogForProject } from "../lib/sandbox-action-catalog";
-import { actionCatalogForLocalCrossSystemFixture } from "../lib/local-cross-system-action-catalog";
 import { openPondActionProjectTarget } from "../lib/openpond-action-project";
 import {
   buildOpenPondAgentSlashCommand,
@@ -42,6 +41,7 @@ export function useSandboxActionContext({
   profile,
   selectedCloudProject,
   selectedProject,
+  reportError,
 }: {
   cloudProjectById: Map<string, CloudProject>;
   cloudProjects: CloudProject[];
@@ -52,8 +52,12 @@ export function useSandboxActionContext({
   profile: OpenPondProfileState | null | undefined;
   selectedCloudProject: CloudProject | null;
   selectedProject: LocalProject | null;
+  reportError?: (message: string) => void;
 }) {
   const [selectedSandboxProject, setSelectedSandboxProject] = useState<SandboxProject | null>(null);
+  const [selectedLocalProjectActionCatalog, setSelectedLocalProjectActionCatalog] = useState<
+    OpenPondActionCatalogEntry[]
+  >([]);
   const [slashAgents, setSlashAgents] = useState<SandboxAgent[]>([]);
   const slashAgentTeamIds = useMemo(() => {
     const ids = new Set<string>();
@@ -146,10 +150,30 @@ export function useSandboxActionContext({
     };
   }, [accountScopeKey, connection, selectedActionProjectTarget?.id, selectedActionProjectTarget?.teamId]);
 
-  const selectedLocalProjectActionCatalog = useMemo(
-    () => actionCatalogForLocalCrossSystemFixture(selectedProject),
-    [selectedProject],
-  );
+  useEffect(() => {
+    if (!connection || !selectedProject) {
+      setSelectedLocalProjectActionCatalog([]);
+      return undefined;
+    }
+    let cancelled = false;
+    void api.localProjectActions(connection, selectedProject.id)
+      .then((payload) => {
+        if (!cancelled) setSelectedLocalProjectActionCatalog(payload.actions);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setSelectedLocalProjectActionCatalog([]);
+          reportError?.(
+            `Could not load Project Actions for ${selectedProject.name}: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connection, reportError, selectedProject?.id, selectedProject?.name, selectedProject?.updatedAt]);
   const selectedProjectActionCatalog = useMemo(() => {
     const byId = new Map<string, OpenPondActionCatalogEntry>();
     for (const action of actionCatalogForProject(selectedSandboxProject)) byId.set(action.id, action);

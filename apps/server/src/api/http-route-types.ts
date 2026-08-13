@@ -240,6 +240,7 @@ export type HttpRouteDeps = {
     projectId: string,
     payload: unknown
   ) => Promise<unknown>;
+  localProjectActionCatalogPayload: (projectId: string) => Promise<unknown>;
   organizationPayload: (action: OrganizationRequestAction) => Promise<unknown>;
   sandboxPayload: (action: SandboxRequestAction) => Promise<unknown>;
   teamChatPayload: (action: TeamChatRequestAction) => Promise<unknown>;

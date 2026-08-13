@@ -1,6 +1,7 @@
 {
   "files": [],
   "references": [
+    { "path": "packages/actions" },
     { "path": "packages/agent-runtime" },
     { "path": "packages/app-server" },
     { "path": "packages/harness/tsconfig.build.json" },

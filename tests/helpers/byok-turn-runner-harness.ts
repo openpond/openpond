@@ -39,6 +39,9 @@ export function createByokTurnRunnerHarness(input: {
   executeWorkspaceTool?: NonNullable<
     Parameters<typeof createTurnRunner>[0]["executeWorkspaceTool"]
   >;
+  executeProjectAction?: NonNullable<
+    Parameters<typeof createTurnRunner>[0]["executeProjectAction"]
+  >;
   maxHostedWorkspaceToolRounds?: number;
 }) {
   const providerId = input.providerId ?? "openrouter";
@@ -156,6 +159,7 @@ export function createByokTurnRunnerHarness(input: {
       (async () => {
         throw new Error("workspace tool execution should not be needed");
       }),
+    executeProjectAction: input.executeProjectAction,
     finalizeCrossSystemTurn: input.finalizeCrossSystemTurn,
     loadPersonalizationSoul: async () => "",
     loadAppPreferences: async () =>
