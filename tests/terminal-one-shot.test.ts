@@ -596,6 +596,61 @@ describe("terminal one-shot chat runner", () => {
     }
   });
 
+  test("loads the selected local Project Action catalog before submitting the turn", async () => {
+    const fake = await startOneShotFakeServer([
+      runtimeEvent({
+        id: "event-completed",
+        name: "turn.completed",
+        sessionId: "session-one-shot",
+        turnId: "turn-one-shot",
+        output: "done",
+      }),
+    ]);
+    const output = createStringWritable();
+
+    try {
+      const result = await runOneShotChat(
+        parseTerminalArgs(
+          [
+            "chat",
+            "--server",
+            fake.url,
+            "--message",
+            "Get the relocation summary",
+            "--project",
+            "local_project_1",
+            "--non-interactive",
+            "--json",
+            "--timeout-sec",
+            "5",
+          ],
+          "/repo/site",
+        ).options,
+        {
+          output: output.stream,
+          connection: { server: fake.url, token: "test-token" },
+        },
+      );
+
+      expect(result.status).toBe("completed");
+      expect(fake.turnRequests).toHaveLength(1);
+      expect(fake.turnRequests[0]).toMatchObject({
+        openPondActionCatalog: [
+          ...terminalProfileFixture().actionCatalog.map((action) => ({
+            ...action,
+            implementation: {
+              type: "openpond-profile-action",
+              actionId: action.id,
+            },
+          })),
+          terminalProjectActionFixture(),
+        ],
+      });
+    } finally {
+      fake.stop();
+    }
+  });
+
   test("waits for the event stream to connect before posting a one-shot turn", async () => {
     let releaseEventStream!: () => void;
     const eventStreamGate = new Promise<void>((resolve) => {
@@ -906,6 +961,10 @@ async function startOneShotFakeServer(
           appId: body.appId ?? null,
           appName: body.appName ?? null,
           cwd: body.cwd ?? null,
+          workspaceKind: body.workspaceKind ?? null,
+          workspaceId: body.workspaceId ?? null,
+          workspaceName: body.workspaceName ?? null,
+          localProjectId: body.localProjectId ?? null,
           codexThreadId: null,
           createdAt: now,
           updatedAt: now,
@@ -914,6 +973,9 @@ async function startOneShotFakeServer(
           archived: false,
           order: 0,
         });
+      }
+      if (request.method === "GET" && url.pathname === "/v1/projects/local_project_1/actions") {
+        return Response.json({ projectId: "local_project_1", actions: [terminalProjectActionFixture()] });
       }
       if (url.pathname === "/v1/events") {
         eventStreamRequests += 1;
@@ -965,6 +1027,36 @@ async function startOneShotFakeServer(
       return eventStreamRequests;
     },
     stop: () => server.stop(),
+  };
+}
+
+function terminalProjectActionFixture() {
+  return {
+    id: "local_project_1:relocation.get_business_summary",
+    sourceActionId: "relocation.get_business_summary",
+    name: "relocation.get_business_summary",
+    label: "Get corporate relocation summary",
+    description: "Get the current corporate relocation pipeline and operations summary.",
+    visibility: "default",
+    inputSchema: { type: "object", properties: {} },
+    outputSchema: { type: "object", properties: {} },
+    approvalPolicy: { mode: "never" },
+    artifactPolicy: { outputArtifacts: [], persistRunSummary: true, persistTrace: true },
+    setupRequirements: [],
+    mcp: { enabled: false },
+    schedulePolicy: { enabled: true, allowAdHoc: true },
+    trace: { name: "relocation.get_business_summary", namespace: "project-actions" },
+    implementation: {
+      type: "openpond-project-action",
+      actionId: "relocation.get_business_summary",
+      behavior: "read",
+      timeoutMs: 120_000,
+      concurrency: null,
+      projectId: "local_project_1",
+      projectRoot: "/repo/site",
+    },
+    invokesModel: false,
+    sourcePath: "/repo/site",
   };
 }
 
