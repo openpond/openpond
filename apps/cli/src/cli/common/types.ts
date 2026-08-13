@@ -29,6 +29,7 @@ export type Command =
   | "project"
   | "agent"
   | "agents"
+  | "actions"
   | "inspect"
   | "build"
   | "validate"

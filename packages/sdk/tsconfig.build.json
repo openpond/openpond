@@ -12,6 +12,7 @@
   },
   "include": [
     "src/**/*.ts",
+    "../actions/src/**/*.ts",
     "../cloud/src/hosted-chat.ts",
     "../cloud/src/urls.ts",
     "../cloud/src/api/core.ts",

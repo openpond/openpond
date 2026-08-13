@@ -1,0 +1,9 @@
+{
+  "name": "openpond-project-actions-analytics-proof",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "openpond-sdk": "workspace:*",
+    "zod": "^4.1.13"
+  }
+}

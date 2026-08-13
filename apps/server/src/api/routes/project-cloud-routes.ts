@@ -6,9 +6,23 @@ export async function handleProjectCloudRoutes({ deps, request, requestUrl, resp
     createLocalProjectPayload,
     previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
+    localProjectActionCatalogPayload,
     updateLocalProjectAgentSetupPayload,
     deleteLocalProjectPayload,
   } = deps;
+  const localProjectActionsMatch = /^\/v1\/projects\/([^/]+)\/actions$/.exec(
+    requestUrl.pathname,
+  );
+  if (request.method === "GET" && localProjectActionsMatch) {
+    sendJson(
+      response,
+      200,
+      await localProjectActionCatalogPayload(
+        decodeURIComponent(localProjectActionsMatch[1]!),
+      ),
+    );
+    return true;
+  }
   if (request.method === "POST" && requestUrl.pathname === "/v1/projects") {
     sendJson(response, 201, await createLocalProjectPayload(await readJson(request)));
     return true;

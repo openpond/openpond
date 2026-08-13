@@ -31,11 +31,15 @@ openpond ui --port 0
 openpond ui --no-open
 openpond tui
 openpond chat --message "Summarize this project" --non-interactive --yes
+openpond actions check --cwd ./customer-project
+openpond actions run analytics.get_summary --cwd ./customer-project --input '{"businessId":"relocation"}'
 ```
 
 Cloud and account commands include `login`, `profiles`, `account`, `health`, `project`, `agent`, `sandbox`, `apps`, `tool`, and `backtest`. Run `openpond <command> --help` for the schema-generated option list.
 
 `--cwd` is an explicit local workspace override. A resumed session uses its stored workspace. Cloud project targets reject local cwd overrides instead of silently changing execution placement.
+
+Project Actions use `openpond/actions` by default. `actions check` validates and builds their registry, `actions build` produces the deterministic local bundle, `actions run` invokes one built action in a child process, and `actions dev` watches the source tree and rebuilds after changes. These commands do not use hosted sandboxes or require an OpenPond API key.
 
 ## Authentication and configuration
 

@@ -93,6 +93,21 @@ Usage:
 Options:
   --json
 ```
+## actions
+
+```text
+Usage:
+  openpond actions <check|build|run|dev> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]
+
+Options:
+  --cwd <string>
+  --input <string>
+  --input-file <string>
+  --json
+  --output-directory <string>
+  --source-directory <string>
+  --timeout-ms <integer>
+```
 ## inspect
 
 ```text

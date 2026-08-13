@@ -40,6 +40,7 @@ export function createCapabilityCatalogRuntime(deps: {
   executeWebSearch: TurnRunnerDependencies["executeWebSearch"];
   createScheduledWork: TurnRunnerDependencies["createScheduledWork"];
   executeProfileAction: TurnRunnerDependencies["executeProfileAction"];
+  executeProjectAction: TurnRunnerDependencies["executeProjectAction"];
   loadOpenPondProfileStateForRef: TurnRunnerDependencies["loadOpenPondProfileStateForRef"];
 }) {
   return function createNativeModelToolDefinitions(
@@ -67,6 +68,7 @@ export function createCapabilityCatalogRuntime(deps: {
         actionCatalog: openPondActionCatalog,
         executeWorkspaceTool: deps.executeWorkspaceTool,
         executeProfileAction: deps.executeProfileAction,
+        executeProjectAction: deps.executeProjectAction,
         trainingHarness: options.trainingHarness,
       });
     }
@@ -167,6 +169,7 @@ export function createCapabilityCatalogRuntime(deps: {
           actionCatalog: openPondActionCatalog,
           executeWorkspaceTool: deps.executeWorkspaceTool,
           executeProfileAction: deps.executeProfileAction,
+          executeProjectAction: deps.executeProjectAction,
         })
       );
     }

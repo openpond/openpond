@@ -987,6 +987,7 @@ export function createOpenPondActionModelToolDefinitions(deps: {
     options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
   ) => Promise<WorkspaceToolResult>;
   executeProfileAction?: (payload: unknown) => Promise<unknown>;
+  executeProjectAction?: (payload: unknown) => Promise<unknown>;
   executeCrossSystemTool?: (input: {
     modelId: string;
     localProjectId: string | null;
@@ -1232,6 +1233,7 @@ async function executeScopedOpenPondAction(input: {
       options?: { turnId?: string; workspaceDiffBaseline?: WorkspaceDiffSummary | null },
     ) => Promise<WorkspaceToolResult>;
     executeProfileAction?: (payload: unknown) => Promise<unknown>;
+    executeProjectAction?: (payload: unknown) => Promise<unknown>;
   };
   resultToolName: string;
   input: Record<string, unknown>;
@@ -1289,6 +1291,72 @@ async function executeScopedOpenPondAction(input: {
           action: resultToolName,
           output: `Ran profile action ${profileActionId}.`,
           data: { result: modelResult },
+        },
+        null,
+        2,
+      ),
+      data: { result },
+    };
+  }
+  if (implementation?.type === "openpond-project-action") {
+    const executionTarget = resolveWorkspaceExecutionTarget({ session: context.session });
+    if (isSandboxExecutionTarget(executionTarget)) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is a local Project Action and cannot run while Working in Hybrid or sandbox. Switch Working in to Local.`,
+      );
+    }
+    if (!deps.executeProjectAction) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is a local Project Action, but local action execution is not configured.`,
+      );
+    }
+    const projectRoot = stringValue(implementation.projectRoot) ?? action.sourcePath;
+    const projectId = stringValue(implementation.projectId);
+    const projectActionId = stringValue(implementation.actionId) ?? action.id;
+    if (!projectRoot) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is missing its local Project root.`,
+      );
+    }
+    if (!projectId || projectId !== context.session.localProjectId) {
+      return failedActionToolResult(
+        context.callId,
+        resultToolName,
+        `Action ${action.id} is not authorized for the selected local Project.`,
+      );
+    }
+    const result = await deps.executeProjectAction({
+      action: projectActionId,
+      input: input.input,
+      metadata: {
+        source: "openpond_project_action",
+        projectRoot,
+        projectId,
+        selectedActionId: projectActionId,
+        selectedActionLabel: action.label ?? action.name ?? projectActionId,
+        selectedBy: "native_model_tool",
+        displayPrompt: context.userPrompt,
+        sessionId: context.session.id,
+        turnId: context.turnId,
+        toolCallId: context.callId,
+      },
+    });
+    return {
+      toolCallId: context.callId,
+      name: resultToolName,
+      ok: true,
+      contentText: JSON.stringify(
+        {
+          ok: true,
+          action: resultToolName,
+          output: `Ran Project Action ${projectActionId}.`,
+          data: { result },
         },
         null,
         2,

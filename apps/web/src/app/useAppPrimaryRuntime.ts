@@ -538,6 +538,7 @@ export function useAppPrimaryRuntime() {
       profile: bootstrap?.profile,
       selectedCloudProject,
       selectedProject,
+      reportError: setError,
     });
   const {
     expandedProjectIds,

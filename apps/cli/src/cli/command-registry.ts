@@ -134,6 +134,21 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
     optionSchema: { json: "boolean" },
     handler: async ({ options, rest }) => (await import("./profile")).runOpenPondAgentsCommand(options, rest),
   },
+  {
+    name: "actions",
+    usage: "openpond actions <check|build|run|dev> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]",
+    optionSchema: {
+      cwd: "string",
+      input: "string",
+      inputFile: "string",
+      json: "boolean",
+      outputDirectory: "string",
+      sourceDirectory: "string",
+      timeoutMs: "integer",
+    },
+    handler: async ({ options, rest }) =>
+      (await import("./actions-command")).runProjectActionsCommand(options, rest),
+  },
   ...profileSdkAliasDefinitions(),
   {
     name: "extension",

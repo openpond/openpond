@@ -139,6 +139,7 @@ import {
 } from "./server-payload-helpers.js";
 import { createCodexHistoryPayloads } from "./codex-history-payloads.js";
 import { createProfilePayloads } from "./profile-payloads.js";
+import { localProjectActionCatalog } from "../project-actions/local-project-actions.js";
 import {
   listManagedAdapterProviderModels,
   withManagedAdapterProviderModels,
@@ -1105,6 +1106,15 @@ export function createServerPayloads(deps: {
     };
   }
 
+  async function localProjectActionCatalogPayload(projectId: string) {
+    const localProject = await findLocalProject(store, projectId);
+    if (!localProject) throw new Error("Project workspace not found");
+    return {
+      projectId: localProject.id,
+      actions: await localProjectActionCatalog(localProject),
+    };
+  }
+
   async function uploadLocalProjectCloudSourcePayload(
     projectId: string,
     payload: unknown
@@ -1771,6 +1781,7 @@ export function createServerPayloads(deps: {
     ...workspacePayloads,
     previewLocalProjectCloudSourcePayload,
     uploadLocalProjectCloudSourcePayload,
+    localProjectActionCatalogPayload,
     patchSidebarAppPreference,
     listSidebarFileBookmarksPayload,
     patchSidebarFileBookmarkPayload,
