@@ -6,6 +6,7 @@ import {
   ContextUsageSnapshotSchema,
   type BootstrapPayload,
   type ContextUsageSnapshot,
+  type OpenPondActionCatalogEntry,
   type RuntimeEvent,
 } from "@openpond/contracts";
 import type { TerminalOptions } from "./args.js";
@@ -149,7 +150,7 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
 
     await deadline.run("event stream readiness", eventStream.ready);
 
-    const profileActionCatalog = (payload.profile.actionCatalog ?? [])
+    const profileActionCatalog: OpenPondActionCatalogEntry[] = (payload.profile.actionCatalog ?? [])
       .filter(
         (action) =>
           profileActionMatchesAgent(action, options.agent) &&
@@ -166,6 +167,17 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
           actionId: action.id,
         },
       }));
+    const localProjectId = readySession?.localProjectId ?? sessionState.session?.localProjectId ?? null;
+    const projectActionCatalog = localProjectId
+      ? await deadline.run(
+          "Project Action catalog",
+          loadLocalProjectActionCatalog(
+            { ...connection, signal: deadline.signal },
+            localProjectId,
+          ),
+        )
+      : [];
+    const openPondActionCatalog = [...profileActionCatalog, ...projectActionCatalog];
     await deadline.run("turn submission", apiFetch(connection.server, connection.token, `/v1/sessions/${activeSessionId}/turns`, {
       method: "POST",
       body: JSON.stringify({
@@ -173,8 +185,8 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
         ...(options.cwdExplicit || (!options.project && !options.resume) ? { cwd: options.cwd } : {}),
         model: modelId,
         modelRef: activeModelRef(options, payload.providers),
-        ...(profileActionCatalog.length > 0
-          ? { openPondActionCatalog: profileActionCatalog }
+        ...(openPondActionCatalog.length > 0
+          ? { openPondActionCatalog }
           : {}),
         approvalPolicy: options.yes ? "never" : options.approvalPolicy,
         sandbox: options.sandbox,
@@ -248,6 +260,19 @@ export async function runOneShotChat(options: TerminalOptions, io: OneShotChatIo
     if (!io.connection) await stopManagedServer();
     if (timedOut && !options.json) output.write("\n[turn timeout]\n");
   }
+}
+
+async function loadLocalProjectActionCatalog(
+  connection: { server: string; token: string; signal?: AbortSignal },
+  projectId: string,
+): Promise<OpenPondActionCatalogEntry[]> {
+  const result = await apiFetch<{ actions: OpenPondActionCatalogEntry[] }>(
+    connection.server,
+    connection.token,
+    `/v1/projects/${encodeURIComponent(projectId)}/actions`,
+    { signal: connection.signal },
+  );
+  return result.actions;
 }
 
 function profileActionMatchesAgent(
