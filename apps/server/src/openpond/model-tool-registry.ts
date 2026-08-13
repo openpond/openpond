@@ -31,6 +31,7 @@ import {
 import type { WebSearchExecutor, WebSearchResult, WebSearchResultItem } from "./web-search.js";
 import { isSandboxExecutionTarget, resolveWorkspaceExecutionTarget } from "../workspace/workspace-execution-target.js";
 import { discoverCommandArtifacts } from "./command-artifacts.js";
+import { executeHostedProjectActionModelTool } from "../project-actions/hosted-project-action-model-tool.js";
 
 export type ToolVisibilityContext = {
   session: Session;
@@ -1363,6 +1364,17 @@ async function executeScopedOpenPondAction(input: {
       ),
       data: { result },
     };
+  }
+  if (implementation?.type === "openpond-hosted-project-action") {
+    return executeHostedProjectActionModelTool({
+      action,
+      context,
+      implementation,
+      actionInput: input.input,
+      requestedProjectId: input.requestedProjectId,
+      resultToolName,
+      executeProjectAction: deps.executeProjectAction,
+    });
   }
 
   const payloadArgs: Record<string, unknown> = {

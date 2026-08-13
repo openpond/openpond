@@ -49,4 +49,32 @@ describe("Project Actions CLI", () => {
       },
     }));
   });
+
+  test("publishes a built action release from the current Git commit", async () => {
+    const logs: string[] = [];
+    vi.spyOn(console, "log").mockImplementation((value?: unknown) => logs.push(String(value ?? "")));
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({
+      release: {
+        id: "release_1",
+        projectId: "project_1",
+        sourceCommitSha: "abc1234",
+        bundleHash: "bundle_hash",
+        registryHash: "registry_hash",
+        status: "ready",
+        createdAt: new Date().toISOString(),
+      },
+    }, { status: 201 }));
+    await runProjectActionsCommand({
+      cwd: projectRoot,
+      apiKey: "opk_test",
+      baseUrl: "https://api.example.test",
+      projectId: "project_1",
+      teamId: "team_1",
+      sourceCommitSha: "abc1234",
+      sourceRef: "main",
+    }, ["publish"]);
+
+    expect(logs.at(-1)).toBe("Published Project Actions release release_1 from abc1234.");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
 });

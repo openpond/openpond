@@ -3,6 +3,7 @@ import type { RuntimeEvent } from "@openpond/contracts";
 import { event } from "../utils.js";
 import { asRecord, stringValue } from "../api/server-payload-helpers.js";
 import { runLocalProjectAction } from "./local-project-actions.js";
+import { runHostedProjectAction } from "./hosted-project-actions.js";
 
 export function createProjectActionRunPayload(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -13,6 +14,44 @@ export function createProjectActionRunPayload(deps: {
     const action = stringValue(input.action) ?? stringValue(input.actionName);
     if (!action) throw new Error("Project Action name is required.");
     const metadata = asRecord(input.metadata);
+    if (stringValue(metadata.execution) === "hosted") {
+      const result = await runHostedProjectAction({
+        projectId: requiredMetadata(metadata, "projectId"),
+        teamId: requiredMetadata(metadata, "teamId"),
+        releaseId: requiredMetadata(metadata, "releaseId"),
+        actionId: action,
+        value: input.input ?? {},
+        idempotencyKey: stringValue(metadata.toolCallId)
+          ? `${requiredMetadata(metadata, "turnId")}:${requiredMetadata(metadata, "toolCallId")}`
+          : undefined,
+        callerId: stringValue(metadata.turnId) ?? undefined,
+      });
+      const sessionId = stringValue(metadata.sessionId);
+      if (sessionId) {
+        await deps.appendRuntimeEvent(event({
+          name: "workspace_action_result",
+          sessionId,
+          turnId: requiredMetadata(metadata, "turnId"),
+          source: "chat_action",
+          action: "project_action_run",
+          appId: null,
+          status: "completed",
+          output: JSON.stringify(result.resultJson),
+          data: {
+            openPondHostedProjectActionRun: true,
+            action: {
+              name: action,
+              label: stringValue(metadata.selectedActionLabel) ?? action,
+            },
+            releaseId: result.releaseId,
+            invocationId: result.id,
+            traces: result.traceJson,
+            outputs: result.outputJson,
+          },
+        }));
+      }
+      return result;
+    }
     const projectId = stringValue(metadata.projectId);
     if (!projectId) throw new Error("Project Action Project id is required.");
     const projectRoot = await deps.resolveProjectRoot(projectId);
@@ -53,4 +92,10 @@ export function createProjectActionRunPayload(deps: {
     }
     return result;
   };
+}
+
+function requiredMetadata(metadata: Record<string, unknown>, name: string): string {
+  const value = stringValue(metadata[name]);
+  if (!value) throw new Error(`Hosted Project Action ${name} is required.`);
+  return value;
 }

@@ -1,5 +1,7 @@
 import { promises as fs, watch } from "node:fs";
 import path from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import {
   buildProjectActions,
@@ -7,6 +9,9 @@ import {
   loadProjectActionConfiguration,
 } from "openpond-sdk/actions/local";
 import { parseBooleanOption } from "./common/options";
+import { createOpenPondClient } from "openpond-sdk";
+
+const execFileAsync = promisify(execFile);
 
 export async function runProjectActionsCommand(
   options: Record<string, string | boolean>,
@@ -61,7 +66,29 @@ export async function runProjectActionsCommand(
     return;
   }
 
-  throw new Error("usage: openpond actions <check|build|run|dev> [action-id]");
+  if (subcommand === "publish") {
+    const projectId = requiredOption(options, "projectId");
+    const teamId = requiredOption(options, "teamId");
+    const apiKey = stringOption(options, "apiKey") ?? process.env.OPENPOND_API_KEY?.trim();
+    if (!apiKey) throw new Error("OpenPond API key is required. Set OPENPOND_API_KEY or pass --api-key.");
+    const build = await buildProjectActions({ projectRoot, sourceDirectory, outputDirectory });
+    const sourceCommitSha = stringOption(options, "sourceCommitSha") ?? await gitValue(projectRoot, ["rev-parse", "HEAD"]);
+    const sourceRef = stringOption(options, "sourceRef") ?? await gitValue(projectRoot, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    const release = await createOpenPondClient({
+      apiKey,
+      baseUrl: stringOption(options, "baseUrl") ?? process.env.OPENPOND_API_URL,
+    }).actions.publish({
+      projectId,
+      teamId,
+      sourceRef,
+      sourceCommitSha,
+      build,
+    });
+    console.log(json ? JSON.stringify({ release }, null, 2) : `Published Project Actions release ${release.id} from ${release.sourceCommitSha}.`);
+    return;
+  }
+
+  throw new Error("usage: openpond actions <check|build|run|dev|publish> [action-id]");
 }
 
 async function runDev(input: {
@@ -151,6 +178,19 @@ function stringOption(
 ): string | undefined {
   const value = options[name];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function requiredOption(options: Record<string, string | boolean>, name: string): string {
+  const value = stringOption(options, name);
+  if (!value) throw new Error(`--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)} is required.`);
+  return value;
+}
+
+async function gitValue(projectRoot: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd: projectRoot });
+  const value = stdout.trim();
+  if (!value) throw new Error(`git ${args.join(" ")} returned no value.`);
+  return value;
 }
 
 function integerOption(
