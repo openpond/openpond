@@ -41,6 +41,7 @@ import { listAppServerIntegrationConnections } from "./openpond/app-server-conne
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { loadPersonalizationSettings } from "./openpond/personalization.js";
+import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
 import {
   createScriptedOpenPondChatStream,
   scriptedOpenPondModelsEnabled,
@@ -218,6 +219,10 @@ export async function createOpenPondAppServer(
     upsertApproval,
     appendRuntimeEvent,
   });
+  const projectActionRunPayload = createProjectActionRunPayload({
+    appendRuntimeEvent,
+    resolveProjectRoot: async () => null,
+  });
   const safeUpsertModelUsageRecord = async (
     record: ModelUsageRecord,
   ): Promise<void> => {
@@ -264,6 +269,7 @@ export async function createOpenPondAppServer(
     processHarnessImprovementBoundary: harnessImprovement,
     executeWorkspaceTool: workspace.executeWorkspaceTool,
     executeOpenPondCommand: commandAccess.executeCommand,
+    executeProjectAction: projectActionRunPayload,
     loadOpenPondProfileState,
     ...createProfileTurnDependencies(),
     loadOpenPondProfileLibrary,
