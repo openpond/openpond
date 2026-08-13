@@ -300,6 +300,126 @@ describe("lean app-server composition", () => {
       .toBe(true);
   }, 30_000);
 
+  test("runs hosted Project Actions through the lean app-server", async () => {
+    const directory = await mkdtemp(
+      path.join(os.tmpdir(), "openpond-lean-app-server-project-action-"),
+    );
+    const originalFetch = globalThis.fetch;
+    const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
+    let providerRound = 0;
+    globalThis.fetch = async (url, init) => {
+      requests.push({ url: String(url), init });
+      return new Response(JSON.stringify({
+        invocation: {
+          id: "invocation_1",
+          releaseId: "release_1",
+          actionId: "relocation.review_move",
+          status: "succeeded",
+          resultJson: { reference: "SS-9B3F3C1C" },
+          traceJson: [],
+          outputJson: [],
+        },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    };
+    const previousApiKey = process.env.OPENPOND_API_KEY;
+    const previousApiUrl = process.env.OPENPOND_API_URL;
+    process.env.OPENPOND_API_KEY = "opk_test";
+    process.env.OPENPOND_API_URL = "https://api.openpond.test";
+    const server = await createOpenPondAppServer({
+      storeDir: path.join(directory, "state"),
+      workspaceDir: path.join(directory, "workspace"),
+      streamOpenPondHostedChatTurn: async function* () {
+        providerRound += 1;
+        if (providerRound === 1) {
+          yield {
+            type: "tool_call_delta",
+            toolCalls: [{
+              id: "call_review_move",
+              type: "function",
+              function: {
+                name: "openpond_action_run",
+                arguments: JSON.stringify({
+                  actionId: "relocation.review_move",
+                  input: { reference: "SS-9B3F3C1C" },
+                }),
+              },
+            }],
+          };
+          yield { type: "finish", finishReason: "tool_calls" };
+          return;
+        }
+        yield { type: "text_delta", text: "Reviewed the saved move." };
+        yield { type: "finish", finishReason: "stop" };
+      },
+    });
+    cleanup.push({
+      close: async () => {
+        await server.close();
+        globalThis.fetch = originalFetch;
+        if (previousApiKey === undefined) delete process.env.OPENPOND_API_KEY;
+        else process.env.OPENPOND_API_KEY = previousApiKey;
+        if (previousApiUrl === undefined) delete process.env.OPENPOND_API_URL;
+        else process.env.OPENPOND_API_URL = previousApiUrl;
+      },
+      directory,
+    });
+
+    const rpc = new AgentJsonRpcDispatcher(server.runtime);
+    await initializeRpc(rpc);
+    const thread = await rpc.handle({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "thread/start",
+      params: {
+        session: {
+          provider: "openpond",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+          experience: "work",
+          workspaceKind: "sandbox",
+          workspaceId: "sandbox-attached",
+          cloudProjectId: "project_1",
+          cloudTeamId: "team_1",
+          metadata: { workspaceTarget: "hybrid" },
+        },
+      },
+    });
+    const threadId = resultRecord(thread).thread.id as string;
+    const turn = await rpc.handle({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "turn/start",
+      params: {
+        threadId,
+        input: {
+          prompt: "Review the saved relocation move.",
+          modelRef: { providerId: "openpond", modelId: "openpond-chat" },
+          openPondActionCatalog: [{
+            id: "relocation.review_move",
+            label: "Review move",
+            implementation: {
+              type: "openpond-hosted-project-action",
+              actionId: "relocation.review_move",
+              projectId: "project_1",
+              teamId: "team_1",
+              releaseId: "release_1",
+            },
+          }],
+        },
+      },
+    });
+
+    expect(resultRecord(turn).turn).toMatchObject({ status: "completed" });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toContain(
+      "/v1/project-actions/project_1/actions/relocation.review_move?teamId=team_1",
+    );
+    expect(JSON.parse(String(requests[0]?.init?.body))).toMatchObject({
+      input: { reference: "SS-9B3F3C1C" },
+      releaseId: "release_1",
+      callerType: "work",
+    });
+  }, 30_000);
+
   test("resolves command approval over RPC without an HTTP product host", async () => {
     const directory = await mkdtemp(
       path.join(os.tmpdir(), "openpond-lean-app-server-approval-"),
