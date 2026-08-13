@@ -1059,6 +1059,51 @@ describe("model tool registry", () => {
     ]);
   });
 
+  test("routes hosted Project Actions through their pinned release", async () => {
+    const payloads: unknown[] = [];
+    const definitions = createOpenPondActionModelToolDefinitions({
+      actionCatalog: [{
+        id: "analytics.get_summary",
+        label: "Business summary",
+        implementation: {
+          type: "openpond-hosted-project-action",
+          actionId: "analytics.get_summary",
+          projectId: "project_1",
+          teamId: "team_1",
+          releaseId: "release_1",
+        },
+      }],
+      executeWorkspaceTool: async () => {
+        throw new Error("hosted Project Actions should not use sandbox_run_action");
+      },
+      executeProjectAction: async (payload) => {
+        payloads.push(payload);
+        return { id: "invocation_1", status: "succeeded" };
+      },
+    });
+    const run = definitions.find((definition) => definition.name === "openpond_action_run");
+    if (!run) throw new Error("openpond_action_run missing");
+
+    const result = await run.execute(actionContext({
+      actionId: "analytics.get_summary",
+      projectId: "project_1",
+      input: { businessId: "relocation" },
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(payloads).toEqual([{
+      action: "analytics.get_summary",
+      input: { businessId: "relocation" },
+      metadata: expect.objectContaining({
+        execution: "hosted",
+        projectId: "project_1",
+        teamId: "team_1",
+        releaseId: "release_1",
+        turnId: "turn_1",
+      }),
+    }]);
+  });
+
   test("exposes scoped Profile Agent actions as schema-shaped native tools", async () => {
     const profilePayloads: unknown[] = [];
     const action = {
