@@ -18,6 +18,7 @@ await build({
     index: path.join(root, "src/index.ts"),
     actions: path.join(root, "src/actions.ts"),
     "actions-local": path.join(root, "src/actions-local.ts"),
+    "project-actions": path.join(root, "src/project-actions.ts"),
   },
   outdir: dist,
   bundle: true,

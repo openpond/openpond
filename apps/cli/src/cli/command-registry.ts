@@ -136,14 +136,20 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "actions",
-    usage: "openpond actions <check|build|run|dev> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]",
+    usage: "openpond actions <check|build|run|dev|publish> [action-id] [--cwd DIR] [--input JSON|--input-file PATH]",
     optionSchema: {
+      apiKey: "string",
+      baseUrl: "string",
       cwd: "string",
       input: "string",
       inputFile: "string",
       json: "boolean",
       outputDirectory: "string",
       sourceDirectory: "string",
+      sourceCommitSha: "string",
+      sourceRef: "string",
+      projectId: "string",
+      teamId: "string",
       timeoutMs: "integer",
     },
     handler: async ({ options, rest }) =>

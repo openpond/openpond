@@ -5,11 +5,13 @@ import {
 import { resolveOpChatApiBaseUrl } from "@openpond/cloud/hosted-chat";
 
 import { OpenPondWorkClient } from "./work.js";
+import { OpenPondProjectActionsClient } from "./project-actions.js";
 import type { OpenPondClientOptions } from "./types.js";
 
 export class OpenPondClient {
   readonly sandboxes: OpenPondSandboxClient;
   readonly work: OpenPondWorkClient;
+  readonly actions: OpenPondProjectActionsClient;
 
   constructor(options: OpenPondClientOptions) {
     const apiKey = options.apiKey.trim();
@@ -29,6 +31,7 @@ export class OpenPondClient {
         resolveOpChatApiBaseUrl({ apiBaseUrl, env: {} }),
       sandboxes: this.sandboxes,
     });
+    this.actions = new OpenPondProjectActionsClient({ apiKey, apiBaseUrl });
   }
 }
 
@@ -38,6 +41,12 @@ export function createOpenPondClient(options: OpenPondClientOptions): OpenPondCl
 
 export type { OpenPondClientOptions } from "./types.js";
 export { OpenPondWorkClient } from "./work.js";
+export { OpenPondProjectActionsClient } from "./project-actions.js";
+export type {
+  HostedProjectActionCatalog,
+  ProjectActionInvocation,
+  ProjectActionRelease,
+} from "./project-actions.js";
 export { OpenPondApiError } from "@openpond/cloud/api/core";
 export type {
   OpenPondWorkEvent,

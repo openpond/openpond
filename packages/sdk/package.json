@@ -1,6 +1,6 @@
 {
   "name": "openpond-sdk",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Server-side TypeScript SDK for OpenPond sandboxes and agentic work",
   "license": "MIT",
   "type": "module",
@@ -23,6 +23,10 @@
     "./actions/local": {
       "types": "./dist/types/packages/sdk/src/actions-local.d.ts",
       "import": "./dist/actions-local.js"
+    },
+    "./project-actions": {
+      "types": "./dist/types/packages/sdk/src/project-actions.d.ts",
+      "import": "./dist/project-actions.js"
     },
     "./package.json": "./package.json"
   },
