@@ -150,7 +150,10 @@ export async function withSandboxApi(
       return;
     }
 
-    if (request.url === "/v1/projects" && request.method === "POST") {
+    if (
+      request.url === "/v1/projects?teamId=team_test" &&
+      request.method === "POST"
+    ) {
       response.writeHead(201, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -227,7 +230,10 @@ export async function withSandboxApi(
       return;
     }
 
-    if (request.url === "/v1/agents" && request.method === "POST") {
+    if (
+      request.url === "/v1/agents?teamId=team_test" &&
+      request.method === "POST"
+    ) {
       response.writeHead(201, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -292,7 +298,7 @@ export async function withSandboxApi(
     }
 
     if (
-      request.url === "/v1/agents/agent_test/run" &&
+      request.url === "/v1/agents/agent_test/run?teamId=team_test" &&
       request.method === "POST"
     ) {
       response.writeHead(201, { "content-type": "application/json" });

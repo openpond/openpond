@@ -13,7 +13,11 @@ export type OpenPondOrganization = {
   name: string;
   displayName: string;
   role: OpenPondOrganizationRole;
+  workspaceKind?: "personal" | "shared";
   status: OpenPondOrganizationStatus;
+  kind?: "personal_default" | "managed_client" | "team";
+  isPersonalDefault?: boolean;
+  isManagedClient?: boolean;
   primaryContactEmail: string | null;
   customDomain: string | null;
   createdAt: string;
