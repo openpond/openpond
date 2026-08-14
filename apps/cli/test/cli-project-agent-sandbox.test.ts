@@ -249,11 +249,11 @@ describe("project and agent sandbox CLI scenarios", () => {
 
       expect(requests.map((request) => request.url)).toEqual([
         "/v1/projects?teamId=team_test",
-        "/v1/projects",
+        "/v1/projects?teamId=team_test",
         "/v1/projects/project_test?teamId=team_test",
-        "/v1/agents",
+        "/v1/agents?teamId=team_test",
         "/v1/agents/agent_test?teamId=team_test",
-        "/v1/agents/agent_test/run",
+        "/v1/agents/agent_test/run?teamId=team_test",
         "/v1/agents/agent_test?teamId=team_test",
         "/v1/agents/agent_test/source/deploy-plan?teamId=team_test",
         "/v1/agents/agent_test/source/checks?teamId=team_test",
@@ -293,7 +293,7 @@ describe("project and agent sandbox CLI scenarios", () => {
       const runRequest = requests.find(
         (request) =>
           request.method === "POST" &&
-          request.url === "/v1/agents/agent_test/run"
+          request.url === "/v1/agents/agent_test/run?teamId=team_test"
       );
       expect(runRequest?.body).toMatchObject({
         teamId: "team_test",
@@ -1040,13 +1040,13 @@ describe("project and agent sandbox CLI scenarios", () => {
         agentId: "agent_test",
       });
       expect(requests.map((request) => request.url)).toEqual([
-        "/v1/projects",
-        "/v1/projects",
+        "/v1/projects?teamId=team_test",
+        "/v1/projects?teamId=team_test",
         "/v1/projects/project_test?teamId=team_test",
-        "/v1/agents",
-        "/v1/agents",
+        "/v1/agents?teamId=team_test",
+        "/v1/agents?teamId=team_test",
         "/v1/agents/agent_test?teamId=team_test",
-        "/v1/agents/agent_test/run",
+        "/v1/agents/agent_test/run?teamId=team_test",
       ]);
       expect(requests[0]?.body).not.toHaveProperty("appId");
       expect(requests[1]?.body).not.toHaveProperty("appId");

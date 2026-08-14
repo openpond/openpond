@@ -291,10 +291,14 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
   }
 
   upsertProject(input: SandboxProjectUpsertInput): Promise<SandboxProject> {
-    return this.requestApiRoot<SandboxProjectResponse>("/projects", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }).then((payload) => payload.project);
+    const query = new URLSearchParams({ teamId: input.teamId });
+    return this.requestApiRoot<SandboxProjectResponse>(
+      `/projects?${query.toString()}`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ).then((payload) => payload.project);
   }
 
   getHostedProfile(input: {
@@ -421,10 +425,14 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
   }
 
   upsertAgent(input: SandboxAgentUpsertInput): Promise<SandboxAgent> {
-    return this.requestApiRoot<SandboxAgentResponse>("/agents", {
-      method: "POST",
-      body: JSON.stringify(input),
-    }).then((payload) => payload.agent);
+    const query = new URLSearchParams({ teamId: input.teamId });
+    return this.requestApiRoot<SandboxAgentResponse>(
+      `/agents?${query.toString()}`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      }
+    ).then((payload) => payload.agent);
   }
 
   getAgent(agentId: string, input: { teamId: string }): Promise<SandboxAgent> {
@@ -464,8 +472,9 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
     agentId: string,
     input: SandboxAgentRunInput
   ): Promise<SandboxAgentRunResponse> {
+    const query = new URLSearchParams({ teamId: input.teamId });
     return this.requestApiRoot<SandboxAgentRunResponse>(
-      `/agents/${encodeURIComponent(agentId)}/run`,
+      `/agents/${encodeURIComponent(agentId)}/run?${query.toString()}`,
       {
         method: "POST",
         headers: {

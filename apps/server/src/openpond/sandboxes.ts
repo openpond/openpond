@@ -445,7 +445,10 @@ export async function sandboxRequestPayload(
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: "/projects",
+        path: sandboxScopedCollectionPath(
+          "/projects",
+          normalizeSandboxListInput(action.payload)
+        ),
         method: "POST",
         body: asRecord(action.payload),
       })),
@@ -542,7 +545,10 @@ export async function sandboxRequestPayload(
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: "/agents",
+        path: sandboxScopedCollectionPath(
+          "/agents",
+          normalizeSandboxListInput(action.payload)
+        ),
         method: "POST",
         body: asRecord(action.payload),
       })),
@@ -554,7 +560,10 @@ export async function sandboxRequestPayload(
       ...(await requestSandboxPublicApiRoot({
         apiKey,
         sandboxApiUrl,
-        path: `/agents/${encodeURIComponent(action.agentId)}/run`,
+        path: sandboxScopedCollectionPath(
+          `/agents/${encodeURIComponent(action.agentId)}/run`,
+          normalizeSandboxListInput(action.payload)
+        ),
         method: "POST",
         body: asRecord(action.payload),
       })),
