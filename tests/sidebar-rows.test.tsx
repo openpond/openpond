@@ -41,6 +41,26 @@ describe("sidebar row updated dates", () => {
     );
   });
 
+  test("renders Chat as the hover detail for projectless chat tasks", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        projectLabel: "Chat",
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onArchive: () => undefined,
+      })
+    );
+
+    expect(markup).toContain(
+      '<span class="sidebar-session-project-label">Chat</span>',
+    );
+    expect(markup.indexOf("sidebar-session-project-label")).toBeLessThan(
+      markup.indexOf("sidebar-row-updated-at"),
+    );
+  });
+
   test("renders a project's last updated date beside its name", () => {
     const markup = renderToStaticMarkup(
       createElement(SidebarProjectRow, {

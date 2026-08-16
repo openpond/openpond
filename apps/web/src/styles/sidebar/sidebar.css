@@ -1073,6 +1073,23 @@
   line-height: 14px;
 }
 
+.sidebar-task-row .sidebar-session-project-label,
+.sidebar-task-row .sidebar-session-detail-line .sidebar-row-updated-at {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+.sidebar-task-row:hover .sidebar-session-project-label,
+.sidebar-task-row:focus-within .sidebar-session-project-label,
+.sidebar-task-row:hover .sidebar-session-detail-line .sidebar-row-updated-at,
+.sidebar-task-row:focus-within
+  .sidebar-session-detail-line
+  .sidebar-row-updated-at {
+  opacity: 1;
+  visibility: visible;
+}
+
 .sidebar-task-row.is-draft .sidebar-task-title,
 .sidebar-task-row.is-draft .sidebar-session-project-label {
   color: #e5b94f;

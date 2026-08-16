@@ -283,7 +283,6 @@ export function SidebarSectionList({
 
   function projectLabelForSession(session: Session): string | null {
     if (isTaskDraftSession(session)) return "Draft";
-    if (experience === "chat") return null;
     const projectId = sidebarProjectIdBySessionId[session.id];
     if (projectId) {
       return (
