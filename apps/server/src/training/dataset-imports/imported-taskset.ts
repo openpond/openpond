@@ -302,7 +302,7 @@ function graderFixtures(
     output: fixture.output,
     infrastructureError: fixture.infrastructureError,
     expectedPassed: fixture.expectedPassed,
-    expectedRewardEligible: fixture.expectedPassed,
+    expectedRewardEligible: fixture.label !== "infrastructure_failure",
     metadata: {
       artifactBacked: true,
       artifactSplit: split,

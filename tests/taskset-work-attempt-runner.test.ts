@@ -234,6 +234,7 @@ describe("Taskset Work attempt runner", () => {
       expect(artifacts.map((artifact) => artifact.kind).sort()).toEqual([
         "grader_evidence",
         "grader_evidence",
+        "grader_evidence",
         "output_artifact",
         "runtime_trace",
       ]);
@@ -243,6 +244,7 @@ describe("Taskset Work attempt runner", () => {
           .map((artifact) => artifact.path),
       ).toEqual(expect.arrayContaining([
         expect.stringMatching(/artifact-manifest\.json$/),
+        expect.stringMatching(/canonical-rollout\.json$/),
         expect.stringMatching(/reward-receipt\.json$/),
       ]));
       expect(attempt.artifactRefs).toEqual(

@@ -3,12 +3,14 @@ import {
   AttemptReceiptSchema,
   FailureOwnerSchema,
   buildArtifactManifest,
+  createCanonicalRolloutRecord,
   createAttemptReceipt,
   createRewardReceipt,
   createRunManifest,
   classifyAttemptOutcome,
   verifyRequiredOutputs,
   type CollectedArtifact,
+  type CanonicalRolloutRecord,
   type ArtifactManifest,
   type AttemptReceipt,
   type EnvironmentRelease,
@@ -18,6 +20,7 @@ import {
   type RunManifest,
   type TasksetRelease,
   type VerifierSetRelease,
+  type OptimizerTrainingSample,
 } from "@openpond/evals";
 import {
   materializePortableTasksetRelease,
@@ -351,6 +354,90 @@ export function projectDesktopCanonicalReceipts(input: {
     },
   });
   return { attemptReceipt, artifactManifest, rewardReceipt };
+}
+
+export function projectDesktopCanonicalRollout(input: {
+  context: DesktopHarnessContext;
+  attempt: TaskAttemptResult;
+  artifacts: TaskAttemptArtifact[];
+  canonical: {
+    attemptReceipt: AttemptReceipt;
+    artifactManifest: ArtifactManifest;
+    rewardReceipt: RewardReceipt;
+  };
+  optimizerSample?: OptimizerTrainingSample | null;
+}): CanonicalRolloutRecord {
+  const traceArtifact = input.artifacts.find((artifact) => artifact.kind === "runtime_trace")
+    ?? input.artifacts.find((artifact) => artifact.kind === "raw_model_response");
+  const traceRef: ImmutableArtifactRef = traceArtifact
+    ? portableArtifact(traceArtifact)
+    : {
+        id: `trace-${input.canonical.attemptReceipt.id}`,
+        contentHash: input.canonical.attemptReceipt.traceHash,
+        mediaType: "application/vnd.openpond.attempt-trace+json",
+        sizeBytes: null,
+      };
+  const timedOut = input.canonical.rewardReceipt.outcomeClass === "task_deadline"
+    || input.canonical.rewardReceipt.outcomeClass === "infrastructure_timeout";
+  const cancelled = input.canonical.rewardReceipt.outcomeClass === "cancelled";
+  return createCanonicalRolloutRecord({
+    id: `rollout-${contentHash([
+      input.canonical.attemptReceipt.contentHash,
+      input.canonical.rewardReceipt.contentHash,
+      traceRef.contentHash,
+    ]).slice(0, 24)}`,
+    attemptReceipt: input.canonical.attemptReceipt,
+    rewardReceipt: input.canonical.rewardReceipt,
+    artifactManifestRef: {
+      id: input.canonical.artifactManifest.id,
+      contentHash: input.canonical.artifactManifest.contentHash,
+    },
+    tasksetRelease: {
+      id: input.context.tasksetRelease.id,
+      contentHash: input.context.tasksetRelease.contentHash,
+    },
+    environmentRelease: {
+      id: input.context.environmentRelease.id,
+      contentHash: input.context.environmentRelease.contentHash,
+    },
+    harnessRelease: {
+      id: input.context.harnessRelease.id,
+      contentHash: input.context.harnessRelease.contentHash,
+    },
+    taskId: input.attempt.taskId,
+    split: input.attempt.split,
+    model: input.context.runManifest.model,
+    seed: String(input.attempt.seed),
+    traceRef,
+    optimizerSample: input.optimizerSample ?? null,
+    environmentExecutions: [{
+      id: `environment-execution-${input.attempt.id}`,
+      environmentRelease: {
+        id: input.context.environmentRelease.id,
+        contentHash: input.context.environmentRelease.contentHash,
+      },
+      status: cancelled
+        ? "cancelled"
+        : timedOut
+          ? "timed_out"
+          : input.canonical.rewardReceipt.status === "scored"
+            ? "completed"
+            : "failed",
+      startedAt: input.attempt.startedAt,
+      completedAt: input.attempt.completedAt,
+      traceRefs: [traceRef],
+      metadata: {
+        legacyAttemptRef: input.attempt.id,
+        runtimeEventCount: input.attempt.runtimeEventRefs.length,
+      },
+    }],
+    startedAt: input.attempt.startedAt,
+    completedAt: input.attempt.completedAt,
+    metadata: {
+      source: "openpond.desktop-local-runtime",
+      optimizerSamplePresent: Boolean(input.optimizerSample),
+    },
+  });
 }
 
 function portableRewardComponent(input: {

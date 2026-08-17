@@ -13,6 +13,8 @@ import {
   RewardReceiptSchema,
   aggregateEvaluationReceipts,
   createBenchmarkRunSummary,
+  verifyArtifactManifest,
+  verifyRewardReceipt,
   type ArtifactManifest,
   type AttemptReceipt,
   type BenchmarkComparison,
@@ -291,14 +293,16 @@ function portableCanonicalReceipts(attempt: StoredTaskAttempt): {
   rewardReceipt: RewardReceipt;
 } {
   try {
-    return {
-      artifactManifest: ArtifactManifestSchema.parse(
+    const artifactManifest = ArtifactManifestSchema.parse(
         attempt.metadata.portableArtifactManifest,
-      ),
-      rewardReceipt: RewardReceiptSchema.parse(
+      );
+    const rewardReceipt = RewardReceiptSchema.parse(
         attempt.metadata.portableRewardReceipt,
-      ),
-    };
+      );
+    if (!verifyArtifactManifest(artifactManifest) || !verifyRewardReceipt(rewardReceipt)) {
+      throw new Error("Canonical reward evidence failed content-hash verification.");
+    }
+    return { artifactManifest, rewardReceipt };
   } catch (error) {
     throw new Error(
       `Attempt ${attempt.id} has no valid durable canonical reward evidence.`,

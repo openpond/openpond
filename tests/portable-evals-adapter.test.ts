@@ -11,6 +11,7 @@ import {
   compileDesktopHarnessContext,
   projectDesktopAttemptReceipt,
   projectDesktopCanonicalReceipts,
+  projectDesktopCanonicalRollout,
 } from "../apps/server/src/training/portable-evals-adapter.js";
 import { benchmarkRefinerRewardPacket } from "../apps/server/src/training/harness-refiner-benchmark-refiner-stage.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures.js";
@@ -221,6 +222,17 @@ describe("portable Desktop eval adapter", () => {
     expect(verifyAttemptReceipt(canonical.attemptReceipt)).toBe(true);
     expect(verifyArtifactManifest(canonical.artifactManifest)).toBe(true);
     expect(verifyRewardReceipt(canonical.rewardReceipt)).toBe(true);
+    const rollout = projectDesktopCanonicalRollout({
+      context,
+      attempt,
+      artifacts: [],
+      canonical,
+    });
+    expect(rollout).toMatchObject({
+      reward: { status: "scored", value: 0, learningEligible: true },
+      optimizerSample: null,
+      environmentExecutions: [{ status: "completed" }],
+    });
   });
 
   it("makes a missing declared output a scored policy failure", () => {

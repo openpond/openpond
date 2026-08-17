@@ -9,4 +9,5 @@ export * from "./harness.js";
 export * from "./runs.js";
 export * from "./model-improvement-qualification.js";
 export * from "./review-conformance.js";
+export * from "./rollouts.js";
 export * from "./tasksets.js";

@@ -1,6 +1,6 @@
 import path from "node:path";
-import { aggregateEvaluationReceipts } from "@openpond/evals";
 import {
+  aggregateEvaluationReceipts,
   compareBenchmarkRuns,
   createBenchmarkRunSummary,
   type BenchmarkRunPhase,
@@ -29,11 +29,8 @@ import { buildTasksetReadiness } from "./readiness.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 import { gradeTasksetEvaluationAttempt } from "./task-evaluation-grade-runner.js";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
-import {
-  compileDesktopHarnessContext,
-  projectDesktopCanonicalReceipts,
-} from "./portable-evals-adapter.js";
-import { persistJsonTaskAttemptArtifact } from "./task-attempt-artifact-service.js";
+import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
+import { persistCanonicalEvaluationEvidence } from "./canonical-evaluation-persistence.js";
 import type {
   TasksetWorkAttemptRuntime,
   TasksetWorkModelStream,
@@ -198,69 +195,17 @@ export function createTaskEvaluationService(deps: {
     const artifacts = await deps.store.listTaskAttemptArtifacts({
       attemptId: attempt.id,
     });
-    const canonical = projectDesktopCanonicalReceipts({
+    const canonical = await persistCanonicalEvaluationEvidence({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      taskset,
+      task,
       context: portable,
       attempt,
       grade: gradeResult,
       artifacts,
     });
     const receipt = canonical.attemptReceipt;
-    const canonicalEvidenceArtifacts = await Promise.all([
-      persistJsonTaskAttemptArtifact({
-        store: deps.store,
-        storeDir: deps.storeDir,
-        tasksetId: taskset.id,
-        taskId: task.id,
-        attemptId: attempt.id,
-        requestId: attempt.id,
-        kind: "grader_evidence",
-        fileLabel: "artifact-manifest",
-        payload: canonical.artifactManifest,
-        timestamp: () => canonical.artifactManifest.createdAt,
-      }),
-      persistJsonTaskAttemptArtifact({
-        store: deps.store,
-        storeDir: deps.storeDir,
-        tasksetId: taskset.id,
-        taskId: task.id,
-        attemptId: attempt.id,
-        requestId: attempt.id,
-        kind: "grader_evidence",
-        fileLabel: "reward-receipt",
-        payload: canonical.rewardReceipt,
-        timestamp: () => canonical.rewardReceipt.createdAt,
-      }),
-    ]);
-    const persistedArtifacts = [...artifacts, ...canonicalEvidenceArtifacts];
-    const persistedAttempt = TaskAttemptResultSchema.parse({
-      ...attempt,
-      artifactRefs: [...new Set([
-        ...attempt.artifactRefs,
-        ...canonicalEvidenceArtifacts.map((artifact) => artifact.id),
-      ])],
-      metadata: {
-        ...attempt.metadata,
-        portableRunManifestRef: {
-          id: portable.runManifest.id,
-          contentHash: portable.runManifest.contentHash,
-        },
-        portableAttemptReceipt: receipt,
-        portableArtifactManifest: canonical.artifactManifest,
-        portableRewardReceipt: canonical.rewardReceipt,
-        portableEnvironmentReleaseRef: {
-          id: portable.environmentRelease.id,
-          contentHash: portable.environmentRelease.contentHash,
-        },
-        portableVerifierSetReleaseRef: {
-          id: portable.verifierSetRelease.id,
-          contentHash: portable.verifierSetRelease.contentHash,
-        },
-        canonicalEvidenceArtifactRefs: canonicalEvidenceArtifacts.map(
-          (artifact) => artifact.id,
-        ),
-      },
-    });
-    await deps.store.saveTaskAttempt(persistedAttempt);
     const evaluationResult = aggregateEvaluationReceipts({
       id: `evaluation-${receipt.id}`,
       manifest: portable.runManifest,
@@ -272,9 +217,9 @@ export function createTaskEvaluationService(deps: {
       },
     });
     return {
-      attempt: persistedAttempt,
+      attempt: canonical.attempt,
       grade: gradeResult,
-      artifacts: persistedArtifacts,
+      artifacts: canonical.artifacts,
       portable: {
         agentSnapshot: portable.agentSnapshot,
         harnessRelease: portable.harnessRelease,
@@ -285,6 +230,7 @@ export function createTaskEvaluationService(deps: {
         receipt,
         artifactManifest: canonical.artifactManifest,
         rewardReceipt: canonical.rewardReceipt,
+        rolloutRecord: canonical.rolloutRecord,
         evaluationResult,
       },
     };

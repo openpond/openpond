@@ -441,7 +441,7 @@ function benchmarkFixtures(taskId: string): GraderFixture[] {
       },
       infrastructureError: null,
       expectedPassed: false,
-      expectedRewardEligible: false,
+      expectedRewardEligible: true,
       metadata: {},
     },
     {
@@ -451,7 +451,7 @@ function benchmarkFixtures(taskId: string): GraderFixture[] {
       output: { text: "The launch is moving to August 27 while testing finishes." },
       infrastructureError: null,
       expectedPassed: false,
-      expectedRewardEligible: false,
+      expectedRewardEligible: true,
       metadata: {},
     },
   ];

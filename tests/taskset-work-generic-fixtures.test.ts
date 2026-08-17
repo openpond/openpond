@@ -413,7 +413,7 @@ test("classifies privately invalid Work output as policy failure", () =>
     expect(execution.grade).toMatchObject({
       score: 0,
       passed: false,
-      rewardEligible: false,
+      rewardEligible: true,
       failureClass: "policy_failure",
     });
     expect(runtime.actions.at(-1)).toBe("sandbox_stop");
