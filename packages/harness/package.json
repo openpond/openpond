@@ -46,6 +46,10 @@
       "types": "./dist/types/refiner-detection.d.ts",
       "import": "./dist/refiner-detection.js"
     },
+    "./refinement-lifecycle": {
+      "types": "./dist/types/refinement-lifecycle.d.ts",
+      "import": "./dist/refinement-lifecycle.js"
+    },
     "./refiner-support": {
       "types": "./dist/types/refiner-support.d.ts",
       "import": "./dist/refiner-support.js"

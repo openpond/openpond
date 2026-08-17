@@ -73,7 +73,7 @@ describe("task evaluation contracts", () => {
       { id: "hard", version: "1", label: "Hard", kind: "schema" as const, weight: 1, hardGate: true, rewardEligible: true, privileged: false, config: { requiredKeys: ["citation"] }, metadata: {} },
     ];
     const grade = await gradeAttempt({ task, attempt: attemptFixture(), graders });
-    expect(grade).toMatchObject({ score: 0, passed: false, rewardEligible: false });
+    expect(grade).toMatchObject({ score: 0, passed: false, rewardEligible: true });
     expect(grade.components[0]?.score).toBe(1);
   });
 

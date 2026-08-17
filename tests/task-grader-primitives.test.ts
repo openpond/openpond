@@ -63,6 +63,6 @@ describe("deterministic grader primitives", () => {
         attempt: attemptFixture({ output: { text: "#### 1235" } }),
         graders: [grader],
       }),
-    ).resolves.toMatchObject({ passed: false, score: 0, rewardEligible: false });
+    ).resolves.toMatchObject({ passed: false, score: 0, rewardEligible: true });
   });
 });

@@ -6,7 +6,6 @@ import {
   type ImprovementObservation,
   type ImprovementRouteDecision,
   type RefinementTriggerDecision,
-  type RuntimeEvent,
 } from "@openpond/contracts";
 import {
   authorHarnessEvaluationReviewWithModel,
@@ -19,8 +18,13 @@ import {
 import { z } from "zod";
 
 import type { SqliteStore } from "../store/store.js";
+import { createLocalHarnessDeepReviewContextLoader } from "./local-harness-evaluation-review-context.js";
+import { continueConfirmedLocalHarnessCandidate } from "./local-harness-cross-run-refinement.js";
+import {
+  reconcileLocalHarnessRefinementCandidates,
+  resolveLocalHarnessRefinementCandidateFromLaterSuccess,
+} from "./local-harness-refinement-candidates.js";
 import { resolveSelectedLocalHarnessRelease } from "./local-harness-selection.js";
-import { inspectBoundedPdfArtifactDiagnostics } from "./local-harness-refiner-context.js";
 
 const ReviewSourcePolicySchema = z.object({
   sourceRef: z.string().trim().min(1),
@@ -40,11 +44,21 @@ export const LocalHarnessEvaluationReviewRequestSchema = z.object({
     maxTokens: z.number().int().min(1).max(1_000_000).default(50_000),
     maxDurationMs: z.number().int().min(1).max(300_000).default(240_000),
     maxEstimatedCostUsd: z.number().finite().nonnegative().default(0.1),
+    maxPrecedingTurns: z.number().int().min(0).max(10).default(3),
+    maxConversationChars: z.number().int().min(0).max(100_000).default(12_000),
+    maxContextEvents: z.number().int().min(1).max(100).default(12),
+    maxArtifactDiagnostics: z.number().int().min(0).max(100).default(20),
+    maxLaterResults: z.number().int().min(0).max(50).default(8),
   }).strict().default({
     maxEvidence: 200,
     maxTokens: 50_000,
     maxDurationMs: 240_000,
     maxEstimatedCostUsd: 0.1,
+    maxPrecedingTurns: 3,
+    maxConversationChars: 12_000,
+    maxContextEvents: 12,
+    maxArtifactDiagnostics: 20,
+    maxLaterResults: 8,
   }),
 }).strict();
 
@@ -67,6 +81,10 @@ export function reviewSelectedLocalHarnessEvaluation(input: {
   stream?: HarnessEvaluationReviewModelStream;
   signal?: AbortSignal;
   now?: () => string;
+  continuation?: {
+    storeDir: string;
+    stream: HarnessEvaluationReviewModelStream;
+  };
 }): Promise<HarnessEvaluationReviewReceipt> {
   const active = activeReviews.get(input.store);
   if (active) return active;
@@ -83,6 +101,10 @@ async function runSelectedLocalHarnessEvaluation(input: {
   stream?: HarnessEvaluationReviewModelStream;
   signal?: AbortSignal;
   now?: () => string;
+  continuation?: {
+    storeDir: string;
+    stream: HarnessEvaluationReviewModelStream;
+  };
 }): Promise<HarnessEvaluationReviewReceipt> {
   const request = LocalHarnessEvaluationReviewRequestSchema.parse(input.request ?? {});
   const startedAt = performance.now();
@@ -95,13 +117,15 @@ async function runSelectedLocalHarnessEvaluation(input: {
     throw new Error(`Selected Harness workspace ${selectedRelease.workspaceId} does not exist.`);
   }
 
-  const [reviews, routes, triggers, observations, applyReceipts, outcomes] = await Promise.all([
+  const [reviews, routes, triggers, observations, applyReceipts, outcomes, advanceReceipts, refinementCandidates] = await Promise.all([
     input.store.listHarnessImprovementArtifacts(workspace.id, "evaluation_review", 1_000),
     input.store.listHarnessImprovementArtifacts(workspace.id, "route_decision", 1_000),
     input.store.listHarnessImprovementArtifacts(workspace.id, "trigger_decision", 1_000),
     input.store.listHarnessImprovementArtifacts(workspace.id, "observation", 1_000),
     input.store.listHarnessImprovementArtifacts(workspace.id, "apply_receipt", 1_000),
     input.store.listHarnessImprovementArtifacts(workspace.id, "refiner_outcome", 1_000),
+    input.store.listHarnessAdvanceReceipts(workspace.id),
+    input.store.listHarnessRefinementCandidates(workspace.id),
   ]);
   const latestReview = (reviews as HarnessEvaluationReviewReceipt[])[0] ?? null;
   const previousWatermark = request.previousWatermark ?? latestReview?.nextWatermark ?? null;
@@ -120,74 +144,57 @@ async function runSelectedLocalHarnessEvaluation(input: {
     latestReview &&
     !allArtifacts.some((artifact) => artifact.createdAt > latestReview.nextWatermark.throughCreatedAt)
   ) {
+    const reauthorizedAt = (input.now ?? (() => new Date().toISOString()))();
+    const reconciliation = await reconcileLocalHarnessRefinementCandidates({
+      store: input.store,
+      workspace,
+      review: latestReview,
+      sourcePolicies: new Map(
+        request.sourcePolicies.map((policy) => [policy.sourceRef, sourcePolicyRef(policy)]),
+      ),
+      now: reauthorizedAt,
+      upsertReviewClaim: false,
+    });
+    await continueCandidateIfEnabled({
+      ...input,
+      candidate: reconciliation.activeCandidate,
+      review: latestReview,
+    });
     return latestReview;
   }
   const triggerByRef = new Map(
     typedTriggers.map((trigger) => [artifactKey(trigger), trigger]),
   );
+  const crossRunTriggerKeys = new Set(
+    typedTriggers
+      .filter((trigger) => trigger.metadata.origin === "cross_run_candidate")
+      .map(artifactKey),
+  );
   const observationByRef = new Map(
     typedObservations.map((observation) => [artifactKey(observation), observation]),
   );
   const policyBySource = new Map(request.sourcePolicies.map((policy) => [policy.sourceRef, policy]));
+  const contextForObservation = createLocalHarnessDeepReviewContextLoader({
+    store: input.store,
+    workspace,
+    sourcePolicies: policyBySource,
+    observations: typedObservations,
+    triggers: typedTriggers,
+    outcomes: typedOutcomes,
+    applyReceipts: typedApplyReceipts,
+    advanceReceipts,
+    limits: {
+      maxPrecedingTurns: request.limits.maxPrecedingTurns,
+      maxConversationChars: request.limits.maxConversationChars,
+      maxContextEvents: request.limits.maxContextEvents,
+      maxArtifactDiagnostics: request.limits.maxArtifactDiagnostics,
+      maxLaterResults: request.limits.maxLaterResults,
+    },
+  });
   const excludedEvidence: HarnessEvaluationReviewReceipt["excludedEvidence"] = [];
   const rawCandidates: Candidate[] = [];
   const representedObservationKeys = new Set<string>();
   const routedTriggerKeys = new Set(typedRoutes.map((route) => artifactKey(route.trigger)));
-  const eventsBySource = new Map<
-    string,
-    Awaited<ReturnType<SqliteStore["runtimeEventsForSession"]>>
-  >();
-  const artifactDiagnosticsBySource = new Map<
-    string,
-    Awaited<ReturnType<typeof inspectBoundedPdfArtifactDiagnostics>>
-  >();
-  const contextForObservation = async (observation: ImprovementObservation) => {
-    let sourceEvents = eventsBySource.get(observation.runRef);
-    if (!sourceEvents) {
-      sourceEvents = await input.store.runtimeEventsForSession(observation.runRef);
-      eventsBySource.set(observation.runRef, sourceEvents);
-    }
-    const turnEvents = sourceEvents.filter((event) => event.turnId === observation.turnId);
-    const [turn, session] = await Promise.all([
-      input.store.getTurn(observation.turnId),
-      input.store.getSession(observation.runRef),
-    ]);
-    let artifactDiagnostics = artifactDiagnosticsBySource.get(observation.runRef);
-    if (!artifactDiagnostics) {
-      artifactDiagnostics = await inspectBoundedPdfArtifactDiagnostics(session?.cwd);
-      artifactDiagnosticsBySource.set(observation.runRef, artifactDiagnostics);
-    }
-    return {
-      turn: turn ? {
-        id: turn.id,
-        prompt: boundedReviewText(turn.prompt, 2_000),
-        startedAt: turn.startedAt,
-        completedAt: turn.completedAt,
-        status: turn.status,
-        error: boundedReviewText(turn.error ?? "", 1_000),
-      } : null,
-      assistantOutput: boundedReviewText(
-        turnEvents
-          .filter((event) => event.name === "assistant.delta")
-          .map((event) => event.output ?? "")
-          .join(""),
-        6_000,
-      ),
-      artifactDiagnostics,
-      events: turnEvents
-        .filter((event) => [
-          "tool.completed",
-          "validation.completed",
-          "workspace_action_result",
-        ].includes(event.name))
-        .filter((event) =>
-          event.status === "failed" ||
-          ["validation.completed", "workspace_action_result"].includes(event.name),
-        )
-        .slice(-8)
-        .map(boundedReviewEvent),
-    };
-  };
   for (const routeDecision of typedRoutes) {
     const trigger = triggerByRef.get(artifactKey(routeDecision.trigger));
     if (!trigger) {
@@ -195,6 +202,14 @@ async function runSelectedLocalHarnessEvaluation(input: {
         evidence: artifactRef(routeDecision),
         sourcePolicy: null,
         reason: "unverified",
+      });
+      continue;
+    }
+    if (crossRunTriggerKeys.has(artifactKey(trigger))) {
+      excludedEvidence.push({
+        evidence: artifactRef(routeDecision),
+        sourcePolicy: null,
+        reason: "resolved",
       });
       continue;
     }
@@ -225,6 +240,14 @@ async function runSelectedLocalHarnessEvaluation(input: {
         evidence: artifactRef(outcome),
         sourcePolicy: null,
         reason: "unverified",
+      });
+      continue;
+    }
+    if (crossRunTriggerKeys.has(artifactKey(trigger))) {
+      excludedEvidence.push({
+        evidence: artifactRef(outcome),
+        sourcePolicy: null,
+        reason: "resolved",
       });
       continue;
     }
@@ -368,6 +391,15 @@ async function runSelectedLocalHarnessEvaluation(input: {
       })),
       harnessRelease: artifactRef(selectedRelease.harnessRelease),
       previousReviews: (reviews as HarnessEvaluationReviewReceipt[]).slice(0, 20),
+      candidates: refinementCandidates.map((candidate) => ({
+        id: candidate.id,
+        fingerprint: candidate.fingerprint,
+        statement: candidate.statement,
+        status: candidate.status,
+        occurrences: candidate.occurrences,
+        relatedHarnessReleases: candidate.relatedHarnessReleases,
+        resolution: candidate.resolution,
+      })),
       stream: async function* (streamInput) {
         let invocationUsage: typeof modelUsage | null = null;
         for await (const delta of input.stream!(streamInput)) {
@@ -399,7 +431,7 @@ async function runSelectedLocalHarnessEvaluation(input: {
       reason: "budget",
     });
   }
-  const selectedCandidates = modelDecision.decision === "review"
+  const selectedCandidates = modelDecision.decision === "review" || modelDecision.decision === "resolve_candidate"
     ? modelDecision.selectedEvidenceIds.map((id) => {
         const candidate = candidates.find((item) => item.id === id);
         if (!candidate) throw new Error(`Review selected unavailable evidence ${id}.`);
@@ -449,8 +481,10 @@ async function runSelectedLocalHarnessEvaluation(input: {
     excludedEvidence,
     claim: modelDecision.decision === "review" ? {
       fingerprint: contentHash({
-        family: modelDecision.recurrenceFamily,
-        evidence: selectedEvidence.map((item) => item.occurrenceKey),
+        schemaVersion: "openpond.harnessRefinementCandidateFingerprint.v1",
+        classification,
+        triageLayer: modelDecision.triageLayer,
+        recurrenceFamily: normalizeRecurrenceFamily(modelDecision.recurrenceFamily),
       }),
       recurrenceFamily: modelDecision.recurrenceFamily,
       statement: modelDecision.statement,
@@ -480,7 +514,9 @@ async function runSelectedLocalHarnessEvaluation(input: {
       explicitInvocation: true,
       modelDecision: modelDecision.decision,
       modelConfidence:
-        modelDecision.decision === "review" ? modelDecision.confidence : null,
+        modelDecision.decision === "review" || modelDecision.decision === "resolve_candidate"
+          ? modelDecision.confidence
+          : null,
       counterevidence:
         modelDecision.decision === "review" ? modelDecision.counterevidence : null,
       expectedOutcome:
@@ -490,7 +526,61 @@ async function runSelectedLocalHarnessEvaluation(input: {
     },
   });
   await input.store.saveHarnessImprovementArtifact(workspace.id, "evaluation_review", receipt);
+  const reconciliation = await reconcileLocalHarnessRefinementCandidates({
+    store: input.store,
+    workspace,
+    review: receipt,
+    sourcePolicies: new Map(
+      request.sourcePolicies.map((policy) => [policy.sourceRef, sourcePolicyRef(policy)]),
+    ),
+    now: createdAt,
+  });
+  if (modelDecision.decision === "resolve_candidate") {
+    const resolutionCandidate = reconciliation.candidates.find((candidate) =>
+      candidate.id === modelDecision.candidateId
+      && candidate.fingerprint === modelDecision.candidateFingerprint,
+    );
+    if (!resolutionCandidate) {
+      throw new Error("Later-success decision referenced an unavailable candidate.");
+    }
+    await resolveLocalHarnessRefinementCandidateFromLaterSuccess({
+      store: input.store,
+      candidate: resolutionCandidate,
+      review: receipt,
+      evidence: selectedEvidence,
+      reason: modelDecision.reason,
+      now: createdAt,
+    });
+  }
+  await continueCandidateIfEnabled({
+    ...input,
+    candidate: reconciliation.activeCandidate,
+    review: receipt,
+  });
   return receipt;
+}
+
+async function continueCandidateIfEnabled(input: {
+  store: SqliteStore;
+  continuation?: {
+    storeDir: string;
+    stream: HarnessEvaluationReviewModelStream;
+  };
+  candidate: Awaited<ReturnType<typeof reconcileLocalHarnessRefinementCandidates>>["activeCandidate"];
+  review: HarnessEvaluationReviewReceipt;
+  signal?: AbortSignal;
+  now?: () => string;
+}): Promise<void> {
+  if (!input.continuation || input.candidate?.status !== "confirmed") return;
+  await continueConfirmedLocalHarnessCandidate({
+    store: input.store,
+    storeDir: input.continuation.storeDir,
+    candidate: input.candidate,
+    review: input.review,
+    stream: input.continuation.stream,
+    signal: input.signal ?? new AbortController().signal,
+    now: input.now,
+  });
 }
 
 function artifactRef(artifact: { id: string; contentHash: string }) {
@@ -535,26 +625,8 @@ function maxTimestamp(...values: Array<string | undefined>): string {
   return values.filter((value): value is string => Boolean(value)).sort().at(-1)!;
 }
 
-function boundedReviewEvent(event: RuntimeEvent): Record<string, unknown> {
-  const data = asRecord(event.data);
-  const result = asRecord(data.result);
-  return {
-    id: event.id,
-    name: event.name,
-    action: event.action ?? (typeof data.tool === "string" ? data.tool : null),
-    status: event.status ?? null,
-    error: boundedReviewText(event.error ?? "", 750),
-    output: boundedReviewText(
-      typeof result.output === "string" ? result.output : event.output ?? "",
-      750,
-    ),
-    stderr: boundedReviewText(
-      typeof result.stderr === "string" ? result.stderr : "",
-      750,
-    ),
-    exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
-    timedOut: result.timedOut === true,
-  };
+function normalizeRecurrenceFamily(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ");
 }
 
 async function uniqueTurnContexts(
@@ -566,26 +638,4 @@ async function uniqueTurnContexts(
     byTurn.set(`${observation.runRef}:${observation.turnId}`, observation);
   }
   return Promise.all([...byTurn.values()].map(load));
-}
-
-function boundedReviewText(value: string, maxLength: number): string | null {
-  if (!value) return null;
-  const redacted = value
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(
-      /\b(api[_-]?key|access[_-]?token|auth(?:orization)?|password|secret)(\s*[:=]\s*)([^\s,;]+)/gi,
-      "$1$2[redacted]",
-    );
-  if (redacted.length <= maxLength) return redacted;
-  const marker = "\n[... middle omitted ...]\n";
-  const available = Math.max(0, maxLength - marker.length);
-  const headLength = Math.ceil(available / 2);
-  const tailLength = Math.floor(available / 2);
-  return `${redacted.slice(0, headLength)}${marker}${redacted.slice(-tailLength)}`;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
 }

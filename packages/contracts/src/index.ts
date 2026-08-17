@@ -59,9 +59,17 @@ export * from "./training-platform.js";
 export {
   AgentSnapshotSchema,
   HarnessEvaluationReviewReceiptSchema,
+  HarnessCrossRunRefinementRequestSchema,
+  HarnessRefinementCandidateLifecycleReceiptSchema,
+  HarnessRefinementCandidateSchema,
+  HarnessRefinerActivityReceiptSchema,
   HarnessReleaseSchema,
   type AgentSnapshot,
+  type HarnessCrossRunRefinementRequest,
   type HarnessEvaluationReviewReceipt,
+  type HarnessRefinementCandidate,
+  type HarnessRefinementCandidateLifecycleReceipt,
+  type HarnessRefinerActivityReceipt,
   type HarnessReviewEvidenceRef,
   type HarnessRelease,
 } from "@openpond/harness";

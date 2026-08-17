@@ -72,7 +72,7 @@ export function SettingsNavigation({
 }) {
   return (
     <aside className="settings-sidebar">
-      <button className="settings-back" onClick={onBack}>
+      <button className="settings-back" aria-label="Back to app" onClick={onBack}>
         <ArrowLeft size={15} />
         <span>Back to app</span>
       </button>

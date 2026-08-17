@@ -19,6 +19,7 @@ export async function persistJsonTaskAttemptArtifact(input: {
     "raw_model_response" | "runtime_trace" | "environment_state" | "grader_evidence"
   >;
   payload: Record<string, unknown>;
+  fileLabel?: string;
   timestamp: () => string;
 }) {
   const directory = path.join(
@@ -29,7 +30,7 @@ export async function persistJsonTaskAttemptArtifact(input: {
   );
   const file = path.join(
     directory,
-    `${input.attemptId}-${input.kind}.json`,
+    `${input.attemptId}-${safeFileLabel(input.fileLabel ?? input.kind)}.json`,
   );
   const bytes = Buffer.from(`${JSON.stringify({
     schemaVersion: "openpond.rawEvaluationArtifact.v1",
@@ -44,6 +45,13 @@ export async function persistJsonTaskAttemptArtifact(input: {
     bytes,
     mediaType: "application/json",
   });
+}
+
+function safeFileLabel(value: string): string {
+  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!normalized) throw new Error("Evaluation artifact file label is empty.");
+  return normalized;
 }
 
 export async function persistTaskAttemptOutputArtifact(input: {

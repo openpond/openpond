@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 
 import {
+  admitLocalHarnessRefinerDecision,
   authorLocalHarnessRefinementWithModel,
   refinerMessages,
   type HarnessRefinerMessage,
@@ -8,8 +9,9 @@ import {
 } from "../src/index.js";
 
 const evidence: LocalHarnessRefinerEvidence = {
+  capabilities: { memory: true, prompt: true, skill: true, agent: false },
   trigger: { decision: "queue_refiner", suggestedRoutes: ["runtime"] },
-  observations: [{ kind: "recovery", rawError: "PDF edit failed", recovered: true }],
+  observations: [{ id: "observation-1", kind: "recovery", rawError: "PDF edit failed", recovered: true }],
   reviewPacket: {
     currentTurn: {
       id: "turn-1",
@@ -52,6 +54,7 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("visible answer and artifact inventory");
     expect(system).toContain("taskset_grade diagnostic");
     expect(system).toContain("authoritative evaluation evidence");
+    expect(system).toContain("proves only the measured outcome");
     expect(system).toContain("one high-confidence deterministic failure");
     expect(system).toContain("Recurrence strengthens confidence");
     expect(system).toContain("Routing records ownership");
@@ -60,6 +63,10 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("good fallback");
     expect(system).toContain("Never force a change");
     expect(system).toContain("Optimize future work");
+    expect(system).toContain("immediate completed-turn review");
+    expect(system).toContain("supportingEvidenceIds");
+    expect(system).toContain("explicitly stated durable user preference");
+    expect(system).toContain("capabilities is authoritative");
   });
 
   test("treats benchmark adaptation evidence as a cohort rather than one turn", () => {
@@ -92,7 +99,7 @@ describe("public model-driven Harness Refiner", () => {
           return;
         }
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
           decision: "no_action",
           reason: "The single recovered turn does not yet justify durable Harness content.",
         }) };
@@ -112,12 +119,17 @@ describe("public model-driven Harness Refiner", () => {
         messagesSeen.push(messages);
         if (messagesSeen.length === 1) {
           yield { text: JSON.stringify({
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "skill",
             operation: "create",
             target: "skills/chart-label-fix/SKILL.md",
             summary: "Encode the exact chart-label task.",
+            evidenceBasis: {
+              kind: "single_deterministic",
+              supportingEvidenceIds: ["observation-1"],
+              counterevidence: [],
+            },
             createContent: "---\nname: chart-label-fix\n---\nRepeat this task.",
             find: null,
             replace: null,
@@ -127,7 +139,7 @@ describe("public model-driven Harness Refiner", () => {
           return;
         }
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
           decision: "no_action",
           reason: "The draft encodes one task rather than a reusable root behavior.",
         }) };
@@ -139,8 +151,137 @@ describe("public model-driven Harness Refiner", () => {
     expect(messagesSeen).toHaveLength(2);
     expect(messagesSeen[1]!.at(-1)!.content).toContain("mandatory independent critique");
     expect(messagesSeen[1]!.at(-1)!.content).toContain("failure mechanism");
+    expect(messagesSeen[1]!.at(-1)!.content).toContain("invented recurrence");
     expect(messagesSeen[1]!.at(-1)!.content).toContain(
       "Do not reject a concise correction merely because",
     );
+  });
+
+  test("fails closed when the final decision invents evidence or selects an unavailable capability", async () => {
+    let calls = 0;
+    const decision = await authorLocalHarnessRefinementWithModel({
+      evidence,
+      stream: async function* () {
+        calls += 1;
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+          decision: "propose",
+          route: "agent",
+          operation: "create",
+          target: "agents/chart-reviewer/AGENT.md",
+          summary: "Create a chart reviewer.",
+          evidenceBasis: {
+            kind: "single_deterministic",
+            supportingEvidenceIds: ["invented-incident"],
+            counterevidence: [],
+          },
+          createContent: "Review charts.",
+          find: null,
+          replace: null,
+          expectedOutcome: "Future charts are reviewed.",
+          reason: "The chart task needs a reusable role.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toBe(2);
+    expect(decision).toMatchObject({
+      decision: "no_action",
+      reason: expect.stringContaining("not admitted"),
+    });
+  });
+
+  test("uses the critique pass to abstain when supplied counterevidence defeats the draft", async () => {
+    let calls = 0;
+    const decision = await authorLocalHarnessRefinementWithModel({
+      evidence,
+      stream: async function* () {
+        calls += 1;
+        if (calls === 1) {
+          yield { text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+            decision: "propose",
+            route: "skill",
+            operation: "create",
+            target: "skills/pdf-retry/SKILL.md",
+            summary: "Add a PDF retry workflow.",
+            evidenceBasis: {
+              kind: "single_deterministic",
+              supportingEvidenceIds: ["observation-1"],
+              counterevidence: ["A later equivalent operation succeeded without the proposed retry."],
+            },
+            createContent: "---\nname: pdf-retry\n---\nRetry the PDF operation.",
+            find: null,
+            replace: null,
+            expectedOutcome: "Future PDF operations retry automatically.",
+            reason: "The first attempt failed.",
+          }) };
+          return;
+        }
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+          decision: "no_action",
+          reason: "The supplied later success contradicts a deterministic reusable retry rule.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toBe(2);
+    expect(decision).toMatchObject({
+      decision: "no_action",
+      reason: expect.stringContaining("contradicts"),
+    });
+  });
+
+  test("admits external ownership and materially supplied recurrence without treating capabilities as routes", () => {
+    const recurrentEvidence: LocalHarnessRefinerEvidence = {
+      ...evidence,
+      reviewPacket: {
+        ...evidence.reviewPacket,
+        priorIncidents: [{ id: "incident-2", summary: "A separate task hit the same deterministic boundary." }],
+      },
+    };
+    const route = admitLocalHarnessRefinerDecision({
+      evidence: recurrentEvidence,
+      decision: {
+        schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+        decision: "route",
+        route: "taskset",
+        summary: "The hidden fixture contradicts the stated task.",
+        evidenceBasis: {
+          kind: "single_deterministic",
+          supportingEvidenceIds: ["observation-1"],
+          counterevidence: [],
+        },
+        expectedOutcome: "The Taskset owner repairs the fixture.",
+        reason: "The measured failure is outside Harness ownership.",
+      },
+    });
+    const recurrent = admitLocalHarnessRefinerDecision({
+      evidence: recurrentEvidence,
+      decision: {
+        schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+        decision: "propose",
+        route: "skill",
+        operation: "create",
+        target: "skills/chart-validation/SKILL.md",
+        summary: "Add the repeated chart validation workflow.",
+        evidenceBasis: {
+          kind: "recurrent_independent",
+          supportingEvidenceIds: ["observation-1", "incident-2"],
+          counterevidence: [],
+        },
+        createContent: "---\nname: chart-validation\n---\nValidate chart labels against the requested source.",
+        find: null,
+        replace: null,
+        expectedOutcome: "Future chart tasks validate labels before delivery.",
+        reason: "Two supplied independent incidents exhibit the same reusable workflow gap.",
+      },
+    });
+
+    expect(route.decision).toBe("route");
+    expect(recurrent.decision).toBe("propose");
   });
 });

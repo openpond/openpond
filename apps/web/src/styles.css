@@ -18,6 +18,7 @@
 @import "./styles/schedules/scheduled-work.css";
 @import "./styles/outputs/outputs.css";
 @import "./styles/chat/activity.css";
+@import "./styles/chat/harness-refiner-receipt.css";
 @import "./styles/chat/right-chat-panel.css";
 @import "./styles/chat/composer.css";
 @import "./styles/chat/approval-request.css";

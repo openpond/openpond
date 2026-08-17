@@ -5,6 +5,7 @@ import {
   type Taskset,
 } from "@openpond/contracts";
 import type { HarnessRefinerMessage } from "@openpond/harness";
+import type { ArtifactManifest, RewardReceipt } from "@openpond/evals";
 
 import { ensureLocalHarnessRunOverlay } from "../harness/local-harness-run-overlay.js";
 import { recordLocalHarnessImprovementBoundary } from "../harness/local-harness-improvement-observer.js";
@@ -30,6 +31,50 @@ type BenchmarkRefinerModelStream = (input: {
   signal: AbortSignal;
   pricing: HostedTokenPricing;
 }) => AsyncIterable<{ text?: string; usage?: unknown; costUsd?: number }>;
+
+const MAX_REFINER_ARTIFACT_MANIFEST_ENTRIES = 100;
+
+export function benchmarkRefinerRewardPacket(input: {
+  attempt: BenchmarkAttemptEvidence["attempt"];
+  artifactManifest: ArtifactManifest;
+  rewardReceipt: RewardReceipt;
+  artifactCount: number;
+}): Record<string, unknown> {
+  const manifestEntries = input.artifactManifest.entries.slice(
+    0,
+    MAX_REFINER_ARTIFACT_MANIFEST_ENTRIES,
+  );
+  return {
+    schemaVersion: "openpond.refinerRewardPacket.v1",
+    attemptRef: input.rewardReceipt.attemptRef,
+    artifactManifest: {
+      ref: {
+        id: input.artifactManifest.id,
+        contentHash: input.artifactManifest.contentHash,
+      },
+      entries: manifestEntries,
+      entryCount: input.artifactManifest.entries.length,
+      truncated: manifestEntries.length < input.artifactManifest.entries.length,
+    },
+    rewardReceipt: input.rewardReceipt,
+    attempt: {
+      status: input.rewardReceipt.outcomeClass,
+      infrastructureError: input.attempt.infrastructureError,
+      outputPresent:
+        typeof input.attempt.output.text === "string"
+        && input.attempt.output.text.trim().length > 0,
+      artifactCount: input.artifactCount,
+      runtimeEventCount: input.attempt.runtimeEventRefs.length,
+      modelRequestCount: Array.isArray(input.attempt.metadata.usage)
+        ? input.attempt.metadata.usage.length
+        : input.attempt.metadata.usage
+          ? 1
+          : 0,
+      latencyMs: input.attempt.latencyMs,
+      usage: attemptUsageSummary(input.attempt.metadata.usage),
+    },
+  };
+}
 
 export async function materializeBenchmarkRefinerBoundary(input: {
   store: SqliteStore;
@@ -101,31 +146,15 @@ export async function materializeBenchmarkRefinerBoundary(input: {
       output: assistantOutput,
     }));
   }
-  const gradeEvidence = JSON.stringify({
-    schemaVersion: input.result.grade.schemaVersion,
-    id: input.result.grade.id,
-    passed: input.result.grade.passed,
-    score: input.result.grade.score,
-    failureClass: input.result.grade.failureClass,
-    rewardEligible: input.result.grade.rewardEligible,
-    feedback: input.result.grade.feedback,
-    evaluationCriteria: task.expectedOutput,
-    attempt: {
-      status: attempt.infrastructureError ? "infrastructure_failure" : "completed",
-      infrastructureError: attempt.infrastructureError,
-      outputPresent:
-        typeof attempt.output.text === "string" && attempt.output.text.trim().length > 0,
-      artifactCount: input.result.artifacts.length,
-      runtimeEventCount: attempt.runtimeEventRefs.length,
-      modelRequestCount: Array.isArray(attempt.metadata.usage)
-        ? attempt.metadata.usage.length
-        : attempt.metadata.usage
-          ? 1
-          : 0,
-      latencyMs: attempt.latencyMs,
-      usage: attemptUsageSummary(attempt.metadata.usage),
-    },
+  const rewardPacket = benchmarkRefinerRewardPacket({
+    attempt,
+    artifactManifest: input.result.artifactManifest,
+    rewardReceipt: input.result.rewardReceipt,
+    artifactCount: input.result.artifacts.length,
   });
+  const rewardEvidence = JSON.stringify(rewardPacket);
+  const rewardPassed = input.result.rewardReceipt.status === "scored"
+    && input.result.rewardReceipt.passed;
   await input.store.appendRuntimeEvent(event({
     sessionId: session.id,
     turnId: turn.id,
@@ -133,14 +162,23 @@ export async function materializeBenchmarkRefinerBoundary(input: {
     source: "server",
     appId: session.appId,
     action: "taskset_grade",
-    status: input.result.grade.passed ? "completed" : "failed",
-    output: gradeEvidence,
-    error: input.result.grade.passed ? undefined : gradeEvidence,
+    status: rewardPassed ? "completed" : "failed",
+    output: rewardEvidence,
+    error: rewardPassed ? undefined : rewardEvidence,
     data: {
       result: {
-        output: gradeEvidence,
-        passed: input.result.grade.passed,
-        score: input.result.grade.score,
+        output: rewardEvidence,
+        passed: rewardPassed,
+        status: input.result.rewardReceipt.status,
+        reward: input.result.rewardReceipt.reward,
+        rewardReceiptRef: {
+          id: input.result.rewardReceipt.id,
+          contentHash: input.result.rewardReceipt.contentHash,
+        },
+        artifactManifestRef: {
+          id: input.result.artifactManifest.id,
+          contentHash: input.result.artifactManifest.contentHash,
+        },
       },
     },
   }));

@@ -44,7 +44,14 @@ export async function gradeAttempt(input: {
       graderSetHash,
       score: null,
       passed: false,
-      components: input.graders.map((grader) => component(grader, 0, false, "Infrastructure failure; no reward was produced.", [])),
+      components: input.graders.map((grader) => component(
+        grader,
+        0,
+        false,
+        "Infrastructure failure; no reward was produced.",
+        [],
+        false,
+      )),
       failureClass: "infrastructure_failure",
       feedback: [input.attempt.infrastructureError],
       rewardEligible: false,
@@ -70,7 +77,7 @@ export async function gradeAttempt(input: {
     components,
     failureClass: hardGateFailed || components.some((item) => !item.passed) ? "policy_failure" : null,
     feedback: components.flatMap((item) => item.feedback ? [item.feedback] : []),
-    rewardEligible: !hardGateFailed && components.some((item) => item.rewardEligible),
+    rewardEligible: components.some((item) => item.rewardEligible),
     createdAt: now(),
   };
 }
@@ -83,14 +90,14 @@ async function runGrader(
   customVerifier?: CustomVerifierRunner,
 ): Promise<GradeComponent> {
   if (grader.kind === "model_judge") {
-    if (!modelJudge) return component(grader, 0, false, "Model judge runner is unavailable.", []);
-    if (grader.calibrationStatus !== "passed") return component(grader, 0, false, "Model judge calibration has not passed.", []);
+    if (!modelJudge) return component(grader, 0, false, "Model judge runner is unavailable.", [], false);
+    if (grader.calibrationStatus !== "passed") return component(grader, 0, false, "Model judge calibration has not passed.", [], false);
     const result = await modelJudge({ grader, task, attempt });
     return component(grader, clamp(result.score), result.passed, result.feedback, result.evidenceRefs ?? []);
   }
-  if (grader.kind === "human") return component(grader, 0, false, "Human review is pending.", []);
+  if (grader.kind === "human") return component(grader, 0, false, "Human review is pending.", [], false);
   if (grader.kind === "custom_verifier") {
-    if (!customVerifier) return component(grader, 0, false, "Sandboxed verifier runner is unavailable.", []);
+    if (!customVerifier) return component(grader, 0, false, "Sandboxed verifier runner is unavailable.", [], false);
     const result = await customVerifier({ grader, task, attempt });
     return component(grader, clamp(result.score), result.passed, result.feedback, result.evidenceRefs ?? []);
   }
@@ -173,14 +180,21 @@ function runDeterministic(grader: Extract<GraderSpec, { kind: "content" | "schem
   return component(grader, passed ? 1 : 0, passed, passed ? `${grader.kind} evidence passed.` : `${grader.kind} evidence failed.`, attempt.artifactRefs);
 }
 
-function component(grader: GraderSpec, score: number, passed: boolean, feedback: string, evidenceRefs: string[]): GradeComponent {
+function component(
+  grader: GraderSpec,
+  score: number,
+  passed: boolean,
+  feedback: string,
+  evidenceRefs: string[],
+  rewardEligible = grader.rewardEligible,
+): GradeComponent {
   return {
     graderId: grader.id,
     graderVersion: grader.version,
     score,
     passed,
     hardGate: grader.hardGate,
-    rewardEligible: grader.rewardEligible && passed,
+    rewardEligible,
     feedback,
     evidenceRefs,
     judge: grader.kind === "model_judge" ? grader.judge : null,

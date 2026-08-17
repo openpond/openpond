@@ -97,6 +97,8 @@ export async function runSequentialHarnessAdaptation(input: {
         grade: executed.grade,
         artifacts: executed.artifacts,
         receiptContentHash: executed.portable.receipt.contentHash,
+        artifactManifest: executed.portable.artifactManifest,
+        rewardReceipt: executed.portable.rewardReceipt,
       };
       attempts.push(evidence);
       const refined = await runRefinerAfterAttempt({

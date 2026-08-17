@@ -14,6 +14,7 @@ const SOURCE_POLICY_VERSION = "local-personal-work-v1";
 
 export async function reviewSelectedLocalHarnessEvaluationFromHost(input: {
   store: SqliteStore;
+  storeDir: string;
   workspaceId: string;
   maxEstimatedCostUsd: number;
   stream?: HarnessEvaluationReviewModelStream;
@@ -71,5 +72,9 @@ export async function reviewSelectedLocalHarnessEvaluationFromHost(input: {
     stream: input.stream,
     signal: input.signal,
     now: input.now,
+    continuation: input.stream ? {
+      storeDir: input.storeDir,
+      stream: input.stream,
+    } : undefined,
   });
 }

@@ -1,6 +1,9 @@
 import {
   HarnessImprovementProposalSchema,
   HarnessEvaluationReviewReceiptSchema,
+  HarnessCrossRunRefinementRequestSchema,
+  HarnessRefinementCandidateLifecycleReceiptSchema,
+  HarnessRefinementCandidateSchema,
   HarnessOverlayMergeReceiptSchema,
   HarnessRefinerOutcomeSchema,
   HarnessRunOverlaySchema,
@@ -11,6 +14,9 @@ import {
   RefinementTriggerDecisionSchema,
   type HarnessImprovementProposal,
   type HarnessEvaluationReviewReceipt,
+  type HarnessCrossRunRefinementRequest,
+  type HarnessRefinementCandidate,
+  type HarnessRefinementCandidateLifecycleReceipt,
   type HarnessOverlayMergeReceipt,
   type HarnessRefinerOutcome,
   type HarnessRunOverlay,
@@ -31,6 +37,9 @@ import type { LocalHarnessReleaseRecord } from "./store-harness-release-record.j
 export type HarnessImprovementArtifact =
   | HarnessRunOverlay
   | HarnessEvaluationReviewReceipt
+  | HarnessRefinementCandidate
+  | HarnessRefinementCandidateLifecycleReceipt
+  | HarnessCrossRunRefinementRequest
   | ModelImprovementQualificationReceipt
   | HarnessImprovementProposal
   | HarnessTargetedValidationReceipt
@@ -44,6 +53,9 @@ export type HarnessImprovementArtifact =
 export type HarnessImprovementArtifactKind =
   | "run_overlay"
   | "evaluation_review"
+  | "refinement_candidate"
+  | "refinement_candidate_lifecycle"
+  | "cross_run_refinement_request"
   | "training_qualification"
   | "proposal"
   | "targeted_validation"
@@ -57,6 +69,9 @@ export type HarnessImprovementArtifactKind =
 export const HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS = {
   run_overlay: HarnessRunOverlaySchema,
   evaluation_review: HarnessEvaluationReviewReceiptSchema,
+  refinement_candidate: HarnessRefinementCandidateSchema,
+  refinement_candidate_lifecycle: HarnessRefinementCandidateLifecycleReceiptSchema,
+  cross_run_refinement_request: HarnessCrossRunRefinementRequestSchema,
   training_qualification: ModelImprovementQualificationReceiptSchema,
   proposal: HarnessImprovementProposalSchema,
   targeted_validation: HarnessTargetedValidationReceiptSchema,

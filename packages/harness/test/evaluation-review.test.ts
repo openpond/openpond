@@ -50,6 +50,7 @@ describe("Harness Evaluation review contracts", () => {
     expect(messages[0]!.content).toContain("actual user-visible answer and artifacts");
     expect(messages[0]!.content).toContain("missing requested citations or links");
     expect(messages[0]!.content).toContain("hidden metadata do not prove");
+    expect(messages[0]!.content).toContain("An applied edit alone is not later-success evidence");
   });
 
   test("creates and verifies an immutable bounded no-action receipt", () => {
@@ -139,6 +140,50 @@ describe("Harness Evaluation review contracts", () => {
       decision: "review",
       selectedEvidenceIds: ["route-one"],
       recurrenceFamily: "pdf-first-attempt-editing",
+    });
+  });
+
+  test("binds later-success resolution to a listed candidate and supplied evidence", async () => {
+    const evidence = [{
+      id: "success-one",
+      evidence: ref("success-one"),
+      kind: "observation" as const,
+      sourceRef: "independent-source",
+      occurredAt: createdAt,
+      payload: { summary: "Equivalent work succeeded under the applied release." },
+    }];
+    const candidate = {
+      id: "candidate-one",
+      fingerprint: contentHash("candidate-one"),
+      status: "confirmed",
+    };
+    let calls = 0;
+    const decision = await authorHarnessEvaluationReviewWithModel({
+      evidence,
+      harnessRelease: ref("harness-release"),
+      candidates: [candidate],
+      stream: async function* () {
+        calls += 1;
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          decision: "resolve_candidate",
+          candidateId: "candidate-one",
+          candidateFingerprint: calls === 1 ? contentHash("wrong") : candidate.fingerprint,
+          selectedEvidenceIds: ["success-one"],
+          ignoredEvidence: [],
+          confidence: 0.97,
+          reason: "Independent equivalent work now satisfies the expected behavior.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toBe(2);
+    expect(decision).toMatchObject({
+      decision: "resolve_candidate",
+      candidateId: "candidate-one",
+      candidateFingerprint: candidate.fingerprint,
+      selectedEvidenceIds: ["success-one"],
     });
   });
 

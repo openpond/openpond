@@ -6,5 +6,6 @@ export * from "./harness-workspaces.js";
 export * from "./models.js";
 export * from "./refiner.js";
 export * from "./refiner-detection.js";
+export * from "./refinement-lifecycle.js";
 export * from "./refiner-support.js";
 export * from "./tools.js";

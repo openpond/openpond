@@ -30,6 +30,8 @@ type Props = {
 
 const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
   enabled: true,
+  activityEnabled: true,
+  activityBatchSize: 10,
   cadence: "daily",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
@@ -384,6 +386,8 @@ export function HarnessHistorySettingsSection({
 
   const saveEvaluationSchedule = useCallback(async (input: {
     enabled: boolean;
+    activityEnabled: boolean;
+    activityBatchSize: number;
     cadence: "manual" | "daily" | "weekly";
     maxEstimatedCostUsd: number;
   }) => {
@@ -514,6 +518,7 @@ export function HarnessHistorySettingsSection({
             onReview={(maxEstimatedCostUsd) => void reviewEvaluation(maxEstimatedCostUsd)}
             onSaveSchedule={(input) => void saveEvaluationSchedule(input)}
             qualifications={history.modelImprovementQualifications}
+            candidates={history.refinementCandidates}
             reviews={history.evaluationReviews}
             schedule={history.evaluationReviewSchedule ?? DEFAULT_EVALUATION_REVIEW_SCHEDULE}
           />

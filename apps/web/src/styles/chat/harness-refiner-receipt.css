@@ -1,0 +1,176 @@
+.harness-refiner-receipt {
+  display: grid;
+  gap: 8px;
+  width: min(760px, 100%);
+  padding-left: 20px;
+}
+
+.harness-refiner-receipt-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #8f98a3;
+  padding: 0;
+  font-size: 12px;
+  text-align: left;
+}
+
+.harness-refiner-receipt-summary:not(:disabled) {
+  cursor: pointer;
+}
+
+.harness-refiner-receipt-summary:not(:disabled):hover,
+.harness-refiner-receipt-summary:not(:disabled):focus-visible {
+  color: #d7e2ee;
+  outline: 0;
+}
+
+.harness-refiner-receipt-summary:disabled {
+  opacity: 1;
+}
+
+.harness-refiner-receipt-summary > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.harness-refiner-receipt.applied .harness-refiner-receipt-summary {
+  color: #88c99a;
+}
+
+.harness-refiner-receipt.failed .harness-refiner-receipt-summary {
+  color: #ff8d8d;
+}
+
+.harness-refiner-receipt-toggle {
+  flex: 0 0 auto;
+  transform: rotate(-90deg);
+  transition: transform 160ms ease;
+}
+
+.harness-refiner-receipt-toggle.expanded {
+  transform: rotate(0deg);
+}
+
+.harness-refiner-receipt-details {
+  display: grid;
+  gap: 12px;
+  margin-left: 18px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #aeb6c0;
+}
+
+.harness-refiner-receipt-details section,
+.harness-refiner-receipt-details p,
+.harness-refiner-receipt-details dl {
+  margin: 0;
+}
+
+.harness-refiner-receipt-details section {
+  display: grid;
+  gap: 4px;
+}
+
+.harness-refiner-receipt-details strong,
+.harness-refiner-receipt-details summary {
+  color: #d7e2ee;
+  font-weight: 600;
+}
+
+.harness-refiner-receipt-facts,
+.harness-refiner-references dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 14px;
+}
+
+.harness-refiner-receipt-facts div,
+.harness-refiner-references dl div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.harness-refiner-receipt-facts dt,
+.harness-refiner-references dt {
+  color: #717985;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.harness-refiner-receipt-facts dd,
+.harness-refiner-references dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.harness-refiner-validation-list,
+.harness-refiner-exact-edits {
+  display: grid;
+  gap: 8px;
+}
+
+.harness-refiner-validation-list > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.harness-refiner-validation-list span {
+  border-radius: 999px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.harness-refiner-validation-list span.passed {
+  color: #88c99a;
+}
+
+.harness-refiner-validation-list span.failed,
+.harness-refiner-validation-list span.blocked {
+  color: #ff8d8d;
+}
+
+.harness-refiner-exact-edits > section {
+  margin-top: 8px;
+}
+
+.harness-refiner-exact-edits pre {
+  max-height: 320px;
+  margin: 2px 0 0;
+  overflow: auto;
+  border-radius: 7px;
+  background: #11151a;
+  padding: 9px;
+  color: #c9d2dc;
+  font: 11px/1.45 var(--font-mono);
+  white-space: pre-wrap;
+}
+
+.harness-refiner-references summary,
+.harness-refiner-exact-edits summary {
+  cursor: pointer;
+}
+
+.harness-refiner-references dl {
+  margin-top: 8px;
+}
+
+.harness-refiner-references code {
+  font-size: 10px;
+}

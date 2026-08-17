@@ -18,7 +18,7 @@ import {
 import { type ImmutableReleaseRef } from "@openpond/harness";
 
 import type { PayloadRow } from "../types.js";
-import { SqliteHarnessEvaluationReviewSettingsStore } from "./store-harness-evaluation-review-settings.js";
+import { SqliteHarnessRefinementCandidateStore } from "./store-harness-refinement-candidates.js";
 import { LocalHarnessReleaseRecordSchema, type LocalHarnessReleaseRecord } from "./store-harness-release-record.js";
 import {
   HARNESS_IMPROVEMENT_ARTIFACT_SCHEMAS,
@@ -37,7 +37,7 @@ export type {
   HarnessEvaluationReviewSettings,
 } from "./store-harness-evaluation-review-settings.js";
 
-export class SqliteHarnessWorkspaceStore extends SqliteHarnessEvaluationReviewSettingsStore {
+export class SqliteHarnessWorkspaceStore extends SqliteHarnessRefinementCandidateStore {
   async createHarnessWorkspace(input: HarnessWorkspace): Promise<HarnessWorkspace> {
     const workspace = HarnessWorkspaceSchema.parse(input);
     await this.ready;
@@ -880,7 +880,8 @@ export class SqliteHarnessWorkspaceStore extends SqliteHarnessEvaluationReviewSe
        WHERE id = ? AND kind = ?`,
       [artifact.id, kind],
     );
-    if (kind !== "run_overlay" && sameIdentity.length > 0) {
+    const versionedIdentity = kind === "run_overlay" || kind === "refinement_candidate";
+    if (!versionedIdentity && sameIdentity.length > 0) {
       throw new Error("An immutable Harness improvement artifact id already has different content.");
     }
     if (kind === "run_overlay") {

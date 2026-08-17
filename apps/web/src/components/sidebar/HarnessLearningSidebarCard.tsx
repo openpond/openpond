@@ -87,7 +87,7 @@ export function HarnessLearningSidebarCard({
         </span>
       </label>
       <label className="sidebar-learning-control">
-        <strong>RL review</strong>
+        <strong>Scheduled review</strong>
         <span className="sidebar-learning-toggle">
           <input
             checked={schedule.enabled}
@@ -101,6 +101,8 @@ export function HarnessLearningSidebarCard({
               void api.updateHarnessEvaluationReviewSchedule(connection, {
                 workspaceId: history.workspace!.id,
                 enabled,
+                activityEnabled: schedule.activityEnabled,
+                activityBatchSize: schedule.activityBatchSize,
                 cadence,
                 maxEstimatedCostUsd: schedule.maxEstimatedCostUsd,
               }).then((response) => setHistory(response.history))

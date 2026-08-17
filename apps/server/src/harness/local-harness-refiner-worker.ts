@@ -14,17 +14,19 @@ import {
   type HarnessSourceManifest,
   type HarnessTargetedValidationReceipt,
   type HarnessWorkspace,
+  type ImprovementApplyReceipt,
   type ImprovementObservation,
   type RefinementTriggerDecision,
 } from "@openpond/contracts";
 import {
   authorLocalHarnessRefinementWithModel,
+  admitLocalHarnessRefinerDecision,
   HostedHarnessRefinerRequestSchema,
   HostedHarnessRefinerResponseSchema,
   contentHash,
   type HostedHarnessRefinerRequest,
   type HostedHarnessRefinerResponse,
-  type LocalHarnessRefinerDecision,
+  type LocalHarnessRefinerDecisionV2,
   type LocalHarnessRefinerModelStream,
 } from "@openpond/harness";
 
@@ -62,6 +64,7 @@ export type LocalHarnessRefinerWorkerResult = {
   validations: HarnessTargetedValidationReceipt[];
   workspace: HarnessWorkspace;
   advanceReceipt: HarnessAdvanceReceipt | null;
+  applyReceipt: ImprovementApplyReceipt | null;
 };
 
 export async function runLocalHarnessRefinerWorker(input: {
@@ -69,6 +72,7 @@ export async function runLocalHarnessRefinerWorker(input: {
   storeDir: string;
   trigger: RefinementTriggerDecision;
   additionalEvidence?: unknown;
+  reviewScope?: "completed_turn" | "cross_run_candidate";
   stream?: LocalHarnessRefinerModelStream;
   refine?: (input: {
     request: HostedHarnessRefinerRequest;
@@ -109,6 +113,7 @@ export async function runLocalHarnessRefinerWorker(input: {
         : [],
       workspace: (await input.store.getHarnessWorkspace(workspace.id)) ?? workspace,
       advanceReceipt: null,
+      applyReceipt: null,
     };
   }
 
@@ -172,8 +177,16 @@ export async function runLocalHarnessRefinerWorker(input: {
     trigger,
     observations,
     workspace.id,
+    { allowMissingRuntimeEvents: input.reviewScope === "cross_run_candidate" },
   );
+  const capabilities = {
+    memory: true,
+    prompt: true,
+    skill: true,
+    agent: false,
+  } as const;
   const refinerEvidence = {
+    capabilities,
     trigger: boundedTriggerEvidence(trigger),
     observations: observations.map(boundedObservationEvidence),
     reviewPacket: boundedContext.reviewPacket,
@@ -181,7 +194,7 @@ export async function runLocalHarnessRefinerWorker(input: {
     sourceCatalog: source.catalog,
     additionalEvidence: input.additionalEvidence ?? null,
   };
-  let decision: LocalHarnessRefinerDecision;
+  let decision: LocalHarnessRefinerDecisionV2;
   if (input.stream) {
     decision = await authorLocalHarnessRefinementWithModel({
       evidence: refinerEvidence,
@@ -190,7 +203,7 @@ export async function runLocalHarnessRefinerWorker(input: {
     });
   } else if (input.refine) {
     const request = HostedHarnessRefinerRequestSchema.parse({
-      schemaVersion: "openpond.hostedHarnessRefinerRequest.v1",
+      schemaVersion: "openpond.hostedHarnessRefinerRequest.v2",
       requestId: trigger.id,
       idempotencyKey: trigger.contentHash,
       evidenceHash: contentHash(refinerEvidence),
@@ -204,12 +217,7 @@ export async function runLocalHarnessRefinerWorker(input: {
           sourceRevision: workspace.sourceRevision,
           channelRevision: workspace.currentChannel.revision,
         },
-        capabilities: {
-          memory: true,
-          prompt: true,
-          skill: true,
-          agent: false,
-        },
+        capabilities,
       },
       evidence: refinerEvidence,
     });
@@ -221,6 +229,10 @@ export async function runLocalHarnessRefinerWorker(input: {
   } else {
     throw new Error("Harness Refiner requires a public model stream or managed adapter.");
   }
+  decision = admitLocalHarnessRefinerDecision({
+    decision,
+    evidence: refinerEvidence,
+  });
   if (decision.decision === "no_action") {
     return persistNoAction({
       store: input.store,
@@ -306,6 +318,7 @@ export async function runLocalHarnessRefinerWorker(input: {
         metadata: {
           trigger: { id: trigger.id, contentHash: trigger.contentHash },
           reason: decision.reason,
+          evidenceBasis: decision.evidenceBasis,
           generatedManifestEditId:
             edits.find((candidate) => candidate.target === "harness.json")?.id ?? null,
           rebasedFromHarnessRelease: rebasedOntoCurrent
@@ -462,6 +475,7 @@ async function finishPersistedProposal(input: {
     validations,
     workspace: advanced.workspace,
     advanceReceipt: advanced.receipt,
+    applyReceipt,
   };
 }
 
@@ -547,6 +561,7 @@ async function finishMemoryProposal(input: {
     validations: input.validations,
     workspace: input.workspace,
     advanceReceipt: null,
+    applyReceipt,
   };
 }
 
@@ -585,6 +600,7 @@ async function persistNoAction(input: {
     validations: [],
     workspace: input.workspace,
     advanceReceipt: null,
+    applyReceipt: null,
   };
 }
 
@@ -594,7 +610,7 @@ async function persistExternalRoute(input: {
   overlay: HarnessRunOverlay;
   trigger: RefinementTriggerDecision;
   observations: ImprovementObservation[];
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "route" }>;
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "route" }>;
   now?: () => string;
 }): Promise<LocalHarnessRefinerWorkerResult> {
   const timestamp = (input.now ?? (() => new Date().toISOString()))();
@@ -610,6 +626,7 @@ async function persistExternalRoute(input: {
     metadata: {
       summary: input.decision.summary,
       expectedOutcome: input.decision.expectedOutcome,
+      evidenceBasis: input.decision.evidenceBasis,
     },
   });
   await input.store.saveHarnessImprovementArtifact(
@@ -629,13 +646,14 @@ async function persistExternalRoute(input: {
       route: input.decision.route,
       routeDecision: { id: route.id, contentHash: route.contentHash },
       expectedOutcome: input.decision.expectedOutcome,
+      evidenceBasis: input.decision.evidenceBasis,
     },
     now: () => timestamp,
   });
 }
 
 function assertSafeDecision(
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "propose" }>,
   sourceCatalog: Array<{
     path: string;
     kind: "memory" | "instruction" | "skill" | "agent";
@@ -674,7 +692,7 @@ function assertSafeDecision(
 }
 
 function materializeDecisionContent(
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "propose" }>,
   sourceFiles: Array<{
     path: string;
     kind: "memory" | "instruction" | "skill" | "agent";
@@ -728,7 +746,7 @@ function safeCreatedComponentPath(
 
 function buildProposalEdits(input: {
   trigger: RefinementTriggerDecision;
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>;
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "propose" }>;
   materializedContent: string | null;
   manifest: HarnessSourceManifest;
   effects: HarnessChangeEffect[];
@@ -824,7 +842,7 @@ function buildProposalEdits(input: {
 }
 
 function classifyProposalEffects(
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>,
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "propose" }>,
 ): HarnessChangeEffect[] {
   if (decision.route === "agent") return ["executable_code"];
   if (decision.route === "memory") return ["memory"];
@@ -862,7 +880,7 @@ function classifyProposalEffects(
 }
 
 function proposalValidationPlan(input: {
-  decision: Extract<LocalHarnessRefinerDecision, { decision: "propose" }>;
+  decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "propose" }>;
   evidence: ReturnType<typeof proposalEvidence>;
   validationId: string;
   effects: HarnessChangeEffect[];

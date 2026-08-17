@@ -36,8 +36,14 @@ import { HarnessReleaseSchema } from "@openpond/harness";
 import {
   RunManifestSchema,
   TasksetReleaseSchema,
+  buildArtifactManifest,
+  createEnvironmentRelease,
+  createRewardReceipt,
+  createVerifierSetRelease,
   gradeEvidence,
+  verifyRewardReceipt,
   verifyAttemptReceipt,
+  verifyRequiredOutputs,
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
 import { workEvidenceConformance, verifyWorkEvidenceReceipt } from "@openpond/evals/evidence";
@@ -51,6 +57,51 @@ const grades = await gradeEvidence({
 });
 if (!grades[0]?.passed) throw new Error("packed deterministic grader failed");
 if (verifyAttemptReceipt({}) !== false) throw new Error("invalid receipt was accepted");
+const environment = createEnvironmentRelease({
+  schemaVersion: "openpond.environmentRelease.v1",
+  id: "packed-environment",
+  revision: 1,
+  contract: genericToolConformance.taskset.environment,
+  actionSchemaRef: null,
+  observationSchemaRef: null,
+  stateSchemaRef: null,
+  artifactCollection: { maxArtifacts: 10, maxTotalBytes: 1000000 },
+  adapterConformanceHashes: { local: genericToolConformance.manifest.contentHash },
+  metadata: {},
+});
+const verifierSet = createVerifierSetRelease({
+  schemaVersion: "openpond.verifierSetRelease.v1",
+  id: "packed-verifier-set",
+  revision: 1,
+  graders: genericToolConformance.taskset.graders,
+  isolation: { processBoundary: "isolated_process", networkPolicy: "none", defaultTimeoutMs: 1000 },
+  calibrationReceiptRefs: [],
+  metadata: {},
+});
+const attemptRef = { id: "packed-attempt", contentHash: genericToolConformance.manifest.contentHash };
+const requiredOutput = { path: "index.html", mediaType: "text/html", schemaRef: null, maxBytes: 1000, metadata: {} };
+const artifactManifest = buildArtifactManifest({
+  id: "packed-artifact-manifest",
+  attemptRef,
+  requiredOutputs: [requiredOutput],
+  collectedArtifacts: [],
+  createdAt: "2026-08-17T00:00:00.000Z",
+});
+const components = verifyRequiredOutputs({ requiredOutputs: [requiredOutput], manifest: artifactManifest });
+const rewardReceipt = createRewardReceipt({
+  id: "packed-zero-reward",
+  attemptRef,
+  verifierSet,
+  artifactManifest,
+  outcomeClass: "incomplete_output",
+  failureOwner: "policy",
+  components,
+  createdAt: "2026-08-17T00:00:00.000Z",
+});
+if (rewardReceipt.reward !== 0 || !rewardReceipt.learningEligible || !verifyRewardReceipt(rewardReceipt)) {
+  throw new Error("packed scored-zero Reward Receipt failed");
+}
+if (!environment.contentHash) throw new Error("packed Environment Release failed");
 if (!verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)) {
   throw new Error("packed Work evidence validation failed");
 }
@@ -62,11 +113,14 @@ import type {
   AttemptReceipt,
   EvaluationRunner,
   GraderEvidence,
+  ArtifactManifest,
+  EnvironmentRelease,
+  RewardReceipt,
   RunManifest,
   TaskRecord,
   WorkEvidenceReceipt,
 } from "@openpond/evals";
-void (null as unknown as HarnessRelease | AttemptReceipt | EvaluationRunner | GraderEvidence | RunManifest | TaskRecord | WorkEvidenceReceipt);
+void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], {
     cwd: temporary,

@@ -81,7 +81,7 @@ function gradeDeterministic(grader: DeterministicGraderSpec, task: TaskRecord, a
   return {
     score: passed ? 1 : 0,
     passed,
-    rewardEligible: grader.rewardEligible && passed,
+    rewardEligible: grader.rewardEligible,
     failureClass: passed ? null : "policy_failure",
     feedback: [passed ? "Deterministic grader passed." : "Deterministic grader failed."],
     visibleEvidenceRefs: [...attempt.runtimeEventRefs, ...attempt.artifactRefs],
@@ -90,7 +90,13 @@ function gradeDeterministic(grader: DeterministicGraderSpec, task: TaskRecord, a
 }
 
 function evidence(grader: GraderSpec, result: Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash">): GraderEvidence {
-  const content = GraderEvidenceContentSchema.parse({ schemaVersion: "openpond.graderEvidence.v1", graderId: grader.id, graderVersion: grader.version, ...result });
+  const content = GraderEvidenceContentSchema.parse({
+    schemaVersion: "openpond.graderEvidence.v1",
+    graderId: grader.id,
+    graderVersion: grader.version,
+    ...result,
+    rewardEligible: grader.rewardEligible && result.score !== null,
+  });
   return GraderEvidenceSchema.parse({ ...content, contentHash: contentHash(content) });
 }
 function unavailable(message: string): Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash"> {

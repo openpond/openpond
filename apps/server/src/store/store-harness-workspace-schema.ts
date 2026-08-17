@@ -41,6 +41,8 @@ export async function createHarnessWorkspaceTables(
     CREATE TABLE IF NOT EXISTS harness_evaluation_review_settings (
       workspace_id TEXT PRIMARY KEY,
       enabled INTEGER NOT NULL DEFAULT 0,
+      activity_enabled INTEGER NOT NULL DEFAULT 0,
+      activity_batch_size INTEGER NOT NULL DEFAULT 10,
       cadence TEXT NOT NULL DEFAULT 'manual',
       max_estimated_cost_usd REAL NOT NULL DEFAULT 0,
       next_run_at TEXT,
@@ -87,6 +89,37 @@ export async function createHarnessWorkspaceTables(
       ON harness_improvement_artifacts(id, kind);
     CREATE INDEX IF NOT EXISTS harness_improvement_artifacts_workspace_kind_created_idx
       ON harness_improvement_artifacts(workspace_id, kind, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS harness_refinement_candidates (
+      candidate_id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,
+      status TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS harness_refinement_candidates_workspace_fingerprint_idx
+      ON harness_refinement_candidates(workspace_id, fingerprint);
+    CREATE INDEX IF NOT EXISTS harness_refinement_candidates_workspace_status_updated_idx
+      ON harness_refinement_candidates(workspace_id, status, updated_at DESC);
+
+    CREATE TABLE IF NOT EXISTS harness_cross_run_refinement_requests (
+      deduplication_key TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      candidate_id TEXT NOT NULL,
+      admitted_release_hash TEXT NOT NULL,
+      content_hash TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(workspace_id) REFERENCES harness_workspaces(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS harness_cross_run_refinement_requests_workspace_created_idx
+      ON harness_cross_run_refinement_requests(workspace_id, created_at DESC);
 
     CREATE TABLE IF NOT EXISTS harness_advance_receipts (
       content_hash TEXT PRIMARY KEY,

@@ -170,6 +170,48 @@ export type ActionRunSummary = {
   childCalls: ActionRunChildCall[];
 };
 
+export type HarnessRefinerActivity = {
+  state: "running" | "completed" | "failed";
+  visibility: "always" | "material_only";
+  result: "no_action" | "routed" | "applied" | "retained" | "failed" | null;
+  workspaceId: string | null;
+  decision: "no_action" | "route" | "propose" | null;
+  route: string | null;
+  operation: "create" | "update" | "delete" | null;
+  target: string | null;
+  summary: string;
+  expectedOutcome: string | null;
+  reason: string | null;
+  evidenceBasis: {
+    kind: "single_deterministic" | "recurrent_independent";
+    supportingEvidenceIds: string[];
+    counterevidence: string[];
+  } | null;
+  critiqueStatus: "not_applicable" | "pending" | "passed" | "rejected" | "failed";
+  validationStatus: "not_applicable" | "pending" | "passed" | "failed";
+  validations: Array<{
+    id: string;
+    status: "passed" | "failed" | "blocked" | "skipped";
+    summary: string;
+  }>;
+  edits: Array<{
+    id: string;
+    operation: "create" | "update" | "delete";
+    target: string;
+    summary: string;
+    content: string | null;
+  }>;
+  refs: {
+    trigger: string | null;
+    outcome: string | null;
+    proposal: string | null;
+    applyReceipt: string | null;
+    advanceReceipt: string | null;
+    inputHarness: string | null;
+    outputHarness: string | null;
+  };
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "activity_group" | "error" | "status_divider";
@@ -189,6 +231,7 @@ export type ChatMessage = {
   statusState?: "running" | "completed" | "failed";
   statusTone?: "info" | "success" | "danger";
   actionRun?: ActionRunSummary;
+  refinerActivity?: HarnessRefinerActivity;
   createImproveRun?: CreateImproveRun | null;
   userQuestion?: SessionUserQuestion;
 };

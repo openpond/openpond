@@ -1,14 +1,29 @@
 import {
+  AttemptOutcomeClassSchema,
   AttemptReceiptSchema,
-  TasksetReleaseSchema,
+  FailureOwnerSchema,
+  buildArtifactManifest,
   createAttemptReceipt,
+  createRewardReceipt,
   createRunManifest,
+  classifyAttemptOutcome,
+  verifyRequiredOutputs,
+  type CollectedArtifact,
+  type ArtifactManifest,
   type AttemptReceipt,
-  type EnvironmentContract,
+  type EnvironmentRelease,
   type GraderSpec as PortableGraderSpec,
+  type RewardComponentReceipt,
+  type RewardReceipt,
   type RunManifest,
   type TasksetRelease,
+  type VerifierSetRelease,
 } from "@openpond/evals";
+import {
+  materializePortableTasksetRelease,
+  portableTasksetEnvironment,
+  portableTasksetTools,
+} from "@openpond/taskset-sdk";
 import {
   AgentSnapshotSchema,
   HarnessReleaseSchema,
@@ -25,8 +40,8 @@ import {
 } from "@openpond/harness";
 import type {
   ChatModelRef,
+  GradeComponent,
   GradeResult,
-  GraderSpec,
   OpenPondProfileState,
   TaskAttemptArtifact,
   TaskAttemptResult,
@@ -37,6 +52,8 @@ import type {
 export type DesktopHarnessContext = {
   agentSnapshot: AgentSnapshot;
   harnessRelease: HarnessRelease;
+  environmentRelease: EnvironmentRelease;
+  verifierSetRelease: VerifierSetRelease;
   tasksetRelease: TasksetRelease;
   runManifest: RunManifest;
 };
@@ -51,7 +68,7 @@ export function compileDesktopHarnessContext(input: {
   model: ChatModelRef;
   now?: () => string;
 }): DesktopHarnessContext {
-  const tasksetTools = portableTools(input.taskset);
+  const tasksetTools = portableTasksetTools(input.taskset);
   const { agentSnapshot, harnessRelease } = input.releasedHarness
     ? {
         agentSnapshot: AgentSnapshotSchema.parse(input.releasedHarness.agentSnapshot),
@@ -64,54 +81,21 @@ export function compileDesktopHarnessContext(input: {
   ) {
     throw new Error("Released Harness does not bind the supplied Agent snapshot.");
   }
-  const environment = portableEnvironment(input.taskset);
+  const environment = portableTasksetEnvironment(input.taskset);
   const sourceTasks = input.taskset.tasks.length
     ? input.taskset.tasks
     : input.selectedTask ? [input.selectedTask] : [];
   if (!sourceTasks.length) throw new Error("A portable Taskset release requires at least one resolved task.");
-  const tasksetContent = {
-    schemaVersion: "openpond.tasksetRelease.v2" as const,
-    id: `taskset-release-${input.taskset.id}-r${input.taskset.revision}`,
-    revision: input.taskset.revision,
-    policy: {
-      policyVisibleFields: input.taskset.policy.policyVisibleFields,
-      privilegedFields: input.taskset.policy.privilegedFields,
-      hiddenGraderRefs: input.taskset.policy.hiddenGraderRefs,
-      connectedAppScopes: input.taskset.policy.connectedAppScopes,
-    },
-    environment,
-    tools: tasksetTools,
-    capabilities: portableCapabilities(input.taskset),
-    tasks: sourceTasks.map((task) => ({
-      id: task.id,
-      clusterKey: task.clusterKey,
-      split: task.split,
-      input: task.input,
-      expectedOutput: task.expectedOutput,
-      policyVisibleContext: task.policyVisibleContext,
-      privilegedContextRef: task.privilegedContextRef,
-      artifactRefs: (task.assets ?? []).map((item) => ({
-        id: item.id,
-        path: `tasks/${segment(task.id)}/${segment(item.fileName)}`,
-        contentHash: hash(item.sha256),
-        sizeBytes: item.sizeBytes,
-        mediaType: item.mediaType,
-        visibility: "policy" as const,
-      })),
-      tags: task.tags,
-    })),
-    graders: input.taskset.graders.map(portableGrader),
-    metadata: {
-      sourceTasksetId: input.taskset.id,
-      sourceTasksetHash: input.taskset.contentHash,
-    },
-  };
-  const tasksetRelease = input.tasksetRelease
-    ? TasksetReleaseSchema.parse(input.tasksetRelease)
-    : TasksetReleaseSchema.parse({
-        ...tasksetContent,
-        contentHash: contentHash(tasksetContent),
-      });
+  const {
+    environmentRelease,
+    verifierSetRelease,
+    tasksetRelease,
+  } = materializePortableTasksetRelease({
+    taskset: input.taskset,
+    selectedTasks: sourceTasks,
+    adapterId: runtimeAdapterId(input.taskset),
+    admittedTasksetRelease: input.tasksetRelease,
+  });
   const now = input.now ?? (() => new Date().toISOString());
   const runManifest = createRunManifest({
     schemaVersion: "openpond.runManifest.v1",
@@ -146,7 +130,14 @@ export function compileDesktopHarnessContext(input: {
       reasoningEffort: input.reasoningEffort ?? null,
     },
   });
-  return { agentSnapshot, harnessRelease, tasksetRelease, runManifest };
+  return {
+    agentSnapshot,
+    harnessRelease,
+    environmentRelease,
+    verifierSetRelease,
+    tasksetRelease,
+    runManifest,
+  };
 }
 
 function compileTemporaryProfileHarness(
@@ -275,78 +266,172 @@ export function projectDesktopAttemptReceipt(input: {
   }));
 }
 
-function portableEnvironment(taskset: Taskset): EnvironmentContract {
-  const kind: EnvironmentContract["kind"] = taskset.environment.kind === "chat"
-    ? "text"
-    : taskset.environment.kind === "work" ? "work"
-    : taskset.environment.kind === "program" ? "custom_program" : "agent";
+export function projectDesktopCanonicalReceipts(input: {
+  context: Pick<DesktopHarnessContext, "runManifest" | "tasksetRelease" | "verifierSetRelease">;
+  attempt: TaskAttemptResult;
+  grade: GradeResult;
+  artifacts: TaskAttemptArtifact[];
+}): {
+  attemptReceipt: AttemptReceipt;
+  artifactManifest: ArtifactManifest;
+  rewardReceipt: RewardReceipt;
+} {
+  const attemptReceipt = projectDesktopAttemptReceipt({
+    manifest: input.context.runManifest,
+    attempt: input.attempt,
+    grade: input.grade,
+    artifacts: input.artifacts,
+  });
+  const task = input.context.tasksetRelease.tasks.find(
+    (candidate) => candidate.id === input.attempt.taskId,
+  );
+  if (!task) throw new Error(`Task ${input.attempt.taskId} is absent from the admitted Taskset Release.`);
+  const requiredOutputs = task.requiredOutputs ?? [];
+  const outputArtifacts: CollectedArtifact[] = input.artifacts
+    .filter((artifact) => artifact.kind === "output_artifact")
+    .map((artifact) => ({
+      path: typeof artifact.metadata.requiredOutputPath === "string"
+        ? artifact.metadata.requiredOutputPath
+        : artifact.path,
+      artifact: portableArtifact(artifact),
+      detectedMediaType: artifact.mediaType ?? null,
+      status: "collected" as const,
+      parseStatus: artifactValidationStatus(artifact.metadata.parseStatus),
+      schemaStatus: artifactValidationStatus(artifact.metadata.schemaStatus),
+      evidenceRefs: [portableArtifact(artifact)],
+      metadata: { sourceArtifactId: artifact.id },
+    }));
+  const artifactManifest = buildArtifactManifest({
+    id: `artifact-manifest-${attemptReceipt.id}`,
+    attemptRef: { id: attemptReceipt.id, contentHash: attemptReceipt.contentHash },
+    requiredOutputs,
+    collectedArtifacts: outputArtifacts,
+    createdAt: input.attempt.completedAt,
+    metadata: { legacyAttemptRef: input.attempt.id },
+  });
+  const gradeComponents = input.grade.components.map((component, index) =>
+    portableRewardComponent({
+      component,
+      grader: input.context.verifierSetRelease.graders.find(
+        (candidate) => candidate.id === component.graderId,
+      ),
+      evidenceRef: attemptReceipt.graderEvidenceRefs[index] ?? null,
+      gradeScored: input.grade.score !== null,
+    }),
+  );
+  const outputComponents = verifyRequiredOutputs({ requiredOutputs, manifest: artifactManifest });
+  const initial = canonicalOutcome(input.attempt, input.grade);
+  const collectorFailure = outputComponents.some(
+    (component) => component.status === "unscorable" && component.failureOwner === "collector",
+  );
+  const missingOrInvalidOutput = outputComponents.some(
+    (component) => component.status === "scored" && !component.passed,
+  );
+  const outcome = initial.outcomeClass === "completed" && collectorFailure
+    ? { outcomeClass: "collector_failure" as const, failureOwner: "collector" as const }
+    : initial.outcomeClass === "completed" && missingOrInvalidOutput
+      ? { outcomeClass: "incomplete_output" as const, failureOwner: "policy" as const }
+      : initial;
+  const rewardReceipt = createRewardReceipt({
+    id: `reward-${contentHash([
+      attemptReceipt.contentHash,
+      input.context.verifierSetRelease.contentHash,
+      artifactManifest.contentHash,
+      input.grade.id,
+    ]).slice(0, 24)}`,
+    attemptRef: { id: attemptReceipt.id, contentHash: attemptReceipt.contentHash },
+    verifierSet: input.context.verifierSetRelease,
+    artifactManifest,
+    ...outcome,
+    components: [...gradeComponents, ...outputComponents],
+    createdAt: input.grade.createdAt,
+    metadata: {
+      legacyGradeRef: input.grade.id,
+      legacyAttemptRef: input.attempt.id,
+    },
+  });
+  return { attemptReceipt, artifactManifest, rewardReceipt };
+}
+
+function portableRewardComponent(input: {
+  component: GradeComponent;
+  grader: PortableGraderSpec | undefined;
+  evidenceRef: ImmutableArtifactRef | null;
+  gradeScored: boolean;
+}): RewardComponentReceipt {
+  if (!input.grader) {
+    throw new Error(`Grade component ${input.component.graderId} has no admitted Verifier definition.`);
+  }
+  const status = input.gradeScored ? "scored" as const : "unscorable" as const;
+  const rewardEligible = status === "scored" && input.component.rewardEligible;
+  const evidenceRefs = input.evidenceRef ? [input.evidenceRef] : [];
   return {
-    protocolVersion: "openpond.environment.v1",
-    kind,
-    entrypoint: taskset.environment.entrypoint,
-    stateful: taskset.environment.stateful,
-    deterministicSeeds: taskset.environment.deterministicSeeds,
-    lifecycle: ["create", "reset", "step", "collect", "destroy"],
-    networkPolicy: taskset.environment.networkPolicy,
-    defaultTimeoutMs: taskset.environment.defaultTimeoutMs,
+    verifierId: input.component.graderId,
+    verifierVersion: input.component.graderVersion,
+    status,
+    rawScore: status === "scored" ? input.component.score : null,
+    normalizedScore: status === "scored" ? input.component.score : null,
+    weight: input.grader.weight,
+    passed: input.component.passed,
+    hardGate: input.component.hardGate,
+    rewardEligible,
+    rewardContribution: rewardEligible ? input.component.score : null,
+    failureOwner: input.component.passed
+      ? null
+      : status === "scored" ? "policy" : "verifier",
+    feedback: input.component.feedback ? [input.component.feedback] : [],
+    visibleEvidenceRefs: input.grader.privileged ? [] : evidenceRefs,
+    privilegedEvidenceRefs: input.grader.privileged ? evidenceRefs : [],
+    metadata: {
+      judge: input.component.judge ?? null,
+      calibrationStatus: input.component.calibrationStatus,
+      legacyEvidenceRefs: input.component.evidenceRefs,
+    },
   };
 }
 
-function portableTools(taskset: Taskset): ToolDeclaration[] {
-  const bindings = taskset.environment.actionBindings ?? [];
-  if (bindings.length) return bindings.map((binding) => ({
-    name: binding.modelToolName,
-    description: binding.description,
-    inputSchema: binding.inputSchema,
-    inputSchemaHash: hash(binding.actionSchemaHash),
-    sideEffect: binding.sideEffect,
-    timeoutMs: binding.timeoutMs,
-  }));
-  return taskset.environment.toolNames.map((name) => ({
-    name,
-    description: `Host-provided ${name} tool.`,
-    inputSchema: {},
-    inputSchemaHash: contentHash({}),
-    sideEffect: "write" as const,
-    timeoutMs: taskset.environment.defaultTimeoutMs,
-  }));
+function canonicalOutcome(
+  attempt: TaskAttemptResult,
+  grade: GradeResult,
+): {
+  outcomeClass: import("@openpond/evals").AttemptOutcomeClass;
+  failureOwner: import("@openpond/evals").FailureOwner | null;
+} {
+  const explicitOutcome = AttemptOutcomeClassSchema.safeParse(attempt.metadata.outcomeClass);
+  if (explicitOutcome.success) {
+    const explicitOwner = attempt.metadata.failureOwner === null
+      ? null
+      : FailureOwnerSchema.safeParse(attempt.metadata.failureOwner);
+    if (explicitOwner !== null && !explicitOwner.success) {
+      throw new Error("Attempt has an invalid explicit failure owner.");
+    }
+    return {
+      outcomeClass: explicitOutcome.data,
+      failureOwner: explicitOwner === null ? null : explicitOwner.data,
+    };
+  }
+  const failureClass = attemptFailureClass(attempt, grade);
+  if (failureClass) {
+    return classifyAttemptOutcome({
+      failureClass,
+      timeoutKind: attempt.metadata.timeoutKind === "task_deadline"
+        ? "task_deadline"
+        : "infrastructure_timeout",
+    });
+  }
+  if (grade.score === null) {
+    return { outcomeClass: "verifier_failure", failureOwner: "verifier" };
+  }
+  if (!grade.passed) {
+    return { outcomeClass: "policy_failure", failureOwner: "policy" };
+  }
+  return { outcomeClass: "completed", failureOwner: null };
 }
 
-function portableGrader(grader: GraderSpec): PortableGraderSpec {
-  const base = {
-    id: grader.id,
-    version: grader.version,
-    weight: grader.weight,
-    hardGate: grader.hardGate,
-    rewardEligible: grader.rewardEligible,
-    privileged: grader.privileged,
-  };
-  if (grader.kind === "model_judge") return {
-    ...base,
-    kind: "model_judge",
-    rubricRef: asset({ id: `rubric-${grader.id}`, path: `graders/${segment(grader.id)}/rubric.md`, hashInput: grader.rubric, mediaType: "text/markdown", visibility: "verifier" }),
-    calibrationStatus: grader.calibrationStatus,
-  };
-  if (grader.kind === "custom_verifier") return {
-    ...base,
-    kind: "custom_verifier",
-    verifierRef: asset({ id: `verifier-${grader.id}`, path: `graders/${segment(grader.id)}/verifier.json`, hashInput: { module: grader.module, exportName: grader.exportName }, mediaType: "application/json", visibility: "host_private" }),
-    timeoutMs: grader.timeoutMs,
-    networkPolicy: "none",
-  };
-  if (grader.kind === "human") return {
-    ...base,
-    kind: "human",
-    rubricRef: asset({ id: `rubric-${grader.id}`, path: `graders/${segment(grader.id)}/rubric.md`, hashInput: grader.rubric, mediaType: "text/markdown", visibility: "verifier" }),
-    reviewerRole: grader.reviewerRole,
-  };
-  return {
-    ...base,
-    kind: grader.kind === "file" ? "artifact"
-      : grader.kind === "diff" || grader.kind === "test" ? "state"
-      : grader.kind,
-    config: grader.config,
-  };
+function artifactValidationStatus(
+  value: unknown,
+): "not_requested" | "passed" | "failed" {
+  return value === "passed" || value === "failed" ? value : "not_requested";
 }
 
 function portableSkills(profile?: OpenPondProfileState | null): ImmutableAssetRef[] {
@@ -373,23 +458,6 @@ function portableAgents(profile?: OpenPondProfileState | null): ImmutableAssetRe
     mediaType: "application/vnd.openpond.agent-release+json",
     visibility: "policy",
   }));
-}
-
-function portableCapabilities(taskset: Taskset) {
-  const requirements = capabilityRequirements(taskset);
-  return requirements.map((requirement) => ({
-    ...requirement,
-    portability: requirement.id === "local-state" ? "host_adapter" as const : "portable" as const,
-  }));
-}
-
-function capabilityRequirements(taskset: Taskset) {
-  return [
-    ...(taskset.capabilities.requiresTools ? [{ id: "tools", required: true, scopes: taskset.environment.toolNames }] : []),
-    ...(taskset.capabilities.requiresState ? [{ id: "local-state", required: true, scopes: [] }] : []),
-    ...(taskset.capabilities.requiresPrivilegedGrading ? [{ id: "private-verifier", required: true, scopes: taskset.policy.hiddenGraderRefs }] : []),
-    ...taskset.policy.connectedAppScopes.map((scope) => ({ id: `connected-app-${segment(scope)}`, required: true, scopes: [scope] })),
-  ];
 }
 
 function runtimeAdapterId(taskset: Taskset): string {
