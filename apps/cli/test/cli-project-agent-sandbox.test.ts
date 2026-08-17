@@ -459,6 +459,7 @@ describe("project and agent sandbox CLI scenarios", () => {
         expect(paths).toContain(".openpond/validator-report.md");
         expect(paths).toContain(".openpond/source-upload-metadata.json");
         expect(paths).toContain(".openpond/vendor/openpond-agent-sdk.tgz");
+        expect(paths).toContain(".openpond/vendor/npm/fixture-project-dep.tgz");
         expect(paths).toContain(".openpond/vendor/npm/fixture-runtime-dep.tgz");
         expect(paths).not.toContain(".openpond/eval-results.json");
         expect(paths).not.toContain(".openpond/local-sdk-source/package.json");
@@ -478,6 +479,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           overrides?: Record<string, string>;
           devDependencies?: Record<string, string>;
           peerDependencies?: Record<string, string>;
+          packageManager?: string;
         };
         expect(uploadedPackage.dependencies?.["openpond-agent-sdk"]).toBe(
           "file:.openpond/vendor/openpond-agent-sdk.tgz"
@@ -485,11 +487,18 @@ describe("project and agent sandbox CLI scenarios", () => {
         expect(uploadedPackage.dependencies?.["fixture-runtime-dep"]).toBe(
           "file:.openpond/vendor/npm/fixture-runtime-dep.tgz"
         );
+        expect(uploadedPackage.dependencies?.["fixture-project-dep"]).toBe(
+          "file:.openpond/vendor/npm/fixture-project-dep.tgz"
+        );
+        expect(uploadedPackage.overrides?.["fixture-project-dep"]).toBe(
+          "file:.openpond/vendor/npm/fixture-project-dep.tgz"
+        );
         expect(uploadedPackage.overrides?.["fixture-runtime-dep"]).toBe(
           "file:.openpond/vendor/npm/fixture-runtime-dep.tgz"
         );
         expect(uploadedPackage.devDependencies?.["openpond-agent-sdk"]).toBeUndefined();
         expect(uploadedPackage.peerDependencies?.["openpond-agent-sdk"]).toBeUndefined();
+        expect(uploadedPackage.packageManager).toBeUndefined();
 
         const openPondYaml = body.entries?.find(
           (entry) => entry.path === "openpond.yaml"
@@ -556,7 +565,7 @@ describe("project and agent sandbox CLI scenarios", () => {
             versionSpec: "file:.openpond/local-sdk-source",
           },
           commands: {
-            inspect: "pnpm run agent:inspect",
+            inspect: "pnpm --silent run agent:inspect",
             build: "pnpm run agent:build",
             validate: "pnpm run agent:validate",
             eval: "pnpm run agent:eval",
@@ -575,6 +584,12 @@ describe("project and agent sandbox CLI scenarios", () => {
               path: ".openpond/vendor/openpond-agent-sdk.tgz",
             },
             dependencyPackages: [
+              {
+                packageName: "fixture-project-dep",
+                source: "npm_dependency_tarball",
+                versionSpec: "file:.openpond/fixture-project-dep",
+                path: ".openpond/vendor/npm/fixture-project-dep.tgz",
+              },
               {
                 packageName: "fixture-runtime-dep",
                 source: "npm_dependency_tarball",
@@ -637,7 +652,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           packageManager: "unknown",
           sourceTreeMode: "typescript_agent_sdk",
           commands: {
-            inspect: "pnpm run agent:inspect",
+            inspect: "pnpm --silent run agent:inspect",
             build: "pnpm run agent:build",
             validate: "pnpm run agent:validate",
             eval: "pnpm run agent:eval",
@@ -778,14 +793,16 @@ describe("project and agent sandbox CLI scenarios", () => {
         const uploadMetadataJson = JSON.parse(uploadMetadataSource) as {
           dependencySetup?: {
             sdkPackage?: { path?: string };
-            dependencyPackages?: Array<{ path?: string }>;
+            dependencyPackages?: Array<{ packageName?: string; path?: string }>;
           };
         };
         expect(uploadMetadataJson.dependencySetup?.sdkPackage?.path).toBe(
           ".openpond/vendor/openpond-agent-sdk.tgz"
         );
         expect(
-          uploadMetadataJson.dependencySetup?.dependencyPackages?.[0]?.path
+          uploadMetadataJson.dependencySetup?.dependencyPackages?.find(
+            (dependency) => dependency.packageName === "fixture-runtime-dep"
+          )?.path
         ).toBe(".openpond/vendor/npm/fixture-runtime-dep.tgz");
 
         const materializedDir = await mkdtemp(

@@ -1053,6 +1053,9 @@ export async function writeAgentSdkUploadFixture(projectDir: string): Promise<vo
   await mkdir(path.join(projectDir, ".openpond", "fixture-runtime-dep"), {
     recursive: true,
   });
+  await mkdir(path.join(projectDir, ".openpond", "fixture-project-dep"), {
+    recursive: true,
+  });
   await mkdir(path.join(projectDir, "node_modules", ".bin"), {
     recursive: true,
   });
@@ -1063,6 +1066,7 @@ export async function writeAgentSdkUploadFixture(projectDir: string): Promise<vo
         type: "module",
         dependencies: {
           "openpond-agent-sdk": "file:.openpond/local-sdk-source",
+          "fixture-project-dep": "file:.openpond/fixture-project-dep",
         },
         scripts: {
           "agent:inspect": "openpond-agent inspect --json",
@@ -1094,6 +1098,26 @@ export async function writeAgentSdkUploadFixture(projectDir: string): Promise<vo
       null,
       2
     ),
+    "utf8"
+  );
+  await writeFile(
+    path.join(projectDir, ".openpond", "fixture-project-dep", "package.json"),
+    JSON.stringify(
+      {
+        name: "fixture-project-dep",
+        version: "0.0.0-test",
+        type: "module",
+        main: "./index.js",
+        files: ["index.js"],
+      },
+      null,
+      2
+    ),
+    "utf8"
+  );
+  await writeFile(
+    path.join(projectDir, ".openpond", "fixture-project-dep", "index.js"),
+    "export const projectDependency = true;\n",
     "utf8"
   );
   await writeFile(

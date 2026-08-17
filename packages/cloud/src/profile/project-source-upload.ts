@@ -24,6 +24,7 @@ import {
   text,
 } from "./project-source-upload-agent-sdk.js";
 import {
+  agentSdkRunJsonScriptCommand,
   agentSdkRunScriptCommand,
   detectAgentSdkPackageManager,
   type AgentSdkPackageManager,
@@ -556,7 +557,8 @@ function buildAgentSdkCommandHints(
       packageJson,
       packageManager,
       "agent:inspect",
-      "openpond-agent inspect --json"
+      "openpond-agent inspect --json",
+      true,
     ),
     build: buildAgentSdkCommandHint(
       packageJson,
@@ -583,7 +585,8 @@ function buildAgentSdkCommandHint(
   packageJson: Record<string, unknown>,
   packageManager: AgentSdkPackageManager,
   scriptName: string,
-  fallback: string
+  fallback: string,
+  jsonOutput = false,
 ): string {
   const scripts = packageJson.scripts;
   const hasScript =
@@ -592,7 +595,9 @@ function buildAgentSdkCommandHint(
     !Array.isArray(scripts) &&
     typeof (scripts as Record<string, unknown>)[scriptName] === "string";
   if (!hasScript) return fallback;
-  return agentSdkRunScriptCommand(packageManager, scriptName);
+  return jsonOutput
+    ? agentSdkRunJsonScriptCommand(packageManager, scriptName)
+    : agentSdkRunScriptCommand(packageManager, scriptName);
 }
 
 function readOpenPondAgentSdkVersionSpec(

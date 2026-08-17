@@ -56,3 +56,14 @@ export function agentSdkRunScriptCommand(
   if (packageManager === "bun") return `bun run ${scriptName}`;
   return `pnpm run ${scriptName}`;
 }
+
+export function agentSdkRunJsonScriptCommand(
+  packageManager: AgentSdkPackageManager,
+  scriptName: string,
+): string {
+  if (packageManager === "pnpm") return `pnpm --silent run ${scriptName}`;
+  if (packageManager === "yarn") return `yarn --silent ${scriptName}`;
+  if (packageManager === "npm") return `npm run --silent ${scriptName}`;
+  if (packageManager === "bun") return `bun run --silent ${scriptName}`;
+  return `pnpm --silent run ${scriptName}`;
+}

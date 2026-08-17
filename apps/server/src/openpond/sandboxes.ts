@@ -596,6 +596,7 @@ export async function sandboxRequestPayload(
         ),
         method: "POST",
         body,
+        timeoutMs: 15 * 60 * 1000,
       })),
       account,
     };
@@ -1356,6 +1357,7 @@ async function requestSandboxPublicApiRoot(params: {
   path: string;
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: Record<string, unknown>;
+  timeoutMs?: number;
 }): Promise<Record<string, unknown>> {
   const response = await apiFetch(
     sandboxPublicApiRootUrl(params.sandboxApiUrl),
@@ -1364,6 +1366,9 @@ async function requestSandboxPublicApiRoot(params: {
     {
       method: params.method ?? "GET",
       ...(params.body ? { body: JSON.stringify(params.body) } : {}),
+      ...(params.timeoutMs !== undefined
+        ? { timeoutMs: params.timeoutMs }
+        : {}),
     }
   );
   const payload = (await response.json().catch(() => ({}))) as Record<

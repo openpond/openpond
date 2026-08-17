@@ -1,4 +1,8 @@
-import { apiFetch, readApiJson } from "../api/core.js";
+import {
+  apiFetch,
+  readApiJson,
+  type ApiFetchOptions,
+} from "../api/core.js";
 import { DEFAULT_OPENPOND_API_BASE_URL } from "../urls.js";
 import { asyncRequestHeaders } from "./async-request-options.js";
 import { normalizePtyInput, streamSandboxEventOutput } from "./stream.js";
@@ -710,7 +714,7 @@ export class OpenPondSandboxInstanceClient {
 
   async requestApiRoot<T>(
     path: string,
-    init: RequestInit = {}
+    init: ApiFetchOptions = {}
   ): Promise<T> {
     const response = await apiFetch(this.apiRootUrl, this.apiKey, path, init);
     return readApiJson<T>(response, "OpenPond API request");

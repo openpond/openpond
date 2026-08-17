@@ -523,6 +523,7 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
       {
         method: "POST",
         body: JSON.stringify(body),
+        timeoutMs: 15 * 60 * 1000,
       }
     );
   }

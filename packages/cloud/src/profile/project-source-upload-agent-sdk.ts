@@ -12,7 +12,6 @@ import {
   type AgentSdkPackageManager,
 } from "./project-source-upload-bun-compat.js";
 
-const OPENPOND_PNPM_PACKAGE_MANAGER = "pnpm@11.13.0";
 const AGENT_SDK_VENDOR_TARBALL_PATH =
   ".openpond/vendor/openpond-agent-sdk.tgz";
 const AGENT_SDK_VENDOR_NPM_DEPENDENCY_DIR = ".openpond/vendor/npm";
@@ -67,6 +66,8 @@ export async function buildAgentSdkMaterializedDependency(
     const sdkDependencyTarballs = await packAgentSdkRuntimeDependencyTarballs({
       sdkPackageJson: sdkSource.packageJson,
       dependencyBaseDir: sdkSource.dependencyBaseDir,
+      projectPackageJson: packageJson,
+      projectPath,
       tempDir,
     });
     const packageManager = detectAgentSdkPackageManager(projectPath, packageJson);
@@ -158,27 +159,42 @@ async function packOpenPondAgentSdkPackageRoot(
 async function packAgentSdkRuntimeDependencyTarballs(params: {
   sdkPackageJson: Record<string, unknown>;
   dependencyBaseDir: string;
+  projectPackageJson: Record<string, unknown>;
+  projectPath: string;
   tempDir: string;
 }): Promise<AgentSdkMaterializedTarball[]> {
-  const dependencies = recordStringMap(params.sdkPackageJson.dependencies);
-  const pending = Object.entries(dependencies)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([packageName, versionSpec]) => ({ packageName, versionSpec }));
+  const sdkDependencies = recordStringMap(params.sdkPackageJson.dependencies);
+  const projectDependencies = recordStringMap(
+    params.projectPackageJson.dependencies,
+  );
+  delete projectDependencies["openpond-agent-sdk"];
+  const pending = [
+    ...Object.entries(sdkDependencies).map(([packageName, versionSpec]) => ({
+      packageName,
+      versionSpec,
+      dependencyBaseDir: params.dependencyBaseDir,
+    })),
+    ...Object.entries(projectDependencies).map(([packageName, versionSpec]) => ({
+      packageName,
+      versionSpec,
+      dependencyBaseDir: params.projectPath,
+    })),
+  ].sort((left, right) => left.packageName.localeCompare(right.packageName));
   const seen = new Set<string>();
   const tarballs: AgentSdkMaterializedTarball[] = [];
   while (pending.length > 0) {
-    const { packageName, versionSpec } = pending.shift()!;
+    const { packageName, versionSpec, dependencyBaseDir } = pending.shift()!;
     if (seen.has(packageName)) continue;
     seen.add(packageName);
     const packTarget = npmPackTargetForDependency({
       packageName,
       versionSpec,
-      dependencyBaseDir: params.dependencyBaseDir,
+      dependencyBaseDir,
     });
     const pack = await runCommand(
       "npm",
       ["pack", "--silent", "--pack-destination", params.tempDir, packTarget],
-      { cwd: params.dependencyBaseDir }
+      { cwd: dependencyBaseDir }
     );
     if (pack.code !== 0) {
       const details = [pack.stderr.trim(), pack.stdout.trim()]
@@ -210,13 +226,21 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
     for (const [dependencyName, dependencySpec] of Object.entries(
       recordStringMap(packedPackageJson.dependencies),
     )) {
-      pending.push({ packageName: dependencyName, versionSpec: dependencySpec });
+      pending.push({
+        packageName: dependencyName,
+        versionSpec: dependencySpec,
+        dependencyBaseDir,
+      });
     }
     for (const [dependencyName, dependencySpec] of Object.entries(
       recordStringMap(packedPackageJson.optionalDependencies),
     )) {
       if (!isSupportedSandboxOptionalDependency(dependencyName)) continue;
-      pending.push({ packageName: dependencyName, versionSpec: dependencySpec });
+      pending.push({
+        packageName: dependencyName,
+        versionSpec: dependencySpec,
+        dependencyBaseDir,
+      });
     }
   }
   return tarballs.sort((left, right) => left.packageName.localeCompare(right.packageName));
@@ -410,8 +434,11 @@ function rewriteAgentSdkPackageJsonForMaterialization(
   if (Object.keys(overrides).length > 0) {
     rewritten.overrides = overrides;
   }
-  if (packageManager === "unknown") {
-    rewritten.packageManager = OPENPOND_PNPM_PACKAGE_MANAGER;
+  if (packageManager === "pnpm" || packageManager === "unknown") {
+    // The sandbox runtime already pins pnpm. Keeping a different project-level
+    // packageManager pin makes pnpm recursively install itself in an offline
+    // guest before dependency setup can begin.
+    delete rewritten.packageManager;
   }
 
   for (const key of ["devDependencies", "peerDependencies"]) {
