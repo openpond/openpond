@@ -120,34 +120,38 @@ try {
           artifactCount: canonical.artifacts.length,
         }),
       });
-      trigger = await pendingRefinerTrigger({
-        store: boundaryStore,
-        workspaceId: admittedRuntime.workspace.id,
-        turnId: boundary.turn.id,
-      });
-      if (!trigger) {
-        const detection = await recordLocalHarnessImprovementBoundary({
+      if (canonical.rewardReceipt.learningEligible) {
+        trigger = await pendingRefinerTrigger({
           store: boundaryStore,
-          session: boundary.session,
-          turn: boundary.turn,
-          boundaryKind: "turn_completed",
+          workspaceId: admittedRuntime.workspace.id,
+          turnId: boundary.turn.id,
         });
-        trigger = detection?.trigger ?? null;
-      }
-      if (trigger?.decision === "queue_refiner") {
-        const result = await runLocalHarnessRefinerWorker({
-          store: boundaryStore,
-          storeDir: STORE_DIR,
-          trigger,
-          signal: new AbortController().signal,
-          stream: ({ messages, signal }) => refinerModelStream({
-            messages,
-            signal,
-            triggerId: trigger!.id,
-            usage: refinerUsage,
-          }),
-        });
-        outcome = result.outcome;
+        if (!trigger) {
+          const detection = await recordLocalHarnessImprovementBoundary({
+            store: boundaryStore,
+            session: boundary.session,
+            turn: boundary.turn,
+            boundaryKind: "turn_completed",
+          });
+          trigger = detection?.trigger ?? null;
+        }
+        if (trigger?.decision === "queue_refiner") {
+          const result = await runLocalHarnessRefinerWorker({
+            store: boundaryStore,
+            storeDir: STORE_DIR,
+            trigger,
+            signal: new AbortController().signal,
+            stream: ({ messages, signal }) => refinerModelStream({
+              messages,
+              signal,
+              triggerId: trigger!.id,
+              usage: refinerUsage,
+            }),
+          });
+          outcome = result.outcome;
+        }
+      } else {
+        process.stdout.write(`REFINER_SKIP ${taskId(studyTask.id)} unscorable\n`);
       }
       afterRuntime = await requireSelectedRuntime(boundaryStore);
     } finally {
