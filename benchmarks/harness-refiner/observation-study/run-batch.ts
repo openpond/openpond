@@ -269,7 +269,9 @@ function selectTasks(tasks: ObservationStudyTask[]): ObservationStudyTask[] {
   const order = [...GATE_ORDER, ...tasks.map((task) => task.id).filter((id) => !GATE_ORDER.includes(id))];
   const requested = (process.env.OPENPOND_REFINER_OBSERVATION_TASK_IDS ?? "")
     .split(",")
-    .map((value) => Number(value.trim()))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map(Number)
     .filter((value) => Number.isInteger(value));
   const selectedIds = requested.length
     ? order.filter((id) => requested.includes(id))
