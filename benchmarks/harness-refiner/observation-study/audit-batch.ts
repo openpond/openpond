@@ -55,6 +55,7 @@ const rows = tasks.map((task) => {
     admittedHarness,
     resultingHarness,
     harnessChanged: stringValue(admittedHarness?.contentHash) !== stringValue(resultingHarness?.contentHash),
+    model: rolloutRecord.model,
     reward: {
       status: rewardReceipt.status,
       value: rewardReceipt.reward,
@@ -85,6 +86,11 @@ const invalidRows = rows.filter((row) => Object.values(row.verification).some((v
 if (invalidRows.length) {
   throw new Error(`Canonical verification failed for prompts ${invalidRows.map((row) => row.promptId).join(", ")}.`);
 }
+const modelTaskCounts = rows.reduce<Record<string, number>>((counts, row) => {
+  const key = `${row.model.provider}/${row.model.model}`;
+  counts[key] = (counts[key] ?? 0) + 1;
+  return counts;
+}, {});
 const summary = {
   attempted: rows.length,
   scored: rows.filter((row) => row.reward.status === "scored").length,
@@ -101,6 +107,7 @@ const summary = {
   missingRequiredOutputs: rows.reduce((total, row) => total + row.artifacts.missing, 0),
   foregroundTokens: rows.reduce((total, row) => total + row.usage.foregroundTokens, 0),
   backgroundTokens: rows.reduce((total, row) => total + row.usage.backgroundTokens, 0),
+  modelTaskCounts,
 };
 const content = {
   schemaVersion: "openpond.harnessRefinerObservationAudit.v2",
@@ -110,6 +117,7 @@ const content = {
   generatedAt: new Date().toISOString(),
   initialHarness: receipt.initialHarness,
   finalHarness: receipt.finalHarness,
+  modelSegments: receipt.modelSegments,
   summary,
   tasks: rows,
 };

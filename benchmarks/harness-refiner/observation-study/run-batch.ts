@@ -39,6 +39,14 @@ import {
   taskId,
   type ObservationStudyTask,
 } from "./study-taskset.js";
+import {
+  completedObservationPromptIds,
+  observationBatchComplete,
+  priorUnscorableAttemptIds,
+  resolveObservationModel,
+  reusableCanonicalAttempt,
+  upsertObservationTask,
+} from "./observation-resume.js";
 
 const SERVER_URL = process.env.OPENPOND_APP_SERVER_URL?.trim() || "http://127.0.0.1:17874";
 const STORE_DIR = process.env.OPENPOND_APP_HOME?.trim();
@@ -46,7 +54,7 @@ const OUTPUT_PATH = path.resolve(
   process.env.OPENPOND_REFINER_OBSERVATION_OUTPUT?.trim()
     || path.join("output", "harness-refiner-observation-study", "2026-08-17", "canonical-50.json"),
 );
-const MODEL: ChatModelRef = { providerId: "openpond", modelId: "openpond-chat" };
+const MODEL: ChatModelRef = resolveObservationModel(process.env);
 const ORDER_SEED = "refiner-observation-2026-08-17-v2";
 const GATE_ORDER = [3, 49, 45, 22, 11];
 const RESUME = process.env.OPENPOND_REFINER_OBSERVATION_RESUME === "1";
@@ -81,8 +89,9 @@ try {
   });
   const receipt = await loadOrCreateReceipt(initialRuntime);
   receipt.selectedTaskIds = orderedTasks.map((task) => task.id);
-  const completedIds = new Set(receipt.tasks.map((task) => task.promptId));
+  const completedIds = completedObservationPromptIds(receipt.tasks);
   const pendingTasks = orderedTasks.filter((task) => !completedIds.has(task.id));
+  const modelSegment = pendingTasks.length ? ensureModelSegment(receipt) : null;
   if (pendingTasks.length) {
     receipt.completedAt = null;
     receipt.updatedAt = new Date().toISOString();
@@ -157,12 +166,14 @@ try {
     } finally {
       await boundaryStore.close();
     }
-    receipt.tasks.push({
+    const receiptTask = {
       promptId: studyTask.id,
       outputKind: studyTask.outputKind,
       sessionId: boundary.session.id,
       turnId: boundary.turn.id,
       attemptId: attempt.id,
+      model: MODEL,
+      priorUnscorableAttemptIds: await loadPriorUnscorableAttemptIds(task.id, attempt.id),
       admittedHarness: releaseRef(admittedRuntime),
       resultingHarness: releaseRef(afterRuntime),
       canonical: {
@@ -181,7 +192,9 @@ try {
       trigger,
       outcome,
       refinerUsage,
-    });
+    };
+    upsertObservationTask(receipt.tasks, receiptTask);
+    modelSegment?.taskIds.push(studyTask.id);
     receipt.updatedAt = new Date().toISOString();
     receipt.finalHarness = releaseRef(afterRuntime);
     await persistReceipt(receipt);
@@ -191,7 +204,9 @@ try {
       + `foreground_tokens=${usageTotal(attempt.metadata.usage)} refiner_tokens=${usageTotal(refinerUsage)}\n`,
     );
   }
-  receipt.completedAt = receipt.tasks.length === orderedTasks.length ? new Date().toISOString() : null;
+  receipt.completedAt = observationBatchComplete(receipt.selectedTaskIds, receipt.tasks)
+    ? new Date().toISOString()
+    : null;
   receipt.updatedAt = new Date().toISOString();
   receipt.finalHarness = releaseRef(await requireSelectedRuntime());
   await persistReceipt(receipt);
@@ -214,6 +229,11 @@ type ObservationReceipt = {
   completedAt: string | null;
   initialHarness: ReturnType<typeof releaseRef>;
   finalHarness: ReturnType<typeof releaseRef>;
+  modelSegments: Array<{
+    model: ChatModelRef;
+    taskIds: number[];
+    startedAt: string;
+  }>;
   tasks: Array<Record<string, unknown> & { promptId: number }>;
 };
 
@@ -234,9 +254,7 @@ async function loadFreshSelectedRuntime(): Promise<SelectedRuntime> {
 
 async function recoverCanonicalEvidence(sourceTaskId: string): Promise<CanonicalEvidence | null> {
   const attempts = await store.listTaskAttempts("harness-refiner-observation-50-v2");
-  const attempt = attempts.filter((candidate) =>
-    candidate.taskId === sourceTaskId && candidate.metadata.portableRewardReceipt
-  ).at(-1);
+  const attempt = reusableCanonicalAttempt(attempts, sourceTaskId, MODEL);
   if (!attempt) return null;
   const artifacts = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
   return {
@@ -247,6 +265,17 @@ async function recoverCanonicalEvidence(sourceTaskId: string): Promise<Canonical
     rewardReceipt: RewardReceiptSchema.parse(attempt.metadata.portableRewardReceipt),
     rolloutRecord: CanonicalRolloutRecordSchema.parse(attempt.metadata.portableCanonicalRollout),
   };
+}
+
+async function loadPriorUnscorableAttemptIds(
+  sourceTaskId: string,
+  selectedAttemptId: string,
+): Promise<string[]> {
+  return priorUnscorableAttemptIds(
+    await store.listTaskAttempts("harness-refiner-observation-50-v2"),
+    sourceTaskId,
+    selectedAttemptId,
+  );
 }
 
 async function pendingRefinerTrigger(input: {
@@ -387,6 +416,7 @@ async function loadOrCreateReceipt(runtime: SelectedRuntime): Promise<Observatio
     if (parsed.schemaVersion !== "openpond.harnessRefinerObservationBatch.v3" || parsed.orderSeed !== ORDER_SEED) {
       throw new Error("The requested resume receipt is not compatible with this observation protocol.");
     }
+    parsed.modelSegments ??= modelSegmentsFromTasks(parsed);
     return parsed;
   }
   const now = new Date().toISOString();
@@ -402,10 +432,40 @@ async function loadOrCreateReceipt(runtime: SelectedRuntime): Promise<Observatio
     completedAt: null,
     initialHarness: releaseRef(runtime),
     finalHarness: releaseRef(runtime),
+    modelSegments: [],
     tasks: [],
   };
   await persistReceipt(receipt);
   return receipt;
+}
+
+function ensureModelSegment(receipt: ObservationReceipt): ObservationReceipt["modelSegments"][number] {
+  const latest = receipt.modelSegments.at(-1);
+  if (latest?.model.providerId === MODEL.providerId && latest.model.modelId === MODEL.modelId) {
+    return latest;
+  }
+  const segment = { model: MODEL, taskIds: [], startedAt: new Date().toISOString() };
+  receipt.modelSegments.push(segment);
+  return segment;
+}
+
+function modelSegmentsFromTasks(receipt: ObservationReceipt): ObservationReceipt["modelSegments"] {
+  const segments: ObservationReceipt["modelSegments"] = [];
+  for (const task of receipt.tasks) {
+    const rollout = recordValue(recordValue(task.canonical).rolloutRecord);
+    const rolloutModel = recordValue(rollout.model);
+    const model = {
+      providerId: typeof rolloutModel.provider === "string" ? rolloutModel.provider : receipt.runtime.model.providerId,
+      modelId: typeof rolloutModel.model === "string" ? rolloutModel.model : receipt.runtime.model.modelId,
+    };
+    let segment = segments.at(-1);
+    if (segment?.model.providerId !== model.providerId || segment.model.modelId !== model.modelId) {
+      segment = { model, taskIds: [], startedAt: receipt.startedAt };
+      segments.push(segment);
+    }
+    segment.taskIds.push(task.promptId);
+  }
+  return segments;
 }
 
 function structuralPass(attempt: TaskAttemptResult, task: ObservationStudyTask): boolean {

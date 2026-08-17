@@ -11,6 +11,7 @@ const skippedDirectories = new Set([
   "coverage",
   "dist",
   "node_modules",
+  "output",
   "release",
   "release-cli",
   "stage",
