@@ -83,6 +83,11 @@ try {
   receipt.selectedTaskIds = orderedTasks.map((task) => task.id);
   const completedIds = new Set(receipt.tasks.map((task) => task.promptId));
   const pendingTasks = orderedTasks.filter((task) => !completedIds.has(task.id));
+  if (pendingTasks.length) {
+    receipt.completedAt = null;
+    receipt.updatedAt = new Date().toISOString();
+    await persistReceipt(receipt);
+  }
 
   for (const [index, studyTask] of pendingTasks.entries()) {
     const sequence = completedIds.size + index + 1;
