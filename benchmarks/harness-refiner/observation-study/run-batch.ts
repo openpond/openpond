@@ -103,7 +103,7 @@ try {
     const passed = canonical.rewardReceipt.passed;
     const boundaryStore = new SqliteStore(STORE_DIR);
     let boundary: Awaited<ReturnType<typeof materializeRefinerBoundary>>;
-    let detection: Awaited<ReturnType<typeof recordLocalHarnessImprovementBoundary>>;
+    let trigger: RefinementTriggerDecision | null = null;
     let outcome: HarnessRefinerOutcome | null = null;
     const refinerUsage: unknown[] = [];
     let afterRuntime: SelectedRuntime;
@@ -120,31 +120,32 @@ try {
           artifactCount: canonical.artifacts.length,
         }),
       });
-      detection = await recordLocalHarnessImprovementBoundary({
+      trigger = await pendingRefinerTrigger({
         store: boundaryStore,
-        session: boundary.session,
-        turn: boundary.turn,
-        boundaryKind: "turn_completed",
+        workspaceId: admittedRuntime.workspace.id,
+        turnId: boundary.turn.id,
       });
-      if (detection?.trigger.decision === "queue_refiner") {
+      if (!trigger) {
+        const detection = await recordLocalHarnessImprovementBoundary({
+          store: boundaryStore,
+          session: boundary.session,
+          turn: boundary.turn,
+          boundaryKind: "turn_completed",
+        });
+        trigger = detection?.trigger ?? null;
+      }
+      if (trigger?.decision === "queue_refiner") {
         const result = await runLocalHarnessRefinerWorker({
           store: boundaryStore,
           storeDir: STORE_DIR,
-          trigger: detection.trigger,
+          trigger,
           signal: new AbortController().signal,
-          stream: async function* ({ messages, signal }) {
-            for await (const delta of streamOpenPondHostedChatTurn({
-              model: MODEL.modelId,
-              messages,
-              requestId: `observation-refiner:${detection!.trigger.id}`,
-              reasoningEffort: "low",
-              maxTokens: 4_096,
-              signal,
-            })) {
-              if (delta.type === "text_delta" && delta.text) yield { text: delta.text };
-              if (delta.type === "usage") refinerUsage.push(delta.usage);
-            }
-          },
+          stream: ({ messages, signal }) => refinerModelStream({
+            messages,
+            signal,
+            triggerId: trigger!.id,
+            usage: refinerUsage,
+          }),
         });
         outcome = result.outcome;
       }
@@ -173,7 +174,7 @@ try {
         artifactCount: canonical.artifacts.length,
       },
       foregroundUsage: attempt.metadata.usage ?? [],
-      trigger: detection?.trigger ?? null,
+      trigger,
       outcome,
       refinerUsage,
     });
@@ -182,7 +183,7 @@ try {
     await persistReceipt(receipt);
     process.stdout.write(
       `TASK_COMPLETE ${taskId(studyTask.id)} reward=${canonical.rewardReceipt.reward ?? "unscorable"} `
-      + `refiner=${classifyOutcome(outcome, detection?.trigger ?? null)} `
+      + `refiner=${classifyOutcome(outcome, trigger)} `
       + `foreground_tokens=${usageTotal(attempt.metadata.usage)} refiner_tokens=${usageTotal(refinerUsage)}\n`,
     );
   }
@@ -242,6 +243,32 @@ async function recoverCanonicalEvidence(sourceTaskId: string): Promise<Canonical
     rewardReceipt: RewardReceiptSchema.parse(attempt.metadata.portableRewardReceipt),
     rolloutRecord: CanonicalRolloutRecordSchema.parse(attempt.metadata.portableCanonicalRollout),
   };
+}
+
+async function pendingRefinerTrigger(input: {
+  store: SqliteStore;
+  workspaceId: string;
+  turnId: string;
+}): Promise<RefinementTriggerDecision | null> {
+  const triggers = (await input.store.listHarnessImprovementArtifacts(
+    input.workspaceId,
+    "trigger_decision",
+    1_000,
+  ) as RefinementTriggerDecision[]).filter((candidate) =>
+    candidate.turnId === input.turnId && candidate.decision === "queue_refiner"
+  );
+  const completed = new Set(
+    (await input.store.listHarnessImprovementArtifacts(
+      input.workspaceId,
+      "refiner_outcome",
+      1_000,
+    ) as HarnessRefinerOutcome[]).map((outcome) =>
+      `${outcome.trigger.id}:${outcome.trigger.contentHash}`
+    ),
+  );
+  return triggers.find((candidate) =>
+    !completed.has(`${candidate.id}:${candidate.contentHash}`)
+  ) ?? null;
 }
 
 async function executeCanonicalAttempt(input: {
@@ -429,18 +456,62 @@ async function materializeRefinerBoundary(input: {
   const reward = recordValue(input.rewardPacket.rewardReceipt);
   const passed = reward.status === "scored" && reward.passed === true;
   const evidence = JSON.stringify(input.rewardPacket);
-  await input.store.appendRuntimeEvent(event({
-    sessionId,
-    turnId,
-    name: "diagnostic",
-    source: "server",
-    action: "taskset_grade",
-    status: passed ? "completed" : "failed",
-    output: evidence,
-    error: passed ? undefined : evidence,
-    data: { result: { output: evidence, passed, status: reward.status, reward: reward.reward } },
-  }));
+  const existingEvidence = (await input.store.runtimeEventsForSession(sessionId, { limit: 10_000 }))
+    .some((runtimeEvent) =>
+      runtimeEvent.turnId === turnId
+      && runtimeEvent.action === "taskset_grade"
+      && runtimeEvent.output === evidence
+    );
+  if (!existingEvidence) {
+    await input.store.appendRuntimeEvent(event({
+      sessionId,
+      turnId,
+      name: "diagnostic",
+      source: "server",
+      action: "taskset_grade",
+      status: passed ? "completed" : "failed",
+      output: evidence,
+      error: passed ? undefined : evidence,
+      data: { result: { output: evidence, passed, status: reward.status, reward: reward.reward } },
+    }));
+  }
   return { session, turn };
+}
+
+async function* refinerModelStream(input: {
+  messages: Parameters<typeof streamOpenPondHostedChatTurn>[0]["messages"];
+  signal: AbortSignal;
+  triggerId: string;
+  usage: unknown[];
+}): AsyncIterable<{ text?: string }> {
+  for (let retry = 0; retry < 3; retry += 1) {
+    let emitted = false;
+    try {
+      for await (const delta of streamOpenPondHostedChatTurn({
+        model: MODEL.modelId,
+        messages: input.messages,
+        requestId: `observation-refiner:${input.triggerId}:${retry}`,
+        reasoningEffort: "low",
+        maxTokens: 4_096,
+        signal: input.signal,
+      })) {
+        if (delta.type === "text_delta" && delta.text) {
+          emitted = true;
+          yield { text: delta.text };
+        }
+        if (delta.type === "usage") input.usage.push(delta.usage);
+      }
+      return;
+    } catch (error) {
+      if (emitted || retry === 2 || !transientHostedError(error)) throw error;
+      process.stdout.write(`REFINER_RETRY trigger=${input.triggerId} attempt=${retry + 2}/3\n`);
+    }
+  }
+}
+
+function transientHostedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /request failed: (429|5\d\d)\b/.test(message);
 }
 
 async function* hostedModelStream(
