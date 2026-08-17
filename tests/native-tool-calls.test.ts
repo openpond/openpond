@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   assistantMessageForNativeToolCalls,
   NativeToolCallAccumulator,
+  toolResultMessage,
 } from "../apps/server/src/openpond/native-tool-calls";
 
 describe("native tool call accumulator", () => {
@@ -152,5 +153,34 @@ describe("native tool call accumulator", () => {
       continuation: { kind: "responses_reasoning_items", items: [reasoningItem] },
       tool_calls: [toolCalls[0]!.hostedToolCall],
     });
+  });
+
+  test("bounds replay-only tool arguments and results while preserving valid JSON", () => {
+    const large = "x".repeat(5_000);
+    const toolCalls = [{
+      id: "call_large",
+      name: "work_exec",
+      argumentsJson: JSON.stringify({ command: large, timeoutSeconds: 30 }),
+      hostedToolCall: {
+        id: "call_large",
+        type: "function",
+        function: { name: "work_exec", arguments: "{}" },
+      },
+    }];
+    const assistant = assistantMessageForNativeToolCalls("", toolCalls, {
+      maxArgumentCharacters: 800,
+    });
+    const replayedArguments = assistant.tool_calls?.[0]?.function?.arguments ?? "";
+    expect(replayedArguments.length).toBeLessThanOrEqual(800);
+    expect(() => JSON.parse(replayedArguments)).not.toThrow();
+
+    const result = toolResultMessage({
+      toolCallId: "call_large",
+      name: "work_exec",
+      ok: true,
+      contentText: JSON.stringify({ ok: true, output: large }),
+    }, { maxContentCharacters: 800 });
+    expect(result.content?.length).toBeLessThanOrEqual(800);
+    expect(() => JSON.parse(result.content ?? "")).not.toThrow();
   });
 });

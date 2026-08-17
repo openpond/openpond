@@ -33,6 +33,7 @@ export async function loadBoundedRefinerContext(
   trigger: RefinementTriggerDecision,
   observations: ImprovementObservation[],
   workspaceId?: string,
+  options?: { allowMissingRuntimeEvents?: boolean },
 ): Promise<{
   task: {
     prompt: string | null;
@@ -106,10 +107,12 @@ export async function loadBoundedRefinerContext(
     ),
   );
   const exactEvents = events.filter((runtimeEvent) => eventRefs.has(runtimeEvent.id));
-  for (const [eventId, reference] of eventRefs) {
-    const runtimeEvent = exactEvents.find((candidate) => candidate.id === eventId);
-    if (!runtimeEvent || contentHash(runtimeEvent) !== reference.contentHash) {
-      throw new Error(`Refiner runtime event ${eventId} is unavailable or hash-mismatched.`);
+  if (!options?.allowMissingRuntimeEvents) {
+    for (const [eventId, reference] of eventRefs) {
+      const runtimeEvent = exactEvents.find((candidate) => candidate.id === eventId);
+      if (!runtimeEvent || contentHash(runtimeEvent) !== reference.contentHash) {
+        throw new Error(`Refiner runtime event ${eventId} is unavailable or hash-mismatched.`);
+      }
     }
   }
   const evidenceEvents = selectRefinerEvidenceWindow({

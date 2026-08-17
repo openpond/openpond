@@ -8,7 +8,7 @@ import {
   TurnSchema,
   type RuntimeEvent,
 } from "@openpond/contracts";
-import type { LocalHarnessRefinerDecision } from "@openpond/harness";
+import type { LocalHarnessRefinerDecisionV2 } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createBackgroundWorkerQueue } from "../runtime/background-worker-queue.js";
@@ -26,7 +26,7 @@ const SAFE_COMMAND_GUIDANCE =
 
 const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
 
-function refinerDelta(decision: LocalHarnessRefinerDecision) {
+function refinerDelta(decision: LocalHarnessRefinerDecisionV2) {
   return { type: "text_delta" as const, text: JSON.stringify(decision), raw: null };
 }
 
@@ -101,7 +101,7 @@ describe("Local Harness refinement acceptance", () => {
         const evidence = messages.at(-1)?.content ?? "";
         if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
           yield refinerDelta({
-              schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+              schemaVersion: "openpond.localHarnessRefinerDecision.v2",
               decision: "no_action",
               reason: "The completed turn succeeded with the existing safe converter guidance.",
           });
@@ -109,12 +109,17 @@ describe("Local Harness refinement acceptance", () => {
         }
         const anchor = initialInstructions.trimEnd().split("\n").at(-1)!;
         yield refinerDelta({
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "prompt",
             operation: "update",
             target: "instructions/system.md",
             summary: "Avoid the recovered legacy converter detour.",
+            evidenceBasis: {
+              kind: "single_deterministic",
+              supportingEvidenceIds: [first.turn.id],
+              counterevidence: [],
+            },
             createContent: null,
             find: anchor,
             replace: `${anchor}\n\n${SAFE_COMMAND_GUIDANCE}`,
@@ -145,6 +150,35 @@ describe("Local Harness refinement acceptance", () => {
           status: "completed",
           data: expect.objectContaining({
             workspaceAdvance: "advanced",
+            activity: expect.objectContaining({
+              schemaVersion: "openpond.localHarnessRefinerActivityDisplay.v1",
+              visibility: "material_only",
+              state: "completed",
+              result: "applied",
+              decision: "propose",
+              route: "prompt",
+              operation: "update",
+              target: "instructions/system.md",
+              evidenceBasis: {
+                kind: "single_deterministic",
+                supportingEvidenceIds: [first.turn.id],
+                counterevidence: [],
+              },
+              critiqueStatus: "passed",
+              validationStatus: "passed",
+              inputHarness: expect.objectContaining({
+                contentHash: initialRuntime.release.harnessRelease.contentHash,
+              }),
+              outputHarness: expect.objectContaining({
+                contentHash: expect.any(String),
+              }),
+              edits: expect.arrayContaining([
+                expect.objectContaining({
+                  operation: "update",
+                  target: "instructions/system.md",
+                }),
+              ]),
+            }),
             timing: expect.objectContaining({
               queueWaitMs: expect.any(Number),
               modelDurationMs: expect.any(Number),
@@ -311,7 +345,7 @@ describe("Local Harness refinement acceptance", () => {
           throw new Error("Harness Refiner model request failed: 503 temporarily unavailable");
         }
         yield refinerDelta({
-          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
           decision: "no_action",
           reason: "The recovered detour does not justify a durable Harness change.",
         });

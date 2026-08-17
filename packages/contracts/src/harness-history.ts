@@ -12,6 +12,7 @@ import type {
 } from "./harness-improvements.js";
 import type { HarnessMemoryEntry } from "./harness-memory.js";
 import type { HarnessEvaluationReviewReceipt } from "@openpond/harness/evaluation-review";
+import type { HarnessRefinementCandidate } from "@openpond/harness/refinement-lifecycle";
 import type { ModelImprovementQualificationReceipt } from "@openpond/evals/model-improvement-qualification";
 import type { WorkspaceDiffFile } from "./workspaces.js";
 
@@ -70,6 +71,7 @@ export type HarnessHistoryPayload = {
   changes: HarnessHistoryChange[];
   routes: HarnessHistoryRoute[];
   evaluationReviews: HarnessEvaluationReviewReceipt[];
+  refinementCandidates: HarnessRefinementCandidate[];
   modelImprovementQualifications: ModelImprovementQualificationReceipt[];
   pendingReviews: HarnessHistoryPendingReview[];
   memories: HarnessMemoryEntry[];
@@ -79,6 +81,8 @@ export type HarnessEvaluationReviewCadence = "manual" | "daily" | "weekly";
 
 export type HarnessEvaluationReviewSchedule = {
   enabled: boolean;
+  activityEnabled: boolean;
+  activityBatchSize: number;
   cadence: HarnessEvaluationReviewCadence;
   maxEstimatedCostUsd: number;
   nextRunAt: string | null;
@@ -105,6 +109,8 @@ export type HarnessEvaluationReviewResponse = {
 export type HarnessEvaluationReviewScheduleRequest = {
   workspaceId: string;
   enabled: boolean;
+  activityEnabled: boolean;
+  activityBatchSize: number;
   cadence: HarnessEvaluationReviewCadence;
   maxEstimatedCostUsd: number;
 };

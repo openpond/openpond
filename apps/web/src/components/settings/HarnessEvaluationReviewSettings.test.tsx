@@ -9,6 +9,8 @@ import { HarnessEvaluationReviewSettings } from "./HarnessEvaluationReviewSettin
 
 const schedule: HarnessEvaluationReviewSchedule = {
   enabled: false,
+  activityEnabled: false,
+  activityBatchSize: 10,
   cadence: "manual",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
@@ -26,6 +28,7 @@ describe("HarnessEvaluationReviewSettings", () => {
         backgroundReviewBusy={false}
         backgroundReviewEnabled
         busy={false}
+        candidates={[]}
         onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
@@ -40,7 +43,8 @@ describe("HarnessEvaluationReviewSettings", () => {
     expect(html).toContain("3</strong> independent occurrences");
     expect(html).toContain("Update schedule");
     expect(html).toContain("Last run");
-    expect(html).toContain("Next run");
+    expect(html).toContain("Next scheduled run");
+    expect(html).toContain("Activity trigger");
     expect(html).not.toContain("Maximum estimated cost");
     expect(html).not.toContain("maximum cost");
     expect(html).not.toContain("Watermark");
@@ -55,6 +59,7 @@ describe("HarnessEvaluationReviewSettings", () => {
         backgroundReviewBusy={false}
         backgroundReviewEnabled
         busy={false}
+        candidates={[]}
         onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
@@ -67,7 +72,8 @@ describe("HarnessEvaluationReviewSettings", () => {
 
     expect(html).not.toContain("Build training Taskset");
     expect(html).toContain("Refiner");
-    expect(html).toContain("RL review");
+    expect(html).toContain("Activity review");
+    expect(html).toContain("Scheduled backstop");
     expect(html).toContain("enabled by default for new users");
     expect(html).toContain("provider-toggle harness-learning-toggle");
   });

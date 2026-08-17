@@ -2,6 +2,7 @@ import path from "node:path";
 import { readFile } from "node:fs/promises";
 import {
   FileOutputRefSchema,
+  workOutputMediaTypesCompatible,
   type ChatModelRef,
   type FileOutputRef,
   type Session,
@@ -17,6 +18,9 @@ import type {
 
 const DEFAULT_MAX_WORK_TOOL_TURNS = 24;
 const MAX_WORK_TOOL_TURNS = 100;
+const MAX_MISSING_OUTPUT_RECOVERY_TURNS = 10;
+const MAX_WORK_MODEL_REQUEST_TIMEOUT_MS = 20 * 60_000;
+const MAX_WORK_EXEC_TIMEOUT_SECONDS = 20 * 60;
 
 export type TasksetWorkRequiredOutputValidator = (input: {
   requiredOutput: TaskRequiredOutput;
@@ -112,7 +116,10 @@ export async function validateSavedOutput(input: {
   saved: SavedWorkOutput;
   validateRequiredOutput?: TasksetWorkRequiredOutputValidator;
 }): Promise<SavedOutputValidation> {
-  if (input.saved.outputRef.contentType !== input.requiredOutput.mediaType) {
+  if (!workOutputMediaTypesCompatible(
+    input.requiredOutput.mediaType,
+    input.saved.outputRef.contentType,
+  )) {
     return {
       passed: false,
       detail:
@@ -184,6 +191,33 @@ export function workToolTurnLimit(taskset: Taskset): number {
     && configured > 0
     ? Math.min(configured, MAX_WORK_TOOL_TURNS)
     : DEFAULT_MAX_WORK_TOOL_TURNS;
+}
+
+export function workMissingOutputRecoveryTurnLimit(taskset: Taskset): number {
+  const configured = taskset.environment.metadata.missingOutputRecoveryTurns;
+  return typeof configured === "number"
+    && Number.isInteger(configured)
+    && configured > 0
+    ? Math.min(configured, MAX_MISSING_OUTPUT_RECOVERY_TURNS)
+    : 0;
+}
+
+export function workModelRequestTimeoutMs(taskset: Taskset): number | null {
+  const configured = taskset.environment.metadata.modelRequestTimeoutMs;
+  return typeof configured === "number"
+    && Number.isInteger(configured)
+    && configured > 0
+    ? Math.min(configured, MAX_WORK_MODEL_REQUEST_TIMEOUT_MS)
+    : null;
+}
+
+export function workExecTimeoutSeconds(taskset: Taskset): number | null {
+  const configured = taskset.environment.metadata.maxExecTimeoutSeconds;
+  return typeof configured === "number"
+    && Number.isInteger(configured)
+    && configured > 0
+    ? Math.min(configured, MAX_WORK_EXEC_TIMEOUT_SECONDS)
+    : null;
 }
 
 function normalizedOutputPath(value: string): string | null {

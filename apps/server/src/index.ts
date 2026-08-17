@@ -1610,6 +1610,7 @@ export async function createOpenPondServer(
   });
   const harnessEvaluationReviewScheduler = createLocalHarnessEvaluationReviewScheduler({
     store,
+    storeDir,
     stream: harnessEvaluationReviewStream,
     isClosing: () => closing,
     logger,
@@ -1633,6 +1634,7 @@ export async function createOpenPondServer(
         store,
         request,
         stream: harnessEvaluationReviewStream,
+        continuation: { storeDir, stream: harnessEvaluationReviewStream },
       }),
       acceptHarnessEvaluationReview: async (request) => {
         const profile = await loadOpenPondProfileState();

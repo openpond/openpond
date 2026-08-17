@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { OptimizerTrainingSampleSchema } from "@openpond/evals";
+
+export { OptimizerTrainingSampleSchema } from "@openpond/evals";
 
 import {
   ImmutableReleaseRefSchema,
@@ -54,67 +57,6 @@ const LearningSignalBaseSchema = z
     metadata: z.record(z.string(), z.unknown()).default({}),
   })
   .strict();
-
-export const OptimizerTrainingSampleSchema = z
-  .object({
-    schemaVersion: z.literal("openpond.optimizerTrainingSample.v1"),
-    tokenIds: z.array(z.number().int().nonnegative()).min(2).max(32_768),
-    mask: z.array(z.boolean()).min(2).max(32_768),
-    logprobs: z.array(z.number().finite()).min(2).max(32_768),
-    temperatures: z
-      .array(z.number().positive().finite())
-      .min(2)
-      .max(32_768),
-    envName: z.string().trim().min(1).max(200),
-    modelRequestId: z.string().trim().min(1).max(1_000),
-    promptTokenCount: z.number().int().positive(),
-    completionTokenCount: z.number().int().positive(),
-    servedPolicyVersion: z.number().int().nonnegative(),
-  })
-  .strict()
-  .superRefine((sample, context) => {
-    const length = sample.tokenIds.length;
-    for (const [name, values] of [
-      ["mask", sample.mask],
-      ["logprobs", sample.logprobs],
-      ["temperatures", sample.temperatures],
-    ] as const) {
-      if (values.length !== length) {
-        context.addIssue({
-          code: "custom",
-          path: [name],
-          message: `${name} must align with tokenIds`,
-        });
-      }
-    }
-    if (sample.promptTokenCount + sample.completionTokenCount !== length) {
-      context.addIssue({
-        code: "custom",
-        path: ["completionTokenCount"],
-        message: "prompt and completion token counts must span tokenIds",
-      });
-    }
-    if (
-      sample.mask.filter((trainable) => !trainable).length
-      !== sample.promptTokenCount
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["mask"],
-        message: "promptTokenCount must equal the non-trainable mask count",
-      });
-    }
-    if (
-      sample.mask.filter((trainable) => trainable).length
-      !== sample.completionTokenCount
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["mask"],
-        message: "completionTokenCount must equal the trainable mask count",
-      });
-    }
-  });
 
 export const TrajectoryLearningSignalSchema = LearningSignalBaseSchema.extend({
   kind: z.literal("trajectory"),

@@ -29,9 +29,17 @@ evaluation runner.
 The package describes Agent snapshots, releases, workspaces, overlays,
 improvement evidence, public provider-neutral Refiner and continuous-review
 policy, bounded cross-Work review decisions, tools, model identities, and
-traces. Hosts provide authorized evidence and model adapters. Models decide
-semantic grouping and smallest-layer routing; deterministic package code owns
-schema, identity, bounds, and receipt invariants.
+traces. It also owns portable Refiner evidence bases, display-safe activity
+receipts, bounded cross-run candidate state, candidate lifecycle receipts, and
+continuation deduplication identity. Hosts provide authorized evidence and
+model adapters. Models decide semantic grouping and smallest-layer routing;
+deterministic package code owns schema, identity, bounds, and receipt
+invariants.
+Runtime Refiner requests and responses use their v2 schema literals. The
+runtime decision must include an auditable evidence basis for every route or
+proposal, may cite only IDs supplied in the bounded evidence packet, and may
+propose only a capability advertised by the host. Invalid final decisions fail
+closed to `no_action`; v1 remains a compatibility schema only.
 Proposed mutations receive a second model critique for reusable root behavior
 before deterministic validation. Large continuous-review windows use compact
 model-driven navigation followed by full inspection of a bounded selection;

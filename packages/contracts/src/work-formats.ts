@@ -1,5 +1,6 @@
 export type WorkFormatFamily =
   | "document"
+  | "code"
   | "spreadsheet"
   | "presentation"
   | "pdf"
@@ -40,6 +41,33 @@ export const WORK_FORMAT_CAPABILITIES = [
     extensions: [".md", ".txt"],
     contentTypes: ["text/markdown", "text/plain"],
     preview: "markdown",
+    validation: ["structural"],
+    creation: "built_in",
+  },
+  {
+    family: "code",
+    extensions: [
+      ".css",
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".py",
+      ".sql",
+      ".ts",
+      ".tsx",
+      ".yaml",
+      ".yml",
+    ],
+    contentTypes: [
+      "application/javascript",
+      "application/sql",
+      "application/yaml",
+      "text/css",
+      "text/javascript",
+      "text/typescript",
+      "text/yaml",
+    ],
+    preview: "text",
     validation: ["structural"],
     creation: "built_in",
   },
@@ -134,15 +162,19 @@ export const WORK_OUTPUT_CONTENT_TYPES: Readonly<Record<string, string>> =
   Object.freeze({
     ".avif": "image/avif",
     ".csv": "text/csv",
+    ".css": "text/css",
     ".docx":
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".gif": "image/gif",
     ".html": "text/html",
+    ".js": "text/javascript",
+    ".jsx": "text/javascript",
     ".jpeg": "image/jpeg",
     ".jpg": "image/jpeg",
     ".json": "application/json",
     ".m4a": "audio/mp4",
     ".md": "text/markdown",
+    ".mjs": "text/javascript",
     ".mov": "video/quicktime",
     ".mp3": "audio/mpeg",
     ".mp4": "video/mp4",
@@ -150,14 +182,20 @@ export const WORK_OUTPUT_CONTENT_TYPES: Readonly<Record<string, string>> =
     ".png": "image/png",
     ".pptx":
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".py": "text/plain",
     ".svg": "image/svg+xml",
+    ".sql": "application/sql",
     ".tsv": "text/tab-separated-values",
+    ".ts": "text/typescript",
+    ".tsx": "text/typescript",
     ".txt": "text/plain",
     ".wav": "audio/wav",
     ".webm": "video/webm",
     ".webp": "image/webp",
     ".xlsx":
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".yaml": "application/yaml",
+    ".yml": "application/yaml",
   });
 
 export function workFormatCapabilityForContentType(
@@ -168,4 +206,13 @@ export function workFormatCapabilityForContentType(
       capability.contentTypes.includes(contentType as never)
     ) ?? null
   );
+}
+
+export function workOutputMediaTypesCompatible(
+  expectedContentType: string,
+  actualContentType: string
+): boolean {
+  if (expectedContentType === actualContentType) return true;
+  if (expectedContentType !== "text/plain") return false;
+  return workFormatCapabilityForContentType(actualContentType)?.family === "code";
 }

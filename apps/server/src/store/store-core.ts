@@ -293,6 +293,16 @@ export class SqliteStoreCore {
 
   async createHarnessWorkspaceTables(): Promise<void> {
     await ensureHarnessWorkspaceTables((sql) => this.exec(sql));
+    await this.addColumnIfMissing(
+      "harness_evaluation_review_settings",
+      "activity_enabled",
+      "INTEGER NOT NULL DEFAULT 0",
+    );
+    await this.addColumnIfMissing(
+      "harness_evaluation_review_settings",
+      "activity_batch_size",
+      "INTEGER NOT NULL DEFAULT 10",
+    );
   }
 
   async createSidebarFileBookmarkTables(): Promise<void> {

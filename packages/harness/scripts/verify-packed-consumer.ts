@@ -38,12 +38,30 @@ try {
   );
   await writeFile(path.join(temporary, "verify.mjs"), `
 import {
+  HostedHarnessRefinerRequestSchema,
+  LocalHarnessRefinerDecisionV2Schema,
   HarnessRunOverlaySchema,
   ImprovementObservationSchema,
   ToolDeclarationSchema,
   contentHash,
+  admitLocalHarnessRefinerDecision,
 } from "@openpond/harness";
-if (!HarnessRunOverlaySchema || !ImprovementObservationSchema || !ToolDeclarationSchema) {
+import {
+  HarnessCrossRunRefinementRequestSchema,
+  HarnessRefinementCandidateSchema,
+  HarnessRefinerActivityReceiptSchema,
+} from "@openpond/harness/refinement-lifecycle";
+if (
+  !HarnessRunOverlaySchema ||
+  !HostedHarnessRefinerRequestSchema ||
+  !LocalHarnessRefinerDecisionV2Schema ||
+  !ImprovementObservationSchema ||
+  !ToolDeclarationSchema ||
+  !HarnessCrossRunRefinementRequestSchema ||
+  !HarnessRefinementCandidateSchema ||
+  !HarnessRefinerActivityReceiptSchema ||
+  typeof admitLocalHarnessRefinerDecision !== "function"
+) {
   throw new Error("packed Harness exports unavailable");
 }
 if (!/^[a-f0-9]{64}$/.test(contentHash({ harness: true }))) {
@@ -54,12 +72,30 @@ process.stdout.write("clean Harness consumer verified\\n");
   await writeFile(path.join(temporary, "verify-types.mts"), `
 import type {
   AgentSnapshot,
+  HarnessRefinerEvidenceBasis,
   HarnessRelease,
   HarnessRunOverlay,
   ImprovementObservation,
+  LocalHarnessRefinerDecisionV2,
   ToolDeclaration,
 } from "@openpond/harness";
-void (null as unknown as AgentSnapshot | HarnessRelease | HarnessRunOverlay | ImprovementObservation | ToolDeclaration);
+import type {
+  HarnessCrossRunRefinementRequest,
+  HarnessRefinementCandidate,
+  HarnessRefinerActivityReceipt,
+} from "@openpond/harness/refinement-lifecycle";
+void (null as unknown as
+  | AgentSnapshot
+  | HarnessRefinerEvidenceBasis
+  | HarnessRelease
+  | HarnessRunOverlay
+  | ImprovementObservation
+  | LocalHarnessRefinerDecisionV2
+  | ToolDeclaration
+  | HarnessCrossRunRefinementRequest
+  | HarnessRefinementCandidate
+  | HarnessRefinerActivityReceipt
+);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], {
     cwd: temporary,

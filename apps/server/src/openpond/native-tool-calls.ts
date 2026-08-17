@@ -66,7 +66,10 @@ export class NativeToolCallAccumulator {
 export function assistantMessageForNativeToolCalls(
   content: string,
   toolCalls: NativeModelToolCall[],
-  options: { continuation?: HostedChatContinuation | null } = {},
+  options: {
+    continuation?: HostedChatContinuation | null;
+    maxArgumentCharacters?: number;
+  } = {},
 ): HostedChatMessage {
   const continuation = options.continuation;
   return {
@@ -78,17 +81,23 @@ export function assistantMessageForNativeToolCalls(
       type: toolCall.hostedToolCall.type || "function",
       function: {
         name: toolCall.name,
-        arguments: replayableNativeToolArguments(toolCall.argumentsJson),
+        arguments: replayableNativeToolArguments(
+          toolCall.argumentsJson,
+          options.maxArgumentCharacters,
+        ),
       },
     })),
   };
 }
 
-export function toolResultMessage(result: NativeModelToolResult): HostedChatMessage {
+export function toolResultMessage(
+  result: NativeModelToolResult,
+  options: { maxContentCharacters?: number } = {},
+): HostedChatMessage {
   return {
     role: "tool",
     tool_call_id: result.toolCallId,
-    content: result.contentText,
+    content: boundedJsonText(result.contentText, options.maxContentCharacters),
   };
 }
 
@@ -172,15 +181,59 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function replayableNativeToolArguments(argumentsJson: string): string {
+function replayableNativeToolArguments(
+  argumentsJson: string,
+  maxCharacters?: number,
+): string {
   const raw = argumentsJson.trim();
   if (!raw) return "{}";
   try {
     const parsed = JSON.parse(raw) as unknown;
     return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? argumentsJson
+      ? boundedJsonText(argumentsJson, maxCharacters)
       : "{}";
   } catch {
     return "{}";
   }
+}
+
+function boundedJsonText(value: string, maxCharacters?: number): string {
+  if (
+    typeof maxCharacters !== "number"
+    || !Number.isInteger(maxCharacters)
+    || maxCharacters < 500
+    || value.length <= maxCharacters
+  ) return value;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    const bounded = boundLongStrings(parsed, Math.max(200, Math.floor(maxCharacters / 2)));
+    const serialized = JSON.stringify(bounded);
+    if (serialized.length <= maxCharacters) return serialized;
+  } catch {
+    // Fall through to a valid bounded envelope.
+  }
+  return JSON.stringify({
+    truncated: true,
+    originalCharacters: value.length,
+    preview: value.slice(0, Math.max(100, maxCharacters - 120)),
+  });
+}
+
+function boundLongStrings(value: unknown, maxStringCharacters: number): unknown {
+  if (typeof value === "string") {
+    return value.length <= maxStringCharacters
+      ? value
+      : `${value.slice(0, maxStringCharacters)}\n[truncated after execution; ${value.length} characters total]`;
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 100).map((item) => boundLongStrings(item, maxStringCharacters));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .slice(0, 100)
+        .map(([key, item]) => [key, boundLongStrings(item, maxStringCharacters)]),
+    );
+  }
+  return value;
 }

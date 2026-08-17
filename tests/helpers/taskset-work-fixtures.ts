@@ -309,7 +309,7 @@ export async function materializeTasksetWorkFixture(
     taskId,
     infrastructureError: null,
     expectedPassed: false,
-    expectedRewardEligible: false,
+    expectedRewardEligible: true,
     metadata: {
       repositoryOwned: true,
     },
@@ -355,6 +355,7 @@ export async function materializeTasksetWorkFixture(
       label: "infrastructure_failure" as const,
       output: {},
       infrastructureError: "Synthetic Work infrastructure failure.",
+      expectedRewardEligible: false,
     },
   ];
   const draft = TasksetSchema.parse({

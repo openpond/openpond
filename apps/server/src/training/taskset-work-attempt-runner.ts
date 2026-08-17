@@ -4,21 +4,12 @@ import {
   TurnSchema,
   type ChatModelRef,
   type CodexReasoningEffort,
-  type RuntimeEvent,
   type Session,
   type TaskDataRecord,
   type TaskFailureClass,
   type Taskset,
-  type WorkspaceDiffSummary,
-  type WorkspaceToolResult,
 } from "@openpond/contracts";
-import type {
-  HostedChatContinuation,
-  HostedChatMessage,
-  HostedChatTool,
-  HostedChatToolCall,
-  HostedChatToolChoice,
-} from "@openpond/cloud";
+import type { HostedChatContinuation } from "@openpond/cloud";
 import { contentHash } from "@openpond/taskset-sdk";
 import {
   assistantMessageForNativeToolCalls,
@@ -27,7 +18,6 @@ import {
   parseNativeToolArguments,
   toolResultMessage,
   unknownNativeToolResult,
-  type NativeModelToolResult,
 } from "../openpond/native-tool-calls.js";
 import {
   modelToolDefinitionToHostedTool,
@@ -49,6 +39,9 @@ import {
   executeDefinition,
   savedWorkOutput,
   validateSavedOutput,
+  workExecTimeoutSeconds,
+  workMissingOutputRecoveryTurnLimit,
+  workModelRequestTimeoutMs,
   workToolTurnLimit,
   type SavedOutputValidation,
   type SavedWorkOutput,
@@ -70,87 +63,30 @@ import {
   hostedUsageCostUsd,
   type HostedTokenPricing,
 } from "./hosted-token-pricing.js";
+import {
+  boundedRequestSignal,
+  elapsedMilliseconds,
+  errorMessage,
+  listedWorkOutputPaths,
+  nextTasksetWorkModelDelta,
+  throwIfAborted,
+  uniqueCompatibleOutputPath,
+} from "./taskset-work-attempt-runtime-support.js";
+import type {
+  TasksetWorkAttemptRuntime,
+  TasksetWorkModelStream,
+  TasksetWorkToolEvidence,
+  WorkTraceStep,
+} from "./taskset-work-attempt-types.js";
 
-export type TasksetWorkModelDelta = {
-  text?: string;
-  continuation?: HostedChatContinuation;
-  toolCalls?: HostedChatToolCall[];
-  usage?: unknown;
-  costUsd?: number;
-};
-
-export type TasksetWorkModelStream = (input: {
-  model: ChatModelRef;
-  reasoningEffort: CodexReasoningEffort | "none" | null;
-  messages: HostedChatMessage[];
-  tools: HostedChatTool[];
-  toolChoice: HostedChatToolChoice;
-  requestId: string;
-  signal: AbortSignal;
-  maxOutputTokens?: number;
-  temperature?: number;
-  topP?: number;
-  seed?: number;
-  hostedTokenPricing?: HostedTokenPricing;
-}) => AsyncIterable<TasksetWorkModelDelta>;
+export type {
+  TasksetWorkAttemptRuntime,
+  TasksetWorkModelDelta,
+  TasksetWorkModelStream,
+  TasksetWorkToolEvidence,
+} from "./taskset-work-attempt-types.js";
 
 export type { TasksetWorkRequiredOutputValidator } from "./taskset-work-attempt-support.js";
-
-export type TasksetWorkToolEvidence = {
-  execute(input: {
-    taskId: string;
-    callId: string;
-    toolName: string;
-    args: Record<string, unknown>;
-    execute: () => Promise<NativeModelToolResult>;
-  }): Promise<NativeModelToolResult>;
-};
-
-export type TasksetWorkAttemptRuntime = {
-  createSession(payload: unknown): Promise<Session>;
-  getSession(sessionId: string): Promise<Session>;
-  executeWorkspaceTool(
-    sessionId: string,
-    payload: unknown,
-    options?: {
-      turnId?: string;
-      workspaceDiffBaseline?: WorkspaceDiffSummary | null;
-    },
-  ): Promise<WorkspaceToolResult>;
-  runtimeEventsForSession(sessionId: string): Promise<RuntimeEvent[]>;
-  settleCostEvidence?(
-    sessionId: string,
-    options?: { turnId?: string },
-  ): Promise<WorkspaceToolResult>;
-};
-
-type WorkTraceStep =
-  | {
-      kind: "model";
-      turn: number;
-      text: string;
-      toolCallCount: number;
-    }
-  | {
-      kind: "tool";
-      turn: number;
-      callId: string;
-      name: string;
-      arguments: Record<string, unknown>;
-      ok: boolean;
-      output: string;
-    }
-  | {
-      kind: "required_output";
-      path: string;
-      ok: boolean;
-      detail: string;
-    }
-  | {
-      kind: "cleanup";
-      ok: boolean;
-      detail: string;
-    };
 
 export async function runTasksetWorkAttempt(input: {
   store: SqliteStore;
@@ -235,6 +171,8 @@ export async function runTasksetWorkAttempt(input: {
     | "infrastructure_failure" = "completed";
   let infrastructureError: string | null = null;
   let failureClass: TaskFailureClass | null = null;
+  let missingOutputRecoveryTurns = 0;
+  let modelRequestTimedOut = false;
   let stage:
     | "assets"
     | "session"
@@ -329,12 +267,20 @@ export async function runTasksetWorkAttempt(input: {
     const selectedByName = new Map(
       selectedDefinitions.map((definition) => [definition.name, definition]),
     );
+    const saveDefinition = selectedByName.get("work_save_output");
+    if (!saveDefinition) {
+      throw new Error("The Work output persistence tool is unavailable.");
+    }
+    const listFilesDefinition = selectedByName.get("work_list_files") ?? null;
     const messages = tasksetWorkMessages(
       input.task,
       assets,
       input.harnessInstructionContext,
     );
     const maxTurns = workToolTurnLimit(input.taskset);
+    const maxMissingOutputRecoveryTurns = workMissingOutputRecoveryTurnLimit(input.taskset);
+    const modelRequestTimeoutMs = workModelRequestTimeoutMs(input.taskset);
+    const maxExecTimeoutSeconds = workExecTimeoutSeconds(input.taskset);
     const requiredOutputPaths = new Set(
       (input.task.requiredOutputs ?? []).map((output) => output.path),
     );
@@ -366,31 +312,48 @@ export async function runTasksetWorkAttempt(input: {
       const accumulator = new NativeToolCallAccumulator();
       let turnText = "";
       let continuation: HostedChatContinuation | null = null;
-      for await (const delta of input.stream({
-        model: input.model,
-        reasoningEffort: input.reasoningEffort ?? null,
-        messages,
-        tools,
-        toolChoice: "auto",
-        requestId: `${requestId}:${turn}`,
-        signal: controller.signal,
-        maxOutputTokens: input.sampling?.maxOutputTokens ?? 4_096,
-        temperature: input.sampling?.temperature ?? 0,
-        topP: input.sampling?.topP ?? 1,
-        seed: input.seed + input.attempt,
-        hostedTokenPricing: input.hostedTokenPricing,
-      })) {
-        if (delta.text) turnText += delta.text;
-        if (delta.continuation) continuation = delta.continuation;
-        if (delta.toolCalls?.length) accumulator.append(delta.toolCalls);
-        if (delta.usage !== undefined) usages.push(delta.usage);
-        if (
-          typeof delta.costUsd === "number"
-          && Number.isFinite(delta.costUsd)
-          && delta.costUsd >= 0
-        ) {
-          explicitCosts.push(delta.costUsd);
+      const requestBoundary = boundedRequestSignal(controller.signal, modelRequestTimeoutMs);
+      try {
+        const modelDeltas = input.stream({
+          model: input.model,
+          reasoningEffort: input.reasoningEffort ?? null,
+          messages,
+          tools,
+          toolChoice: "auto",
+          requestId: `${requestId}:${turn}`,
+          signal: requestBoundary.signal,
+          maxOutputTokens: input.sampling?.maxOutputTokens ?? 4_096,
+          temperature: input.sampling?.temperature ?? 0,
+          topP: input.sampling?.topP ?? 1,
+          seed: input.seed + input.attempt,
+          hostedTokenPricing: input.hostedTokenPricing,
+        })[Symbol.asyncIterator]();
+        while (true) {
+          const next = await nextTasksetWorkModelDelta(
+            modelDeltas,
+            requestBoundary.signal,
+          );
+          if (next.done) break;
+          const delta = next.value;
+          if (delta.text) turnText += delta.text;
+          if (delta.continuation) continuation = delta.continuation;
+          if (delta.toolCalls?.length) accumulator.append(delta.toolCalls);
+          if (delta.usage !== undefined) usages.push(delta.usage);
+          if (
+            typeof delta.costUsd === "number"
+            && Number.isFinite(delta.costUsd)
+            && delta.costUsd >= 0
+          ) {
+            explicitCosts.push(delta.costUsd);
+          }
         }
+      } catch (error) {
+        if (requestBoundary.signal.aborted && !controller.signal.aborted) {
+          modelRequestTimedOut = true;
+        }
+        throw error;
+      } finally {
+        requestBoundary.dispose();
       }
       throwIfAborted(controller.signal);
       const toolCalls = accumulator.completed();
@@ -413,15 +376,32 @@ export async function runTasksetWorkAttempt(input: {
           content: turnText,
           ...(continuation ? { continuation } : {}),
         });
+        if (
+          requiredOutputPaths.size > 0
+          && missingOutputRecoveryTurns < maxMissingOutputRecoveryTurns
+        ) {
+          missingOutputRecoveryTurns += 1;
+          messages.push({
+            role: "user",
+            content: [
+              "The turn ended before every declared deliverable was saved.",
+              "Resume the task now; this is not a request for a status summary.",
+              "Create and inspect the missing files, then call work_save_output for every exact required path.",
+              `Required paths: ${JSON.stringify([...requiredOutputPaths])}`,
+            ].join("\n"),
+          });
+          continue;
+        }
         break;
       }
       messages.push(
         assistantMessageForNativeToolCalls(
           turnText,
           toolCalls,
-          { continuation },
+          { continuation, maxArgumentCharacters: 6_000 },
         ),
       );
+      let outputMayHaveChanged = false;
       for (const call of toolCalls) {
         const definition = selectedByName.get(call.name);
         if (!definition) {
@@ -444,12 +424,23 @@ export async function runTasksetWorkAttempt(input: {
             ok: false,
             output: result.contentText,
           });
-          messages.push(toolResultMessage(result));
+          messages.push(toolResultMessage(result, { maxContentCharacters: 6_000 }));
           continue;
         }
         let args: Record<string, unknown>;
         try {
           args = parseNativeToolArguments(call);
+          if (call.name === "work_exec" && maxExecTimeoutSeconds !== null) {
+            const requestedTimeout = typeof args.timeoutSeconds === "number"
+              && Number.isFinite(args.timeoutSeconds)
+              && args.timeoutSeconds > 0
+              ? args.timeoutSeconds
+              : maxExecTimeoutSeconds;
+            args = {
+              ...args,
+              timeoutSeconds: Math.min(requestedTimeout, maxExecTimeoutSeconds),
+            };
+          }
         } catch (error) {
           const detail = errorMessage(error);
           const result = invalidNativeToolArgumentsResult(call, detail);
@@ -471,7 +462,7 @@ export async function runTasksetWorkAttempt(input: {
             ok: false,
             output: result.contentText,
           });
-          messages.push(toolResultMessage(result));
+          messages.push(toolResultMessage(result, { maxContentCharacters: 6_000 }));
           continue;
         }
         await appendTasksetToolStarted({
@@ -528,8 +519,122 @@ export async function runTasksetWorkAttempt(input: {
               savedOutputs.has(outputPath)
             );
         }
-        messages.push(toolResultMessage(result));
+        if (
+          result.ok
+          && (call.name === "work_write_file"
+            || call.name === "work_edit_file"
+            || call.name === "work_exec")
+        ) {
+          outputMayHaveChanged = true;
+        }
+        messages.push(toolResultMessage(result, { maxContentCharacters: 6_000 }));
         if (allRequiredOutputsSaved) break;
+      }
+      if (
+        !allRequiredOutputsSaved
+        && outputMayHaveChanged
+        && listFilesDefinition
+      ) {
+        const listCallId = `discover_outputs_${attemptId}_${turn}`;
+        const listArgs = { area: "outputs", recursive: true };
+        const listed = await executeDefinition({
+          definition: listFilesDefinition,
+          runtime: input.runtime,
+          sessionId: session.id,
+          turnId,
+          model: input.model,
+          callId: listCallId,
+          args: listArgs,
+          signal: controller.signal,
+          userPrompt: tasksetWorkUserPrompt(input.task),
+        });
+        await appendTasksetToolLifecycle({
+          store: input.store,
+          session,
+          turnId,
+          callId: listCallId,
+          name: listFilesDefinition.name,
+          args: listArgs,
+          result: listed,
+        });
+        trace.push({
+          kind: "tool",
+          turn,
+          callId: listCallId,
+          name: listFilesDefinition.name,
+          arguments: listArgs,
+          ok: listed.ok,
+          output: listed.contentText,
+        });
+        const availableOutputs = listedWorkOutputPaths(listed);
+        const claimedSourcePaths = new Set(
+          [...savedOutputs.values()].map((saved) => saved.relativePath),
+        );
+        for (const requiredOutput of input.task.requiredOutputs ?? []) {
+          const requiredOutputPath = requiredOutput.path;
+          if (
+            savedOutputs.has(requiredOutputPath)
+          ) continue;
+          const sourcePath = availableOutputs.includes(requiredOutputPath)
+            ? requiredOutputPath
+            : uniqueCompatibleOutputPath({
+                availableOutputs,
+                claimedSourcePaths,
+                mediaType: requiredOutput.mediaType,
+              });
+          if (!sourcePath) continue;
+          const saveCallId = `persist_output_${contentHash([
+            attemptId,
+            turn,
+            requiredOutputPath,
+            sourcePath,
+          ]).slice(0, 20)}`;
+          const saveArgs = {
+            path: sourcePath,
+            suggestedName: path.posix.basename(requiredOutputPath),
+            validation: [],
+          };
+          const result = await executeDefinition({
+            definition: saveDefinition,
+            runtime: input.runtime,
+            sessionId: session.id,
+            turnId,
+            model: input.model,
+            callId: saveCallId,
+            args: saveArgs,
+            signal: controller.signal,
+            userPrompt: tasksetWorkUserPrompt(input.task),
+          });
+          await appendTasksetToolLifecycle({
+            store: input.store,
+            session,
+            turnId,
+            callId: saveCallId,
+            name: saveDefinition.name,
+            args: saveArgs,
+            result,
+          });
+          trace.push({
+            kind: "tool",
+            turn,
+            callId: saveCallId,
+            name: saveDefinition.name,
+            arguments: saveArgs,
+            ok: result.ok,
+            output: result.contentText,
+          });
+          const saved = savedWorkOutput(saveArgs, result);
+          if (saved) {
+            savedOutputs.set(requiredOutputPath, {
+              ...saved,
+              relativePath: requiredOutputPath,
+            });
+            claimedSourcePaths.add(sourcePath);
+          }
+        }
+        allRequiredOutputsSaved =
+          requiredOutputPaths.size > 0
+          && [...requiredOutputPaths].every((outputPath) => savedOutputs.has(outputPath));
       }
       if (allRequiredOutputsSaved) {
         clearTimeout(timer);
@@ -540,12 +645,6 @@ export async function runTasksetWorkAttempt(input: {
 
     stage = "outputs";
     throwIfAborted(controller.signal);
-    const saveDefinition = allDefinitions.find(
-      (definition) => definition.name === "work_save_output",
-    );
-    if (!saveDefinition) {
-      throw new Error("The Work output persistence tool is unavailable.");
-    }
     for (const requiredOutput of input.task.requiredOutputs ?? []) {
       let saved = savedOutputs.get(requiredOutput.path) ?? null;
       if (!saved) {
@@ -598,6 +697,9 @@ export async function runTasksetWorkAttempt(input: {
     if (controller.signal.aborted) {
       status = timedOut ? "timeout" : "cancelled";
       failureClass = timedOut ? "timeout" : "cancelled";
+    } else if (modelRequestTimedOut) {
+      status = "timeout";
+      failureClass = "timeout";
     } else if (stage === "assets" || stage === "environment") {
       status = "environment_failure";
       failureClass = "environment_failure";
@@ -818,6 +920,7 @@ export async function runTasksetWorkAttempt(input: {
       toolFailureCount: trace.filter(
         (step) => step.kind === "tool" && !step.ok,
       ).length,
+      missingOutputRecoveryTurns,
     },
     runtimeEventRefs: runtimeEvents.map((event) => event.id),
     artifactRefs,
@@ -861,19 +964,4 @@ export async function runTasksetWorkAttempt(input: {
       },
     },
   });
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-  if (!signal.aborted) return;
-  throw signal.reason instanceof Error
-    ? signal.reason
-    : new Error("The Work evaluation was cancelled.");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function elapsedMilliseconds(startedAt: string, completedAt: string): number {
-  return Math.max(0, Date.parse(completedAt) - Date.parse(startedAt));
 }

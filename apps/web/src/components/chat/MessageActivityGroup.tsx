@@ -45,6 +45,7 @@ import {
   subagentOpenSessions,
   subagentRoleLabel,
 } from "./SubagentAvatarGroup";
+import { HarnessRefinerReceipt } from "./HarnessRefinerReceipt";
 
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
 const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
@@ -110,7 +111,7 @@ export function ActivityGroup({
     <article
       className={`activity-group work-trace ${running ? "running" : "settled"}`}
     >
-      <div className="activity-summary-row">
+      {activities.length > 0 ? <div className="activity-summary-row">
         {presentation.toolCount > 0 ? (
           <button
             type="button"
@@ -163,7 +164,10 @@ export function ActivityGroup({
             sessions={summaryOpenSessions}
           />
         ) : null}
-      </div>
+      </div> : null}
+      {message.refinerActivity ? (
+        <HarnessRefinerReceipt activity={message.refinerActivity} />
+      ) : null}
       {artifacts.length > 0 ? (
         <ActivityArtifacts
           artifacts={artifacts}

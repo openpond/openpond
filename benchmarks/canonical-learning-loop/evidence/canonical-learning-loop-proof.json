@@ -1,0 +1,455 @@
+{
+  "schemaVersion": "openpond.canonicalLearningLoopProof.v1",
+  "proofKind": "deterministic_protocol_conformance",
+  "providerCalls": 0,
+  "tasksetRelease": {
+    "id": "canonical-learning-loop-html-v1",
+    "contentHash": "1705f4e54fbce9b7603504bb4f1d8e2bf465c25ca87f206e4d1d1fa03cf5c9ad"
+  },
+  "environmentRelease": {
+    "id": "canonical-learning-loop-environment-v1",
+    "contentHash": "6070e066bc3cee5b7cd215d5b402f458464e6c7011df756ed355a88d1cdf2a26"
+  },
+  "verifierSetRelease": {
+    "id": "canonical-learning-loop-verifier-v1",
+    "contentHash": "d0d600ab7926b2b6bc6c62bad848bc6fad747bd3797325e415da5ba188528bcb"
+  },
+  "baselineHarnessRelease": {
+    "id": "canonical-proof-baseline-harness",
+    "contentHash": "c096d112dd9ed5ecc83de20dc5c9ec30d41169f6c7ef254a9b924a300c93146d"
+  },
+  "candidateHarnessRelease": {
+    "id": "canonical-proof-candidate-harness",
+    "contentHash": "fdd83e7dedb049201d41c33aa528843ecfb83fecd162fff9808c0231629afa55"
+  },
+  "candidateChange": {
+    "instruction": "When a task requests a saved standalone artifact, create the complete file at the declared output path, validate its structure and required content, and only then claim completion.",
+    "instructionRef": {
+      "id": "canonical-proof-artifact-instruction",
+      "contentHash": "9bed4498a94a9391b7558beba4cc6ccaa6714dc9b54b713313b72fcd64c4c2a1"
+    },
+    "scope": "personal_harness_instruction",
+    "reversible": true
+  },
+  "taskCounts": {
+    "adaptation": 8,
+    "development": 4,
+    "heldOut": 6,
+    "controls": 2
+  },
+  "fixtureAudit": {
+    "oracle": {
+      "attemptCount": 20,
+      "scoredCount": 20,
+      "zeroRewardCount": 0,
+      "passCount": 20,
+      "meanReward": 1,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-oracle-train-bakery",
+          "contentHash": "d6bb928364e6858513b25dd12d1fd22b60e2918690db82397042168f50382fdc"
+        },
+        {
+          "id": "reward-oracle-train-status",
+          "contentHash": "e3c251374c1de27408c4ced34015baa7d4c94d672db7392464333c7dd595b83b"
+        },
+        {
+          "id": "reward-oracle-train-conference",
+          "contentHash": "32ebbc36056882aaef4f686dc611f43aa31e44d726fa1aa3bc97afaaeab9e551"
+        },
+        {
+          "id": "reward-oracle-train-knowledge-base",
+          "contentHash": "a9971a81fe3bdf1a5ebd50190a52d965eeae1138f9a8cd6c1a2223b39b943333"
+        },
+        {
+          "id": "reward-oracle-train-nonprofit",
+          "contentHash": "24b211a117df3e26ce840704e467527cd404b2e410ba42decc2d566daf72e039"
+        },
+        {
+          "id": "reward-oracle-train-restaurant",
+          "contentHash": "535c7ee84b3b9ad97eadc1198b30cf3d68d89fc1c1a34f93c8f59aec3dce2845"
+        },
+        {
+          "id": "reward-oracle-train-pricing",
+          "contentHash": "dc201f6d096a8dc43eec94f4d0ce06282112655d7ea1187da74c74d40ebb0434"
+        },
+        {
+          "id": "reward-oracle-train-portfolio",
+          "contentHash": "4e94a934d2a3e62558173d4082ff9847b0005c5f3225eb3cce70e40397810017"
+        },
+        {
+          "id": "reward-oracle-dev-community-center",
+          "contentHash": "69459cebe12556e2afb89000e5147925c6b934341eb356483e634ca32abb95d9"
+        },
+        {
+          "id": "reward-oracle-dev-cafe",
+          "contentHash": "7e7cf22ab77ef66d6178ac91b7ca67dec6d6ec8d96fb50cf2c585ca83df82704"
+        },
+        {
+          "id": "reward-oracle-dev-incident",
+          "contentHash": "ddf2185e1e98e3d0df7fa81d9c1fde28139f76fd712fd2f37da305412d10016d"
+        },
+        {
+          "id": "reward-oracle-dev-workshop",
+          "contentHash": "bb76e120eddb7af44c296d60788ced5a6541b63623b71267f861c74eca0a250d"
+        },
+        {
+          "id": "reward-oracle-held-clinic",
+          "contentHash": "449773369e20b47a4dcd3a2e611c39ccd4fb12afabfe052810c4dbc4dac6505b"
+        },
+        {
+          "id": "reward-oracle-held-museum",
+          "contentHash": "1c03315845ad5d8dfe9da5e17277d8b687cc06c253f3c87160fa17de02191a85"
+        },
+        {
+          "id": "reward-oracle-held-library",
+          "contentHash": "fcfd98436da49d21bba530006ddd0b66fe9ee0617c089c42d021efcc0e16a550"
+        },
+        {
+          "id": "reward-oracle-held-transit",
+          "contentHash": "804dffb9bef9277690572bc247a8259a18c60b77106643fc47288fb32585c16e"
+        },
+        {
+          "id": "reward-oracle-held-volunteer",
+          "contentHash": "b407cb28d1298527fd176db3c7dd0f12e773f9a7cba4f08daa325fa1ad0ab9f8"
+        },
+        {
+          "id": "reward-oracle-held-product-docs",
+          "contentHash": "4a6719e9734bc27cd825338ba19c554f900825c1f8ddcc9f31554bdbf994433e"
+        },
+        {
+          "id": "reward-oracle-control-release-notes",
+          "contentHash": "187e6b14a7cd496d2407ad211a48206685f4268106970d0b71c155816a69da26"
+        },
+        {
+          "id": "reward-oracle-control-service-manifest",
+          "contentHash": "3fb19ac864029fec76290218589ec9140aace82f612e66dec6308afb510dacd9"
+        }
+      ]
+    },
+    "negative": {
+      "attemptCount": 20,
+      "scoredCount": 20,
+      "zeroRewardCount": 20,
+      "passCount": 0,
+      "meanReward": 0,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-negative-train-bakery",
+          "contentHash": "1c07e9f4a678f913645c41d8d3b2c9a8dcc209f3c13ef9229cbc53955852e265"
+        },
+        {
+          "id": "reward-negative-train-status",
+          "contentHash": "ad0fbad2e5ea449421478575b353e9c642186a1bb2ac4870ae0ee4698438ed76"
+        },
+        {
+          "id": "reward-negative-train-conference",
+          "contentHash": "5d669a9a77aea54de40cfe3897eb14e03977d1fc5c0ac194e534cc1a88111fe3"
+        },
+        {
+          "id": "reward-negative-train-knowledge-base",
+          "contentHash": "49b5407de6e05a3f4844012dc18ff48848f24b70d2e3cdfe1c0f74c87d07232a"
+        },
+        {
+          "id": "reward-negative-train-nonprofit",
+          "contentHash": "e1f2380ea1ff781250cbbd9fe3bf3d8cbe4acdff4c9c3f166a32cbae51f87cc9"
+        },
+        {
+          "id": "reward-negative-train-restaurant",
+          "contentHash": "c588077e2c770205e57bb2b94fbcbbeecd9448cb432866b863144136289b3509"
+        },
+        {
+          "id": "reward-negative-train-pricing",
+          "contentHash": "ca57dcbad7cbd816a2542e8b6606d5208fb62945dd21f931e327f6882b927c47"
+        },
+        {
+          "id": "reward-negative-train-portfolio",
+          "contentHash": "c611b6d97ec9c06f33ff9456caaf31c6149c3e870f800c196d5c655590bb93fa"
+        },
+        {
+          "id": "reward-negative-dev-community-center",
+          "contentHash": "64e326aceb344c66a7b12feff5110a54c5e2013ccf7ac4aa08b15ef632457eb8"
+        },
+        {
+          "id": "reward-negative-dev-cafe",
+          "contentHash": "75e5ba5fa0abca2431fb3f9dd1048285c0afc0c03fa03a9c2413785bcf8b453a"
+        },
+        {
+          "id": "reward-negative-dev-incident",
+          "contentHash": "d3c8e591fd1a2a3bdfeff23d987a83805c712cc04913cdd0ab284f58aea45fbe"
+        },
+        {
+          "id": "reward-negative-dev-workshop",
+          "contentHash": "644e02a301d2013719276a09eb1e23ea02b2c8b834452992f2d565402f1527b5"
+        },
+        {
+          "id": "reward-negative-held-clinic",
+          "contentHash": "c52069d65d10d60893ece841cdcbb0f935d2ccdf0ca5446724301b839799eaee"
+        },
+        {
+          "id": "reward-negative-held-museum",
+          "contentHash": "9bc3f5e672f3c5c35a734c334556af18f46dc30643b36d9c0ba313e68c3dd849"
+        },
+        {
+          "id": "reward-negative-held-library",
+          "contentHash": "b0376849938ddfbc064b8d90e2fe5427a4112e949f44e0192f35ec8abab54fa4"
+        },
+        {
+          "id": "reward-negative-held-transit",
+          "contentHash": "e4b73d700cdfbec5590e927a1dc4845495a8dda6700a610d30544983eb68b67a"
+        },
+        {
+          "id": "reward-negative-held-volunteer",
+          "contentHash": "11775aff9a37c616e9d6b719514dca1fe7202477365d090f9fc6ab027ad86b5b"
+        },
+        {
+          "id": "reward-negative-held-product-docs",
+          "contentHash": "b527030c39a90517463c6aed5037d10b998c288c286a8ebf97a4df2a132f9241"
+        },
+        {
+          "id": "reward-negative-control-release-notes",
+          "contentHash": "6deea0d3580e2634035f0b7cc33c161f8aea2f1702f0eef13bf1a2996e568ab2"
+        },
+        {
+          "id": "reward-negative-control-service-manifest",
+          "contentHash": "f56299b16b706286830cf5d17cfc7532892862b0137c4cf327b451f045282436"
+        }
+      ]
+    },
+    "promptInjection": {
+      "attemptCount": 1,
+      "scoredCount": 1,
+      "zeroRewardCount": 1,
+      "passCount": 0,
+      "meanReward": 0,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-prompt-injection-train-bakery",
+          "contentHash": "260cfac55ff1d5d4769517b448ea7b064c58a13443fde5441e4103776d208729"
+        }
+      ]
+    }
+  },
+  "adaptationEvidence": {
+    "attemptCount": 8,
+    "scoredCount": 8,
+    "zeroRewardCount": 8,
+    "passCount": 0,
+    "meanReward": 0,
+    "rewardReceiptRefs": [
+      {
+        "id": "reward-adaptation-baseline-train-bakery",
+        "contentHash": "2cf9c2b9838991b809a054d2c5be520fc4884a34734ff54777a95bfde0487ac2"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-status",
+        "contentHash": "2093c85ce0a51981317a20e2f779e1f54cb7a9924f8665881805d7d368fac10a"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-conference",
+        "contentHash": "4b1a0c9a9057673b7f264507a20b0f76c48b1775c4aabd142045eabdd10f4a2e"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-knowledge-base",
+        "contentHash": "69c4088f648a816e19732fee507b84ef7ce21a1e703fc8c26882d5e327982912"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-nonprofit",
+        "contentHash": "105c61c08e221ed4d931c95b253b6b09ed858c0195173712a660a806757705f2"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-restaurant",
+        "contentHash": "eb783032e51be9494fe0a322bcdfbc4b97e0ee84e02eb052385dd8138da2d8dd"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-pricing",
+        "contentHash": "ccdfb12cd33ef7e59f7ed5ca3be6821564bea2566bb80b44625c03b8fd56380e"
+      },
+      {
+        "id": "reward-adaptation-baseline-train-portfolio",
+        "contentHash": "a4f897c6623fa04fe3b597307bca272c10f2c28e86152ec6daec0d33d9eea78b"
+      }
+    ]
+  },
+  "developmentValidation": {
+    "attemptCount": 4,
+    "scoredCount": 4,
+    "zeroRewardCount": 0,
+    "passCount": 4,
+    "meanReward": 1,
+    "rewardReceiptRefs": [
+      {
+        "id": "reward-development-candidate-dev-community-center",
+        "contentHash": "22c60ae0efd6055c0373a459d581fd2c3da223215ff8a81df60858b47a52ca09"
+      },
+      {
+        "id": "reward-development-candidate-dev-cafe",
+        "contentHash": "39a14363c25a330c0faa5bfa4cef00a88fb6220fed6422eef78955558ad44654"
+      },
+      {
+        "id": "reward-development-candidate-dev-incident",
+        "contentHash": "44e756cf1ab467c47aff78cbe75f9af7fd6437adbbf70cd77af2ccb326350d4e"
+      },
+      {
+        "id": "reward-development-candidate-dev-workshop",
+        "contentHash": "4c6c886eee78351790f7dde3d96e7d79e40009142190b154e74e27dee51f1d71"
+      }
+    ]
+  },
+  "frozenComparison": {
+    "htmlBefore": {
+      "attemptCount": 6,
+      "scoredCount": 6,
+      "zeroRewardCount": 6,
+      "passCount": 0,
+      "meanReward": 0,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-frozen-baseline-held-clinic",
+          "contentHash": "e3ab125bdf639bb8d0ca7afa7837b5b6b87f3358db11cab402de2a467a750c3d"
+        },
+        {
+          "id": "reward-frozen-baseline-held-museum",
+          "contentHash": "74fbbd5e1a52cbf8372cb8e92a8f63f6336c535df51bbc28cb10cd509ef8531d"
+        },
+        {
+          "id": "reward-frozen-baseline-held-library",
+          "contentHash": "42dad21c9c667851414495daa16596964435d32a122c082ded0926f0030b7a5c"
+        },
+        {
+          "id": "reward-frozen-baseline-held-transit",
+          "contentHash": "e9ee084b77137d3ca432c230eb88185147031a9c82d69a218ff939120ecaede4"
+        },
+        {
+          "id": "reward-frozen-baseline-held-volunteer",
+          "contentHash": "e059350451eeb4ee99e8f0f6bd1c4dd3165ec4b4b5ccf17ebc3b3918e0722967"
+        },
+        {
+          "id": "reward-frozen-baseline-held-product-docs",
+          "contentHash": "f43dd35d577221b49f171168027f8be101171349e9d247fd37daf54948320970"
+        }
+      ]
+    },
+    "htmlAfter": {
+      "attemptCount": 6,
+      "scoredCount": 6,
+      "zeroRewardCount": 0,
+      "passCount": 6,
+      "meanReward": 1,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-frozen-candidate-held-clinic",
+          "contentHash": "d8d37d5df1608c7c605afdaf11497078278920bf382c3ca26853b4921805681f"
+        },
+        {
+          "id": "reward-frozen-candidate-held-museum",
+          "contentHash": "9b31d1f297422ef8b5b0ab4100d1e829d13ee8dedaee604811b9d9558e0b3c6a"
+        },
+        {
+          "id": "reward-frozen-candidate-held-library",
+          "contentHash": "22483c6bd0924185b4bf3ef863af0423fb2ce6e07fe35b068d4d895ff2a15571"
+        },
+        {
+          "id": "reward-frozen-candidate-held-transit",
+          "contentHash": "1d532348e409d8c080e40c60ae3e31cc89f993c59e8ed12a43109c6f0f85c194"
+        },
+        {
+          "id": "reward-frozen-candidate-held-volunteer",
+          "contentHash": "527a56429dc45c096fb423490fd506109e3c8a7bc95a0a3a660e6fe8b34bfaae"
+        },
+        {
+          "id": "reward-frozen-candidate-held-product-docs",
+          "contentHash": "97c42ebdaee4dae2e1cf1add50fb245d08e374c25b23266afe15e3a768ccd11c"
+        }
+      ]
+    },
+    "controlsBefore": {
+      "attemptCount": 2,
+      "scoredCount": 2,
+      "zeroRewardCount": 0,
+      "passCount": 2,
+      "meanReward": 1,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-frozen-baseline-control-release-notes",
+          "contentHash": "e63f200c2b5766a5f53b36795123de05bfc0fdc42cda53908944c7c6a0bee65d"
+        },
+        {
+          "id": "reward-frozen-baseline-control-service-manifest",
+          "contentHash": "184d58ae51710e2da4b2916927b8f21baf36aef3fdc322cc7fb54daf282148df"
+        }
+      ]
+    },
+    "controlsAfter": {
+      "attemptCount": 2,
+      "scoredCount": 2,
+      "zeroRewardCount": 0,
+      "passCount": 2,
+      "meanReward": 1,
+      "rewardReceiptRefs": [
+        {
+          "id": "reward-frozen-candidate-control-release-notes",
+          "contentHash": "54ce2a643b6c199d24beed9bb26a8c2410f7a69f4ad5c605fa01efe773ea3abc"
+        },
+        {
+          "id": "reward-frozen-candidate-control-service-manifest",
+          "contentHash": "8ad09c4fb4d56266ddb5fbe78cef5ca5de395f514156fdc23860b03eb0667d23"
+        }
+      ]
+    }
+  },
+  "decision": {
+    "developmentPassed": true,
+    "heldOutImproved": true,
+    "controlsNonRegressed": true,
+    "outcome": "retain_candidate"
+  },
+  "regrade": {
+    "originalRewardReceipt": {
+      "id": "reward-adaptation-baseline-train-bakery",
+      "contentHash": "2cf9c2b9838991b809a054d2c5be520fc4884a34734ff54777a95bfde0487ac2"
+    },
+    "derivedRewardReceipt": {
+      "id": "canonical-learning-loop-regrade-v2",
+      "contentHash": "9a970acdae8b631e4a171fc1f0398af89d5ea60eea0914bbcb3ee2a444e1af25"
+    },
+    "supersedes": {
+      "id": "reward-adaptation-baseline-train-bakery",
+      "contentHash": "2cf9c2b9838991b809a054d2c5be520fc4884a34734ff54777a95bfde0487ac2"
+    },
+    "originalReward": 0,
+    "derivedReward": 0
+  },
+  "rolloutReceiptHashes": [
+    "16c92a2a50e8022731b295bda92be9f15d2adcec106f4c14fa3623e20859700b",
+    "b3719bb50a002a696fe0a74b27097391de6fe373cfadce450bf6b4cf8f83528f",
+    "32c082e0a302dfc566bad7be7335b9df8e74f81a31eb68ac685a06101c1aa3d0",
+    "14c3f176e9a95f4e0d1825304a309fb919c48bd7559e69dabd42936d9100234d",
+    "7f2637914431cb42bd1cb7ffdee943243ab555017bab194f48f61093b7f8a966",
+    "72f9606020ba204699aea0a12826218cfcde05ec114c979cac2b8988df77a68e",
+    "576b21b1bac08e8dbc2007d8cc3a473e18e7cbb3825efe9b93dffa0da4f51576",
+    "a4349997e36fb41bfd71e66efd5ac69a75a6730a8c237f7d67403f9f18ffdd6c",
+    "90a2f82418202c60d6057945ad16ea3ab1b95ffe389ccda294c9c4f356d1ea01",
+    "3283b10a10e53ce10ffa5574925e5e5314c18c83a107239a740dc4b79b416dcd",
+    "3483c3ae8358df058bb52ca25e15ed070018fac6da9c446f091aef51621dc3c4",
+    "8f7111d7af11db4e874530b541a91d215552d2f893878787ea00481b3c0002bb",
+    "2e6c27e8767c60729f716f3e74a8710f467538b197188e2ce2cf7402e07175af",
+    "87a95a4c157b710da567b89bdc978a8b2fb8cbaf298e4f4c7944e998411d6f93",
+    "73028e9d3f2380a5ed47fe77e0c3bc19b5f370526ff37742bb4772f0e5f780f2",
+    "ab5f6de2e816d4aaea6f0c936ec2c5a5a8fbe311fd73ffaaca43679fb5a7738a",
+    "50db57f63f9102ea54557f3a2c57221580bc386f21fd54c7e3fcf0d5aa43cfbc",
+    "2c1772bb0eaf80d68e66b35d6c3a62cd91f7559df77edf947f2bed28309f0225",
+    "86cddede96451ffb593d12cfb12ea904ddc3d4f71c987f125b80c69e39ce6ccb",
+    "5a7f863c87974562e2483e8aca6dd95ac1ca3f7d40d8549c0b56a08db636b9c0",
+    "6c3249c12a3cfc7fb6c9174d168e89213003dd54cb6c7331771e101a83b58e1b",
+    "1eb3aa4558e84262a806b8dbd180d5d2f37082a9af38cb6cecaa237d3c5f6a47",
+    "3820239c302bfff7d0830a885516039eef848f3a55e7a055e17c638196096b45",
+    "c396ec2d9d139fac9d0473c30e1a1a165d2019fc3178910b27a3c1e8ae078a78",
+    "a53976a80cb92a4689542c6ac780723a54eb327ef430b7080d27453c674597d0",
+    "8fa619174768eaaee511a057dd7964ac5b52e5847d39ff98c403edd55370ab7b",
+    "72cdae1cf0d241c3e3b0c808c3bcd92a347d2715c5016fac411634f7d985d29e",
+    "ade6f07dacf93599898dc9024b07d76adc64e6f5765038b272517d04838d9dd0"
+  ],
+  "createdAt": "2026-08-17T15:00:00.000Z",
+  "contentHash": "5c34e6dea627e638611dfe9a93cdf6e69cb382acabd66f7eb20b7f7ab6dbb08c"
+}

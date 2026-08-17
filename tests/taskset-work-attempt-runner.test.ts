@@ -232,9 +232,21 @@ describe("Taskset Work attempt runner", () => {
         completedAt: expect.any(String),
       });
       expect(artifacts.map((artifact) => artifact.kind).sort()).toEqual([
+        "grader_evidence",
+        "grader_evidence",
+        "grader_evidence",
         "output_artifact",
         "runtime_trace",
       ]);
+      expect(
+        artifacts
+          .filter((artifact) => artifact.kind === "grader_evidence")
+          .map((artifact) => artifact.path),
+      ).toEqual(expect.arrayContaining([
+        expect.stringMatching(/artifact-manifest\.json$/),
+        expect.stringMatching(/canonical-rollout\.json$/),
+        expect.stringMatching(/reward-receipt\.json$/),
+      ]));
       expect(attempt.artifactRefs).toEqual(
         expect.arrayContaining(artifacts.map((artifact) => artifact.id)),
       );
@@ -250,7 +262,7 @@ describe("Taskset Work attempt runner", () => {
       );
     }));
 
-  test("finalizes once every required output is durably saved", () =>
+  test("reconciles and persists a sole compatible output with a friendly filename", () =>
     withTrainingStore(async ({ store, directory }) => {
       const { taskset, task } = await createWorkTaskset(directory);
       await store.upsertTaskset(taskset);
@@ -312,6 +324,13 @@ describe("Taskset Work attempt runner", () => {
               Buffer.from(String(args.content), "utf8"),
             );
           }
+          if (request.action === "sandbox_list_files") {
+            return result(request, {
+              files: [...sandboxFiles.keys()].filter((filePath) =>
+                filePath.startsWith("outputs/")
+              ),
+            });
+          }
           if (request.action === "sandbox_save_output") {
             const args = request.args as Record<string, unknown>;
             const saved = await workOutputService.saveWorkOutput({
@@ -350,27 +369,10 @@ describe("Taskset Work attempt runner", () => {
                   name: "work_write_file",
                   arguments: JSON.stringify({
                     area: "outputs",
-                    path: "normalized.json",
+                    path: "friendly-inventory.json",
                     content: JSON.stringify({
                       rows: [{ sku: "A", count: 2 }],
                     }),
-                  }),
-                },
-              }],
-            };
-            return;
-          }
-          if (modelRounds === 2) {
-            yield {
-              toolCalls: [{
-                id: "call_save",
-                type: "function",
-                function: {
-                  name: "work_save_output",
-                  arguments: JSON.stringify({
-                    path: "normalized.json",
-                    suggestedName: "normalized.json",
-                    validation: [],
                   }),
                 },
               }],
@@ -394,7 +396,7 @@ describe("Taskset Work attempt runner", () => {
         resultId: "attempt_taskset_work_saved_output_completion",
       });
 
-      expect(modelRounds).toBe(2);
+      expect(modelRounds).toBe(1);
       expect(workspaceActions.at(-1)).toBe("sandbox_stop");
       expect(execution.attempt).toMatchObject({
         infrastructureError: null,
@@ -556,6 +558,47 @@ describe("Taskset Work attempt runner", () => {
         passed: false,
         rewardEligible: false,
         failureClass: "timeout",
+      });
+    }));
+
+  test("enforces the model-request deadline when a provider ignores its abort signal", () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const { taskset, task } = await createWorkTaskset(directory, {
+        modelRequestTimeoutMs: 10,
+      });
+      await store.upsertTaskset(taskset);
+      const workspaceActions: string[] = [];
+      const { runtime } = successfulRuntime(workspaceActions);
+      const evaluation = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelText: async () => "",
+        modelStream: async function* () {
+          await new Promise<void>(() => {});
+          if (false) yield {};
+        },
+        workRuntime: runtime,
+      });
+
+      const execution = await evaluation.execute({
+        tasksetId: taskset.id,
+        taskId: task.id,
+        model: {
+          providerId: "openpond",
+          modelId: "openpond-chat",
+        },
+        seed: 17,
+        attempt: 0,
+        resultId: "attempt_taskset_work_model_request_timeout",
+      });
+
+      expect(workspaceActions).toContain("sandbox_stop");
+      expect(execution.attempt).toMatchObject({
+        infrastructureError: "Work model request exceeded 10 ms.",
+        metadata: {
+          status: "timeout",
+          failureClass: "timeout",
+        },
       });
     }));
 
@@ -915,6 +958,7 @@ async function createWorkTaskset(
   options: {
     timeoutMs?: number;
     includeParsedJsonInAttempt?: boolean;
+    modelRequestTimeoutMs?: number;
   } = {},
 ) {
   const base = tasksetFixture();
@@ -980,11 +1024,15 @@ async function createWorkTaskset(
         "work_read_file",
         "work_write_file",
         "work_exec",
+        "work_list_files",
         "work_save_output",
       ],
       metadata: {
         maxToolTurns: 8,
         maxInputBytes: 1_000_000,
+        ...(options.modelRequestTimeoutMs !== undefined
+          ? { modelRequestTimeoutMs: options.modelRequestTimeoutMs }
+          : {}),
       },
       defaultTimeoutMs: options.timeoutMs ?? base.environment.defaultTimeoutMs,
     },

@@ -353,6 +353,7 @@ export async function createOpenPondAppServer(
         store,
         request,
         stream: harnessEvaluationReviewStream,
+        continuation: { storeDir, stream: harnessEvaluationReviewStream },
       }),
       acceptHarnessEvaluationReview: harnessTasksetReview.acceptEvaluationReview,
       materializeHarnessEvaluationTaskset:

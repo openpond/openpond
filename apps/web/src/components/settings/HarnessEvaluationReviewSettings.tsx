@@ -3,6 +3,7 @@ import type {
   HarnessEvaluationReviewCadence,
   HarnessEvaluationReviewReceipt,
   HarnessEvaluationReviewSchedule,
+  HarnessRefinementCandidate,
   ModelImprovementQualificationReceipt,
 } from "@openpond/contracts";
 
@@ -11,6 +12,7 @@ type Props = {
   backgroundReviewEnabled: boolean;
   busy: boolean;
   reviews: HarnessEvaluationReviewReceipt[];
+  candidates: HarnessRefinementCandidate[];
   qualifications: ModelImprovementQualificationReceipt[];
   schedule: HarnessEvaluationReviewSchedule;
   acceptingReviewId: string | null;
@@ -19,6 +21,8 @@ type Props = {
   onReview: (maxEstimatedCostUsd: number) => void;
   onSaveSchedule: (input: {
     enabled: boolean;
+    activityEnabled: boolean;
+    activityBatchSize: number;
     cadence: HarnessEvaluationReviewCadence;
     maxEstimatedCostUsd: number;
   }) => void;
@@ -133,6 +137,7 @@ export function HarnessEvaluationReviewSettings({
   onBackgroundReviewChange,
   onAcceptTasksetReview,
   reviews,
+  candidates,
   qualifications,
   schedule,
   onReview,
@@ -140,13 +145,25 @@ export function HarnessEvaluationReviewSettings({
 }: Props) {
   const [cadence, setCadence] = useState<HarnessEvaluationReviewCadence>(schedule.cadence);
   const [enabled, setEnabled] = useState(schedule.enabled);
+  const [activityEnabled, setActivityEnabled] = useState(schedule.activityEnabled);
+  const [activityBatchSize, setActivityBatchSize] = useState(schedule.activityBatchSize);
 
   useEffect(() => {
     setCadence(schedule.cadence);
     setEnabled(schedule.enabled);
-  }, [schedule.cadence, schedule.enabled]);
+    setActivityEnabled(schedule.activityEnabled);
+    setActivityBatchSize(schedule.activityBatchSize);
+  }, [
+    schedule.activityBatchSize,
+    schedule.activityEnabled,
+    schedule.cadence,
+    schedule.enabled,
+  ]);
 
-  const dirty = cadence !== schedule.cadence || enabled !== schedule.enabled;
+  const dirty = cadence !== schedule.cadence
+    || enabled !== schedule.enabled
+    || activityEnabled !== schedule.activityEnabled
+    || activityBatchSize !== schedule.activityBatchSize;
 
   return (
     <>
@@ -155,8 +172,8 @@ export function HarnessEvaluationReviewSettings({
           <div>
             <h2>Continuous learning</h2>
             <p>
-              Review completed turns immediately, then run scheduled RL reviews
-              across recurring evidence.
+              Review each completed turn, and separately look across Work for
+              recurring evidence when you choose.
             </p>
           </div>
           <div className="harness-section-actions">
@@ -173,6 +190,8 @@ export function HarnessEvaluationReviewSettings({
               disabled={busy || !dirty}
               onClick={() => onSaveSchedule({
                 enabled,
+                activityEnabled,
+                activityBatchSize,
                 cadence,
                 maxEstimatedCostUsd: schedule.maxEstimatedCostUsd,
               })}
@@ -201,18 +220,46 @@ export function HarnessEvaluationReviewSettings({
           </label>
           <label className="harness-learning-setting">
             <span className="harness-learning-copy">
-              <strong>RL review</strong>
-              <small>Compare recurring evidence on a schedule and propose evaluation or training work. Unchanged evidence does not call the model.</small>
+              <strong>Activity review</strong>
+              <small>Review after a bounded batch of new outcomes. Unchanged evidence does not call the model.</small>
+            </span>
+            <span className="provider-toggle harness-learning-toggle">
+              <input
+                checked={activityEnabled}
+                disabled={busy}
+                onChange={(event) => setActivityEnabled(event.target.checked)}
+                type="checkbox"
+              />
+              <span aria-hidden="true" />
+            </span>
+          </label>
+          <div className="harness-learning-schedule">
+            <label className="settings-select-field">
+              <span>Activity batch</span>
+              <select
+                disabled={busy || !activityEnabled}
+                onChange={(event) => setActivityBatchSize(Number(event.target.value))}
+                value={activityBatchSize}
+              >
+                <option value={5}>5 new outcomes</option>
+                <option value={10}>10 new outcomes</option>
+                <option value={20}>20 new outcomes</option>
+                <option value={50}>50 new outcomes</option>
+              </select>
+            </label>
+          </div>
+          <label className="harness-learning-setting">
+            <span className="harness-learning-copy">
+              <strong>Scheduled backstop</strong>
+              <small>Optionally review daily or weekly when activity is low. This is the same cross-Work reviewer, not another learning loop.</small>
             </span>
             <span className="provider-toggle harness-learning-toggle">
               <input
                 checked={enabled}
                 disabled={busy}
                 onChange={(event) => {
-                  const nextEnabled = event.target.checked;
-                  const nextCadence = nextEnabled && cadence === "manual" ? "daily" : cadence;
-                  setEnabled(nextEnabled);
-                  setCadence(nextCadence);
+                  setEnabled(event.target.checked);
+                  if (event.target.checked && cadence === "manual") setCadence("daily");
                 }}
                 type="checkbox"
               />
@@ -223,15 +270,13 @@ export function HarnessEvaluationReviewSettings({
             <label className="settings-select-field">
               <span>Cadence</span>
               <select
-                disabled={busy}
+                disabled={busy || !enabled}
                 onChange={(event) => {
                   const next = event.target.value as HarnessEvaluationReviewCadence;
                   setCadence(next);
-                  if (next === "manual") setEnabled(false);
                 }}
-                value={cadence}
+                value={cadence === "manual" ? "daily" : cadence}
               >
-                <option value="manual">Manual only</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
               </select>
@@ -239,9 +284,40 @@ export function HarnessEvaluationReviewSettings({
           </div>
           <dl className="harness-learning-run-times">
             <div><dt>Last run</dt><dd>{formatDate(schedule.lastRunAt)}</dd></div>
-            <div><dt>Next run</dt><dd>{schedule.enabled ? formatDate(schedule.nextRunAt) : "Manual"}</dd></div>
+            <div><dt>Next scheduled run</dt><dd>{schedule.enabled ? formatDate(schedule.nextRunAt) : "Off"}</dd></div>
+            <div><dt>Activity trigger</dt><dd>{schedule.activityEnabled ? `${schedule.activityBatchSize} new outcomes` : "Off"}</dd></div>
           </dl>
         </section>
+      </section>
+
+      <section className="harness-history-section">
+        <div className="harness-section-heading">
+          <div>
+            <h2>Cross-Work candidates</h2>
+            <p>Persistent patterns carried across review windows until confirmed, resolved, rejected, or expired.</p>
+          </div>
+          <span>{candidates.length}</span>
+        </div>
+        {candidates.length ? candidates.map((candidate) => (
+          <article
+            className="harness-history-card harness-evaluation-review-card"
+            key={`${candidate.id}:${candidate.contentHash}`}
+          >
+            <header>
+              <div>
+                <div className="harness-history-kicker">
+                  <span className={`harness-status harness-status-${candidate.status}`}>
+                    {displayClassification(candidate.status)}
+                  </span>
+                  <span>{candidate.occurrences.length} occurrences</span>
+                </div>
+                <h2>{candidate.statement}</h2>
+              </div>
+              <time>{formatDate(candidate.updatedAt)}</time>
+            </header>
+            <p>{candidate.resolution?.reason ?? candidate.recurrenceFamily}</p>
+          </article>
+        )) : <div className="harness-empty">No cross-Work candidates yet.</div>}
       </section>
 
       <section className="harness-history-section">

@@ -139,4 +139,66 @@ describe("Model binding promotion gate", () => {
       }),
     ).toBeNull();
   });
+
+  test("preserves baseline, candidate activation, rejection, and rollback lineage", () => {
+    const baseline = ModelBindingSchema.parse({
+      schemaVersion: "openpond.modelBinding.v1",
+      id: "binding-baseline",
+      profileId: "profile-fixture",
+      role: "chat_manual",
+      roleTargetId: "default",
+      modelArtifactLineageId: "lineage-baseline",
+      tasksetId: "taskset-fixture",
+      evaluationArtifactId: "evaluation-baseline",
+      status: "active",
+      priorBindingId: null,
+      rollbackTargetBindingId: null,
+      promotedBy: "profile-fixture",
+      promotedAt: "2026-07-27T00:00:00.000Z",
+      rolledBackAt: null,
+      metadata: {},
+    });
+    expect(resolveModelBindingPromotionGate(lineage())).toBeNull();
+    const gate = resolveModelBindingPromotionGate({
+      ...lineage(),
+      promotable: true,
+      frozenEvaluationArtifactId: "evaluation-candidate",
+    });
+    expect(gate?.kind).toBe("source_frozen_evaluation");
+    const candidate = ModelBindingSchema.parse({
+      ...baseline,
+      id: "binding-candidate",
+      modelArtifactLineageId: "lineage-candidate",
+      evaluationArtifactId: gate?.evaluationArtifactId ?? null,
+      priorBindingId: baseline.id,
+      rollbackTargetBindingId: baseline.id,
+      promotedAt: "2026-07-27T01:00:00.000Z",
+    });
+    const rolledBackCandidate = ModelBindingSchema.parse({
+      ...candidate,
+      status: "rolled_back",
+      rolledBackAt: "2026-07-27T02:00:00.000Z",
+    });
+    const restored = ModelBindingSchema.parse({
+      ...baseline,
+      id: "binding-baseline-restored",
+      priorBindingId: candidate.id,
+      promotedAt: "2026-07-27T02:00:00.000Z",
+      metadata: {
+        action: "rollback",
+        rolledBackBindingId: candidate.id,
+        restoredFromBindingId: baseline.id,
+      },
+    });
+    expect(candidate).toMatchObject({
+      priorBindingId: baseline.id,
+      rollbackTargetBindingId: baseline.id,
+    });
+    expect(rolledBackCandidate).toMatchObject({ status: "rolled_back" });
+    expect(restored).toMatchObject({
+      status: "active",
+      priorBindingId: candidate.id,
+      modelArtifactLineageId: baseline.modelArtifactLineageId,
+    });
+  });
 });

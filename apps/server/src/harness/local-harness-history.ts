@@ -61,6 +61,7 @@ export function createLocalHarnessSettingsRoutePayloads(input: {
     reviewHarnessEvaluationPayload: (payload: unknown) =>
       reviewLocalHarnessEvaluationFromSettings({
         store: input.store,
+        storeDir: input.storeDir,
         stream: input.evaluationReviewStream,
         request: parseHarnessEvaluationReviewRequest(payload),
       }),
@@ -119,6 +120,11 @@ function parseHarnessEvaluationReviewScheduleRequest(
   if (
     typeof record.workspaceId !== "string" ||
     typeof record.enabled !== "boolean" ||
+    typeof record.activityEnabled !== "boolean" ||
+    typeof record.activityBatchSize !== "number" ||
+    !Number.isInteger(record.activityBatchSize) ||
+    record.activityBatchSize < 1 ||
+    record.activityBatchSize > 100 ||
     (record.cadence !== "manual" && record.cadence !== "daily" && record.cadence !== "weekly") ||
     typeof record.maxEstimatedCostUsd !== "number" ||
     !Number.isFinite(record.maxEstimatedCostUsd) ||
@@ -129,6 +135,8 @@ function parseHarnessEvaluationReviewScheduleRequest(
   return {
     workspaceId: record.workspaceId,
     enabled: record.enabled,
+    activityEnabled: record.activityEnabled,
+    activityBatchSize: record.activityBatchSize,
     cadence: record.cadence,
     maxEstimatedCostUsd: record.maxEstimatedCostUsd,
   };
@@ -234,6 +242,8 @@ export async function localHarnessHistoryPayload(
       backgroundReview: { enabled: true, updatedAt: null },
       evaluationReviewSchedule: {
         enabled: false,
+        activityEnabled: false,
+        activityBatchSize: 10,
         cadence: "manual",
         maxEstimatedCostUsd: 0,
         nextRunAt: null,
@@ -246,6 +256,7 @@ export async function localHarnessHistoryPayload(
       changes: [],
       routes: [],
       evaluationReviews: [],
+      refinementCandidates: [],
       modelImprovementQualifications: [],
       pendingReviews: [],
       memories: [],
@@ -261,6 +272,7 @@ export async function localHarnessHistoryPayload(
     validations,
     routeDecisions,
     evaluationReviews,
+    refinementCandidates,
     modelImprovementQualifications,
     applyReceipts,
     outcomes,
@@ -274,6 +286,7 @@ export async function localHarnessHistoryPayload(
     store.listHarnessImprovementArtifacts(workspace.id, "targeted_validation", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "route_decision", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "evaluation_review", 1_000),
+    store.listHarnessRefinementCandidates(workspace.id),
     store.listHarnessImprovementArtifacts(workspace.id, "training_qualification", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "apply_receipt", 1_000),
     store.listHarnessImprovementArtifacts(workspace.id, "refiner_outcome", 1_000),
@@ -402,6 +415,7 @@ export async function localHarnessHistoryPayload(
     changes,
     routes,
     evaluationReviews: evaluationReviews as HarnessEvaluationReviewReceipt[],
+    refinementCandidates,
     modelImprovementQualifications: modelImprovementQualifications as ModelImprovementQualificationReceipt[],
     pendingReviews,
     memories: await store.listHarnessMemories(workspace.id),
@@ -410,12 +424,14 @@ export async function localHarnessHistoryPayload(
 
 export async function reviewLocalHarnessEvaluationFromSettings(input: {
   store: SqliteStore;
+  storeDir: string;
   request: HarnessEvaluationReviewRequest;
   stream?: import("@openpond/harness").HarnessEvaluationReviewModelStream;
 }): Promise<HarnessEvaluationReviewResponse> {
   const settings = await input.store.getHarnessEvaluationReviewSettings(input.request.workspaceId);
   const receipt = await reviewSelectedLocalHarnessEvaluationFromHost({
     store: input.store,
+    storeDir: input.storeDir,
     workspaceId: input.request.workspaceId,
     maxEstimatedCostUsd: input.request.maxEstimatedCostUsd ?? settings.maxEstimatedCostUsd,
     stream: input.stream,
@@ -461,6 +477,8 @@ export async function updateLocalHarnessEvaluationReviewScheduleFromSettings(inp
     settings: {
       ...previous,
       enabled,
+      activityEnabled: input.request.activityEnabled,
+      activityBatchSize: input.request.activityBatchSize,
       cadence: input.request.cadence,
       maxEstimatedCostUsd: input.request.maxEstimatedCostUsd,
       nextRunAt: enabled

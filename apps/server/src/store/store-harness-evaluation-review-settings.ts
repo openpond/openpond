@@ -7,6 +7,8 @@ export type HarnessBackgroundReviewSettings = { enabled: boolean; updatedAt: str
 type HarnessEvaluationReviewClassification = HarnessEvaluationReviewReceipt["classification"];
 export type HarnessEvaluationReviewSettings = {
   enabled: boolean;
+  activityEnabled: boolean;
+  activityBatchSize: number;
   cadence: HarnessEvaluationReviewCadence;
   maxEstimatedCostUsd: number;
   nextRunAt: string | null;
@@ -22,6 +24,8 @@ export type HarnessEvaluationReviewSettings = {
 
 const DEFAULT_SETTINGS: HarnessEvaluationReviewSettings = {
   enabled: true,
+  activityEnabled: true,
+  activityBatchSize: 10,
   cadence: "daily",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
@@ -81,6 +85,8 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
     await this.writeQueue;
     const row = await this.get<{
       enabled: number;
+      activity_enabled: number;
+      activity_batch_size: number;
       cadence: HarnessEvaluationReviewCadence;
       max_estimated_cost_usd: number;
       next_run_at: string | null;
@@ -91,7 +97,8 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
       last_error: string | null;
       updated_at: string;
     }>(
-      `SELECT enabled, cadence, max_estimated_cost_usd, next_run_at, last_run_at,
+      `SELECT enabled, activity_enabled, activity_batch_size, cadence,
+              max_estimated_cost_usd, next_run_at, last_run_at,
               last_review_id, last_review_hash, last_classification, last_error, updated_at
        FROM harness_evaluation_review_settings WHERE workspace_id = ?`,
       [workspaceId],
@@ -106,6 +113,8 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
       : null;
     return {
       enabled: row.enabled === 1,
+      activityEnabled: row.activity_enabled === 1,
+      activityBatchSize: row.activity_batch_size,
       cadence: row.cadence,
       maxEstimatedCostUsd: row.max_estimated_cost_usd,
       nextRunAt: row.next_run_at,
@@ -130,12 +139,15 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
       const result = input.settings.lastResult;
       await this.run(
         `INSERT INTO harness_evaluation_review_settings (
-           workspace_id, enabled, cadence, max_estimated_cost_usd, next_run_at,
+           workspace_id, enabled, activity_enabled, activity_batch_size,
+           cadence, max_estimated_cost_usd, next_run_at,
            last_run_at, last_review_id, last_review_hash, last_classification,
            last_error, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(workspace_id) DO UPDATE SET
            enabled = excluded.enabled,
+           activity_enabled = excluded.activity_enabled,
+           activity_batch_size = excluded.activity_batch_size,
            cadence = excluded.cadence,
            max_estimated_cost_usd = excluded.max_estimated_cost_usd,
            next_run_at = excluded.next_run_at,
@@ -148,6 +160,8 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
         [
           input.workspaceId,
           input.settings.enabled ? 1 : 0,
+          input.settings.activityEnabled ? 1 : 0,
+          input.settings.activityBatchSize,
           input.settings.cadence,
           input.settings.maxEstimatedCostUsd,
           input.settings.nextRunAt,

@@ -12,6 +12,13 @@ import {
 } from "@openpond/harness";
 
 export const TaskSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
+export const RequiredOutputContractSchema = z.object({
+  path: z.string().trim().min(1).max(2_000).refine(safeRelativePath),
+  mediaType: z.string().trim().min(1).max(200),
+  schemaRef: ImmutableAssetRefSchema.nullable().default(null),
+  maxBytes: z.number().int().positive().max(250_000_000).nullable().default(null),
+  metadata: MetadataSchema,
+}).strict();
 export const PolicyBoundarySchema = z.object({
   policyVisibleFields: z.array(ReleaseIdSchema).max(1_000).default([]),
   privilegedFields: z.array(ReleaseIdSchema).max(1_000).default([]),
@@ -75,6 +82,7 @@ export const TaskRecordSchema = z.object({
   policyVisibleContext: z.record(z.string(), z.unknown()).default({}),
   privilegedContextRef: ReleaseIdSchema.nullable(),
   artifactRefs: z.array(ImmutableAssetRefSchema).max(1_000).default([]),
+  requiredOutputs: z.array(RequiredOutputContractSchema).max(1_000).optional(),
   tags: z.array(ReleaseIdSchema).max(100).default([]),
 }).strict();
 
@@ -84,10 +92,12 @@ export const TasksetReleaseContentSchema = z.object({
   revision: z.number().int().positive(),
   policy: PolicyBoundarySchema,
   environment: EnvironmentContractSchema,
+  environmentRelease: z.object({ id: ReleaseIdSchema, contentHash: ReleaseHashSchema }).strict().optional(),
   tools: z.array(ToolDeclarationSchema).max(200),
   capabilities: z.array(CapabilityRequirementSchema).max(200),
   tasks: z.array(TaskRecordSchema).min(1).max(1_000_000),
   graders: z.array(GraderSpecSchema).min(1).max(1_000),
+  verifierSetRelease: z.object({ id: ReleaseIdSchema, contentHash: ReleaseHashSchema }).strict().optional(),
   metadata: MetadataSchema,
 }).strict();
 export const TasksetReleaseSchema = TasksetReleaseContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
@@ -121,6 +131,14 @@ export function validateTasksetRelease(input: unknown): {
   }
   const taskset = parsed.data;
   const issues: TasksetValidationIssue[] = [];
+  if (Boolean(taskset.environmentRelease) !== Boolean(taskset.verifierSetRelease)) {
+    issues.push({
+      code: "execution_release_binding_incomplete",
+      severity: "error",
+      message: "A Taskset Release must bind both Environment and Verifier Set releases or neither during v2 migration.",
+      path: "environmentRelease",
+    });
+  }
   const clusterSplits = new Map<string, Set<string>>();
   for (const task of taskset.tasks) {
     const splits = clusterSplits.get(task.clusterKey) ?? new Set<string>();
@@ -186,6 +204,7 @@ export type GraderSpec = z.infer<typeof GraderSpecSchema>;
 export type DeterministicGraderSpec = z.infer<typeof DeterministicGraderSpecSchema>;
 export type TaskRecord = z.infer<typeof TaskRecordSchema>;
 export type TasksetRelease = z.infer<typeof TasksetReleaseSchema>;
+export type RequiredOutputContract = z.infer<typeof RequiredOutputContractSchema>;
 
 export {
   CapabilityRequirementSchema,
@@ -193,3 +212,9 @@ export {
   type CapabilityRequirement,
   type ToolDeclaration,
 } from "@openpond/harness";
+
+function safeRelativePath(value: string): boolean {
+  const normalized = value.replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) return false;
+  return !normalized.split("/").some((part) => !part || part === "." || part === "..");
+}

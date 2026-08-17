@@ -38,6 +38,10 @@
       "types": "./dist/types/runs.d.ts",
       "import": "./dist/runs.js"
     },
+    "./rollouts": {
+      "types": "./dist/types/rollouts.d.ts",
+      "import": "./dist/rollouts.js"
+    },
     "./review": {
       "types": "./dist/types/review-conformance.d.ts",
       "import": "./dist/review-conformance.js"

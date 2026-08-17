@@ -132,6 +132,26 @@ describe("public package conformance", () => {
     expect(destroyed).toBe(true);
   });
 
+  it("keeps a trusted deterministic policy failure scored and reward-eligible", async () => {
+    const [grader] = genericToolConformance.taskset.graders;
+    expect(grader).toBeDefined();
+    const [result] = await gradeEvidence({
+      task: genericToolConformance.taskset.tasks[0]!,
+      evidence: {
+        output: { text: "intentionally incorrect" },
+        runtimeEventRefs: [],
+        artifactRefs: [],
+      },
+      graders: [grader!],
+    });
+    expect(result).toMatchObject({
+      score: 0,
+      passed: false,
+      rewardEligible: true,
+      failureClass: "policy_failure",
+    });
+  });
+
   it("rejects split contamination and content-hash drift", () => {
     const fixture = structuredClone(genericToolConformance.taskset);
     fixture.tasks[1]!.clusterKey = fixture.tasks[0]!.clusterKey;

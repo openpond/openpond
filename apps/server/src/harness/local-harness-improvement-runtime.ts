@@ -20,6 +20,7 @@ import { startProviderRequestUsageRecorder } from "../runtime/model-usage-record
 import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
 import { recordLocalHarnessImprovementBoundary } from "./local-harness-improvement-observer.js";
+import { localHarnessRefinerActivityDisplay } from "./local-harness-refiner-activity.js";
 import { runLocalHarnessRefinerWorker } from "./local-harness-refiner-worker.js";
 
 type LocalHarnessImprovementBoundary = {
@@ -105,6 +106,12 @@ export function createLocalHarnessImprovementRuntime(input: {
             maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
             execution: "public_package",
             recoveredAfterRestart,
+            activity: {
+              schemaVersion: "openpond.localHarnessRefinerActivityDisplay.v1",
+              visibility: refinerActivityVisibility(boundary.session),
+              state: "running",
+              summary: "Reviewing this Work for a reusable improvement",
+            },
           },
         }),
       );
@@ -145,6 +152,12 @@ export function createLocalHarnessImprovementRuntime(input: {
                 maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
                 execution: "public_package",
                 recoveredAfterRestart,
+                activity: {
+                  schemaVersion: "openpond.localHarnessRefinerActivityDisplay.v1",
+                  visibility: refinerActivityVisibility(boundary.session),
+                  state: "running",
+                  summary: "Reviewing this Work for a reusable improvement",
+                },
               },
             }),
           );
@@ -195,6 +208,11 @@ export function createLocalHarnessImprovementRuntime(input: {
             },
           });
           const completedAtMs = Date.now();
+          const activity = localHarnessRefinerActivityDisplay({
+            session: boundary.session,
+            trigger,
+            result,
+          });
           await input.appendRuntimeEvent(
             event({
               sessionId: boundary.session.id,
@@ -220,6 +238,7 @@ export function createLocalHarnessImprovementRuntime(input: {
                   ? { id: result.proposal.id, contentHash: result.proposal.contentHash }
                   : null,
                 workspaceAdvance: result.advanceReceipt?.decision ?? null,
+                activity,
                 timing: {
                   queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
                   modelDurationMs:
@@ -249,6 +268,13 @@ export function createLocalHarnessImprovementRuntime(input: {
               data: {
                 triggerId: trigger.id,
                 recoveredAfterRestart,
+                activity: {
+                  schemaVersion: "openpond.localHarnessRefinerActivityDisplay.v1",
+                  visibility: refinerActivityVisibility(boundary.session),
+                  state: "failed",
+                  summary: "Refiner review failed",
+                  reason: error instanceof Error ? error.message : String(error),
+                },
                 timing: {
                   queueWaitMs: Math.max(0, jobStartedAtMs - queuedAtMs),
                   modelDurationMs:
@@ -291,4 +317,14 @@ export function createLocalHarnessImprovementRuntime(input: {
   };
 
   return processLocalHarnessImprovementBoundary;
+}
+
+function refinerActivityVisibility(
+  session: Session,
+): "always" | "material_only" {
+  return session.metadata?.automatedTasksetWorkAttempt === true
+    || typeof session.metadata?.tasksetId === "string"
+    || typeof session.metadata?.benchmarkRuntime === "string"
+    ? "always"
+    : "material_only";
 }

@@ -67,6 +67,15 @@ describe("Harness refinement status", () => {
     });
 
     expect(messages).toHaveLength(1);
-    expect(messages[0]?.content).toBe("Harness recommendation routed to runtime");
+    expect(messages[0]).toMatchObject({
+      role: "activity_group",
+      turnId: "turn-a",
+      refinerActivity: {
+        state: "completed",
+        result: "routed",
+        decision: "route",
+        route: "runtime",
+      },
+    });
   });
 });

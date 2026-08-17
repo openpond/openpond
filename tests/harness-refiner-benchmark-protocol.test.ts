@@ -4,6 +4,11 @@ import {
   ModelEvaluationStopReceiptSchema,
   summarizeModelEvaluationTaskEfficiency,
 } from "@openpond/contracts";
+import {
+  buildArtifactManifest,
+  createRewardReceipt,
+  createVerifierSetRelease,
+} from "@openpond/evals";
 
 import {
   BenchmarkEvidenceSnapshot,
@@ -408,7 +413,66 @@ describe("Harness Refiner benchmark protocol", () => {
       harnessRelease: { id: `${phase}-harness`, contentHash: harnessHash },
       attemptCount: 1,
     });
-    const attempt = (id: string, harnessHash: string) => ({
+    const canonicalEvidence = (id: string, score: 0 | 1) => {
+      const attemptRef = { id: `receipt-${id}`, contentHash: receiptHash };
+      const artifactManifest = buildArtifactManifest({
+        id: `artifact-manifest-${id}`,
+        attemptRef,
+        requiredOutputs: [],
+        collectedArtifacts: [],
+        createdAt: "2026-08-17T00:00:00.000Z",
+      });
+      const verifierSet = createVerifierSetRelease({
+        schemaVersion: "openpond.verifierSetRelease.v1",
+        id: `verifier-set-${id}`,
+        revision: 1,
+        graders: [{
+          id: "fixture-verifier",
+          version: "1",
+          kind: "state",
+          weight: 1,
+          hardGate: true,
+          rewardEligible: true,
+          privileged: true,
+          config: {},
+        }],
+        isolation: {
+          processBoundary: "isolated_process",
+          networkPolicy: "none",
+          defaultTimeoutMs: 1_000,
+        },
+        calibrationReceiptRefs: [],
+        metadata: {},
+      });
+      const rewardReceipt = createRewardReceipt({
+        id: `reward-${id}`,
+        attemptRef,
+        verifierSet,
+        artifactManifest,
+        outcomeClass: score ? "completed" : "policy_failure",
+        failureOwner: score ? null : "policy",
+        components: [{
+          verifierId: "fixture-verifier",
+          verifierVersion: "1",
+          status: "scored",
+          rawScore: score,
+          normalizedScore: score,
+          weight: 1,
+          passed: Boolean(score),
+          hardGate: true,
+          rewardEligible: true,
+          rewardContribution: score,
+          failureOwner: score ? null : "policy",
+          feedback: [],
+          visibleEvidenceRefs: [],
+          privilegedEvidenceRefs: [],
+          metadata: {},
+        }],
+        createdAt: "2026-08-17T00:00:00.000Z",
+      });
+      return { artifactManifest, rewardReceipt };
+    };
+    const attempt = (id: string, harnessHash: string, score: 0 | 1) => ({
       id,
       taskId: "held-out-1",
       seed: 17,
@@ -419,6 +483,8 @@ describe("Harness Refiner benchmark protocol", () => {
           harnessRelease: { id: "harness", contentHash: harnessHash },
         },
         portableAttemptReceipt: { contentHash: receiptHash },
+        portableArtifactManifest: canonicalEvidence(id, score).artifactManifest,
+        portableRewardReceipt: canonicalEvidence(id, score).rewardReceipt,
       },
     });
     const grades = [
@@ -433,8 +499,8 @@ describe("Harness Refiner benchmark protocol", () => {
         run("baseline", baselineHash),
       ]),
       listTaskAttempts: vi.fn(async () => [
-        attempt("baseline-attempt", baselineHash),
-        attempt("candidate-attempt", candidateHash),
+        attempt("baseline-attempt", baselineHash, 1),
+        attempt("candidate-attempt", candidateHash, 0),
       ]),
       listGradeResultsForTaskset: vi.fn(async () => grades),
       listTaskAttemptArtifacts: vi.fn(async () => []),

@@ -1,6 +1,6 @@
 import path from "node:path";
-import { aggregateEvaluationReceipts } from "@openpond/evals";
 import {
+  aggregateEvaluationReceipts,
   compareBenchmarkRuns,
   createBenchmarkRunSummary,
   type BenchmarkRunPhase,
@@ -29,10 +29,8 @@ import { buildTasksetReadiness } from "./readiness.js";
 import { runSandboxedVerifier } from "./sandboxed-verifier.js";
 import { gradeTasksetEvaluationAttempt } from "./task-evaluation-grade-runner.js";
 import { runPostTrainingEvaluationAttempt } from "./task-evaluation-attempt-runner.js";
-import {
-  compileDesktopHarnessContext,
-  projectDesktopAttemptReceipt,
-} from "./portable-evals-adapter.js";
+import { compileDesktopHarnessContext } from "./portable-evals-adapter.js";
+import { persistCanonicalEvaluationEvidence } from "./canonical-evaluation-persistence.js";
 import type {
   TasksetWorkAttemptRuntime,
   TasksetWorkModelStream,
@@ -197,24 +195,17 @@ export function createTaskEvaluationService(deps: {
     const artifacts = await deps.store.listTaskAttemptArtifacts({
       attemptId: attempt.id,
     });
-    const receipt = projectDesktopAttemptReceipt({
-      manifest: portable.runManifest,
+    const canonical = await persistCanonicalEvaluationEvidence({
+      store: deps.store,
+      storeDir: deps.storeDir,
+      taskset,
+      task,
+      context: portable,
       attempt,
       grade: gradeResult,
       artifacts,
     });
-    const persistedAttempt = TaskAttemptResultSchema.parse({
-      ...attempt,
-      metadata: {
-        ...attempt.metadata,
-        portableRunManifestRef: {
-          id: portable.runManifest.id,
-          contentHash: portable.runManifest.contentHash,
-        },
-        portableAttemptReceipt: receipt,
-      },
-    });
-    await deps.store.saveTaskAttempt(persistedAttempt);
+    const receipt = canonical.attemptReceipt;
     const evaluationResult = aggregateEvaluationReceipts({
       id: `evaluation-${receipt.id}`,
       manifest: portable.runManifest,
@@ -226,15 +217,20 @@ export function createTaskEvaluationService(deps: {
       },
     });
     return {
-      attempt: persistedAttempt,
+      attempt: canonical.attempt,
       grade: gradeResult,
-      artifacts,
+      artifacts: canonical.artifacts,
       portable: {
         agentSnapshot: portable.agentSnapshot,
         harnessRelease: portable.harnessRelease,
         tasksetRelease: portable.tasksetRelease,
+        environmentRelease: portable.environmentRelease,
+        verifierSetRelease: portable.verifierSetRelease,
         runManifest: portable.runManifest,
         receipt,
+        artifactManifest: canonical.artifactManifest,
+        rewardReceipt: canonical.rewardReceipt,
+        rolloutRecord: canonical.rolloutRecord,
         evaluationResult,
       },
     };

@@ -10,10 +10,11 @@ import {
 } from "@openpond/contracts";
 import {
   contentHash,
+  type HarnessRefinerEvidenceBasis,
   type HostedHarnessRefinerRequest,
   type HostedHarnessRefinerResponse,
   type ImmutableReleaseRef,
-  type LocalHarnessRefinerDecision,
+  type LocalHarnessRefinerDecisionV2,
 } from "@openpond/harness";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -35,10 +36,10 @@ const cleanup: Array<{ directory: string; store: SqliteStore }> = [];
 
 function hostedResult(
   request: HostedHarnessRefinerRequest,
-  decision: LocalHarnessRefinerDecision,
+  decision: LocalHarnessRefinerDecisionV2,
 ): HostedHarnessRefinerResponse {
   return {
-    schemaVersion: "openpond.hostedHarnessRefinerResponse.v1",
+    schemaVersion: "openpond.hostedHarnessRefinerResponse.v2",
     requestId: request.requestId,
     evidenceHash: request.evidenceHash,
     admittedRelease: request.harness.admittedRelease,
@@ -46,6 +47,20 @@ function hostedResult(
     decision,
     serviceRevision: "worker-test",
     usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+  };
+}
+
+function singleEvidence(
+  request: HostedHarnessRefinerRequest,
+): HarnessRefinerEvidenceBasis {
+  const observation = request.evidence.observations[0];
+  const id = typeof observation?.id === "string"
+    ? observation.id
+    : request.evidence.reviewPacket.currentTurn.id;
+  return {
+    kind: "single_deterministic",
+    supportingEvidenceIds: [id],
+    counterevidence: [],
   };
 }
 
@@ -243,6 +258,8 @@ describe("local Harness Refiner worker", () => {
           totalTokens: 0,
           toolFailureCount: 0,
         });
+        expect(request.evidence.capabilities).toEqual(request.harness.capabilities);
+        expect(request.evidence.capabilities.agent).toBe(false);
         expect(request.evidence.reviewPacket.timeline).toEqual([
           expect.objectContaining({
             name: "tool.completed",
@@ -252,12 +269,13 @@ describe("local Harness Refiner worker", () => {
         ]);
         expect(request.evidence.reviewPacket.priorIncidents).toEqual([]);
         return hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "prompt",
             operation: "update",
             target: "instructions/system.md",
             summary: "Recover from a malformed command without restarting completed work.",
+            evidenceBasis: singleEvidence(request),
             createContent: null,
             find: anchor,
             replace: `${anchor}\n\nWhen a harmless command fails because of malformed syntax, correct only that command and continue from the current checkpoint.`,
@@ -343,12 +361,13 @@ describe("local Harness Refiner worker", () => {
         const anchor = source?.content.trimEnd().split("\n").at(-1);
         if (!anchor) throw new Error("Expected instruction source evidence.");
         return hostedResult(request, {
-          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
           decision: "propose",
           route: "prompt",
           operation: "update",
           target: "instructions/system.md",
           summary: "Encode the first reusable recovery.",
+          evidenceBasis: singleEvidence(request),
           createContent: null,
           find: anchor,
           replace: `${anchor}\n\nCorrect one harmless malformed command and continue.`,
@@ -393,12 +412,13 @@ describe("local Harness Refiner worker", () => {
         const anchor = source?.content.trimEnd().split("\n").at(-1);
         if (!anchor) throw new Error("Expected rebased instruction source evidence.");
         return hostedResult(request, {
-          schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
           decision: "propose",
           route: "prompt",
           operation: "update",
           target: "instructions/system.md",
           summary: "Encode a second reusable recovery.",
+          evidenceBasis: singleEvidence(request),
           createContent: null,
           find: anchor,
           replace: `${anchor}\n\nPreserve completed work when applying a second harmless correction.`,
@@ -427,7 +447,7 @@ describe("local Harness Refiner worker", () => {
       now: () => LATER,
       refine: async ({ request }) =>
         hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "no_action",
             reason: "The failure was conversation-specific and does not justify a durable Harness change.",
         }),
@@ -444,7 +464,40 @@ describe("local Harness Refiner worker", () => {
     ).toEqual(current.workspace.currentChannel);
   });
 
-  it("retains an Agent proposal when Desktop Work cannot activate the source", async () => {
+  it("routes a measured fixture defect without converting the grade into Harness ownership", async () => {
+    const current = await fixture("run-taskset-route");
+    const result = await runLocalHarnessRefinerWorker({
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      refine: async ({ request }) => hostedResult(request, {
+        schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+        decision: "route",
+        route: "taskset",
+        summary: "The fixture contradicts the stated output contract.",
+        evidenceBasis: singleEvidence(request),
+        expectedOutcome: "The Taskset owner repairs and re-freezes the fixture.",
+        reason: "The failed measurement is real, but its deterministic owner is the fixture.",
+      }),
+    });
+
+    expect(result.proposal).toBeNull();
+    expect(result.outcome).toMatchObject({
+      decision: "no_action",
+      metadata: {
+        routed: true,
+        route: "taskset",
+        evidenceBasis: {
+          kind: "single_deterministic",
+          counterevidence: [],
+        },
+      },
+    });
+  });
+
+  it("rejects an Agent proposal when the hosted request advertises no Agent capability", async () => {
     const current = await fixture("run-inactive-agent");
 
     const result = await runLocalHarnessRefinerWorker({
@@ -455,12 +508,13 @@ describe("local Harness Refiner worker", () => {
       now: () => LATER,
       refine: async ({ request }) =>
         hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "agent",
             operation: "create",
             target: "agents/recovery-guide/agent.ts",
             summary: "Create a reusable recovery Agent.",
+            evidenceBasis: singleEvidence(request),
             createContent: "export const agent = { name: 'recovery-guide' };\n",
             find: null,
             replace: null,
@@ -469,24 +523,13 @@ describe("local Harness Refiner worker", () => {
         }),
     });
 
-    expect(result.outcome.decision).toBe("proposed");
-    expect(result.validations.map((validation) => [validation.kind, validation.status])).toEqual([
-      ["observed_recovery", "passed"],
-      ["package", "passed"],
-      ["component_activation", "failed"],
-    ]);
-    expect(result.validations.at(-1)).toMatchObject({
-      summary: expect.stringContaining("does not compile or execute released Agent source"),
-      metadata: {
-        targetRuntime: "desktop_work",
-        beforeEffectiveRuntimeHash: expect.any(String),
-        afterEffectiveRuntimeHash: expect.any(String),
-        inactiveAgentRefs: [
-          expect.objectContaining({ path: "agents/recovery-guide/agent.ts" }),
-        ],
-      },
+    expect(result.outcome).toMatchObject({
+      decision: "no_action",
+      reason: expect.stringContaining("agent capability is unavailable"),
     });
-    expect(result.advanceReceipt?.decision).toBe("retained");
+    expect(result.proposal).toBeNull();
+    expect(result.validations).toEqual([]);
+    expect(result.advanceReceipt).toBeNull();
     expect(result.workspace.currentChannel).toEqual(current.workspace.currentChannel);
   });
 
@@ -510,12 +553,13 @@ describe("local Harness Refiner worker", () => {
       now: () => LATER,
       refine: async ({ request }) =>
         hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "memory",
             operation: "update",
             target: "memory/brief-style",
             summary: "Keep briefs concise.",
+            evidenceBasis: singleEvidence(request),
             createContent: null,
             find: "Use short paragraphs.",
             replace: "Use exactly three concise bullets when explicitly requested.",
@@ -538,6 +582,8 @@ describe("local Harness Refiner worker", () => {
       expect.objectContaining({ kind: "observed_recovery", status: "passed" }),
       expect.objectContaining({ kind: "memory", status: "passed" }),
     ]);
+    expect(result.applyReceipt?.decision).toBe("applied");
+    expect(result.advanceReceipt).toBeNull();
     expect(await current.store.getHarnessMemory(current.workspace.id, "brief-style")).toMatchObject({
       revision: 2,
       content: "Use exactly three concise bullets when explicitly requested.",
@@ -564,12 +610,13 @@ describe("local Harness Refiner worker", () => {
       now: () => LATER,
       refine: async ({ request }) =>
         hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "memory",
             operation: "delete",
             target: "memory/obsolete-style",
             summary: "Remove the obsolete style.",
+            evidenceBasis: singleEvidence(request),
             createContent: null,
             find: null,
             replace: null,
@@ -586,6 +633,7 @@ describe("local Harness Refiner worker", () => {
       expect.objectContaining({ kind: "memory", status: "passed" }),
     ]);
     expect(result.outcome.reason).toContain("requires explicit review");
+    expect(result.applyReceipt?.decision).toBe("retained");
     expect(await current.store.getHarnessMemory(current.workspace.id, "obsolete-style")).toMatchObject({
       revision: 1,
       status: "active",
@@ -635,12 +683,13 @@ describe("local Harness Refiner worker", () => {
       now: () => LATER,
       refine: async ({ request }) =>
         hostedResult(request, {
-            schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
             decision: "propose",
             route: "memory",
             operation: "delete",
             target: "memory/temporary-style",
             summary: "Remove the temporary audit style.",
+            evidenceBasis: singleEvidence(request),
             createContent: null,
             find: null,
             replace: null,
@@ -688,12 +737,13 @@ describe("local Harness Refiner worker", () => {
         now: () => LATER,
         refine: async ({ request }) =>
           hostedResult(request, {
-              schemaVersion: "openpond.localHarnessRefinerDecision.v1",
+              schemaVersion: "openpond.localHarnessRefinerDecision.v2",
               decision: "propose",
               route: "prompt",
               operation: "update",
               target: "instructions/system.md",
               summary: "Attempt an ambiguous patch.",
+              evidenceBasis: singleEvidence(request),
               createContent: null,
               find: "\n",
               replace: "\n\n",

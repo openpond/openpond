@@ -3,6 +3,7 @@ import {
   WORK_FORMAT_CAPABILITIES,
   WORK_OUTPUT_CONTENT_TYPES,
   workFormatCapabilityForContentType,
+  workOutputMediaTypesCompatible,
 } from "@openpond/contracts";
 
 describe("Work format capability matrix", () => {
@@ -24,5 +25,13 @@ describe("Work format capability matrix", () => {
         );
       }
     }
+  });
+
+  test("accepts registered code media types for generic text output contracts", () => {
+    expect(workOutputMediaTypesCompatible("text/plain", "text/typescript")).toBe(true);
+    expect(workOutputMediaTypesCompatible("text/plain", "text/javascript")).toBe(true);
+    expect(workOutputMediaTypesCompatible("text/plain", "application/sql")).toBe(true);
+    expect(workOutputMediaTypesCompatible("text/plain", "text/html")).toBe(false);
+    expect(workOutputMediaTypesCompatible("text/markdown", "text/plain")).toBe(false);
   });
 });

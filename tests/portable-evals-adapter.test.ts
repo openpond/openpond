@@ -1,9 +1,19 @@
 import { describe, expect, it } from "vitest";
 
-import { verifyAttemptReceipt } from "../packages/evals/src/index.js";
+import {
+  verifyArtifactManifest,
+  verifyAttemptReceipt,
+  verifyRewardReceipt,
+} from "../packages/evals/src/index.js";
 import { contentHash } from "../packages/harness/src/index.js";
 import { GradeResultSchema, TaskAttemptArtifactSchema, emptyOpenPondProfileState } from "../packages/contracts/src/index.js";
-import { compileDesktopHarnessContext, projectDesktopAttemptReceipt } from "../apps/server/src/training/portable-evals-adapter.js";
+import {
+  compileDesktopHarnessContext,
+  projectDesktopAttemptReceipt,
+  projectDesktopCanonicalReceipts,
+  projectDesktopCanonicalRollout,
+} from "../apps/server/src/training/portable-evals-adapter.js";
+import { benchmarkRefinerRewardPacket } from "../apps/server/src/training/harness-refiner-benchmark-refiner-stage.js";
 import { attemptFixture, tasksetFixture } from "./helpers/training-fixtures.js";
 
 describe("portable Desktop eval adapter", () => {
@@ -16,6 +26,14 @@ describe("portable Desktop eval adapter", () => {
     });
     expect(context.runManifest.tasksetRelease.contentHash).toBe(context.tasksetRelease.contentHash);
     expect(context.runManifest.harnessRelease.contentHash).toBe(context.harnessRelease.contentHash);
+    expect(context.tasksetRelease.environmentRelease).toEqual({
+      id: context.environmentRelease.id,
+      contentHash: context.environmentRelease.contentHash,
+    });
+    expect(context.tasksetRelease.verifierSetRelease).toEqual({
+      id: context.verifierSetRelease.id,
+      contentHash: context.verifierSetRelease.contentHash,
+    });
     expect(context.tasksetRelease.tasks).toHaveLength(2);
     expect(JSON.stringify(context)).not.toContain("sourceRefs");
     expect(JSON.stringify(context)).not.toContain("consent");
@@ -154,5 +172,141 @@ describe("portable Desktop eval adapter", () => {
     const receipt = projectDesktopAttemptReceipt({ manifest: context.runManifest, attempt, grade, artifacts: [] });
     expect(receipt).toMatchObject({ failureClass, terminal });
     expect(verifyAttemptReceipt(receipt)).toBe(true);
+  });
+
+  it("projects a failed deterministic grade into an eligible canonical zero reward", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const context = compileDesktopHarnessContext({
+      taskset,
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+      now: () => "2026-08-03T00:00:00.000Z",
+    });
+    const attempt = attemptFixture({ output: { text: "incorrect" } });
+    const grade = GradeResultSchema.parse({
+      schemaVersion: "openpond.gradeResult.v1",
+      id: "grade-policy-failure-canonical",
+      attemptId: attempt.id,
+      graderSetHash: contentHash(taskset.graders),
+      score: 0,
+      passed: false,
+      components: [{
+        graderId: "expected_output",
+        graderVersion: "1",
+        score: 0,
+        passed: false,
+        hardGate: true,
+        rewardEligible: true,
+        feedback: "mismatch",
+        evidenceRefs: [],
+        judge: null,
+        calibrationStatus: "not_applicable",
+      }],
+      failureClass: "policy_failure",
+      feedback: ["mismatch"],
+      rewardEligible: true,
+      createdAt: "2026-08-03T00:00:00.000Z",
+    });
+    const canonical = projectDesktopCanonicalReceipts({
+      context,
+      attempt,
+      grade,
+      artifacts: [],
+    });
+    expect(canonical.rewardReceipt).toMatchObject({
+      status: "scored",
+      reward: 0,
+      learningEligible: true,
+      outcomeClass: "policy_failure",
+      failureOwner: "policy",
+    });
+    expect(verifyAttemptReceipt(canonical.attemptReceipt)).toBe(true);
+    expect(verifyArtifactManifest(canonical.artifactManifest)).toBe(true);
+    expect(verifyRewardReceipt(canonical.rewardReceipt)).toBe(true);
+    const rollout = projectDesktopCanonicalRollout({
+      context,
+      attempt,
+      artifacts: [],
+      canonical,
+    });
+    expect(rollout).toMatchObject({
+      reward: { status: "scored", value: 0, learningEligible: true },
+      optimizerSample: null,
+      environmentExecutions: [{ status: "completed" }],
+    });
+  });
+
+  it("makes a missing declared output a scored policy failure", () => {
+    const taskset = tasksetFixture({ ready: true });
+    taskset.tasks[1]!.requiredOutputs = [{
+      path: "index.html",
+      mediaType: "text/html",
+      maxBytes: 1_000_000,
+      metadata: {},
+    }];
+    const context = compileDesktopHarnessContext({
+      taskset,
+      model: { providerId: "custom-openai-compatible", modelId: "fixture" },
+      now: () => "2026-08-03T00:00:00.000Z",
+    });
+    const attempt = attemptFixture();
+    const grade = GradeResultSchema.parse({
+      schemaVersion: "openpond.gradeResult.v1",
+      id: "grade-missing-output-canonical",
+      attemptId: attempt.id,
+      graderSetHash: contentHash(taskset.graders),
+      score: 1,
+      passed: true,
+      components: [{
+        graderId: "expected_output",
+        graderVersion: "1",
+        score: 1,
+        passed: true,
+        hardGate: true,
+        rewardEligible: true,
+        feedback: "state matched",
+        evidenceRefs: [],
+        judge: null,
+        calibrationStatus: "not_applicable",
+      }],
+      failureClass: null,
+      feedback: [],
+      rewardEligible: true,
+      createdAt: "2026-08-03T00:00:00.000Z",
+    });
+    const canonical = projectDesktopCanonicalReceipts({ context, attempt, grade, artifacts: [] });
+    expect(canonical.artifactManifest.entries[0]).toMatchObject({
+      requiredOutputPath: "index.html",
+      status: "missing",
+      failureOwner: "policy",
+    });
+    expect(canonical.rewardReceipt).toMatchObject({
+      status: "scored",
+      reward: 0,
+      learningEligible: true,
+      passed: false,
+      outcomeClass: "incomplete_output",
+      failureOwner: "policy",
+    });
+
+    const packet = benchmarkRefinerRewardPacket({
+      attempt,
+      artifactManifest: canonical.artifactManifest,
+      rewardReceipt: canonical.rewardReceipt,
+      artifactCount: 0,
+    });
+    expect(packet).toMatchObject({
+      schemaVersion: "openpond.refinerRewardPacket.v1",
+      attemptRef: canonical.rewardReceipt.attemptRef,
+      artifactManifest: {
+        ref: {
+          id: canonical.artifactManifest.id,
+          contentHash: canonical.artifactManifest.contentHash,
+        },
+        entryCount: 1,
+        truncated: false,
+      },
+      rewardReceipt: canonical.rewardReceipt,
+    });
+    expect(JSON.stringify(packet)).not.toContain(taskset.tasks[1]!.expectedOutput);
   });
 });

@@ -7,13 +7,19 @@ import {
   type ModelRun,
 } from "@openpond/contracts";
 import {
+  ArtifactManifestSchema,
   AttemptReceiptContentSchema,
   AttemptReceiptSchema,
+  RewardReceiptSchema,
   aggregateEvaluationReceipts,
   createBenchmarkRunSummary,
+  verifyArtifactManifest,
+  verifyRewardReceipt,
+  type ArtifactManifest,
   type AttemptReceipt,
   type BenchmarkComparison,
   type BenchmarkRunSummary,
+  type RewardReceipt,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-worker.js";
@@ -39,6 +45,8 @@ export type BenchmarkAttemptEvidence = {
   grade: StoredGradeResult;
   artifacts: StoredTaskArtifact[];
   receiptContentHash: string;
+  artifactManifest: ArtifactManifest;
+  rewardReceipt: RewardReceipt;
 };
 
 export type CompletedBenchmarkStage = {
@@ -67,6 +75,8 @@ export function completedStage(input: {
       grade: result.grade,
       artifacts: result.artifacts,
       receiptContentHash: result.portable.receipt.contentHash,
+      artifactManifest: result.portable.artifactManifest,
+      rewardReceipt: result.portable.rewardReceipt,
     })),
   };
 }
@@ -108,6 +118,8 @@ export async function combineRetriedBenchmarkStage(input: {
         grade: result.grade,
         artifacts: result.artifacts,
         receiptContentHash: result.portable.receipt.contentHash,
+        artifactManifest: result.portable.artifactManifest,
+        rewardReceipt: result.portable.rewardReceipt,
       },
       receipt: result.portable.receipt,
     },
@@ -225,6 +237,7 @@ export async function loadCompletedBenchmarkStage(input: {
       grade,
       artifacts: await input.store.listTaskAttemptArtifacts({ attemptId: attempt.id }),
       receiptContentHash: portableReceiptContentHash(attempt),
+      ...portableCanonicalReceipts(attempt),
     };
   }));
   return { run, attempts: evidence };
@@ -255,6 +268,7 @@ export async function loadBenchmarkAttemptEvidenceByIds(input: {
       grade,
       artifacts: await input.store.listTaskAttemptArtifacts({ attemptId: attempt.id }),
       receiptContentHash: portableReceiptContentHash(attempt),
+      ...portableCanonicalReceipts(attempt),
     };
   }));
 }
@@ -272,6 +286,29 @@ function portableReceiptContentHash(attempt: StoredTaskAttempt): string {
     throw new Error(`Attempt ${attempt.id} has no durable portable receipt.`);
   }
   return hash;
+}
+
+function portableCanonicalReceipts(attempt: StoredTaskAttempt): {
+  artifactManifest: ArtifactManifest;
+  rewardReceipt: RewardReceipt;
+} {
+  try {
+    const artifactManifest = ArtifactManifestSchema.parse(
+        attempt.metadata.portableArtifactManifest,
+      );
+    const rewardReceipt = RewardReceiptSchema.parse(
+        attempt.metadata.portableRewardReceipt,
+      );
+    if (!verifyArtifactManifest(artifactManifest) || !verifyRewardReceipt(rewardReceipt)) {
+      throw new Error("Canonical reward evidence failed content-hash verification.");
+    }
+    return { artifactManifest, rewardReceipt };
+  } catch (error) {
+    throw new Error(
+      `Attempt ${attempt.id} has no valid durable canonical reward evidence.`,
+      { cause: error },
+    );
+  }
 }
 
 function objectRecord(value: unknown): Record<string, unknown> | null {

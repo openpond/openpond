@@ -202,3 +202,76 @@
   gap: 6px;
   margin-left: auto;
 }
+
+@media (max-width: 980px) {
+  .settings-shell,
+  .settings-shell.harness-diff-open,
+  .settings-shell.harness-diff-expanded {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-drag-region {
+    left: 0;
+  }
+
+  .settings-sidebar,
+  .settings-shell.platform-macos .settings-sidebar {
+    display: flex;
+    min-width: 0;
+    gap: 8px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 44px 14px 10px;
+    scrollbar-width: none;
+  }
+
+  .settings-sidebar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .settings-back {
+    flex: 0 0 auto;
+    width: auto;
+  }
+
+  .settings-back span,
+  .settings-nav-heading {
+    display: none;
+  }
+
+  .settings-nav,
+  .settings-nav-group {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 3px;
+    margin: 0;
+  }
+
+  .settings-nav-group + .settings-nav-group {
+    margin: 0;
+    padding: 0 0 0 8px;
+    border-top: 0;
+    border-left: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .settings-nav-item {
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: auto;
+    padding-inline: 10px;
+  }
+
+  .settings-content,
+  .settings-content-wide {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 28px 18px;
+  }
+
+  .settings-shell.harness-diff-expanded > .workspace-diff-panel {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
