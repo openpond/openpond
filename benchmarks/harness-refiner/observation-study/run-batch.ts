@@ -7,8 +7,15 @@ import {
   type HarnessRefinerOutcome,
   type RefinementTriggerDecision,
   type Session,
+  type TaskAttemptArtifact,
   type TaskAttemptResult,
 } from "@openpond/contracts";
+import {
+  ArtifactManifestSchema,
+  AttemptReceiptSchema,
+  CanonicalRolloutRecordSchema,
+  RewardReceiptSchema,
+} from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
 
@@ -80,125 +87,66 @@ try {
   for (const [index, studyTask] of pendingTasks.entries()) {
     const sequence = completedIds.size + index + 1;
     process.stdout.write(`TASK_START ${sequence}/${orderedTasks.length} ${taskId(studyTask.id)} local\n`);
-    const admittedRuntime = await requireSelectedRuntime();
+    const admittedRuntime = await loadFreshSelectedRuntime();
     const task = taskset.tasks.find((candidate) => candidate.id === taskId(studyTask.id));
     if (!task) throw new Error(`Task ${studyTask.id} is missing from the observation Taskset.`);
-    const context = compileDesktopHarnessContext({
-      taskset,
-      selectedTask: task,
-      releasedHarness: {
-        agentSnapshot: admittedRuntime.release.agentSnapshot,
-        harnessRelease: admittedRuntime.release.harnessRelease,
-      },
-      reasoningEffort: "low",
-      model: MODEL,
-    });
-    let attempt = await runTasksetWorkAttempt({
-      store,
-      storeDir: STORE_DIR,
-      taskset,
-      task,
-      model: MODEL,
-      reasoningEffort: "low",
-      seed: 17,
-      attempt: 0,
-      sampling: { maxOutputTokens: 8_192, temperature: 0, topP: 1 },
-      stream: hostedModelStream,
-      runtime,
-      harnessInstructionContext: admittedRuntime.instructionContext,
-      harnessCapabilityReceipt: {
-        execution: "desktop_local_work",
-        harnessRelease: admittedRuntime.release.harnessRelease,
-        agentSnapshot: admittedRuntime.release.agentSnapshot,
-      },
-    });
+    let canonical = await recoverCanonicalEvidence(task.id);
+    if (canonical) process.stdout.write(`TASK_RECOVER ${taskId(studyTask.id)} canonical-attempt=${canonical.attempt.id}\n`);
+    if (!canonical) canonical = await executeCanonicalAttempt({ taskset, task, studyTask, admittedRuntime, runtime });
+    const attempt = canonical.attempt;
     const output = recordValue(attempt.output);
-    const passed = structuralPass(attempt, studyTask);
-    const infrastructureFailure = attempt.infrastructureError !== null;
-    const feedback = passed
-      ? "The requested output was structurally materialized."
-      : infrastructureFailure
-        ? "The local execution environment did not produce a scorable attempt."
-        : "The requested output was not structurally materialized.";
-    const grade = GradeResultSchema.parse({
-      schemaVersion: "openpond.gradeResult.v1",
-      id: `grade-${attempt.id}`,
-      attemptId: attempt.id,
-      graderSetHash: contentHash(taskset.graders),
-      score: infrastructureFailure ? null : passed ? 1 : 0,
-      passed,
-      components: [{
-        graderId: "structural-output-verifier",
-        graderVersion: "1",
-        score: passed ? 1 : 0,
-        passed,
-        hardGate: true,
-        rewardEligible: !infrastructureFailure,
-        feedback,
-        evidenceRefs: [],
-        judge: null,
-        calibrationStatus: "not_applicable",
-      }],
-      failureClass: infrastructureFailure ? "infrastructure_failure" : passed ? null : "grader_failure",
-      feedback: passed ? [] : [feedback],
-      rewardEligible: !infrastructureFailure,
-      createdAt: attempt.completedAt,
-    });
-    await store.saveGradeResult(grade);
-    const artifacts = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
-    const canonical = await persistCanonicalEvaluationEvidence({
-      store,
-      storeDir: STORE_DIR,
-      taskset,
-      task,
-      context,
-      attempt,
-      grade,
-      artifacts,
-    });
-    attempt = canonical.attempt;
-    const boundary = await materializeRefinerBoundary({
-      attempt,
-      admittedRuntime,
-      promptId: studyTask.id,
-      rewardPacket: benchmarkRefinerRewardPacket({
-        attempt,
-        artifactManifest: canonical.artifactManifest,
-        rewardReceipt: canonical.rewardReceipt,
-        artifactCount: canonical.artifacts.length,
-      }),
-    });
-    const detection = await recordLocalHarnessImprovementBoundary({
-      store,
-      session: boundary.session,
-      turn: boundary.turn,
-      boundaryKind: "turn_completed",
-    });
+    const passed = canonical.rewardReceipt.passed;
+    const boundaryStore = new SqliteStore(STORE_DIR);
+    let boundary: Awaited<ReturnType<typeof materializeRefinerBoundary>>;
+    let detection: Awaited<ReturnType<typeof recordLocalHarnessImprovementBoundary>>;
     let outcome: HarnessRefinerOutcome | null = null;
     const refinerUsage: unknown[] = [];
-    if (detection?.trigger.decision === "queue_refiner") {
-      const result = await runLocalHarnessRefinerWorker({
-        store,
-        storeDir: STORE_DIR,
-        trigger: detection.trigger,
-        signal: new AbortController().signal,
-        stream: async function* ({ messages, signal }) {
-          for await (const delta of streamOpenPondHostedChatTurn({
-            model: MODEL.modelId,
-            messages,
-            requestId: `observation-refiner:${detection.trigger.id}`,
-            reasoningEffort: "low",
-            maxTokens: 4_096,
-            signal,
-          })) {
-            if (delta.type === "text_delta" && delta.text) yield { text: delta.text };
-            if (delta.type === "usage") refinerUsage.push(delta.usage);
-          }
-        },
+    let afterRuntime: SelectedRuntime;
+    try {
+      boundary = await materializeRefinerBoundary({
+        store: boundaryStore,
+        attempt,
+        admittedRuntime,
+        promptId: studyTask.id,
+        rewardPacket: benchmarkRefinerRewardPacket({
+          attempt,
+          artifactManifest: canonical.artifactManifest,
+          rewardReceipt: canonical.rewardReceipt,
+          artifactCount: canonical.artifacts.length,
+        }),
       });
-      outcome = result.outcome;
+      detection = await recordLocalHarnessImprovementBoundary({
+        store: boundaryStore,
+        session: boundary.session,
+        turn: boundary.turn,
+        boundaryKind: "turn_completed",
+      });
+      if (detection?.trigger.decision === "queue_refiner") {
+        const result = await runLocalHarnessRefinerWorker({
+          store: boundaryStore,
+          storeDir: STORE_DIR,
+          trigger: detection.trigger,
+          signal: new AbortController().signal,
+          stream: async function* ({ messages, signal }) {
+            for await (const delta of streamOpenPondHostedChatTurn({
+              model: MODEL.modelId,
+              messages,
+              requestId: `observation-refiner:${detection!.trigger.id}`,
+              reasoningEffort: "low",
+              maxTokens: 4_096,
+              signal,
+            })) {
+              if (delta.type === "text_delta" && delta.text) yield { text: delta.text };
+              if (delta.type === "usage") refinerUsage.push(delta.usage);
+            }
+          },
+        });
+        outcome = result.outcome;
+      }
+      afterRuntime = await requireSelectedRuntime(boundaryStore);
+    } finally {
+      await boundaryStore.close();
     }
-    const afterRuntime = await requireSelectedRuntime();
     receipt.tasks.push({
       promptId: studyTask.id,
       outputKind: studyTask.outputKind,
@@ -243,6 +191,7 @@ try {
 }
 
 type SelectedRuntime = NonNullable<Awaited<ReturnType<typeof loadSelectedLocalHarnessRuntime>>>;
+type CanonicalEvidence = Awaited<ReturnType<typeof persistCanonicalEvaluationEvidence>>;
 type ObservationReceipt = {
   schemaVersion: "openpond.harnessRefinerObservationBatch.v3";
   study: string;
@@ -258,10 +207,117 @@ type ObservationReceipt = {
   tasks: Array<Record<string, unknown> & { promptId: number }>;
 };
 
-async function requireSelectedRuntime(): Promise<SelectedRuntime> {
-  const runtime = await loadSelectedLocalHarnessRuntime(store);
+async function requireSelectedRuntime(inputStore: SqliteStore = store): Promise<SelectedRuntime> {
+  const runtime = await loadSelectedLocalHarnessRuntime(inputStore);
   if (!runtime) throw new Error("A selected Local Harness release is required.");
   return runtime;
+}
+
+async function loadFreshSelectedRuntime(): Promise<SelectedRuntime> {
+  const freshStore = new SqliteStore(STORE_DIR!);
+  try {
+    return await requireSelectedRuntime(freshStore);
+  } finally {
+    await freshStore.close();
+  }
+}
+
+async function recoverCanonicalEvidence(sourceTaskId: string): Promise<CanonicalEvidence | null> {
+  const attempts = await store.listTaskAttempts("harness-refiner-observation-50-v2");
+  const attempt = attempts.filter((candidate) =>
+    candidate.taskId === sourceTaskId && candidate.metadata.portableRewardReceipt
+  ).at(-1);
+  if (!attempt) return null;
+  const artifacts = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
+  return {
+    attempt,
+    artifacts,
+    attemptReceipt: AttemptReceiptSchema.parse(attempt.metadata.portableAttemptReceipt),
+    artifactManifest: ArtifactManifestSchema.parse(attempt.metadata.portableArtifactManifest),
+    rewardReceipt: RewardReceiptSchema.parse(attempt.metadata.portableRewardReceipt),
+    rolloutRecord: CanonicalRolloutRecordSchema.parse(attempt.metadata.portableCanonicalRollout),
+  };
+}
+
+async function executeCanonicalAttempt(input: {
+  taskset: ReturnType<typeof buildObservationStudyTaskset>;
+  task: ReturnType<typeof buildObservationStudyTaskset>["tasks"][number];
+  studyTask: ObservationStudyTask;
+  admittedRuntime: SelectedRuntime;
+  runtime: ReturnType<typeof createLocalTasksetWorkRuntime>;
+}): Promise<CanonicalEvidence> {
+  const context = compileDesktopHarnessContext({
+    taskset: input.taskset,
+    selectedTask: input.task,
+    releasedHarness: {
+      agentSnapshot: input.admittedRuntime.release.agentSnapshot,
+      harnessRelease: input.admittedRuntime.release.harnessRelease,
+    },
+    reasoningEffort: "low",
+    model: MODEL,
+  });
+  const attempt = await runTasksetWorkAttempt({
+    store,
+    storeDir: STORE_DIR!,
+    taskset: input.taskset,
+    task: input.task,
+    model: MODEL,
+    reasoningEffort: "low",
+    seed: 17,
+    attempt: 0,
+    sampling: { maxOutputTokens: 8_192, temperature: 0, topP: 1 },
+    stream: hostedModelStream,
+    runtime: input.runtime,
+    harnessInstructionContext: input.admittedRuntime.instructionContext,
+    harnessCapabilityReceipt: {
+      execution: "desktop_local_work",
+      harnessRelease: input.admittedRuntime.release.harnessRelease,
+      agentSnapshot: input.admittedRuntime.release.agentSnapshot,
+    },
+  });
+  const passed = structuralPass(attempt, input.studyTask);
+  const infrastructureFailure = attempt.infrastructureError !== null;
+  const feedback = passed
+    ? "The requested output was structurally materialized."
+    : infrastructureFailure
+      ? "The local execution environment did not produce a scorable attempt."
+      : "The requested output was not structurally materialized.";
+  const grade = GradeResultSchema.parse({
+    schemaVersion: "openpond.gradeResult.v1",
+    id: `grade-${attempt.id}`,
+    attemptId: attempt.id,
+    graderSetHash: contentHash(input.taskset.graders),
+    score: infrastructureFailure ? null : passed ? 1 : 0,
+    passed,
+    components: [{
+      graderId: "structural-output-verifier",
+      graderVersion: "1",
+      score: passed ? 1 : 0,
+      passed,
+      hardGate: true,
+      rewardEligible: !infrastructureFailure,
+      feedback,
+      evidenceRefs: [],
+      judge: null,
+      calibrationStatus: "not_applicable",
+    }],
+    failureClass: infrastructureFailure ? "infrastructure_failure" : passed ? null : "grader_failure",
+    feedback: passed ? [] : [feedback],
+    rewardEligible: !infrastructureFailure,
+    createdAt: attempt.completedAt,
+  });
+  await store.saveGradeResult(grade);
+  const artifacts: TaskAttemptArtifact[] = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
+  return persistCanonicalEvaluationEvidence({
+    store,
+    storeDir: STORE_DIR!,
+    taskset: input.taskset,
+    task: input.task,
+    context,
+    attempt,
+    grade,
+    artifacts,
+  });
 }
 
 function selectTasks(tasks: ObservationStudyTask[]): ObservationStudyTask[] {
@@ -323,6 +379,7 @@ function structuralPass(attempt: TaskAttemptResult, task: ObservationStudyTask):
 }
 
 async function materializeRefinerBoundary(input: {
+  store: SqliteStore;
   attempt: TaskAttemptResult;
   admittedRuntime: SelectedRuntime;
   promptId: number;
@@ -331,7 +388,7 @@ async function materializeRefinerBoundary(input: {
   const sessionId = stringMetadata(input.attempt.metadata, "sessionId");
   const turnId = stringMetadata(input.attempt.metadata, "turnId");
   if (!sessionId || !turnId) throw new Error(`Prompt ${input.promptId} has no local session boundary.`);
-  const session = await store.updateSession(sessionId, (current) => ({
+  const session = await input.store.updateSession(sessionId, (current) => ({
     ...current,
     metadata: {
       ...current.metadata,
@@ -341,16 +398,16 @@ async function materializeRefinerBoundary(input: {
       execution: "desktop_local_work",
     },
   }));
-  const originalTurn = await store.getTurn(turnId);
+  const originalTurn = await input.store.getTurn(turnId);
   if (!session || !originalTurn) throw new Error(`Prompt ${input.promptId} local boundary is missing.`);
   const overlay = await ensureLocalHarnessRunOverlay({
-    store,
+    store: input.store,
     runId: session.id,
     workspace: input.admittedRuntime.workspace,
     harnessRelease: releaseRef(input.admittedRuntime),
     admittedAt: input.attempt.startedAt,
   });
-  const turn = await store.updateTurn(turnId, (current) => ({
+  const turn = await input.store.updateTurn(turnId, (current) => ({
     ...current,
     harnessSnapshot: {
       schemaVersion: "openpond.harnessTurnSnapshot.v1",
@@ -367,7 +424,7 @@ async function materializeRefinerBoundary(input: {
   const reward = recordValue(input.rewardPacket.rewardReceipt);
   const passed = reward.status === "scored" && reward.passed === true;
   const evidence = JSON.stringify(input.rewardPacket);
-  await store.appendRuntimeEvent(event({
+  await input.store.appendRuntimeEvent(event({
     sessionId,
     turnId,
     name: "diagnostic",
