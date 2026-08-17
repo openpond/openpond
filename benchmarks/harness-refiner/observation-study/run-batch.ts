@@ -1,14 +1,13 @@
-import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import type {
-  ChatModelRef,
-  HarnessRefinerOutcome,
-  RefinementTriggerDecision,
-  Session,
-  TaskDataRecord,
-  Taskset,
+import {
+  GradeResultSchema,
+  type ChatModelRef,
+  type HarnessRefinerOutcome,
+  type RefinementTriggerDecision,
+  type Session,
+  type TaskAttemptResult,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/harness";
 import { streamOpenPondHostedChatTurn } from "@openpond/runtime";
@@ -18,107 +17,51 @@ import { recordLocalHarnessImprovementBoundary } from "../../../apps/server/src/
 import { runLocalHarnessRefinerWorker } from "../../../apps/server/src/harness/local-harness-refiner-worker.js";
 import { loadSelectedLocalHarnessRuntime } from "../../../apps/server/src/harness/local-harness-skill-runtime.js";
 import { SqliteStore } from "../../../apps/server/src/store/store.js";
+import { persistCanonicalEvaluationEvidence } from "../../../apps/server/src/training/canonical-evaluation-persistence.js";
+import { benchmarkRefinerRewardPacket } from "../../../apps/server/src/training/harness-refiner-benchmark-refiner-stage.js";
 import { createLocalTasksetWorkRuntime } from "../../../apps/server/src/training/local-taskset-work-runtime.js";
+import { compileDesktopHarnessContext } from "../../../apps/server/src/training/portable-evals-adapter.js";
 import {
   runTasksetWorkAttempt,
   type TasksetWorkModelStream,
 } from "../../../apps/server/src/training/taskset-work-attempt-runner.js";
 import { event } from "../../../apps/server/src/utils.js";
+import {
+  buildObservationStudyTaskset,
+  loadObservationStudyTasks,
+  taskId,
+  type ObservationStudyTask,
+} from "./study-taskset.js";
 
-const ROOT = path.resolve(import.meta.dirname);
-const FIXTURE_ROOT = path.join(ROOT, "fixtures");
-const SERVER_URL = process.env.OPENPOND_APP_SERVER_URL?.trim() || "http://127.0.0.1:17914";
+const SERVER_URL = process.env.OPENPOND_APP_SERVER_URL?.trim() || "http://127.0.0.1:17874";
 const STORE_DIR = process.env.OPENPOND_APP_HOME?.trim();
 const OUTPUT_PATH = path.resolve(
   process.env.OPENPOND_REFINER_OBSERVATION_OUTPUT?.trim()
-    || path.join("output", "harness-refiner-observation-study", "2026-08-12", "local-batch-01.json"),
+    || path.join("output", "harness-refiner-observation-study", "2026-08-17", "canonical-50.json"),
 );
 const MODEL: ChatModelRef = { providerId: "openpond", modelId: "openpond-chat" };
-const ORDER_SEED = "refiner-observation-2026-08-12-v1";
-const TASKSET_ID = "harness-refiner-observation-local-batch-01";
-const WORK_TOOL_NAMES = [
-  "work_environment",
-  "work_list_files",
-  "work_read_file",
-  "work_write_file",
-  "work_edit_file",
-  "work_exec",
-  "work_save_output",
-  "work_stop",
-];
+const ORDER_SEED = "refiner-observation-2026-08-17-v2";
+const GATE_ORDER = [3, 49, 45, 22, 11];
+const RESUME = process.env.OPENPOND_REFINER_OBSERVATION_RESUME === "1";
 
 if (!STORE_DIR) throw new Error("OPENPOND_APP_HOME is required for an isolated local observation run.");
-
-type StudyTask = {
-  id: number;
-  prompt: string;
-  fixtures: string[];
-  expectedOutputKind: "pdf" | "xlsx" | "html" | "text";
-};
-
-const BATCH_ONE: StudyTask[] = [
-  {
-    id: 3,
-    prompt: "Create an accessible PDF welcome packet for volunteers at a community food pantry. It should cover arrival, parking, check-in, clothing, safety, shift responsibilities, accessibility accommodations, and who to contact. Use the attached operational notes, add a clear checklist, and make the document easy to scan on a phone.",
-    fixtures: ["prompt-003-food-pantry-operational-notes.md"],
-    expectedOutputKind: "pdf",
-  },
-  {
-    id: 49,
-    prompt: "Create a resident notice about a six-hour building water shutdown. Include the date and exact time, affected areas, reason for the work, preparation steps, accessibility assistance, emergency contact, and what residents should do when service returns. Make it suitable for both email and lobby posting.",
-    fixtures: [],
-    expectedOutputKind: "text",
-  },
-  {
-    id: 45,
-    prompt: "Review the attached customer-feedback export and produce a product-discovery summary. Group related problems without merging materially different requests, quantify recurring themes, include representative anonymized examples, identify gaps in the evidence, and propose the next five customer interviews.",
-    fixtures: ["prompt-045-customer-feedback.csv"],
-    expectedOutputKind: "text",
-  },
-  {
-    id: 22,
-    prompt: "Create a standalone HTML operations dashboard using the attached fulfillment data. Show daily order volume, late shipments, return rate, and warehouse performance with accessible CSS-based charts. Include filters for warehouse and date range and provide a usable empty state.",
-    fixtures: ["prompt-022-fulfillment-data.csv"],
-    expectedOutputKind: "html",
-  },
-  {
-    id: 11,
-    prompt: "Turn the attached event requirements and employee availability into an Excel staffing schedule. Assign shifts without overlapping an employee, flag uncovered roles, calculate hours by employee, and include a printable daily schedule for each event day.",
-    fixtures: [
-      "prompt-011-event-requirements.csv",
-      "prompt-011-employee-availability.csv",
-    ],
-    expectedOutputKind: "xlsx",
-  },
-];
-
-const requestedTaskIds = new Set(
-  (process.env.OPENPOND_REFINER_OBSERVATION_TASK_IDS ?? "")
-    .split(",")
-    .map((value) => Number(value.trim()))
-    .filter((value) => Number.isInteger(value)),
-);
-const selectedTasks = requestedTaskIds.size > 0
-  ? BATCH_ONE.filter((task) => requestedTaskIds.has(task.id))
-  : BATCH_ONE;
-if (selectedTasks.length === 0) {
-  throw new Error("OPENPOND_REFINER_OBSERVATION_TASK_IDS did not match a batch task.");
-}
 
 const token = (await readFile(path.join(STORE_DIR, "token"), "utf8")).trim();
 if (!token) throw new Error("The isolated OpenPond capability token is empty.");
 const store = new SqliteStore(STORE_DIR);
 
 try {
-  const selectedHarness = await loadSelectedLocalHarnessRuntime(store);
-  if (!selectedHarness) throw new Error("A selected Local Harness release is required.");
+  const tasks = await loadObservationStudyTasks();
+  const taskset = buildObservationStudyTaskset(tasks);
+  await store.upsertTaskset(taskset);
+  const orderedTasks = selectTasks(tasks);
+  const initialRuntime = await requireSelectedRuntime();
   await store.setHarnessBackgroundReviewSettings({
-    workspaceId: selectedHarness.workspace.id,
+    workspaceId: initialRuntime.workspace.id,
     enabled: true,
     updatedAt: new Date().toISOString(),
   });
-  const taskset = await localObservationTaskset(selectedTasks);
-  const localRuntime = createLocalTasksetWorkRuntime({
+  const runtime = createLocalTasksetWorkRuntime({
     storeDir: STORE_DIR,
     deviceId: `observation-${process.pid}`,
     createSession: (payload) => api<Session>("/v1/sessions", { method: "POST", body: payload }),
@@ -129,27 +72,28 @@ try {
     },
     runtimeEventsForSession: (sessionId) => store.runtimeEventsForSession(sessionId),
   });
-  const receipt: Record<string, unknown> = {
-    schemaVersion: "openpond.harnessRefinerObservationBatch.v2",
-    study: "2026-08-11-harness-refiner-50-prompt-observation-study",
-    execution: "desktop_local_work",
-    batch: 1,
-    orderSeed: ORDER_SEED,
-    batchTaskIds: selectedTasks.map((task) => task.id),
-    runtime: { model: MODEL, serverUrl: SERVER_URL, workspace: "local" },
-    startedAt: new Date().toISOString(),
-    initialHarness: releaseRef(selectedHarness),
-    tasks: [],
-  };
-  await persistReceipt(receipt);
+  const receipt = await loadOrCreateReceipt(initialRuntime);
+  receipt.selectedTaskIds = orderedTasks.map((task) => task.id);
+  const completedIds = new Set(receipt.tasks.map((task) => task.promptId));
+  const pendingTasks = orderedTasks.filter((task) => !completedIds.has(task.id));
 
-  for (const [batchIndex, studyTask] of selectedTasks.entries()) {
-    process.stdout.write(
-      `TASK_START ${batchIndex + 1}/${selectedTasks.length} prompt-${String(studyTask.id).padStart(3, "0")} local\n`,
-    );
+  for (const [index, studyTask] of pendingTasks.entries()) {
+    const sequence = completedIds.size + index + 1;
+    process.stdout.write(`TASK_START ${sequence}/${orderedTasks.length} ${taskId(studyTask.id)} local\n`);
+    const admittedRuntime = await requireSelectedRuntime();
     const task = taskset.tasks.find((candidate) => candidate.id === taskId(studyTask.id));
-    if (!task) throw new Error(`Local Taskset task ${studyTask.id} is missing.`);
-    const attempt = await runTasksetWorkAttempt({
+    if (!task) throw new Error(`Task ${studyTask.id} is missing from the observation Taskset.`);
+    const context = compileDesktopHarnessContext({
+      taskset,
+      selectedTask: task,
+      releasedHarness: {
+        agentSnapshot: admittedRuntime.release.agentSnapshot,
+        harnessRelease: admittedRuntime.release.harnessRelease,
+      },
+      reasoningEffort: "low",
+      model: MODEL,
+    });
+    let attempt = await runTasksetWorkAttempt({
       store,
       storeDir: STORE_DIR,
       taskset,
@@ -160,101 +104,74 @@ try {
       attempt: 0,
       sampling: { maxOutputTokens: 8_192, temperature: 0, topP: 1 },
       stream: hostedModelStream,
-      runtime: localRuntime,
-      harnessInstructionContext: selectedHarness.instructionContext,
+      runtime,
+      harnessInstructionContext: admittedRuntime.instructionContext,
       harnessCapabilityReceipt: {
         execution: "desktop_local_work",
-        harnessRelease: selectedHarness.release.harnessRelease,
-        agentSnapshot: selectedHarness.release.agentSnapshot,
+        harnessRelease: admittedRuntime.release.harnessRelease,
+        agentSnapshot: admittedRuntime.release.agentSnapshot,
       },
     });
-    const sessionId = stringMetadata(attempt.metadata, "sessionId");
-    const turnId = stringMetadata(attempt.metadata, "turnId");
-    if (!sessionId || !turnId) throw new Error(`Prompt ${studyTask.id} has no local session boundary.`);
-    const storedSession = await store.getSession(sessionId);
-    const originalTurn = await store.getTurn(turnId);
-    if (!storedSession || !originalTurn) throw new Error(`Prompt ${studyTask.id} local boundary is missing.`);
-    const session = await store.updateSession(sessionId, (current) => ({
-      ...current,
-      metadata: {
-        ...current.metadata,
-        harnessRefinerObservationStudy: true,
-        observationBatch: 1,
-        observationPromptId: studyTask.id,
-        orderSeed: ORDER_SEED,
-        execution: "desktop_local_work",
-      },
-    }));
-    if (!session) throw new Error(`Prompt ${studyTask.id} local session could not be updated.`);
-    const overlay = await ensureLocalHarnessRunOverlay({
+    const output = recordValue(attempt.output);
+    const passed = structuralPass(attempt, studyTask);
+    const infrastructureFailure = attempt.infrastructureError !== null;
+    const feedback = passed
+      ? "The requested output was structurally materialized."
+      : infrastructureFailure
+        ? "The local execution environment did not produce a scorable attempt."
+        : "The requested output was not structurally materialized.";
+    const grade = GradeResultSchema.parse({
+      schemaVersion: "openpond.gradeResult.v1",
+      id: `grade-${attempt.id}`,
+      attemptId: attempt.id,
+      graderSetHash: contentHash(taskset.graders),
+      score: infrastructureFailure ? null : passed ? 1 : 0,
+      passed,
+      components: [{
+        graderId: "structural-output-verifier",
+        graderVersion: "1",
+        score: passed ? 1 : 0,
+        passed,
+        hardGate: true,
+        rewardEligible: !infrastructureFailure,
+        feedback,
+        evidenceRefs: [],
+        judge: null,
+        calibrationStatus: "not_applicable",
+      }],
+      failureClass: infrastructureFailure ? "infrastructure_failure" : passed ? null : "grader_failure",
+      feedback: passed ? [] : [feedback],
+      rewardEligible: !infrastructureFailure,
+      createdAt: attempt.completedAt,
+    });
+    await store.saveGradeResult(grade);
+    const artifacts = await store.listTaskAttemptArtifacts({ attemptId: attempt.id });
+    const canonical = await persistCanonicalEvaluationEvidence({
       store,
-      runId: session.id,
-      workspace: selectedHarness.workspace,
-      harnessRelease: {
-        id: selectedHarness.release.harnessRelease.id,
-        contentHash: selectedHarness.release.harnessRelease.contentHash,
-      },
-      admittedAt: attempt.startedAt,
+      storeDir: STORE_DIR,
+      taskset,
+      task,
+      context,
+      attempt,
+      grade,
+      artifacts,
     });
-    const turn = await store.updateTurn(turnId, (current) => ({
-      ...current,
-      harnessSnapshot: {
-        schemaVersion: "openpond.harnessTurnSnapshot.v1",
-        workspaceId: selectedHarness.workspace.id,
-        workspaceRevision: selectedHarness.workspace.revision,
-        sourceRevision: selectedHarness.workspace.sourceRevision,
-        channelName: selectedHarness.workspace.currentChannel.name,
-        channelRevision: selectedHarness.workspace.currentChannel.revision,
-        harnessRelease: overlay.baseHarnessRelease,
-        overlay: { id: overlay.id, revision: overlay.revision, contentHash: overlay.contentHash },
-      },
-    }));
-    if (!turn) throw new Error(`Prompt ${studyTask.id} local turn could not be updated.`);
-    const foregroundUsage = usageSummary(attempt.metadata.usage);
-    const attemptOutput = recordValue(attempt.output);
-    const requiredOutputRows = Array.isArray(attemptOutput.requiredOutputs)
-      ? attemptOutput.requiredOutputs
-      : [];
-    const attemptText = typeof attemptOutput.text === "string" ? attemptOutput.text : "";
-    const outputsPassed = requiredOutputRows.length === 0
-      ? attempt.infrastructureError === null && attemptText.trim().length > 0
-      : attemptOutput.outputsPassed === true;
-    const completionCheck = JSON.stringify({
-      schemaVersion: "openpond.localObservationCompletionCheck.v1",
-      passed: outputsPassed,
-      score: outputsPassed ? 1 : 0,
-      failureClass: attempt.infrastructureError ? attempt.metadata.failureClass : null,
-      feedback: outputsPassed
-        ? "The requested output was structurally materialized; this check does not assert subjective quality."
-        : "The requested output was not structurally materialized.",
-      evaluationCriteria: task.expectedOutput,
-      attempt: {
-        status: attempt.metadata.status,
-        infrastructureError: attempt.infrastructureError,
-        outputPresent: attemptText.trim().length > 0,
-        artifactCount: attempt.artifactRefs.length,
-        outputsPassed: attemptOutput.outputsPassed === true,
-        toolFailureCount: numeric(attemptOutput.toolFailureCount),
-        modelRequestCount: foregroundUsage.modelRequestCount,
-        latencyMs: attempt.latencyMs,
-        usage: foregroundUsage,
-      },
+    attempt = canonical.attempt;
+    const boundary = await materializeRefinerBoundary({
+      attempt,
+      admittedRuntime,
+      promptId: studyTask.id,
+      rewardPacket: benchmarkRefinerRewardPacket({
+        attempt,
+        artifactManifest: canonical.artifactManifest,
+        rewardReceipt: canonical.rewardReceipt,
+        artifactCount: canonical.artifacts.length,
+      }),
     });
-    await store.appendRuntimeEvent(event({
-      sessionId,
-      turnId,
-      name: "diagnostic",
-      source: "server",
-      action: "taskset_grade",
-      status: outputsPassed ? "completed" : "failed",
-      output: completionCheck,
-      error: outputsPassed ? undefined : completionCheck,
-      data: { result: { output: completionCheck, passed: outputsPassed, score: outputsPassed ? 1 : 0 } },
-    }));
     const detection = await recordLocalHarnessImprovementBoundary({
       store,
-      session,
-      turn,
+      session: boundary.session,
+      turn: boundary.turn,
       boundaryKind: "turn_completed",
     });
     let outcome: HarnessRefinerOutcome | null = null;
@@ -281,36 +198,185 @@ try {
       });
       outcome = result.outcome;
     }
-    const taskReceipt = {
+    const afterRuntime = await requireSelectedRuntime();
+    receipt.tasks.push({
       promptId: studyTask.id,
-      expectedOutputKind: studyTask.expectedOutputKind,
-      fixtureNames: studyTask.fixtures,
-      sessionId,
-      turnId,
-      attempt,
+      outputKind: studyTask.outputKind,
+      sessionId: boundary.session.id,
+      turnId: boundary.turn.id,
+      attemptId: attempt.id,
+      admittedHarness: releaseRef(admittedRuntime),
+      resultingHarness: releaseRef(afterRuntime),
+      canonical: {
+        attemptReceipt: canonical.attemptReceipt,
+        artifactManifest: canonical.artifactManifest,
+        rewardReceipt: canonical.rewardReceipt,
+        rolloutRecord: canonical.rolloutRecord,
+      },
+      structural: {
+        passed,
+        outputPresent: typeof output.text === "string" && output.text.trim().length > 0,
+        outputsPassed: output.outputsPassed === true,
+        artifactCount: canonical.artifacts.length,
+      },
       foregroundUsage: attempt.metadata.usage ?? [],
       trigger: detection?.trigger ?? null,
       outcome,
       refinerUsage,
-      harnessChanged: outcome?.decision === "proposed",
-    };
-    (receipt.tasks as unknown[]).push(taskReceipt);
+    });
+    receipt.updatedAt = new Date().toISOString();
+    receipt.finalHarness = releaseRef(afterRuntime);
     await persistReceipt(receipt);
-    const classification = classifyOutcome(outcome, detection?.trigger ?? null);
     process.stdout.write(
-      `TASK_COMPLETE prompt-${String(studyTask.id).padStart(3, "0")} ${classification} `
-      + `foreground_tokens=${usageTotal(attempt.metadata.usage)} `
-      + `refiner_tokens=${usageTotal(refinerUsage)}\n`,
+      `TASK_COMPLETE ${taskId(studyTask.id)} reward=${canonical.rewardReceipt.reward ?? "unscorable"} `
+      + `refiner=${classifyOutcome(outcome, detection?.trigger ?? null)} `
+      + `foreground_tokens=${usageTotal(attempt.metadata.usage)} refiner_tokens=${usageTotal(refinerUsage)}\n`,
     );
   }
-  receipt.completedAt = new Date().toISOString();
-  receipt.finalHarness = releaseRef(await loadSelectedLocalHarnessRuntime(store));
+  receipt.completedAt = receipt.tasks.length === orderedTasks.length ? new Date().toISOString() : null;
+  receipt.updatedAt = new Date().toISOString();
+  receipt.finalHarness = releaseRef(await requireSelectedRuntime());
   await persistReceipt(receipt);
-  process.stdout.write(
-    `BATCH_COMPLETE ${selectedTasks.length}/${selectedTasks.length} local receipt=${OUTPUT_PATH}\n`,
-  );
+  process.stdout.write(`BATCH_COMPLETE ${receipt.tasks.length}/${orderedTasks.length} local receipt=${OUTPUT_PATH}\n`);
 } finally {
   await store.close();
+}
+
+type SelectedRuntime = NonNullable<Awaited<ReturnType<typeof loadSelectedLocalHarnessRuntime>>>;
+type ObservationReceipt = {
+  schemaVersion: "openpond.harnessRefinerObservationBatch.v3";
+  study: string;
+  execution: "desktop_local_work";
+  orderSeed: string;
+  selectedTaskIds: number[];
+  runtime: { model: ChatModelRef; serverUrl: string; workspace: "local" };
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  initialHarness: ReturnType<typeof releaseRef>;
+  finalHarness: ReturnType<typeof releaseRef>;
+  tasks: Array<Record<string, unknown> & { promptId: number }>;
+};
+
+async function requireSelectedRuntime(): Promise<SelectedRuntime> {
+  const runtime = await loadSelectedLocalHarnessRuntime(store);
+  if (!runtime) throw new Error("A selected Local Harness release is required.");
+  return runtime;
+}
+
+function selectTasks(tasks: ObservationStudyTask[]): ObservationStudyTask[] {
+  const byId = new Map(tasks.map((task) => [task.id, task]));
+  const order = [...GATE_ORDER, ...tasks.map((task) => task.id).filter((id) => !GATE_ORDER.includes(id))];
+  const requested = (process.env.OPENPOND_REFINER_OBSERVATION_TASK_IDS ?? "")
+    .split(",")
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isInteger(value));
+  const selectedIds = requested.length
+    ? order.filter((id) => requested.includes(id))
+    : order.slice(0, boundedMaximum());
+  const selected = selectedIds.map((id) => byId.get(id)).filter((task): task is ObservationStudyTask => Boolean(task));
+  if (!selected.length) throw new Error("No observation tasks were selected.");
+  return selected;
+}
+
+function boundedMaximum(): number {
+  const value = Number(process.env.OPENPOND_REFINER_OBSERVATION_MAX_TASKS ?? "50");
+  if (!Number.isInteger(value) || value < 1 || value > 50) {
+    throw new Error("OPENPOND_REFINER_OBSERVATION_MAX_TASKS must be an integer from 1 through 50.");
+  }
+  return value;
+}
+
+async function loadOrCreateReceipt(runtime: SelectedRuntime): Promise<ObservationReceipt> {
+  if (RESUME) {
+    const parsed = JSON.parse(await readFile(OUTPUT_PATH, "utf8")) as ObservationReceipt;
+    if (parsed.schemaVersion !== "openpond.harnessRefinerObservationBatch.v3" || parsed.orderSeed !== ORDER_SEED) {
+      throw new Error("The requested resume receipt is not compatible with this observation protocol.");
+    }
+    return parsed;
+  }
+  const now = new Date().toISOString();
+  const receipt: ObservationReceipt = {
+    schemaVersion: "openpond.harnessRefinerObservationBatch.v3",
+    study: "harness-refiner-50-prompt-structural-observation-v2",
+    execution: "desktop_local_work",
+    orderSeed: ORDER_SEED,
+    selectedTaskIds: selectTasks(await loadObservationStudyTasks()).map((task) => task.id),
+    runtime: { model: MODEL, serverUrl: SERVER_URL, workspace: "local" },
+    startedAt: now,
+    updatedAt: now,
+    completedAt: null,
+    initialHarness: releaseRef(runtime),
+    finalHarness: releaseRef(runtime),
+    tasks: [],
+  };
+  await persistReceipt(receipt);
+  return receipt;
+}
+
+function structuralPass(attempt: TaskAttemptResult, task: ObservationStudyTask): boolean {
+  if (attempt.infrastructureError) return false;
+  if (task.requiredOutput) return attempt.output.outputsPassed === true;
+  return typeof attempt.output.text === "string" && attempt.output.text.trim().length > 0;
+}
+
+async function materializeRefinerBoundary(input: {
+  attempt: TaskAttemptResult;
+  admittedRuntime: SelectedRuntime;
+  promptId: number;
+  rewardPacket: Record<string, unknown>;
+}) {
+  const sessionId = stringMetadata(input.attempt.metadata, "sessionId");
+  const turnId = stringMetadata(input.attempt.metadata, "turnId");
+  if (!sessionId || !turnId) throw new Error(`Prompt ${input.promptId} has no local session boundary.`);
+  const session = await store.updateSession(sessionId, (current) => ({
+    ...current,
+    metadata: {
+      ...current.metadata,
+      harnessRefinerObservationStudy: true,
+      observationPromptId: input.promptId,
+      orderSeed: ORDER_SEED,
+      execution: "desktop_local_work",
+    },
+  }));
+  const originalTurn = await store.getTurn(turnId);
+  if (!session || !originalTurn) throw new Error(`Prompt ${input.promptId} local boundary is missing.`);
+  const overlay = await ensureLocalHarnessRunOverlay({
+    store,
+    runId: session.id,
+    workspace: input.admittedRuntime.workspace,
+    harnessRelease: releaseRef(input.admittedRuntime),
+    admittedAt: input.attempt.startedAt,
+  });
+  const turn = await store.updateTurn(turnId, (current) => ({
+    ...current,
+    harnessSnapshot: {
+      schemaVersion: "openpond.harnessTurnSnapshot.v1",
+      workspaceId: input.admittedRuntime.workspace.id,
+      workspaceRevision: input.admittedRuntime.workspace.revision,
+      sourceRevision: input.admittedRuntime.workspace.sourceRevision,
+      channelName: input.admittedRuntime.workspace.currentChannel.name,
+      channelRevision: input.admittedRuntime.workspace.currentChannel.revision,
+      harnessRelease: overlay.baseHarnessRelease,
+      overlay: { id: overlay.id, revision: overlay.revision, contentHash: overlay.contentHash },
+    },
+  }));
+  if (!turn) throw new Error(`Prompt ${input.promptId} local turn could not be updated.`);
+  const reward = recordValue(input.rewardPacket.rewardReceipt);
+  const passed = reward.status === "scored" && reward.passed === true;
+  const evidence = JSON.stringify(input.rewardPacket);
+  await store.appendRuntimeEvent(event({
+    sessionId,
+    turnId,
+    name: "diagnostic",
+    source: "server",
+    action: "taskset_grade",
+    status: passed ? "completed" : "failed",
+    output: evidence,
+    error: passed ? undefined : evidence,
+    data: { result: { output: evidence, passed, status: reward.status, reward: reward.reward } },
+  }));
+  return { session, turn };
 }
 
 async function* hostedModelStream(
@@ -335,90 +401,6 @@ async function* hostedModelStream(
   }
 }
 
-async function localObservationTaskset(tasks: StudyTask[]): Promise<Taskset> {
-  const sourceId = "source-harness-refiner-observation-local";
-  const tasksetRoot = path.join(STORE_DIR!, "training", "tasksets", TASKSET_ID);
-  const assetRoot = path.join(tasksetRoot, "assets");
-  await mkdir(assetRoot, { recursive: true });
-  const fileMetadata = new Map<string, { sha256: string; sizeBytes: number; mediaType: string }>();
-  for (const fixtureName of [...new Set(tasks.flatMap((task) => task.fixtures))]) {
-    const sourcePath = path.join(FIXTURE_ROOT, fixtureName);
-    const bytes = await readFile(sourcePath);
-    await copyFile(sourcePath, path.join(assetRoot, fixtureName));
-    fileMetadata.set(fixtureName, {
-      sha256: sha256(bytes),
-      sizeBytes: bytes.byteLength,
-      mediaType: fixtureName.endsWith(".csv") ? "text/csv" : "text/markdown",
-    });
-  }
-  const taskRows: TaskDataRecord[] = tasks.map((task) => ({
-    schemaVersion: "openpond.taskData.v1",
-    id: taskId(task.id),
-    clusterKey: `observation-${task.expectedOutputKind}`,
-    split: "validation",
-    input: { prompt: task.prompt },
-    expectedOutput: { kind: task.expectedOutputKind },
-    policyVisibleContext: {},
-    privilegedContextRef: null,
-    sourceRefs: [sourceId],
-    assets: task.fixtures.map((fixtureName) => {
-      const metadata = fileMetadata.get(fixtureName)!;
-      return {
-        id: `asset-${contentHash([task.id, fixtureName]).slice(0, 24)}`,
-        sourceRefId: sourceId,
-        artifactRef: `assets/${fixtureName}`,
-        fileName: fixtureName,
-        mediaType: metadata.mediaType,
-        sha256: metadata.sha256,
-        sizeBytes: metadata.sizeBytes,
-        split: "validation" as const,
-        metadata: {},
-      };
-    }),
-    requiredOutputs: requiredOutputs(task),
-    tags: [task.expectedOutputKind],
-    metadata: { observationPromptId: task.id },
-  }));
-  const sourceFileHashes = [...fileMetadata.values()].map((metadata) => metadata.sha256);
-  const hash = contentHash({ tasks: taskRows, tools: WORK_TOOL_NAMES, orderSeed: ORDER_SEED });
-  return {
-    id: TASKSET_ID,
-    name: "Harness Refiner local observation batch 1",
-    contentHash: hash,
-    sourceRefs: [{
-      id: sourceId,
-      kind: "uploaded_file",
-      sourceFileHashes,
-      originalFileNames: [...fileMetadata.keys()],
-      mediaTypes: [...new Set([...fileMetadata.values()].map((metadata) => metadata.mediaType))],
-      secretScanStatus: "passed",
-      piiScanStatus: "passed",
-      licensingStatus: "approved",
-    }],
-    environment: {
-      kind: "work",
-      entrypoint: "openpond-local-work-v1",
-      toolNames: WORK_TOOL_NAMES,
-      defaultTimeoutMs: 20 * 60_000,
-      metadata: { maxToolTurns: 40, execution: "desktop_local_work" },
-    },
-    tasks: taskRows,
-  } as unknown as Taskset;
-}
-
-function requiredOutputs(task: StudyTask): TaskDataRecord["requiredOutputs"] {
-  if (task.expectedOutputKind === "text") return [];
-  const output = {
-    pdf: { path: "welcome-packet.pdf", mediaType: "application/pdf" },
-    html: { path: "operations-dashboard.html", mediaType: "text/html" },
-    xlsx: {
-      path: "staffing-schedule.xlsx",
-      mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    },
-  }[task.expectedOutputKind];
-  return output ? [{ ...output, maxBytes: 10_000_000, metadata: {} }] : [];
-}
-
 function classifyOutcome(
   outcome: HarnessRefinerOutcome | null,
   trigger: RefinementTriggerDecision | null,
@@ -430,14 +412,11 @@ function classifyOutcome(
   return outcome.decision;
 }
 
-function releaseRef(runtime: Awaited<ReturnType<typeof loadSelectedLocalHarnessRuntime>>) {
-  return runtime
-    ? { id: runtime.release.harnessRelease.id, contentHash: runtime.release.harnessRelease.contentHash }
-    : null;
-}
-
-function taskId(id: number): string {
-  return `observation-prompt-${String(id).padStart(3, "0")}`;
+function releaseRef(runtime: SelectedRuntime) {
+  return {
+    id: runtime.release.harnessRelease.id,
+    contentHash: runtime.release.harnessRelease.contentHash,
+  };
 }
 
 function stringMetadata(metadata: Record<string, unknown>, key: string): string | null {
@@ -448,42 +427,11 @@ function stringMetadata(metadata: Record<string, unknown>, key: string): string 
 function usageTotal(value: unknown): number {
   const usages = Array.isArray(value) ? value : value ? [value] : [];
   return usages.reduce((total, usage) => {
-    if (!usage || typeof usage !== "object" || Array.isArray(usage)) return total;
-    const record = usage as Record<string, unknown>;
-    const totalTokens = record.total_tokens ?? record.totalTokens;
-    if (typeof totalTokens === "number") return total + totalTokens;
-    const inputTokens = record.input_tokens ?? record.prompt_tokens ?? record.promptTokens ?? 0;
-    const outputTokens = record.output_tokens ?? record.completion_tokens ?? record.completionTokens ?? 0;
-    return total + (typeof inputTokens === "number" ? inputTokens : 0)
-      + (typeof outputTokens === "number" ? outputTokens : 0);
+    const record = recordValue(usage);
+    const reported = numeric(record.total_tokens ?? record.totalTokens);
+    return total + (reported || numeric(record.input_tokens ?? record.prompt_tokens ?? record.promptTokens)
+      + numeric(record.output_tokens ?? record.completion_tokens ?? record.completionTokens));
   }, 0);
-}
-
-function usageSummary(value: unknown): {
-  modelRequestCount: number;
-  promptTokens: number;
-  completionTokens: number;
-  totalTokens: number;
-} {
-  const usages = Array.isArray(value) ? value : value ? [value] : [];
-  return usages.reduce(
-    (total, usage) => {
-      if (!usage || typeof usage !== "object" || Array.isArray(usage)) return total;
-      const record = usage as Record<string, unknown>;
-      const prompt = numeric(record.prompt_tokens ?? record.promptTokens ?? record.input_tokens);
-      const completion = numeric(
-        record.completion_tokens ?? record.completionTokens ?? record.output_tokens,
-      );
-      const reportedTotal = numeric(record.total_tokens ?? record.totalTokens);
-      return {
-        modelRequestCount: total.modelRequestCount + 1,
-        promptTokens: total.promptTokens + prompt,
-        completionTokens: total.completionTokens + completion,
-        totalTokens: total.totalTokens + (reportedTotal || prompt + completion),
-      };
-    },
-    { modelRequestCount: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-  );
 }
 
 function numeric(value: unknown): number {
@@ -496,7 +444,7 @@ function recordValue(value: unknown): Record<string, unknown> {
     : {};
 }
 
-async function persistReceipt(receipt: Record<string, unknown>): Promise<void> {
+async function persistReceipt(receipt: ObservationReceipt): Promise<void> {
   await mkdir(path.dirname(OUTPUT_PATH), { recursive: true });
   await writeFile(OUTPUT_PATH, `${JSON.stringify(receipt, null, 2)}\n`, { mode: 0o600 });
 }
@@ -513,8 +461,4 @@ async function api<T>(pathname: string, input: { method?: string; body?: unknown
   const text = await response.text();
   if (!response.ok) throw new Error(`${pathname} returned HTTP ${response.status}: ${text.slice(0, 4_000)}`);
   return JSON.parse(text) as T;
-}
-
-function sha256(value: Buffer): string {
-  return createHash("sha256").update(value).digest("hex");
 }
