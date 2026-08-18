@@ -42,6 +42,7 @@ function sandbox(state: SandboxRecord["state"] = "running"): SandboxRecord {
 describe("OpenPondWorkClient", () => {
   test("creates a sandbox, executes model tool calls, and returns the final text", async () => {
     const record = sandbox();
+    const longCommand = `printf '%s' '${"x".repeat(5_414)}' > outputs/report.txt`;
     const fakeSandboxes = {
       create: vi.fn().mockResolvedValue(record),
       get: vi.fn().mockResolvedValue(record),
@@ -123,7 +124,10 @@ describe("OpenPondWorkClient", () => {
                   {
                     id: "call_test",
                     type: "function",
-                    function: { name: "run_command", arguments: '{"command":"pwd"}' },
+                    function: {
+                      name: "run_command",
+                      arguments: JSON.stringify({ command: longCommand }),
+                    },
                   },
                 ],
               },
@@ -177,13 +181,13 @@ describe("OpenPondWorkClient", () => {
     });
     expect(fakeSandboxes.create).toHaveBeenCalledOnce();
     expect(fakeSandboxes.exec).toHaveBeenCalledWith("sb_test", {
-      command: "pwd",
+      command: longCommand,
       timeoutSeconds: 180,
     });
     expect(events).toContainEqual({
       type: "tool",
       toolCallId: "call_test",
-      command: "pwd",
+      command: longCommand,
       status: "succeeded",
       output: "/workspace\n",
       exitCode: 0,
@@ -208,6 +212,18 @@ describe("OpenPondWorkClient", () => {
       }),
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstRequest = JSON.parse(
+      String(fetchMock.mock.calls[0]?.[1]?.body),
+    ) as {
+      tools: Array<{
+        function: {
+          parameters: { properties: { command: { maxLength?: number } } };
+        };
+      }>;
+    };
+    expect(
+      firstRequest.tools[0]?.function.parameters.properties.command.maxLength,
+    ).toBe(20_000);
     fetchMock.mockRestore();
   });
 

@@ -15,6 +15,7 @@ import type {
 const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
+export const MAX_WORK_COMMAND_CHARS = 20_000;
 const WORK_OUTPUT_DIRECTORY = "outputs";
 const WORK_INPUT_DIRECTORY = "inputs/previous-outputs";
 const WORK_INPUT_MANIFEST = "inputs/.openpond-context.json";
@@ -526,6 +527,11 @@ export class OpenPondWorkClient {
     }
     const command = typeof args.command === "string" ? args.command.trim() : "";
     if (!command) return toolMessage(toolCallId, { error: "command is required" });
+    if (command.length > MAX_WORK_COMMAND_CHARS) {
+      const output = `command exceeds the ${MAX_WORK_COMMAND_CHARS} character limit`;
+      await emit({ type: "tool", toolCallId, command, status: "failed", output });
+      return toolMessage(toolCallId, { status: "failed", error: output });
+    }
 
     await emit({ type: "tool", toolCallId, command, status: "started" });
     try {
@@ -568,7 +574,12 @@ const WORK_TOOLS: HostedChatTool[] = [
         type: "object",
         additionalProperties: false,
         properties: {
-          command: { type: "string", description: "Shell command to execute." },
+          command: {
+            type: "string",
+            minLength: 1,
+            maxLength: MAX_WORK_COMMAND_CHARS,
+            description: "Shell command to execute.",
+          },
         },
         required: ["command"],
       },
