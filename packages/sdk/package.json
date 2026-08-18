@@ -28,6 +28,10 @@
       "types": "./dist/types/packages/sdk/src/project-actions.d.ts",
       "import": "./dist/project-actions.js"
     },
+    "./workflows": {
+      "types": "./dist/types/packages/sdk/src/workflows.d.ts",
+      "import": "./dist/workflows.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
