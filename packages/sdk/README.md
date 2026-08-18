@@ -96,6 +96,31 @@ console.log(result.command.output);
 
 The package also exports `createOpenPondSandboxClient`, all public sandbox input and response types, and the OpChat helpers used by the Work loop.
 
+## Workflows and scheduled Work
+
+Use `openpond.workflows` for model-driven scheduled Work. Workflows use the same Saved Work definitions, conversations, runs, and scheduler as the hosted OpenPond Workflows UI:
+
+```ts
+const workflow = await openpond.workflows.create({
+  name: "Morning market brief",
+  prompt: "Summarize the overnight market and write the brief to outputs.",
+  recurrence: {
+    version: 1,
+    kind: "weekdays",
+    timeZone: "America/New_York",
+    startDate: "2026-08-18",
+    localTime: "08:30",
+    end: { kind: "never" },
+  },
+});
+
+const catalog = await openpond.workflows.list();
+await openpond.workflows.runNow(workflow.scheduleId);
+await openpond.workflows.update(workflow.scheduleId, { enabled: false });
+```
+
+`openpond.workflows` is distinct from `openpond.sandboxes.createSchedule()`. Workflows schedule model-driven Work and create normal Work conversations and run history. Raw sandbox schedules execute a declared sandbox command or action.
+
 ## Project Actions
 
 Project Actions expose typed business functions from a normal Git Project to local OpenPond Work. The website and action wrapper can import the same neutral domain module, so the harness does not duplicate application logic.
