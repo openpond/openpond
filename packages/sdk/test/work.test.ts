@@ -52,7 +52,7 @@ describe("OpenPondWorkClient", () => {
           sandbox: record,
           files: [
             {
-              path: "/workspace/outputs/previous.txt",
+              path: "outputs/previous.txt",
               type: "file",
               sizeBytes: 8,
               updatedAt: new Date(0).toISOString(),
@@ -65,7 +65,7 @@ describe("OpenPondWorkClient", () => {
           sandbox: record,
           files: [
             {
-              path: "/workspace/outputs/previous.txt",
+              path: "outputs/previous.txt",
               type: "file",
               sizeBytes: 8,
               updatedAt: new Date(0).toISOString(),
@@ -73,7 +73,7 @@ describe("OpenPondWorkClient", () => {
               previewable: true,
             },
             {
-              path: "/workspace/outputs/report.docx",
+              path: "outputs/report.docx",
               type: "file",
               sizeBytes: 4812,
               updatedAt: new Date(1).toISOString(),
@@ -85,7 +85,7 @@ describe("OpenPondWorkClient", () => {
       downloadFileResponse: vi.fn().mockResolvedValue({
         sandbox: record,
         file: {
-          path: "/workspace/outputs/report.docx",
+          path: "outputs/report.docx",
           sizeBytes: 4812,
           updatedAt: new Date(1).toISOString(),
           isBinary: true,
@@ -164,7 +164,7 @@ describe("OpenPondWorkClient", () => {
       },
       outputs: [
         {
-          path: "/workspace/outputs/report.docx",
+          path: "outputs/report.docx",
           name: "report.docx",
           mimeType:
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -189,11 +189,11 @@ describe("OpenPondWorkClient", () => {
       exitCode: 0,
     });
     await expect(work.downloadOutput(result.sandboxId, result.outputs[0]!)).resolves.toMatchObject({
-      file: { path: "/workspace/outputs/report.docx", contentsBase64: "UEs=" },
+      file: { path: "outputs/report.docx", contentsBase64: "UEs=" },
     });
     expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledWith(
       "sb_test",
-      "/workspace/outputs/report.docx",
+      "outputs/report.docx",
     );
     expect(events).toContainEqual({
       type: "sandbox",
@@ -203,7 +203,7 @@ describe("OpenPondWorkClient", () => {
     expect(events).toContainEqual({
       type: "output",
       output: expect.objectContaining({
-        path: "/workspace/outputs/report.docx",
+        path: "outputs/report.docx",
         name: "report.docx",
       }),
     });
@@ -283,7 +283,7 @@ describe("OpenPondWorkClient", () => {
     const deleted = sandbox("deleted");
     const order: string[] = [];
     const outputFile = {
-      path: "/workspace/outputs/report.pdf",
+      path: "outputs/report.pdf",
       type: "file" as const,
       sizeBytes: 3,
       updatedAt: new Date(1).toISOString(),
@@ -345,7 +345,7 @@ describe("OpenPondWorkClient", () => {
     ]);
     expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledOnce();
     expect(fakeSandboxes.downloadFileResponse).toHaveBeenCalledWith("sb_test", {
-      path: "/workspace/outputs/report.pdf",
+      path: "outputs/report.pdf",
       maxBytes: 3,
     });
     expect(result.lifecycle).toEqual({
@@ -375,7 +375,7 @@ describe("OpenPondWorkClient", () => {
           sandbox: record,
           files: [
             {
-              path: "/workspace/outputs/result.txt",
+              path: "outputs/result.txt",
               type: "file",
               sizeBytes: 6,
               updatedAt: new Date(1).toISOString(),
@@ -429,7 +429,7 @@ describe("OpenPondWorkClient", () => {
           sandbox: record,
           files: [
             {
-              path: "/workspace/outputs/result.txt",
+              path: "outputs/result.txt",
               type: "file",
               sizeBytes: 6,
               updatedAt: new Date(1).toISOString(),
@@ -494,12 +494,12 @@ describe("OpenPondWorkClient", () => {
 
     expect(fakeSandboxes.uploadFileBase64).toHaveBeenCalledWith(
       "sb_test",
-      "/workspace/inputs/previous-outputs/output-1-quarterly-report.docx",
+      "inputs/previous-outputs/output-1-quarterly-report.docx",
       "UEsD",
     );
     expect(fakeSandboxes.uploadFile).toHaveBeenCalledWith(
       "sb_test",
-      "/workspace/inputs/.openpond-context.json",
+      "inputs/.openpond-context.json",
       expect.stringContaining('"checksumSha256": "abc123"'),
     );
     fetchMock.mockRestore();

@@ -15,9 +15,9 @@ import type {
 const DEFAULT_MODEL = "openpond-chat";
 const DEFAULT_MAX_STEPS = 24;
 const MAX_TOOL_OUTPUT_CHARS = 40_000;
-const WORK_OUTPUT_DIRECTORY = "/workspace/outputs";
-const WORK_INPUT_DIRECTORY = "/workspace/inputs/previous-outputs";
-const WORK_INPUT_MANIFEST = "/workspace/inputs/.openpond-context.json";
+const WORK_OUTPUT_DIRECTORY = "outputs";
+const WORK_INPUT_DIRECTORY = "inputs/previous-outputs";
+const WORK_INPUT_MANIFEST = "inputs/.openpond-context.json";
 const MAX_WORK_OUTPUTS = 100;
 const MAX_WORK_INPUTS = 100;
 const MAX_WORK_INPUT_BYTES = 100 * 1024 * 1024;
