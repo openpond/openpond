@@ -96,7 +96,7 @@ export function compileDesktopHarnessContext(input: {
   } = materializePortableTasksetRelease({
     taskset: input.taskset,
     selectedTasks: sourceTasks,
-    adapterId: runtimeAdapterId(input.taskset),
+    adapterId: desktopTasksetRuntimeAdapterId(input.taskset),
     admittedTasksetRelease: input.tasksetRelease,
   });
   const now = input.now ?? (() => new Date().toISOString());
@@ -114,7 +114,7 @@ export function compileDesktopHarnessContext(input: {
       chatTemplateHash: null,
     },
     runtimeTarget: {
-      adapterId: runtimeAdapterId(input.taskset),
+      adapterId: desktopTasksetRuntimeAdapterId(input.taskset),
       placement: "local",
       runtimeVersion: "desktop-v1",
       capabilityReceipt: contentHash({ environment, tools: tasksetTools, capabilities: input.taskset.capabilities }),
@@ -547,7 +547,7 @@ function portableAgents(profile?: OpenPondProfileState | null): ImmutableAssetRe
   }));
 }
 
-function runtimeAdapterId(taskset: Taskset): string {
+export function desktopTasksetRuntimeAdapterId(taskset: Taskset): string {
   const declared = taskset.environment.metadata.runtimeAdapterId;
   if (typeof declared === "string" && declared.trim()) return declared.trim();
   const benchmark = taskset.environment.metadata.benchmark;

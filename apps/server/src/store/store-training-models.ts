@@ -412,9 +412,18 @@ export function isCheckpointResumeTransition(
     (total, item) => total + item.attemptCount,
     0,
   );
+  const candidateAdaptationPlan = existing.evaluation.attemptPlan.find(
+    (item) => item.stage === "candidate_adaptation",
+  );
+  const completedCandidateAdaptationAttempts = completedAdaptationAttempts
+    + (candidateAdaptationPlan?.attemptCount ?? 0);
   const checkpointIsDurable =
     (existing.evaluationProgress?.stage === "refiner"
       && existing.evaluationProgress.completedAttempts === completedAdaptationAttempts)
+    || (existing.evaluationProgress?.stage === "candidate_adaptation"
+      && existing.evaluationProgress.completedAttempts >= completedAdaptationAttempts
+      && existing.evaluationProgress.completedAttempts
+        <= completedCandidateAdaptationAttempts)
     || (["candidate_adaptation", "candidate", "comparison"].includes(
       existing.evaluationProgress?.stage ?? "",
     )

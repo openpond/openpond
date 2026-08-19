@@ -29,14 +29,12 @@ limitations. It does not post, react, or interact with accounts.
 
 The detailed split and acceptance contract are in the
 [Taskset design](./taskset/README.md). The materialized
-[`harness-refiner-08112026` Taskset Release](./taskset/taskset.release.json)
-contains the frozen prompts, fixtures, grader assets, and production-derived
-tool contracts. The 08112026 release includes four fact-distinct
+[`harness-refiner-20260818-v2` Taskset Release](./taskset/taskset.release.json)
+contains the frozen prompts, fixtures, deterministic grader assets, and
+production-derived tool contracts. It includes four fact-distinct
 direct-deliverable tasks in each split so repeated checklist-or-file
-substitution is visible across sequential adaptation, and calibrates the judge
-to accept short framing when the complete requested copy is present inline.
-Its current content hash is
-`4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634`.
+substitution is visible across sequential adaptation. Its content hash is
+`20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d`.
 
 ## Shipped reference Taskset
 
@@ -86,8 +84,19 @@ Each complete pass uses the following sequence:
 
 The baseline and candidate Run Manifests must pin the same model identity,
 reasoning effort, runtime adapter and version, tool declarations, limits, and
-Taskset Release. For `openpond-chat`, the receipt must retain both the stable
-alias and the current upstream identity, DeepSeek V4 Pro.
+Taskset Release. The 20260818-v2 controlled run uses OpenPond Chat with
+DeepSeek V4 Flash and retains the exact upstream catalog revision and pricing
+in its private receipt.
+
+Before execution, `pnpm benchmark:harness-refiner:prepare` creates a fresh
+isolated store and a content-addressed admission receipt. It binds the portable
+Taskset, its projected application form, the execution-bound Taskset,
+Environment and Verifier Set releases, the initial Harness release,
+forty-attempt execution plan, model, sampling, reasoning effort, gateway
+environment, spend ceiling, 180-second Refiner timeout, 1,200-token Refiner
+response limit, and at most two Refiner invocations per adaptation task. A
+retry resumes the same foreground attempt and trigger; exhausted retries stop
+the run and remain failed evidence.
 
 The canonical runner uses OpenPond Desktop's local Work runtime. Every attempt
 gets an isolated managed local directory with the standard
@@ -111,7 +120,42 @@ Reports also retain:
 Success must not regress. Infrastructure failures, timeouts, partial runs, or
 an unchanged Harness are reported but cannot support an improvement claim.
 
+`pnpm benchmark:harness-refiner:audit` verifies the final admission, six-case
+qualification, result manifest, evaluation receipt, forty unique stage/task
+attempts, twenty canonical pairs, sequential checkpoint, Refiner retries,
+spend ceiling, and immutable Harness lineage. It writes a private audit receipt
+and the redacted public aggregate from the same terminal evidence.
+
 ## Results
+
+The 20260818-v2 controlled run completed all forty foreground attempts and
+twenty canonical pairs with valid immutable lineage and an enforced $5 spend
+ceiling. It used OpenPond Chat with DeepSeek V4 Flash, cost $0.888575, and used
+222,498 Refiner tokens in addition to foreground work.
+
+Refiner returned `no_action` after each of the ten sequential adaptation
+tasks, so the baseline and final Harness hashes are identical. One Refiner
+invocation failed and was recovered by the admitted same-attempt retry. No
+high-confidence reusable Harness change was accepted.
+
+The comparison is therefore **inconclusive**, not evidence of continual
+improvement. The baseline passed 5/10 adaptation and 3/10 held-out contracts;
+the repeated candidate pass passed 3/10 adaptation and 4/10 held-out
+contracts. Total foreground tokens fell from 11,063,871 to 10,728,586, but
+because the Harness did not change, neither the pass-count nor token
+differences can be attributed to Refiner.
+
+The separate six-scenario qualification passed all six controlled scenarios,
+including abstention, routing, bounded mutation with rollback, fact-distinct
+transfer, and persisted cross-run review. That establishes mechanism coverage;
+it does not turn the natural-task benchmark into a positive result.
+
+The complete redacted aggregate and all twenty task pairs are in the
+content-addressed [20260818-v2 public result](./results/harness-refiner-20260818-v2.json).
+Its content hash is
+`e31311cbf919c65b2059531990b7f345cb1a2a928bfe50e114c39f75726f459c`.
+
+### Historical result
 
 The locked 08112026 run completed all forty planned attempts with valid
 provider usage, frozen external evidence, and immutable Harness lineage. One
@@ -130,5 +174,5 @@ content-addressed [08112026 public result](./results/harness-refiner-08112026.js
 Earlier incomplete and batch/replay runs remain development evidence and are
 not included in the public result.
 
-Public result content hash:
+Historical public result content hash:
 `14d622744d9397d415aeda8285b53b7d1c5c5486c45e0e953bb093e714d156b1`.

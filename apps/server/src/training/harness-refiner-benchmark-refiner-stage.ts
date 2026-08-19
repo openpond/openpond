@@ -2,9 +2,13 @@ import {
   TurnSchema,
   type ChatModelRef,
   type ModelRun,
+  type RefinementTriggerDecision,
   type Taskset,
 } from "@openpond/contracts";
-import type { HarnessRefinerMessage } from "@openpond/harness";
+import {
+  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+  type HarnessRefinerMessage,
+} from "@openpond/harness";
 import type { ArtifactManifest, RewardReceipt } from "@openpond/evals";
 
 import { ensureLocalHarnessRunOverlay } from "../harness/local-harness-run-overlay.js";
@@ -13,7 +17,11 @@ import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-w
 import { loadLocalHarnessRuntimeFromRelease } from "../harness/local-harness-skill-runtime.js";
 import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
-import { BenchmarkSpendBudget } from "./harness-refiner-benchmark-protocol.js";
+import {
+  BenchmarkSpendBudget,
+  HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
+} from "./harness-refiner-benchmark-protocol.js";
+import type { BenchmarkRefinerFailureKind } from "./harness-refiner-benchmark-sequential-checkpoint.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import {
   addUsage,
@@ -33,6 +41,29 @@ type BenchmarkRefinerModelStream = (input: {
 }) => AsyncIterable<{ text?: string; usage?: unknown; costUsd?: number }>;
 
 const MAX_REFINER_ARTIFACT_MANIFEST_ENTRIES = 100;
+
+type RefinerUsage = ReturnType<typeof emptyUsageCategory>;
+
+export class BenchmarkRefinerInvocationError extends Error {
+  readonly name = "BenchmarkRefinerInvocationError";
+
+  constructor(
+    message: string,
+    readonly details: {
+      trigger: RefinementTriggerDecision;
+      usage: RefinerUsage;
+      costBasis: "authoritative" | "estimated" | "none";
+      estimatedCostUsd: number | null;
+      failureKind: BenchmarkRefinerFailureKind;
+      retryable: boolean;
+      startedAt: string;
+      completedAt: string;
+    },
+    options?: { cause?: unknown },
+  ) {
+    super(message, options);
+  }
+}
 
 export function benchmarkRefinerRewardPacket(input: {
   attempt: BenchmarkAttemptEvidence["attempt"];
@@ -133,7 +164,17 @@ export async function materializeBenchmarkRefinerBoundary(input: {
       },
     },
   });
-  if (!(await input.store.getTurn(turn.id))) await input.store.insertTurn(turn);
+  const existingTurn = await input.store.getTurn(turn.id);
+  if (!existingTurn) {
+    await input.store.insertTurn(turn);
+  } else {
+    await input.store.updateTurn(turn.id, (current) => TurnSchema.parse({
+      ...current,
+      modelRef: turn.modelRef,
+      metadata: { ...current.metadata, ...turn.metadata },
+      harnessSnapshot: turn.harnessSnapshot,
+    }));
+  }
   const assistantOutput = attempt.output.text;
   if (typeof assistantOutput === "string" && assistantOutput.trim()) {
     await input.store.appendRuntimeEvent(event({
@@ -203,13 +244,20 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   if (!boundary) {
     throw new Error(`Adaptation attempt ${input.result.attempt.id} has no Refiner boundary.`);
   }
-  const detection = await recordLocalHarnessImprovementBoundary({
+  const existingTrigger = await queuedTriggerForTurn({
     store: input.store,
-    session: boundary.session,
-    turn: boundary.turn,
-    boundaryKind: "turn_completed",
-    now: input.now,
+    workspaceId: input.runtime.workspace.id,
+    turnId: boundary.turn.id,
   });
+  const detection = existingTrigger
+    ? { observations: [], trigger: existingTrigger }
+    : await recordLocalHarnessImprovementBoundary({
+        store: input.store,
+        session: boundary.session,
+        turn: boundary.turn,
+        boundaryKind: "turn_completed",
+        now: input.now,
+      });
   if (!detection) {
     throw new Error(`Adaptation attempt ${input.result.attempt.id} produced no Refiner detection.`);
   }
@@ -219,35 +267,164 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
   input.budget.assertAvailable(`Refiner turn ${detection.trigger.id}`);
   const usage = emptyUsageCategory();
   let providerInvoked = false;
+  let providerRequestCount = 0;
+  let requestsWithAuthoritativeCost = 0;
+  let estimatedCostUsd = 0;
+  const startedAt = input.now();
+  let result: Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>> | null = null;
+  let failure: unknown = null;
   try {
-    const result = await runLocalHarnessRefinerWorker({
+    result = await runLocalHarnessRefinerWorker({
       store: input.store,
       storeDir: input.storeDir,
       trigger: detection.trigger,
       stream: async function* (streamInput) {
         providerInvoked = true;
-        for await (const delta of input.refinerStream({
-          ...streamInput,
-          model: input.model,
-          pricing: input.admittedPricing,
-        })) {
-          if (delta.usage !== undefined) addUsage(usage, delta.usage, delta.costUsd);
-          if (delta.text) yield { text: delta.text };
+        providerRequestCount += 1;
+        let requestHadAuthoritativeCost = false;
+        estimatedCostUsd += conservativeRefinerRequestCost(
+          streamInput.messages,
+          input.admittedPricing,
+        );
+        try {
+          for await (const delta of input.refinerStream({
+            ...streamInput,
+            model: input.model,
+            pricing: input.admittedPricing,
+          })) {
+            if (typeof delta.costUsd === "number") requestHadAuthoritativeCost = true;
+            if (delta.usage !== undefined || delta.costUsd !== undefined) {
+              addUsage(usage, delta.usage, delta.costUsd);
+            }
+            if (delta.text) yield { text: delta.text };
+          }
+        } finally {
+          if (requestHadAuthoritativeCost) requestsWithAuthoritativeCost += 1;
         }
       },
       signal: input.signal,
+      timeoutMs: HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
       now: input.now,
     });
-    return { detection, result };
-  } finally {
-    if (providerInvoked) {
-      input.budget.charge(usage.costUsd, "Refiner");
+  } catch (error) {
+    failure = error;
+  }
+  const completedAt = input.now();
+  const costBasis = providerInvoked
+    ? usage.costUsd !== null && requestsWithAuthoritativeCost === providerRequestCount
+      ? "authoritative" as const
+      : "estimated" as const
+    : "none" as const;
+  const chargedCost = costBasis === "authoritative"
+    ? usage.costUsd
+    : costBasis === "estimated"
+      ? Math.max(usage.costUsd ?? 0, estimatedCostUsd)
+      : null;
+  if (providerInvoked) {
+    try {
+      input.budget.charge(chargedCost, "Refiner");
       await checkpointRefinerUsage(
         input.store,
         input.modelRun.id,
         usage,
         input.budget.observedSpendUsd,
       );
+    } catch (error) {
+      failure ??= error;
     }
   }
+  if (failure) {
+    const message = failure instanceof Error ? failure.message : String(failure);
+    const failureKind = benchmarkRefinerFailureKind(failure, input.signal);
+    const retryable = failureKind !== "cancelled";
+    await input.store.appendRuntimeEvent(event({
+      sessionId: boundary.session.id,
+      turnId: boundary.turn.id,
+      name: "harness.refiner.failed",
+      source: "server",
+      appId: boundary.session.appId,
+      status: "failed",
+      output: message,
+      data: {
+        trigger: {
+          id: detection.trigger.id,
+          contentHash: detection.trigger.contentHash,
+        },
+        benchmark: true,
+        modelRunId: input.modelRun.id,
+        attemptId: input.result.attempt.id,
+        failureKind,
+        retryable,
+        costBasis,
+        estimatedCostUsd: costBasis === "estimated" ? estimatedCostUsd : null,
+      },
+    })).catch(() => undefined);
+    throw new BenchmarkRefinerInvocationError(message, {
+      trigger: detection.trigger,
+      usage,
+      costBasis,
+      estimatedCostUsd: costBasis === "estimated" ? estimatedCostUsd : null,
+      failureKind,
+      retryable,
+      startedAt,
+      completedAt,
+    }, { cause: failure });
+  }
+  return {
+    detection,
+    result,
+    invocation: {
+      usage,
+      costBasis,
+      estimatedCostUsd: costBasis === "estimated" ? estimatedCostUsd : null,
+      startedAt,
+      completedAt,
+    },
+  };
+}
+
+async function queuedTriggerForTurn(input: {
+  store: SqliteStore;
+  workspaceId: string;
+  turnId: string;
+}): Promise<RefinementTriggerDecision | null> {
+  const triggers = await input.store.listHarnessImprovementArtifacts(
+    input.workspaceId,
+    "trigger_decision",
+    1_000,
+  ) as RefinementTriggerDecision[];
+  return triggers.find(
+    (trigger) => trigger.turnId === input.turnId && trigger.decision === "queue_refiner",
+  ) ?? null;
+}
+
+function conservativeRefinerRequestCost(
+  messages: HarnessRefinerMessage[],
+  pricing: HostedTokenPricing,
+): number {
+  const inputCharacters = messages.reduce(
+    (total, message) => total + message.content.length,
+    0,
+  );
+  const estimatedInputTokens = Math.ceil(inputCharacters / 3);
+  return (
+    estimatedInputTokens * pricing.inputUsdPerMillionTokens
+    + DEFAULT_REFINER_MAX_OUTPUT_TOKENS * pricing.outputUsdPerMillionTokens
+  ) / 1_000_000;
+}
+
+function benchmarkRefinerFailureKind(
+  error: unknown,
+  signal: AbortSignal,
+): BenchmarkRefinerFailureKind {
+  if (signal.aborted) return "cancelled";
+  const message = error instanceof Error ? error.message : String(error);
+  if (/timed out|timeout/i.test(message)) return "timeout";
+  if (/invalid structured output|response limit|JSON/i.test(message)) {
+    return "invalid_output";
+  }
+  if (/provider|rate limit|billing|signed out|network|fetch/i.test(message)) {
+    return "provider_failure";
+  }
+  return "unknown";
 }

@@ -20,10 +20,11 @@ import {
   totalPlannedTasks,
 } from "../apps/server/src/training/harness-refiner-benchmark-protocol.js";
 import {
-  benchmarkLineage,
   frozenToolEvidence,
   loadCompletedBenchmarkStage,
 } from "../apps/server/src/training/harness-refiner-benchmark-service-support.js";
+import { benchmarkLineage } from
+  "../apps/server/src/training/harness-refiner-benchmark-lineage.js";
 
 describe("Harness Refiner benchmark protocol", () => {
   test("derives the four-stage forty-attempt plan from the admitted Taskset", () => {
@@ -50,8 +51,8 @@ describe("Harness Refiner benchmark protocol", () => {
     });
 
     expect(plan.map((stage) => [stage.stage, stage.attemptCount])).toEqual([
-      ["baseline", 10],
       ["adaptation", 10],
+      ["baseline", 10],
       ["candidate_adaptation", 10],
       ["candidate", 10],
     ]);
@@ -388,7 +389,7 @@ describe("Harness Refiner benchmark protocol", () => {
       store: store as never,
       workspaceId: "benchmark-workspace",
       adaptationAttempts: [],
-      refinerResults: [],
+      completedSteps: [],
       candidateRelease: fullCandidateRelease,
       refinerInputHash: hash,
     });

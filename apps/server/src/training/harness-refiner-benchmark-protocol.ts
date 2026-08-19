@@ -47,6 +47,9 @@ export type SequentialAdaptationSummary = {
   contentHash: string;
 };
 
+export const HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK = 2;
+export const HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS = 180_000;
+
 export function createHarnessRefinerExecutionPlan(input: {
   taskset: Taskset;
   seeds: number[];
@@ -63,8 +66,8 @@ export function createHarnessRefinerExecutionPlan(input: {
   const adaptation = taskIdsForSplit(input.taskset, benchmark.adaptationSplit);
   const multiplier = input.seeds.length * input.repetitions;
   return [
-    planItem("baseline", benchmark.evaluationSplit, heldOut, multiplier),
     planItem("adaptation", benchmark.adaptationSplit, adaptation, multiplier),
+    planItem("baseline", benchmark.evaluationSplit, heldOut, multiplier),
     planItem("candidate_adaptation", benchmark.adaptationSplit, adaptation, multiplier),
     planItem("candidate", benchmark.evaluationSplit, heldOut, multiplier),
   ];

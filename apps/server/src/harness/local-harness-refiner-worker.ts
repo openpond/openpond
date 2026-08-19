@@ -67,7 +67,7 @@ export type LocalHarnessRefinerWorkerResult = {
   applyReceipt: ImprovementApplyReceipt | null;
 };
 
-export async function runLocalHarnessRefinerWorker(input: {
+export type LocalHarnessRefinerWorkerInput = {
   store: SqliteStore;
   storeDir: string;
   trigger: RefinementTriggerDecision;
@@ -79,8 +79,40 @@ export async function runLocalHarnessRefinerWorker(input: {
     signal: AbortSignal;
   }) => Promise<HostedHarnessRefinerResponse>;
   signal: AbortSignal;
+  timeoutMs?: number;
   now?: () => string;
-}): Promise<LocalHarnessRefinerWorkerResult> {
+};
+
+const activeRefinerInvocations = new WeakMap<
+  SqliteStore,
+  Map<string, Promise<LocalHarnessRefinerWorkerResult>>
+>();
+
+export async function runLocalHarnessRefinerWorker(
+  input: LocalHarnessRefinerWorkerInput,
+): Promise<LocalHarnessRefinerWorkerResult> {
+  const key = RefinementTriggerDecisionSchema.parse(input.trigger).contentHash;
+  let activeForStore = activeRefinerInvocations.get(input.store);
+  if (!activeForStore) {
+    activeForStore = new Map();
+    activeRefinerInvocations.set(input.store, activeForStore);
+  }
+  const active = activeForStore.get(key);
+  if (active) return active;
+  const execution = executeLocalHarnessRefinerWorker(input);
+  activeForStore.set(key, execution);
+  try {
+    return await execution;
+  } finally {
+    if (activeForStore.get(key) === execution) {
+      activeForStore.delete(key);
+    }
+  }
+}
+
+async function executeLocalHarnessRefinerWorker(
+  input: LocalHarnessRefinerWorkerInput,
+): Promise<LocalHarnessRefinerWorkerResult> {
   const trigger = RefinementTriggerDecisionSchema.parse(input.trigger);
   if (trigger.decision !== "queue_refiner") {
     throw new Error("The model-backed Refiner only accepts queue_refiner decisions.");
@@ -200,6 +232,7 @@ export async function runLocalHarnessRefinerWorker(input: {
       evidence: refinerEvidence,
       stream: input.stream,
       signal: input.signal,
+      timeoutMs: input.timeoutMs,
     });
   } else if (input.refine) {
     const request = HostedHarnessRefinerRequestSchema.parse({

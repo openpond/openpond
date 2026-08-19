@@ -33,6 +33,8 @@ import {
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import { resumeHarnessRefinerComparison } from "./harness-refiner-benchmark-comparison-recovery.js";
 import { runSequentialHarnessAdaptation } from "./harness-refiner-benchmark-sequential-stage.js";
+import { loadSequentialAdaptationCheckpoint } from
+  "./harness-refiner-benchmark-sequential-checkpoint.js";
 import {
   createResultManifest,
   ensureBaseVersion,
@@ -121,7 +123,9 @@ export function createHarnessRefinerBenchmarkService(deps: {
     });
     if (!taskset.benchmark) throw new Error("Harness Refiner Taskset is unavailable.");
     if (taskset.graders.some(
-      (grader) => grader.kind === "model_judge" && grader.calibrationStatus !== "passed",
+      (grader) => grader.kind === "model_judge"
+        && grader.rewardEligible
+        && grader.calibrationStatus !== "passed",
     )) {
       const calibration = await deps.evaluation.calibrateModelJudges(taskset.id);
       if (!calibration.passed) {
@@ -196,7 +200,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
         attemptPlan: executionPlan,
       },
       evaluationProgress: {
-        stage: "baseline",
+        stage: "adaptation",
         completedAttempts: 0,
         totalAttempts: totalPlannedAttempts(executionPlan),
         accounting: emptyEvaluationAccounting(),
@@ -257,6 +261,21 @@ export function createHarnessRefinerBenchmarkService(deps: {
       run.evaluationProgress?.stage === "refiner"
       && run.evaluationProgress?.completedAttempts
         === completedBeforeStage(run.evaluation.attemptPlan, "candidate_adaptation");
+    const candidateAdaptationStart = completedBeforeStage(
+      run.evaluation.attemptPlan,
+      "candidate_adaptation",
+    );
+    const candidateAdaptationEnd = candidateAdaptationStart
+      + requirePlanStage(run.evaluation.attemptPlan, "candidate_adaptation").attemptCount;
+    const sequentialCheckpoint = await loadSequentialAdaptationCheckpoint({
+      storeDir: deps.storeDir,
+      modelRunId: run.id,
+    });
+    const canResumeFromCandidateAdaptation =
+      run.evaluationProgress?.stage === "candidate_adaptation"
+      && run.evaluationProgress.completedAttempts >= candidateAdaptationStart
+      && run.evaluationProgress.completedAttempts <= candidateAdaptationEnd
+      && Boolean(sequentialCheckpoint);
     const hasCompletedComparisonCheckpoint =
       ["candidate_adaptation", "candidate", "comparison"].includes(
         run.evaluationProgress?.stage ?? "",
@@ -267,10 +286,14 @@ export function createHarnessRefinerBenchmarkService(deps: {
       && Boolean(await loadLatestManagedResult(deps.storeDir, run.id));
     if (
       !["failed", "cancelled"].includes(run.status)
-      || (!canResumeFromRefiner && !canResumeFromComparison)
+      || (
+        !canResumeFromRefiner
+        && !canResumeFromCandidateAdaptation
+        && !canResumeFromComparison
+      )
     ) {
       throw new Error(
-        "Only a Harness Refiner run with a durable Refiner or comparison checkpoint can resume.",
+        "Only a Harness Refiner run with a durable Refiner, sequential adaptation, or comparison checkpoint can resume.",
       );
     }
     const project = await requireModelProject(deps.store, run.modelId, run.profileId);
@@ -382,6 +405,21 @@ export function createHarnessRefinerBenchmarkService(deps: {
         modelRun.evaluationProgress?.stage === "refiner"
         && modelRun.evaluationProgress.completedAttempts
           === completedBeforeStage(executionPlan, "candidate_adaptation");
+      const candidateAdaptationStart = completedBeforeStage(
+        executionPlan,
+        "candidate_adaptation",
+      );
+      const candidateAdaptationEnd = candidateAdaptationStart
+        + candidateAdaptationPlan.attemptCount;
+      const sequentialCheckpoint = await loadSequentialAdaptationCheckpoint({
+        storeDir: deps.storeDir,
+        modelRunId: modelRun.id,
+      });
+      const resumeFromCandidateAdaptation =
+        modelRun.evaluationProgress?.stage === "candidate_adaptation"
+        && modelRun.evaluationProgress.completedAttempts >= candidateAdaptationStart
+        && modelRun.evaluationProgress.completedAttempts <= candidateAdaptationEnd
+        && Boolean(sequentialCheckpoint);
       const resumeFromComparison =
         ["candidate_adaptation", "candidate", "comparison"].includes(
           modelRun.evaluationProgress?.stage ?? "",
@@ -389,7 +427,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
         && modelRun.evaluationProgress?.completedAttempts === totalAttempts;
       const budget = new BenchmarkSpendBudget(
         input.maximumSpendUsd,
-        resumeFromRefiner || resumeFromComparison
+        resumeFromRefiner || resumeFromCandidateAdaptation || resumeFromComparison
           ? modelRun.evaluationProgress?.accounting?.observedSpendUsd ?? 0
           : 0,
       );
@@ -421,7 +459,8 @@ export function createHarnessRefinerBenchmarkService(deps: {
         stage: HarnessRefinerExecutionPlanItem["stage"],
         label: string,
       ) => {
-        let completedInStage = 0;
+        let completedInStage = modelRun.evaluationProgress?.accounting?.attempts
+          .filter((attempt) => attempt.phase === stage).length ?? 0;
         return async (result: EvaluationAttempt) => {
           context.signal.throwIfAborted();
           budget.assertAvailable(label);
@@ -451,7 +490,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
       let baseline: CompletedBenchmarkStage;
       let adaptation: CompletedBenchmarkStage;
       let adaptationAttempts: BenchmarkAttemptEvidence[];
-      if (resumeFromRefiner) {
+      if (resumeFromRefiner || resumeFromCandidateAdaptation) {
         baseline = await loadCompletedBenchmarkStage({
           store: deps.store,
           modelRunId: modelRun.id,
@@ -475,51 +514,6 @@ export function createHarnessRefinerBenchmarkService(deps: {
           ],
         });
       } else {
-        const executedBaseline = await deps.evaluation.executeBenchmark({
-          tasksetId: taskset.id,
-          phase: "baseline",
-          model: input.model,
-          reasoningEffort: input.reasoningEffort,
-          seeds: input.seeds,
-          repetitions: input.repetitions,
-          split: baselinePlan.split as never,
-          taskIds: baselinePlan.taskIds,
-          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
-          releasedHarness: baselineHarness,
-          hostedTokenPricing: admittedPricing,
-          parentModelRunId: modelRun.id,
-          signal: context.signal,
-          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
-          onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
-        });
-        baseline = completedStage(executedBaseline);
-        await ensureBaseVersion({
-          store: deps.store,
-          project: context.project,
-          modelRun,
-          model: input.model,
-          baseline: executedBaseline.attempts[0]!,
-        });
-        if (
-          baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
-          || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
-        ) {
-          throw new Error("Baseline execution drifted from the admitted Harness release.");
-        }
-
-        await checkpointEvidenceSnapshot(
-          deps.store,
-          deps.storeDir,
-          modelRun.id,
-          evidenceSnapshot.manifest(),
-        );
-
-        await updateProgress(deps.store, modelRun.id, {
-          stage: "adaptation",
-          completedAttempts: completedBeforeStage(executionPlan, "adaptation"),
-          totalAttempts,
-        });
-
         const executedAdaptation = await deps.evaluation.executeBenchmark({
           tasksetId: taskset.id,
           phase: "baseline",
@@ -539,6 +533,57 @@ export function createHarnessRefinerBenchmarkService(deps: {
         });
         adaptation = completedStage(executedAdaptation);
         adaptationAttempts = adaptation.attempts;
+        await ensureBaseVersion({
+          store: deps.store,
+          project: context.project,
+          modelRun,
+          model: input.model,
+          baseline: executedAdaptation.attempts[0]!,
+        });
+        if (
+          adaptation.run.harnessRelease.id !== modelRun.harnessRelease.id
+          || adaptation.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
+        ) {
+          throw new Error("Adaptation baseline drifted from the admitted Harness release.");
+        }
+
+        await checkpointEvidenceSnapshot(
+          deps.store,
+          deps.storeDir,
+          modelRun.id,
+          evidenceSnapshot.manifest(),
+        );
+
+        await updateProgress(deps.store, modelRun.id, {
+          stage: "baseline",
+          completedAttempts: completedBeforeStage(executionPlan, "baseline"),
+          totalAttempts,
+        });
+
+        const executedBaseline = await deps.evaluation.executeBenchmark({
+          tasksetId: taskset.id,
+          phase: "baseline",
+          model: input.model,
+          reasoningEffort: input.reasoningEffort,
+          seeds: input.seeds,
+          repetitions: input.repetitions,
+          split: baselinePlan.split as never,
+          taskIds: baselinePlan.taskIds,
+          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
+          releasedHarness: baselineHarness,
+          hostedTokenPricing: admittedPricing,
+          parentModelRunId: modelRun.id,
+          signal: context.signal,
+          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
+          onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
+        });
+        baseline = completedStage(executedBaseline);
+        if (
+          baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
+          || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
+        ) {
+          throw new Error("Held-out baseline drifted from the admitted Harness release.");
+        }
         await checkpointEvidenceSnapshot(
           deps.store,
           deps.storeDir,
@@ -551,16 +596,21 @@ export function createHarnessRefinerBenchmarkService(deps: {
           totalAttempts,
         });
       }
-      if (resumeFromRefiner && !modelRun.evaluationProgress?.evidenceSnapshot) {
+      if (
+        (resumeFromRefiner || resumeFromCandidateAdaptation)
+        && !modelRun.evaluationProgress?.evidenceSnapshot
+      ) {
         throw new Error(
           "Sequential adaptation cannot resume because the interrupted run did not preserve its exact frozen evidence snapshot. Start a new run to preserve a valid causal comparison.",
         );
       }
-      await updateProgress(deps.store, modelRun.id, {
-        stage: "candidate_adaptation",
-        completedAttempts: completedBeforeStage(executionPlan, "candidate_adaptation"),
-        totalAttempts,
-      });
+      if (!resumeFromCandidateAdaptation) {
+        await updateProgress(deps.store, modelRun.id, {
+          stage: "candidate_adaptation",
+          completedAttempts: candidateAdaptationStart,
+          totalAttempts,
+        });
+      }
       const candidateAdaptation = await runSequentialHarnessAdaptation({
         store: deps.store,
         storeDir: deps.storeDir,

@@ -40,7 +40,7 @@
       ]
     }
   ],
-  "contentHash": "20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d",
+  "contentHash": "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -67,37 +67,23 @@
       "rewardEligible": true,
       "timeoutMs": 30000,
       "verifierRef": {
-        "contentHash": "31cda791adf4e55131ee49651431432b429f1404dbc4fa610a3fe1466574f270",
+        "contentHash": "5290dfae6969bd4581b1e1c111bdc1cb5f2828f7a91681635254b246c7590392",
         "id": "verifiers-taskset-output-verifier-mjs",
         "mediaType": "text/javascript",
         "path": "verifiers/taskset-output-verifier.mjs",
-        "sizeBytes": 2994,
+        "sizeBytes": 1295,
         "visibility": "verifier"
       },
       "version": "1",
       "weight": 1
-    }
-  ],
-  "id": "harness-refiner-20260818-v2",
-  "metadata": {
-    "adaptationSplit": "validation",
-    "benchmark": "harness-refiner",
-    "frozenEvaluationSplit": "frozen_eval",
-    "modelJudgeRole": "supplementary_uncalibrated_not_executed",
-    "orderSeed": "harness-refiner-20260818-order-v1",
-    "primaryMetric": "paired_verified_reward",
-    "protocolVersion": "3",
-    "qualityPolicy": "complete_frozen_cohort",
-    "refinementMode": "sequential_product_lifecycle",
-    "resultSchemaVersion": "openpond.harnessRefinerPublicResult.v2",
-    "secondaryMetrics": [
-      "paired_foreground_provider_tokens"
-    ],
-    "supplementaryModelJudge": {
+    },
+    {
       "calibrationStatus": "pending",
-      "executable": false,
+      "hardGate": true,
       "id": "task-quality-judge",
-      "rewardEligible": false,
+      "kind": "model_judge",
+      "privileged": true,
+      "rewardEligible": true,
       "rubricRef": {
         "contentHash": "455b3697c0617333a34b6521f167760fb8ae7e286059fa2ec327a5c97e66a2b3",
         "id": "rubrics-task-quality-md",
@@ -106,8 +92,19 @@
         "sizeBytes": 1496,
         "visibility": "verifier"
       },
-      "version": "1"
-    },
+      "version": "1",
+      "weight": 1
+    }
+  ],
+  "id": "harness-refiner-08112026",
+  "metadata": {
+    "adaptationSplit": "validation",
+    "benchmark": "harness-refiner",
+    "frozenEvaluationSplit": "frozen_eval",
+    "primaryMetric": "paired_foreground_provider_tokens",
+    "protocolVersion": "2",
+    "qualityPolicy": "hard_non_regression",
+    "refinementMode": "sequential_product_lifecycle",
     "toolDeclarationSource": "openpond-production-model-tool-definitions",
     "trainingSideEffect": false
   },
@@ -124,7 +121,7 @@
       "expectedOutput"
     ]
   },
-  "revision": 2,
+  "revision": 1,
   "schemaVersion": "openpond.tasksetRelease.v2",
   "tasks": [
     {
@@ -141,7 +138,6 @@
       "clusterKey": "northstar-launch-packet",
       "expectedOutput": {
         "deliverable": "pdf",
-        "deterministicContract": {},
         "mustInclude": [
           "three decision options",
           "owners and dates",
@@ -168,20 +164,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-board-launch-brief",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/pdf",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "visual"
-            ]
-          },
-          "path": "adaptation-board-launch-brief.pdf",
-          "schemaRef": null
-        }
-      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -203,7 +185,6 @@
       "clusterKey": "checkout-latency-incident-packet",
       "expectedOutput": {
         "deliverable": "pdf",
-        "deterministicContract": {},
         "mustInclude": [
           "incident window",
           "confirmed impact",
@@ -232,20 +213,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-latency-incident-review",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/pdf",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "visual"
-            ]
-          },
-          "path": "adaptation-latency-incident-review.pdf",
-          "schemaRef": null
-        }
-      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -267,7 +234,6 @@
       "clusterKey": "harbor-program-budget-packet",
       "expectedOutput": {
         "deliverable": "spreadsheet",
-        "deterministicContract": {},
         "mustInclude": [
           "summary sheet",
           "detail sheet",
@@ -296,20 +262,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-program-budget-workbook",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "test"
-            ]
-          },
-          "path": "adaptation-program-budget-workbook.xlsx",
-          "schemaRef": null
-        }
-      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -322,27 +274,6 @@
       "clusterKey": "northwind-invoice-correction-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "intentional error",
-            "deliberate error"
-          ],
-          "maxWords": 130,
-          "requiredAny": [
-            [
-              "no payment",
-              "not due"
-            ]
-          ],
-          "requiredText": [
-            "inv-1842",
-            "120",
-            "102",
-            "august 14",
-            "accounts@example.com"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "INV-1842",
@@ -367,7 +298,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-invoice-correction-email",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -381,27 +311,6 @@
       "clusterKey": "nextjs-security-current-sources",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "affected"
-            ],
-            [
-              "fixed",
-              "patched"
-            ],
-            [
-              "checked",
-              "as of"
-            ],
-            [
-              "version and configuration",
-              "version or configuration",
-              "exact version"
-            ]
-          ]
-        },
         "mustInclude": [
           "official advisory links",
           "affected and fixed versions",
@@ -423,7 +332,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-nextjs-security-audit",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -437,31 +345,6 @@
       "clusterKey": "juniper-workshop-reschedule-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "venue caused",
-            "venue's fault"
-          ],
-          "maxWords": 120,
-          "requiredAny": [
-            [
-              "facilitator",
-              "presenter"
-            ],
-            [
-              "registration",
-              "registrations"
-            ]
-          ],
-          "requiredText": [
-            "september 10",
-            "2:00",
-            "et",
-            "recording",
-            "events@example.com"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "September 10",
@@ -487,7 +370,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-workshop-reschedule-email",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -501,38 +383,6 @@
       "clusterKey": "boston-dc-accessibility-sources",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "wheelchair",
-              "accessible",
-              "accessibility"
-            ],
-            [
-              "outbound"
-            ],
-            [
-              "return"
-            ],
-            [
-              "disruption",
-              "service alert"
-            ],
-            [
-              "checked",
-              "as of"
-            ],
-            [
-              "confirm",
-              "confirmation"
-            ]
-          ],
-          "requiredText": [
-            "september 17",
-            "september 19"
-          ]
-        },
         "mustInclude": [
           "official operator sources",
           "outbound and return plan",
@@ -556,7 +406,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-accessible-boston-dc-plan",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -570,33 +419,6 @@
       "clusterKey": "chatgpt-x-reddit-public-sample",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "positive"
-            ],
-            [
-              "negative"
-            ],
-            [
-              "anecdote",
-              "anecdotal"
-            ],
-            [
-              "pattern",
-              "recurring"
-            ],
-            [
-              "sampling",
-              "sample"
-            ],
-            [
-              "limitation",
-              "access"
-            ]
-          ]
-        },
         "mustInclude": [
           "links to public examples",
           "dates",
@@ -620,7 +442,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-chatgpt-public-experiences",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -634,29 +455,6 @@
       "clusterKey": "acme-launch-delay-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "testing failed",
-            "test failed",
-            "compensation"
-          ],
-          "maxWords": 140,
-          "requiredAny": [
-            [
-              "accessibility testing",
-              "accessibility test"
-            ],
-            [
-              "pilot access"
-            ]
-          ],
-          "requiredText": [
-            "august 27",
-            "august 22",
-            "pilot-support@example.com"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "August 27",
@@ -682,7 +480,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-launch-delay-email",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -696,33 +493,6 @@
       "clusterKey": "cirrus-service-window-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "zero interruption",
-            "no interruption"
-          ],
-          "maxWords": 125,
-          "requiredAny": [
-            [
-              "read-only",
-              "read only"
-            ],
-            [
-              "alerts"
-            ],
-            [
-              "no data loss"
-            ]
-          ],
-          "requiredText": [
-            "august 18",
-            "1:00",
-            "2:00",
-            "utc",
-            "status.example.com"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "August 18",
@@ -748,7 +518,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-service-window-email",
-      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -771,7 +540,6 @@
       "clusterKey": "riverside-clinic-relocation-packet",
       "expectedOutput": {
         "deliverable": "pdf",
-        "deterministicContract": {},
         "mustInclude": [
           "three opening options",
           "owners and dates",
@@ -799,20 +567,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-clinic-relocation-brief",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/pdf",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "visual"
-            ]
-          },
-          "path": "frozen-clinic-relocation-brief.pdf",
-          "schemaRef": null
-        }
-      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -834,7 +588,6 @@
       "clusterKey": "subscription-renewal-incident-packet",
       "expectedOutput": {
         "deliverable": "pdf",
-        "deterministicContract": {},
         "mustInclude": [
           "incident window",
           "attempt and timeout counts",
@@ -863,20 +616,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-payment-incident-review",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/pdf",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "visual"
-            ]
-          },
-          "path": "frozen-payment-incident-review.pdf",
-          "schemaRef": null
-        }
-      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -898,7 +637,6 @@
       "clusterKey": "greenway-grant-budget-packet",
       "expectedOutput": {
         "deliverable": "spreadsheet",
-        "deterministicContract": {},
         "mustInclude": [
           "summary sheet",
           "detail sheet",
@@ -927,20 +665,6 @@
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-grant-budget-workbook",
-      "requiredOutputs": [
-        {
-          "maxBytes": 10000000,
-          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "metadata": {
-            "validationKinds": [
-              "structural",
-              "test"
-            ]
-          },
-          "path": "frozen-grant-budget-workbook.xlsx",
-          "schemaRef": null
-        }
-      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -953,29 +677,6 @@
       "clusterKey": "beacon-shipping-delay-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "equipment is lost",
-            "shipment is lost"
-          ],
-          "maxWords": 90,
-          "requiredAny": [
-            [
-              "transfer window"
-            ],
-            [
-              "installation",
-              "crew"
-            ]
-          ],
-          "requiredText": [
-            "august 21",
-            "august 22",
-            "morgan",
-            "logistics"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete ready-to-post message copy",
           "August 21",
@@ -1000,7 +701,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-shipping-delay-chat-message",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -1014,27 +714,6 @@
       "clusterKey": "python-requests-security-current-sources",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "affected"
-            ],
-            [
-              "fixed",
-              "patched"
-            ],
-            [
-              "checked",
-              "as of"
-            ],
-            [
-              "dependency graph",
-              "exact dependency",
-              "usage"
-            ]
-          ]
-        },
         "mustInclude": [
           "primary advisory links",
           "affected and fixed versions",
@@ -1056,7 +735,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-python-requests-security-audit",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -1070,29 +748,6 @@
       "clusterKey": "cobalt-refund-support-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "refund is approved",
-            "refund has been approved"
-          ],
-          "maxWords": 110,
-          "requiredAny": [
-            [
-              "original payment method"
-            ],
-            [
-              "duplicate",
-              "charge"
-            ]
-          ],
-          "requiredText": [
-            "$48",
-            "august 16",
-            "five business days",
-            "cb-7714"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready reply copy",
           "$48 duplicate charge",
@@ -1117,7 +772,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-refund-support-reply",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -1131,38 +785,6 @@
       "clusterKey": "chicago-stl-accessibility-sources",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "wheelchair",
-              "accessible",
-              "accessibility"
-            ],
-            [
-              "outbound"
-            ],
-            [
-              "return"
-            ],
-            [
-              "disruption",
-              "service alert"
-            ],
-            [
-              "checked",
-              "as of"
-            ],
-            [
-              "confirm",
-              "confirmation"
-            ]
-          ],
-          "requiredText": [
-            "october 8",
-            "october 10"
-          ]
-        },
         "mustInclude": [
           "official operator sources",
           "outbound and return plan",
@@ -1186,7 +808,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-accessible-chicago-stl-plan",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -1200,27 +821,6 @@
       "clusterKey": "new-jersey-youth-grant-sources",
       "expectedOutput": {
         "deliverable": "report",
-        "deterministicContract": {
-          "minLinks": 1,
-          "requiredAny": [
-            [
-              "new jersey",
-              "nj"
-            ],
-            [
-              "eligibility",
-              "eligible"
-            ],
-            [
-              "deadline",
-              "due"
-            ],
-            [
-              "checked",
-              "as of"
-            ]
-          ]
-        },
         "mustInclude": [
           "authoritative source links",
           "eligibility evidence",
@@ -1244,7 +844,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-new-jersey-youth-grants",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -1258,27 +857,6 @@
       "clusterKey": "maple-maintenance-followup-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "sue",
-            "lawsuit",
-            "legal action"
-          ],
-          "maxWords": 130,
-          "requiredAny": [
-            [
-              "repair date",
-              "repair schedule"
-            ]
-          ],
-          "requiredText": [
-            "july 28",
-            "august 1",
-            "security",
-            "two business days"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "July 28",
@@ -1303,7 +881,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-maintenance-followup-email",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -1317,27 +894,6 @@
       "clusterKey": "meridian-vendor-document-message",
       "expectedOutput": {
         "deliverable": "message",
-        "deterministicContract": {
-          "forbiddenText": [
-            "cancel the contract",
-            "contract cancellation"
-          ],
-          "maxWords": 120,
-          "requiredAny": [
-            [
-              "onboarding",
-              "cannot finish",
-              "blocked"
-            ]
-          ],
-          "requiredText": [
-            "insurance certificate",
-            "august 7",
-            "rosa",
-            "august 12"
-          ],
-          "requireMessageBody": true
-        },
         "mustInclude": [
           "complete send-ready message copy",
           "insurance certificate",
@@ -1362,7 +918,6 @@
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-vendor-document-followup-email",
-      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",

@@ -115,7 +115,9 @@ export async function resumeHarnessRefinerComparison(input: {
     attemptIds: sequentialAttemptIds,
   });
   if (
-    priorManifest.tasksetRelease.contentHash !== taskset.benchmark?.releaseHash
+    priorManifest.tasksetRelease.id !== baseline.run.tasksetRelease.id
+    || priorManifest.tasksetRelease.contentHash
+      !== baseline.run.tasksetRelease.contentHash
     || priorManifest.harness.baseline.contentHash
       !== baseline.run.harnessRelease.contentHash
   ) {

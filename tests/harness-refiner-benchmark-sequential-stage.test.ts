@@ -9,6 +9,7 @@ const NOW = "2026-08-11T17:00:00.000Z";
 
 describe("sequential Harness adaptation", () => {
   test("gives each distinct task the Harness produced after the prior task", async () => {
+    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), "openpond-sequential-test-"));
     let currentHash = "a".repeat(64);
     const backgroundSettings: boolean[] = [];
     const releasedHashes: string[] = [];
@@ -93,7 +94,7 @@ describe("sequential Harness adaptation", () => {
 
     const result = await runSequentialHarnessAdaptation({
       store: store as never,
-      storeDir: "/tmp/openpond-sequential-test",
+      storeDir,
       evaluation: { execute } as never,
       modelRun: { id: "model-run" } as never,
       model: { providerId: "openpond", modelId: "openpond-chat" } as never,
@@ -151,5 +152,9 @@ describe("sequential Harness adaptation", () => {
         },
       ],
     });
+    await fs.rm(storeDir, { recursive: true, force: true });
   });
 });
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";

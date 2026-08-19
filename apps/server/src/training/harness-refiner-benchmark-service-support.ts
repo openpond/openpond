@@ -22,7 +22,6 @@ import {
   type RewardReceipt,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
-import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-worker.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
@@ -52,16 +51,6 @@ export type BenchmarkAttemptEvidence = {
 export type CompletedBenchmarkStage = {
   run: BenchmarkRunSummary;
   attempts: BenchmarkAttemptEvidence[];
-};
-
-export type BenchmarkLineage = {
-  adaptationEvidenceHash: string;
-  refinerInputHash: string;
-  refinerOutcomeHash: string;
-  validationHash: string;
-  applyReceiptHash: string;
-  candidateRelease: { id: string; contentHash: string };
-  valid: boolean;
 };
 
 export function completedStage(input: {
@@ -259,8 +248,11 @@ export async function loadBenchmarkAttemptEvidenceByIds(input: {
       `Sequential adaptation evidence has ${selected.length}/${wanted.size} attempts.`,
     );
   }
+  const selectedById = new Map(selected.map((attempt) => [attempt.id, attempt]));
   const gradesByAttempt = new Map(grades.map((grade) => [grade.attemptId, grade]));
-  return Promise.all(selected.map(async (attempt) => {
+  return Promise.all(input.attemptIds.map(async (attemptId) => {
+    const attempt = selectedById.get(attemptId);
+    if (!attempt) throw new Error(`Sequential adaptation attempt ${attemptId} is unavailable.`);
     const grade = gradesByAttempt.get(attempt.id);
     if (!grade) throw new Error(`Attempt ${attempt.id} has no durable grade.`);
     return {
@@ -847,73 +839,6 @@ export function frozenToolEvidence(
         };
       }
     },
-  };
-}
-
-export async function benchmarkLineage(input: {
-  store: SqliteStore;
-  workspaceId: string;
-  adaptationAttempts: BenchmarkAttemptEvidence[];
-  refinerResults: Array<Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>>>;
-  candidateRelease: { id: string; contentHash: string };
-  refinerInputHash: string;
-}): Promise<BenchmarkLineage> {
-  const [outcomes, validations, applyReceipts] = await Promise.all([
-    input.store.listHarnessImprovementArtifacts(
-      input.workspaceId,
-      "refiner_outcome",
-      1_000,
-    ),
-    input.store.listHarnessImprovementArtifacts(
-      input.workspaceId,
-      "targeted_validation",
-      10_000,
-    ),
-    input.store.listHarnessImprovementArtifacts(
-      input.workspaceId,
-      "apply_receipt",
-      1_000,
-    ),
-  ]);
-  const adaptationEvidenceHash = contentHash(input.adaptationAttempts.map((result) => ({
-    attempt: result.attempt.id,
-    receipt: result.receiptContentHash,
-    grade: contentHash(result.grade),
-  })));
-  const proposalResults = input.refinerResults.filter((result) => result.proposal);
-  const requiredValidationsPassed = proposalResults.every((result) =>
-    result.proposal!.validationPlan
-      .filter((plan) => plan.required)
-      .every((plan) => result.validations.some(
-        (validation) => validation.validationId === plan.id && validation.status === "passed",
-      ))
-  );
-  const proposalHashes = new Set(
-    proposalResults.map((result) => result.proposal!.contentHash),
-  );
-  const appliedProposalHashes = new Set(applyReceipts.flatMap((artifact) => {
-    const proposal = "proposal" in artifact ? artifact.proposal : null;
-    return proposal && typeof proposal === "object" && "contentHash" in proposal
-      ? [String(proposal.contentHash)]
-      : [];
-  }));
-  const everyProposalHasReceipt = [...proposalHashes].every((hash) =>
-    appliedProposalHashes.has(hash)
-  );
-  return {
-    adaptationEvidenceHash,
-    refinerInputHash: input.refinerInputHash,
-    refinerOutcomeHash: contentHash(outcomes),
-    validationHash: contentHash(validations),
-    applyReceiptHash: contentHash(applyReceipts),
-    candidateRelease: {
-      id: input.candidateRelease.id,
-      contentHash: input.candidateRelease.contentHash,
-    },
-    valid:
-      outcomes.length === input.refinerResults.length
-      && requiredValidationsPassed
-      && everyProposalHasReceipt,
   };
 }
 

@@ -32,16 +32,32 @@ describe("public Harness Refiner benchmark Taskset", () => {
     const validation = validateTasksetRelease(taskset);
 
     expect(validation.issues).toEqual([]);
-    expect(taskset.id).toBe("harness-refiner-08112026");
-    expect(taskset.revision).toBe(1);
+    expect(taskset.id).toBe("harness-refiner-20260818-v2");
+    expect(taskset.revision).toBe(2);
     expect(taskset.tasks).toHaveLength(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
     expect(new Set(taskset.tasks.map((task) => task.clusterKey)).size).toBe(20);
     expect(taskset.metadata).toMatchObject({
       trainingSideEffect: false,
-      primaryMetric: "paired_foreground_provider_tokens",
-      qualityPolicy: "hard_non_regression",
+      primaryMetric: "paired_verified_reward",
+      secondaryMetrics: ["paired_foreground_provider_tokens"],
+      qualityPolicy: "complete_frozen_cohort",
+      orderSeed: "harness-refiner-20260818-order-v1",
+      modelJudgeRole: "supplementary_uncalibrated_not_executed",
+    });
+    expect(taskset.graders).toEqual([
+      expect.objectContaining({
+        kind: "custom_verifier",
+        hardGate: true,
+        rewardEligible: true,
+      }),
+    ]);
+    expect(taskset.metadata.supplementaryModelJudge).toMatchObject({
+      id: "task-quality-judge",
+      calibrationStatus: "pending",
+      executable: false,
+      rewardEligible: false,
     });
   });
 
@@ -98,6 +114,15 @@ describe("public Harness Refiner benchmark Taskset", () => {
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
   });
 
+  test("binds every case to a deterministic primary-reward contract", async () => {
+    const taskset = await loadTaskset();
+    for (const task of taskset.tasks) {
+      expect(task.expectedOutput?.deterministicContract).toEqual(
+        expect.any(Object),
+      );
+    }
+  });
+
   test("requires a concrete catalog revision for the admitted upstream model", () => {
     expect(benchmarkUpstreamModelFromCatalog(
       { providerId: "openpond", modelId: "openpond-chat" },
@@ -123,6 +148,46 @@ describe("public Harness Refiner benchmark Taskset", () => {
         inputUsdPerMillionTokens: 0.4,
         cachedInputUsdPerMillionTokens: 0.04,
         outputUsdPerMillionTokens: 0.8,
+      },
+    });
+  });
+
+  test("resolves provider identity from the hosted catalog shape", () => {
+    expect(benchmarkUpstreamModelFromCatalog(
+      {
+        providerId: "openpond",
+        modelId: "accounts/fireworks/models/deepseek-v4-flash",
+      },
+      {
+        id: "accounts/fireworks/models/deepseek-v4-flash",
+        created: 1_785_456_000,
+        owned_by: "fireworks",
+        metadata: {
+          provider: { name: "fireworks" },
+          billing: {
+            providerId: "fireworks",
+            pricing: {
+              version: "fireworks-serverless-2026-07-31",
+              source: "fireworks-serverless",
+              effectiveAt: "2026-07-31T00:00:00.000Z",
+              inputUsdPerMillionTokens: 0.14,
+              cachedInputUsdPerMillionTokens: 0.028,
+              outputUsdPerMillionTokens: 0.28,
+            },
+          },
+        },
+      },
+    )).toEqual({
+      providerId: "fireworks",
+      modelId: "accounts/fireworks/models/deepseek-v4-flash",
+      revision: "catalog-created:1785456000",
+      pricing: {
+        version: "fireworks-serverless-2026-07-31",
+        source: "fireworks-serverless",
+        effectiveAt: "2026-07-31T00:00:00.000Z",
+        inputUsdPerMillionTokens: 0.14,
+        cachedInputUsdPerMillionTokens: 0.028,
+        outputUsdPerMillionTokens: 0.28,
       },
     });
   });
@@ -154,6 +219,9 @@ describe("public Harness Refiner benchmark Taskset", () => {
             ? [grader.verifierRef]
             : [],
       ),
+      (taskset.metadata.supplementaryModelJudge as {
+        rubricRef: { path: string; sizeBytes: number; contentHash: string };
+      }).rubricRef,
     ];
     for (const asset of assets) {
       const contents = await readFile(path.join(tasksetDirectory, asset.path), "utf8");

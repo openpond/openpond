@@ -23,9 +23,22 @@ import {
 } from "../../../apps/server/src/openpond/model-tool-registry.js";
 import { createWorkModelToolDefinitions } from "../../../apps/server/src/openpond/work-tool-registry.js";
 import { BENCHMARK_CASES } from "./cases.js";
+import {
+  deterministicContractFor,
+  deterministicContractTaskIds,
+} from "./deterministic-contracts.js";
 
 const tasksetDirectory = path.dirname(fileURLToPath(import.meta.url));
 const outputPath = path.join(tasksetDirectory, "taskset.release.json");
+const releaseDirectory = path.join(tasksetDirectory, "releases");
+const historicalReleasePath = path.join(
+  releaseDirectory,
+  "harness-refiner-08112026.json",
+);
+const versionedOutputPath = path.join(
+  releaseDirectory,
+  "harness-refiner-20260818-v2.json",
+);
 const builtinModulePath = path.resolve(
   tasksetDirectory,
   "../../../packages/evals/src/builtin-benchmarks/harness-refiner.ts",
@@ -99,6 +112,11 @@ export async function buildTaskset(): Promise<TasksetRelease> {
   if (ids.size !== BENCHMARK_CASES.length || clusters.size !== BENCHMARK_CASES.length) {
     throw new Error("Benchmark case ids and source clusters must be unique.");
   }
+  if (
+    contentHash([...ids].sort()) !== contentHash(deterministicContractTaskIds())
+  ) {
+    throw new Error("Every benchmark case must have exactly one deterministic contract.");
+  }
   if (BENCHMARK_CASES.filter((item) => item.split === "validation").length !== 10) {
     throw new Error("The adaptation split must contain ten cases.");
   }
@@ -150,7 +168,10 @@ export async function buildTaskset(): Promise<TasksetRelease> {
         path.basename(relativePath),
       ),
     },
-    expectedOutput: item.expectedOutput,
+    expectedOutput: {
+      ...item.expectedOutput,
+      deterministicContract: deterministicContractFor(item.id),
+    },
     policyVisibleContext: {
       attachmentCount: item.attachmentPaths?.length ?? 0,
     },
@@ -160,13 +181,18 @@ export async function buildTaskset(): Promise<TasksetRelease> {
       if (!asset) throw new Error(`Missing asset reference for ${relativePath}.`);
       return asset;
     }),
+    requiredOutputs: releaseRequiredOutputs(
+      item.id,
+      item.expectedOutput.deliverable,
+      item.expectedOutput.validation,
+    ),
     tags: item.tags,
   }));
 
   const content = {
     schemaVersion: "openpond.tasksetRelease.v2" as const,
-    id: "harness-refiner-08112026",
-    revision: 1,
+    id: "harness-refiner-20260818-v2",
+    revision: 2,
     policy: {
       policyVisibleFields: ["input"],
       privilegedFields: ["expectedOutput"],
@@ -224,26 +250,27 @@ export async function buildTaskset(): Promise<TasksetRelease> {
         timeoutMs: 30_000,
         networkPolicy: "none" as const,
       },
-      {
-        id: "task-quality-judge",
-        version: "1",
-        kind: "model_judge" as const,
-        weight: 1,
-        hardGate: true,
-        rewardEligible: true,
-        privileged: true,
-        rubricRef: rubric,
-        calibrationStatus: "pending" as const,
-      },
     ],
     metadata: {
       benchmark: "harness-refiner",
-      protocolVersion: "2",
+      protocolVersion: "3",
       refinementMode: "sequential_product_lifecycle",
       adaptationSplit: "validation",
       frozenEvaluationSplit: "frozen_eval",
-      primaryMetric: "paired_foreground_provider_tokens",
-      qualityPolicy: "hard_non_regression",
+      primaryMetric: "paired_verified_reward",
+      secondaryMetrics: ["paired_foreground_provider_tokens"],
+      qualityPolicy: "complete_frozen_cohort",
+      orderSeed: "harness-refiner-20260818-order-v1",
+      resultSchemaVersion: "openpond.harnessRefinerPublicResult.v2",
+      modelJudgeRole: "supplementary_uncalibrated_not_executed",
+      supplementaryModelJudge: {
+        id: "task-quality-judge",
+        version: "1",
+        rubricRef: rubric,
+        calibrationStatus: "pending",
+        executable: false,
+        rewardEligible: false,
+      },
       trainingSideEffect: false,
       toolDeclarationSource: "openpond-production-model-tool-definitions",
     },
@@ -273,6 +300,7 @@ const builtinAssets = Object.fromEntries(await Promise.all(
           ? [grader.verifierRef.path]
           : [],
     ),
+    "rubrics/task-quality.md",
   ].sort().map(async (relativePath) => [
     relativePath,
     await readFile(path.join(tasksetDirectory, relativePath), "utf8"),
@@ -295,8 +323,39 @@ if (process.argv.includes("--check")) {
       "The @openpond/evals built-in benchmark is stale. Run pnpm benchmark:harness-refiner:build.",
     );
   }
+  const versioned = await readFile(versionedOutputPath, "utf8");
+  if (versioned !== serialized) {
+    throw new Error(
+      "The versioned Taskset Release is stale. Run pnpm benchmark:harness-refiner:build.",
+    );
+  }
+  const historical = JSON.parse(await readFile(historicalReleasePath, "utf8")) as {
+    id?: unknown;
+    contentHash?: unknown;
+  };
+  if (
+    historical.id !== "harness-refiner-08112026"
+    || historical.contentHash !== "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634"
+  ) {
+    throw new Error("The historical Harness Refiner Taskset Release drifted.");
+  }
 } else {
+  await mkdir(releaseDirectory, { recursive: true });
+  try {
+    await readFile(historicalReleasePath, "utf8");
+  } catch {
+    const current = await readFile(outputPath, "utf8");
+    const historical = JSON.parse(current) as { id?: unknown; contentHash?: unknown };
+    if (
+      historical.id !== "harness-refiner-08112026"
+      || historical.contentHash !== "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634"
+    ) {
+      throw new Error("The checked-in historical Taskset cannot be archived safely.");
+    }
+    await writeFile(historicalReleasePath, current, "utf8");
+  }
   await writeFile(outputPath, serialized, "utf8");
+  await writeFile(versionedOutputPath, serialized, "utf8");
   await mkdir(path.dirname(builtinModulePath), { recursive: true });
   await writeFile(builtinModulePath, builtinModule, "utf8");
 }
@@ -310,3 +369,28 @@ console.log(
     checked: process.argv.includes("--check"),
   }),
 );
+
+function releaseRequiredOutputs(
+  taskId: string,
+  deliverable: BenchmarkCaseDeliverable,
+  validationKinds: string[],
+): TaskRecord["requiredOutputs"] {
+  const output = deliverable === "pdf"
+    ? { extension: "pdf", mediaType: "application/pdf" }
+    : deliverable === "spreadsheet"
+      ? {
+          extension: "xlsx",
+          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }
+      : null;
+  if (!output) return [];
+  return [{
+    path: `${taskId}.${output.extension}`,
+    mediaType: output.mediaType,
+    schemaRef: null,
+    maxBytes: 10_000_000,
+    metadata: { validationKinds },
+  }];
+}
+
+type BenchmarkCaseDeliverable = (typeof BENCHMARK_CASES)[number]["expectedOutput"]["deliverable"];
