@@ -94,8 +94,13 @@ export function materializePortableTasksetRelease(input: {
       sourceTasksetHash: input.taskset.contentHash,
     },
   });
-  const draft = input.admittedTasksetRelease
+  const admitted = input.admittedTasksetRelease
     ? TasksetReleaseSchema.parse(input.admittedTasksetRelease)
+    : null;
+  const draft = admitted
+    ? contentHash(admitted.graders) === contentHash(graders)
+      ? admitted
+      : calibratedDerivativeRelease({ admitted, graders, taskset: input.taskset })
     : TasksetReleaseSchema.parse({
       ...tasksetContent,
       contentHash: contentHash(tasksetContent),
@@ -108,6 +113,42 @@ export function materializePortableTasksetRelease(input: {
       verifierSet: verifierSetRelease,
     });
   return { environmentRelease, verifierSetRelease, tasksetRelease };
+}
+
+function calibratedDerivativeRelease(input: {
+  admitted: TasksetRelease;
+  graders: PortableGraderSpec[];
+  taskset: Taskset;
+}): TasksetRelease {
+  const {
+    contentHash: _contentHash,
+    environmentRelease: _environmentRelease,
+    verifierSetRelease: _verifierSetRelease,
+    ...content
+  } = input.admitted;
+  const parent = {
+    id: input.admitted.id,
+    contentHash: input.admitted.contentHash,
+  };
+  const derivativeId = `${input.admitted.id}-calibrated-${contentHash(input.graders).slice(0, 12)}`;
+  const derivative = TasksetReleaseContentSchema.parse({
+    ...content,
+    id: derivativeId,
+    revision: input.admitted.revision + 1,
+    graders: input.graders,
+    metadata: {
+      ...input.admitted.metadata,
+      calibrationBoundRelease: {
+        parent,
+        tasksetId: input.taskset.id,
+        tasksetHash: input.taskset.contentHash,
+      },
+    },
+  });
+  return TasksetReleaseSchema.parse({
+    ...derivative,
+    contentHash: contentHash(derivative),
+  });
 }
 
 export function portableTasksetEnvironment(taskset: Taskset): EnvironmentContract {
@@ -147,6 +188,7 @@ function portableTask(task: TaskDataRecord) {
         legacySchemaRef: output.schemaRef ?? null,
       },
     })),
+    evaluationCriteria: task.evaluationCriteria ?? [],
     tags: task.tags,
   };
 }
@@ -156,6 +198,14 @@ function portableEnvironment(taskset: Taskset): EnvironmentContract {
     ? "text"
     : taskset.environment.kind === "work" ? "work"
       : taskset.environment.kind === "program" ? "custom_program" : "agent";
+  const maxToolTurns = positiveInteger(taskset.environment.metadata.maxToolTurns);
+  const maxToolCalls = positiveInteger(taskset.environment.metadata.maxToolCalls);
+  const maxIdenticalToolCalls = positiveInteger(
+    taskset.environment.metadata.maxIdenticalToolCalls,
+  );
+  const maxToolCallsPerName = positiveIntegerRecord(
+    taskset.environment.metadata.maxToolCallsPerName,
+  );
   return {
     protocolVersion: "openpond.environment.v1",
     kind,
@@ -165,7 +215,38 @@ function portableEnvironment(taskset: Taskset): EnvironmentContract {
     lifecycle: ["create", "reset", "step", "collect", "destroy"],
     networkPolicy: taskset.environment.networkPolicy,
     defaultTimeoutMs: taskset.environment.defaultTimeoutMs,
+    ...(maxToolTurns && maxToolCalls && maxIdenticalToolCalls
+      ? {
+          limits: {
+            maxToolTurns: Math.min(maxToolTurns, 100),
+            maxToolCalls: Math.min(maxToolCalls, 256),
+            maxIdenticalToolCalls: Math.min(maxIdenticalToolCalls, 10),
+            maxToolCallsPerName: Object.fromEntries(
+              Object.entries(maxToolCallsPerName).map(([name, limit]) => [
+                name,
+                Math.min(limit, 256),
+              ]),
+            ),
+          },
+        }
+      : {}),
   };
+}
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : null;
+}
+
+function positiveIntegerRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([name, limit]) => {
+      const parsed = positiveInteger(limit);
+      return parsed === null ? [] : [[name, parsed]];
+    }),
+  );
 }
 
 function portableTools(taskset: Taskset): ToolDeclaration[] {
@@ -204,13 +285,15 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   if (grader.kind === "model_judge") return {
     ...base,
     kind: "model_judge",
-    rubricRef: asset({
-      id: `rubric-${grader.id}`,
-      path: `graders/${segment(grader.id)}/rubric.md`,
-      hashInput: grader.rubric,
-      mediaType: "text/markdown",
-      visibility: "verifier",
-    }),
+    rubricRef: grader.metadata.portableRubricRef === undefined
+      ? asset({
+          id: `rubric-${grader.id}`,
+          path: `graders/${segment(grader.id)}/rubric.md`,
+          hashInput: grader.rubric,
+          mediaType: "text/markdown",
+          visibility: "verifier",
+        })
+      : ImmutableAssetRefSchema.parse(grader.metadata.portableRubricRef),
     calibrationStatus: grader.calibrationStatus,
   };
   if (grader.kind === "custom_verifier") return {

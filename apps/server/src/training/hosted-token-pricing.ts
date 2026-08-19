@@ -79,6 +79,19 @@ export function hostedUsageCostUsd(
   ) / 1_000_000;
 }
 
+export function conservativeHostedRequestCostUsd(input: {
+  inputCharacters: number;
+  maxOutputTokens: number;
+  pricing: HostedTokenPricing;
+}): number {
+  const estimatedInputTokens = Math.ceil(Math.max(0, input.inputCharacters) / 3);
+  const maximumOutputTokens = Math.max(0, Math.trunc(input.maxOutputTokens));
+  return (
+    estimatedInputTokens * input.pricing.inputUsdPerMillionTokens
+    + maximumOutputTokens * input.pricing.outputUsdPerMillionTokens
+  ) / 1_000_000;
+}
+
 function cachedInputTokens(usage: Record<string, unknown>): number {
   const candidates = [
     usage.cached_input_tokens,

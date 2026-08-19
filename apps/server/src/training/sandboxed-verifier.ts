@@ -1,7 +1,13 @@
 import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import vm from "node:vm";
-import type { GraderSpec, TaskAttemptResult, TaskDataRecord } from "@openpond/contracts";
+import {
+  CriterionScoreSchema,
+  type CriterionScore,
+  type GraderSpec,
+  type TaskAttemptResult,
+  type TaskDataRecord,
+} from "@openpond/contracts";
 
 type CustomVerifier = Extract<GraderSpec, { kind: "custom_verifier" }>;
 
@@ -10,7 +16,13 @@ export async function runSandboxedVerifier(input: {
   task: TaskDataRecord;
   attempt: TaskAttemptResult;
   allowedRoot: string;
-}): Promise<{ score: number; passed: boolean; feedback: string; evidenceRefs?: string[] }> {
+}): Promise<{
+  score: number;
+  passed: boolean;
+  feedback: string;
+  evidenceRefs?: string[];
+  criterionScores?: CriterionScore[];
+}> {
   const root = await realpath(input.allowedRoot);
   const modulePath = await realpath(path.resolve(root, input.grader.module));
   if (modulePath !== root && !modulePath.startsWith(`${root}${path.sep}`)) throw new Error("Verifier module is outside the approved Taskset root.");
@@ -59,12 +71,27 @@ function verifierFunctionSource(source: string, exportName: string): string {
   throw new Error(`Verifier must contain one standalone ESM function export named ${exportName}.`);
 }
 
-function normalizeResult(value: unknown): { score: number; passed: boolean; feedback: string; evidenceRefs?: string[] } {
+function normalizeResult(value: unknown): {
+  score: number;
+  passed: boolean;
+  feedback: string;
+  evidenceRefs?: string[];
+  criterionScores?: CriterionScore[];
+} {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Verifier must return an object.");
   const record = value as Record<string, unknown>;
   const score = typeof record.score === "number" ? Math.max(0, Math.min(1, record.score)) : record.passed === true ? 1 : 0;
   const feedback = typeof record.feedback === "string" ? record.feedback : typeof record.reason === "string" ? record.reason : "Custom verifier completed.";
-  return { score, passed: record.passed === true, feedback: feedback.slice(0, 20_000), evidenceRefs: Array.isArray(record.evidenceRefs) ? record.evidenceRefs.filter((item): item is string => typeof item === "string").slice(0, 10_000) : [] };
+  const criterionScores = Array.isArray(record.criterionScores)
+    ? record.criterionScores.map((item) => CriterionScoreSchema.parse(item))
+    : [];
+  return {
+    score,
+    passed: record.passed === true,
+    feedback: feedback.slice(0, 20_000),
+    evidenceRefs: Array.isArray(record.evidenceRefs) ? record.evidenceRefs.filter((item): item is string => typeof item === "string").slice(0, 10_000) : [],
+    criterionScores,
+  };
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {

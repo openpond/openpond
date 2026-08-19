@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { FailureClassSchema, ReleaseHashSchema, ReleaseIdSchema, contentHash } from "@openpond/harness";
+import { CriterionScoreSchema } from "./evaluation-criteria.js";
 import type { DeterministicGraderSpec, GraderSpec, TaskRecord } from "./tasksets.js";
 
 export const GraderEvidenceContentSchema = z.object({
@@ -14,6 +15,7 @@ export const GraderEvidenceContentSchema = z.object({
   feedback: z.array(z.string().max(20_000)).max(1_000),
   visibleEvidenceRefs: z.array(ReleaseIdSchema).max(10_000),
   privilegedEvidenceRefs: z.array(ReleaseIdSchema).max(10_000),
+  criterionScores: z.array(CriterionScoreSchema).max(1_000).default([]),
 }).strict();
 export const GraderEvidenceSchema = GraderEvidenceContentSchema.extend({ contentHash: ReleaseHashSchema }).strict();
 
@@ -42,6 +44,7 @@ export async function gradeEvidence(input: {
       feedback: [input.evidence.infrastructureError!],
       visibleEvidenceRefs: [],
       privilegedEvidenceRefs: [],
+      criterionScores: [],
     }));
   }
   return Promise.all(input.graders.map(async (grader) => {
@@ -86,6 +89,7 @@ function gradeDeterministic(grader: DeterministicGraderSpec, task: TaskRecord, a
     feedback: [passed ? "Deterministic grader passed." : "Deterministic grader failed."],
     visibleEvidenceRefs: [...attempt.runtimeEventRefs, ...attempt.artifactRefs],
     privilegedEvidenceRefs: grader.privileged ? [task.privilegedContextRef].filter((ref): ref is string => ref !== null) : [],
+    criterionScores: [],
   };
 }
 
@@ -100,7 +104,7 @@ function evidence(grader: GraderSpec, result: Omit<GraderEvidence, "schemaVersio
   return GraderEvidenceSchema.parse({ ...content, contentHash: contentHash(content) });
 }
 function unavailable(message: string): Omit<GraderEvidence, "schemaVersion" | "graderId" | "graderVersion" | "contentHash"> {
-  return { score: null, passed: false, rewardEligible: false, failureClass: "grader_failure", feedback: [message], visibleEvidenceRefs: [], privilegedEvidenceRefs: [] };
+  return { score: null, passed: false, rewardEligible: false, failureClass: "grader_failure", feedback: [message], visibleEvidenceRefs: [], privilegedEvidenceRefs: [], criterionScores: [] };
 }
 function string(value: unknown): string | null { return typeof value === "string" ? value : null; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }

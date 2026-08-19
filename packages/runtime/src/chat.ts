@@ -193,6 +193,7 @@ export async function* streamOpenPondHostedChatTurn(
     maxTokens: input.maxTokens,
     temperature: input.temperature,
     topP: input.topP,
+    responseFormat: input.responseFormat,
     signal: input.signal,
   });
 }
@@ -470,6 +471,7 @@ export function buildOpChatBody(options: {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  responseFormat?: Record<string, unknown>;
 }, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
@@ -490,6 +492,9 @@ export function buildOpChatBody(options: {
   }
   if (typeof options.topP === "number") {
     body.top_p = options.topP;
+  }
+  if (options.responseFormat) {
+    body.response_format = options.responseFormat;
   }
   Object.assign(body, opChatReasoningFields(options.reasoningEffort));
   return body;
@@ -554,8 +559,20 @@ async function readOpChatError(response: Response): Promise<string> {
   try {
     return errorMessageFromPayload(JSON.parse(text) as unknown);
   } catch {
-    return text;
+    return summarizeNonJsonError(text, response.statusText);
   }
+}
+
+function summarizeNonJsonError(text: string, fallback: string): string {
+  if (/<!doctype\s+html|<html[\s>]/i.test(text)) {
+    const title = text.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
+    return (title?.split("|").at(-1)?.trim() || fallback || "HTML error response")
+      .slice(0, 500);
+  }
+  return (text.replace(/\s+/g, " ").trim() || fallback || "Unknown error")
+    .slice(0, 1_000);
 }
 
 function errorMessageFromPayload(payload: unknown): string {

@@ -10,6 +10,7 @@ import {
   assertContentHash,
   contentHash,
 } from "@openpond/harness";
+import { EvaluationCriterionSchema } from "./evaluation-criteria.js";
 
 export const TaskSplitSchema = z.enum(["train", "validation", "test", "frozen_eval"]);
 export const RequiredOutputContractSchema = z.object({
@@ -35,6 +36,15 @@ export const EnvironmentContractSchema = z.object({
   lifecycle: z.array(z.enum(["create", "reset", "step", "collect", "destroy"])).min(5).max(5),
   networkPolicy: z.enum(["none", "declared_read_only", "declared_scoped"]),
   defaultTimeoutMs: z.number().int().positive().max(3_600_000),
+  limits: z.object({
+    maxToolTurns: z.number().int().positive().max(100),
+    maxToolCalls: z.number().int().positive().max(256),
+    maxIdenticalToolCalls: z.number().int().positive().max(10),
+    maxToolCallsPerName: z.record(
+      z.string().trim().min(1).max(200),
+      z.number().int().positive().max(256),
+    ),
+  }).strict().optional(),
 }).strict();
 
 const GraderBaseSchema = z.object({
@@ -83,6 +93,7 @@ export const TaskRecordSchema = z.object({
   privilegedContextRef: ReleaseIdSchema.nullable(),
   artifactRefs: z.array(ImmutableAssetRefSchema).max(1_000).default([]),
   requiredOutputs: z.array(RequiredOutputContractSchema).max(1_000).optional(),
+  evaluationCriteria: z.array(EvaluationCriterionSchema).max(1_000).optional(),
   tags: z.array(ReleaseIdSchema).max(100).default([]),
 }).strict();
 
@@ -159,6 +170,9 @@ export function validateTasksetRelease(input: unknown): {
     message: "The release has no frozen-evaluation task.",
     path: "tasks",
   });
+  if (taskset.metadata.evaluationVersion === "v3") {
+    validateVisibleCriteria(taskset, issues);
+  }
   const { contentHash: _contentHash, ...tasksetContent } = taskset;
   const computedHash = contentHash(TasksetReleaseContentSchema.parse(tasksetContent));
   if (computedHash !== taskset.contentHash) issues.push({
@@ -168,6 +182,97 @@ export function validateTasksetRelease(input: unknown): {
     path: "contentHash",
   });
   return { valid: !issues.some((issue) => issue.severity === "error"), taskset, computedHash, issues };
+}
+
+function validateVisibleCriteria(
+  taskset: TasksetRelease,
+  issues: TasksetValidationIssue[],
+): void {
+  if (!taskset.policy.policyVisibleFields.includes("evaluationCriteria")) {
+    issues.push({
+      code: "evaluation_criteria_not_policy_visible",
+      severity: "error",
+      message: "A v3 Taskset Release must disclose evaluationCriteria to the policy.",
+      path: "policy.policyVisibleFields",
+    });
+  }
+  const graderById = new Map(taskset.graders.map((grader) => [grader.id, grader]));
+  for (const task of taskset.tasks) {
+    if (!task.evaluationCriteria?.length) {
+      issues.push({
+        code: "evaluation_criteria_missing",
+        severity: "error",
+        message: `v3 task ${task.id} has no evaluation criteria.`,
+        path: `tasks.${task.id}.evaluationCriteria`,
+      });
+      continue;
+    }
+    const ids = new Set<string>();
+    for (const criterion of task.evaluationCriteria) {
+      if (ids.has(criterion.id)) {
+        issues.push({
+          code: "evaluation_criterion_duplicate",
+          severity: "error",
+          message: `v3 task ${task.id} repeats criterion ${criterion.id}.`,
+          path: `tasks.${task.id}.evaluationCriteria`,
+        });
+      }
+      ids.add(criterion.id);
+      for (const source of criterion.sourceRefs) {
+        if (
+          source.source === "prompt"
+          && (source.path !== "input.prompt"
+            || typeof task.input.prompt !== "string"
+            || !task.input.prompt.includes(source.quoteOrAnchor))
+        ) {
+          issues.push({
+            code: "evaluation_criterion_prompt_trace_invalid",
+            severity: "error",
+            message: `Criterion ${criterion.id} must quote an exact policy-visible prompt anchor.`,
+            path: `tasks.${task.id}.evaluationCriteria`,
+          });
+        }
+      }
+      const scorers = criterion.scorerIds.map((id) => graderById.get(id));
+      if (scorers.some((grader) => !grader)) {
+        issues.push({
+          code: "evaluation_criterion_scorer_missing",
+          severity: "error",
+          message: `Criterion ${criterion.id} names a scorer absent from this release.`,
+          path: `tasks.${task.id}.evaluationCriteria`,
+        });
+      }
+      if (
+        criterion.critical
+        && (criterion.kind === "semantic_quality" || criterion.kind === "factual_grounding")
+        && !scorers.some((grader) => grader?.kind === "model_judge")
+      ) {
+        issues.push({
+          code: "critical_semantic_criterion_unscored",
+          severity: "error",
+          message: `Critical semantic criterion ${criterion.id} requires a semantic scorer.`,
+          path: `tasks.${task.id}.evaluationCriteria`,
+        });
+      }
+    }
+    if (task.tags.includes("artifact-verification")) {
+      const hasStructure = task.evaluationCriteria.some((criterion) =>
+        criterion.kind === "artifact_structure"
+      );
+      const hasContent = task.evaluationCriteria.some((criterion) =>
+        (criterion.kind === "semantic_quality" || criterion.kind === "factual_grounding")
+        && criterion.scorerIds.some((id) => graderById.get(id)?.kind === "model_judge")
+      );
+      if (!hasStructure || !hasContent) {
+        issues.push({
+          code: "artifact_content_evaluation_missing",
+          severity: "error",
+          message: `Artifact task ${task.id} requires structural and semantic artifact-content evaluation.`,
+          path: `tasks.${task.id}.evaluationCriteria`,
+        });
+      }
+    }
+  }
 }
 
 export function assertTasksetRelease(taskset: TasksetRelease): void {
@@ -182,6 +287,7 @@ export function policyTaskView(task: TaskRecord): {
   input: Record<string, unknown>;
   policyVisibleContext: Record<string, unknown>;
   artifactRefs: Array<z.infer<typeof ImmutableAssetRefSchema>>;
+  evaluationCriteria: z.infer<typeof EvaluationCriterionSchema>[];
   tags: string[];
 } {
   return {
@@ -189,6 +295,7 @@ export function policyTaskView(task: TaskRecord): {
     input: structuredClone(task.input),
     policyVisibleContext: structuredClone(task.policyVisibleContext),
     artifactRefs: task.artifactRefs.filter((artifact) => artifact.visibility === "policy"),
+    evaluationCriteria: structuredClone(task.evaluationCriteria ?? []),
     tags: [...task.tags],
   };
 }

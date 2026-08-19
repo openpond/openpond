@@ -66,10 +66,12 @@ export async function gradeTasksetEvaluationAttempt(
           grader.kind === "model_judge"
             ? grader.calibrationStatus
             : "not_applicable",
+        criterionScores: [],
       })),
       failureClass: workFailure.failureClass,
       feedback: [feedback],
       rewardEligible: false,
+      diagnosis: null,
       createdAt: input.now?.() ?? new Date().toISOString(),
     };
   }
@@ -111,6 +113,7 @@ export async function gradeTasksetEvaluationAttempt(
       grader.kind === "model_judge"
         ? grader.calibrationStatus
         : "not_applicable",
+    criterionScores: [],
   }));
   return {
     schemaVersion: "openpond.gradeResult.v1",
@@ -127,6 +130,7 @@ export async function gradeTasksetEvaluationAttempt(
     failureClass,
     feedback: [feedback],
     rewardEligible: verified.rewardEligible,
+    diagnosis: null,
     createdAt: input.now?.() ?? new Date().toISOString(),
   };
 }
@@ -168,10 +172,12 @@ function graderFailureResult(input: {
         grader.kind === "model_judge"
           ? grader.calibrationStatus
           : "not_applicable",
+      criterionScores: [],
     })),
     failureClass: "grader_failure",
     feedback: [feedback],
     rewardEligible: false,
+    diagnosis: null,
     createdAt: input.now?.() ?? new Date().toISOString(),
   };
 }

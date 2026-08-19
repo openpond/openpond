@@ -19,6 +19,7 @@ import {
   computeTasksetHash,
   contentHash,
   gradeAttempt,
+  isModelJudgeExecutionError,
   type ModelJudgeRunner,
 } from "@openpond/taskset-sdk";
 import { loadOpenPondProfileState } from "@openpond/cloud";
@@ -257,7 +258,25 @@ export function createTaskEvaluationService(deps: {
       modelJudge: deps.modelJudge
         ? async (judgeInput) => {
             modelJudgeCalls += 1;
-            const judged = await deps.modelJudge!(judgeInput);
+            let judged: Awaited<ReturnType<NonNullable<typeof deps.modelJudge>>>;
+            try {
+              judged = await deps.modelJudge!(judgeInput);
+            } catch (error) {
+              if (isModelJudgeExecutionError(error)) {
+                if (Array.isArray(error.usage)) rawUsages.push(...error.usage);
+                else if (error.usage !== undefined) rawUsages.push(error.usage);
+                const callCostUsd = hostedModelJudgeCallCost({
+                  costUsd: error.costUsd,
+                  usage: error.usage,
+                  pricing: input.hostedTokenPricing,
+                });
+                if (callCostUsd !== null) {
+                  explicitCostUsd += callCostUsd;
+                  modelJudgeCostAccounted += 1;
+                }
+              }
+              throw error;
+            }
             if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
             else if (judged.usage !== undefined) rawUsages.push(judged.usage);
             const callCostUsd = hostedModelJudgeCallCost({
@@ -480,7 +499,19 @@ export function createTaskEvaluationService(deps: {
         grader.calibrationFixtureRefs.includes(fixture.id),
       );
       const results = [];
+      let judgeFailure: string | null = null;
       for (const [index, fixture] of fixtures.entries()) {
+        if (judgeFailure) {
+          results.push({
+            fixtureId: fixture.id,
+            expectedPassed: fixture.expectedPassed,
+            passed: false,
+            score: 0,
+            feedback: `Not run because the judge failed on an earlier fixture: ${judgeFailure}`,
+            matched: false,
+          });
+          continue;
+        }
         const task = await findTask(
           taskset,
           fixture.taskId,
@@ -489,21 +520,36 @@ export function createTaskEvaluationService(deps: {
         const attempt = fixtureAttempt(taskset.id, fixture, index);
         try {
           const result = await deps.modelJudge({ grader, task, attempt });
+          const criterionScores = result.criterionScores ?? [];
+          const expectedCriterionIds = (task.evaluationCriteria ?? [])
+            .filter((criterion) => criterion.scorerIds.includes(grader.id))
+            .map((criterion) => criterion.id)
+            .sort();
+          const scoredCriterionIds = criterionScores
+            .map((criterion) => criterion.criterionId)
+            .sort();
+          const criterionCoverageMatched =
+            expectedCriterionIds.length === scoredCriterionIds.length
+            && expectedCriterionIds.every((id, scoreIndex) => id === scoredCriterionIds[scoreIndex]);
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
             passed: result.passed,
             score: result.score,
             feedback: result.feedback,
-            matched: result.passed === fixture.expectedPassed,
+            expectedCriterionIds,
+            scoredCriterionIds,
+            criterionCoverageMatched,
+            matched: result.passed === fixture.expectedPassed && criterionCoverageMatched,
           });
         } catch (error) {
+          judgeFailure = error instanceof Error ? error.message : String(error);
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
             passed: false,
             score: 0,
-            feedback: error instanceof Error ? error.message : String(error),
+            feedback: judgeFailure,
             matched: false,
           });
         }
@@ -555,6 +601,20 @@ export function createTaskEvaluationService(deps: {
           parentTasksetHash: taskset.contentHash,
           calibratedAt: timestamp,
           graderIds: calibrationResults.map((result) => result.graderId),
+          results: calibrationResults.map((result) => ({
+            graderId: result.graderId,
+            passed: result.passed,
+            fixtures: result.results.map((fixture) => ({
+              fixtureId: fixture.fixtureId,
+              expectedPassed: fixture.expectedPassed,
+              passed: fixture.passed,
+              matched: fixture.matched,
+              feedback: fixture.feedback,
+              ...("criterionCoverageMatched" in fixture
+                ? { criterionCoverageMatched: fixture.criterionCoverageMatched }
+                : {}),
+            })),
+          })),
         },
       },
     });

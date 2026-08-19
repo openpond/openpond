@@ -111,6 +111,7 @@ export type HostedChatTurnInput = {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  responseFormat?: Record<string, unknown>;
   signal?: AbortSignal;
 };
 

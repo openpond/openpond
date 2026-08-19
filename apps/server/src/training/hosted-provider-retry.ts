@@ -1,8 +1,28 @@
+export const HOSTED_PROVIDER_MAX_RETRIES = 6;
+export const HOSTED_PROVIDER_RETRY_WINDOW_MS = 45_000;
+
 export function retryableHostedError(error: unknown): boolean {
   const message = hostedErrorText(error);
   return /\b(?:429|500|502|503|504)\b|retryable["':\s]+true|bad gateway|temporar(?:y|ily)|fetch failed|network error|socket hang up|econnreset|econnrefused|etimedout|und_err_(?:connect|socket|headers|body)_timeout/i.test(
     message,
   );
+}
+
+export function hostedRetryDelayForAttempt(
+  error: unknown,
+  retry: number,
+  elapsedMs: number,
+): number | null {
+  if (
+    retry >= HOSTED_PROVIDER_MAX_RETRIES
+    || !retryableHostedError(error)
+  ) {
+    return null;
+  }
+  const delayMs = hostedRetryDelayMs(error, retry);
+  return elapsedMs + delayMs <= HOSTED_PROVIDER_RETRY_WINDOW_MS
+    ? delayMs
+    : null;
 }
 
 function hostedErrorText(error: unknown): string {

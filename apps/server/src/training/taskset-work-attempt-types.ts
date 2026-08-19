@@ -80,4 +80,10 @@ export type WorkTraceStep =
       output: string;
     }
   | { kind: "required_output"; path: string; ok: boolean; detail: string }
+  | {
+      kind: "resource_budget";
+      resource: "tool_calls";
+      ok: false;
+      detail: string;
+    }
   | { kind: "cleanup"; ok: boolean; detail: string };

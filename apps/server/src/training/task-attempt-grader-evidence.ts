@@ -2,18 +2,27 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import type { TaskAttemptResult } from "@openpond/contracts";
-import type { ModelJudgeRunner } from "@openpond/taskset-sdk";
+import type { TaskAttemptResult, TaskDataRecord } from "@openpond/contracts";
+import {
+  ModelJudgeExecutionError,
+  type ModelJudgeRunner,
+} from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { parseModelJudgeResult } from "../server-entry-helpers.js";
 import type { createTrainingModelRuntime } from "./training-model-runtime.js";
-import { hostedTokenPricingFromValue } from "./hosted-token-pricing.js";
+import {
+  conservativeHostedRequestCostUsd,
+  hostedTokenPricingFromValue,
+} from "./hosted-token-pricing.js";
 
 const MAX_ARTIFACTS = 5;
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 40_000;
+const MODEL_JUDGE_TIMEOUT_MS = 45_000;
+const MODEL_JUDGE_MAX_OUTPUT_TOKENS = 1_200;
+const MODEL_JUDGE_REPAIR_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 
 type TrainingModelText = ReturnType<
@@ -26,7 +35,8 @@ export function createTaskAttemptModelJudge(input: {
 }): ModelJudgeRunner {
   return async ({ grader, task, attempt }) => {
     const usages: unknown[] = [];
-    let costUsd = 0;
+    let chargedCostUsd = 0;
+    let everyRequestHasCost = true;
     const artifactEvidence = await loadTaskAttemptGraderEvidence({
       store: input.store,
       attempt,
@@ -37,40 +47,190 @@ export function createTaskAttemptModelJudge(input: {
         ? hostedTokenPricingFromValue(attempt.metadata.hostedTokenPricing)
           ?? undefined
         : undefined;
-    const raw = await input.modelText({
-      model: grader.judge,
-      hostedTokenPricing,
-      signal: new AbortController().signal,
-      requestId: `task-judge:${attempt.id}:${grader.id}`,
-      onUsage: (usage, cost) => {
-        usages.push(usage);
-        if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
-          costUsd += cost;
-        }
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error(`Model judge timed out after ${MODEL_JUDGE_TIMEOUT_MS / 1_000} seconds.`)),
+      MODEL_JUDGE_TIMEOUT_MS,
+    );
+    const judgeMessages = [
+      {
+        role: "system" as const,
+        content: `Apply this rubric. Return JSON only with score (0..1), passed, feedback, and criterionScores. criterionScores is mandatory and must contain exactly every criterion assigned to this judge.\n\n${grader.rubric}`,
       },
-      messages: [
-        {
-          role: "system",
-          content: `Apply this rubric and return JSON only with score (0..1), passed, and feedback.\n\n${grader.rubric}`,
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            input: task.input,
-            expectedOutput: task.expectedOutput,
-            output: attempt.output,
-            artifactEvidence,
-          }),
-        },
-      ],
-    });
-    const parsed = parseModelJudgeResult(raw);
-    if (!parsed) throw new Error("Model judge returned invalid structured output.");
-    return {
-      ...parsed,
-      usage: usages,
-      ...(costUsd > 0 ? { costUsd } : {}),
+      {
+        role: "user" as const,
+        content: JSON.stringify({
+          input: task.input,
+          policyVisibleContext: task.policyVisibleContext,
+          output: attempt.output,
+          artifactEvidence,
+          evaluationCriteria: task.evaluationCriteria,
+        }),
+      },
+    ];
+    const runJudgeRequest = async (
+      requestId: string,
+      messages: Array<{ role: "system" | "user"; content: string }>,
+    ): Promise<string> => {
+      let requestCostUsd = 0;
+      let requestHasAuthoritativeCost = false;
+      try {
+        return await input.modelText({
+          model: grader.judge,
+          hostedTokenPricing,
+          signal: controller.signal,
+          requestId,
+          maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
+          temperature: grader.temperature,
+          responseFormat: judgeResponseFormat(task, grader.id),
+          onUsage: (usage, cost) => {
+            usages.push(usage);
+            if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
+              requestCostUsd += cost;
+              requestHasAuthoritativeCost = true;
+            }
+          },
+          messages,
+        });
+      } finally {
+        if (requestHasAuthoritativeCost) {
+          chargedCostUsd += requestCostUsd;
+        } else if (hostedTokenPricing) {
+          chargedCostUsd += conservativeHostedRequestCostUsd({
+            inputCharacters: messages.reduce(
+              (total, message) => total + message.content.length,
+              0,
+            ),
+            maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
+            pricing: hostedTokenPricing,
+          });
+        } else {
+          everyRequestHasCost = false;
+        }
+      }
     };
+    let raw: string;
+    try {
+      raw = await runJudgeRequest(
+        `task-judge:${attempt.id}:${grader.id}`,
+        judgeMessages,
+      );
+      for (let repair = 0; repair < MODEL_JUDGE_REPAIR_ATTEMPTS; repair += 1) {
+        const parsed = parseModelJudgeResult(raw);
+        if (hasAssignedCriterionScores(
+          parsed?.criterionScores ?? [],
+          task,
+          grader.id,
+        )) {
+          return {
+            ...parsed!,
+            usage: usages,
+            ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+          };
+        }
+        raw = await runJudgeRequest(
+          `task-judge-repair-${repair + 1}:${attempt.id}:${grader.id}`,
+          [
+            {
+              role: "system",
+              content: `Your prior answer omitted or malformed mandatory criterionScores. Return only a complete replacement JSON object. Include exactly these criterion IDs: ${assignedCriterionIds(task, grader.id).join(", ")}. Do not omit criterionScores.`,
+            },
+            { role: "user", content: raw },
+          ],
+        );
+      }
+      const parsed = parseModelJudgeResult(raw);
+      if (
+        !parsed
+        || !hasAssignedCriterionScores(
+          parsed.criterionScores,
+          task,
+          grader.id,
+        )
+      ) {
+        throw new Error(
+          "Model judge returned invalid structured output after bounded repair.",
+        );
+      }
+      return {
+        ...parsed,
+        usage: usages,
+        ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+      };
+    } catch (error) {
+      throw new ModelJudgeExecutionError(
+        error instanceof Error ? error.message : String(error),
+        {
+          usage: usages,
+          ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+        },
+        { cause: error },
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+function assignedCriterionIds(
+  task: Pick<TaskDataRecord, "evaluationCriteria">,
+  graderId: string,
+): string[] {
+  return (task.evaluationCriteria ?? [])
+    .filter((criterion) => criterion.scorerIds.includes(graderId))
+    .map((criterion) => criterion.id)
+    .sort();
+}
+
+function hasAssignedCriterionScores(
+  scores: Array<{ criterionId: string }>,
+  task: Pick<TaskDataRecord, "evaluationCriteria">,
+  graderId: string,
+): boolean {
+  const expected = assignedCriterionIds(task, graderId);
+  const actual = scores.map((score) => score.criterionId).sort();
+  return expected.length === actual.length
+    && expected.every((id, index) => id === actual[index]);
+}
+
+function judgeResponseFormat(
+  task: Pick<TaskDataRecord, "evaluationCriteria">,
+  graderId: string,
+): Record<string, unknown> {
+  const criterionIds = assignedCriterionIds(task, graderId);
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: "task_judgment",
+      strict: true,
+      schema: {
+        type: "object",
+        additionalProperties: false,
+        required: ["score", "passed", "feedback", "criterionScores"],
+        properties: {
+          score: { type: "number", minimum: 0, maximum: 1 },
+          passed: { type: "boolean" },
+          feedback: { type: "string" },
+          criterionScores: {
+            type: "array",
+            minItems: criterionIds.length,
+            maxItems: criterionIds.length,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["criterionId", "score", "passed", "feedback", "evidenceRefs"],
+              properties: {
+                criterionId: { type: "string", enum: criterionIds },
+                score: { type: "number", minimum: 0, maximum: 1 },
+                passed: { type: "boolean" },
+                feedback: { type: "string" },
+                evidenceRefs: { type: "array", items: { type: "string" } },
+              },
+            },
+          },
+        },
+      },
+    },
   };
 }
 

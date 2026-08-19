@@ -18,6 +18,10 @@ import type {
 
 const DEFAULT_MAX_WORK_TOOL_TURNS = 24;
 const MAX_WORK_TOOL_TURNS = 100;
+const DEFAULT_MAX_WORK_TOOL_CALLS = 64;
+const MAX_WORK_TOOL_CALLS = 256;
+const DEFAULT_MAX_IDENTICAL_WORK_TOOL_CALLS = 3;
+const MAX_IDENTICAL_WORK_TOOL_CALLS = 10;
 const MAX_MISSING_OUTPUT_RECOVERY_TURNS = 10;
 const MAX_WORK_MODEL_REQUEST_TIMEOUT_MS = 20 * 60_000;
 const MAX_WORK_EXEC_TIMEOUT_SECONDS = 20 * 60;
@@ -191,6 +195,42 @@ export function workToolTurnLimit(taskset: Taskset): number {
     && configured > 0
     ? Math.min(configured, MAX_WORK_TOOL_TURNS)
     : DEFAULT_MAX_WORK_TOOL_TURNS;
+}
+
+export type WorkToolCallBudget = {
+  maxTotal: number;
+  maxIdentical: number;
+  maxPerName: Record<string, number>;
+};
+
+export function workToolCallBudget(taskset: Taskset): WorkToolCallBudget {
+  const configuredTotal = taskset.environment.metadata.maxToolCalls;
+  const maxTotal = typeof configuredTotal === "number"
+    && Number.isInteger(configuredTotal)
+    && configuredTotal > 0
+    ? Math.min(configuredTotal, MAX_WORK_TOOL_CALLS)
+    : DEFAULT_MAX_WORK_TOOL_CALLS;
+  const configuredIdentical = taskset.environment.metadata.maxIdenticalToolCalls;
+  const maxIdentical = typeof configuredIdentical === "number"
+    && Number.isInteger(configuredIdentical)
+    && configuredIdentical > 0
+    ? Math.min(configuredIdentical, MAX_IDENTICAL_WORK_TOOL_CALLS)
+    : DEFAULT_MAX_IDENTICAL_WORK_TOOL_CALLS;
+  const configuredPerName = taskset.environment.metadata.maxToolCallsPerName;
+  const maxPerName = configuredPerName
+    && typeof configuredPerName === "object"
+    && !Array.isArray(configuredPerName)
+    ? Object.fromEntries(
+        Object.entries(configuredPerName).flatMap(([name, value]) =>
+          typeof value === "number"
+          && Number.isInteger(value)
+          && value > 0
+            ? [[name, Math.min(value, maxTotal)]]
+            : []
+        ),
+      )
+    : {};
+  return { maxTotal, maxIdentical, maxPerName };
 }
 
 export function workMissingOutputRecoveryTurnLimit(taskset: Taskset): number {

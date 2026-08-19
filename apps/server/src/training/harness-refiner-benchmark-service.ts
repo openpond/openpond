@@ -22,6 +22,7 @@ import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import {
   BenchmarkEvidenceSnapshot,
   BenchmarkSpendBudget,
+  assertBenchmarkAttemptInfrastructureValid,
   benchmarkAttemptsInfrastructureValid,
   benchmarkEfficiency,
   completedBeforeStage,
@@ -124,7 +125,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
     if (!taskset.benchmark) throw new Error("Harness Refiner Taskset is unavailable.");
     if (taskset.graders.some(
       (grader) => grader.kind === "model_judge"
-        && grader.rewardEligible
+        && (grader.rewardEligible || grader.metadata.requestedRewardEligible === true)
         && grader.calibrationStatus !== "passed",
     )) {
       const calibration = await deps.evaluation.calibrateModelJudges(taskset.id);
@@ -477,6 +478,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
             grader,
             observedSpendUsd: budget.observedSpendUsd,
           });
+          assertBenchmarkAttemptInfrastructureValid(result, label);
         };
       };
       const baselineRuntime = await loadLocalHarnessRuntimeFromRelease({

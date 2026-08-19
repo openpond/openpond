@@ -42,6 +42,7 @@ import {
   workExecTimeoutSeconds,
   workMissingOutputRecoveryTurnLimit,
   workModelRequestTimeoutMs,
+  workToolCallBudget,
   workToolTurnLimit,
   type SavedOutputValidation,
   type SavedWorkOutput,
@@ -154,6 +155,7 @@ export async function runTasksetWorkAttempt(input: {
   timer.unref?.();
 
   const trace: WorkTraceStep[] = [];
+  const toolCallBudget = workToolCallBudget(input.taskset);
   const usages: unknown[] = [];
   const explicitCosts: number[] = [];
   const savedOutputs = new Map<string, SavedWorkOutput>();
@@ -173,6 +175,10 @@ export async function runTasksetWorkAttempt(input: {
   let failureClass: TaskFailureClass | null = null;
   let missingOutputRecoveryTurns = 0;
   let modelRequestTimedOut = false;
+  let modelToolCallCount = 0;
+  const modelToolCallsPerName = new Map<string, number>();
+  const identicalModelToolCalls = new Map<string, number>();
+  let toolCallBudgetExhaustion: string | null = null;
   let stage:
     | "assets"
     | "session"
@@ -238,7 +244,6 @@ export async function runTasksetWorkAttempt(input: {
       taskId: input.task.id,
       attemptId,
     });
-    stage = "environment";
     allDefinitions = [
       ...createWorkModelToolDefinitions({
         executeWorkspaceTool: input.runtime.executeWorkspaceTool,
@@ -272,12 +277,13 @@ export async function runTasksetWorkAttempt(input: {
       throw new Error("The Work output persistence tool is unavailable.");
     }
     const listFilesDefinition = selectedByName.get("work_list_files") ?? null;
-    const messages = tasksetWorkMessages(
-      input.task,
-      assets,
-      input.harnessInstructionContext,
-    );
     const maxTurns = workToolTurnLimit(input.taskset);
+    const messages = tasksetWorkMessages(input.task, assets, input.harnessInstructionContext, {
+      maxToolTurns: maxTurns,
+      maxToolCalls: toolCallBudget.maxTotal,
+      maxIdenticalToolCalls: toolCallBudget.maxIdentical,
+      maxToolCallsPerName: toolCallBudget.maxPerName,
+    });
     const maxMissingOutputRecoveryTurns = workMissingOutputRecoveryTurnLimit(input.taskset);
     const modelRequestTimeoutMs = workModelRequestTimeoutMs(input.taskset);
     const maxExecTimeoutSeconds = workExecTimeoutSeconds(input.taskset);
@@ -291,19 +297,24 @@ export async function runTasksetWorkAttempt(input: {
     if (!environmentDefinition) {
       throw new Error("The Work environment readiness tool is unavailable.");
     }
-    const environmentResult = await executeDefinition({
-      definition: environmentDefinition,
-      runtime: input.runtime,
-      sessionId: session.id,
-      turnId,
-      model: input.model,
-      callId: `environment_${attemptId}`,
-      args: {},
-      signal: controller.signal,
-      userPrompt: tasksetWorkUserPrompt(input.task),
-    });
-    if (!environmentResult.ok) {
-      throw new Error(environmentResult.contentText);
+    const requiresPreparedEnvironment = assets.length > 0
+      || (input.task.requiredOutputs?.length ?? 0) > 0;
+    if (requiresPreparedEnvironment) {
+      stage = "environment";
+      const environmentResult = await executeDefinition({
+        definition: environmentDefinition,
+        runtime: input.runtime,
+        sessionId: session.id,
+        turnId,
+        model: input.model,
+        callId: `environment_${attemptId}`,
+        args: {},
+        signal: controller.signal,
+        userPrompt: tasksetWorkUserPrompt(input.task),
+      });
+      if (!environmentResult.ok) {
+        throw new Error(environmentResult.contentText);
+      }
     }
     stage = "model";
 
@@ -403,6 +414,42 @@ export async function runTasksetWorkAttempt(input: {
       );
       let outputMayHaveChanged = false;
       for (const call of toolCalls) {
+        const nextNameCount = (modelToolCallsPerName.get(call.name) ?? 0) + 1;
+        let signatureArguments: unknown = call.argumentsJson;
+        try {
+          signatureArguments = parseNativeToolArguments(call);
+        } catch {
+          // Invalid calls still consume budget and are deduplicated by raw input.
+        }
+        const identicalSignature = contentHash([
+          call.name,
+          signatureArguments,
+        ]);
+        const nextIdenticalCount =
+          (identicalModelToolCalls.get(identicalSignature) ?? 0) + 1;
+        const perNameLimit = toolCallBudget.maxPerName[call.name];
+        if (modelToolCallCount >= toolCallBudget.maxTotal) {
+          toolCallBudgetExhaustion =
+            `Model-requested tool-call budget exhausted at ${toolCallBudget.maxTotal} total calls.`;
+        } else if (perNameLimit !== undefined && nextNameCount > perNameLimit) {
+          toolCallBudgetExhaustion =
+            `Model-requested ${call.name} budget exhausted at ${perNameLimit} calls.`;
+        } else if (nextIdenticalCount > toolCallBudget.maxIdentical) {
+          toolCallBudgetExhaustion =
+            `Identical model-requested tool-call budget exhausted at ${toolCallBudget.maxIdentical} calls for ${call.name}.`;
+        }
+        if (toolCallBudgetExhaustion) {
+          trace.push({
+            kind: "resource_budget",
+            resource: "tool_calls",
+            ok: false,
+            detail: toolCallBudgetExhaustion,
+          });
+          break;
+        }
+        modelToolCallCount += 1;
+        modelToolCallsPerName.set(call.name, nextNameCount);
+        identicalModelToolCalls.set(identicalSignature, nextIdenticalCount);
         const definition = selectedByName.get(call.name);
         if (!definition) {
           const result = unknownNativeToolResult(call);
@@ -529,6 +576,10 @@ export async function runTasksetWorkAttempt(input: {
         }
         messages.push(toolResultMessage(result, { maxContentCharacters: 6_000 }));
         if (allRequiredOutputsSaved) break;
+      }
+      if (toolCallBudgetExhaustion && !allRequiredOutputsSaved) {
+        status = "budget_exhausted";
+        break;
       }
       if (
         !allRequiredOutputsSaved
@@ -921,6 +972,7 @@ export async function runTasksetWorkAttempt(input: {
         (step) => step.kind === "tool" && !step.ok,
       ).length,
       missingOutputRecoveryTurns,
+      modelToolCallCount,
     },
     runtimeEventRefs: runtimeEvents.map((event) => event.id),
     artifactRefs,
@@ -940,6 +992,14 @@ export async function runTasksetWorkAttempt(input: {
       sessionId: session?.id ?? null,
       turnId,
       toolNames: input.taskset.environment.toolNames,
+      toolCallBudget: {
+        maxTotal: toolCallBudget.maxTotal,
+        maxIdentical: toolCallBudget.maxIdentical,
+        maxPerName: toolCallBudget.maxPerName,
+        consumedTotal: modelToolCallCount,
+        consumedPerName: Object.fromEntries(modelToolCallsPerName),
+        exhaustion: toolCallBudgetExhaustion,
+      },
       harnessCapabilityReceipt: input.harnessCapabilityReceipt
         ? {
             ...input.harnessCapabilityReceipt,

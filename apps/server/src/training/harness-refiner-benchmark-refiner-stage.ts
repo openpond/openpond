@@ -22,7 +22,10 @@ import {
   HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
 } from "./harness-refiner-benchmark-protocol.js";
 import type { BenchmarkRefinerFailureKind } from "./harness-refiner-benchmark-sequential-checkpoint.js";
-import type { HostedTokenPricing } from "./hosted-token-pricing.js";
+import {
+  conservativeHostedRequestCostUsd,
+  type HostedTokenPricing,
+} from "./hosted-token-pricing.js";
 import {
   addUsage,
   attemptUsageSummary,
@@ -406,11 +409,11 @@ function conservativeRefinerRequestCost(
     (total, message) => total + message.content.length,
     0,
   );
-  const estimatedInputTokens = Math.ceil(inputCharacters / 3);
-  return (
-    estimatedInputTokens * pricing.inputUsdPerMillionTokens
-    + DEFAULT_REFINER_MAX_OUTPUT_TOKENS * pricing.outputUsdPerMillionTokens
-  ) / 1_000_000;
+  return conservativeHostedRequestCostUsd({
+    inputCharacters,
+    maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+    pricing,
+  });
 }
 
 function benchmarkRefinerFailureKind(

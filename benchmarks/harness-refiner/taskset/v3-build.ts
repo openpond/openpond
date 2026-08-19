@@ -1,0 +1,182 @@
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  TasksetReleaseSchema,
+  validateTasksetRelease,
+  type EvaluationCriterion,
+  type TasksetRelease,
+} from "@openpond/evals";
+import { canonicalJson, contentHash, withContentHash, type ImmutableAssetRef } from "@openpond/harness";
+
+import { BENCHMARK_CASES, type BenchmarkCase } from "./cases.js";
+import { buildTaskset } from "./build.js";
+
+const tasksetDirectory = path.dirname(fileURLToPath(import.meta.url));
+const releaseDirectory = path.join(tasksetDirectory, "releases");
+const outputPath = path.join(releaseDirectory, "harness-refiner-20260819-v3.json");
+const builtinModulePath = path.resolve(
+  tasksetDirectory,
+  "../../../packages/evals/src/builtin-benchmarks/harness-refiner-v3.ts",
+);
+
+export async function buildV3Taskset(): Promise<TasksetRelease> {
+  const v2 = await buildTaskset();
+  const verifier = await assetRef("verifiers/taskset-v3-contract-verifier.mjs", "verifier");
+  const rubric = await assetRef("rubrics/task-quality-v3.md", "verifier");
+  const caseById = new Map(BENCHMARK_CASES.map((item) => [item.id, item]));
+  const tasks = v2.tasks.map((task) => {
+    const benchmarkCase = caseById.get(task.id);
+    if (!benchmarkCase) throw new Error(`No v3 case definition exists for ${task.id}.`);
+    return {
+      ...task,
+      expectedOutput: {
+        deliverable: benchmarkCase.expectedOutput.deliverable,
+        validation: benchmarkCase.expectedOutput.validation,
+      },
+      policyVisibleContext: {
+        ...task.policyVisibleContext,
+        visibleConstraints: visibleConstraints(benchmarkCase.prompt),
+      },
+      evaluationCriteria: criteriaFor(benchmarkCase),
+    };
+  });
+  const content = {
+    ...v2,
+    id: "harness-refiner-20260819-v3",
+    revision: 3,
+    contentHash: undefined,
+    policy: {
+      ...v2.policy,
+      policyVisibleFields: ["input", "policyVisibleContext", "evaluationCriteria"],
+      hiddenGraderRefs: [verifier.id, rubric.id],
+    },
+    environment: {
+      ...v2.environment,
+      limits: {
+        maxToolTurns: 24,
+        maxToolCalls: 40,
+        maxIdenticalToolCalls: 3,
+        maxToolCallsPerName: {
+          web_fetch: 12,
+          web_search: 8,
+        },
+      },
+    },
+    tasks,
+    graders: [
+      {
+        id: "task-visible-contract",
+        version: "3",
+        kind: "custom_verifier" as const,
+        weight: 0.25,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: false,
+        verifierRef: verifier,
+        timeoutMs: 30_000,
+        networkPolicy: "none" as const,
+      },
+      {
+        id: "task-semantic-judge",
+        version: "3",
+        kind: "model_judge" as const,
+        weight: 0.75,
+        hardGate: false,
+        rewardEligible: false,
+        privileged: true,
+        rubricRef: rubric,
+        calibrationStatus: "pending" as const,
+      },
+    ],
+    metadata: {
+      ...v2.metadata,
+      evaluationVersion: "v3",
+      protocolVersion: "4",
+      primaryMetric: "criterion_weighted_reward",
+      resultSchemaVersion: "openpond.harnessRefinerPublicResult.v3",
+      modelJudgeRole: "required_after_calibration",
+      semanticJudges: {
+        "task-semantic-judge": {
+          judge: {
+            providerId: "openpond",
+            modelId: "accounts/fireworks/models/deepseek-v4-flash",
+          },
+          temperature: 0,
+          calibrationFixtureRefs: [
+            "v3-invoice-positive",
+            "v3-invoice-negative",
+            "v3-invoice-boundary",
+            "v3-invoice-adversarial",
+            "v3-invoice-prompt-injection",
+          ],
+          requestedRewardEligible: true,
+        },
+      },
+      evaluationThreshold: 0.75,
+      criticalCriterionMinimum: 0.5,
+      v2HistoricalRelease: { id: v2.id, contentHash: v2.contentHash },
+    },
+  };
+  const taskset = TasksetReleaseSchema.parse(withContentHash(content));
+  const validation = validateTasksetRelease(taskset);
+  if (!validation.valid) {
+    throw new Error(`Generated v3 Taskset failed validation: ${validation.issues.map((issue) => `${issue.code}: ${issue.message}`).join("; ")}`);
+  }
+  return taskset;
+}
+
+export async function writeV3Taskset(): Promise<void> {
+  const taskset = await buildV3Taskset();
+  const serialized = canonicalJson(taskset);
+  const assetPaths = [...new Set([
+    ...taskset.tasks.flatMap((task) => task.artifactRefs.map((asset) => asset.path)),
+    ...taskset.graders.flatMap((grader) =>
+      grader.kind === "model_judge" ? [grader.rubricRef.path] : [grader.verifierRef.path]
+    ),
+  ])].sort();
+  const assets = Object.fromEntries(await Promise.all(assetPaths.map(async (relativePath) => [
+    relativePath,
+    await readFile(path.join(tasksetDirectory, relativePath), "utf8"),
+  ])));
+  const module = `// Generated by benchmarks/harness-refiner/taskset/v3-build.ts. Do not edit.\n`
+    + `import { TasksetReleaseSchema } from "../tasksets.js";\n\n`
+    + `export const harnessRefinerBenchmarkV3Release = TasksetReleaseSchema.parse(${serialized});\n\n`
+    + `export const harnessRefinerBenchmarkV3Assets: Readonly<Record<string, string>> = Object.freeze(${JSON.stringify(assets, null, 2)});\n`;
+  if (process.argv.includes("--check")) {
+    if (await readFile(outputPath, "utf8") !== serialized) throw new Error("The checked-in v3 Taskset Release is stale. Run pnpm benchmark:harness-refiner:v3:build.");
+    if (await readFile(builtinModulePath, "utf8") !== module) throw new Error("The v3 @openpond/evals built-in benchmark is stale. Run pnpm benchmark:harness-refiner:v3:build.");
+  } else {
+    await mkdir(releaseDirectory, { recursive: true });
+    await writeFile(outputPath, serialized, "utf8");
+    await mkdir(path.dirname(builtinModulePath), { recursive: true });
+    await writeFile(builtinModulePath, module, "utf8");
+  }
+  console.log(JSON.stringify({ outputPath, id: taskset.id, contentHash: taskset.contentHash, tasks: taskset.tasks.length, checked: process.argv.includes("--check") }));
+}
+
+function criteriaFor(item: BenchmarkCase): EvaluationCriterion[] {
+  const source = [{ source: "prompt" as const, path: "input.prompt", quoteOrAnchor: item.prompt }];
+  const structural: EvaluationCriterion[] = item.expectedOutput.deliverable === "pdf" || item.expectedOutput.deliverable === "spreadsheet"
+    ? [{ id: `${item.id}-artifact-structure`, label: "Requested artifact is present and structurally valid", description: `Return the requested ${item.expectedOutput.deliverable} with the validation requested in the task.`, sourceRefs: source, kind: "artifact_structure", weight: 0.25, critical: true, scorerIds: ["task-visible-contract"] }]
+    : [];
+  return [
+    ...structural,
+    { id: `${item.id}-visible-constraints`, label: "Visible output constraints", description: "The response is non-empty and follows explicit, machine-checkable limits disclosed in the request.", sourceRefs: source, kind: "hard_constraint", weight: 0.15, critical: true, scorerIds: ["task-visible-contract"] },
+    { id: `${item.id}-task-coverage`, label: "Requested task coverage and usefulness", description: "Address the requested deliverable completely, usefully, and in an organization appropriate to the request.", sourceRefs: source, kind: "semantic_quality", weight: 0.4, critical: true, scorerIds: ["task-semantic-judge"] },
+    { id: `${item.id}-factual-grounding`, label: "Factual grounding and uncertainty", description: "Preserve supplied facts, distinguish uncertainty where requested, and avoid unsupported claims or prohibited assertions.", sourceRefs: source, kind: "factual_grounding", weight: 0.2, critical: true, scorerIds: ["task-semantic-judge"] },
+  ];
+}
+
+function visibleConstraints(prompt: string): { maxWords?: number } {
+  const match = /under\s+(\d+)\s+words/i.exec(prompt);
+  return match ? { maxWords: Number(match[1]) } : {};
+}
+
+async function assetRef(relativePath: string, visibility: ImmutableAssetRef["visibility"]): Promise<ImmutableAssetRef> {
+  const contents = await readFile(path.join(tasksetDirectory, relativePath), "utf8");
+  return { id: relativePath.replaceAll(/[^a-zA-Z0-9_-]/g, "-"), path: relativePath, contentHash: contentHash(contents), sizeBytes: Buffer.byteLength(contents), mediaType: relativePath.endsWith(".mjs") ? "text/javascript" : "text/markdown", visibility };
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await writeV3Taskset();
