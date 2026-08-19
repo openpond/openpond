@@ -29,14 +29,12 @@ limitations. It does not post, react, or interact with accounts.
 
 The detailed split and acceptance contract are in the
 [Taskset design](./taskset/README.md). The materialized
-[`harness-refiner-08112026` Taskset Release](./taskset/taskset.release.json)
-contains the frozen prompts, fixtures, grader assets, and production-derived
-tool contracts. The 08112026 release includes four fact-distinct
+[`harness-refiner-20260818-v2` Taskset Release](./taskset/taskset.release.json)
+contains the frozen prompts, fixtures, deterministic grader assets, and
+production-derived tool contracts. It includes four fact-distinct
 direct-deliverable tasks in each split so repeated checklist-or-file
-substitution is visible across sequential adaptation, and calibrates the judge
-to accept short framing when the complete requested copy is present inline.
-Its current content hash is
-`4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634`.
+substitution is visible across sequential adaptation. Its content hash is
+`20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d`.
 
 ## Shipped reference Taskset
 
@@ -86,8 +84,17 @@ Each complete pass uses the following sequence:
 
 The baseline and candidate Run Manifests must pin the same model identity,
 reasoning effort, runtime adapter and version, tool declarations, limits, and
-Taskset Release. For `openpond-chat`, the receipt must retain both the stable
-alias and the current upstream identity, DeepSeek V4 Pro.
+Taskset Release. The 20260818-v2 controlled run uses OpenPond Chat with
+DeepSeek V4 Flash and retains the exact upstream catalog revision and pricing
+in its private receipt.
+
+Before execution, `pnpm benchmark:harness-refiner:prepare` creates a fresh
+isolated store and a content-addressed admission receipt. It binds the exact
+Taskset and initial Harness releases, forty-attempt execution plan, model,
+sampling, reasoning effort, gateway environment, spend ceiling, 180-second
+Refiner timeout, 1,200-token Refiner response limit, and at most two Refiner
+invocations per adaptation task. A retry resumes the same foreground attempt
+and trigger; exhausted retries stop the run and remain failed evidence.
 
 The canonical runner uses OpenPond Desktop's local Work runtime. Every attempt
 gets an isolated managed local directory with the standard
@@ -110,6 +117,12 @@ Reports also retain:
 
 Success must not regress. Infrastructure failures, timeouts, partial runs, or
 an unchanged Harness are reported but cannot support an improvement claim.
+
+`pnpm benchmark:harness-refiner:audit` verifies the final admission, six-case
+qualification, result manifest, evaluation receipt, forty unique stage/task
+attempts, twenty canonical pairs, sequential checkpoint, Refiner retries,
+spend ceiling, and immutable Harness lineage. It writes a private audit receipt
+and the redacted public aggregate from the same terminal evidence.
 
 ## Results
 
