@@ -152,6 +152,46 @@ describe("public Harness Refiner benchmark Taskset", () => {
     });
   });
 
+  test("resolves provider identity from the hosted catalog shape", () => {
+    expect(benchmarkUpstreamModelFromCatalog(
+      {
+        providerId: "openpond",
+        modelId: "accounts/fireworks/models/deepseek-v4-flash",
+      },
+      {
+        id: "accounts/fireworks/models/deepseek-v4-flash",
+        created: 1_785_456_000,
+        owned_by: "fireworks",
+        metadata: {
+          provider: { name: "fireworks" },
+          billing: {
+            providerId: "fireworks",
+            pricing: {
+              version: "fireworks-serverless-2026-07-31",
+              source: "fireworks-serverless",
+              effectiveAt: "2026-07-31T00:00:00.000Z",
+              inputUsdPerMillionTokens: 0.14,
+              cachedInputUsdPerMillionTokens: 0.028,
+              outputUsdPerMillionTokens: 0.28,
+            },
+          },
+        },
+      },
+    )).toEqual({
+      providerId: "fireworks",
+      modelId: "accounts/fireworks/models/deepseek-v4-flash",
+      revision: "catalog-created:1785456000",
+      pricing: {
+        version: "fireworks-serverless-2026-07-31",
+        source: "fireworks-serverless",
+        effectiveAt: "2026-07-31T00:00:00.000Z",
+        inputUsdPerMillionTokens: 0.14,
+        cachedInputUsdPerMillionTokens: 0.028,
+        outputUsdPerMillionTokens: 0.28,
+      },
+    });
+  });
+
   test("binds every declared tool schema and immutable asset to its content", async () => {
     const taskset = await loadTaskset();
     expect(taskset.tools.map((tool) => tool.name)).toEqual([

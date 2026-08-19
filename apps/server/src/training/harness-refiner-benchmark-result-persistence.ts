@@ -56,7 +56,8 @@ export type ManagedResultManifest = {
   evidenceSnapshot: BenchmarkEvidenceSnapshotManifest;
   lineage: BenchmarkLineage;
   publicationPolicy: {
-    judgeCalibration: "required_pass";
+    primaryReward: "deterministic_output_contract";
+    supplementaryJudge: "not_executed_uncalibrated";
     diagnosticPasses: 1;
     confirmationPasses: 1;
     uncertainty: "paired_per_case_descriptive";
@@ -100,7 +101,8 @@ export function createResultManifest(
     evidenceSnapshot: input.evidenceSnapshot,
     lineage: input.lineage,
     publicationPolicy: {
-      judgeCalibration: "required_pass" as const,
+      primaryReward: "deterministic_output_contract" as const,
+      supplementaryJudge: "not_executed_uncalibrated" as const,
       diagnosticPasses: 1 as const,
       confirmationPasses: 1 as const,
       uncertainty: "paired_per_case_descriptive" as const,

@@ -281,11 +281,17 @@ export function benchmarkUpstreamModelFromCatalog(
   pricing: HostedTokenPricing;
 } {
   const metadata = record(raw.metadata);
+  const provider = record(metadata.provider);
+  const billing = record(metadata.billing);
   const providerId = firstString(
     raw.upstream_provider,
     raw.provider_id,
+    raw.owned_by,
     metadata.upstreamProvider,
     metadata.upstream_provider,
+    provider.id,
+    provider.name,
+    billing.providerId,
     model.modelId === "openpond-chat" ? "deepseek" : null,
   );
   const modelId = firstString(
@@ -306,8 +312,13 @@ export function benchmarkUpstreamModelFromCatalog(
     typeof raw.created === "number" ? `catalog-created:${raw.created}` : null,
   );
   if (!providerId || !modelId || !revision) {
+    const missing = [
+      !providerId ? "provider" : null,
+      !modelId ? "model" : null,
+      !revision ? "revision" : null,
+    ].filter(Boolean).join(", ");
     throw new Error(
-      `Hosted model ${model.modelId} did not provide concrete upstream identity and revision.`,
+      `Hosted model ${model.modelId} did not provide concrete catalog ${missing}.`,
     );
   }
   return {
