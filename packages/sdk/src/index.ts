@@ -6,6 +6,7 @@ import { resolveOpChatApiBaseUrl } from "@openpond/cloud/hosted-chat";
 
 import { OpenPondWorkClient } from "./work.js";
 import { OpenPondProjectActionsClient } from "./project-actions.js";
+import { OpenPondProfileActionsClient } from "./profile-actions.js";
 import { OpenPondWorkflowsClient } from "./workflows.js";
 import type { OpenPondClientOptions } from "./types.js";
 
@@ -14,6 +15,7 @@ export class OpenPondClient {
   readonly work: OpenPondWorkClient;
   readonly workflows: OpenPondWorkflowsClient;
   readonly actions: OpenPondProjectActionsClient;
+  readonly profileActions: OpenPondProfileActionsClient;
 
   constructor(options: OpenPondClientOptions) {
     const apiKey = options.apiKey.trim();
@@ -35,6 +37,7 @@ export class OpenPondClient {
     });
     this.workflows = new OpenPondWorkflowsClient({ apiKey, apiBaseUrl });
     this.actions = new OpenPondProjectActionsClient({ apiKey, apiBaseUrl });
+    this.profileActions = new OpenPondProfileActionsClient({ apiKey, apiBaseUrl });
   }
 }
 
@@ -46,11 +49,17 @@ export type { OpenPondClientOptions } from "./types.js";
 export { OpenPondWorkClient } from "./work.js";
 export { OpenPondWorkflowsClient } from "./workflows.js";
 export { OpenPondProjectActionsClient } from "./project-actions.js";
+export { OpenPondProfileActionsClient } from "./profile-actions.js";
 export type {
   HostedProjectActionCatalog,
   ProjectActionInvocation,
   ProjectActionRelease,
 } from "./project-actions.js";
+export type {
+  OpenPondProfileActionCatalog,
+  OpenPondProfileActionCatalogEntry,
+  OpenPondProfileActionSetupRequirement,
+} from "./profile-actions.js";
 export { OpenPondApiError } from "@openpond/cloud/api/core";
 export type {
   OpenPondWorkEvent,
