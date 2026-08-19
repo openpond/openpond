@@ -147,6 +147,7 @@ function portableTask(task: TaskDataRecord) {
         legacySchemaRef: output.schemaRef ?? null,
       },
     })),
+    evaluationCriteria: task.evaluationCriteria ?? [],
     tags: task.tags,
   };
 }

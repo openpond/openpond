@@ -57,9 +57,10 @@ export function createTaskAttemptModelJudge(input: {
           role: "user",
           content: JSON.stringify({
             input: task.input,
-            expectedOutput: task.expectedOutput,
+            policyVisibleContext: task.policyVisibleContext,
             output: attempt.output,
             artifactEvidence,
+            evaluationCriteria: task.evaluationCriteria,
           }),
         },
       ],

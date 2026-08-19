@@ -3,6 +3,11 @@
 Status: Taskset Release materialized; deterministic local-runtime conformance
 and the 20260818-v2 controlled run completed.
 
+The sealed v2 release remains historical systems evidence. The active
+validity follow-up is the unreleased v3 Taskset below; it must clear semantic
+judge calibration, adversarial/metamorphic fixture audits, and A/A variance
+admission before any paid natural-task run.
+
 This directory contains the canonical `openpond.tasksetRelease.v2` used by the
 Harness Refiner benchmark. Benchmarking is a first-class Taskset purpose: the
 same portable cases, assets, graders, and receipts appear in the Tasksets UI,
@@ -18,6 +23,21 @@ this benchmark does not start a training job.
   [`harness-refiner-08112026.json`](./releases/harness-refiner-08112026.json)
 - Rebuild: `pnpm benchmark:harness-refiner:build`
 - Conformance: `pnpm benchmark:harness-refiner:conformance`
+
+## v3 release (not yet admitted)
+
+- Release: [`harness-refiner-20260819-v3.json`](./releases/harness-refiner-20260819-v3.json)
+- Release id: `harness-refiner-20260819-v3`
+- Content hash:
+  `8fb3cecdcc8f324e6aa314c5e2136d843b212779b4c88e32abee7b5117add335`
+- Rebuild: `pnpm benchmark:harness-refiner:v3:build`
+- Structural conformance: `pnpm benchmark:harness-refiner:v3:conformance`
+
+V3 exposes criteria with exact source traces to the policy-visible request.
+Its deterministic verifier only handles visible output limits and required
+artifact receipts; semantic coverage and factual grounding require a separately
+calibrated judge. It emits criterion scores and an attempt diagnosis, and it
+will remain blocked until the calibration and variance gates are complete.
 
 ## Split
 

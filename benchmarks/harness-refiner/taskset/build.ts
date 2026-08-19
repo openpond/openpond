@@ -288,6 +288,7 @@ export async function buildTaskset(): Promise<TasksetRelease> {
   return taskset;
 }
 
+export async function writeV2Taskset(): Promise<void> {
 const taskset = await buildTaskset();
 const serialized = canonicalJson(taskset);
 const builtinAssets = Object.fromEntries(await Promise.all(
@@ -369,6 +370,17 @@ console.log(
     checked: process.argv.includes("--check"),
   }),
 );
+}
+
+if (isMainModule()) {
+  await writeV2Taskset();
+}
+
+function isMainModule(): boolean {
+  const entrypoint = process.argv[1];
+  return Boolean(entrypoint)
+    && path.resolve(entrypoint) === fileURLToPath(import.meta.url);
+}
 
 function releaseRequiredOutputs(
   taskId: string,

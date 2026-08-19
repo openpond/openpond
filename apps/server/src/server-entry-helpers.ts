@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from "@openpond/contracts";
+import { CriterionScoreSchema, type RuntimeEvent } from "@openpond/contracts";
 
 const DEFAULT_MAX_HOSTED_WORKSPACE_TOOL_ROUNDS = 64;
 
@@ -9,6 +9,7 @@ export function parseModelJudgeResult(
   passed: boolean;
   feedback: string;
   evidenceRefs: string[];
+  criterionScores: Array<ReturnType<typeof CriterionScoreSchema.parse>>;
 } | null {
   const normalized = raw
     .trim()
@@ -26,6 +27,9 @@ export function parseModelJudgeResult(
           ? value.feedback.slice(0, 20_000)
           : "Model judge completed.",
       evidenceRefs: [],
+      criterionScores: Array.isArray(value.criterionScores)
+        ? value.criterionScores.map((item) => CriterionScoreSchema.parse(item))
+        : [],
     };
   } catch {
     return null;

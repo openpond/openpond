@@ -6,6 +6,11 @@ import { DatasetArtifactManifestSchema, DatasetSplitSchema } from "./dataset-art
 import { ExternalDatasetSourceRefSchema } from "./dataset-sources.js";
 import { HarnessActionBindingSchema } from "./harness-actions.js";
 import { VersionedReleaseRefSchema } from "./release-core.js";
+import {
+  AttemptDiagnosisSchema,
+  CriterionScoreSchema,
+  EvaluationCriterionSchema,
+} from "@openpond/evals";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
@@ -264,6 +269,7 @@ export const TaskDataRecordSchema = z.object({
   sourceRefs: z.array(IdSchema).min(1).max(100),
   assets: z.array(TaskAssetRefSchema).max(1_000).optional(),
   requiredOutputs: z.array(TaskRequiredOutputSchema).max(100).optional(),
+  evaluationCriteria: z.array(EvaluationCriterionSchema).max(1_000).optional(),
   tags: z.array(IdSchema).max(100).default([]),
   metadata: MetadataSchema,
 });
@@ -514,6 +520,7 @@ export const GradeComponentSchema = z.object({
   evidenceRefs: z.array(IdSchema).max(10_000).default([]),
   judge: ChatModelRefSchema.nullable().optional().default(null),
   calibrationStatus: z.enum(["not_applicable", "pending", "passed", "failed"]),
+  criterionScores: z.array(CriterionScoreSchema).max(1_000).default([]),
 });
 
 export const GradeResultSchema = z.object({
@@ -527,6 +534,7 @@ export const GradeResultSchema = z.object({
   failureClass: TaskFailureClassSchema.nullable(),
   feedback: z.array(z.string().trim().min(1).max(20_000)).max(1_000).default([]),
   rewardEligible: z.boolean(),
+  diagnosis: AttemptDiagnosisSchema.nullable().default(null),
   createdAt: TimestampSchema,
 });
 

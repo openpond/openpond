@@ -36,6 +36,25 @@ direct-deliverable tasks in each split so repeated checklist-or-file
 substitution is visible across sequential adaptation. Its content hash is
 `20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d`.
 
+## v3 validity follow-up
+
+The sealed v2 result is a systems trace, not a validated quality or continual
+learning result. Its deterministic verifier was reproducible but reduced
+natural-task quality to hidden lexical and artifact-receipt checks, so v2 pass
+counts must not be used as an RL reward baseline or improvement claim.
+
+The in-progress [`harness-refiner-20260819-v3` release](./taskset/releases/harness-refiner-20260819-v3.json)
+keeps the same public task corpus while exposing source-traceable criteria,
+separating deterministic format/artifact checks from semantic grading, and
+recording criterion-level evidence and diagnoses. It is **not admitted for a
+paid natural run** until its semantic judge, fixture corpus, metamorphic audit,
+and A/A variance plan are calibrated and frozen. Rebuild it with:
+
+```bash
+pnpm benchmark:harness-refiner:v3:build
+pnpm benchmark:harness-refiner:v3:conformance
+```
+
 ## Shipped reference Taskset
 
 This repository-owned suite ships with OpenPond as a built-in, read-only

@@ -83,4 +83,9 @@ export {
   type ModelImprovementQualificationReceipt,
   type RunManifest as PortableRunManifest,
   type TasksetRelease,
+  type AttemptDiagnosis,
+  type CriterionScore,
+  EvaluationCriterionSchema,
+  AttemptDiagnosisSchema,
+  CriterionScoreSchema,
 } from "@openpond/evals";
