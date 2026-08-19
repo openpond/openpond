@@ -94,8 +94,13 @@ export function materializePortableTasksetRelease(input: {
       sourceTasksetHash: input.taskset.contentHash,
     },
   });
-  const draft = input.admittedTasksetRelease
+  const admitted = input.admittedTasksetRelease
     ? TasksetReleaseSchema.parse(input.admittedTasksetRelease)
+    : null;
+  const draft = admitted
+    ? contentHash(admitted.graders) === contentHash(graders)
+      ? admitted
+      : calibratedDerivativeRelease({ admitted, graders, taskset: input.taskset })
     : TasksetReleaseSchema.parse({
       ...tasksetContent,
       contentHash: contentHash(tasksetContent),
@@ -108,6 +113,42 @@ export function materializePortableTasksetRelease(input: {
       verifierSet: verifierSetRelease,
     });
   return { environmentRelease, verifierSetRelease, tasksetRelease };
+}
+
+function calibratedDerivativeRelease(input: {
+  admitted: TasksetRelease;
+  graders: PortableGraderSpec[];
+  taskset: Taskset;
+}): TasksetRelease {
+  const {
+    contentHash: _contentHash,
+    environmentRelease: _environmentRelease,
+    verifierSetRelease: _verifierSetRelease,
+    ...content
+  } = input.admitted;
+  const parent = {
+    id: input.admitted.id,
+    contentHash: input.admitted.contentHash,
+  };
+  const derivativeId = `${input.admitted.id}-calibrated-${contentHash(input.graders).slice(0, 12)}`;
+  const derivative = TasksetReleaseContentSchema.parse({
+    ...content,
+    id: derivativeId,
+    revision: input.admitted.revision + 1,
+    graders: input.graders,
+    metadata: {
+      ...input.admitted.metadata,
+      calibrationBoundRelease: {
+        parent,
+        tasksetId: input.taskset.id,
+        tasksetHash: input.taskset.contentHash,
+      },
+    },
+  });
+  return TasksetReleaseSchema.parse({
+    ...derivative,
+    contentHash: contentHash(derivative),
+  });
 }
 
 export function portableTasksetEnvironment(taskset: Taskset): EnvironmentContract {

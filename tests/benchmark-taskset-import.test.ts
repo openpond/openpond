@@ -136,6 +136,32 @@ describe("shipped benchmark Taskset projection", () => {
             contentHash: portable.verifierSetRelease.contentHash,
           },
         });
+        const calibratedTaskset = {
+          ...taskset,
+          graders: taskset.graders.map((grader) =>
+            grader.kind === "model_judge"
+              ? { ...grader, calibrationStatus: "passed" as const, rewardEligible: true }
+              : grader,
+          ),
+        };
+        const calibratedPortable = materializePortableTasksetRelease({
+          taskset: calibratedTaskset,
+          adapterId: "openpond.desktop-local-work.v1",
+          admittedTasksetRelease: release,
+        });
+        expect(calibratedPortable.tasksetRelease).toMatchObject({
+          metadata: {
+            calibrationBoundRelease: {
+              parent: { id: release.id, contentHash: release.contentHash },
+            },
+          },
+          graders: [{ id: "task-visible-contract" }, {
+            id: "task-semantic-judge",
+            calibrationStatus: "passed",
+            rewardEligible: true,
+          }],
+        });
+        expect(calibratedPortable.tasksetRelease.contentHash).not.toBe(release.contentHash);
 
         for (const asset of taskset.tasks.flatMap((task) => task.assets)) {
           await expect(access(path.join(
