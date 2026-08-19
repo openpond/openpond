@@ -114,7 +114,10 @@ for (const plan of admission.executionPlan as JsonRecord[]) {
 }
 assert(receipt.budget?.enforced === true, "Spend ceiling was not enforced.");
 assert(receipt.budget.observedSpendUsd <= receipt.budget.maximumSpendUsd, "Spend ceiling was exceeded.");
-assert(receipt.invalidReasons?.length === 0, "The result contains invalidating reasons.");
+assert(
+  receipt.terminalClassification !== "infrastructure_failure",
+  "Infrastructure failure cannot produce a public comparison.",
+);
 
 const pairs = [
   ...pairedAttempts(attempts, "adaptation", "candidate_adaptation", "adaptation"),
@@ -167,6 +170,8 @@ const publicCore = {
     spend: receipt.budget,
   },
   quality: receipt.quality,
+  comparisonClassification: receipt.terminalClassification,
+  comparisonInvalidReasons: receipt.invalidReasons,
   efficiency: receipt.efficiency,
   taskEfficiency: receipt.taskEfficiency,
   pairs,
