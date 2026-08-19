@@ -1,6 +1,6 @@
 {
   "name": "openpond-agent-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript SDK and CLI for building, validating, and packaging OpenPond Agents",
   "license": "MIT",
   "type": "module",
