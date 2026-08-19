@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { gradeAttempt } from "../packages/taskset-sdk/src";
+import {
+  gradeAttempt,
+  ModelJudgeExecutionError,
+} from "../packages/taskset-sdk/src";
 import { runSandboxedVerifier } from "../apps/server/src/training/sandboxed-verifier";
 import { createTaskEvaluationService } from "../apps/server/src/training/evaluation-service";
 import { buildTaskset } from "../packages/taskset-sdk/src";
@@ -82,6 +85,59 @@ describe("grader execution", () => {
         outputTokens: 200,
         totalTokens: 1_200,
         costUsd: 0.0022,
+      });
+    }));
+
+  test("retains judge cost when invalid output becomes a grader failure", async () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const judge = {
+        id: "judge",
+        version: "1",
+        label: "Judge",
+        kind: "model_judge" as const,
+        weight: 1,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: true,
+        rubric: "Match intent",
+        judge: { providerId: "openpond", modelId: "judge-v1" },
+        calibrationFixtureRefs: ["fixture_positive"],
+        calibrationStatus: "passed" as const,
+        temperature: 0,
+        metadata: {},
+      };
+      const taskset = tasksetFixture({ graders: [judge] });
+      await store.upsertTaskset(taskset);
+      const attempt = attemptFixture({
+        tasksetId: taskset.id,
+        taskId: taskset.tasks[1]!.id,
+      });
+      const service = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelJudge: async () => {
+          throw new ModelJudgeExecutionError(
+            "Model judge returned invalid structured output.",
+            { usage: [], costUsd: 0.0042 },
+          );
+        },
+      });
+
+      const grade = await service.grade({
+        tasksetId: taskset.id,
+        taskId: taskset.tasks[1]!.id,
+        attempt,
+      });
+
+      expect(grade).toMatchObject({
+        score: null,
+        failureClass: "grader_failure",
+      });
+      expect(service.consumeGraderUsage([attempt.id])).toEqual({
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        costUsd: 0.0042,
       });
     }));
 

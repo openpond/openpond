@@ -9,6 +9,40 @@ import {
 } from "@openpond/contracts";
 import { contentHash } from "./hashing.js";
 
+export class ModelJudgeExecutionError extends Error {
+  readonly usage: unknown;
+  readonly costUsd?: number;
+
+  constructor(
+    message: string,
+    accounting: { usage?: unknown; costUsd?: number } = {},
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = "ModelJudgeExecutionError";
+    this.usage = accounting.usage;
+    this.costUsd = accounting.costUsd;
+  }
+}
+
+export function isModelJudgeExecutionError(
+  value: unknown,
+): value is ModelJudgeExecutionError {
+  if (value instanceof ModelJudgeExecutionError) return true;
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return record.name === "ModelJudgeExecutionError"
+    && "usage" in record
+    && (
+      record.costUsd === undefined
+      || (
+        typeof record.costUsd === "number"
+        && Number.isFinite(record.costUsd)
+        && record.costUsd >= 0
+      )
+    );
+}
+
 export type ModelJudgeRunner = (input: {
   grader: Extract<GraderSpec, { kind: "model_judge" }>;
   task: TaskDataRecord;

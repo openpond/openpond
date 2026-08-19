@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import type { TaskAttemptResult, TaskDataRecord } from "@openpond/contracts";
-import type { ModelJudgeRunner } from "@openpond/taskset-sdk";
+import {
+  ModelJudgeExecutionError,
+  type ModelJudgeRunner,
+} from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
@@ -19,6 +22,7 @@ const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 40_000;
 const MODEL_JUDGE_TIMEOUT_MS = 45_000;
 const MODEL_JUDGE_MAX_OUTPUT_TOKENS = 1_200;
+const MODEL_JUDGE_REPAIR_ATTEMPTS = 2;
 const execFileAsync = promisify(execFile);
 
 type TrainingModelText = ReturnType<
@@ -70,38 +74,40 @@ export function createTaskAttemptModelJudge(input: {
     ): Promise<string> => {
       let requestCostUsd = 0;
       let requestHasAuthoritativeCost = false;
-      const response = await input.modelText({
-        model: grader.judge,
-        hostedTokenPricing,
-        signal: controller.signal,
-        requestId,
-        maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
-        temperature: grader.temperature,
-        responseFormat: judgeResponseFormat(task, grader.id),
-        onUsage: (usage, cost) => {
-          usages.push(usage);
-          if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
-            requestCostUsd += cost;
-            requestHasAuthoritativeCost = true;
-          }
-        },
-        messages,
-      });
-      if (requestHasAuthoritativeCost) {
-        chargedCostUsd += requestCostUsd;
-      } else if (hostedTokenPricing) {
-        chargedCostUsd += conservativeHostedRequestCostUsd({
-          inputCharacters: messages.reduce(
-            (total, message) => total + message.content.length,
-            0,
-          ),
+      try {
+        return await input.modelText({
+          model: grader.judge,
+          hostedTokenPricing,
+          signal: controller.signal,
+          requestId,
           maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
-          pricing: hostedTokenPricing,
+          temperature: grader.temperature,
+          responseFormat: judgeResponseFormat(task, grader.id),
+          onUsage: (usage, cost) => {
+            usages.push(usage);
+            if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
+              requestCostUsd += cost;
+              requestHasAuthoritativeCost = true;
+            }
+          },
+          messages,
         });
-      } else {
-        everyRequestHasCost = false;
+      } finally {
+        if (requestHasAuthoritativeCost) {
+          chargedCostUsd += requestCostUsd;
+        } else if (hostedTokenPricing) {
+          chargedCostUsd += conservativeHostedRequestCostUsd({
+            inputCharacters: messages.reduce(
+              (total, message) => total + message.content.length,
+              0,
+            ),
+            maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
+            pricing: hostedTokenPricing,
+          });
+        } else {
+          everyRequestHasCost = false;
+        }
       }
-      return response;
     };
     let raw: string;
     try {
@@ -109,10 +115,21 @@ export function createTaskAttemptModelJudge(input: {
         `task-judge:${attempt.id}:${grader.id}`,
         judgeMessages,
       );
-      const initial = parseModelJudgeResult(raw);
-      if (!hasAssignedCriterionScores(initial?.criterionScores ?? [], task, grader.id)) {
+      for (let repair = 0; repair < MODEL_JUDGE_REPAIR_ATTEMPTS; repair += 1) {
+        const parsed = parseModelJudgeResult(raw);
+        if (hasAssignedCriterionScores(
+          parsed?.criterionScores ?? [],
+          task,
+          grader.id,
+        )) {
+          return {
+            ...parsed!,
+            usage: usages,
+            ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+          };
+        }
         raw = await runJudgeRequest(
-          `task-judge-repair:${attempt.id}:${grader.id}`,
+          `task-judge-repair-${repair + 1}:${attempt.id}:${grader.id}`,
           [
             {
               role: "system",
@@ -122,16 +139,36 @@ export function createTaskAttemptModelJudge(input: {
           ],
         );
       }
+      const parsed = parseModelJudgeResult(raw);
+      if (
+        !parsed
+        || !hasAssignedCriterionScores(
+          parsed.criterionScores,
+          task,
+          grader.id,
+        )
+      ) {
+        throw new Error(
+          "Model judge returned invalid structured output after bounded repair.",
+        );
+      }
+      return {
+        ...parsed,
+        usage: usages,
+        ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+      };
+    } catch (error) {
+      throw new ModelJudgeExecutionError(
+        error instanceof Error ? error.message : String(error),
+        {
+          usage: usages,
+          ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
+        },
+        { cause: error },
+      );
     } finally {
       clearTimeout(timer);
     }
-    const parsed = parseModelJudgeResult(raw);
-    if (!parsed) throw new Error("Model judge returned invalid structured output.");
-    return {
-      ...parsed,
-      usage: usages,
-      ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
-    };
   };
 }
 

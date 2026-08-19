@@ -19,6 +19,7 @@ import {
   computeTasksetHash,
   contentHash,
   gradeAttempt,
+  isModelJudgeExecutionError,
   type ModelJudgeRunner,
 } from "@openpond/taskset-sdk";
 import { loadOpenPondProfileState } from "@openpond/cloud";
@@ -257,7 +258,25 @@ export function createTaskEvaluationService(deps: {
       modelJudge: deps.modelJudge
         ? async (judgeInput) => {
             modelJudgeCalls += 1;
-            const judged = await deps.modelJudge!(judgeInput);
+            let judged: Awaited<ReturnType<NonNullable<typeof deps.modelJudge>>>;
+            try {
+              judged = await deps.modelJudge!(judgeInput);
+            } catch (error) {
+              if (isModelJudgeExecutionError(error)) {
+                if (Array.isArray(error.usage)) rawUsages.push(...error.usage);
+                else if (error.usage !== undefined) rawUsages.push(error.usage);
+                const callCostUsd = hostedModelJudgeCallCost({
+                  costUsd: error.costUsd,
+                  usage: error.usage,
+                  pricing: input.hostedTokenPricing,
+                });
+                if (callCostUsd !== null) {
+                  explicitCostUsd += callCostUsd;
+                  modelJudgeCostAccounted += 1;
+                }
+              }
+              throw error;
+            }
             if (Array.isArray(judged.usage)) rawUsages.push(...judged.usage);
             else if (judged.usage !== undefined) rawUsages.push(judged.usage);
             const callCostUsd = hostedModelJudgeCallCost({

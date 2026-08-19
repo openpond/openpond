@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import type { TaskAttemptResult } from "@openpond/contracts";
+import { ModelJudgeExecutionError } from "@openpond/taskset-sdk";
 import { describe, expect, test } from "vitest";
 
 import type { SqliteStore } from "../store/store.js";
@@ -83,6 +84,144 @@ describe("task attempt grader evidence", () => {
     });
 
     expect(result.usage).toEqual([]);
+    expect(result.costUsd).toBeGreaterThan(0);
+  });
+
+  test("preserves conservative cost when structured judge output is invalid", async () => {
+    const store = {
+      listTaskAttemptArtifacts: async () => [],
+    } as unknown as SqliteStore;
+    const judge = createTaskAttemptModelJudge({
+      store,
+      modelText: async () => "not valid structured output",
+    });
+
+    const failure = await judge({
+      grader: {
+        id: "judge-1",
+        version: "1",
+        label: "Judge",
+        kind: "model_judge",
+        weight: 1,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: true,
+        rubric: "Assess criterion-1.",
+        judge: { providerId: "openpond", modelId: "judge-model" },
+        calibrationFixtureRefs: [],
+        calibrationStatus: "passed",
+        temperature: 0,
+        metadata: {},
+      },
+      task: {
+        id: "task-1",
+        input: { prompt: "Do the work." },
+        policyVisibleContext: {},
+        evaluationCriteria: [{
+          id: "criterion-1",
+          description: "Complete the work.",
+          scorerIds: ["judge-1"],
+          weight: 1,
+          hardGate: true,
+        }],
+      } as never,
+      attempt: {
+        id: "attempt-invalid-judge",
+        output: { text: "Done." },
+        modelRef: { providerId: "openpond", modelId: "judge-model" },
+        metadata: {
+          hostedTokenPricing: {
+            version: "test-v1",
+            source: "test",
+            effectiveAt: "2026-08-19T00:00:00.000Z",
+            inputUsdPerMillionTokens: 1,
+            cachedInputUsdPerMillionTokens: 0.5,
+            outputUsdPerMillionTokens: 2,
+          },
+        },
+      } as unknown as TaskAttemptResult,
+    }).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(failure).toBeInstanceOf(ModelJudgeExecutionError);
+    expect((failure as ModelJudgeExecutionError).costUsd).toBeGreaterThan(0);
+  });
+
+  test("accepts exact criterion scores on the second bounded repair", async () => {
+    const store = {
+      listTaskAttemptArtifacts: async () => [],
+    } as unknown as SqliteStore;
+    let calls = 0;
+    const judge = createTaskAttemptModelJudge({
+      store,
+      modelText: async () => {
+        calls += 1;
+        if (calls < 3) return "invalid";
+        return JSON.stringify({
+          score: 1,
+          passed: true,
+          feedback: "Meets the criterion.",
+          criterionScores: [{
+            criterionId: "criterion-1",
+            score: 1,
+            passed: true,
+            feedback: "Meets the criterion.",
+            evidenceRefs: [],
+          }],
+        });
+      },
+    });
+
+    const result = await judge({
+      grader: {
+        id: "judge-1",
+        version: "1",
+        label: "Judge",
+        kind: "model_judge",
+        weight: 1,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: true,
+        rubric: "Assess criterion-1.",
+        judge: { providerId: "openpond", modelId: "judge-model" },
+        calibrationFixtureRefs: [],
+        calibrationStatus: "passed",
+        temperature: 0,
+        metadata: {},
+      },
+      task: {
+        id: "task-1",
+        input: { prompt: "Do the work." },
+        policyVisibleContext: {},
+        evaluationCriteria: [{
+          id: "criterion-1",
+          description: "Complete the work.",
+          scorerIds: ["judge-1"],
+          weight: 1,
+          hardGate: true,
+        }],
+      } as never,
+      attempt: {
+        id: "attempt-repaired-judge",
+        output: { text: "Done." },
+        modelRef: { providerId: "openpond", modelId: "judge-model" },
+        metadata: {
+          hostedTokenPricing: {
+            version: "test-v1",
+            source: "test",
+            effectiveAt: "2026-08-19T00:00:00.000Z",
+            inputUsdPerMillionTokens: 1,
+            cachedInputUsdPerMillionTokens: 0.5,
+            outputUsdPerMillionTokens: 2,
+          },
+        },
+      } as unknown as TaskAttemptResult,
+    });
+
+    expect(calls).toBe(3);
+    expect(result.criterionScores).toHaveLength(1);
     expect(result.costUsd).toBeGreaterThan(0);
   });
 
