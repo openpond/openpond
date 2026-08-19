@@ -85,6 +85,23 @@ export async function buildV3Taskset(): Promise<TasksetRelease> {
       primaryMetric: "criterion_weighted_reward",
       resultSchemaVersion: "openpond.harnessRefinerPublicResult.v3",
       modelJudgeRole: "required_after_calibration",
+      semanticJudges: {
+        "task-semantic-judge": {
+          judge: {
+            providerId: "openpond",
+            modelId: "accounts/fireworks/models/deepseek-v4-flash",
+          },
+          temperature: 0,
+          calibrationFixtureRefs: [
+            "v3-invoice-positive",
+            "v3-invoice-negative",
+            "v3-invoice-boundary",
+            "v3-invoice-adversarial",
+            "v3-invoice-prompt-injection",
+          ],
+          requestedRewardEligible: true,
+        },
+      },
       evaluationThreshold: 0.75,
       criticalCriterionMinimum: 0.5,
       v2HistoricalRelease: { id: v2.id, contentHash: v2.contentHash },

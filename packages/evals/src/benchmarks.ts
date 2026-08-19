@@ -17,6 +17,10 @@ export {
   harnessRefinerBenchmarkAssets,
   harnessRefinerBenchmarkRelease,
 } from "./builtin-benchmarks/harness-refiner.js";
+export {
+  harnessRefinerBenchmarkV3Assets,
+  harnessRefinerBenchmarkV3Release,
+} from "./builtin-benchmarks/harness-refiner-v3.js";
 
 export const BenchmarkMetricSchema = z.enum([
   "foreground_tokens",

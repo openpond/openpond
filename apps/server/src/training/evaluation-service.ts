@@ -489,13 +489,27 @@ export function createTaskEvaluationService(deps: {
         const attempt = fixtureAttempt(taskset.id, fixture, index);
         try {
           const result = await deps.modelJudge({ grader, task, attempt });
+          const criterionScores = result.criterionScores ?? [];
+          const expectedCriterionIds = (task.evaluationCriteria ?? [])
+            .filter((criterion) => criterion.scorerIds.includes(grader.id))
+            .map((criterion) => criterion.id)
+            .sort();
+          const scoredCriterionIds = criterionScores
+            .map((criterion) => criterion.criterionId)
+            .sort();
+          const criterionCoverageMatched =
+            expectedCriterionIds.length === scoredCriterionIds.length
+            && expectedCriterionIds.every((id, scoreIndex) => id === scoredCriterionIds[scoreIndex]);
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
             passed: result.passed,
             score: result.score,
             feedback: result.feedback,
-            matched: result.passed === fixture.expectedPassed,
+            expectedCriterionIds,
+            scoredCriterionIds,
+            criterionCoverageMatched,
+            matched: result.passed === fixture.expectedPassed && criterionCoverageMatched,
           });
         } catch (error) {
           results.push({

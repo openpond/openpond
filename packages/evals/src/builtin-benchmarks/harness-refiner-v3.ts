@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkV3Release = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "8fb3cecdcc8f324e6aa314c5e2136d843b212779b4c88e32abee7b5117add335",
+  "contentHash": "50426a5391ffe35e08d15080940397d7e7382a893cdf3dab4c3e95083b23584e",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -117,6 +117,23 @@ export const harnessRefinerBenchmarkV3Release = TasksetReleaseSchema.parse({
     "secondaryMetrics": [
       "paired_foreground_provider_tokens"
     ],
+    "semanticJudges": {
+      "task-semantic-judge": {
+        "calibrationFixtureRefs": [
+          "v3-invoice-positive",
+          "v3-invoice-negative",
+          "v3-invoice-boundary",
+          "v3-invoice-adversarial",
+          "v3-invoice-prompt-injection"
+        ],
+        "judge": {
+          "modelId": "accounts/fireworks/models/deepseek-v4-flash",
+          "providerId": "openpond"
+        },
+        "requestedRewardEligible": true,
+        "temperature": 0
+      }
+    },
     "supplementaryModelJudge": {
       "calibrationStatus": "pending",
       "executable": false,

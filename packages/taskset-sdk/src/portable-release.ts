@@ -205,13 +205,15 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   if (grader.kind === "model_judge") return {
     ...base,
     kind: "model_judge",
-    rubricRef: asset({
-      id: `rubric-${grader.id}`,
-      path: `graders/${segment(grader.id)}/rubric.md`,
-      hashInput: grader.rubric,
-      mediaType: "text/markdown",
-      visibility: "verifier",
-    }),
+    rubricRef: grader.metadata.portableRubricRef === undefined
+      ? asset({
+          id: `rubric-${grader.id}`,
+          path: `graders/${segment(grader.id)}/rubric.md`,
+          hashInput: grader.rubric,
+          mediaType: "text/markdown",
+          visibility: "verifier",
+        })
+      : ImmutableAssetRefSchema.parse(grader.metadata.portableRubricRef),
     calibrationStatus: grader.calibrationStatus,
   };
   if (grader.kind === "custom_verifier") return {

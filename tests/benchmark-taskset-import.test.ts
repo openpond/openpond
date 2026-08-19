@@ -3,7 +3,7 @@ import path from "node:path";
 
 import {
   TasksetReleaseSchema,
-  harnessRefinerBenchmarkRelease,
+  harnessRefinerBenchmarkV3Release,
 } from "@openpond/evals";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
 import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
@@ -38,27 +38,32 @@ describe("shipped benchmark Taskset projection", () => {
           status: "ready",
           benchmark: {
             definitionId: "harness-refiner",
-            releaseHash: harnessRefinerBenchmarkRelease.contentHash,
+            releaseHash: harnessRefinerBenchmarkV3Release.contentHash,
             adaptationSplit: "validation",
             evaluationSplit: "frozen_eval",
             primaryMetric: "success_rate",
           },
         });
         expect(taskset.tasks).toHaveLength(20);
-        expect(taskset.graders).toHaveLength(1);
-        expect(taskset.graders[0]).toMatchObject({
+        expect(taskset.graders).toHaveLength(2);
+        expect(taskset.graders.find((grader) => grader.kind === "custom_verifier")).toMatchObject({
           kind: "custom_verifier",
           hardGate: true,
           rewardEligible: true,
         });
-        expect(taskset.metadata.supplementaryModelJudge).toMatchObject({
+        expect(taskset.graders.find((grader) => grader.kind === "model_judge")).toMatchObject({
           calibrationStatus: "pending",
-          executable: false,
+          judge: {
+            providerId: "openpond",
+            modelId: "accounts/fireworks/models/deepseek-v4-flash",
+          },
           rewardEligible: false,
         });
-        const verifier = taskset.graders[0];
+        expect(taskset.tasks.every((task) => task.evaluationCriteria.length > 0)).toBe(true);
+        expect(taskset.graderFixtures).toHaveLength(6);
+        const verifier = taskset.graders.find((grader) => grader.kind === "custom_verifier");
         const fixtureTask = taskset.tasks.find(
-          (task) => task.id === "adaptation-launch-delay-email",
+          (task) => task.id === "adaptation-invoice-correction-email",
         );
         if (!verifier || verifier.kind !== "custom_verifier" || !fixtureTask) {
           throw new Error("Projected deterministic verifier fixture is unavailable.");
@@ -74,7 +79,7 @@ describe("shipped benchmark Taskset projection", () => {
           task: fixtureTask,
           attempt: {
             output: {
-              text: "Subject: Acme pilot launch update\n\nThe August 20 launch is moving to August 27 because final accessibility testing is not complete. Testing is expected to finish August 22, and existing pilot access remains available. Please send questions to pilot-support@example.com. Thank you for your patience while we complete this work.",
+              text: "Subject: Corrected INV-1842 invoice\n\nHello Northwind Labs,\n\nInvoice INV-1842 incorrectly lists 120 seats instead of 102. A corrected invoice will arrive by August 14. No payment is due until it arrives. Billing questions can go to accounts@example.com.",
               requiredOutputs: [],
             },
           } as never,
@@ -85,14 +90,16 @@ describe("shipped benchmark Taskset projection", () => {
           task: fixtureTask,
           attempt: {
             output: {
-              text: "Draft saved to /workspace/outputs/acme-launch-email.md. Checklist: new date included; accessibility testing mentioned; pilot access preserved; support address included; under 140 words.",
+              text: "Draft saved. Checklist: invoice number, seats, corrected invoice, payment, contact.",
               requiredOutputs: [],
             },
           } as never,
           allowedRoot,
         });
         expect(positive).toMatchObject({ passed: true, score: 1 });
-        expect(negative).toMatchObject({ passed: false, score: 0 });
+        // The contract lane checks only task-visible mechanical constraints.
+        // Completeness of this checklist-shaped answer belongs to the semantic judge.
+        expect(negative).toMatchObject({ passed: true, score: 1 });
         expect(repeated).toEqual(taskset);
         expect(await store.listTasksets("benchmark-profile")).toEqual([taskset]);
 
@@ -110,7 +117,7 @@ describe("shipped benchmark Taskset projection", () => {
             "utf8",
           )),
         ));
-        expect(release?.contentHash).toBe(harnessRefinerBenchmarkRelease.contentHash);
+        expect(release?.contentHash).toBe(harnessRefinerBenchmarkV3Release.contentHash);
         if (!release) throw new Error("Managed benchmark release was not loaded.");
         const portable = materializePortableTasksetRelease({
           taskset,
@@ -195,7 +202,7 @@ describe("shipped benchmark Taskset projection", () => {
 
         expect(refreshed.revision).toBe(stale.revision + 1);
         expect(refreshed.benchmark?.releaseHash).toBe(
-          harnessRefinerBenchmarkRelease.contentHash,
+          harnessRefinerBenchmarkV3Release.contentHash,
         );
         expect(refreshed.contentHash).not.toBe(stale.contentHash);
       } finally {
