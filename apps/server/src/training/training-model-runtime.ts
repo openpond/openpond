@@ -21,8 +21,7 @@ import {
 } from "./hosted-token-pricing.js";
 import {
   abortableDelay,
-  hostedRetryDelayMs,
-  retryableHostedError,
+  hostedRetryDelayForAttempt,
 } from "./hosted-provider-retry.js";
 
 export function createTrainingModelRuntime(deps: {
@@ -83,6 +82,7 @@ export function createTrainingModelRuntime(deps: {
     if (input.model.providerId === "openpond") {
       const pricing = input.hostedTokenPricing
         ?? await pricingFor(input.model.modelId);
+      const retryStartedAt = Date.now();
       for (let retry = 0; ; retry += 1) {
         let emitted = false;
         try {
@@ -112,8 +112,15 @@ export function createTrainingModelRuntime(deps: {
           }
           return text;
         } catch (error) {
-          if (emitted || retry >= 2 || !retryableHostedError(error)) throw error;
-          await abortableDelay(hostedRetryDelayMs(error, retry), input.signal);
+          const delayMs = emitted
+            ? null
+            : hostedRetryDelayForAttempt(
+                error,
+                retry,
+                Date.now() - retryStartedAt,
+              );
+          if (delayMs === null) throw error;
+          await abortableDelay(delayMs, input.signal);
         }
       }
     }
@@ -168,6 +175,7 @@ export function createTrainingModelRuntime(deps: {
       if (input.model.providerId === "openpond") {
         const pricing = input.hostedTokenPricing
           ?? await pricingFor(input.model.modelId);
+        const retryStartedAt = Date.now();
         for (let retry = 0; ; retry += 1) {
           let emitted = false;
           try {
@@ -205,8 +213,15 @@ export function createTrainingModelRuntime(deps: {
             }
             return;
           } catch (error) {
-            if (emitted || retry >= 2 || !retryableHostedError(error)) throw error;
-            await abortableDelay(hostedRetryDelayMs(error, retry), input.signal);
+            const delayMs = emitted
+              ? null
+              : hostedRetryDelayForAttempt(
+                  error,
+                  retry,
+                  Date.now() - retryStartedAt,
+                );
+            if (delayMs === null) throw error;
+            await abortableDelay(delayMs, input.signal);
           }
         }
       }

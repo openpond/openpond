@@ -42,8 +42,14 @@ type ModelRun = {
   failure: string | null;
 };
 
-type TrainingState = {
-  modelRuns?: ModelRun[];
+type ModelRunStatus = {
+  runId: string;
+  state: ModelRun["status"];
+  updatedAt: string;
+  evaluationProgress: EvaluationProgress | null;
+  reward: ModelRun["reward"];
+  receipt: unknown;
+  failure: string | null;
 };
 
 type Options = {
@@ -103,6 +109,32 @@ function timestamp(): string {
 
 function usd(value: number | null): string {
   return value === null ? "unknown" : `$${value.toFixed(6)}`;
+}
+
+function compactFailure(value: string): string {
+  if (/<!doctype\s+html|<html[\s>]/i.test(value)) {
+    const title = value.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
+    return title?.split("|").at(-1)?.trim() || "HTML error response from host";
+  }
+  return value.replace(/\s+/g, " ").trim().slice(0, 1_000);
+}
+
+function compactReceipt(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return JSON.stringify(value);
+  }
+  const receipt = value as Record<string, unknown>;
+  return JSON.stringify({
+    schemaVersion: receipt.schemaVersion,
+    benchmarkId: receipt.benchmarkId,
+    terminalClassification: receipt.terminalClassification,
+    quality: receipt.quality,
+    budget: receipt.budget,
+    resultManifest: receipt.resultManifest,
+    contentHash: receipt.contentHash,
+  });
 }
 
 function attemptLine(attempt: EvaluationAttempt): string {
@@ -166,20 +198,30 @@ async function loadToken(): Promise<string> {
 }
 
 async function fetchRun(options: Options, token: string): Promise<ModelRun> {
-  const response = await fetch(`${options.serverUrl}/v1/training`, {
+  const response = await fetch(
+    `${options.serverUrl}/v1/training/model-runs/${encodeURIComponent(options.runId)}/status`,
+    {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(30_000),
-  });
+    },
+  );
   if (!response.ok) {
-    throw new Error(`Training state request failed: HTTP ${response.status}`);
+    throw new Error(`Model Run status request failed: HTTP ${response.status}`);
   }
 
-  const state = (await response.json()) as TrainingState;
-  const run = state.modelRuns?.find((candidate) => candidate.id === options.runId);
-  if (!run) {
+  const status = (await response.json()) as ModelRunStatus;
+  if (status.runId !== options.runId) {
     throw new Error(`Model Run not found: ${options.runId}`);
   }
-  return run;
+  return {
+    id: status.runId,
+    status: status.state,
+    updatedAt: status.updatedAt,
+    evaluationProgress: status.evaluationProgress,
+    reward: status.reward,
+    receipt: status.receipt,
+    failure: status.failure,
+  };
 }
 
 async function delay(milliseconds: number): Promise<void> {
@@ -221,13 +263,13 @@ async function main(): Promise<void> {
           `[${timestamp()}] TERMINAL status=${run.status} reward=${run.reward ? run.reward.raw : "n/a"}`,
         );
         if (run.failure) {
-          console.log(`[${timestamp()}] FAILURE ${run.failure}`);
+          console.log(`[${timestamp()}] FAILURE ${compactFailure(run.failure)}`);
         }
         if (run.reward) {
           console.log(`[${timestamp()}] REWARD_COMPONENTS ${JSON.stringify(run.reward.components)}`);
         }
         if (run.receipt) {
-          console.log(`[${timestamp()}] RECEIPT ${JSON.stringify(run.receipt)}`);
+          console.log(`[${timestamp()}] RECEIPT ${compactReceipt(run.receipt)}`);
         }
         process.exitCode = run.status === "succeeded" ? 0 : 1;
         return;

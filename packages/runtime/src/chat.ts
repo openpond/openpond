@@ -559,8 +559,20 @@ async function readOpChatError(response: Response): Promise<string> {
   try {
     return errorMessageFromPayload(JSON.parse(text) as unknown);
   } catch {
-    return text;
+    return summarizeNonJsonError(text, response.statusText);
   }
+}
+
+function summarizeNonJsonError(text: string, fallback: string): string {
+  if (/<!doctype\s+html|<html[\s>]/i.test(text)) {
+    const title = text.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]
+      ?.replace(/\s+/g, " ")
+      .trim();
+    return (title?.split("|").at(-1)?.trim() || fallback || "HTML error response")
+      .slice(0, 500);
+  }
+  return (text.replace(/\s+/g, " ").trim() || fallback || "Unknown error")
+    .slice(0, 1_000);
 }
 
 function errorMessageFromPayload(payload: unknown): string {

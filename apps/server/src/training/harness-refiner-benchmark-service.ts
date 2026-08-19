@@ -22,6 +22,7 @@ import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import {
   BenchmarkEvidenceSnapshot,
   BenchmarkSpendBudget,
+  assertBenchmarkAttemptInfrastructureValid,
   benchmarkAttemptsInfrastructureValid,
   benchmarkEfficiency,
   completedBeforeStage,
@@ -477,6 +478,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
             grader,
             observedSpendUsd: budget.observedSpendUsd,
           });
+          assertBenchmarkAttemptInfrastructureValid(result, label);
         };
       };
       const baselineRuntime = await loadLocalHarnessRuntimeFromRelease({

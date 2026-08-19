@@ -12,8 +12,7 @@ import {
 } from "./hosted-token-pricing.js";
 import {
   abortableDelay,
-  hostedRetryDelayMs,
-  retryableHostedError,
+  hostedRetryDelayForAttempt,
 } from "./hosted-provider-retry.js";
 
 export function createHarnessRefinerBenchmarkModelStream(
@@ -34,6 +33,7 @@ export function createHarnessRefinerBenchmarkModelStream(
       throw new Error("Harness Refiner benchmark model must use the admitted OpenPond hosted provider.");
     }
     const requestId = `harness-refiner-benchmark:${randomUUID()}`;
+    const retryStartedAt = Date.now();
     for (let retry = 0; ; retry += 1) {
       let received = false;
       try {
@@ -65,8 +65,15 @@ export function createHarnessRefinerBenchmarkModelStream(
         if (text.length > 0) yield { text: text.join("") };
         return;
       } catch (error) {
-        if (received || retry >= 2 || !retryableHostedError(error)) throw error;
-        await abortableDelay(hostedRetryDelayMs(error, retry), signal);
+        const delayMs = received
+          ? null
+          : hostedRetryDelayForAttempt(
+              error,
+              retry,
+              Date.now() - retryStartedAt,
+            );
+        if (delayMs === null) throw error;
+        await abortableDelay(delayMs, signal);
       }
     }
   };

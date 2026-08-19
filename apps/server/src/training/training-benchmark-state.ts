@@ -16,6 +16,8 @@ export function evaluationModelRunStatus(run: ModelRun) {
     updatedAt: run.updatedAt,
     errorCode: run.status === "failed" ? "evaluation_model_run_failed" : null,
     failure: run.failure,
+    evaluationProgress: run.evaluationProgress,
+    reward: run.reward,
     receipt: run.receipt,
   };
 }

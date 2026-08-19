@@ -6,6 +6,9 @@ import {
   hostedUsageCostUsd,
 } from "../apps/server/src/training/hosted-token-pricing.js";
 import {
+  HOSTED_PROVIDER_MAX_RETRIES,
+  HOSTED_PROVIDER_RETRY_WINDOW_MS,
+  hostedRetryDelayForAttempt,
   hostedRetryDelayMs,
   retryableHostedError,
 } from "../apps/server/src/training/hosted-provider-retry.js";
@@ -53,6 +56,17 @@ describe("hosted benchmark accounting", () => {
     expect(retryableHostedError(transport)).toBe(true);
     expect(retryableHostedError(new Error("UND_ERR_HEADERS_TIMEOUT"))).toBe(true);
     expect(retryableHostedError(new Error("schema validation failed"))).toBe(false);
+  });
+
+  test("retries transient hosted failures within a bounded backoff window", () => {
+    const failure = new Error("OpenPond request failed: 502 Bad gateway");
+    expect(HOSTED_PROVIDER_MAX_RETRIES).toBe(6);
+    expect(HOSTED_PROVIDER_RETRY_WINDOW_MS).toBe(45_000);
+    expect(hostedRetryDelayForAttempt(failure, 0, 0)).toBe(1_000);
+    expect(hostedRetryDelayForAttempt(failure, 5, 25_000)).toBe(10_000);
+    expect(hostedRetryDelayForAttempt(failure, 5, 40_000)).toBeNull();
+    expect(hostedRetryDelayForAttempt(failure, 6, 0)).toBeNull();
+    expect(hostedRetryDelayForAttempt(new Error("invalid request: 400"), 0, 0)).toBeNull();
   });
 
   test("runs Refiner with the same admitted hosted model whose price card is used", async () => {

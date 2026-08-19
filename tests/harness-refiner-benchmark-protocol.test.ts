@@ -13,7 +13,9 @@ import {
 import {
   BenchmarkEvidenceSnapshot,
   BenchmarkSpendBudget,
+  assertBenchmarkAttemptInfrastructureValid,
   benchmarkAttemptsInfrastructureValid,
+  benchmarkAttemptInfrastructureValid,
   benchmarkEfficiency,
   createHarnessRefinerExecutionPlan,
   totalPlannedAttempts,
@@ -593,6 +595,18 @@ describe("Harness Refiner benchmark protocol", () => {
   });
 
   test("rejects terminal attempts whose scores are missing because infrastructure failed", () => {
+    expect(benchmarkAttemptInfrastructureValid({
+      grade: { score: null, failureClass: "infrastructure_failure" },
+    })).toBe(false);
+    expect(benchmarkAttemptInfrastructureValid({
+      grade: { score: 0, failureClass: "policy_failure" },
+    })).toBe(true);
+    expect(() => assertBenchmarkAttemptInfrastructureValid({
+      attempt: { taskId: "task-infrastructure-failure" },
+      grade: { score: null, failureClass: "infrastructure_failure" },
+    }, "adaptation baseline")).toThrow(
+      "Benchmark stopped after infrastructure-invalid adaptation baseline task task-infrastructure-failure",
+    );
     expect(benchmarkAttemptsInfrastructureValid([
       { grade: { score: 1, failureClass: null } },
       { grade: { score: null, failureClass: "infrastructure_failure" } },

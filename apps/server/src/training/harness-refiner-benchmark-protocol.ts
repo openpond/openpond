@@ -275,6 +275,12 @@ export function benchmarkAttemptsInfrastructureValid(
     grade: { score: number | null; failureClass: string | null };
   }>,
 ): boolean {
+  return attempts.every(benchmarkAttemptInfrastructureValid);
+}
+
+export function benchmarkAttemptInfrastructureValid(attempt: {
+  grade: { score: number | null; failureClass: string | null };
+}): boolean {
   const infrastructureFailures = new Set([
     "grader_failure",
     "environment_failure",
@@ -282,9 +288,20 @@ export function benchmarkAttemptsInfrastructureValid(
     "timeout",
     "cancelled",
   ]);
-  return attempts.every((attempt) =>
-    typeof attempt.grade.score === "number"
-    && !infrastructureFailures.has(attempt.grade.failureClass ?? "")
+  return typeof attempt.grade.score === "number"
+    && !infrastructureFailures.has(attempt.grade.failureClass ?? "");
+}
+
+export function assertBenchmarkAttemptInfrastructureValid(
+  attempt: {
+    attempt: { taskId: string };
+    grade: { score: number | null; failureClass: string | null };
+  },
+  label: string,
+): void {
+  if (benchmarkAttemptInfrastructureValid(attempt)) return;
+  throw new Error(
+    `Benchmark stopped after infrastructure-invalid ${label} task ${attempt.attempt.taskId} (${attempt.grade.failureClass ?? "missing_score"}).`,
   );
 }
 
