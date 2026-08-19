@@ -47,6 +47,8 @@ export type SequentialAdaptationSummary = {
   contentHash: string;
 };
 
+export const HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK = 2;
+
 export function createHarnessRefinerExecutionPlan(input: {
   taskset: Taskset;
   seeds: number[];

@@ -464,6 +464,40 @@ describe("local Harness Refiner worker", () => {
     ).toEqual(current.workspace.currentChannel);
   });
 
+  it("deduplicates concurrent invocations for the same durable trigger", async () => {
+    const current = await fixture("run-concurrent-dedupe");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    const refine = async ({ request }: { request: HostedHarnessRefinerRequest }) => {
+      calls += 1;
+      await gate;
+      return hostedResult(request, {
+        schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+        decision: "no_action",
+        reason: "The concurrent fixture does not justify a durable change.",
+      });
+    };
+    const workerInput = {
+      store: current.store,
+      storeDir: current.directory,
+      trigger: current.trigger,
+      signal: new AbortController().signal,
+      now: () => LATER,
+      refine,
+    };
+    const first = runLocalHarnessRefinerWorker(workerInput);
+    const second = runLocalHarnessRefinerWorker(workerInput);
+    await Promise.resolve();
+    release();
+
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+    expect(calls).toBe(1);
+    expect(secondResult.outcome).toEqual(firstResult.outcome);
+  });
+
   it("routes a measured fixture defect without converting the grade into Harness ownership", async () => {
     const current = await fixture("run-taskset-route");
     const result = await runLocalHarnessRefinerWorker({

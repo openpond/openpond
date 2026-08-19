@@ -388,7 +388,7 @@ describe("Harness Refiner benchmark protocol", () => {
       store: store as never,
       workspaceId: "benchmark-workspace",
       adaptationAttempts: [],
-      refinerResults: [],
+      completedSteps: [],
       candidateRelease: fullCandidateRelease,
       refinerInputHash: hash,
     });

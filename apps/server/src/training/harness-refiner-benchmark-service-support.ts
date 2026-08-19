@@ -4,6 +4,8 @@ import path from "node:path";
 
 import {
   ModelRunSchema,
+  type HarnessImprovementProposal,
+  type HarnessTargetedValidationReceipt,
   type ModelRun,
 } from "@openpond/contracts";
 import {
@@ -22,7 +24,6 @@ import {
   type RewardReceipt,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
-import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-worker.js";
 import { normalizeModelUsageTokens } from "../runtime/model-usage-normalization.js";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
@@ -32,6 +33,7 @@ import {
   type BenchmarkEvidenceSnapshotManifest,
   type FrozenToolObservation,
   type HarnessRefinerExecutionPlanItem,
+  type SequentialAdaptationStep,
 } from "./harness-refiner-benchmark-protocol.js";
 
 type Evaluation = ReturnType<typeof createTaskEvaluationService>;
@@ -259,8 +261,11 @@ export async function loadBenchmarkAttemptEvidenceByIds(input: {
       `Sequential adaptation evidence has ${selected.length}/${wanted.size} attempts.`,
     );
   }
+  const selectedById = new Map(selected.map((attempt) => [attempt.id, attempt]));
   const gradesByAttempt = new Map(grades.map((grade) => [grade.attemptId, grade]));
-  return Promise.all(selected.map(async (attempt) => {
+  return Promise.all(input.attemptIds.map(async (attemptId) => {
+    const attempt = selectedById.get(attemptId);
+    if (!attempt) throw new Error(`Sequential adaptation attempt ${attemptId} is unavailable.`);
     const grade = gradesByAttempt.get(attempt.id);
     if (!grade) throw new Error(`Attempt ${attempt.id} has no durable grade.`);
     return {
@@ -854,14 +859,19 @@ export async function benchmarkLineage(input: {
   store: SqliteStore;
   workspaceId: string;
   adaptationAttempts: BenchmarkAttemptEvidence[];
-  refinerResults: Array<Awaited<ReturnType<typeof runLocalHarnessRefinerWorker>>>;
+  completedSteps: SequentialAdaptationStep[];
   candidateRelease: { id: string; contentHash: string };
   refinerInputHash: string;
 }): Promise<BenchmarkLineage> {
-  const [outcomes, validations, applyReceipts] = await Promise.all([
+  const [outcomes, rawProposals, rawValidations, applyReceipts] = await Promise.all([
     input.store.listHarnessImprovementArtifacts(
       input.workspaceId,
       "refiner_outcome",
+      1_000,
+    ),
+    input.store.listHarnessImprovementArtifacts(
+      input.workspaceId,
+      "proposal",
       1_000,
     ),
     input.store.listHarnessImprovementArtifacts(
@@ -875,21 +885,22 @@ export async function benchmarkLineage(input: {
       1_000,
     ),
   ]);
+  const proposals = rawProposals as HarnessImprovementProposal[];
+  const validations = rawValidations as HarnessTargetedValidationReceipt[];
   const adaptationEvidenceHash = contentHash(input.adaptationAttempts.map((result) => ({
     attempt: result.attempt.id,
     receipt: result.receiptContentHash,
     grade: contentHash(result.grade),
   })));
-  const proposalResults = input.refinerResults.filter((result) => result.proposal);
-  const requiredValidationsPassed = proposalResults.every((result) =>
-    result.proposal!.validationPlan
+  const requiredValidationsPassed = proposals.every((proposal) =>
+    proposal.validationPlan
       .filter((plan) => plan.required)
-      .every((plan) => result.validations.some(
+      .every((plan) => validations.some(
         (validation) => validation.validationId === plan.id && validation.status === "passed",
       ))
   );
   const proposalHashes = new Set(
-    proposalResults.map((result) => result.proposal!.contentHash),
+    proposals.map((proposal) => proposal.contentHash),
   );
   const appliedProposalHashes = new Set(applyReceipts.flatMap((artifact) => {
     const proposal = "proposal" in artifact ? artifact.proposal : null;
@@ -911,7 +922,7 @@ export async function benchmarkLineage(input: {
       contentHash: input.candidateRelease.contentHash,
     },
     valid:
-      outcomes.length === input.refinerResults.length
+      outcomes.length === input.completedSteps.filter((step) => step.outcome).length
       && requiredValidationsPassed
       && everyProposalHasReceipt,
   };
