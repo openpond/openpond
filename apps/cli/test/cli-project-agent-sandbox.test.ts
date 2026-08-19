@@ -296,7 +296,6 @@ describe("project and agent sandbox CLI scenarios", () => {
           request.url === "/v1/agents/agent_test/run?teamId=team_test"
       );
       expect(runRequest?.body).toMatchObject({
-        teamId: "team_test",
         targetProjectId: "target_project_test",
         targetProject: { id: "target_project_test" },
         input: { prompt: "read workspace sentinel" },
@@ -306,6 +305,7 @@ describe("project and agent sandbox CLI scenarios", () => {
           allowLatestSource: true,
         },
       });
+      expect(runRequest?.body).not.toHaveProperty("teamId");
     });
   });
 
