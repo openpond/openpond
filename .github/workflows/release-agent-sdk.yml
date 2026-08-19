@@ -10,14 +10,110 @@ on:
 
 permissions:
   contents: read
+  checks: read
 
 concurrency:
-  group: release-agent-sdk
+  group: release-agent-sdk-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  meta:
+    name: Resolve Agent SDK release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      should_publish: ${{ steps.release.outputs.should_publish }}
+      should_release: ${{ steps.release.outputs.should_release }}
+      already_published: ${{ steps.release.outputs.already_published }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - id: release
+        name: Resolve publish state
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./packages/agent-sdk/package.json').version")"
+          package_name="$(node -p "require('./packages/agent-sdk/package.json').name")"
+          tag="agent-sdk-v${version}"
+          should_publish="true"
+          should_release="true"
+          already_published="false"
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            previous_manifest="$(git show "${GITHUB_SHA}^:packages/agent-sdk/package.json")"
+            previous_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).name)" <<<"${previous_manifest}")"
+            previous_version="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)" <<<"${previous_manifest}")"
+            if [[ "${package_name}" == "${previous_name}" && "${version}" == "${previous_version}" ]]; then
+              echo "packages/agent-sdk/package.json changed without a version bump." >&2
+              exit 1
+            fi
+          fi
+
+          if ! npm view "${package_name}" name >/dev/null 2>&1; then
+            echo "${package_name} does not exist yet. Associate the exact package name with this trusted publisher before dispatching this release."
+            should_publish="false"
+            should_release="false"
+          elif npm view "${package_name}@${version}" version >/dev/null 2>&1; then
+            echo "${package_name}@${version} is already published; publication will be skipped."
+            should_publish="false"
+            already_published="true"
+            if git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+              echo "${tag} already exists; release creation will also be skipped."
+              should_release="false"
+            fi
+          elif git rev-parse --verify --quiet "refs/tags/${tag}" >/dev/null; then
+            echo "${tag} exists but ${package_name}@${version} does not. Refusing an ambiguous release." >&2
+            exit 1
+          fi
+
+          {
+            echo "version=${version}"
+            echo "tag=${tag}"
+            echo "should_publish=${should_publish}"
+            echo "should_release=${should_release}"
+            echo "already_published=${already_published}"
+          } >> "$GITHUB_OUTPUT"
+
+  ci_gate:
+    name: Require green CI
+    needs: meta
+    if: needs.meta.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for required CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            check_run="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs" --jq '[.check_runs[] | select(.name == "Checks" and .app.slug == "github-actions")] | sort_by(.started_at) | last // {}')"
+            status="$(jq -r '.status // empty' <<<"${check_run}")"
+            conclusion="$(jq -r '.conclusion // empty' <<<"${check_run}")"
+            url="$(jq -r '.html_url // empty' <<<"${check_run}")"
+            if [[ "${status}" == "completed" && "${conclusion}" == "success" ]]; then
+              echo "Required CI check passed: ${url}"
+              exit 0
+            fi
+            if [[ "${status}" == "completed" && -n "${conclusion}" ]]; then
+              echo "Required CI check concluded ${conclusion}: ${url}" >&2
+              exit 1
+            fi
+            echo "Waiting for required CI check on ${RELEASE_SHA} (attempt ${attempt}/60)."
+            sleep 10
+          done
+          echo "Timed out waiting for required Checks result on ${RELEASE_SHA}." >&2
+          exit 1
+
   publish:
     name: Publish openpond-agent-sdk
+    needs: [meta, ci_gate]
+    if: needs.meta.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     environment: npm-production
     permissions:
@@ -42,5 +138,66 @@ jobs:
       - run: pnpm run build:contracts
       - run: pnpm --dir packages/connected-apps run build
       - run: pnpm run agent-sdk:check
-      - run: npm install --global npm@11.18.0
-      - run: npm publish ./packages/agent-sdk --access public --ignore-scripts
+
+      - name: Publish through npm trusted publishing
+        run: |
+          set -euo pipefail
+          npm install --global npm@11.18.0
+          npm publish ./packages/agent-sdk --access public --ignore-scripts
+
+      - name: Verify registry release and provenance
+        env:
+          VERSION: ${{ needs.meta.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          consumer_dir="$(mktemp -d)"
+          trap 'rm -rf "${consumer_dir}"' EXIT
+          installed="false"
+          for attempt in {1..30}; do
+            published="$(npm view "openpond-agent-sdk@${VERSION}" version 2>/dev/null || true)"
+            integrity="$(npm view "openpond-agent-sdk@${VERSION}" dist.integrity 2>/dev/null || true)"
+            if [[ "${published}" == "${VERSION}" && "${integrity}" == sha512-* ]]; then
+              if [[ "${installed}" != "true" ]]; then
+                if npm install --prefix "${consumer_dir}" --ignore-scripts --no-audit --no-fund "openpond-agent-sdk@${VERSION}"; then
+                  installed="true"
+                fi
+              fi
+              if [[ "${installed}" == "true" ]] && (cd "${consumer_dir}" && npm audit signatures); then
+                echo "Verified openpond-agent-sdk@${VERSION} with integrity ${integrity}."
+                exit 0
+              fi
+            fi
+            echo "Waiting for npm package and attestation propagation (attempt ${attempt}/30)."
+            sleep 10
+          done
+          echo "openpond-agent-sdk@${VERSION} was not verifiable after publication." >&2
+          exit 1
+
+  github_release:
+    name: Create Agent SDK tag and GitHub release
+    needs: [meta, publish]
+    if: >-
+      always() &&
+      needs.meta.outputs.should_release == 'true' &&
+      (needs.publish.result == 'success' ||
+      (needs.meta.outputs.already_published == 'true' && needs.publish.result == 'skipped'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Create Agent SDK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          VERSION: ${{ needs.meta.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh release create "${TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "OpenPond Agent SDK v${VERSION}" \
+            --generate-notes
