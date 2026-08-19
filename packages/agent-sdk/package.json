@@ -30,7 +30,7 @@
     "node": ">=22.14.0 <25"
   },
   "bin": {
-    "openpond-agent": "./dist/cli.js"
+    "openpond-agent": "dist/cli.js"
   },
   "exports": {
     ".": {

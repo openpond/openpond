@@ -42,8 +42,13 @@ jobs:
           should_publish="true"
           should_release="true"
           already_published="false"
+          package_exists="false"
 
-          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+          if npm view "${package_name}" name >/dev/null 2>&1; then
+            package_exists="true"
+          fi
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${package_exists}" == "true" ]]; then
             previous_manifest="$(git show "${GITHUB_SHA}^:packages/agent-sdk/package.json")"
             previous_name="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).name)" <<<"${previous_manifest}")"
             previous_version="$(node -e "process.stdout.write(JSON.parse(require('fs').readFileSync(0, 'utf8')).version)" <<<"${previous_manifest}")"
@@ -53,7 +58,7 @@ jobs:
             fi
           fi
 
-          if ! npm view "${package_name}" name >/dev/null 2>&1; then
+          if [[ "${package_exists}" != "true" ]]; then
             echo "${package_name} does not exist yet. Associate the exact package name with this trusted publisher before dispatching this release."
             should_publish="false"
             should_release="false"
