@@ -120,7 +120,7 @@ export function compileDesktopHarnessContext(input: {
       capabilityReceipt: contentHash({ environment, tools: tasksetTools, capabilities: input.taskset.capabilities }),
     },
     limits: {
-      maxTurns: 128,
+      maxTurns: environment.limits?.maxToolTurns ?? 128,
       timeoutMs: input.taskset.environment.defaultTimeoutMs,
       maxOutputBytes: 250_000_000,
       maximumSpendUsd: null,

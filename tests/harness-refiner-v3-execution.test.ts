@@ -229,6 +229,6 @@ describe("Harness Refiner v3 executable path", () => {
           ]),
         }),
       ]));
-      expect(runtime.actions.at(-1)).toBe("sandbox_stop");
+      expect(runtime.actions).toEqual([]);
     }));
 });

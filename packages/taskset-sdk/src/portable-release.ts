@@ -198,6 +198,14 @@ function portableEnvironment(taskset: Taskset): EnvironmentContract {
     ? "text"
     : taskset.environment.kind === "work" ? "work"
       : taskset.environment.kind === "program" ? "custom_program" : "agent";
+  const maxToolTurns = positiveInteger(taskset.environment.metadata.maxToolTurns);
+  const maxToolCalls = positiveInteger(taskset.environment.metadata.maxToolCalls);
+  const maxIdenticalToolCalls = positiveInteger(
+    taskset.environment.metadata.maxIdenticalToolCalls,
+  );
+  const maxToolCallsPerName = positiveIntegerRecord(
+    taskset.environment.metadata.maxToolCallsPerName,
+  );
   return {
     protocolVersion: "openpond.environment.v1",
     kind,
@@ -207,7 +215,38 @@ function portableEnvironment(taskset: Taskset): EnvironmentContract {
     lifecycle: ["create", "reset", "step", "collect", "destroy"],
     networkPolicy: taskset.environment.networkPolicy,
     defaultTimeoutMs: taskset.environment.defaultTimeoutMs,
+    ...(maxToolTurns && maxToolCalls && maxIdenticalToolCalls
+      ? {
+          limits: {
+            maxToolTurns: Math.min(maxToolTurns, 100),
+            maxToolCalls: Math.min(maxToolCalls, 256),
+            maxIdenticalToolCalls: Math.min(maxIdenticalToolCalls, 10),
+            maxToolCallsPerName: Object.fromEntries(
+              Object.entries(maxToolCallsPerName).map(([name, limit]) => [
+                name,
+                Math.min(limit, 256),
+              ]),
+            ),
+          },
+        }
+      : {}),
   };
+}
+
+function positiveInteger(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : null;
+}
+
+function positiveIntegerRecord(value: unknown): Record<string, number> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([name, limit]) => {
+      const parsed = positiveInteger(limit);
+      return parsed === null ? [] : [[name, parsed]];
+    }),
+  );
 }
 
 function portableTools(taskset: Taskset): ToolDeclaration[] {

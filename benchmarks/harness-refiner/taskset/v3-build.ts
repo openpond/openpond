@@ -52,6 +52,18 @@ export async function buildV3Taskset(): Promise<TasksetRelease> {
       policyVisibleFields: ["input", "policyVisibleContext", "evaluationCriteria"],
       hiddenGraderRefs: [verifier.id, rubric.id],
     },
+    environment: {
+      ...v2.environment,
+      limits: {
+        maxToolTurns: 24,
+        maxToolCalls: 40,
+        maxIdenticalToolCalls: 3,
+        maxToolCallsPerName: {
+          web_fetch: 12,
+          web_search: 8,
+        },
+      },
+    },
     tasks,
     graders: [
       {

@@ -36,6 +36,15 @@ export const EnvironmentContractSchema = z.object({
   lifecycle: z.array(z.enum(["create", "reset", "step", "collect", "destroy"])).min(5).max(5),
   networkPolicy: z.enum(["none", "declared_read_only", "declared_scoped"]),
   defaultTimeoutMs: z.number().int().positive().max(3_600_000),
+  limits: z.object({
+    maxToolTurns: z.number().int().positive().max(100),
+    maxToolCalls: z.number().int().positive().max(256),
+    maxIdenticalToolCalls: z.number().int().positive().max(10),
+    maxToolCallsPerName: z.record(
+      z.string().trim().min(1).max(200),
+      z.number().int().positive().max(256),
+    ),
+  }).strict().optional(),
 }).strict();
 
 const GraderBaseSchema = z.object({

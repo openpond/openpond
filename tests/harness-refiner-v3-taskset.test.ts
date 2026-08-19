@@ -6,6 +6,15 @@ import { gradeAttempt } from "@openpond/taskset-sdk";
 describe("Harness Refiner v3 Taskset", () => {
   test("makes every scored criterion traceable to policy-visible task material", () => {
     expect(harnessRefinerBenchmarkV3Release.id).toBe("harness-refiner-20260819-v3");
+    expect(harnessRefinerBenchmarkV3Release.environment.limits).toEqual({
+      maxToolTurns: 24,
+      maxToolCalls: 40,
+      maxIdenticalToolCalls: 3,
+      maxToolCallsPerName: {
+        web_fetch: 12,
+        web_search: 8,
+      },
+    });
     expect(harnessRefinerBenchmarkV3Release.policy.policyVisibleFields).toContain("evaluationCriteria");
     for (const task of harnessRefinerBenchmarkV3Release.tasks) {
       expect(task.evaluationCriteria?.length).toBeGreaterThan(0);

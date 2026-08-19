@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkV3Release = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "50426a5391ffe35e08d15080940397d7e7382a893cdf3dab4c3e95083b23584e",
+  "contentHash": "a158dbdf6b4570c9ed883545f13d66982d523072b65ee5a7d4ce56741dd873fe",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -56,6 +56,15 @@ export const harnessRefinerBenchmarkV3Release = TasksetReleaseSchema.parse({
       "collect",
       "destroy"
     ],
+    "limits": {
+      "maxIdenticalToolCalls": 3,
+      "maxToolCalls": 40,
+      "maxToolCallsPerName": {
+        "web_fetch": 12,
+        "web_search": 8
+      },
+      "maxToolTurns": 24
+    },
     "networkPolicy": "declared_read_only",
     "protocolVersion": "openpond.environment.v1",
     "stateful": true

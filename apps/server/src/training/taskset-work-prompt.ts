@@ -12,6 +12,12 @@ export function tasksetWorkMessages(
   task: TaskDataRecord,
   assets: StagedAsset[],
   harnessInstructionContext?: string,
+  resourceBudget?: {
+    maxToolTurns: number;
+    maxToolCalls: number;
+    maxIdenticalToolCalls: number;
+    maxToolCallsPerName: Record<string, number>;
+  },
 ): HostedChatMessage[] {
   const stagedAssets = assets.map((asset) => ({
     storageName: asset.storageName,
@@ -29,6 +35,12 @@ export function tasksetWorkMessages(
         "Keep scratch work under /workspace/work.",
         "Write every required deliverable under /workspace/outputs at the exact declared relative path.",
         "Inspect outputs before finishing. The evaluator will validate and persist declared outputs.",
+        resourceBudget
+          ? [
+              "Stay within the released resource budget; exceeding it ends the attempt as budget exhausted.",
+              `Resource budget: ${JSON.stringify(resourceBudget)}`,
+            ].join("\n")
+          : null,
         `Staged assets: ${JSON.stringify(stagedAssets)}`,
         `Required outputs: ${JSON.stringify(task.requiredOutputs ?? [])}`,
         harnessInstructionContext?.trim()

@@ -274,7 +274,16 @@ async function projectRelease(input: {
       metadata: {
         portableEnvironmentHash: contentHash(input.release.environment),
         portableTools: input.release.tools,
-        maxToolTurns: 40,
+        maxToolTurns: input.release.environment.limits?.maxToolTurns ?? 40,
+        ...(input.release.environment.limits
+          ? {
+              maxToolCalls: input.release.environment.limits.maxToolCalls,
+              maxIdenticalToolCalls:
+                input.release.environment.limits.maxIdenticalToolCalls,
+              maxToolCallsPerName:
+                input.release.environment.limits.maxToolCallsPerName,
+            }
+          : {}),
       },
     },
     capabilities: {

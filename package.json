@@ -57,7 +57,7 @@
     "cycles:server-runtime": "tsx scripts/report-server-runtime-cycles.ts",
     "benchmark:turn-runtime": "tsx scripts/benchmark-turn-runtime-queries.ts",
     "benchmark:harness-refiner:build": "tsx benchmarks/harness-refiner/taskset/build.ts && pnpm --filter @openpond/evals build && pnpm --filter @openpond/taskset-sdk build",
-    "benchmark:harness-refiner:v3:build": "tsx benchmarks/harness-refiner/taskset/v3-build.ts && pnpm --filter @openpond/evals build && pnpm --filter @openpond/taskset-sdk build",
+    "benchmark:harness-refiner:v3:build": "pnpm --filter @openpond/evals build && pnpm --filter @openpond/taskset-sdk build && tsx benchmarks/harness-refiner/taskset/v3-build.ts",
     "benchmark:harness-refiner:v3:check": "pnpm --filter @openpond/evals build && pnpm --filter @openpond/taskset-sdk build && tsx benchmarks/harness-refiner/taskset/v3-build.ts --check",
     "benchmark:harness-refiner:v3:conformance": "pnpm benchmark:harness-refiner:v3:check && vitest run tests/harness-refiner-v3-taskset.test.ts tests/harness-refiner-v3-execution.test.ts",
     "benchmark:harness-refiner:check": "pnpm --filter @openpond/evals build && pnpm --filter @openpond/taskset-sdk build && tsx benchmarks/harness-refiner/taskset/build.ts --check && vitest run tests/harness-refiner-benchmark-taskset.test.ts",

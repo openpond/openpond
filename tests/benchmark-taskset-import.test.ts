@@ -45,6 +45,15 @@ describe("shipped benchmark Taskset projection", () => {
           },
         });
         expect(taskset.tasks).toHaveLength(20);
+        expect(taskset.environment.metadata).toMatchObject({
+          maxToolTurns: 24,
+          maxToolCalls: 40,
+          maxIdenticalToolCalls: 3,
+          maxToolCallsPerName: {
+            web_fetch: 12,
+            web_search: 8,
+          },
+        });
         expect(taskset.graders).toHaveLength(2);
         expect(taskset.graders.find((grader) => grader.kind === "custom_verifier")).toMatchObject({
           kind: "custom_verifier",

@@ -509,6 +509,43 @@ describe("Taskset Work attempt runner", () => {
       });
     }));
 
+  test("keeps sandbox compute lazy for direct-answer tasks without files", () =>
+    withTrainingStore(async ({ store, directory }) => {
+      const { taskset, task } = await createWorkTaskset(directory, {
+        directAnswer: true,
+      });
+      await store.upsertTaskset(taskset);
+      const workspaceActions: string[] = [];
+      const { runtime } = successfulRuntime(workspaceActions);
+      const evaluation = createTaskEvaluationService({
+        store,
+        storeDir: directory,
+        modelText: async () => "",
+        modelStream: async function* () {
+          yield { text: "A complete direct answer that requires no files." };
+        },
+        workRuntime: runtime,
+      });
+
+      const execution = await evaluation.execute({
+        tasksetId: taskset.id,
+        taskId: task.id,
+        model: { providerId: "openpond", modelId: "openpond-chat" },
+        seed: 17,
+        attempt: 0,
+        resultId: "attempt_taskset_work_lazy_direct_answer",
+      });
+
+      expect(workspaceActions).not.toContain("sandbox_create");
+      expect(workspaceActions).not.toContain("sandbox_status");
+      expect(workspaceActions).not.toContain("sandbox_exec");
+      expect(execution.attempt).toMatchObject({
+        infrastructureError: null,
+        output: { text: "A complete direct answer that requires no files." },
+        metadata: { status: "completed", failureClass: null },
+      });
+    }));
+
   test("classifies timeout separately, produces no reward, and stops compute", () =>
     withTrainingStore(async ({ store, directory }) => {
       const { taskset, task } = await createWorkTaskset(directory, {
@@ -601,6 +638,98 @@ describe("Taskset Work attempt runner", () => {
         },
       });
     }));
+
+  test.each([
+    {
+      label: "total tool calls",
+      options: { maxToolCalls: 1 },
+      secondArgs: { area: "outputs", recursive: true },
+      exhaustion: "at 1 total calls",
+    },
+    {
+      label: "per-tool calls",
+      options: {
+        maxToolCalls: 10,
+        maxToolCallsPerName: { work_list_files: 1 },
+      },
+      secondArgs: { area: "outputs", recursive: true },
+      exhaustion: "work_list_files budget exhausted at 1 calls",
+    },
+    {
+      label: "identical calls",
+      options: { maxToolCalls: 10, maxIdenticalToolCalls: 1 },
+      secondArgs: { recursive: false, area: "outputs" },
+      exhaustion: "Identical model-requested tool-call budget exhausted at 1 calls",
+    },
+  ])("makes $label visible and classifies exhaustion as an agent outcome", ({
+    options,
+    secondArgs,
+    exhaustion,
+  }) => withTrainingStore(async ({ store, directory }) => {
+    const { taskset, task } = await createWorkTaskset(directory, options);
+    await store.upsertTaskset(taskset);
+    const workspaceActions: string[] = [];
+    const { runtime } = successfulRuntime(workspaceActions);
+    let systemMessage = "";
+    const evaluation = createTaskEvaluationService({
+      store,
+      storeDir: directory,
+      modelText: async () => "",
+      modelStream: async function* (request) {
+        systemMessage = request.messages[0]?.content ?? "";
+        yield {
+          toolCalls: [
+            {
+              id: "call_list_1",
+              type: "function",
+              function: {
+                name: "work_list_files",
+                arguments: JSON.stringify({ area: "outputs", recursive: false }),
+              },
+            },
+            {
+              id: "call_list_2",
+              type: "function",
+              function: {
+                name: "work_list_files",
+                arguments: JSON.stringify(secondArgs),
+              },
+            },
+          ],
+        };
+      },
+      workRuntime: runtime,
+    });
+
+    const execution = await evaluation.execute({
+      tasksetId: taskset.id,
+      taskId: task.id,
+      model: { providerId: "openpond", modelId: "openpond-chat" },
+      seed: 17,
+      attempt: 0,
+      resultId: `attempt_taskset_work_budget_${options.maxToolCalls}`,
+    });
+
+    expect(systemMessage).toContain("Resource budget:");
+    expect(workspaceActions.filter((action) => action === "sandbox_list_files")).toHaveLength(1);
+    expect(execution.attempt).toMatchObject({
+      infrastructureError: null,
+      metadata: {
+        status: "budget_exhausted",
+        failureClass: null,
+        toolCallBudget: {
+          consumedTotal: 1,
+          consumedPerName: { work_list_files: 1 },
+          exhaustion: expect.stringContaining(exhaustion),
+        },
+      },
+    });
+    expect(execution.grade).toMatchObject({
+      passed: false,
+      rewardEligible: true,
+      failureClass: "policy_failure",
+    });
+  }));
 
   test("classifies cancellation separately and stops the active sandbox", () =>
     withTrainingStore(async ({ store, directory }) => {
@@ -959,6 +1088,10 @@ async function createWorkTaskset(
     timeoutMs?: number;
     includeParsedJsonInAttempt?: boolean;
     modelRequestTimeoutMs?: number;
+    maxToolCalls?: number;
+    maxIdenticalToolCalls?: number;
+    maxToolCallsPerName?: Record<string, number>;
+    directAnswer?: boolean;
   } = {},
 ) {
   const base = tasksetFixture();
@@ -991,7 +1124,7 @@ async function createWorkTaskset(
     expectedOutput: {
       outputsPassed: true,
     },
-    assets: [{
+    assets: options.directAnswer ? [] : [{
       id: "asset_inventory",
       sourceRefId: source.id,
       artifactRef: "assets/inventory.csv",
@@ -1002,7 +1135,7 @@ async function createWorkTaskset(
       split: base.tasks[0]!.split,
       metadata: {},
     }],
-    requiredOutputs: [{
+    requiredOutputs: options.directAnswer ? [] : [{
       path: "normalized.json",
       mediaType: "application/json",
       schemaRef: "normalized-inventory-v1",
@@ -1030,6 +1163,15 @@ async function createWorkTaskset(
       metadata: {
         maxToolTurns: 8,
         maxInputBytes: 1_000_000,
+        ...(options.maxToolCalls !== undefined
+          ? { maxToolCalls: options.maxToolCalls }
+          : {}),
+        ...(options.maxIdenticalToolCalls !== undefined
+          ? { maxIdenticalToolCalls: options.maxIdenticalToolCalls }
+          : {}),
+        ...(options.maxToolCallsPerName !== undefined
+          ? { maxToolCallsPerName: options.maxToolCallsPerName }
+          : {}),
         ...(options.modelRequestTimeoutMs !== undefined
           ? { modelRequestTimeoutMs: options.modelRequestTimeoutMs }
           : {}),
