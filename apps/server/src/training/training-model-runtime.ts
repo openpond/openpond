@@ -60,6 +60,7 @@ export function createTrainingModelRuntime(deps: {
     maxOutputTokens?: number;
     temperature?: number;
     topP?: number;
+    responseFormat?: Record<string, unknown>;
     seed?: number;
     onUsage?: (usage: unknown, costUsd?: number) => void;
     hostedTokenPricing?: HostedTokenPricing;
@@ -96,6 +97,7 @@ export function createTrainingModelRuntime(deps: {
             maxTokens: input.maxOutputTokens,
             temperature: input.temperature,
             topP: input.topP,
+            responseFormat: input.responseFormat,
             signal: input.signal,
           })) {
             emitted = true;

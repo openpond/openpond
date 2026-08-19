@@ -450,7 +450,7 @@ function benchmarkFixtures(release: TasksetRelease): GraderFixture[] {
       id: "v3-invoice-boundary",
       taskId,
       label: "boundary",
-      output: { text: "Subject: Invoice update\n\nInvoice INV-1842 lists 120 seats instead of 102. A corrected invoice will arrive by August 14. No payment is due until it arrives. Questions: accounts@example.com." },
+      output: { text: "Subject: Invoice update\n\nHello Northwind Labs,\n\nInvoice INV-1842 lists 120 seats instead of 102. A corrected invoice will arrive by August 14. No payment is due until it arrives. Please contact accounts@example.com with billing questions. Thank you." },
       infrastructureError: null,
       expectedPassed: true,
       expectedRewardEligible: true,

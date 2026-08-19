@@ -480,7 +480,19 @@ export function createTaskEvaluationService(deps: {
         grader.calibrationFixtureRefs.includes(fixture.id),
       );
       const results = [];
+      let judgeFailure: string | null = null;
       for (const [index, fixture] of fixtures.entries()) {
+        if (judgeFailure) {
+          results.push({
+            fixtureId: fixture.id,
+            expectedPassed: fixture.expectedPassed,
+            passed: false,
+            score: 0,
+            feedback: `Not run because the judge failed on an earlier fixture: ${judgeFailure}`,
+            matched: false,
+          });
+          continue;
+        }
         const task = await findTask(
           taskset,
           fixture.taskId,
@@ -512,12 +524,13 @@ export function createTaskEvaluationService(deps: {
             matched: result.passed === fixture.expectedPassed && criterionCoverageMatched,
           });
         } catch (error) {
+          judgeFailure = error instanceof Error ? error.message : String(error);
           results.push({
             fixtureId: fixture.id,
             expectedPassed: fixture.expectedPassed,
             passed: false,
             score: 0,
-            feedback: error instanceof Error ? error.message : String(error),
+            feedback: judgeFailure,
             matched: false,
           });
         }
@@ -569,6 +582,20 @@ export function createTaskEvaluationService(deps: {
           parentTasksetHash: taskset.contentHash,
           calibratedAt: timestamp,
           graderIds: calibrationResults.map((result) => result.graderId),
+          results: calibrationResults.map((result) => ({
+            graderId: result.graderId,
+            passed: result.passed,
+            fixtures: result.results.map((fixture) => ({
+              fixtureId: fixture.fixtureId,
+              expectedPassed: fixture.expectedPassed,
+              passed: fixture.passed,
+              matched: fixture.matched,
+              feedback: fixture.feedback,
+              ...("criterionCoverageMatched" in fixture
+                ? { criterionCoverageMatched: fixture.criterionCoverageMatched }
+                : {}),
+            })),
+          })),
         },
       },
     });

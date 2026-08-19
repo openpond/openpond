@@ -193,6 +193,7 @@ export async function* streamOpenPondHostedChatTurn(
     maxTokens: input.maxTokens,
     temperature: input.temperature,
     topP: input.topP,
+    responseFormat: input.responseFormat,
     signal: input.signal,
   });
 }
@@ -470,6 +471,7 @@ export function buildOpChatBody(options: {
   maxTokens?: number;
   temperature?: number;
   topP?: number;
+  responseFormat?: Record<string, unknown>;
 }, stream: boolean): Record<string, unknown> {
   const body: Record<string, unknown> = {
     model: options.model,
@@ -490,6 +492,9 @@ export function buildOpChatBody(options: {
   }
   if (typeof options.topP === "number") {
     body.top_p = options.topP;
+  }
+  if (options.responseFormat) {
+    body.response_format = options.responseFormat;
   }
   Object.assign(body, opChatReasoningFields(options.reasoningEffort));
   return body;
