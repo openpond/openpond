@@ -16,6 +16,7 @@ const WORKFLOW_PATH = ".github/workflows/release-builds.yml";
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const EVALS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-evals.yml";
 const HARNESS_RELEASE_WORKFLOW_PATH = ".github/workflows/release-harness.yml";
+const AGENT_SDK_RELEASE_WORKFLOW_PATH = ".github/workflows/release-agent-sdk.yml";
 const ROOT_PACKAGE_PATH = "package.json";
 const RELEASE_COMMAND_PATH = "scripts/release-stable.ts";
 const LATEST_STABLE_TAG_SCRIPT_PATH = "scripts/latest-stable-release-tag.sh";
@@ -25,6 +26,7 @@ describe("release workflow", () => {
     for (const workflowPath of [
       EVALS_RELEASE_WORKFLOW_PATH,
       HARNESS_RELEASE_WORKFLOW_PATH,
+      AGENT_SDK_RELEASE_WORKFLOW_PATH,
     ]) {
       const workflow = readFileSync(workflowPath, "utf8");
 

@@ -1,6 +1,6 @@
 # OpenPond Agent SDK
 
-This folder is the TypeScript-first OpenPond Agent SDK package. Releases are published to npm through the repository's trusted-publishing workflow; local source remains executable for package development.
+This folder is the TypeScript-first OpenPond Agent SDK package. Releases use the repository's npm trusted-publishing workflow; local source remains executable for package development.
 
 The package name is:
 
