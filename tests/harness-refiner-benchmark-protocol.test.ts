@@ -20,10 +20,11 @@ import {
   totalPlannedTasks,
 } from "../apps/server/src/training/harness-refiner-benchmark-protocol.js";
 import {
-  benchmarkLineage,
   frozenToolEvidence,
   loadCompletedBenchmarkStage,
 } from "../apps/server/src/training/harness-refiner-benchmark-service-support.js";
+import { benchmarkLineage } from
+  "../apps/server/src/training/harness-refiner-benchmark-lineage.js";
 
 describe("Harness Refiner benchmark protocol", () => {
   test("derives the four-stage forty-attempt plan from the admitted Taskset", () => {

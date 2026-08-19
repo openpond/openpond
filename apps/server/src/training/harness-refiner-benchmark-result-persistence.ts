@@ -28,9 +28,9 @@ import type {
 } from "./harness-refiner-benchmark-protocol.js";
 import type {
   BenchmarkAttemptEvidence,
-  BenchmarkLineage,
   EvaluationAttempt,
 } from "./harness-refiner-benchmark-service-support.js";
+import type { BenchmarkLineage } from "./harness-refiner-benchmark-lineage.js";
 
 export type ManagedResultManifest = {
   schemaVersion: "openpond.harnessRefinerBenchmarkResult.v2";

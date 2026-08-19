@@ -11,13 +11,13 @@ import {
   type SequentialAdaptationSummary,
 } from "./harness-refiner-benchmark-protocol.js";
 import {
-  benchmarkLineage,
   frozenToolEvidence,
   loadBenchmarkAttemptEvidenceByIds,
   releasedHarness,
   type BenchmarkAttemptEvidence,
   type EvaluationAttempt,
 } from "./harness-refiner-benchmark-service-support.js";
+import { benchmarkLineage } from "./harness-refiner-benchmark-lineage.js";
 import {
   BenchmarkRefinerInvocationError,
   runBenchmarkRefinerAfterAttempt,
