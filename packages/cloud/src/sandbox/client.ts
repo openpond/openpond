@@ -473,6 +473,7 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
     input: SandboxAgentRunInput
   ): Promise<SandboxAgentRunResponse> {
     const query = new URLSearchParams({ teamId: input.teamId });
+    const { teamId: _teamId, ...body } = input;
     return this.requestApiRoot<SandboxAgentRunResponse>(
       `/agents/${encodeURIComponent(agentId)}/run?${query.toString()}`,
       {
@@ -480,7 +481,7 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
         headers: {
           Prefer: "respond-async",
         },
-        body: JSON.stringify(input),
+        body: JSON.stringify(body),
       }
     );
   }
