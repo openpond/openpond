@@ -58,6 +58,7 @@ export type {
 export type {
   OpenPondProfileActionCatalog,
   OpenPondProfileActionCatalogEntry,
+  OpenPondProfileActionInvocation,
   OpenPondProfileActionSetupRequirement,
 } from "./profile-actions.js";
 export { OpenPondApiError } from "@openpond/cloud/api/core";

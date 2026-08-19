@@ -38,6 +38,15 @@ export type OpenPondProfileActionCatalog = {
   actions: OpenPondProfileActionCatalogEntry[];
 };
 
+export type OpenPondProfileActionInvocation<TOutput = Record<string, unknown>> = {
+  run: {
+    id: string;
+    status: string;
+    conversationId: string | null;
+    resultJson: TOutput | null;
+  };
+};
+
 type ProfileActionsClientInput = {
   apiKey: string;
   apiBaseUrl: string;
@@ -74,6 +83,47 @@ export class OpenPondProfileActionsClient {
         "Get Profile Action catalog",
       )
     ).catalog;
+  }
+
+  async run<TOutput = Record<string, unknown>>(input: {
+    teamId: string;
+    agentId: string;
+    actionId: string;
+    value?: Record<string, unknown>;
+    conversationId?: string | null;
+    createConversation?: boolean;
+    conversationTitle?: string | null;
+    idempotencyKey: string;
+    catalogVersion: string;
+  }): Promise<OpenPondProfileActionInvocation<TOutput>> {
+    const teamId = requiredValue(input.teamId, "teamId");
+    const agentId = requiredValue(input.agentId, "agentId");
+    const actionId = requiredValue(input.actionId, "actionId");
+    const idempotencyKey = requiredValue(input.idempotencyKey, "idempotencyKey");
+    const catalogVersion = requiredValue(input.catalogVersion, "catalogVersion");
+    const response = await apiFetch(
+      this.#apiBaseUrl,
+      this.#apiKey,
+      `/v1/agents/${encodeURIComponent(agentId)}/run?${new URLSearchParams({ teamId }).toString()}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          entrypoint: { scope: "action", name: actionId },
+          input: input.value ?? {},
+          conversationId: input.conversationId ?? null,
+          createConversation: input.createConversation,
+          conversationTitle: input.conversationTitle ?? null,
+          idempotencyKey,
+          runtimeSourcePolicy: { requirePublishedSnapshot: true, source: "manual" },
+          metadata: { profileCatalogVersion: catalogVersion },
+        }),
+      },
+    );
+    return readApiJson<OpenPondProfileActionInvocation<TOutput>>(
+      response,
+      "Run Profile Action",
+    );
   }
 }
 
