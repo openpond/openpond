@@ -1,4 +1,6 @@
 import type {
+  SandboxIntegrationConnectionLeaseInput,
+  SandboxIntegrationLeaseInput,
   SandboxRecord,
   SandboxWorkflowMode,
   SandboxRuntimePromotionPolicy,
@@ -550,11 +552,16 @@ export type SandboxAgentUpdateInput = { teamId: string } & Partial<
 export type SandboxAgentRunInput = {
   teamId: string;
   conversationId?: string | null;
+  createConversation?: boolean;
+  conversationTitle?: string | null;
   idempotencyKey?: string | null;
   targetProjectId?: string | null;
   targetProject?: { id: string } | null;
   triggerType?: SandboxAgentTriggerType;
+  entrypoint?: Partial<SandboxAgentSelectedEntrypoint> | null;
   input?: Record<string, unknown>;
+  integrationLeases?: SandboxIntegrationLeaseInput[];
+  integrationConnectionLeases?: SandboxIntegrationConnectionLeaseInput[];
   metadata?: Record<string, unknown>;
   workflowMode?: SandboxWorkflowMode;
   runtimeSourcePolicy?: SandboxAgentRuntimeSourcePolicy;

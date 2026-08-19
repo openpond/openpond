@@ -1,8 +1,8 @@
 {
   "name": "openpond-agent-sdk",
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "TypeScript SDK and CLI for building, validating, and packaging OpenPond Agents",
   "license": "MIT",
-  "private": true,
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -13,6 +13,22 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openpond/openpond.git",
+    "directory": "packages/agent-sdk"
+  },
+  "homepage": "https://github.com/openpond/openpond/tree/master/packages/agent-sdk#readme",
+  "bugs": {
+    "url": "https://github.com/openpond/openpond/issues"
+  },
+  "engines": {
+    "node": ">=22.14.0 <25"
+  },
   "bin": {
     "openpond-agent": "./dist/cli.js"
   },
