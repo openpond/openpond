@@ -2,20 +2,35 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { ModelProjectSchema } from "@openpond/contracts";
-import { contentHash } from "@openpond/harness";
+import {
+  contentHash,
+  DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+} from "@openpond/harness";
 
 import { createLocalHarnessWorkspace } from
   "../../apps/server/src/harness/local-harness-workspace-service.js";
 import { SqliteStore } from "../../apps/server/src/store/store.js";
 import { createBenchmarkTasksetService } from
   "../../apps/server/src/training/benchmark-tasksets.js";
-import { createHarnessRefinerExecutionPlan } from
+import {
+  createHarnessRefinerExecutionPlan,
+  HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK,
+  HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
+} from
   "../../apps/server/src/training/harness-refiner-benchmark-protocol.js";
 import { resolveBenchmarkUpstreamModel } from
   "../../apps/server/src/training/training-model-runtime.js";
 
 const storeDir = process.env.OPENPOND_APP_HOME?.trim();
 if (!storeDir) throw new Error("OPENPOND_APP_HOME is required for benchmark admission.");
+const apiBaseUrl = process.env.OPENPOND_API_URL?.trim();
+if (!apiBaseUrl) throw new Error("OPENPOND_API_URL is required for benchmark admission.");
+const apiUrl = new URL(apiBaseUrl);
+const gatewayEnvironment = apiUrl.hostname.startsWith("staging-")
+  ? "staging"
+  : apiUrl.hostname === "api.openpond.ai"
+    ? "production"
+    : "custom";
 const outputPath = path.resolve(
   process.env.OPENPOND_REFINER_ADMISSION_OUTPUT?.trim()
     || path.join(storeDir, "harness-refiner-admission.json"),
@@ -96,9 +111,20 @@ try {
     profileId,
     modelProjectId,
     model,
+    gateway: {
+      service: "openpond-chat",
+      environment: gatewayEnvironment,
+      apiBaseUrl: apiUrl.origin,
+    },
     upstreamModel,
     reasoningEffort: "low",
     sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
+    refiner: {
+      timeoutMs: HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
+      maxOutputTokens: DEFAULT_REFINER_MAX_OUTPUT_TOKENS,
+      maxInvocationsPerTask: HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK,
+      retryPolicy: "resume-same-attempt-and-trigger-once",
+    },
     seed: 17,
     repetitions: 1,
     maximumSpendUsd,
@@ -130,6 +156,7 @@ try {
       taskset: receipt.taskset,
       initialHarness: receipt.initialHarness,
       model: receipt.model,
+      gateway: receipt.gateway,
       upstreamModel: receipt.upstreamModel,
       reasoningEffort: receipt.reasoningEffort,
       maximumSpendUsd: receipt.maximumSpendUsd,

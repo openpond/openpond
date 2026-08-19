@@ -79,6 +79,7 @@ export type LocalHarnessRefinerWorkerInput = {
     signal: AbortSignal;
   }) => Promise<HostedHarnessRefinerResponse>;
   signal: AbortSignal;
+  timeoutMs?: number;
   now?: () => string;
 };
 
@@ -231,6 +232,7 @@ async function executeLocalHarnessRefinerWorker(
       evidence: refinerEvidence,
       stream: input.stream,
       signal: input.signal,
+      timeoutMs: input.timeoutMs,
     });
   } else if (input.refine) {
     const request = HostedHarnessRefinerRequestSchema.parse({

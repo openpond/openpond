@@ -48,6 +48,7 @@ export type SequentialAdaptationSummary = {
 };
 
 export const HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK = 2;
+export const HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS = 180_000;
 
 export function createHarnessRefinerExecutionPlan(input: {
   taskset: Taskset;

@@ -17,7 +17,10 @@ import { runLocalHarnessRefinerWorker } from "../harness/local-harness-refiner-w
 import { loadLocalHarnessRuntimeFromRelease } from "../harness/local-harness-skill-runtime.js";
 import type { SqliteStore } from "../store/store.js";
 import { event } from "../utils.js";
-import { BenchmarkSpendBudget } from "./harness-refiner-benchmark-protocol.js";
+import {
+  BenchmarkSpendBudget,
+  HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
+} from "./harness-refiner-benchmark-protocol.js";
 import type { BenchmarkRefinerFailureKind } from "./harness-refiner-benchmark-sequential-checkpoint.js";
 import type { HostedTokenPricing } from "./hosted-token-pricing.js";
 import {
@@ -300,6 +303,7 @@ export async function runBenchmarkRefinerAfterAttempt(input: {
         }
       },
       signal: input.signal,
+      timeoutMs: HARNESS_REFINER_BENCHMARK_REFINER_TIMEOUT_MS,
       now: input.now,
     });
   } catch (error) {
