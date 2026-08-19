@@ -64,6 +64,7 @@
     "benchmark:harness-refiner:conformance": "tsx benchmarks/harness-refiner/taskset/conformance.ts",
     "benchmark:harness-refiner:prepare": "tsx benchmarks/harness-refiner/prepare-run.ts",
     "benchmark:harness-refiner:audit": "tsx benchmarks/harness-refiner/audit-run.ts",
+    "benchmark:harness-refiner:monitor": "tsx scripts/monitor-harness-refiner-benchmark.ts",
     "benchmark:harness-refiner:qualification": "tsx benchmarks/harness-refiner/qualification/run.ts",
     "benchmark:harness-refiner:qualification:check": "tsc -p benchmarks/harness-refiner/qualification/tsconfig.json --pretty false && vitest run tests/harness-refiner-qualification.test.ts",
     "benchmark:harness-refiner:observation:check": "vitest run tests/harness-refiner-observation-taskset.test.ts tests/harness-refiner-observation-resume.test.ts",

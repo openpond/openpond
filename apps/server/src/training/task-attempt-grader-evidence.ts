@@ -9,12 +9,16 @@ import type { SqliteStore } from "../store/store.js";
 import { executableSearchPath } from "../runtime/executable-search-path-bun-compat.js";
 import { parseModelJudgeResult } from "../server-entry-helpers.js";
 import type { createTrainingModelRuntime } from "./training-model-runtime.js";
-import { hostedTokenPricingFromValue } from "./hosted-token-pricing.js";
+import {
+  conservativeHostedRequestCostUsd,
+  hostedTokenPricingFromValue,
+} from "./hosted-token-pricing.js";
 
 const MAX_ARTIFACTS = 5;
 const MAX_ARTIFACT_BYTES = 20 * 1024 * 1024;
 const MAX_EXTRACTED_CHARS = 40_000;
 const MODEL_JUDGE_TIMEOUT_MS = 45_000;
+const MODEL_JUDGE_MAX_OUTPUT_TOKENS = 1_200;
 const execFileAsync = promisify(execFile);
 
 type TrainingModelText = ReturnType<
@@ -27,7 +31,8 @@ export function createTaskAttemptModelJudge(input: {
 }): ModelJudgeRunner {
   return async ({ grader, task, attempt }) => {
     const usages: unknown[] = [];
-    let costUsd = 0;
+    let chargedCostUsd = 0;
+    let everyRequestHasCost = true;
     const artifactEvidence = await loadTaskAttemptGraderEvidence({
       store: input.store,
       attempt,
@@ -59,48 +64,63 @@ export function createTaskAttemptModelJudge(input: {
         }),
       },
     ];
-    let raw: string;
-    try {
-      raw = await input.modelText({
+    const runJudgeRequest = async (
+      requestId: string,
+      messages: Array<{ role: "system" | "user"; content: string }>,
+    ): Promise<string> => {
+      let requestCostUsd = 0;
+      let requestHasAuthoritativeCost = false;
+      const response = await input.modelText({
         model: grader.judge,
         hostedTokenPricing,
         signal: controller.signal,
-        requestId: `task-judge:${attempt.id}:${grader.id}`,
-        maxOutputTokens: 1_200,
+        requestId,
+        maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
         temperature: grader.temperature,
         responseFormat: judgeResponseFormat(task, grader.id),
         onUsage: (usage, cost) => {
           usages.push(usage);
           if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
-            costUsd += cost;
+            requestCostUsd += cost;
+            requestHasAuthoritativeCost = true;
           }
         },
-        messages: judgeMessages,
+        messages,
       });
+      if (requestHasAuthoritativeCost) {
+        chargedCostUsd += requestCostUsd;
+      } else if (hostedTokenPricing) {
+        chargedCostUsd += conservativeHostedRequestCostUsd({
+          inputCharacters: messages.reduce(
+            (total, message) => total + message.content.length,
+            0,
+          ),
+          maxOutputTokens: MODEL_JUDGE_MAX_OUTPUT_TOKENS,
+          pricing: hostedTokenPricing,
+        });
+      } else {
+        everyRequestHasCost = false;
+      }
+      return response;
+    };
+    let raw: string;
+    try {
+      raw = await runJudgeRequest(
+        `task-judge:${attempt.id}:${grader.id}`,
+        judgeMessages,
+      );
       const initial = parseModelJudgeResult(raw);
       if (!hasAssignedCriterionScores(initial?.criterionScores ?? [], task, grader.id)) {
-        raw = await input.modelText({
-          model: grader.judge,
-          hostedTokenPricing,
-          signal: controller.signal,
-          requestId: `task-judge-repair:${attempt.id}:${grader.id}`,
-          maxOutputTokens: 1_200,
-          temperature: grader.temperature,
-          responseFormat: judgeResponseFormat(task, grader.id),
-          onUsage: (usage, cost) => {
-            usages.push(usage);
-            if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) {
-              costUsd += cost;
-            }
-          },
-          messages: [
+        raw = await runJudgeRequest(
+          `task-judge-repair:${attempt.id}:${grader.id}`,
+          [
             {
               role: "system",
               content: `Your prior answer omitted or malformed mandatory criterionScores. Return only a complete replacement JSON object. Include exactly these criterion IDs: ${assignedCriterionIds(task, grader.id).join(", ")}. Do not omit criterionScores.`,
             },
             { role: "user", content: raw },
           ],
-        });
+        );
       }
     } finally {
       clearTimeout(timer);
@@ -110,7 +130,7 @@ export function createTaskAttemptModelJudge(input: {
     return {
       ...parsed,
       usage: usages,
-      ...(costUsd > 0 ? { costUsd } : {}),
+      ...(everyRequestHasCost ? { costUsd: chargedCostUsd } : {}),
     };
   };
 }

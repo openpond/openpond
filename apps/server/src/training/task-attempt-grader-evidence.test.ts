@@ -8,11 +8,84 @@ import type { TaskAttemptResult } from "@openpond/contracts";
 import { describe, expect, test } from "vitest";
 
 import type { SqliteStore } from "../store/store.js";
-import { loadTaskAttemptGraderEvidence } from "./task-attempt-grader-evidence.js";
+import {
+  createTaskAttemptModelJudge,
+  loadTaskAttemptGraderEvidence,
+} from "./task-attempt-grader-evidence.js";
 
 const execFileAsync = promisify(execFile);
 
 describe("task attempt grader evidence", () => {
+  test("conservatively prices a judge response when provider usage is absent", async () => {
+    const store = {
+      listTaskAttemptArtifacts: async () => [],
+    } as unknown as SqliteStore;
+    const judge = createTaskAttemptModelJudge({
+      store,
+      modelText: async () => JSON.stringify({
+        score: 1,
+        passed: true,
+        feedback: "Meets the criterion.",
+        criterionScores: [{
+          criterionId: "criterion-1",
+          score: 1,
+          passed: true,
+          feedback: "Meets the criterion.",
+          evidenceRefs: [],
+        }],
+      }),
+    });
+
+    const result = await judge({
+      grader: {
+        id: "judge-1",
+        version: "1",
+        label: "Judge",
+        kind: "model_judge",
+        weight: 1,
+        hardGate: true,
+        rewardEligible: true,
+        privileged: true,
+        rubric: "Assess criterion-1.",
+        judge: { providerId: "openpond", modelId: "judge-model" },
+        calibrationFixtureRefs: [],
+        calibrationStatus: "passed",
+        temperature: 0,
+        metadata: {},
+      },
+      task: {
+        id: "task-1",
+        input: { prompt: "Do the work." },
+        policyVisibleContext: {},
+        evaluationCriteria: [{
+          id: "criterion-1",
+          description: "Complete the work.",
+          scorerIds: ["judge-1"],
+          weight: 1,
+          hardGate: true,
+        }],
+      } as never,
+      attempt: {
+        id: "attempt-1",
+        output: { text: "Done." },
+        modelRef: { providerId: "openpond", modelId: "judge-model" },
+        metadata: {
+          hostedTokenPricing: {
+            version: "test-v1",
+            source: "test",
+            effectiveAt: "2026-08-19T00:00:00.000Z",
+            inputUsdPerMillionTokens: 1,
+            cachedInputUsdPerMillionTokens: 0.5,
+            outputUsdPerMillionTokens: 2,
+          },
+        },
+      } as unknown as TaskAttemptResult,
+    });
+
+    expect(result.usage).toEqual([]);
+    expect(result.costUsd).toBeGreaterThan(0);
+  });
+
   test("extracts bounded text and structure from Open XML artifacts", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "openpond-grader-evidence-"));
     try {
