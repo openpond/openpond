@@ -161,7 +161,17 @@ export async function materializeBenchmarkRefinerBoundary(input: {
       },
     },
   });
-  if (!(await input.store.getTurn(turn.id))) await input.store.insertTurn(turn);
+  const existingTurn = await input.store.getTurn(turn.id);
+  if (!existingTurn) {
+    await input.store.insertTurn(turn);
+  } else {
+    await input.store.updateTurn(turn.id, (current) => TurnSchema.parse({
+      ...current,
+      modelRef: turn.modelRef,
+      metadata: { ...current.metadata, ...turn.metadata },
+      harnessSnapshot: turn.harnessSnapshot,
+    }));
+  }
   const assistantOutput = attempt.output.text;
   if (typeof assistantOutput === "string" && assistantOutput.trim()) {
     await input.store.appendRuntimeEvent(event({

@@ -1,5 +1,6 @@
 import {
   DEFAULT_OPENPOND_CHAT_MODEL,
+  TurnSchema,
   createImprovementRouteDecision,
   type ModelUsageRecord,
   type RefinementTriggerDecision,
@@ -50,6 +51,7 @@ export function createLocalHarnessImprovementRuntime(input: {
   const processLocalHarnessImprovementBoundary = (async function (
     boundary: LocalHarnessImprovementBoundary,
   ): Promise<void> {
+    if (parentModelRunOwnsRefinement(boundary.session)) return;
     const detection = await recordLocalHarnessImprovementBoundary({
       store: input.store,
       ...boundary,
@@ -296,15 +298,56 @@ export function createLocalHarnessImprovementRuntime(input: {
 
   processLocalHarnessImprovementBoundary.reconcilePending = async (): Promise<number> => {
     const pending = await input.store.listPendingHarnessRefinerTriggers();
+    let recovered = 0;
     for (const { workspaceId, trigger } of pending) {
-      const [session, turn] = await Promise.all([
+      const [session, storedTurn] = await Promise.all([
         input.store.getSession(trigger.runRef),
         input.store.getTurn(trigger.turnId),
       ]);
-      if (!session || !turn || turn.sessionId !== session.id) {
+      if (!session || !storedTurn || storedTurn.sessionId !== session.id) {
         throw new Error(
           `Pending Harness Refiner trigger ${trigger.id} references an unavailable session or turn.`,
         );
+      }
+      if (parentModelRunOwnsRefinement(session)) continue;
+      let turn = storedTurn;
+      if (!turn.harnessSnapshot) {
+        const [workspace, overlay] = await Promise.all([
+          input.store.getHarnessWorkspace(workspaceId),
+          input.store.getHarnessRunOverlay(trigger.runRef),
+        ]);
+        const overlayMatches = Boolean(
+          workspace
+          && overlay
+          && trigger.overlay
+          && overlay.id === trigger.overlay.id
+          && overlay.revision === trigger.overlay.revision
+          && overlay.contentHash === trigger.overlay.contentHash
+          && overlay.workspace.workspaceId === workspaceId
+          && overlay.workspace.revision === workspace.revision
+          && overlay.workspace.sourceRevision === workspace.sourceRevision
+          && overlay.workspace.channelRevision === workspace.currentChannel.revision
+          && overlay.baseHarnessRelease.id === trigger.harnessRelease.id
+          && overlay.baseHarnessRelease.contentHash === trigger.harnessRelease.contentHash,
+        );
+        if (!workspace || !overlay || !trigger.overlay || !overlayMatches) {
+          throw new Error(
+            `Pending Harness Refiner trigger ${trigger.id} cannot reconstruct its missing Harness snapshot.`,
+          );
+        }
+        turn = await input.store.updateTurn(turn.id, (current) => TurnSchema.parse({
+          ...current,
+          harnessSnapshot: {
+            schemaVersion: "openpond.harnessTurnSnapshot.v1",
+            workspaceId,
+            workspaceRevision: overlay.workspace.revision,
+            sourceRevision: overlay.workspace.sourceRevision,
+            channelName: workspace.currentChannel.name,
+            channelRevision: overlay.workspace.channelRevision,
+            harnessRelease: trigger.harnessRelease,
+            overlay: trigger.overlay,
+          },
+        })) ?? turn;
       }
       if (turn.harnessSnapshot?.workspaceId !== workspaceId) {
         throw new Error(
@@ -312,11 +355,18 @@ export function createLocalHarnessImprovementRuntime(input: {
         );
       }
       await enqueueTrigger({ session, turn }, trigger, true);
+      recovered += 1;
     }
-    return pending.length;
+    return recovered;
   };
 
   return processLocalHarnessImprovementBoundary;
+}
+
+function parentModelRunOwnsRefinement(session: Session): boolean {
+  return session.metadata?.automatedTasksetWorkAttempt === true
+    && typeof session.metadata.parentModelRunId === "string"
+    && session.metadata.parentModelRunId.trim().length > 0;
 }
 
 function refinerActivityVisibility(

@@ -40,6 +40,86 @@ afterEach(async () => {
 });
 
 describe("Local Harness refinement acceptance", () => {
+  it("leaves model-run-owned pending triggers for their benchmark orchestrator", async () => {
+    const directory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "openpond-harness-refinement-managed-run-"),
+    );
+    const store = new SqliteStore(directory);
+    cleanup.push({ directory, store });
+    const created = await createLocalHarnessWorkspace({
+      store,
+      storeDir: directory,
+      id: "managed-run-refinement",
+      ownerId: "desktop-personal",
+      name: "Managed run Harness",
+      now: () => BEFORE,
+    });
+    await store.selectHarnessWorkspace({
+      ownerKind: "personal",
+      ownerId: "desktop-personal",
+      workspaceId: created.workspace.id,
+      updatedAt: BEFORE,
+    });
+    const runtime = await loadSelectedLocalHarnessRuntime(store);
+    if (!runtime) throw new Error("Managed-run Harness runtime was not selected.");
+    const admitted = await admitRun({
+      store,
+      runtime,
+      runId: "managed-run-refinement-attempt",
+      admittedAt: BEFORE,
+    });
+    const session = await store.updateSession(admitted.session.id, (current) => ({
+      ...current,
+      metadata: {
+        ...current.metadata,
+        automatedTasksetWorkAttempt: true,
+        parentModelRunId: "model-run-owned-refiner",
+      },
+    }));
+    if (!session) throw new Error("Managed-run session was unavailable.");
+    await executeScriptedConverterTask({
+      store,
+      sessionId: session.id,
+      turnId: admitted.turn.id,
+      instructions: await readRuntimeInstructions(runtime.release.bundlePath),
+      occurredAt: BEFORE,
+    });
+    await recordLocalHarnessImprovementBoundary({
+      store,
+      session,
+      turn: admitted.turn,
+      boundaryKind: "turn_completed",
+    });
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+
+    let modelCalls = 0;
+    const queue = createBackgroundWorkerQueue({
+      queueId: "local-harness-managed-run-refinement",
+    });
+    const processBoundary = createLocalHarnessImprovementRuntime({
+      store,
+      storeDir: directory,
+      queue,
+      appendRuntimeEvent: (runtimeEvent) => store.appendRuntimeEvent(runtimeEvent),
+      upsertModelUsageRecord: async (record) => {
+        await store.upsertModelUsageRecord(record);
+      },
+      streamOpenPondHostedChatTurn: async function* () {
+        modelCalls += 1;
+        yield refinerDelta({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+          decision: "no_action",
+          reason: "The benchmark orchestrator owns this trigger.",
+        });
+      },
+    });
+
+    await expect(processBoundary.reconcilePending()).resolves.toBe(0);
+    await queue.drain();
+    expect(modelCalls).toBe(0);
+    expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+  });
+
   it("turns a recovered converter failure into a release that avoids the same failure", async () => {
     const directory = await fs.mkdtemp(
       path.join(os.tmpdir(), "openpond-harness-refinement-acceptance-"),
@@ -273,10 +353,21 @@ describe("Local Harness refinement acceptance", () => {
       boundaryKind: "turn_completed",
     });
     expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(1);
+    await store.updateTurn(recovered.turn.id, (current) => ({
+      ...current,
+      harnessSnapshot: null,
+    }));
 
     await expect(processBoundary.reconcilePending()).resolves.toBe(1);
     await queue.drain();
     expect(await store.listPendingHarnessRefinerTriggers()).toHaveLength(0);
+    expect((await store.getTurn(recovered.turn.id))?.harnessSnapshot).toMatchObject({
+      workspaceId: improvedRuntime.workspace.id,
+      harnessRelease: {
+        id: improvedRuntime.release.harnessRelease.id,
+        contentHash: improvedRuntime.release.harnessRelease.contentHash,
+      },
+    });
     const recoveredEvents = await store.runtimeEventsForSession(recovered.session.id);
     expect(recoveredEvents).toEqual(expect.arrayContaining([
       expect.objectContaining({
