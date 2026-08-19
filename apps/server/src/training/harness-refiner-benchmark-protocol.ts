@@ -65,8 +65,8 @@ export function createHarnessRefinerExecutionPlan(input: {
   const adaptation = taskIdsForSplit(input.taskset, benchmark.adaptationSplit);
   const multiplier = input.seeds.length * input.repetitions;
   return [
-    planItem("baseline", benchmark.evaluationSplit, heldOut, multiplier),
     planItem("adaptation", benchmark.adaptationSplit, adaptation, multiplier),
+    planItem("baseline", benchmark.evaluationSplit, heldOut, multiplier),
     planItem("candidate_adaptation", benchmark.adaptationSplit, adaptation, multiplier),
     planItem("candidate", benchmark.evaluationSplit, heldOut, multiplier),
   ];

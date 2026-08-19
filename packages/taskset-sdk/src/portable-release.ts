@@ -4,6 +4,7 @@ import type {
   Taskset,
 } from "@openpond/contracts";
 import {
+  TaskRecordSchema,
   TasksetReleaseContentSchema,
   TasksetReleaseSchema,
   bindTasksetExecutionReleases,
@@ -16,6 +17,11 @@ import {
 import type {
   ImmutableAssetRef,
   ToolDeclaration,
+} from "@openpond/harness";
+import {
+  CapabilityRequirementSchema,
+  ImmutableAssetRefSchema,
+  ToolDeclarationSchema,
 } from "@openpond/harness";
 
 import { canonicalJson } from "./canonical-json.js";
@@ -113,6 +119,8 @@ export function portableTasksetTools(taskset: Taskset): ToolDeclaration[] {
 }
 
 function portableTask(task: TaskDataRecord) {
+  const admitted = task.metadata.portableTaskRecord;
+  if (admitted !== undefined) return TaskRecordSchema.parse(admitted);
   return {
     id: task.id,
     clusterKey: task.clusterKey,
@@ -161,6 +169,10 @@ function portableEnvironment(taskset: Taskset): EnvironmentContract {
 }
 
 function portableTools(taskset: Taskset): ToolDeclaration[] {
+  const admitted = taskset.environment.metadata.portableTools;
+  if (admitted !== undefined) {
+    return ToolDeclarationSchema.array().max(200).parse(admitted);
+  }
   const bindings = taskset.environment.actionBindings ?? [];
   if (bindings.length) return bindings.map((binding) => ({
     name: binding.modelToolName,
@@ -204,13 +216,15 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
   if (grader.kind === "custom_verifier") return {
     ...base,
     kind: "custom_verifier",
-    verifierRef: asset({
-      id: `verifier-${grader.id}`,
-      path: `graders/${segment(grader.id)}/verifier.json`,
-      hashInput: { module: grader.module, exportName: grader.exportName },
-      mediaType: "application/json",
-      visibility: "host_private",
-    }),
+    verifierRef: grader.metadata.portableVerifierRef === undefined
+      ? asset({
+          id: `verifier-${grader.id}`,
+          path: `graders/${segment(grader.id)}/verifier.json`,
+          hashInput: { module: grader.module, exportName: grader.exportName },
+          mediaType: "application/json",
+          visibility: "host_private",
+        })
+      : ImmutableAssetRefSchema.parse(grader.metadata.portableVerifierRef),
     timeoutMs: grader.timeoutMs,
     networkPolicy: "none",
   };
@@ -236,6 +250,10 @@ function portableGrader(grader: GraderSpec): PortableGraderSpec {
 }
 
 function portableCapabilities(taskset: Taskset) {
+  const admitted = taskset.metadata.portableCapabilities;
+  if (admitted !== undefined) {
+    return CapabilityRequirementSchema.array().max(200).parse(admitted);
+  }
   return [
     ...(taskset.capabilities.requiresTools
       ? [{ id: "tools", required: true, scopes: taskset.environment.toolNames }]

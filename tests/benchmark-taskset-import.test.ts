@@ -6,11 +6,13 @@ import {
   harnessRefinerBenchmarkRelease,
 } from "@openpond/evals";
 import { computeTasksetHash } from "@openpond/taskset-sdk";
+import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
 import { describe, expect, test } from "vitest";
 
 import { SqliteStore } from "../apps/server/src/store/store.js";
 import { createTrainingApi } from "../apps/server/src/training/training-api.js";
 import { createBenchmarkTasksetService } from "../apps/server/src/training/benchmark-tasksets.js";
+import { runSandboxedVerifier } from "../apps/server/src/training/sandboxed-verifier.js";
 import { withTempDirectory } from "./helpers/temp-directory.js";
 
 describe("shipped benchmark Taskset projection", () => {
@@ -39,15 +41,58 @@ describe("shipped benchmark Taskset projection", () => {
             releaseHash: harnessRefinerBenchmarkRelease.contentHash,
             adaptationSplit: "validation",
             evaluationSplit: "frozen_eval",
+            primaryMetric: "success_rate",
           },
         });
         expect(taskset.tasks).toHaveLength(20);
-        expect(taskset.graders.find((grader) => grader.kind === "model_judge"))
-          .toMatchObject({
-            calibrationStatus: "pending",
-            rewardEligible: false,
-            metadata: { requestedRewardEligible: true },
-          });
+        expect(taskset.graders).toHaveLength(1);
+        expect(taskset.graders[0]).toMatchObject({
+          kind: "custom_verifier",
+          hardGate: true,
+          rewardEligible: true,
+        });
+        expect(taskset.metadata.supplementaryModelJudge).toMatchObject({
+          calibrationStatus: "pending",
+          executable: false,
+          rewardEligible: false,
+        });
+        const verifier = taskset.graders[0];
+        const fixtureTask = taskset.tasks.find(
+          (task) => task.id === "adaptation-launch-delay-email",
+        );
+        if (!verifier || verifier.kind !== "custom_verifier" || !fixtureTask) {
+          throw new Error("Projected deterministic verifier fixture is unavailable.");
+        }
+        const allowedRoot = path.join(
+          storeDir,
+          "training",
+          "tasksets",
+          taskset.id,
+        );
+        const positive = await runSandboxedVerifier({
+          grader: verifier,
+          task: fixtureTask,
+          attempt: {
+            output: {
+              text: "Subject: Acme pilot launch update\n\nThe August 20 launch is moving to August 27 because final accessibility testing is not complete. Testing is expected to finish August 22, and existing pilot access remains available. Please send questions to pilot-support@example.com. Thank you for your patience while we complete this work.",
+              requiredOutputs: [],
+            },
+          } as never,
+          allowedRoot,
+        });
+        const negative = await runSandboxedVerifier({
+          grader: verifier,
+          task: fixtureTask,
+          attempt: {
+            output: {
+              text: "Draft saved to /workspace/outputs/acme-launch-email.md. Checklist: new date included; accessibility testing mentioned; pilot access preserved; support address included; under 140 words.",
+              requiredOutputs: [],
+            },
+          } as never,
+          allowedRoot,
+        });
+        expect(positive).toMatchObject({ passed: true, score: 1 });
+        expect(negative).toMatchObject({ passed: false, score: 0 });
         expect(repeated).toEqual(taskset);
         expect(await store.listTasksets("benchmark-profile")).toEqual([taskset]);
 
@@ -66,6 +111,24 @@ describe("shipped benchmark Taskset projection", () => {
           )),
         ));
         expect(release?.contentHash).toBe(harnessRefinerBenchmarkRelease.contentHash);
+        if (!release) throw new Error("Managed benchmark release was not loaded.");
+        const portable = materializePortableTasksetRelease({
+          taskset,
+          adapterId: "openpond.desktop-local-work.v1",
+          admittedTasksetRelease: release,
+        });
+        expect(portable.tasksetRelease).toMatchObject({
+          id: release.id,
+          graders: release.graders,
+          environmentRelease: {
+            id: portable.environmentRelease.id,
+            contentHash: portable.environmentRelease.contentHash,
+          },
+          verifierSetRelease: {
+            id: portable.verifierSetRelease.id,
+            contentHash: portable.verifierSetRelease.contentHash,
+          },
+        });
 
         for (const asset of taskset.tasks.flatMap((task) => task.assets)) {
           await expect(access(path.join(

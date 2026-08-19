@@ -1,7 +1,7 @@
 # Harness Refiner Taskset Design
 
-Status: Taskset Release materialized; model-judge calibration and runtime
-conformance pending.
+Status: Taskset Release materialized; deterministic local-runtime conformance
+passed.
 
 This directory contains the canonical `openpond.tasksetRelease.v2` used by the
 Harness Refiner benchmark. Benchmarking is a first-class Taskset purpose: the
@@ -10,11 +10,14 @@ while the benchmark protocol controls paired execution and comparison. Running
 this benchmark does not start a training job.
 
 - Release: [`taskset.release.json`](./taskset.release.json)
-- Release id: `harness-refiner-08112026`
-- Revision: `1`
+- Release id: `harness-refiner-20260818-v2`
+- Revision: `2`
 - Content hash:
-  `4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634`
-- Rebuild: `pnpm exec tsx benchmarks/harness-refiner/taskset/build.ts`
+  `20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d`
+- Historical release:
+  [`harness-refiner-08112026.json`](./releases/harness-refiner-08112026.json)
+- Rebuild: `pnpm benchmark:harness-refiner:build`
+- Conformance: `pnpm benchmark:harness-refiner:conformance`
 
 ## Split
 
@@ -63,9 +66,9 @@ reply so a candidate must generalize beyond one prompt template.
 
 ## Evidence contract
 
-Each attempt must retain the visible request and answer, runtime and tool
-receipts, generated artifacts, deterministic checks, calibrated grader output,
-manual-review state where required, and authoritative provider usage.
+Each attempt retains the visible request and answer, runtime and tool receipts,
+generated artifacts, deterministic checks, canonical reward receipts, and
+authoritative provider usage.
 
 For adaptation cases, Refiner receives bounded neutral facts,
 content-addressed references, requests, user-visible outputs, artifact checks,
@@ -76,8 +79,17 @@ chooses the smallest justified Harness change or external route. Deterministic c
 authorization, budgets, schemas, paths, hashes, validation, atomic application,
 and rollback; it does not choose the semantic diagnosis or route.
 
-Frozen-evaluation prompts, privileged expected outcomes, grader rubrics, and
-results remain unavailable to Refiner until the candidate Harness is frozen.
+Frozen-evaluation prompts, privileged expected outcomes, deterministic
+contracts, and results remain unavailable to Refiner until the candidate
+Harness is frozen.
+
+The primary reward is produced by one sandboxed deterministic verifier. It
+checks required artifact type and validation receipts, explicit message facts,
+word limits, direct-link/report structure, and declared prohibitions. This is
+an output-contract reward, not a claim that every factual or aesthetic detail
+has been judged. The richer quality rubric remains a content-addressed,
+uncalibrated supplementary artifact and is not executed, weighted, or allowed
+to block primary reward.
 
 ## Materialization and execution gate
 
@@ -87,12 +99,15 @@ The checked-in release now satisfies these materialization requirements:
 - every fixture and rubric has an immutable asset reference and content hash;
 - production tool declarations and capability requirements are captured from
   the qualified runtime rather than rewritten by hand;
-- the deterministic verifier and model judge are declared with immutable
-  assets;
+- the deterministic verifier and supplementary rubric are immutable assets;
 - `@openpond/evals` validates the release and rejects split-cluster
   contamination;
+- the projected app Taskset round-trips to the admitted portable environment,
+  tool, task, capability, and verifier contracts; and
+- a scripted no-training Work attempt earned a scored reward of `1`, persisted
+  its artifact manifest, attempt receipt, reward receipt, and Evaluation
+  result, and made zero model-judge calls.
 
-The model judge remains explicitly `pending` until it is calibrated. Before a
-benchmark result can be published, one conformance run must prove the Taskset,
-Harness, runtime, grader, artifact, and receipt path end to end without invoking
-training.
+The supplementary model judge remains explicitly `pending` until separate
+calibration evidence exists. It is not part of this release's executable
+Verifier Set.

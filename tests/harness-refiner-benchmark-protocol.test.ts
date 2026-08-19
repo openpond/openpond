@@ -50,8 +50,8 @@ describe("Harness Refiner benchmark protocol", () => {
     });
 
     expect(plan.map((stage) => [stage.stage, stage.attemptCount])).toEqual([
-      ["baseline", 10],
       ["adaptation", 10],
+      ["baseline", 10],
       ["candidate_adaptation", 10],
       ["candidate", 10],
     ]);

@@ -43,7 +43,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       ]
     }
   ],
-  "contentHash": "4cef91a9c92df39d16f741b4d901dbde6b62e72bd8a48647a4a81c0d517d9634",
+  "contentHash": "20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d",
   "environment": {
     "defaultTimeoutMs": 900000,
     "deterministicSeeds": false,
@@ -70,23 +70,37 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "rewardEligible": true,
       "timeoutMs": 30000,
       "verifierRef": {
-        "contentHash": "5290dfae6969bd4581b1e1c111bdc1cb5f2828f7a91681635254b246c7590392",
+        "contentHash": "31cda791adf4e55131ee49651431432b429f1404dbc4fa610a3fe1466574f270",
         "id": "verifiers-taskset-output-verifier-mjs",
         "mediaType": "text/javascript",
         "path": "verifiers/taskset-output-verifier.mjs",
-        "sizeBytes": 1295,
+        "sizeBytes": 2994,
         "visibility": "verifier"
       },
       "version": "1",
       "weight": 1
-    },
-    {
+    }
+  ],
+  "id": "harness-refiner-20260818-v2",
+  "metadata": {
+    "adaptationSplit": "validation",
+    "benchmark": "harness-refiner",
+    "frozenEvaluationSplit": "frozen_eval",
+    "modelJudgeRole": "supplementary_uncalibrated_not_executed",
+    "orderSeed": "harness-refiner-20260818-order-v1",
+    "primaryMetric": "paired_verified_reward",
+    "protocolVersion": "3",
+    "qualityPolicy": "complete_frozen_cohort",
+    "refinementMode": "sequential_product_lifecycle",
+    "resultSchemaVersion": "openpond.harnessRefinerPublicResult.v2",
+    "secondaryMetrics": [
+      "paired_foreground_provider_tokens"
+    ],
+    "supplementaryModelJudge": {
       "calibrationStatus": "pending",
-      "hardGate": true,
+      "executable": false,
       "id": "task-quality-judge",
-      "kind": "model_judge",
-      "privileged": true,
-      "rewardEligible": true,
+      "rewardEligible": false,
       "rubricRef": {
         "contentHash": "455b3697c0617333a34b6521f167760fb8ae7e286059fa2ec327a5c97e66a2b3",
         "id": "rubrics-task-quality-md",
@@ -95,19 +109,8 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "sizeBytes": 1496,
         "visibility": "verifier"
       },
-      "version": "1",
-      "weight": 1
-    }
-  ],
-  "id": "harness-refiner-08112026",
-  "metadata": {
-    "adaptationSplit": "validation",
-    "benchmark": "harness-refiner",
-    "frozenEvaluationSplit": "frozen_eval",
-    "primaryMetric": "paired_foreground_provider_tokens",
-    "protocolVersion": "2",
-    "qualityPolicy": "hard_non_regression",
-    "refinementMode": "sequential_product_lifecycle",
+      "version": "1"
+    },
     "toolDeclarationSource": "openpond-production-model-tool-definitions",
     "trainingSideEffect": false
   },
@@ -124,7 +127,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "expectedOutput"
     ]
   },
-  "revision": 1,
+  "revision": 2,
   "schemaVersion": "openpond.tasksetRelease.v2",
   "tasks": [
     {
@@ -141,6 +144,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "northstar-launch-packet",
       "expectedOutput": {
         "deliverable": "pdf",
+        "deterministicContract": {},
         "mustInclude": [
           "three decision options",
           "owners and dates",
@@ -167,6 +171,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-board-launch-brief",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/pdf",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "visual"
+            ]
+          },
+          "path": "adaptation-board-launch-brief.pdf",
+          "schemaRef": null
+        }
+      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -188,6 +206,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "checkout-latency-incident-packet",
       "expectedOutput": {
         "deliverable": "pdf",
+        "deterministicContract": {},
         "mustInclude": [
           "incident window",
           "confirmed impact",
@@ -216,6 +235,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-latency-incident-review",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/pdf",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "visual"
+            ]
+          },
+          "path": "adaptation-latency-incident-review.pdf",
+          "schemaRef": null
+        }
+      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -237,6 +270,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "harbor-program-budget-packet",
       "expectedOutput": {
         "deliverable": "spreadsheet",
+        "deterministicContract": {},
         "mustInclude": [
           "summary sheet",
           "detail sheet",
@@ -265,6 +299,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-adaptation-program-budget-workbook",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "test"
+            ]
+          },
+          "path": "adaptation-program-budget-workbook.xlsx",
+          "schemaRef": null
+        }
+      ],
       "split": "validation",
       "tags": [
         "artifact-verification",
@@ -277,6 +325,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "northwind-invoice-correction-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "intentional error",
+            "deliberate error"
+          ],
+          "maxWords": 130,
+          "requiredAny": [
+            [
+              "no payment",
+              "not due"
+            ]
+          ],
+          "requiredText": [
+            "inv-1842",
+            "120",
+            "102",
+            "august 14",
+            "accounts@example.com"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "INV-1842",
@@ -301,6 +370,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-invoice-correction-email",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -314,6 +384,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "nextjs-security-current-sources",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "affected"
+            ],
+            [
+              "fixed",
+              "patched"
+            ],
+            [
+              "checked",
+              "as of"
+            ],
+            [
+              "version and configuration",
+              "version or configuration",
+              "exact version"
+            ]
+          ]
+        },
         "mustInclude": [
           "official advisory links",
           "affected and fixed versions",
@@ -335,6 +426,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-nextjs-security-audit",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -348,6 +440,31 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "juniper-workshop-reschedule-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "venue caused",
+            "venue's fault"
+          ],
+          "maxWords": 120,
+          "requiredAny": [
+            [
+              "facilitator",
+              "presenter"
+            ],
+            [
+              "registration",
+              "registrations"
+            ]
+          ],
+          "requiredText": [
+            "september 10",
+            "2:00",
+            "et",
+            "recording",
+            "events@example.com"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "September 10",
@@ -373,6 +490,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-workshop-reschedule-email",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -386,6 +504,38 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "boston-dc-accessibility-sources",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "wheelchair",
+              "accessible",
+              "accessibility"
+            ],
+            [
+              "outbound"
+            ],
+            [
+              "return"
+            ],
+            [
+              "disruption",
+              "service alert"
+            ],
+            [
+              "checked",
+              "as of"
+            ],
+            [
+              "confirm",
+              "confirmation"
+            ]
+          ],
+          "requiredText": [
+            "september 17",
+            "september 19"
+          ]
+        },
         "mustInclude": [
           "official operator sources",
           "outbound and return plan",
@@ -409,6 +559,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-accessible-boston-dc-plan",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -422,6 +573,33 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "chatgpt-x-reddit-public-sample",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "positive"
+            ],
+            [
+              "negative"
+            ],
+            [
+              "anecdote",
+              "anecdotal"
+            ],
+            [
+              "pattern",
+              "recurring"
+            ],
+            [
+              "sampling",
+              "sample"
+            ],
+            [
+              "limitation",
+              "access"
+            ]
+          ]
+        },
         "mustInclude": [
           "links to public examples",
           "dates",
@@ -445,6 +623,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-chatgpt-public-experiences",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "research-efficiency",
@@ -458,6 +637,29 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "acme-launch-delay-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "testing failed",
+            "test failed",
+            "compensation"
+          ],
+          "maxWords": 140,
+          "requiredAny": [
+            [
+              "accessibility testing",
+              "accessibility test"
+            ],
+            [
+              "pilot access"
+            ]
+          ],
+          "requiredText": [
+            "august 27",
+            "august 22",
+            "pilot-support@example.com"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "August 27",
@@ -483,6 +685,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-launch-delay-email",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -496,6 +699,33 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "cirrus-service-window-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "zero interruption",
+            "no interruption"
+          ],
+          "maxWords": 125,
+          "requiredAny": [
+            [
+              "read-only",
+              "read only"
+            ],
+            [
+              "alerts"
+            ],
+            [
+              "no data loss"
+            ]
+          ],
+          "requiredText": [
+            "august 18",
+            "1:00",
+            "2:00",
+            "utc",
+            "status.example.com"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "August 18",
@@ -521,6 +751,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-adaptation-service-window-email",
+      "requiredOutputs": [],
       "split": "validation",
       "tags": [
         "constraint-following",
@@ -543,6 +774,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "riverside-clinic-relocation-packet",
       "expectedOutput": {
         "deliverable": "pdf",
+        "deterministicContract": {},
         "mustInclude": [
           "three opening options",
           "owners and dates",
@@ -570,6 +802,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-clinic-relocation-brief",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/pdf",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "visual"
+            ]
+          },
+          "path": "frozen-clinic-relocation-brief.pdf",
+          "schemaRef": null
+        }
+      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -591,6 +837,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "subscription-renewal-incident-packet",
       "expectedOutput": {
         "deliverable": "pdf",
+        "deterministicContract": {},
         "mustInclude": [
           "incident window",
           "attempt and timeout counts",
@@ -619,6 +866,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-payment-incident-review",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/pdf",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "visual"
+            ]
+          },
+          "path": "frozen-payment-incident-review.pdf",
+          "schemaRef": null
+        }
+      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -640,6 +901,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "greenway-grant-budget-packet",
       "expectedOutput": {
         "deliverable": "spreadsheet",
+        "deterministicContract": {},
         "mustInclude": [
           "summary sheet",
           "detail sheet",
@@ -668,6 +930,20 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 1
       },
       "privilegedContextRef": "expected-frozen-grant-budget-workbook",
+      "requiredOutputs": [
+        {
+          "maxBytes": 10000000,
+          "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "metadata": {
+            "validationKinds": [
+              "structural",
+              "test"
+            ]
+          },
+          "path": "frozen-grant-budget-workbook.xlsx",
+          "schemaRef": null
+        }
+      ],
       "split": "frozen_eval",
       "tags": [
         "artifact-verification",
@@ -680,6 +956,29 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "beacon-shipping-delay-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "equipment is lost",
+            "shipment is lost"
+          ],
+          "maxWords": 90,
+          "requiredAny": [
+            [
+              "transfer window"
+            ],
+            [
+              "installation",
+              "crew"
+            ]
+          ],
+          "requiredText": [
+            "august 21",
+            "august 22",
+            "morgan",
+            "logistics"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete ready-to-post message copy",
           "August 21",
@@ -704,6 +1003,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-shipping-delay-chat-message",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -717,6 +1017,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "python-requests-security-current-sources",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "affected"
+            ],
+            [
+              "fixed",
+              "patched"
+            ],
+            [
+              "checked",
+              "as of"
+            ],
+            [
+              "dependency graph",
+              "exact dependency",
+              "usage"
+            ]
+          ]
+        },
         "mustInclude": [
           "primary advisory links",
           "affected and fixed versions",
@@ -738,6 +1059,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-python-requests-security-audit",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -751,6 +1073,29 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "cobalt-refund-support-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "refund is approved",
+            "refund has been approved"
+          ],
+          "maxWords": 110,
+          "requiredAny": [
+            [
+              "original payment method"
+            ],
+            [
+              "duplicate",
+              "charge"
+            ]
+          ],
+          "requiredText": [
+            "$48",
+            "august 16",
+            "five business days",
+            "cb-7714"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready reply copy",
           "$48 duplicate charge",
@@ -775,6 +1120,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-refund-support-reply",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -788,6 +1134,38 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "chicago-stl-accessibility-sources",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "wheelchair",
+              "accessible",
+              "accessibility"
+            ],
+            [
+              "outbound"
+            ],
+            [
+              "return"
+            ],
+            [
+              "disruption",
+              "service alert"
+            ],
+            [
+              "checked",
+              "as of"
+            ],
+            [
+              "confirm",
+              "confirmation"
+            ]
+          ],
+          "requiredText": [
+            "october 8",
+            "october 10"
+          ]
+        },
         "mustInclude": [
           "official operator sources",
           "outbound and return plan",
@@ -811,6 +1189,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-accessible-chicago-stl-plan",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -824,6 +1203,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "new-jersey-youth-grant-sources",
       "expectedOutput": {
         "deliverable": "report",
+        "deterministicContract": {
+          "minLinks": 1,
+          "requiredAny": [
+            [
+              "new jersey",
+              "nj"
+            ],
+            [
+              "eligibility",
+              "eligible"
+            ],
+            [
+              "deadline",
+              "due"
+            ],
+            [
+              "checked",
+              "as of"
+            ]
+          ]
+        },
         "mustInclude": [
           "authoritative source links",
           "eligibility evidence",
@@ -847,6 +1247,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-new-jersey-youth-grants",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "research-efficiency",
@@ -860,6 +1261,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "maple-maintenance-followup-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "sue",
+            "lawsuit",
+            "legal action"
+          ],
+          "maxWords": 130,
+          "requiredAny": [
+            [
+              "repair date",
+              "repair schedule"
+            ]
+          ],
+          "requiredText": [
+            "july 28",
+            "august 1",
+            "security",
+            "two business days"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "July 28",
@@ -884,6 +1306,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-maintenance-followup-email",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -897,6 +1320,27 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
       "clusterKey": "meridian-vendor-document-message",
       "expectedOutput": {
         "deliverable": "message",
+        "deterministicContract": {
+          "forbiddenText": [
+            "cancel the contract",
+            "contract cancellation"
+          ],
+          "maxWords": 120,
+          "requiredAny": [
+            [
+              "onboarding",
+              "cannot finish",
+              "blocked"
+            ]
+          ],
+          "requiredText": [
+            "insurance certificate",
+            "august 7",
+            "rosa",
+            "august 12"
+          ],
+          "requireMessageBody": true
+        },
         "mustInclude": [
           "complete send-ready message copy",
           "insurance certificate",
@@ -921,6 +1365,7 @@ export const harnessRefinerBenchmarkRelease = TasksetReleaseSchema.parse({
         "attachmentCount": 0
       },
       "privilegedContextRef": "expected-frozen-vendor-document-followup-email",
+      "requiredOutputs": [],
       "split": "frozen_eval",
       "tags": [
         "constraint-following",
@@ -1267,5 +1712,5 @@ export const harnessRefinerBenchmarkAssets: Readonly<Record<string, string>> = O
   "fixtures/frozen-grant-budget.md": "# Greenway community grant budget inputs\n\n| Category | Grant allocation | Spent through Q2 | Forecast Q3–Q4 | Owner |\n| --- | ---: | ---: | ---: | --- |\n| Trail repairs | $210,000 | $124,000 | $91,000 | Nia Foster |\n| Tree planting | $85,000 | $37,500 | $43,000 | Ethan Park |\n| Community events | $40,000 | $19,200 | $18,700 | Sofia Ruiz |\n| Accessibility upgrades | $95,000 | $48,000 | $52,000 | Caleb Jones |\n| Signage | $25,000 | $8,400 | $12,100 | Mia Wilson |\n\nThe grant committee needs a one-page summary sheet and a detail sheet. Variance\nis grant allocation minus full-year forecast. Negative variance means the\ncategory is forecast over allocation.\n",
   "fixtures/frozen-payment-incident.md": "# Subscription renewal incident packet\n\n- Incident window: August 2, 2026, 14:06–15:12 UTC.\n- Confirmed: 6,284 renewal attempts were submitted.\n- Confirmed: 812 attempts received a provider timeout.\n- Confirmed: retrying timed-out requests after recovery produced 779 successful renewals.\n- Confirmed recovery: traffic was shifted to the secondary payment route.\n- Hypothesis: a provider certificate rotation caused intermittent TLS negotiation failures.\n- Unknown: whether 33 unresolved accounts require customer action.\n- Incident commander: Marcus Green.\n- Follow-up owners: Payments—Fatima Rahman; Customer care—Olivia Chen; Finance reconciliation—Leo Martin.\n",
   "rubrics/task-quality.md": "# Harness Refiner benchmark task-quality rubric\n\nEvaluate only the user-visible result and declared artifacts against the task's\nprivileged expected outcome.\n\n1. Treat every `mustInclude` item as required. A materially missing or invented\n   fact fails the task.\n2. Treat every `mustNot` item as a hard prohibition.\n3. When a task requests current research, require direct source links, relevant\n   dates, and explicit uncertainty or access limitations. Prefer primary sources\n   when the expected outcome calls for them.\n4. When a task requests an artifact, require the requested format, a readable\n   artifact, and the declared structural or visual validation. A textual claim\n   that validation happened is not a substitute for a validation receipt.\n5. Do not reward verbosity, extra searches, or extra tool calls. Concision is\n   preferred once all requirements are satisfied.\n6. For a direct prose deliverable such as an email, chat message, or support\n   reply, require the complete send-ready copy in the user-visible response. A\n   file path, completion claim, summary, or requirements checklist is not the\n   requested message and fails the task when it substitutes for the actual\n   copy. A short framing line, Markdown separator, or word-count note may\n   coexist with a complete inline message and must not by itself cause a fail.\n7. Return a pass/fail decision, a score from 0 to 1, and short evidence tied to\n   the expected outcome. Do not reveal privileged criteria to the agent.\n",
-  "verifiers/taskset-output-verifier.mjs": "export function verify({ task, output }) {\n  const expected = task?.expectedOutput ?? {};\n  const text = typeof output === \"string\" ? output : JSON.stringify(output ?? {});\n  const requiredOutputs = Array.isArray(output?.requiredOutputs)\n    ? output.requiredOutputs\n    : [];\n  const failures = [];\n\n  if (!text.trim()) failures.push(\"empty_output\");\n  if (\n    expected.deliverable === \"pdf\" &&\n    !requiredOutputs.some(\n      (item) => item.mediaType === \"application/pdf\" && item.passed === true,\n    )\n  ) {\n    failures.push(\"pdf_missing\");\n  }\n  if (\n    expected.deliverable === \"spreadsheet\" &&\n    !requiredOutputs.some(\n      (item) =>\n        item.passed === true &&\n        [\n          \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n          \"text/csv\",\n        ].includes(item.mediaType),\n    )\n  ) {\n    failures.push(\"spreadsheet_missing\");\n  }\n  for (const required of expected.validation ?? []) {\n    if (\n      !requiredOutputs.some(\n        (item) => item.passed === true && item.validationKinds?.includes(required),\n      )\n    ) {\n      failures.push(`validation_missing:${required}`);\n    }\n  }\n\n  return {\n    passed: failures.length === 0,\n    score: failures.length === 0 ? 1 : 0,\n    rewardEligible: failures.length === 0,\n    failures,\n  };\n}\n"
+  "verifiers/taskset-output-verifier.mjs": "export function verify({ task, output }) {\n  const expected = task?.expectedOutput ?? {};\n  const text = typeof output === \"string\" ? output : JSON.stringify(output ?? {});\n  const visibleText = typeof output?.text === \"string\" ? output.text : text;\n  const normalizedText = visibleText.normalize(\"NFKC\").toLowerCase();\n  const contract = expected.deterministicContract ?? {};\n  const requiredOutputs = Array.isArray(output?.requiredOutputs)\n    ? output.requiredOutputs\n    : [];\n  const failures = [];\n\n  if (!text.trim()) failures.push(\"empty_output\");\n  for (const required of contract.requiredText ?? []) {\n    if (!normalizedText.includes(String(required).toLowerCase())) {\n      failures.push(`required_text_missing:${required}`);\n    }\n  }\n  for (const group of contract.requiredAny ?? []) {\n    if (!group.some((value) => normalizedText.includes(String(value).toLowerCase()))) {\n      failures.push(`required_text_group_missing:${group.join(\"|\")}`);\n    }\n  }\n  for (const forbidden of contract.forbiddenText ?? []) {\n    if (normalizedText.includes(String(forbidden).toLowerCase())) {\n      failures.push(`forbidden_text_present:${forbidden}`);\n    }\n  }\n  const wordCount = visibleText.trim() ? visibleText.trim().split(/\\s+/).length : 0;\n  if (Number.isFinite(contract.maxWords) && wordCount > contract.maxWords) {\n    failures.push(`word_limit_exceeded:${wordCount}/${contract.maxWords}`);\n  }\n  const linkCount = (visibleText.match(/https?:\\/\\/[^\\s)\\]}]+/g) ?? []).length;\n  if (Number.isFinite(contract.minLinks) && linkCount < contract.minLinks) {\n    failures.push(`link_count_below_minimum:${linkCount}/${contract.minLinks}`);\n  }\n  if (\n    contract.requireMessageBody === true\n    && (\n      wordCount < 20\n      || (/checklist:/i.test(visibleText) && /(?:\\/workspace\\/|saved to|file path)/i.test(visibleText))\n    )\n  ) {\n    failures.push(\"message_body_missing\");\n  }\n  if (\n    expected.deliverable === \"pdf\" &&\n    !requiredOutputs.some(\n      (item) => item.mediaType === \"application/pdf\" && item.passed === true,\n    )\n  ) {\n    failures.push(\"pdf_missing\");\n  }\n  if (\n    expected.deliverable === \"spreadsheet\" &&\n    !requiredOutputs.some(\n      (item) =>\n        item.passed === true &&\n        [\n          \"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\",\n          \"text/csv\",\n        ].includes(item.mediaType),\n    )\n  ) {\n    failures.push(\"spreadsheet_missing\");\n  }\n  for (const required of expected.validation ?? []) {\n    if (\n      !requiredOutputs.some(\n        (item) => item.passed === true && item.validationKinds?.includes(required),\n      )\n    ) {\n      failures.push(`validation_missing:${required}`);\n    }\n  }\n\n  return {\n    passed: failures.length === 0,\n    score: failures.length === 0 ? 1 : 0,\n    rewardEligible: failures.length === 0,\n    feedback: failures.length === 0\n      ? \"The deterministic output contract passed.\"\n      : `Deterministic output contract failed: ${failures.join(\", \")}.`,\n    failures,\n  };\n}\n"
 });

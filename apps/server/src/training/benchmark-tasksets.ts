@@ -11,7 +11,11 @@ import {
   type BenchmarkDefinition,
   type TasksetRelease,
 } from "@openpond/evals";
-import { contentHash, type ImmutableAssetRef } from "@openpond/harness";
+import {
+  ImmutableAssetRefSchema,
+  contentHash,
+  type ImmutableAssetRef,
+} from "@openpond/harness";
 import {
   TasksetSchema,
   type GraderFixture,
@@ -90,19 +94,24 @@ function definitionForRelease(release: TasksetRelease): BenchmarkDefinition {
   return createBenchmarkDefinition({
     schemaVersion: "openpond.benchmarkDefinition.v1",
     id: BUILTIN_DEFINITION_ID,
-    title: "Harness Refiner 08112026",
+    title: "Harness Refiner 20260818 v2",
     description:
-      "Measures whether sequential, evidence-driven Harness improvements preserve quality while reducing future-task foreground tokens.",
+      "Measures whether sequential, evidence-driven Harness improvements change verified reward on a frozen cohort; foreground tokens are secondary.",
     tasksetRelease: { id: release.id, contentHash: release.contentHash },
     adaptationSplit: "validation",
     evaluationSplit: "frozen_eval",
-    primaryMetric: "foreground_tokens",
+    primaryMetric: "success_rate",
     qualityGate: "non_regression",
     caseCounts: {
       adaptation: release.tasks.filter((task) => task.split === "validation").length,
       evaluation: release.tasks.filter((task) => task.split === "frozen_eval").length,
     },
-    metadata: { builtin: true, protocol: "sequential_product_lifecycle" },
+    metadata: {
+      builtin: true,
+      protocol: "sequential_product_lifecycle_v3",
+      orderSeed: "harness-refiner-20260818-order-v1",
+      secondaryMetrics: ["foreground_tokens"],
+    },
   });
 }
 
@@ -153,19 +162,17 @@ async function projectRelease(input: {
       mediaType: asset.mediaType,
     });
   }
-  const rubricGrader = input.release.graders.find(
-    (grader) => grader.kind === "model_judge",
-  );
   const verifierGrader = input.release.graders.find(
     (grader) => grader.kind === "custom_verifier",
   );
-  if (!rubricGrader || !verifierGrader) {
-    throw new Error("Benchmark release requires a model judge and custom verifier.");
+  const supplementaryJudge = supplementaryModelJudge(input.release);
+  if (!verifierGrader) {
+    throw new Error("Benchmark release requires a custom verifier.");
   }
-  const rubric = await copyVerifierAsset(
+  await copyVerifierAsset(
     input.assets,
     input.tasksetRoot,
-    rubricGrader.rubricRef,
+    supplementaryJudge.rubricRef,
   );
   await copyVerifierAsset(
     input.assets,
@@ -175,12 +182,6 @@ async function projectRelease(input: {
 
   const sourceId = `source-${input.tasksetId}`;
   const tasks: TaskDataRecord[] = input.release.tasks.map((task) => {
-    const deliverable = stringValue(task.expectedOutput?.deliverable);
-    const validationKinds = Array.isArray(task.expectedOutput?.validation)
-      ? task.expectedOutput.validation.filter(
-          (value): value is string => typeof value === "string",
-        )
-      : [];
     return {
       schemaVersion: "openpond.taskData.v1",
       id: task.id,
@@ -206,9 +207,18 @@ async function projectRelease(input: {
           metadata: { portableContentHash: asset.contentHash },
         };
       }),
-      requiredOutputs: requiredOutputs(task.id, deliverable, validationKinds),
+      requiredOutputs: (task.requiredOutputs ?? []).map((output) => ({
+        path: output.path,
+        mediaType: output.mediaType,
+        schemaRef: output.schemaRef?.id ?? null,
+        maxBytes: output.maxBytes ?? undefined,
+        metadata: output.metadata,
+      })),
       tags: task.tags,
-      metadata: { portableTaskId: task.id },
+      metadata: {
+        portableTaskId: task.id,
+        portableTaskRecord: task,
+      },
     };
   });
   const sourceFileHashes = [...managedAssetById.values()].map((asset) => asset.sha256);
@@ -226,29 +236,9 @@ async function projectRelease(input: {
       exportName: "verify",
       timeoutMs: verifierGrader.timeoutMs,
       networkPolicy: "none",
-      metadata: { portableVerifierHash: verifierGrader.verifierRef.contentHash },
-    },
-    {
-      id: rubricGrader.id,
-      version: rubricGrader.version,
-      label: "Task quality",
-      kind: "model_judge",
-      weight: rubricGrader.weight,
-      hardGate: rubricGrader.hardGate,
-      rewardEligible: false,
-      privileged: rubricGrader.privileged,
-      rubric,
-      judge: { providerId: "openpond", modelId: "openpond-chat" },
-      calibrationFixtureRefs: [
-        "benchmark-positive",
-        "benchmark-negative",
-        "benchmark-boundary",
-      ],
-      calibrationStatus: "pending",
-      temperature: 0,
       metadata: {
-        portableRubricHash: rubricGrader.rubricRef.contentHash,
-        requestedRewardEligible: rubricGrader.rewardEligible,
+        portableVerifierHash: verifierGrader.verifierRef.contentHash,
+        portableVerifierRef: verifierGrader.verifierRef,
       },
     },
   ];
@@ -310,6 +300,7 @@ async function projectRelease(input: {
       networkPolicy: input.release.environment.networkPolicy,
       metadata: {
         portableEnvironmentHash: contentHash(input.release.environment),
+        portableTools: input.release.tools,
         maxToolTurns: 40,
       },
     },
@@ -318,7 +309,7 @@ async function projectRelease(input: {
       taskKind: "single_agent",
       supportedSignals: [],
       compatibleMethods: ["none"],
-      rewardKinds: ["deterministic", "model_judge"],
+      rewardKinds: ["deterministic"],
       requiresTools: true,
       requiresState: true,
       requiresPrivilegedGrading: true,
@@ -360,6 +351,15 @@ async function projectRelease(input: {
         id: input.release.id,
         contentHash: input.release.contentHash,
       },
+      supplementaryModelJudge: {
+        id: supplementaryJudge.id,
+        version: supplementaryJudge.version,
+        rubricHash: supplementaryJudge.rubricRef.contentHash,
+        calibrationStatus: supplementaryJudge.calibrationStatus,
+        executable: false,
+        rewardEligible: false,
+      },
+      portableCapabilities: input.release.capabilities,
     },
   });
   return TasksetSchema.parse({
@@ -394,28 +394,6 @@ function builtinAsset(
     throw new Error(`Built-in benchmark asset ${assetPath} is unavailable.`);
   }
   return contents;
-}
-
-function requiredOutputs(
-  taskId: string,
-  deliverable: string | null,
-  validationKinds: string[],
-): TaskDataRecord["requiredOutputs"] {
-  const output = deliverable === "pdf"
-    ? { extension: "pdf", mediaType: "application/pdf" }
-    : deliverable === "spreadsheet"
-      ? {
-          extension: "xlsx",
-          mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }
-      : null;
-  if (!output) return [];
-  return [{
-    path: `${taskId}.${output.extension}`,
-    mediaType: output.mediaType,
-    maxBytes: 10_000_000,
-    metadata: { validationKinds },
-  }];
 }
 
 function benchmarkFixtures(taskId: string): GraderFixture[] {
@@ -461,6 +439,25 @@ function uniqueAssets<T extends { id: string }>(assets: T[]): T[] {
   return [...new Map(assets.map((asset) => [asset.id, asset])).values()];
 }
 
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+function supplementaryModelJudge(release: TasksetRelease) {
+  const raw = release.metadata.supplementaryModelJudge;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Benchmark release has no supplementary model-judge metadata.");
+  }
+  const value = raw as Record<string, unknown>;
+  if (
+    typeof value.id !== "string"
+    || typeof value.version !== "string"
+    || value.calibrationStatus !== "pending"
+    || value.executable !== false
+    || value.rewardEligible !== false
+  ) {
+    throw new Error("Benchmark supplementary model-judge metadata is invalid.");
+  }
+  return {
+    id: value.id,
+    version: value.version,
+    calibrationStatus: value.calibrationStatus,
+    rubricRef: ImmutableAssetRefSchema.parse(value.rubricRef),
+  };
 }

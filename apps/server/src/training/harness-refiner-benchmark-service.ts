@@ -123,7 +123,9 @@ export function createHarnessRefinerBenchmarkService(deps: {
     });
     if (!taskset.benchmark) throw new Error("Harness Refiner Taskset is unavailable.");
     if (taskset.graders.some(
-      (grader) => grader.kind === "model_judge" && grader.calibrationStatus !== "passed",
+      (grader) => grader.kind === "model_judge"
+        && grader.rewardEligible
+        && grader.calibrationStatus !== "passed",
     )) {
       const calibration = await deps.evaluation.calibrateModelJudges(taskset.id);
       if (!calibration.passed) {
@@ -198,7 +200,7 @@ export function createHarnessRefinerBenchmarkService(deps: {
         attemptPlan: executionPlan,
       },
       evaluationProgress: {
-        stage: "baseline",
+        stage: "adaptation",
         completedAttempts: 0,
         totalAttempts: totalPlannedAttempts(executionPlan),
         accounting: emptyEvaluationAccounting(),
@@ -512,51 +514,6 @@ export function createHarnessRefinerBenchmarkService(deps: {
           ],
         });
       } else {
-        const executedBaseline = await deps.evaluation.executeBenchmark({
-          tasksetId: taskset.id,
-          phase: "baseline",
-          model: input.model,
-          reasoningEffort: input.reasoningEffort,
-          seeds: input.seeds,
-          repetitions: input.repetitions,
-          split: baselinePlan.split as never,
-          taskIds: baselinePlan.taskIds,
-          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
-          releasedHarness: baselineHarness,
-          hostedTokenPricing: admittedPricing,
-          parentModelRunId: modelRun.id,
-          signal: context.signal,
-          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
-          onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
-        });
-        baseline = completedStage(executedBaseline);
-        await ensureBaseVersion({
-          store: deps.store,
-          project: context.project,
-          modelRun,
-          model: input.model,
-          baseline: executedBaseline.attempts[0]!,
-        });
-        if (
-          baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
-          || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
-        ) {
-          throw new Error("Baseline execution drifted from the admitted Harness release.");
-        }
-
-        await checkpointEvidenceSnapshot(
-          deps.store,
-          deps.storeDir,
-          modelRun.id,
-          evidenceSnapshot.manifest(),
-        );
-
-        await updateProgress(deps.store, modelRun.id, {
-          stage: "adaptation",
-          completedAttempts: completedBeforeStage(executionPlan, "adaptation"),
-          totalAttempts,
-        });
-
         const executedAdaptation = await deps.evaluation.executeBenchmark({
           tasksetId: taskset.id,
           phase: "baseline",
@@ -576,6 +533,57 @@ export function createHarnessRefinerBenchmarkService(deps: {
         });
         adaptation = completedStage(executedAdaptation);
         adaptationAttempts = adaptation.attempts;
+        await ensureBaseVersion({
+          store: deps.store,
+          project: context.project,
+          modelRun,
+          model: input.model,
+          baseline: executedAdaptation.attempts[0]!,
+        });
+        if (
+          adaptation.run.harnessRelease.id !== modelRun.harnessRelease.id
+          || adaptation.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
+        ) {
+          throw new Error("Adaptation baseline drifted from the admitted Harness release.");
+        }
+
+        await checkpointEvidenceSnapshot(
+          deps.store,
+          deps.storeDir,
+          modelRun.id,
+          evidenceSnapshot.manifest(),
+        );
+
+        await updateProgress(deps.store, modelRun.id, {
+          stage: "baseline",
+          completedAttempts: completedBeforeStage(executionPlan, "baseline"),
+          totalAttempts,
+        });
+
+        const executedBaseline = await deps.evaluation.executeBenchmark({
+          tasksetId: taskset.id,
+          phase: "baseline",
+          model: input.model,
+          reasoningEffort: input.reasoningEffort,
+          seeds: input.seeds,
+          repetitions: input.repetitions,
+          split: baselinePlan.split as never,
+          taskIds: baselinePlan.taskIds,
+          sampling: { maxOutputTokens: 4_096, temperature: 0, topP: 1 },
+          releasedHarness: baselineHarness,
+          hostedTokenPricing: admittedPricing,
+          parentModelRunId: modelRun.id,
+          signal: context.signal,
+          toolEvidence: frozenToolEvidence(evidenceSnapshot, "record", "held_out"),
+          onAttemptComplete: observeStageAttempts("baseline", "held-out baseline"),
+        });
+        baseline = completedStage(executedBaseline);
+        if (
+          baseline.run.harnessRelease.id !== modelRun.harnessRelease.id
+          || baseline.run.harnessRelease.contentHash !== modelRun.harnessRelease.contentHash
+        ) {
+          throw new Error("Held-out baseline drifted from the admitted Harness release.");
+        }
         await checkpointEvidenceSnapshot(
           deps.store,
           deps.storeDir,

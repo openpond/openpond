@@ -32,16 +32,32 @@ describe("public Harness Refiner benchmark Taskset", () => {
     const validation = validateTasksetRelease(taskset);
 
     expect(validation.issues).toEqual([]);
-    expect(taskset.id).toBe("harness-refiner-08112026");
-    expect(taskset.revision).toBe(1);
+    expect(taskset.id).toBe("harness-refiner-20260818-v2");
+    expect(taskset.revision).toBe(2);
     expect(taskset.tasks).toHaveLength(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
     expect(new Set(taskset.tasks.map((task) => task.clusterKey)).size).toBe(20);
     expect(taskset.metadata).toMatchObject({
       trainingSideEffect: false,
-      primaryMetric: "paired_foreground_provider_tokens",
-      qualityPolicy: "hard_non_regression",
+      primaryMetric: "paired_verified_reward",
+      secondaryMetrics: ["paired_foreground_provider_tokens"],
+      qualityPolicy: "complete_frozen_cohort",
+      orderSeed: "harness-refiner-20260818-order-v1",
+      modelJudgeRole: "supplementary_uncalibrated_not_executed",
+    });
+    expect(taskset.graders).toEqual([
+      expect.objectContaining({
+        kind: "custom_verifier",
+        hardGate: true,
+        rewardEligible: true,
+      }),
+    ]);
+    expect(taskset.metadata.supplementaryModelJudge).toMatchObject({
+      id: "task-quality-judge",
+      calibrationStatus: "pending",
+      executable: false,
+      rewardEligible: false,
     });
   });
 
@@ -96,6 +112,15 @@ describe("public Harness Refiner benchmark Taskset", () => {
     expect(new Set(taskset.tasks.map((task) => task.id)).size).toBe(20);
     expect(taskset.tasks.filter((task) => task.split === "validation")).toHaveLength(10);
     expect(taskset.tasks.filter((task) => task.split === "frozen_eval")).toHaveLength(10);
+  });
+
+  test("binds every case to a deterministic primary-reward contract", async () => {
+    const taskset = await loadTaskset();
+    for (const task of taskset.tasks) {
+      expect(task.expectedOutput?.deterministicContract).toEqual(
+        expect.any(Object),
+      );
+    }
   });
 
   test("requires a concrete catalog revision for the admitted upstream model", () => {
@@ -154,6 +179,9 @@ describe("public Harness Refiner benchmark Taskset", () => {
             ? [grader.verifierRef]
             : [],
       ),
+      (taskset.metadata.supplementaryModelJudge as {
+        rubricRef: { path: string; sizeBytes: number; contentHash: string };
+      }).rubricRef,
     ];
     for (const asset of assets) {
       const contents = await readFile(path.join(tasksetDirectory, asset.path), "utf8");
