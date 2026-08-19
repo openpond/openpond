@@ -2,6 +2,13 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { contentHash } from "@openpond/harness";
+import { materializePortableTasksetRelease } from "@openpond/taskset-sdk";
+
+import { SqliteStore } from "../../apps/server/src/store/store.js";
+import { createBenchmarkTasksetService } from
+  "../../apps/server/src/training/benchmark-tasksets.js";
+import { desktopTasksetRuntimeAdapterId } from
+  "../../apps/server/src/training/portable-evals-adapter.js";
 
 type JsonRecord = Record<string, any>;
 
@@ -41,6 +48,10 @@ const resultFiles = (await readdir(resultDirectory)).filter((name) => name.endsW
 assert(resultFiles.length === 1, "The admitted run must have exactly one result manifest.");
 const manifest = await readJson(path.join(resultDirectory, resultFiles[0]!));
 const receipt = record(status.receipt, "status.receipt");
+const executionGraph = await reconstructAdmittedExecutionGraph({
+  storeDir,
+  admission,
+});
 
 verifyHash(admission, "admission");
 verifyHash(qualification, "qualification");
@@ -58,11 +69,19 @@ assert(
 assert(admission.plannedAttempts === 40, "Admission must bind forty stage attempts.");
 assert(manifest.modelRunId === modelRunId, "Result manifest belongs to another Model Run.");
 assert(manifest.contentHash === receipt.resultManifest?.contentHash, "Result receipt hash drifted.");
-assert(manifest.tasksetRelease?.id === admission.taskset?.id, "Taskset release id drifted.");
+assert(manifest.tasksetRelease?.id === executionGraph.tasksetRelease.id, "Taskset release id drifted.");
 assert(
-  manifest.tasksetRelease?.contentHash === admission.taskset?.contentHash,
+  manifest.tasksetRelease?.contentHash === executionGraph.tasksetRelease.contentHash,
   "Taskset release hash drifted.",
 );
+if (admission.taskset?.executionRelease) {
+  assert(
+    admission.taskset.executionRelease.id === executionGraph.tasksetRelease.id
+      && admission.taskset.executionRelease.contentHash
+        === executionGraph.tasksetRelease.contentHash,
+    "Admitted execution Taskset Release drifted.",
+  );
+}
 assert(contentHash(manifest.model) === contentHash(admission.model), "Model selection drifted.");
 assert(
   contentHash(manifest.upstreamModel) === contentHash(admission.upstreamModel),
@@ -133,6 +152,10 @@ const publicCore = {
   completedAt: manifest.createdAt,
   outcome: receipt.terminalClassification,
   source: {
+    portableTasksetRelease: {
+      id: admission.taskset.id,
+      contentHash: admission.taskset.contentHash,
+    },
     tasksetRelease: manifest.tasksetRelease,
     resultManifestContentHash: manifest.contentHash,
     evaluationReceiptContentHash: receipt.contentHash,
@@ -315,4 +338,42 @@ function array(value: unknown, label: string): JsonRecord[] {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+async function reconstructAdmittedExecutionGraph(input: {
+  storeDir: string;
+  admission: JsonRecord;
+}) {
+  const store = new SqliteStore(input.storeDir);
+  try {
+    const projectedId = requiredString(
+      input.admission.taskset?.projectedTasksetId,
+      "admission.taskset.projectedTasksetId",
+    );
+    const taskset = await store.getTaskset(projectedId);
+    assert(taskset, "The admitted projected Taskset is unavailable.");
+    assert(
+      taskset.contentHash === input.admission.taskset.projectedContentHash,
+      "Projected Taskset hash drifted.",
+    );
+    const tasksetService = createBenchmarkTasksetService({
+      store,
+      storeDir: input.storeDir,
+    });
+    const portableRelease = await tasksetService.releaseForTaskset(taskset);
+    assert(portableRelease, "The admitted portable Taskset Release is unavailable.");
+    assert(
+      portableRelease.id === input.admission.taskset.id
+        && portableRelease.contentHash === input.admission.taskset.contentHash,
+      "Portable Taskset Release drifted.",
+    );
+    return materializePortableTasksetRelease({
+      taskset,
+      selectedTasks: taskset.tasks,
+      adapterId: desktopTasksetRuntimeAdapterId(taskset),
+      admittedTasksetRelease: portableRelease,
+    });
+  } finally {
+    await store.close();
+  }
 }

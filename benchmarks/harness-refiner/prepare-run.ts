@@ -12,6 +12,8 @@ import { createLocalHarnessWorkspace } from
 import { SqliteStore } from "../../apps/server/src/store/store.js";
 import { createBenchmarkTasksetService } from
   "../../apps/server/src/training/benchmark-tasksets.js";
+import { compileDesktopHarnessContext } from
+  "../../apps/server/src/training/portable-evals-adapter.js";
 import {
   createHarnessRefinerExecutionPlan,
   HARNESS_REFINER_BENCHMARK_MAX_INVOCATIONS_PER_TASK,
@@ -94,11 +96,27 @@ try {
     createdAt: timestamp,
     updatedAt: timestamp,
   }));
-  const taskset = await createBenchmarkTasksetService({
+  const tasksetService = createBenchmarkTasksetService({
     store,
     storeDir,
     now: () => timestamp,
-  }).ensureHarnessRefiner({ profileId });
+  });
+  const taskset = await tasksetService.ensureHarnessRefiner({ profileId });
+  const admittedTasksetRelease = await tasksetService.releaseForTaskset(taskset);
+  if (!admittedTasksetRelease) {
+    throw new Error("Benchmark admission requires a managed Taskset Release.");
+  }
+  const portable = compileDesktopHarnessContext({
+    taskset,
+    releasedHarness: {
+      agentSnapshot: harness.release.agentSnapshot,
+      harnessRelease: harness.release.harnessRelease,
+    },
+    tasksetRelease: admittedTasksetRelease,
+    reasoningEffort: "low",
+    model,
+    now: () => timestamp,
+  });
   const executionPlan = createHarnessRefinerExecutionPlan({
     taskset,
     seeds: [17],
@@ -133,6 +151,18 @@ try {
       contentHash: taskset.benchmark!.releaseHash,
       projectedTasksetId: taskset.id,
       projectedContentHash: taskset.contentHash,
+      executionRelease: {
+        id: portable.tasksetRelease.id,
+        contentHash: portable.tasksetRelease.contentHash,
+      },
+      environmentRelease: {
+        id: portable.environmentRelease.id,
+        contentHash: portable.environmentRelease.contentHash,
+      },
+      verifierSetRelease: {
+        id: portable.verifierSetRelease.id,
+        contentHash: portable.verifierSetRelease.contentHash,
+      },
     },
     initialHarness: {
       id: harness.release.harnessRelease.id,

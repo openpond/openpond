@@ -1,0 +1,337 @@
+{
+  "schemaVersion": "openpond.harnessRefinerPublicResult.v2",
+  "id": "harness-refiner-20260818-v2",
+  "completedAt": "2026-08-19T07:57:29.938Z",
+  "outcome": "inconclusive",
+  "source": {
+    "portableTasksetRelease": {
+      "id": "harness-refiner-20260818-v2",
+      "contentHash": "20e247cec268ecb6380bc7af204abc9056f7eaa90e1e85aa5e11544f2506888d"
+    },
+    "tasksetRelease": {
+      "id": "harness-refiner-20260818-v2",
+      "contentHash": "c4cb8a543c22ef397ea7bc5192fb0be9baea40b0323674fc66f36794af182a6d"
+    },
+    "resultManifestContentHash": "2ab8d0b66c4061dc82276a67b52952ad2a85e37aa95bc1ea66508ecfb7cb16dc",
+    "evaluationReceiptContentHash": "504e7718f71c022fecf56d033eb07d873a79bfbcdaace957d2aa693939a31057",
+    "qualificationContentHash": "45dae71df2cfd408887b85d21b0286c5b6009c5d2925ddff324d344d6539b16c",
+    "admissionContentHash": "988f50b41116b4e353a4eb7591b573d8a0f2b2e429e6df0fa3e26fb5998d6c86",
+    "reward": "deterministic_output_contract",
+    "supplementaryJudge": "not_executed_uncalibrated",
+    "model": {
+      "provider": "OpenPond Chat",
+      "model": "DeepSeek V4 Flash",
+      "upstreamRevision": "catalog-created:1785456000",
+      "reasoningEffort": "low"
+    }
+  },
+  "harness": {
+    "baselineContentHash": "4742e82de09328109e9a34fa459f16d5574259dda64f22931b516cc245f6d6c3",
+    "finalContentHash": "4742e82de09328109e9a34fa459f16d5574259dda64f22931b516cc245f6d6c3",
+    "lineageValid": true,
+    "changedStepCount": 0,
+    "changedAfterTaskIds": [],
+    "decisions": {
+      "no_action": 10
+    },
+    "failedInvocationCount": 1
+  },
+  "aggregates": {
+    "adaptation": {
+      "baselineTokens": 5410104,
+      "refinedTokens": 5226264,
+      "tokenDelta": -183840,
+      "tokenDeltaPercent": -3.398086247510214,
+      "lowerTaskCount": 5,
+      "higherTaskCount": 5,
+      "unchangedTaskCount": 0,
+      "baselineQualityPassCount": 5,
+      "refinedQualityPassCount": 3,
+      "taskCount": 10
+    },
+    "heldOut": {
+      "baselineTokens": 5653767,
+      "refinedTokens": 5502322,
+      "tokenDelta": -151445,
+      "tokenDeltaPercent": -2.678656548810731,
+      "lowerTaskCount": 4,
+      "higherTaskCount": 6,
+      "unchangedTaskCount": 0,
+      "baselineQualityPassCount": 3,
+      "refinedQualityPassCount": 4,
+      "taskCount": 10
+    },
+    "allTasks": {
+      "baselineTokens": 11063871,
+      "refinedTokens": 10728586,
+      "tokenDelta": -335285,
+      "tokenDeltaPercent": -3.0304492884994776,
+      "lowerTaskCount": 9,
+      "higherTaskCount": 11,
+      "unchangedTaskCount": 0,
+      "baselineQualityPassCount": 8,
+      "refinedQualityPassCount": 7,
+      "taskCount": 20
+    },
+    "refiner": {
+      "inputTokens": 215413,
+      "outputTokens": 7085,
+      "totalTokens": 222498,
+      "costUsd": 0.021223972000000004
+    },
+    "spend": {
+      "maximumSpendUsd": 5,
+      "observedSpendUsd": 0.888575156,
+      "enforced": true
+    }
+  },
+  "quality": {
+    "baselinePassRate": 0.3,
+    "candidatePassRate": 0.4,
+    "adaptationBaselinePassRate": 0.5,
+    "adaptationCandidatePassRate": 0.3,
+    "adaptationCandidatePassed": false,
+    "heldOutCandidatePassed": false,
+    "passed": false
+  },
+  "comparisonClassification": "inconclusive",
+  "comparisonInvalidReasons": [
+    "The candidate Harness is unchanged.",
+    "Sequential adaptation treatment did not pass every case.",
+    "Candidate held-out quality did not pass every case."
+  ],
+  "efficiency": {
+    "grossForegroundTokenSavings": 151445,
+    "overheadTokens": 222498,
+    "firstPassNetTokenSavings": -71053,
+    "breakEvenReuseCount": 2,
+    "amortizedTokenSavings": 1291952,
+    "amortizedReuseCount": 10
+  },
+  "taskEfficiency": {
+    "target": "all_tasks_lower",
+    "targetTaskCount": 20,
+    "comparedTaskCount": 20,
+    "passedTaskCount": 9,
+    "failedTaskCount": 11,
+    "lowerTaskCount": 9,
+    "higherTaskCount": 11,
+    "unchangedTaskCount": 0,
+    "baselineTokens": 11063871,
+    "refinedTokens": 10728586,
+    "tokenDelta": -335285,
+    "tokenDeltaPercent": -3.0304492884994776,
+    "complete": true,
+    "passed": false,
+    "cohorts": {
+      "adaptation": {
+        "targetTaskCount": 10,
+        "comparedTaskCount": 10,
+        "passedTaskCount": 5,
+        "failedTaskCount": 5,
+        "lowerTaskCount": 5,
+        "higherTaskCount": 5,
+        "unchangedTaskCount": 0
+      },
+      "heldOut": {
+        "targetTaskCount": 10,
+        "comparedTaskCount": 10,
+        "passedTaskCount": 4,
+        "failedTaskCount": 6,
+        "lowerTaskCount": 4,
+        "higherTaskCount": 6,
+        "unchangedTaskCount": 0
+      }
+    }
+  },
+  "pairs": [
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-board-launch-brief",
+      "baselineTokens": 94934,
+      "refinedTokens": 62642,
+      "tokenDelta": -32292,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-latency-incident-review",
+      "baselineTokens": 28694,
+      "refinedTokens": 57530,
+      "tokenDelta": 28836,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-program-budget-workbook",
+      "baselineTokens": 51280,
+      "refinedTokens": 29941,
+      "tokenDelta": -21339,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-invoice-correction-email",
+      "baselineTokens": 16736,
+      "refinedTokens": 16965,
+      "tokenDelta": 229,
+      "baselinePassed": true,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-nextjs-security-audit",
+      "baselineTokens": 2329293,
+      "refinedTokens": 2385840,
+      "tokenDelta": 56547,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-workshop-reschedule-email",
+      "baselineTokens": 17126,
+      "refinedTokens": 16452,
+      "tokenDelta": -674,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-accessible-boston-dc-plan",
+      "baselineTokens": 1851659,
+      "refinedTokens": 2163689,
+      "tokenDelta": 312030,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-chatgpt-public-experiences",
+      "baselineTokens": 986830,
+      "refinedTokens": 459997,
+      "tokenDelta": -526833,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-launch-delay-email",
+      "baselineTokens": 16596,
+      "refinedTokens": 16865,
+      "tokenDelta": 269,
+      "baselinePassed": true,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "adaptation",
+      "taskId": "adaptation-service-window-email",
+      "baselineTokens": 16956,
+      "refinedTokens": 16343,
+      "tokenDelta": -613,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-clinic-relocation-brief",
+      "baselineTokens": 135371,
+      "refinedTokens": 197486,
+      "tokenDelta": 62115,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-payment-incident-review",
+      "baselineTokens": 56478,
+      "refinedTokens": 59964,
+      "tokenDelta": 3486,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-grant-budget-workbook",
+      "baselineTokens": 16846,
+      "refinedTokens": 26142,
+      "tokenDelta": 9296,
+      "baselinePassed": true,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-shipping-delay-chat-message",
+      "baselineTokens": 20446,
+      "refinedTokens": 20558,
+      "tokenDelta": 112,
+      "baselinePassed": false,
+      "refinedPassed": true
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-python-requests-security-audit",
+      "baselineTokens": 1206864,
+      "refinedTokens": 1014268,
+      "tokenDelta": -192596,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-refund-support-reply",
+      "baselineTokens": 21541,
+      "refinedTokens": 16580,
+      "tokenDelta": -4961,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-accessible-chicago-stl-plan",
+      "baselineTokens": 2111164,
+      "refinedTokens": 2123182,
+      "tokenDelta": 12018,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-new-jersey-youth-grants",
+      "baselineTokens": 2051958,
+      "refinedTokens": 2011283,
+      "tokenDelta": -40675,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-maintenance-followup-email",
+      "baselineTokens": 16897,
+      "refinedTokens": 16553,
+      "tokenDelta": -344,
+      "baselinePassed": false,
+      "refinedPassed": false
+    },
+    {
+      "cohort": "held_out",
+      "taskId": "frozen-vendor-document-followup-email",
+      "baselineTokens": 16202,
+      "refinedTokens": 16306,
+      "tokenDelta": 104,
+      "baselinePassed": false,
+      "refinedPassed": false
+    }
+  ],
+  "limits": {
+    "taskCount": 20,
+    "attemptCount": 40,
+    "refinerTimeoutMs": 180000,
+    "maximumRefinerInvocationsPerTask": 2,
+    "uncertainty": "paired_per_case_descriptive"
+  },
+  "contentHash": "e31311cbf919c65b2059531990b7f345cb1a2a928bfe50e114c39f75726f459c"
+}

@@ -1,7 +1,7 @@
 # Harness Refiner Taskset Design
 
 Status: Taskset Release materialized; deterministic local-runtime conformance
-passed.
+and the 20260818-v2 controlled run completed.
 
 This directory contains the canonical `openpond.tasksetRelease.v2` used by the
 Harness Refiner benchmark. Benchmarking is a first-class Taskset purpose: the
@@ -111,3 +111,15 @@ The checked-in release now satisfies these materialization requirements:
 The supplementary model judge remains explicitly `pending` until separate
 calibration evidence exists. It is not part of this release's executable
 Verifier Set.
+
+The portable source release is bound to immutable Environment and Verifier Set
+releases before execution. The resulting execution Taskset hash for the sealed
+20260818-v2 run is
+`c4cb8a543c22ef397ea7bc5192fb0be9baea40b0323674fc66f36794af182a6d`.
+The source and execution hashes identify different layers of the same admitted
+release graph and are both verified by the benchmark audit.
+
+The sealed natural-task result accepted no Harness change and is classified as
+inconclusive. See the [benchmark result](../results/harness-refiner-20260818-v2.json)
+for the complete paired aggregate. The six-scenario qualification is separate
+mechanism evidence and is not part of the twenty-task score.
