@@ -18,8 +18,6 @@ export type RightChatPanelView = RightChatPanel & {
   createImproveRun: CreateImproveRun | null;
   pendingApproval: Approval | null;
   running: boolean;
-  steerAutoDispatchBlocked: boolean;
-  steerAutoDispatchReady: boolean;
   workspaceRootPath: string | null;
   activeWorkspaceAppId: string | null;
   pendingUserMessage: PendingChatUserMessage | null;

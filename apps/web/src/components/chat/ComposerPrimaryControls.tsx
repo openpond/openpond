@@ -1,7 +1,6 @@
 import { useMemo, type CSSProperties, type RefObject } from "react";
 import {
   ArrowUp,
-  ArrowUpRight,
   Pause,
   Plus,
   Shield,
@@ -92,7 +91,6 @@ export function ComposerPrimaryControls({
   showToast,
   stopIcon = "stop",
   stopLabel = "Stop response",
-  steering,
 }: {
   surface?: "chat" | "team";
   teamUseModel?: boolean;
@@ -137,7 +135,6 @@ export function ComposerPrimaryControls({
   showToast: ShowAppToast;
   stopIcon?: "pause" | "stop";
   stopLabel?: string;
-  steering: boolean;
 }) {
   const showModelReasoningMenu = providerModelSupportsReasoning(
     provider,
@@ -407,16 +404,6 @@ export function ComposerPrimaryControls({
           ) : (
             <Square size={13} fill="currentColor" />
           )}
-        </button>
-      ) : steering ? (
-        <button
-          className="send-button steer-button"
-          disabled={sendDisabled}
-          data-tooltip="Steer"
-          aria-label="Steer"
-        >
-          <ArrowUpRight size={13} />
-          <span>Steer</span>
         </button>
       ) : (
         <button

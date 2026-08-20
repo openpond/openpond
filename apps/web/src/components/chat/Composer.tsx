@@ -59,6 +59,17 @@ import {
   WorkspaceActionControl,
 } from "./ComposerControls";
 import { ComposerGoalStrip } from "./ComposerGoalStrip";
+import { ComposerSteerQueue } from "./ComposerSteerQueue";
+import {
+  composerSteerDraftsAfterSubmit,
+  composerSteerDraftsForScope,
+  createComposerSteerDraft,
+  removeComposerSteerDraft,
+  replaceComposerSteerDraftForEdit,
+  updateComposerSteerDraftScope,
+  type ComposerSteerDraft,
+  type ComposerSteerDraftScopeState,
+} from "./composer-steer-queue";
 import {
   ComposerInlineInput,
   type ComposerInlineInputHandle,
@@ -130,6 +141,8 @@ const SUBMIT_ISSUE_COMMAND = COMPOSER_SLASH_COMMANDS.find(
   (command) => command.id === "submit-issue"
 ) as ComposerSlashCommand;
 
+const EMPTY_STEER_DRAFTS: ComposerSteerDraft[] = [];
+
 export function Composer({
   experience = "development",
   mode,
@@ -151,6 +164,7 @@ export function Composer({
   busy,
   running = busy,
   submissionScopeKey = "default",
+  initialSteerDrafts = EMPTY_STEER_DRAFTS,
   showProjectFooter = true,
   autoFocus = false,
   focusRequestId = 0,
@@ -235,6 +249,14 @@ export function Composer({
   const [serializingAttachmentScopeKey, setSerializingAttachmentScopeKey] =
     useState<string | null>(null);
   const [goalDetailsOpen, setGoalDetailsOpen] = useState(false);
+  const [steerDraftsByScope, setSteerDraftsByScope] =
+    useState<ComposerSteerDraftScopeState>(() => ({
+      [submissionScopeKey]: initialSteerDrafts,
+    }));
+  const [sendingSteerDraft, setSendingSteerDraft] = useState<{
+    draftId: string;
+    scopeKey: string;
+  } | null>(null);
   const [submitIssueDialogOpen, setSubmitIssueDialogOpen] = useState(false);
   const [submitIssueInitialDescription, setSubmitIssueInitialDescription] =
     useState("");
@@ -375,12 +397,9 @@ export function Composer({
   ]);
   const serializingAttachments =
     serializingAttachmentScopeKey === submissionScopeKey;
-  const steering = running && hasComposerInput;
   const sendDisabled = serializingAttachments || !hasComposerInput;
   const sendTooltip = serializingAttachments
     ? "Preparing files"
-    : steering
-    ? "Steer"
     : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments;
@@ -682,6 +701,29 @@ export function Composer({
   const stopControlLabel = activeGoalRuntime ? "Pause goal" : "Stop response";
   const stopControlIcon = activeGoalRuntime ? "pause" : "stop";
   const showWorkspaceFooterControls = experience === "work" || projectTarget.value !== "none";
+  const steerDrafts = composerSteerDraftsForScope(
+    steerDraftsByScope,
+    submissionScopeKey,
+    initialSteerDrafts
+  );
+  const sendingSteerDraftId =
+    sendingSteerDraft?.scopeKey === submissionScopeKey
+      ? sendingSteerDraft.draftId
+      : null;
+
+  function updateSteerDraftsForScope(
+    scopeKey: string,
+    updateDrafts: (drafts: ComposerSteerDraft[]) => ComposerSteerDraft[]
+  ) {
+    setSteerDraftsByScope((current) =>
+      updateComposerSteerDraftScope(
+        current,
+        scopeKey,
+        updateDrafts,
+        scopeKey === submissionScopeKey ? initialSteerDrafts : []
+      )
+    );
+  }
 
   useLayoutEffect(() => {
     inputRef.current?.resize();
@@ -815,6 +857,12 @@ export function Composer({
     setSelectedCommandId(null);
     setSelectedInvocationPosition(null);
     setSelectedActionMentionText(null);
+  }
+
+  function clearComposerPrompt() {
+    clearSelectedInvocation();
+    onPromptChange("");
+    setCursorIndex(0);
   }
 
   function openSubmitIssueDialog(initialDescription: string) {
@@ -1167,6 +1215,100 @@ export function Composer({
     resetAddMenuQuery(insertSelectedAction(item.item.action, range));
   }
 
+  function stageCurrentSteerDraft(): boolean {
+    const value = prompt.trim();
+    if (!running || !value) return false;
+    if (attachments.length > 0 || selectedAction || selectedCommand) {
+      showToast(
+        "Steering supports a plain-text instruction. Remove files or actions before staging it.",
+        "info"
+      );
+      return false;
+    }
+    updateSteerDraftsForScope(submissionScopeKey, (current) => [
+      ...current,
+      createComposerSteerDraft(value),
+    ]);
+    clearComposerPrompt();
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(0);
+    });
+    return true;
+  }
+
+  async function submitQueuedSteerDraft(draftId: string): Promise<boolean> {
+    const submissionScope = submissionScopeKey;
+    if (
+      isSubmittingScope(submissionScope) ||
+      sendingSteerDraft?.scopeKey === submissionScope
+    )
+      return false;
+    const draft = composerSteerDraftsForScope(
+      steerDraftsByScope,
+      submissionScope,
+      initialSteerDrafts
+    ).find((candidate) => candidate.id === draftId);
+    if (!draft || !beginSubmissionForScope(submissionScope)) return false;
+    setSendingSteerDraft({ draftId, scopeKey: submissionScope });
+    setAttachmentError(null);
+    try {
+      const steeringActiveTurn = running;
+      if (steeringActiveTurn) {
+        const stopped = await onStop();
+        if (stopped === false) return false;
+      }
+      const sent = await onSubmit([], null, null, {
+        preservePrompt: true,
+        promptOverride: draft.prompt,
+        ...(steeringActiveTurn
+          ? { turnMetadata: { interactionKind: "steer" } }
+          : {}),
+      });
+      updateSteerDraftsForScope(submissionScope, (current) =>
+        composerSteerDraftsAfterSubmit(current, draftId, sent)
+      );
+      return sent;
+    } catch (error) {
+      setAttachmentError(
+        error instanceof Error ? error.message : String(error)
+      );
+      return false;
+    } finally {
+      finishSubmissionForScope(submissionScope);
+      setSendingSteerDraft((current) =>
+        current?.scopeKey === submissionScope && current.draftId === draftId
+          ? null
+          : current
+      );
+    }
+  }
+
+  function deleteQueuedSteerDraft(draftId: string) {
+    if (sendingSteerDraftId === draftId) return;
+    updateSteerDraftsForScope(submissionScopeKey, (current) =>
+      removeComposerSteerDraft(current, draftId)
+    );
+  }
+
+  function editQueuedSteerDraft(draft: ComposerSteerDraft) {
+    if (sendingSteerDraftId === draft.id) return;
+    if (attachments.length > 0 || selectedActionId || selectedCommandId) {
+      showToast(
+        "Finish the current composer before editing a queued message.",
+        "info"
+      );
+      return;
+    }
+    updateSteerDraftsForScope(submissionScopeKey, (current) =>
+      replaceComposerSteerDraftForEdit(current, draft.id, prompt)
+    );
+    onPromptChange(draft.prompt);
+    setCursorIndex(draft.prompt.length);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focusAtPromptIndex(draft.prompt.length);
+    });
+  }
+
   async function submitComposer() {
     if (isSubmittingCurrentScope()) return;
     const parsedSubmitIssuePrompt =
@@ -1185,16 +1327,15 @@ export function Composer({
       return;
     }
     if (sendDisabled) return;
+    if (running) {
+      stageCurrentSteerDraft();
+      return;
+    }
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return;
-    const steeringSubmission = running;
     setAddMenuOpen(false);
     setAttachmentError(null);
     try {
-      if (running) {
-        const stopped = await onStop();
-        if (stopped === false) return;
-      }
       const stagedAttachments = stageAttachmentsForSubmit();
       try {
         setSerializingAttachmentScopeKey(
@@ -1216,15 +1357,12 @@ export function Composer({
           payloads,
           selectedAction,
           selectedCommand,
-          selectedDisplayPrompt || promptOverride || steeringSubmission
+          selectedDisplayPrompt || promptOverride
             ? {
                 ...(selectedDisplayPrompt
                   ? { displayPrompt: selectedDisplayPrompt }
                   : {}),
                 ...(promptOverride ? { promptOverride } : {}),
-                ...(steeringSubmission
-                  ? { turnMetadata: { interactionKind: "steer" } }
-                  : {}),
               }
             : undefined
         );
@@ -1262,10 +1400,6 @@ export function Composer({
     setAddMenuOpen(false);
     setAttachmentError(null);
     try {
-      if (running) {
-        const stopped = await onStop();
-        if (stopped === false) return false;
-      }
       const sent = await onSubmit([], null, SUBMIT_ISSUE_COMMAND, {
         displayPrompt: `/submit-issue ${input.title.trim()}`,
         promptOverride: formatSubmitIssueFormInput(input),
@@ -1301,9 +1435,7 @@ export function Composer({
       ref={composerRef}
       className={`composer ${mode} ${
         createImproveRuntime ? "has-create-runtime" : ""
-      } ${showGoalRuntime ? "has-goal-runtime" : ""} ${
-        steering ? "is-steering" : ""
-      } ${attachments.length > 0 ? "has-attachments" : ""} ${
+      } ${showGoalRuntime ? "has-goal-runtime" : ""} ${attachments.length > 0 ? "has-attachments" : ""} ${
         selectedAction || selectedCommand ? "has-selected-action" : ""
       } ${attachmentError ? "has-attachment-error" : ""} ${
         addMenuOpen ? "has-add-menu" : ""
@@ -1394,6 +1526,15 @@ export function Composer({
           <ComposerCreateImproveStrip runtime={createImproveRuntime} />
         </Suspense>
       ) : null}
+      <ComposerSteerQueue
+        drafts={steerDrafts}
+        sendingDraftId={sendingSteerDraftId}
+        onDeleteDraft={deleteQueuedSteerDraft}
+        onEditDraft={editQueuedSteerDraft}
+        onSteerDraft={(draftId) => {
+          void submitQueuedSteerDraft(draftId);
+        }}
+      />
       {showGoalRuntime && goalRuntime && (
         <ComposerGoalStrip
           detailsOpen={goalDetailsOpen}
@@ -1409,11 +1550,6 @@ export function Composer({
         </div>
       )}
       <div className="composer-input-shell" ref={inputShellRef}>
-        {steering ? (
-          <div className="composer-steer-context" aria-hidden="true">
-            Steer active response
-          </div>
-        ) : null}
         {addMenuOpen && surface !== "team" && (
           <ComposerCommandMenu
             id={addMenuId}
@@ -1715,13 +1851,12 @@ export function Composer({
           provider={provider}
           providerSettings={providerSettings}
           providerOptions={providerOptions}
-          running={running && !hasComposerInput}
+          running={running}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           showToast={showToast}
           stopIcon={stopControlIcon}
           stopLabel={stopControlLabel}
-          steering={steering}
         />
       </div>
     </form>

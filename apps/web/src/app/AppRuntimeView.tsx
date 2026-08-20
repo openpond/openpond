@@ -230,8 +230,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     terminalSummaries,
     runningSessionIds,
     selectedSessionRunning,
-    selectedSteerAutoDispatchBlocked,
-    selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
     taskDragSessionId,
@@ -292,6 +290,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     restoreSession,
     renameSession,
     toggleSessionPinned,
+    toggleProjectPinned,
     toggleSessionSavedForLater,
     startCloudSetupUpload,
     changeWorkspaceTarget,
@@ -317,7 +316,16 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     openProfileSettings,
     diagnosticEvents,
     toggleRightSidebar,
+    removeProject,
   } = secondary;
+  const beginProjectChat = useCallback((projectId: string) => {
+    setSelectedAppId(null);
+    setSelectedProjectId(projectId);
+    setSelectedSessionId(null);
+    setView("chat");
+    expandProject(projectId);
+    requestMainComposerFocus();
+  }, [expandProject, requestMainComposerFocus, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]);
   const [nativeSkillSidebar, setNativeSkillSidebar] =
     useState<SkillSourceDocument | null>(null);
   const [extensionSkillSidebar, setExtensionSkillSidebar] =
@@ -810,6 +818,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           setCloudProjectsExpanded,
           setChatRowsVisibleCount,
           beginNewChat,
+          beginProjectChat,
           dockSessionRight: openRightChatPanel,
           selectTeamThread: (threadId) => {
             setView("team");
@@ -820,6 +829,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             void teamChat.openDm(userId);
           },
           toggleSessionPinned,
+          toggleProjectPinned,
           toggleSessionSavedForLater,
           openSidebarFile,
           setSidebarFileStatus: (file, status) =>
@@ -827,6 +837,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           archiveSession,
           restoreSession,
           renameSession,
+          removeProject,
           expandProject,
           toggleProjectExpanded,
           startPinnedDrag,
@@ -997,8 +1008,6 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             setRightChatTrainingLaunchRequest((current) =>
               current?.id === id ? null : current
             ),
-          steerAutoDispatchBlocked: selectedSteerAutoDispatchBlocked,
-          steerAutoDispatchReady: selectedSteerAutoDispatchReady,
           mentionApps: chatMentionApps,
           connectedAppMentions,
           profileSkills: harnessSkills,

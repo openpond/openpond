@@ -7,15 +7,6 @@ export type ComposerSteerDraft = {
 
 export type ComposerSteerDraftScopeState = Record<string, ComposerSteerDraft[]>;
 
-export type ComposerSteerAutoDispatchInput = {
-  autoDispatchReady: boolean;
-  hasQueuedDrafts: boolean;
-  running: boolean;
-  sending: boolean;
-  waitingForStartedTurn: boolean;
-  wasRunning: boolean;
-};
-
 function nextSteerDraftId(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
@@ -90,15 +81,4 @@ export function updateComposerSteerDraftScope(
     ...draftsByScope,
     [scopeKey]: nextDrafts,
   };
-}
-
-export function shouldAutoDispatchComposerSteer(input: ComposerSteerAutoDispatchInput): boolean {
-  return (
-    input.wasRunning &&
-    !input.running &&
-    input.autoDispatchReady &&
-    input.hasQueuedDrafts &&
-    !input.sending &&
-    !input.waitingForStartedTurn
-  );
 }

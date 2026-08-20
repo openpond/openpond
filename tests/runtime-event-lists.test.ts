@@ -21,7 +21,7 @@ describe("runtime event list merging", () => {
     ]);
   });
 
-  test("preserves stream events that are newer than a stale bootstrap window", () => {
+  test("preserves the live transcript when bootstrap returns a partial event window", () => {
     const bootstrapEvents = [
       runtimeEvent("session-started", 10, { timestamp: "2026-07-01T10:00:00.000Z" }),
       runtimeEvent("turn-started", 11, { timestamp: "2026-07-01T10:00:01.000Z" }),
@@ -40,6 +40,7 @@ describe("runtime event list merging", () => {
     ];
 
     expect(mergeBootstrapRuntimeEvents(bootstrapEvents, currentEvents)).toEqual([
+      currentEvents[0],
       bootstrapEvents[0],
       bootstrapEvents[1],
       streamOnlyEvent,
@@ -88,7 +89,10 @@ describe("runtime event list merging", () => {
       (event) => event.sessionId === selectedSessionId,
     );
 
-    expect(refreshedSelectedEvents.map((event) => event.id)).toEqual(["selected-bootstrap"]);
+    expect(refreshedSelectedEvents.map((event) => event.id)).toEqual([
+      "selected-bootstrap",
+      "selected-apply-result",
+    ]);
     expect(mergeRuntimeEventLists(cache[selectedSessionId] ?? [], refreshedSelectedEvents).map((event) => event.id)).toEqual([
       "selected-apply-result",
       "selected-bootstrap",

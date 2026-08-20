@@ -1,0 +1,117 @@
+.sidebar-task-project-group + .sidebar-task-project-group {
+  margin-top: 8px;
+}
+
+.sidebar-task-project-group-header {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 8px);
+  min-height: 27px;
+  gap: 5px;
+  margin: 0 4px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #858585;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+  text-align: left;
+}
+
+.sidebar-task-project-group-header-shell {
+  position: relative;
+}
+
+.sidebar-task-project-group-header:hover,
+.sidebar-task-project-group-header:focus-visible {
+  background: rgba(255, 255, 255, 0.045);
+  color: #b5b5b5;
+  outline: 0;
+}
+
+.sidebar-task-project-group-actions {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.sidebar-task-project-group-header-shell:hover .sidebar-task-project-group-actions,
+.sidebar-task-project-group-header-shell:focus-within .sidebar-task-project-group-actions,
+.sidebar-task-project-group-header-shell.menu-open .sidebar-task-project-group-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar-task-project-group-header-shell:hover .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header-shell:focus-within .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header-shell.menu-open .sidebar-task-project-group-caret {
+  opacity: 0;
+}
+
+.sidebar-task-project-group-menu {
+  z-index: 130;
+  top: calc(100% - 1px);
+  right: 4px;
+}
+
+.sidebar-task-project-group-menu-backdrop {
+  position: fixed;
+  z-index: 129;
+  inset: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.sidebar-task-project-group-icon,
+.sidebar-task-project-group-caret {
+  flex: 0 0 auto;
+}
+
+.sidebar-task-project-group-icon {
+  color: #8f8f8f;
+}
+
+.sidebar-task-project-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-task-project-group-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 12px;
+  height: 16px;
+  color: #707070;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.sidebar-task-project-group-header:hover .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header:focus-visible .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header:focus-within .sidebar-task-project-group-caret {
+  opacity: 1;
+}
+
+.sidebar-task-project-group-content {
+  width: calc(100% - 14px);
+  margin-left: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-task-project-group-header {
+    transition: none;
+  }
+}

@@ -100,6 +100,7 @@ export type SidebarProps = {
   setCloudProjectsExpanded: Dispatch<SetStateAction<boolean>>;
   setChatRowsVisibleCount: Dispatch<SetStateAction<number>>;
   beginNewChat: (app?: OpenPondApp | null) => void;
+  beginProjectChat: (projectId: string) => void;
   dockSessionRight: (session: Session) => void;
   selectTeamThread: (threadId: string) => void;
   openTeamDm: (userId: string) => void;
@@ -107,6 +108,7 @@ export type SidebarProps = {
   selectCommunity: (communityId: string) => void;
   selectCommunityChannel: (channelId: string) => void;
   toggleSessionPinned: (session: Session) => void;
+  toggleProjectPinned: (item: SidebarProjectItem) => void;
   toggleSessionSavedForLater: (session: Session) => void;
   openSidebarFile: (file: SidebarFileBookmark) => void;
   setSidebarFileStatus: (
@@ -116,6 +118,7 @@ export type SidebarProps = {
   archiveSession: (session: Session) => void;
   restoreSession: (session: Session) => void;
   renameSession: (session: Session, title: string) => void;
+  removeProject: (item: SidebarProjectItem) => void;
   expandProject: (projectId: string) => void;
   toggleProjectExpanded: (projectId: string) => void;
   startPinnedDrag: (

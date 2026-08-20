@@ -86,8 +86,6 @@ export type MainPaneProps = {
   labCloseDetailKind: LabDetailLocation["kind"] | null;
   sideChatTrainingLaunchRequest: TrainingLaunchRequest | null;
   onSideChatTrainingLaunchHandled: (id: number) => void;
-  steerAutoDispatchBlocked: boolean;
-  steerAutoDispatchReady: boolean;
   mentionApps: OpenPondApp[];
   connectedAppMentions: ConnectedAppMentionOption[];
   profileSkills: OpenPondProfileSkill[];

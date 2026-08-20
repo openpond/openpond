@@ -108,6 +108,7 @@ export function SidebarSectionList({
   chatRowsVisibleCount,
   childSessionRowsByParentId = {},
   cloudProjectRows,
+  beginProjectChat,
   commitTaskDrop,
   commitTaskPreviewDrop,
   dockSessionRight,
@@ -138,6 +139,8 @@ export function SidebarSectionList({
   toggleSessionSavedForLater,
   view,
   clearTaskDrag,
+  removeProject,
+  toggleProjectPinned,
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
@@ -676,6 +679,15 @@ export function SidebarSectionList({
                       return next;
                     });
                   }}
+                  onNewTask={group.project ? () => beginProjectChat(group.project!.id) : undefined}
+                  onOpenProject={group.project ? () => {
+                    setSelectedAppId(null);
+                    setSelectedProjectId(group.project!.id);
+                    setSelectedSessionId(null);
+                    setView("chat");
+                  } : undefined}
+                  onRemoveProject={group.project ? () => removeProject(group.project!) : undefined}
+                  onTogglePin={group.project ? () => toggleProjectPinned(group.project!) : undefined}
                   project={group.project}
                 >
                   {group.sessions.map((session) =>

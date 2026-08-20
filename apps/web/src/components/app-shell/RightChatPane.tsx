@@ -34,7 +34,6 @@ import { contextWindowStatusFromUsage } from "../../lib/context-window";
 import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runtime";
 import { appendPendingUserChatMessage } from "../../lib/pending-chat-messages";
 import type { RuntimeEventStore } from "../../lib/runtime-event-store";
-import { latestTurnCompletionState } from "../../lib/turn-completion-state";
 import { useRuntimeEventSession } from "../../hooks/useRuntimeEventSession";
 import { useChatContentScrollScheduler } from "../../hooks/useChatContentScrollScheduler";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
@@ -155,7 +154,6 @@ export function RightChatPane({
     if (panel.runtimeSource === "history" || !panel.sessionId) return panel;
     const events = liveSessionSnapshot.events;
     const indexes = buildRuntimeIndexes(events, []);
-    const turnCompletionState = latestTurnCompletionState(events);
     return {
       ...panel,
       messages: appendPendingUserChatMessage(
@@ -169,12 +167,6 @@ export function RightChatPane({
         preferences: contextCompaction,
       }),
       goalRuntime: latestGoalRuntimeForSession(indexes, panel.sessionId),
-      steerAutoDispatchBlocked:
-        Boolean(panel.pendingApproval) || turnCompletionState === "blocked",
-      steerAutoDispatchReady:
-        turnCompletionState === "completed" &&
-        !panel.pendingApproval &&
-        !panel.running,
     };
   }, [chatProjector, contextCompaction, liveSessionSnapshot, panel]);
   const showThinking = activePanelView.running
@@ -314,8 +306,6 @@ export function RightChatPane({
           busy={activePanelView.running}
           running={activePanelView.running}
           submissionScopeKey={activePanelView.sessionId ?? activePanelView.id}
-          steerAutoDispatchBlocked={activePanelView.steerAutoDispatchBlocked}
-          steerAutoDispatchReady={activePanelView.steerAutoDispatchReady}
           showProjectFooter={false}
           connection={connection}
           providerSettings={providerSettings}

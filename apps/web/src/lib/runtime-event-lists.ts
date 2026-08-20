@@ -50,22 +50,20 @@ export function mergeBootstrapRuntimeEvents(
   if (currentEvents.length === 0) return limitRuntimeEventList(bootstrapEvents);
   if (bootstrapEvents.length === 0) return limitRuntimeEventList(currentEvents);
 
-  const bootstrapEventIds = new Set(bootstrapEvents.map((event) => event.id));
-  const latestBootstrapSequence = latestRuntimeEventSequence(bootstrapEvents);
-  const newestBootstrapTimestamp = newestTimestamp(bootstrapEvents);
-  const currentEventsAfterBootstrap = currentEvents.filter((event) => {
-    if (bootstrapEventIds.has(event.id)) return false;
-    if (typeof event.sequence === "number") {
-      return latestBootstrapSequence === null || event.sequence > latestBootstrapSequence;
-    }
-    const timestamp = Date.parse(event.timestamp);
-    if (Number.isFinite(timestamp) && newestBootstrapTimestamp !== null) {
-      return timestamp >= newestBootstrapTimestamp;
-    }
-    return true;
-  });
-
-  return mergeLiveRuntimeEventLists(bootstrapEvents, currentEventsAfterBootstrap);
+  // Bootstrap only provides a bounded event window. It must augment—not
+  // replace—the live stream, otherwise an interrupt followed by bootstrap can
+  // collapse a visible transcript to the tail event(s) in that response.
+  const eventsById = new Map<string, { event: RuntimeEvent; index: number }>();
+  let index = 0;
+  for (const event of [...bootstrapEvents, ...currentEvents]) {
+    if (!eventsById.has(event.id)) eventsById.set(event.id, { event, index });
+    index += 1;
+  }
+  return limitRuntimeEventList(
+    [...eventsById.values()]
+      .sort((left, right) => compareRuntimeEventOrder(left, right))
+      .map(({ event }) => event),
+  );
 }
 
 export function latestRuntimeEventSequence(events: RuntimeEvent[]): number | null {
@@ -86,12 +84,21 @@ export function oldestRuntimeEventSequence(events: RuntimeEvent[]): number | nul
   return oldest;
 }
 
-function newestTimestamp(events: RuntimeEvent[]): number | null {
-  let newest: number | null = null;
-  for (const event of events) {
-    const timestamp = Date.parse(event.timestamp);
-    if (!Number.isFinite(timestamp)) continue;
-    newest = newest === null ? timestamp : Math.max(newest, timestamp);
+function compareRuntimeEventOrder(
+  left: { event: RuntimeEvent; index: number },
+  right: { event: RuntimeEvent; index: number },
+): number {
+  const leftSequence = left.event.sequence;
+  const rightSequence = right.event.sequence;
+  if (typeof leftSequence === "number" && typeof rightSequence === "number") {
+    const difference = leftSequence - rightSequence;
+    if (difference !== 0) return difference;
   }
-  return newest;
+  const leftTimestamp = Date.parse(left.event.timestamp);
+  const rightTimestamp = Date.parse(right.event.timestamp);
+  if (Number.isFinite(leftTimestamp) && Number.isFinite(rightTimestamp)) {
+    const difference = leftTimestamp - rightTimestamp;
+    if (difference !== 0) return difference;
+  }
+  return left.index - right.index;
 }

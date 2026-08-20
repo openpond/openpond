@@ -6,7 +6,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { Approval, RuntimeEvent, Session } from "@openpond/contracts";
+import type { RuntimeEvent, Session } from "@openpond/contracts";
 import type { ClientConnection } from "../api";
 import {
   activeGoalRuntimeFromSessionMetadata,
@@ -19,7 +19,6 @@ import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { upsertSessionPreservingLocalSidebarStateAndRecency } from "../lib/session-state";
 import { SIDEBAR_SECTION_LIMIT } from "../lib/app-models";
 import { latestSubagentRuntimeFromEvents } from "../lib/subagent-runtime";
-import { latestTurnCompletionState } from "../lib/turn-completion-state";
 import { buildRuntimeIndexes } from "../lib/runtime-indexes";
 import { useRunningSessionState } from "./useRunningSessionState";
 import type { useSidebarData } from "./useSidebarData";
@@ -36,7 +35,6 @@ export function useSidebarRuntimeState(input: {
   expandedProjectIds: ReadonlySet<string>;
   goalRuntime: ReturnType<typeof latestGoalRuntimeFromEvents>;
   locallyActiveCodexHistorySessionIds: ReadonlySet<string>;
-  pendingApproval: Approval | null;
   pinnedSessions: ReturnType<typeof useSidebarData>["pinnedSessions"];
   savedForLaterSessions: ReturnType<
     typeof useSidebarData
@@ -49,7 +47,6 @@ export function useSidebarRuntimeState(input: {
   selectedSession: Session | null;
   selectedSessionId: string | null;
   serverId: string | null | undefined;
-  sessionEvents: RuntimeEvent[];
   setCodexHistorySessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
   sidebarSessions: Session[];
@@ -64,7 +61,6 @@ export function useSidebarRuntimeState(input: {
     expandedProjectIds,
     goalRuntime,
     locallyActiveCodexHistorySessionIds,
-    pendingApproval,
     pinnedSessions,
     savedForLaterSessions,
     projectSessionRowsByProjectId,
@@ -73,7 +69,6 @@ export function useSidebarRuntimeState(input: {
     selectedSession,
     selectedSessionId,
     serverId,
-    sessionEvents,
     setCodexHistorySessions,
     sidebarSessions,
     subagentRuntime,
@@ -364,23 +359,10 @@ export function useSidebarRuntimeState(input: {
     sidebarSessions,
     subagentRuntimeBySessionId: sidebarSubagentRuntimeBySessionId,
   });
-  const selectedTurnCompletionState = useMemo(
-    () => latestTurnCompletionState(sessionEvents),
-    [sessionEvents]
-  );
-  const selectedSteerAutoDispatchReady =
-    selectedTurnCompletionState === "completed" &&
-    !pendingApproval &&
-    !selectedSessionRunning;
-  const selectedSteerAutoDispatchBlocked =
-    Boolean(pendingApproval) || selectedTurnCompletionState === "blocked";
-
   return {
     goalRuntime: liveGoalRuntime,
     runningSessionIds,
     selectedSessionRunning,
-    selectedSteerAutoDispatchBlocked,
-    selectedSteerAutoDispatchReady,
     sidebarGoalRuntimeBySessionId,
     sidebarSubagentRuntimeBySessionId,
   };

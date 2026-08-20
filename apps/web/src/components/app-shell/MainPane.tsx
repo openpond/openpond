@@ -150,8 +150,6 @@ export function MainPane({
   labCloseDetailKind,
   sideChatTrainingLaunchRequest,
   onSideChatTrainingLaunchHandled,
-  steerAutoDispatchBlocked,
-  steerAutoDispatchReady,
   mentionApps,
   connectedAppMentions,
   profileSkills,
@@ -1734,12 +1732,6 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
-                steerAutoDispatchBlocked={
-                  steerAutoDispatchBlocked || Boolean(pendingApproval)
-                }
-                steerAutoDispatchReady={
-                  steerAutoDispatchReady && !pendingApproval
-                }
                 showProjectFooter={false}
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
@@ -1827,12 +1819,6 @@ export function MainPane({
                 busy={turnRunning}
                 running={turnRunning}
                 submissionScopeKey={composerSubmissionScopeKey}
-                steerAutoDispatchBlocked={
-                  steerAutoDispatchBlocked || Boolean(pendingApproval)
-                }
-                steerAutoDispatchReady={
-                  steerAutoDispatchReady && !pendingApproval
-                }
                 connection={connection}
                 providerSettings={bootstrap?.providers ?? null}
                 provider={activeProvider}
