@@ -3,6 +3,7 @@ import { SUBAGENT_RUNTIME_EVENT_NAMES } from "./subagents.js";
 
 export const RuntimeEventNameSchema = z.enum([
   "session.started",
+  "session.title.updated",
   "turn.started",
   "assistant.delta",
   "assistant.reasoning.delta",

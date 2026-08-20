@@ -419,7 +419,6 @@ export function createHostedToolLoopRuntime(deps: {
         },
       });
       const assistantText = providerRound.text;
-      const reasoningText = providerRound.reasoningText;
       const latestContinuation = providerRound.continuation;
       const latestUsage = providerRound.usage;
       const finishReason = providerRound.finishReason;

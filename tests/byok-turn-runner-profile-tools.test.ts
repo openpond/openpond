@@ -453,7 +453,12 @@ describe("BYOK turn runner profile and tools", () => {
     });
     expect(events.some((event) => event.name === "skill.selected" && (event.data as any)?.skillName === "release-notes")).toBe(true);
     expect(events.some((event) => event.name === "skill.loaded" && (event.data as any)?.skillName === "release-notes")).toBe(true);
-    expect(events.some((event) => event.name === "assistant.delta" && event.output === "BYOK hello")).toBe(true);
+    expect(
+      events
+        .filter((event) => event.name === "assistant.delta")
+        .map((event) => event.output ?? "")
+        .join(""),
+    ).toBe("BYOK hello");
     expect(events.some((event) => event.name === "assistant.reasoning.delta" && event.output === "The user is saying hello.")).toBe(true);
     expect(events.some((event) => event.name === "assistant.delta" && event.output?.includes("The user is saying hello."))).toBe(false);
     expect(events.some((event) => event.name === "turn.completed" && event.source === "provider")).toBe(true);

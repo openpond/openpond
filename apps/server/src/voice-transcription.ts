@@ -530,11 +530,15 @@ async function downloadAndExtractWhisperBinary(
       throw new Error("whisper-cli binary not found in downloaded archive.");
     }
 
-    // Move ALL files from the extraction directory into the binary directory
-    // so that shared libraries (libwhisper.so, libggml.so, etc.) remain
-    // alongside the executable. On Linux, whisper-cli is dynamically linked.
+    // Move ALL files from the directory containing the binary into the binary
+    // directory so that shared libraries (libwhisper.so, libggml.so, etc.)
+    // remain alongside the executable. On Linux, whisper-cli is dynamically
+    // linked. Archives may extract into a subdirectory (e.g.
+    // whisper-bin-ubuntu-x64/), so we move from the binary's parent, not the
+    // top-level extract dir.
+    const binaryParentDir = path.dirname(foundBinary);
     await fs.mkdir(binaryDir, { recursive: true });
-    await moveAllFiles(extractDir, binaryDir);
+    await moveAllFiles(binaryParentDir, binaryDir);
     await fs.chmod(finalBinaryPath, 0o755).catch(() => undefined);
     logger.info("whisper binary installed", { binaryPath: finalBinaryPath });
     return finalBinaryPath;
@@ -629,11 +633,19 @@ async function findWhisperBinaryInDirectory(directory: string): Promise<string |
 }
 
 async function moveAllFiles(srcDir: string, destDir: string): Promise<void> {
-  const entries = await fs.readdir(srcDir, { withFileTypes: true });
+  const entries =  await fs.readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = path.join(srcDir, entry.name);
     const destPath = path.join(destDir, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      // Preserve symlinks -- the archive contains versioned shared libraries
+      // (e.g. libwhisper.so.1.9.2) with symlinks (libwhisper.so.1 -> libwhisper.so.1.9.2)
+      // that the dynamic linker needs. Without these symlinks whisper-cli fails
+      // with "cannot open shared object file".
+      const linkTarget = await fs.readlink(srcPath);
+      await fs.symlink(linkTarget, destPath).catch(() => undefined);
+      await fs.rm(srcPath, { force: true }).catch(() => undefined);
+    } else if (entry.isDirectory()) {
       await fs.mkdir(destPath, { recursive: true });
       await moveAllFiles(srcPath, destPath);
       await fs.rmdir(srcPath).catch(() => undefined);

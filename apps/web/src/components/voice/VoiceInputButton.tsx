@@ -4,7 +4,7 @@ import { api, type ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { canRecordVoice, startVoiceRecorder, type RecordedVoiceAudio, type VoiceRecorder } from "../../lib/voice-recorder";
 
-type VoiceInputPhase = "idle" | "recording" | "transcribing";
+type VoiceInputPhase = "idle" | "starting" | "recording" | "transcribing";
 
 type VoiceInputButtonProps = {
   connection: ClientConnection | null;
@@ -42,17 +42,8 @@ export function VoiceInputButton({
   const [phase, setPhase] = useState<VoiceInputPhase>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const busy = phase === "transcribing";
+  const starting = phase === "starting";
   const recording = phase === "recording";
-  const unavailable = !connection || !canRecordVoice();
-  const title = message ?? (
-    recording
-      ? "Stop dictation"
-      : busy
-        ? "Transcribing voice"
-        : unavailable
-          ? "Voice input unavailable"
-          : "Dictate"
-  );
 
   const clearStopTimer = useCallback(() => {
     if (stopTimerRef.current !== null) {
@@ -123,14 +114,8 @@ export function VoiceInputButton({
       return;
     }
     setMessage(null);
+    setPhase("starting");
     try {
-      const status = await api.voiceTranscriptionStatus(currentConnection);
-      if (!status.binaryPath) {
-        throw new Error(status.installHint ?? "Install whisper.cpp to use dictation.");
-      }
-      if (!status.modelReady && status.canDownloadModel) {
-        setMessage(`${status.modelName} will download after recording.`);
-      }
       const desktopPermission = await window.openpond?.requestMicrophoneAccess?.();
       if (desktopPermission === false) throw new Error("Microphone access is denied.");
       const recorder = await startVoiceRecorder();
@@ -176,14 +161,13 @@ export function VoiceInputButton({
   }, [cancelRecording]);
 
   return (
-    <span className={`voice-input-control ${wrapperClassName} ${recording ? "recording" : ""}`.trim()}>
+    <span className={`voice-input-control ${wrapperClassName} ${starting ? "starting" : ""} ${recording ? "recording" : ""}`.trim()}>
       <button
         type="button"
-        className={`${buttonClassName} ${recording ? "recording active" : ""}`.trim()}
-        aria-label={recording ? "Stop dictation" : "Dictate"}
+        className={`${buttonClassName} ${starting ? "starting" : ""} ${recording ? "recording active" : ""}`.trim()}
+        aria-label={recording ? "Stop dictation" : starting ? "Starting dictation" : "Dictate"}
         aria-pressed={recording}
-        data-tooltip={title}
-        disabled={disabled || busy}
+        disabled={disabled || busy || starting}
         onClick={() => {
           if (recording) void stopAndTranscribe();
           else startRecording();

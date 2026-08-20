@@ -329,6 +329,11 @@ const OPENPOND_MODEL_OPTIONS = [
     description: "reasoning",
   },
   {
+    value: "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
+    label: "Nemotron Lightning 3.5 30B A3B",
+    description: "reasoning",
+  },
+  {
     value: "accounts/fireworks/models/minimax-m3",
     label: "MiniMax M3",
     description: "reasoning",

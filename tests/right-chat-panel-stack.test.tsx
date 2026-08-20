@@ -98,7 +98,8 @@ describe("Right chat panel stack", () => {
 
     expect(markup.toLowerCase()).toContain('contenteditable="true"');
     expect(markup).toContain('aria-label="Steer"');
-    expect(markup).toContain('aria-label="Queue steer draft"');
+    expect(markup).toContain("Steer active response");
+    expect(markup).not.toContain('aria-label="Queue steer draft"');
     expect(markup).not.toContain('aria-label="Stop response"');
   });
 

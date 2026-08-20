@@ -68,6 +68,26 @@ export function previousSidebarChatVisibleCount(
   );
 }
 
+export type SidebarTaskGroup = {
+  key: string;
+  label: string;
+  sessions: Session[];
+};
+
+export function groupSidebarTaskRows(
+  sessions: Session[],
+  resolveGroup: (session: Session) => { key: string; label: string },
+): SidebarTaskGroup[] {
+  const groups = new Map<string, SidebarTaskGroup>();
+  for (const session of sessions) {
+    const resolved = resolveGroup(session);
+    const current = groups.get(resolved.key);
+    if (current) current.sessions.push(session);
+    else groups.set(resolved.key, { ...resolved, sessions: [session] });
+  }
+  return [...groups.values()];
+}
+
 export function SidebarSectionList({
   activeSessions,
   archiveSession,
@@ -108,6 +128,7 @@ export function SidebarSectionList({
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
+  const [groupByProject, setGroupByProject] = useState(experience !== "chat");
   const [selectedTasksetId, setSelectedTasksetId] = useState<string | null>(
     null
   );
@@ -215,6 +236,19 @@ export function SidebarSectionList({
   const visibleTaskRows = filteredTaskRows.slice(
     0,
     Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)
+  );
+  const groupedTaskRows = useMemo(
+    () =>
+      groupSidebarTaskRows(visibleTaskRows, (session) => {
+        if (isTaskDraftSession(session)) return { key: "draft", label: "Drafts" };
+        const projectId = sidebarProjectIdBySessionId[session.id];
+        const label = projectLabelForSession(session) ?? "No project";
+        return {
+          key: projectId ? `project:${projectId}` : `projectless:${label}`,
+          label,
+        };
+      }),
+    [projectLabelById, sidebarProjectIdBySessionId, visibleTaskRows],
   );
   const canShowMoreTasks = visibleTaskRows.length < filteredTaskRows.length;
   const canShowLessTasks =
@@ -362,7 +396,7 @@ export function SidebarSectionList({
     );
   }
 
-  function renderTaskSession(session: Session) {
+  function renderTaskSession(session: Session, showProjectLabel = true) {
     const archived = session.archived;
     const isDragged = taskDragSessionId === session.id;
     const childSessions = childSessionsFor(session);
@@ -412,7 +446,7 @@ export function SidebarSectionList({
           goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
           subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
           terminalIndicator={terminalIndicatorForSession(session.id)}
-          projectLabel={projectLabelForSession(session)}
+          projectLabel={showProjectLabel ? projectLabelForSession(session) : null}
           childSessionCount={childSessions.length}
           childSessionsExpanded={childSessionsExpanded(session, childSessions)}
           onToggleChildSessions={() => toggleChildSessions(session.id)}
@@ -497,8 +531,10 @@ export function SidebarSectionList({
         actions={
           <SidebarTaskListControls
             filter={taskFilter}
+            groupByProject={groupByProject}
             noun={taskNoun}
             onFilterChange={changeTaskFilter}
+            onGroupByProjectChange={setGroupByProject}
             onTasksetChange={changeTasksetFilter}
             onSortChange={changeTaskSort}
             openMenu={sectionMenuOpen}
@@ -509,7 +545,17 @@ export function SidebarSectionList({
           />
         }
       >
-        {visibleTaskRows.map(renderTaskSession)}
+        {groupByProject && experience !== "chat"
+          ? groupedTaskRows.map((group) => (
+              <section className="sidebar-task-project-group" key={group.key}>
+                <div className="sidebar-task-project-group-label">
+                  {group.label}
+                  <span aria-hidden="true">{group.sessions.length}</span>
+                </div>
+                {group.sessions.map((session) => renderTaskSession(session, false))}
+              </section>
+            ))
+          : visibleTaskRows.map((session) => renderTaskSession(session))}
         {filteredTaskRows.length === 0 ? (
           <div className="empty-row">
             {sidebarTaskEmptyLabel(taskFilter, taskNoun)}

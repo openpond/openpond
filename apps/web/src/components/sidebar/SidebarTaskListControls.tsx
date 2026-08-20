@@ -22,8 +22,10 @@ import {
 
 export function SidebarTaskListControls({
   filter,
+  groupByProject,
   noun,
   onFilterChange,
+  onGroupByProjectChange,
   onTasksetChange,
   onSortChange,
   openMenu,
@@ -33,8 +35,10 @@ export function SidebarTaskListControls({
   tasksets,
 }: {
   filter: SidebarTaskFilter;
+  groupByProject: boolean;
   noun: "chats" | "tasks";
   onFilterChange: (filter: SidebarTaskFilter) => void;
+  onGroupByProjectChange: (groupByProject: boolean) => void;
   onTasksetChange: (tasksetId: string | null) => void;
   onSortChange: (sort: SidebarTaskSort) => void;
   openMenu: SidebarSectionMenuId | null;
@@ -76,6 +80,19 @@ export function SidebarTaskListControls({
             role="menu"
             aria-label={`Sort ${noun}`}
           >
+            {noun === "tasks" ? (
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={groupByProject}
+                onClick={() => onGroupByProjectChange(!groupByProject)}
+              >
+                <span className="section-menu-check" aria-hidden="true">
+                  {groupByProject ? <Check size={13} /> : null}
+                </span>
+                <span>Group by project</span>
+              </button>
+            ) : null}
             {SIDEBAR_TASK_SORT_OPTIONS.map((option) => (
               <button
                 key={option.value}

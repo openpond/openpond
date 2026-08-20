@@ -104,6 +104,18 @@ import {
 
 export * from "./turns/public-api.js";
 
+export function promptWithSteeringContext(
+  prompt: string,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  if (metadata?.interactionKind !== "steer") return prompt;
+  return [
+    "[Steering instruction for an interrupted response]",
+    "Change the response direction immediately. Treat the instruction below as a correction to the response that was in progress, not as an unrelated new request.",
+    prompt,
+  ].join("\n\n");
+}
+
 function parseUserQuestionResolution(
   value: unknown,
   priorEvents: RuntimeEvent[]
@@ -1075,7 +1087,10 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           : undefined;
       const attachmentContext = chatAttachmentContext(attachmentContexts);
       const providerPrompt = formatPromptWithAttachmentContext(
-        promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
+        promptWithSteeringContext(
+          promptWithUserQuestionResolution(input.prompt, userQuestionResolution),
+          input.metadata,
+        ),
         attachmentContext
       );
       await appendRuntimeEvent(

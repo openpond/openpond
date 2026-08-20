@@ -65,6 +65,11 @@ import { createRuntimeEventBus } from "./runtime/runtime-event-bus.js";
 import { createTurnRunner } from "./runtime/turn-runner.js";
 import { resolveMaxHostedWorkspaceToolRounds } from "./server-entry-helpers.js";
 import { createSessionStore } from "./store/session-store.js";
+import {
+  autoTitlePromptFromPayload,
+  createSessionTitleService,
+  withPendingAutoTitle,
+} from "./session-title-service.js";
 import { SqliteStore } from "./store/store.js";
 import { event, now } from "./utils.js";
 
@@ -181,6 +186,19 @@ export async function createOpenPondAppServer(
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
   });
+  const sessionTitleService = createSessionTitleService({
+    appendRuntimeEvent,
+    getSession,
+    logger,
+    stream: streamOpenPondHostedChatTurn,
+    updateSession,
+  });
+  const createSessionWithAutoTitle: typeof createSession = async (payload) => {
+    const prompt = autoTitlePromptFromPayload(payload);
+    const session = await createSession(withPendingAutoTitle(payload));
+    if (prompt) sessionTitleService.schedule(session.id, prompt);
+    return session;
+  };
   const workspace = createAppServerWorkspace({
     workspaceDir,
     logger,
@@ -337,7 +355,7 @@ export async function createOpenPondAppServer(
   const instance = createAppServer({
     ports: createAgentRuntimePorts({
       placement: "hosted_work",
-      createSession,
+      createSession: createSessionWithAutoTitle,
       getSession,
       turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
       runtimeEventsForSession: (sessionId) =>

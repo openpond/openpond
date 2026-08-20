@@ -520,6 +520,26 @@
   min-width: 0;
 }
 
+.composer-steer-context {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 12px;
+  border-radius: 999px;
+  background: rgba(98, 161, 255, 0.12);
+  color: #9cc5ff;
+  padding: 2px 7px;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 15px;
+  letter-spacing: 0.015em;
+  pointer-events: none;
+}
+
+.composer.is-steering .composer-inline-input {
+  padding-top: 27px;
+}
+
 .composer.has-add-menu .composer-input-shell {
   z-index: 5;
 }

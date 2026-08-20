@@ -149,6 +149,8 @@ type CodexHistoryTurnPayload = {
   events: RuntimeEvent[];
 };
 
+const sessionAutoTitlePrompt = (prompt: string) => prompt.slice(0, 20_000);
+
 type SendPromptOptions = {
   session?: Session | null;
   selectSession?: boolean;
@@ -546,7 +548,7 @@ export function useChatActions({
           cloudProjectId: selectedCloudProject.id,
           cloudTeamId: selectedCloudProject.teamId,
           cwd: null,
-          title: input.command.slice(0, 64),
+          autoTitlePrompt: sessionAutoTitlePrompt(input.command),
         });
         setSessions((current) => [session!, ...current]);
         input.onSessionCreated?.(session);
@@ -588,7 +590,7 @@ export function useChatActions({
           cloudProjectId: confirmedCloudProject?.id ?? null,
           cloudTeamId: confirmedCloudProject?.teamId ?? null,
           cwd: project.workspacePath,
-          title: input.command.slice(0, 64),
+          autoTitlePrompt: sessionAutoTitlePrompt(input.command),
         });
         setSessions((current) => [session!, ...current]);
         input.onSessionCreated?.(session);
@@ -778,7 +780,7 @@ export function useChatActions({
               cloudProjectId: selectedAgent.projectId,
               cloudTeamId: selectedAgent.teamId,
               cwd: null,
-              title: displayPromptForTurn.slice(0, 64),
+              autoTitlePrompt: sessionAutoTitlePrompt(displayPromptForTurn),
             });
             setSessions((current) => [session!, ...current]);
             options.onSessionCreated?.(session);
@@ -842,7 +844,7 @@ export function useChatActions({
               cloudProjectId: null,
               cloudTeamId: null,
               cwd: null,
-              title: displayPromptForTurn.slice(0, 64),
+              autoTitlePrompt: sessionAutoTitlePrompt(displayPromptForTurn),
             });
             setSessions((current) => [session!, ...current]);
             options.onSessionCreated?.(session);
@@ -896,7 +898,7 @@ export function useChatActions({
             cloudProjectId: actionProjectTarget.id,
             cloudTeamId: actionProjectTarget.teamId,
             cwd: null,
-            title: displayPromptForTurn.slice(0, 64),
+            autoTitlePrompt: sessionAutoTitlePrompt(displayPromptForTurn),
           });
           setSessions((current) => [session!, ...current]);
           options.onSessionCreated?.(session);
@@ -1084,6 +1086,7 @@ export function useChatActions({
                 ...(sessionCommandAccessMode
                   ? { openPondCommandAccessMode: sessionCommandAccessMode }
                   : {}),
+                autoTitlePrompt: sessionAutoTitlePrompt(value),
               }
             : {
                 experience: experienceForTurn,
@@ -1132,7 +1135,7 @@ export function useChatActions({
                         ? { metadata: options.sessionMetadata }
                         : {}),
                     }),
-                title: value.slice(0, 64),
+                autoTitlePrompt: sessionAutoTitlePrompt(value),
               }
         );
         setSessions((current) => [session!, ...current]);

@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Globe2,
   ImageIcon,
+  Lightbulb,
 } from "../icons";
 import type {
   ChatAttachmentSummary,
@@ -24,6 +25,7 @@ import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
 import { StreamingMarkdownText } from "./StreamingMarkdownText";
+import { ChatActivitySummary } from "./ChatActivitySummary";
 import {
   ActionRunCard,
   isProfileActionRun,
@@ -297,19 +299,14 @@ const ReasoningSection = memo(function ReasoningSection({
 }) {
   const [expanded, setExpanded] = useState(false);
   return (
-    <div className="assistant-reasoning">
-      <button
-        type="button"
-        className="assistant-reasoning-toggle"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
+    <div className="activity-group assistant-reasoning">
+      <ChatActivitySummary
+        expanded={expanded}
+        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
+        onToggle={() => setExpanded((value) => !value)}
       >
-        <ChevronDown
-          className={`assistant-reasoning-chevron ${expanded ? "expanded" : ""}`}
-          size={14}
-        />
-        <span>Thinking</span>
-      </button>
+        Thinking
+      </ChatActivitySummary>
       {expanded ? (
         <div className="assistant-reasoning-content">
           <StreamingMarkdownText
@@ -892,9 +889,12 @@ function MessageImageAttachment({
 export const ThinkingIndicator = memo(function ThinkingIndicator() {
   return (
     <article className="activity-group thinking-row" aria-live="polite">
-      <div className="activity-summary thinking-summary" role="status">
-        <span>Thinking...</span>
-      </div>
+      <ChatActivitySummary
+        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
+        running
+      >
+        Thinking…
+      </ChatActivitySummary>
     </article>
   );
 });

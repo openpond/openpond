@@ -1128,6 +1128,45 @@
   white-space: nowrap;
 }
 
+.sidebar-task-title-text.pending {
+  width: min(62%, 126px);
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.045) 20%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.045) 80%
+  );
+  background-size: 220% 100%;
+  animation: sidebar-title-pending 1.15s ease-in-out infinite;
+}
+
+@keyframes sidebar-title-pending {
+  from { background-position: 100% 0; }
+  to { background-position: -120% 0; }
+}
+
+.sidebar-task-project-group + .sidebar-task-project-group {
+  margin-top: 8px;
+}
+
+.sidebar-task-project-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 29px;
+  color: #858585;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.01em;
+}
+
+.sidebar-task-project-group-label > span {
+  color: #666;
+  font-variant-numeric: tabular-nums;
+}
+
 .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
   width: max-content;
   max-width: none;
@@ -1150,6 +1189,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .sidebar-task-title-text.pending {
+    animation: none;
+  }
+
   .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {
     animation: none;
   }

@@ -48,6 +48,7 @@ import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import { RenameChatDialog } from "./RenameChatDialog";
 import { isTaskDraftSession } from "../../lib/task-drafts";
+import { SidebarAnimatedTitle } from "./SidebarAnimatedTitle";
 
 const SIDEBAR_RUNNING_PULSE_MS = 2650;
 const PROJECT_LOCATIONS_POPOVER_WIDTH = 304;
@@ -365,7 +366,7 @@ export function SidebarSessionRow({
             data-overflowing="false"
             onPointerEnter={prepareSidebarTitleTicker}
           >
-            <span className="sidebar-task-title-text">{session.title}</span>
+            <SidebarAnimatedTitle title={session.title} />
           </span>
           {projectLabel ? null : <SidebarUpdatedAt value={session.updatedAt} />}
         </span>

@@ -105,6 +105,11 @@ import {
 } from "./codex-history.js";
 import { createCodexStatusService } from "./codex-status-service.js";
 import { createSessionStore } from "./store/session-store.js";
+import {
+  autoTitlePromptFromPayload,
+  createSessionTitleService,
+  withPendingAutoTitle,
+} from "./session-title-service.js";
 import { createOpenPondHttpSurface, listenOpenPondHttpServer } from "./api/server-http.js";
 import { createServerWorkQueues } from "./runtime/background-worker-queue.js";
 import { createServerShutdown } from "./runtime/server-shutdown.js";
@@ -431,6 +436,19 @@ export async function createOpenPondServer(
     loadLastUsedProfile: async () =>
       (await loadOpenPondProfileLibrary()).lastUsed,
   });
+  const sessionTitleService = createSessionTitleService({
+    appendRuntimeEvent,
+    getSession,
+    logger,
+    stream: streamOpenPondHostedChatTurn,
+    updateSession,
+  });
+  const createSessionWithAutoTitle: typeof createSession = async (payload) => {
+    const prompt = autoTitlePromptFromPayload(payload);
+    const session = await createSession(withPendingAutoTitle(payload));
+    if (prompt) sessionTitleService.schedule(session.id, prompt);
+    return session;
+  };
 
   const {
     activeWorkspace,
@@ -1618,7 +1636,7 @@ export async function createOpenPondServer(
 
   const agentRuntime = createAppServer({
     ports: createAgentRuntimePorts({
-      createSession,
+      createSession: createSessionWithAutoTitle,
       getSession,
       turnsForSession: (sessionId) => store.turnsForSession(sessionId, 1_000),
       runtimeEventsForSession: (sessionId) =>
@@ -1807,7 +1825,7 @@ export async function createOpenPondServer(
       browserControlComplete: browserControlQueue.completeRequest,
       browserControlStatus: browserControlQueue.status,
       agentRuntime,
-      createSession,
+      createSession: createSessionWithAutoTitle,
       patchSession: patchSessionPayload,
       sendTurn,
       runSessionCommand: runSessionCommandPayload,

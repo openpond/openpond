@@ -70,7 +70,9 @@ export function useRuntimeEvents({
     if (!connection?.token || afterSequence === null) return;
     let disconnectTimer: number | null = null;
     let pendingRuntimeEvents: RuntimeEvent[] = [];
-    let flushFrame: number | null = null;
+    let flushTimer: number | null = null;
+    let lastFlushMs = 0;
+    const MIN_FLUSH_INTERVAL_MS = 16;
 
     function clearDisconnectTimer() {
       if (disconnectTimer === null) return;
@@ -83,11 +85,12 @@ export function useRuntimeEvents({
     }
 
     function flushRuntimeEvents() {
-      flushFrame = null;
+      flushTimer = null;
       const nextEvents = pendingRuntimeEvents;
       pendingRuntimeEvents = [];
       if (nextEvents.length === 0) return;
 
+      lastFlushMs = Date.now();
       setEvents((current) => mergeLiveRuntimeEventLists(current, nextEvents));
       const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
       if (liveSessions.length > 0) {
@@ -110,11 +113,36 @@ export function useRuntimeEvents({
       });
     }
 
+    function scheduleFlush() {
+      const elapsedMs = Date.now() - lastFlushMs;
+      if (elapsedMs >= MIN_FLUSH_INTERVAL_MS) {
+        if (flushTimer !== null) {
+          window.clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        flushRuntimeEvents();
+        return;
+      }
+      if (flushTimer !== null) return;
+      flushTimer = window.setTimeout(
+        flushRuntimeEvents,
+        MIN_FLUSH_INTERVAL_MS - elapsedMs
+      );
+    }
+
     function queueRuntimeEvent(runtimeEvent: RuntimeEvent) {
       pendingRuntimeEvents.push(runtimeEvent);
-      if (flushFrame !== null) return;
-      flushFrame = window.requestAnimationFrame(flushRuntimeEvents);
+      scheduleFlush();
     }
+
+    function flushPendingOnVisibilityChange() {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      flushRuntimeEvents();
+    }
+    document.addEventListener("visibilitychange", flushPendingOnVisibilityChange);
 
     const source = openEventStream(
       connection,
@@ -140,7 +168,10 @@ export function useRuntimeEvents({
     );
     return () => {
       clearDisconnectTimer();
-      if (flushFrame !== null) window.cancelAnimationFrame(flushFrame);
+      if (flushTimer !== null) window.clearTimeout(flushTimer);
+      flushTimer = null;
+      pendingRuntimeEvents = [];
+      document.removeEventListener("visibilitychange", flushPendingOnVisibilityChange);
       source.close();
     };
   }, [afterSequence, connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
@@ -152,7 +183,8 @@ export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[]
     const data = runtimeEvent.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) continue;
     const sessionKey =
-      runtimeEvent.name === "session.started"
+      runtimeEvent.name === "session.started" ||
+      runtimeEvent.name === "session.title.updated"
         ? "session"
         : runtimeEvent.name === "subagent.started" ||
           runtimeEvent.name === "subagent.failed"

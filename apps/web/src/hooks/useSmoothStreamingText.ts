@@ -98,6 +98,18 @@ export function useSmoothStreamingText(
   const revealTimerRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
   const remainderRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     targetContentRef.current = content;
@@ -110,7 +122,7 @@ export function useSmoothStreamingText(
       lastFrameTimeRef.current = null;
       remainderRef.current = 0;
       visibleContentRef.current = content;
-      setVisibleContent(content);
+      if (mountedRef.current) setVisibleContent(content);
       return;
     }
 
@@ -122,6 +134,10 @@ export function useSmoothStreamingText(
     }
 
     const revealNextCharacters = () => {
+      if (!mountedRef.current) {
+        revealTimerRef.current = null;
+        return;
+      }
       const current = visibleContentRef.current;
       const target = targetContentRef.current;
       const timestamp = performance.now();
@@ -192,7 +208,7 @@ export function useSmoothStreamingText(
       lastFrameTimeRef.current = null;
       remainderRef.current = 0;
       visibleContentRef.current = targetContentRef.current;
-      setVisibleContent(targetContentRef.current);
+      if (mountedRef.current) setVisibleContent(targetContentRef.current);
     };
     document.addEventListener("visibilitychange", finishWhenHidden);
     return () => {
