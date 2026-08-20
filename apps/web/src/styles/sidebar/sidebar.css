@@ -1150,21 +1150,93 @@
   margin-top: 8px;
 }
 
-.sidebar-task-project-group-label {
+.sidebar-task-project-group-header {
   display: flex;
   align-items: center;
+  width: calc(100% - 8px);
+  min-height: 27px;
   gap: 6px;
-  padding: 3px 10px 3px 29px;
+  margin: 0 4px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
   color: #858585;
   font-size: 11px;
   font-weight: 600;
   line-height: 16px;
   letter-spacing: 0.01em;
+  text-align: left;
 }
 
-.sidebar-task-project-group-label > span {
+.sidebar-task-project-group-header:hover,
+.sidebar-task-project-group-header:focus-visible {
+  background: rgba(255, 255, 255, 0.045);
+  color: #b5b5b5;
+  outline: 0;
+}
+
+.sidebar-task-project-group-icon,
+.sidebar-task-project-group-caret {
+  flex: 0 0 auto;
+}
+
+.sidebar-task-project-group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-task-project-group-count {
+  margin-left: auto;
   color: #666;
   font-variant-numeric: tabular-nums;
+}
+
+.sidebar-task-project-group-caret {
+  display: inline-grid;
+  place-items: center;
+  color: #707070;
+}
+
+.sidebar-task-detail-popover {
+  position: fixed;
+  z-index: 126;
+  top: var(--sidebar-task-detail-top, 128px);
+  left: var(--sidebar-task-detail-left, calc(var(--sidebar-width, 320px) + 10px));
+  width: min(288px, calc(100vw - var(--sidebar-task-detail-left, 0px) - 12px));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: #1d1d1d;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  color: var(--muted-strong);
+  padding: 10px 11px;
+  pointer-events: none;
+}
+
+.sidebar-task-detail-title {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-task-detail-project,
+.sidebar-task-detail-popover time {
+  display: block;
+  margin-top: 4px;
+  color: #929292;
+  font-size: 11px;
+  line-height: 15px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-task-project-group-header {
+    transition: none;
+  }
 }
 
 .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {

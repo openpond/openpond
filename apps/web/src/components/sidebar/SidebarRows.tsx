@@ -206,6 +206,8 @@ export function SidebarSessionRow({
   subagentRuntime,
   terminalIndicator,
   projectLabel,
+  metadataPresentation,
+  ariaDescribedBy,
   childSessionCount = 0,
   childSessionsExpanded = false,
   onSelect,
@@ -233,6 +235,8 @@ export function SidebarSessionRow({
   subagentRuntime?: SubagentRuntimeStatus | null;
   terminalIndicator?: SidebarTerminalIndicator | null;
   projectLabel?: string | null;
+  metadataPresentation?: "inline" | "hover-detail" | "flyout";
+  ariaDescribedBy?: string;
   childSessionCount?: number;
   childSessionsExpanded?: boolean;
   onSelect: () => void;
@@ -264,12 +268,16 @@ export function SidebarSessionRow({
       : goalRunning && goalRuntime
       ? sidebarGoalRuntimeTooltip(goalRuntime)
       : "Running";
+  const resolvedMetadataPresentation =
+    metadataPresentation ?? (projectLabel ? "hover-detail" : "inline");
+  const showHoverDetail = resolvedMetadataPresentation === "hover-detail";
+  const showInlineDate = resolvedMetadataPresentation === "inline";
   const rowClassName = [
     "sidebar-task-row",
     isTaskDraftSession(session) ? "is-draft" : "",
     onDockRight ? "actions-4" : onToggleSaveForLater ? "actions-3" : "",
     rowRunning ? "has-running-dot" : "",
-    projectLabel ? "has-project-detail" : "",
+    showHoverDetail ? "has-project-detail" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -277,7 +285,7 @@ export function SidebarSessionRow({
   const taskActions = (
     <div
       className={`sidebar-row-actions${
-        projectLabel ? " sidebar-task-inline-actions" : ""
+        showHoverDetail ? " sidebar-task-inline-actions" : ""
       }`}
     >
       {onDockRight ? (
@@ -321,6 +329,7 @@ export function SidebarSessionRow({
       placeholder={placeholder}
       className={rowClassName || undefined}
       ariaExpanded={hasChildSessions ? childSessionsExpanded : undefined}
+      ariaDescribedBy={ariaDescribedBy}
       onSelect={onSelect}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -358,7 +367,7 @@ export function SidebarSessionRow({
         icon ?? <MessageSquare size={15} />
       )}
       <span
-        className={`row-label-shell${projectLabel ? " has-detail" : ""}`}
+        className={`row-label-shell${showHoverDetail ? " has-detail" : ""}`}
       >
         <span className="sidebar-session-title-line">
           <span
@@ -368,9 +377,9 @@ export function SidebarSessionRow({
           >
             <SidebarAnimatedTitle title={session.title} />
           </span>
-          {projectLabel ? null : <SidebarUpdatedAt value={session.updatedAt} />}
+          {showInlineDate ? <SidebarUpdatedAt value={session.updatedAt} /> : null}
         </span>
-        {projectLabel ? (
+        {showHoverDetail ? (
           <span className="sidebar-session-detail-line">
             <span className="sidebar-session-project-label">{projectLabel}</span>
             {taskActions}
@@ -393,7 +402,7 @@ export function SidebarSessionRow({
             />
           ) : null}
         </span>
-        {projectLabel ? null : taskActions}
+        {showHoverDetail ? null : taskActions}
       </div>
     </SidebarInteractiveRow>
   );

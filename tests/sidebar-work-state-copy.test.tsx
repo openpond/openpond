@@ -151,7 +151,7 @@ describe("sidebar task list controls", () => {
     );
   });
 
-  test("renders project detail and updated date for development tasks without elapsed runtime", () => {
+  test("renders project disclosure without inline dates or elapsed runtime", () => {
     const project = localProject();
     const projectItem: SidebarProjectItem = {
       id: `local:${project.id}`,
@@ -186,10 +186,10 @@ describe("sidebar task list controls", () => {
     expect(developmentMarkup).toContain(">Refine sidebar<");
     expect(developmentMarkup).toContain(">Active workspace<");
     expect(developmentMarkup).not.toContain(">2h 7m<");
-    expect(developmentMarkup).toContain(
-      '<time class="sidebar-row-updated-at" dateTime="2026-07-29T12:00:00.000Z"'
-    );
-    expect(developmentMarkup).toContain(">Jul 29 ");
+    expect(developmentMarkup).toContain("sidebar-task-project-group-header");
+    expect(developmentMarkup).toContain('aria-expanded="true"');
+    expect(developmentMarkup).not.toContain("sidebar-row-updated-at");
+    expect(developmentMarkup).not.toContain(">Jul 29 ");
     expect(developmentMarkup).not.toContain(" · ");
     expect(developmentMarkup).not.toContain(">Projects<");
 
@@ -214,7 +214,7 @@ describe("sidebar task list controls", () => {
     expect(workMarkup).toContain(">Refine sidebar<");
     expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
-    expect(workMarkup).toContain(">Jul 29 ");
+    expect(workMarkup).not.toContain(">Jul 29 ");
   });
 });
 
