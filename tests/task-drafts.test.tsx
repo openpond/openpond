@@ -38,25 +38,28 @@ describe("task drafts", () => {
     expect(taskDraftTitle("x".repeat(100))).toHaveLength(64);
   });
 
-  test("uses Shift+Enter consistently for Work on macOS and Linux", () => {
-    for (const platform of ["darwin", "linux"]) {
-      expect(platform).toBeTruthy();
-      expect(
-        composerTaskDraftShortcut("Enter", true, "work", "chat", true)
-      ).toBe(true);
-    }
+  test("uses Ctrl/Cmd+Enter for Work drafts", () => {
     expect(
-      composerTaskDraftShortcut("Enter", false, "work", "chat", true)
+      composerTaskDraftShortcut("Enter", true, false, false, "work", "chat", true)
+    ).toBe(true);
+    expect(
+      composerTaskDraftShortcut("Enter", false, true, false, "work", "chat", true)
+    ).toBe(true);
+    expect(
+      composerTaskDraftShortcut("Enter", false, false, false, "work", "chat", true)
     ).toBe(false);
     expect(
-      composerTaskDraftShortcut("Enter", true, "chat", "chat", true)
+      composerTaskDraftShortcut("Enter", true, false, false, "chat", "chat", true)
+    ).toBe(false);
+    expect(
+      composerTaskDraftShortcut("Enter", true, false, true, "work", "chat", true)
     ).toBe(false);
   });
 
   test("adds the draft shortcut to the Work start placeholder", () => {
     expect(
       composerPlaceholder({ experience: "work", mode: "start", surface: "chat" })
-    ).toBe("What should we work on? Shift Enter to save as draft");
+    ).toBe("What should we work on? Ctrl Enter to save as draft");
   });
 
   test("renders a saved draft in yellow with Draft on its second row", () => {

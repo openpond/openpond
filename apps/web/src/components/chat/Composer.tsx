@@ -1326,11 +1326,11 @@ export function Composer({
       );
       return;
     }
-    if (sendDisabled) return;
     if (running) {
       stageCurrentSteerDraft();
       return;
     }
+    if (sendDisabled) return;
     const submissionScope = submissionScopeKey;
     if (!beginSubmissionForScope(submissionScope)) return;
     setAddMenuOpen(false);
@@ -1713,7 +1713,17 @@ export function Composer({
                 clearSelectedInvocation();
                 return;
               }
-              if (composerTaskDraftShortcut(event.key, event.shiftKey, experience, surface, Boolean(onSaveTaskDraft))) {
+              if (
+                composerTaskDraftShortcut(
+                  event.key,
+                  event.ctrlKey,
+                  event.metaKey,
+                  event.shiftKey,
+                  experience,
+                  surface,
+                  Boolean(onSaveTaskDraft)
+                )
+              ) {
                 event.preventDefault();
                 saveComposerTaskDraft({
                   attachmentsCount: attachments.length,
@@ -1729,8 +1739,7 @@ export function Composer({
               }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-                if (hasComposerInput && !serializingAttachments)
-                  void submitComposer();
+                if (!serializingAttachments) void submitComposer();
               }
             }}
             onPasteFiles={addFiles}

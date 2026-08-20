@@ -35,13 +35,16 @@ export function saveComposerTaskDraft(input: {
 
 export function composerTaskDraftShortcut(
   key: string,
+  controlKey: boolean,
+  metaKey: boolean,
   shiftKey: boolean,
   experience: string,
   surface: string,
   supported: boolean,
 ): boolean {
   return key === "Enter"
-    && shiftKey
+    && (controlKey || metaKey)
+    && !shiftKey
     && experience === "work"
     && surface === "chat"
     && supported;
@@ -56,5 +59,5 @@ export function composerPlaceholder(input: {
   if (input.mode !== "start") return "Ask for follow-up changes";
   return input.experience === "chat"
     ? "Ask anything"
-    : "What should we work on? Shift Enter to save as draft";
+    : "What should we work on? Ctrl Enter to save as draft";
 }
