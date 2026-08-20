@@ -1,5 +1,17 @@
 export type ChatErrorKind = "opchat_quota_exceeded";
 
+const OPCHAT_GATEWAY_FAILURE = /\bopenpond\s+opchat\b/i;
+const TRANSIENT_GATEWAY_FAILURE =
+  /\b(?:50[0-9]|52[0-9]|53[0-9])\b|bad\s+gateway|gateway\s+timeout|service\s+unavailable/i;
+
+export function displayChatErrorMessage(message?: string | null): string {
+  const raw = message?.trim() || "Turn failed";
+  if (OPCHAT_GATEWAY_FAILURE.test(raw) && TRANSIENT_GATEWAY_FAILURE.test(raw)) {
+    return "Server connection lost. Retry your message.";
+  }
+  return raw;
+}
+
 export function classifyChatError(message?: string | null, data?: unknown): ChatErrorKind | null {
   const code = stringFromRecord(data, "code") ?? stringFromRecord(data, "errorCode");
   if (code === "opchat_quota_exceeded") return "opchat_quota_exceeded";

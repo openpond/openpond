@@ -1,3 +1,5 @@
+import { displayChatErrorMessage } from "./chat-errors";
+
 const TEAM_CHAT_ERROR_MESSAGES: Record<string, string> = {
   team_chat_team_not_found: "You no longer have access to this workspace.",
   workspace_membership_required: "You no longer have access to this workspace.",
@@ -26,5 +28,5 @@ export function teamChatErrorMessage(error: unknown): string {
   if (normalized.includes("event stream ended")) {
     return "Team chat realtime disconnected. Messages will continue to refresh automatically.";
   }
-  return raw;
+  return displayChatErrorMessage(raw);
 }

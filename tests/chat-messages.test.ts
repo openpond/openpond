@@ -735,6 +735,24 @@ describe("chat message projection", () => {
     expect(html).not.toContain("OpenPond OpChat stream failed");
   });
 
+  test("hides gateway HTML from a failed OpChat turn", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_failed_gateway",
+        name: "turn.failed",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        error:
+          "OpenPond OpChat request failed: 502 <!DOCTYPE html><title>openpond.ai | 502: Bad gateway</title>",
+      }),
+    ]);
+
+    expect(messages[0]).toMatchObject({
+      role: "error",
+      content: "Server connection lost. Retry your message.",
+    });
+  });
+
   test("renders image attachments as inline user message previews", () => {
     const messages = buildChatMessages([
       runtimeEvent({

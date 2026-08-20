@@ -21,7 +21,7 @@ import {
   isCompactionEvent,
   settleRunningActivityGroups,
 } from "./chat-activities";
-import { classifyChatError } from "./chat-errors";
+import { classifyChatError, displayChatErrorMessage } from "./chat-errors";
 import { attachTurnDeliverables } from "./chat-deliverables";
 import { asRecord, findLast } from "./chat-message-utils";
 import { mergeChatSources, webSearchSourcesFromEvent } from "./chat-sources";
@@ -206,12 +206,12 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
 
     if (item.name === "turn.failed") {
       completeActivityGroup(messages, item, "failed");
-      const content = item.error ?? "Turn failed";
-      const errorKind = classifyChatError(content, item.data);
+      const rawContent = item.error ?? "Turn failed";
+      const errorKind = classifyChatError(rawContent, item.data);
       messages.push({
         id: item.id,
         role: "error",
-        content,
+        content: displayChatErrorMessage(rawContent),
         ...(errorKind ? { errorKind } : {}),
         timestamp: item.timestamp,
         turnId: item.turnId,

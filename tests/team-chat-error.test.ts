@@ -24,4 +24,12 @@ describe("team chat error messages", () => {
   test("keeps unknown server errors intact", () => {
     expect(teamChatErrorMessage(new Error("unexpected_failure"))).toBe("unexpected_failure");
   });
+
+  test("replaces OpChat gateway markup with a retryable connection message", () => {
+    expect(
+      teamChatErrorMessage(
+        new Error("OpenPond OpChat request failed: 502 <!DOCTYPE html><title>Bad gateway</title>"),
+      ),
+    ).toBe("Server connection lost. Retry your message.");
+  });
 });
