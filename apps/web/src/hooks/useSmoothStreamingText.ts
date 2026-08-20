@@ -174,6 +174,12 @@ export function useSmoothStreamingText(
       revealNextCharacters,
       REVEAL_INTERVAL_MS
     );
+    return () => {
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
   }, [content]);
 
   useEffect(() => {

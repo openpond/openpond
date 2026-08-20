@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { constants as fsConstants, promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -41,6 +41,11 @@ const TRANSCRIPTION_TIMEOUT_MS = 120_000;
 const MODEL_MIN_BYTES = 10 * 1024 * 1024;
 const MODEL_MAX_BYTES = 2 * 1024 * 1024 * 1024;
 const PROCESS_OUTPUT_MAX_CHARS = 64 * 1024;
+const WHISPER_CPP_VERSION = "v1.9.2";
+const WHISPER_CPP_RELEASE_BASE = `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_CPP_VERSION}`;
+const BINARY_DIR_NAME = "voice-binaries";
+const BINARY_MIN_BYTES = 500_000;
+const BINARY_MAX_BYTES = 100_000_000;
 
 export function createVoiceTranscriptionService(input: {
   storeDir: string;
@@ -55,6 +60,7 @@ export function createVoiceTranscriptionService(input: {
     process.env.OPENPOND_WHISPER_MODEL?.trim() ||
     path.join(input.storeDir, "voice-models", `ggml-${modelName}.bin`);
   let modelDownload: Promise<string> | null = null;
+  let binaryDownload: Promise<string> | null = null;
   const closeController = new AbortController();
   const activeProcesses = new Set<ChildProcess>();
   const activeTranscriptions = new Set<Promise<VoiceTranscriptionResponse>>();
@@ -62,7 +68,7 @@ export function createVoiceTranscriptionService(input: {
   let closePromise: Promise<void> | null = null;
 
   async function status(): Promise<VoiceTranscriptionStatus> {
-    const binaryPath = await resolveWhisperBinary();
+    const binaryPath = await ensureBinary();
     const modelReady = await fileExists(modelPath);
     return {
       available: Boolean(binaryPath && (modelReady || canDownloadDefaultModel())),
@@ -73,6 +79,35 @@ export function createVoiceTranscriptionService(input: {
       canDownloadModel: canDownloadDefaultModel(),
       installHint: binaryPath ? null : whisperInstallHint(),
     };
+  }
+
+  async function ensureBinary(): Promise<string | null> {
+    const resolved = await resolveWhisperBinary();
+    if (resolved) return resolved;
+
+    const assetInfo = getPlatformAssetInfo();
+    if (!assetInfo) return null;
+
+    const binaryDir = path.join(input.storeDir, BINARY_DIR_NAME);
+    const binaryPath = path.join(binaryDir, "whisper-cli");
+
+    if (await fileExists(binaryPath)) {
+      const isExec = await executableExists(binaryPath);
+      if (isExec) return binaryPath;
+    }
+
+    if (!binaryDownload) {
+      binaryDownload = downloadAndExtractWhisperBinary(
+        binaryDir,
+        binaryPath,
+        assetInfo,
+        input.logger,
+        closeController.signal,
+      ).finally(() => {
+        binaryDownload = null;
+      });
+    }
+    return binaryDownload;
   }
 
   async function ensureModel(): Promise<string> {
@@ -106,7 +141,7 @@ export function createVoiceTranscriptionService(input: {
 
   async function runTranscription(payload: unknown): Promise<VoiceTranscriptionResponse> {
     const request = parseVoiceTranscriptionRequest(payload);
-    const binaryPath = await resolveWhisperBinary();
+    const binaryPath = await ensureBinary();
     if (!binaryPath) throw new Error(whisperInstallHint());
 
     const audio = Buffer.from(request.audioBase64, "base64");
@@ -157,7 +192,7 @@ export function createVoiceTranscriptionService(input: {
     closing = true;
     closeController.abort();
     for (const child of activeProcesses) stopVoiceProcess(child);
-    closePromise = Promise.allSettled([...activeTranscriptions, ...(modelDownload ? [modelDownload] : [])])
+    closePromise = Promise.allSettled([...activeTranscriptions, ...(modelDownload ? [modelDownload] : []), ...(binaryDownload ? [binaryDownload] : [])])
       .then(() => {
         if (activeProcesses.size > 0) {
           throw new Error(`Voice transcription leaked ${activeProcesses.size} process(es).`);
@@ -218,7 +253,14 @@ async function runWhisper(input: {
       reject(new Error("Voice transcription service is closed."));
       return;
     }
-    const child = spawn(input.binaryPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(input.binaryPath, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        // Ensure whisper-cli can find shared libraries bundled alongside it
+        LD_LIBRARY_PATH: [path.dirname(input.binaryPath), process.env.LD_LIBRARY_PATH].filter(Boolean).join(":"),
+      },
+    });
     input.activeProcesses.add(child);
     let stderr = "";
     let stdout = "";
@@ -429,11 +471,180 @@ async function fileExists(filePath: string): Promise<boolean> {
 }
 
 function whisperInstallHint(): string {
-  if (process.platform === "darwin") {
-    return "Install whisper.cpp with `brew install whisper-cpp`, then try dictation again.";
-  }
-  if (process.platform === "linux") {
-    return "Install whisper.cpp and make `whisper-cli` available on PATH, or set OPENPOND_WHISPER_CPP_BIN.";
+  if (process.platform === "darwin" || process.platform === "linux") {
+    return "Could not auto-download whisper.cpp. Install it manually (e.g. `brew install whisper-cpp` on macOS or build from github.com/ggml-org/whisper.cpp), or set OPENPOND_WHISPER_CPP_BIN to the binary path.";
   }
   return "Local dictation requires whisper.cpp on macOS or Linux.";
+}
+
+export function getPlatformAssetInfo(): { assetName: string; archiveType: "tar.gz" | "zip" } | null {
+  if (process.platform === "darwin") {
+    return { assetName: "whisper-bin-x64.zip", archiveType: "zip" };
+  }
+  if (process.platform === "linux") {
+    if (process.arch === "arm64") {
+      return { assetName: "whisper-bin-ubuntu-arm64.tar.gz", archiveType: "tar.gz" };
+    }
+    if (process.arch === "x64") {
+      return { assetName: "whisper-bin-ubuntu-x64.tar.gz", archiveType: "tar.gz" };
+    }
+  }
+  return null;
+}
+
+async function downloadAndExtractWhisperBinary(
+  binaryDir: string,
+  finalBinaryPath: string,
+  assetInfo: { assetName: string; archiveType: "tar.gz" | "zip" },
+  logger: VoiceLogger,
+  signal: AbortSignal,
+): Promise<string> {
+  const url = `${WHISPER_CPP_RELEASE_BASE}/${assetInfo.assetName}`;
+  await fs.mkdir(binaryDir, { recursive: true });
+  const tempArchive = path.join(binaryDir, `whisper-archive.${process.pid}.${Date.now()}.tmp`);
+  const extractDir = path.join(binaryDir, `extract-${process.pid}-${Date.now()}`);
+  logger.info("downloading whisper binary", { url, targetDir: binaryDir });
+  try {
+    const response = await fetch(url, { signal, redirect: "follow" });
+    if (!response.ok || !response.body) {
+      throw new Error(`Unable to download whisper binary: ${response.status} ${response.statusText}`.trim());
+    }
+    const sizeBytes = await streamBinaryResponseToFile({
+      response,
+      targetPath: tempArchive,
+      signal,
+      minBytes: BINARY_MIN_BYTES,
+      maxBytes: BINARY_MAX_BYTES,
+    });
+    logger.info("whisper binary downloaded", { sizeBytes, extracting: true });
+
+    await fs.mkdir(extractDir, { recursive: true });
+    if (assetInfo.archiveType === "tar.gz") {
+      await runExtractionCommand("tar", ["xzf", tempArchive, "-C", extractDir], signal);
+    } else {
+      await runExtractionCommand("unzip", ["-o", tempArchive, "-d", extractDir], signal);
+    }
+
+    const foundBinary = await findWhisperBinaryInDirectory(extractDir);
+    if (!foundBinary) {
+      throw new Error("whisper-cli binary not found in downloaded archive.");
+    }
+
+    // Move ALL files from the extraction directory into the binary directory
+    // so that shared libraries (libwhisper.so, libggml.so, etc.) remain
+    // alongside the executable. On Linux, whisper-cli is dynamically linked.
+    await fs.mkdir(binaryDir, { recursive: true });
+    await moveAllFiles(extractDir, binaryDir);
+    await fs.chmod(finalBinaryPath, 0o755).catch(() => undefined);
+    logger.info("whisper binary installed", { binaryPath: finalBinaryPath });
+    return finalBinaryPath;
+  } finally {
+    await Promise.all([
+      fs.rm(tempArchive, { force: true }),
+      fs.rm(extractDir, { force: true, recursive: true }),
+    ]);
+  }
+}
+
+export async function streamBinaryResponseToFile(input: {
+  response: Response;
+  targetPath: string;
+  signal: AbortSignal;
+  minBytes: number;
+  maxBytes: number;
+}): Promise<number> {
+  const declaredBytes = Number(input.response.headers.get("content-length"));
+  if (Number.isFinite(declaredBytes) && declaredBytes > input.maxBytes) {
+    throw new Error("Whisper binary download exceeds the configured byte limit.");
+  }
+  const reader = input.response.body?.getReader();
+  if (!reader) throw new Error("Whisper binary download did not return a response body.");
+  const file = await fs.open(input.targetPath, "wx", 0o600);
+  let sizeBytes = 0;
+  try {
+    try {
+      while (true) {
+        if (input.signal.aborted) throw new Error("Whisper binary download was cancelled.");
+        const { done, value } = await reader.read();
+        if (done) break;
+        sizeBytes += value.byteLength;
+        if (sizeBytes > input.maxBytes) {
+          throw new Error("Whisper binary download exceeds the configured byte limit.");
+        }
+        await file.write(value);
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => undefined);
+      throw error;
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    await fs.rm(input.targetPath, { force: true });
+    throw error;
+  }
+  if (sizeBytes < input.minBytes) {
+    await fs.rm(input.targetPath, { force: true });
+    throw new Error("Downloaded whisper binary is incomplete.");
+  }
+  await fs.chmod(input.targetPath, 0o600).catch(() => undefined);
+  return sizeBytes;
+}
+
+async function runExtractionCommand(
+  command: string,
+  args: string[],
+  signal: AbortSignal,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("Whisper binary extraction was cancelled."));
+      return;
+    }
+    const child = execFile(command, args, { signal, maxBuffer: 10 * 1024 * 1024 }, (error) => {
+      if (error) {
+        reject(new Error(`Whisper binary extraction failed: ${error.message}`));
+        return;
+      }
+      resolve();
+    });
+    if (child.exitCode === null && child.signalCode === null && signal.aborted) {
+      child.kill("SIGTERM");
+    }
+  });
+}
+
+async function findWhisperBinaryInDirectory(directory: string): Promise<string | null> {
+  const entries = await fs.readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      const found = await findWhisperBinaryInDirectory(fullPath);
+      if (found) return found;
+    } else if (entry.isFile() && (entry.name === "whisper-cli" || entry.name === "whisper-cpp")) {
+      if (await executableExists(fullPath)) return fullPath;
+    }
+  }
+  return null;
+}
+
+async function moveAllFiles(srcDir: string, destDir: string): Promise<void> {
+  const entries = await fs.readdir(srcDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(srcDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      await fs.mkdir(destPath, { recursive: true });
+      await moveAllFiles(srcPath, destPath);
+      await fs.rmdir(srcPath).catch(() => undefined);
+    } else if (entry.isFile()) {
+      await fs.rename(srcPath, destPath);
+      // Make executables and shared libraries usable
+      if (entry.name === "whisper-cli" || entry.name === "whisper-cpp") {
+        await fs.chmod(destPath, 0o755).catch(() => undefined);
+      } else if (entry.name.endsWith(".so") || entry.name.includes(".so.")) {
+        await fs.chmod(destPath, 0o755).catch(() => undefined);
+      }
+    }
+  }
 }

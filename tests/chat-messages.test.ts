@@ -418,7 +418,7 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Subagent running");
   });
 
-  test("keeps model reasoning out of the visible work trace and answer", () => {
+  test("renders reasoning as an assistant message with reasoningContent", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -450,41 +450,63 @@ describe("chat message projection", () => {
       }),
     ]);
 
+    // Reasoning deltas create a single assistant message that later receives
+    // the text content — they no longer produce an activity_group row.
     expect(messages.map((message) => message.role)).toEqual([
       "user",
-      "activity_group",
       "assistant",
     ]);
     expect(messages[1]).toMatchObject({
-      role: "activity_group",
-      traceState: "settled",
-    });
-    expect(messages[1]?.activities).toMatchObject([
-      {
-        kind: "reasoning",
-        content: "The user is greeting Z.ai. It should answer briefly.",
-      },
-    ]);
-    expect(messages[2]).toMatchObject({
       role: "assistant",
+      reasoningContent: "The user is greeting Z.ai. It should answer briefly.",
       content: "Hello z.ai",
     });
 
-    const html = renderToStaticMarkup(
+    const assistantHtml = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("Thought through the request");
-    expect(html).not.toContain("Working…");
-    expect(html).not.toContain("The user is greeting Z.ai.");
-    expect(html).not.toContain("It should answer briefly.");
-    expect(html).not.toContain(">Reasoning<");
-    expect(html).not.toContain("Hello z.ai");
-
-    const assistantHtml = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[2]! })
-    );
     expect(assistantHtml).toContain("Hello z.ai");
+    expect(assistantHtml).toContain("Thinking");
+    // Reasoning section is collapsed by default, so the text is not in the DOM
     expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+  });
+
+  test("merges reasoning into an assistant message that already has content (out-of-order events)", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "hello z.ai" },
+      }),
+      runtimeEvent({
+        id: "assistant_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "Hello z.ai",
+      }),
+      runtimeEvent({
+        id: "reasoning_1",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "The user is greeting Z.ai.",
+      }),
+    ]);
+
+    // When text arrives before reasoning, the reasoning should merge into
+    // the same assistant message instead of creating a separate one.
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      reasoningContent: "The user is greeting Z.ai.",
+      content: "Hello z.ai",
+    });
   });
 
   test("groups reasoning and actions across alternating tool runs", () => {
@@ -544,33 +566,37 @@ describe("chat message projection", () => {
       }),
     ]);
 
+    // reasoning_1 creates an assistant message with reasoningContent.
+    // tool_started/tool_completed create an activity_group (settles the
+    // reasoning assistant message).  reasoning_2 creates a new assistant
+    // message with reasoningContent, and assistant_1 appends content to it.
     expect(messages.map((message) => message.role)).toEqual([
       "user",
-      "activity_group",
-      "assistant",
+      "assistant",   // reasoning_1
+      "activity_group", // tool search
+      "assistant",   // reasoning_2 + assistant_1
     ]);
-    expect(messages[1]?.traceState).toBe("completed");
-    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
-      "Reasoning",
+    expect(messages[1]?.reasoningContent).toBe("I need to find the relevant files.");
+    expect(messages[1]?.content).toBeUndefined();
+    expect(messages[2]?.traceState).toBe("completed");
+    expect(messages[2]?.activities?.map((activity) => activity.label)).toEqual([
       "Searched resources",
-      "Reasoning",
     ]);
     expect(
-      messages[1]?.activities?.map((activity) => activity.content)
+      messages[2]?.activities?.map((activity) => activity.content)
     ).toEqual([
-      "I need to find the relevant files.",
       "Found 2 resources.",
-      "Now I can inspect the candidate.",
     ]);
-    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe(
+    expect(activityGroupSummary(messages[2]?.activities ?? [])).toBe(
       "Searched code"
     );
-    expect(messages[2]?.content).toBe("I found the chat files.");
+    expect(messages[3]?.content).toBe("I found the chat files.");
+    expect(messages[3]?.reasoningContent).toBe("Now I can inspect the candidate.");
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: {
-          ...messages[1]!,
+          ...messages[2]!,
           traceStartedAt: "2026-07-22T15:00:00.000Z",
           traceCompletedAt: "2026-07-22T15:01:24.000Z",
         },
@@ -578,12 +604,10 @@ describe("chat message projection", () => {
     );
     expect(html).toContain("Worked for 1m 24s · Searched code");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("I need to find the relevant files.");
-    expect(html).not.toContain("Now I can inspect the candidate.");
     expect(html).not.toContain("Found 2 resources.");
     expect(html).not.toContain("Searched resources");
     const expandedActivities = workTracePresentation(
-      messages[1]?.activities ?? [],
+      messages[2]?.activities ?? [],
       true
     ).visibleActivities;
     expect(expandedActivities).toMatchObject([
@@ -591,9 +615,6 @@ describe("chat message projection", () => {
         content: "Found 2 resources.",
       },
     ]);
-    expect(
-      expandedActivities.some((activity) => activity.kind === "reasoning")
-    ).toBe(false);
   });
 
   test("settles earlier work summaries while only the active tail keeps working", () => {
@@ -645,7 +666,7 @@ describe("chat message projection", () => {
     expect(runningHtml).not.toContain("Running command");
   });
 
-  test("keeps completed reasoning hidden beneath a factual work summary", () => {
+  test("renders completed reasoning as an assistant reasoning message", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -674,17 +695,15 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[1]! })
-    );
-    expect(html).toContain("Worked · Thought through the request");
-    expect(html).not.toContain("aria-expanded");
-    expect(html).not.toContain("I found the branch");
-    expect(html).not.toContain("app-state.ts");
-    expect(html).not.toContain("const prompt");
-    expect(html).not.toContain("setPrompt");
-    expect(messages[1]?.activities?.[0]?.content).toContain("const prompt");
-    expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
+    // Reasoning now produces an assistant message with reasoningContent,
+    // not an activity group with a "Thought through the request" summary.
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1]?.reasoningContent).toContain("const prompt");
+    expect(messages[1]?.reasoningContent).toContain("setPrompt");
+    expect(messages[1]?.reasoningContent).toContain("app-state.ts");
   });
 
   test("renders OpChat quota failures as a billing action card", () => {

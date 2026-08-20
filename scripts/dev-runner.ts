@@ -13,6 +13,7 @@ export type DevRunnerOptions = {
   host: string;
   serverPort?: number;
   webPort?: number;
+  watch?: boolean;
 };
 
 export type DevRunnerCommand = {
@@ -71,11 +72,16 @@ export function parseDevRunnerArgs(
   let host = env.OPENPOND_DEV_HOST || "127.0.0.1";
   let serverPort = numberFromEnv(env.OPENPOND_SERVER_PORT);
   let webPort = numberFromEnv(env.OPENPOND_WEB_PORT);
+  let watch = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]!;
     if (arg === "--print-plan" || arg === "--dry-run") {
       printPlan = true;
+      continue;
+    }
+    if (arg === "--watch") {
+      watch = true;
       continue;
     }
     if (arg === "--host") {
@@ -121,6 +127,7 @@ export function parseDevRunnerArgs(
     host,
     serverPort,
     webPort,
+    watch,
   };
 }
 
@@ -164,18 +171,18 @@ export function buildDevRunnerPlan(
 
   if (options.mode === "desktop") {
     setupCommands.push(command("build-desktop", pnpmBinary(env), ["run", "build:desktop"], root));
-    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));
     processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
     processes.push(command("desktop", electronBinary(root), ["."], path.join(root, "apps", "desktop"), desktopEnv));
   }
 
   if (options.mode === "web") {
-    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));
     processes.push(command("renderer", pnpmBinary(env), ["--dir", "apps/web", "run", "dev"], root, rendererEnv));
   }
 
   if (options.mode === "server") {
-    processes.push(watchedServerCommand(root, env, serverPort, serverEnv));
+    processes.push(watchedServerCommand(root, env, serverPort, serverEnv, options.watch));
   }
 
   if (options.mode === "renderer") {
@@ -629,11 +636,15 @@ function watchedServerCommand(
   env: NodeJS.ProcessEnv,
   serverPort: number,
   serverEnv: Record<string, string>,
+  watch?: boolean,
 ): DevRunnerCommand {
+  const args = watch
+    ? ["watch", "apps/server/src/index.ts", "--port", String(serverPort)]
+    : ["apps/server/src/index.ts", "--port", String(serverPort)];
   return command(
     "server",
     tsxBinary(root),
-    ["watch", "apps/server/src/index.ts", "--port", String(serverPort)],
+    args,
     root,
     serverEnv,
   );

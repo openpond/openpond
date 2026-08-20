@@ -1341,3 +1341,59 @@ button.user-message-attachment {
     animation: none;
   }
 }
+
+/* Assistant reasoning section — collapsible thinking shown above the answer */
+.assistant-reasoning {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 736px;
+}
+
+.assistant-reasoning-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.52);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 2px 0;
+  user-select: none;
+}
+
+.assistant-reasoning-toggle:hover {
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.assistant-reasoning-chevron {
+  transition: transform 140ms ease;
+}
+
+.assistant-reasoning-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.assistant-reasoning-content {
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  padding-left: 14px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.assistant-reasoning-content .markdown-message {
+  gap: 8px;
+}
+
+.assistant-reasoning-content .markdown-heading {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.assistant-reasoning-content .markdown-paragraph {
+  color: rgba(255, 255, 255, 0.58);
+}

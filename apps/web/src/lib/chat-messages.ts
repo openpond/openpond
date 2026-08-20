@@ -132,7 +132,35 @@ export function buildChatMessages(items: RuntimeEvent[]): ChatMessage[] {
     }
 
     if (item.name === "assistant.reasoning.delta") {
-      appendActivityMessage(messages, item);
+      const reasoningChunk = item.output ?? "";
+      if (!reasoningChunk) continue;
+      settleRunningActivityGroups(messages, item);
+      const previous = messages[messages.length - 1];
+      if (
+        previous?.role === "assistant" &&
+        previous.turnId === item.turnId &&
+        previous.reasoningContent !== undefined &&
+        !previous.createImproveRun
+      ) {
+        previous.reasoningContent = `${previous.reasoningContent}${reasoningChunk}`;
+        previous.timestamp = item.timestamp;
+      } else if (
+        previous?.role === "assistant" &&
+        previous.turnId === item.turnId &&
+        !previous.reasoningContent &&
+        !previous.createImproveRun
+      ) {
+        previous.reasoningContent = reasoningChunk;
+        previous.timestamp = item.timestamp;
+      } else {
+        messages.push({
+          id: item.id,
+          role: "assistant",
+          reasoningContent: reasoningChunk,
+          timestamp: item.timestamp,
+          turnId: item.turnId,
+        });
+      }
       continue;
     }
 

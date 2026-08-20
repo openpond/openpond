@@ -997,7 +997,7 @@ export function useChatActions({
             throw codexHistoryError;
           });
         if (!explicitTurnContext || selectedSession?.id === session.id) {
-          setCodexHistoryEvents(payload.events);
+          setCodexHistoryEvents((current) => mergeLiveRuntimeEventLists(current, payload.events));
         }
         setCodexHistorySessions((current) =>
           upsertSessionPreservingLocalSidebarState(current, payload.session)
@@ -1310,7 +1310,7 @@ export function useChatActions({
             );
             const session = { ...payload.session, status: "idle" as const };
             if (selectedSession?.id === activeSessionId)
-              setCodexHistoryEvents(payload.events);
+              setCodexHistoryEvents((current) => mergeLiveRuntimeEventLists(current, payload.events));
             setCodexHistorySessions((current) =>
               upsertSessionPreservingLocalSidebarState(current, session)
             );
@@ -1330,7 +1330,7 @@ export function useChatActions({
           { tail: true }
         );
         if (selectedSession?.id === activeSessionId)
-          setCodexHistoryEvents(payload.events);
+          setCodexHistoryEvents((current) => mergeLiveRuntimeEventLists(current, payload.events));
         setCodexHistorySessions((current) =>
           upsertSessionPreservingLocalSidebarState(current, payload.session)
         );

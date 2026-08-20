@@ -380,9 +380,24 @@ export function createHostedToolLoopRuntime(deps: {
             : { requestId: usageRequestId },
         ),
         signal: params.signal,
-        onDelta: (delta) => {
+        onDelta: async (delta) => {
           throwIfInterrupted(params.signal);
           usageRecorder.observeDelta(delta);
+          if (delta.reasoningText) {
+            await appendRuntimeEvent(
+              event({
+                sessionId: session.id,
+                turnId: params.turn.id,
+                name: "assistant.reasoning.delta",
+                source: "provider",
+                appId: session.appId,
+                output: delta.reasoningText,
+              })
+            );
+          }
+          if (delta.text) {
+            await appendAssistantText(session, params.turn.id, delta.text);
+          }
         },
         onCompleted: async () => usageRecorder.complete(),
         onFailed: async (error) => {
@@ -411,19 +426,6 @@ export function createHostedToolLoopRuntime(deps: {
       for (const toolCallBatch of providerRound.toolCallBatches) {
         nativeToolAccumulator.append(toolCallBatch);
       }
-      if (reasoningText) {
-        await appendRuntimeEvent(
-          event({
-            sessionId: session.id,
-            turnId: params.turn.id,
-            name: "assistant.reasoning.delta",
-            source: "provider",
-            appId: session.appId,
-            output: reasoningText,
-          })
-        );
-      }
-
       const nativeToolCalls = nativeToolAccumulator.completed();
       if (
         trainingHarnessRound?.requiredToolName &&
@@ -674,7 +676,6 @@ export function createHostedToolLoopRuntime(deps: {
           toolRequiredCorrectionSent = true;
           return { type: "continue" };
         }
-        await appendAssistantText(session, params.turn.id, assistantText);
         await appendContextUsage({
           messages,
           usage: latestUsage,

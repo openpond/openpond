@@ -234,6 +234,7 @@ export type ChatMessage = {
   refinerActivity?: HarnessRefinerActivity;
   createImproveRun?: CreateImproveRun | null;
   userQuestion?: SessionUserQuestion;
+  reasoningContent?: string;
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;

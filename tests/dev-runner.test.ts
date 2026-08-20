@@ -38,7 +38,6 @@ describe("dev runner", () => {
       "desktop",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "watch",
       "apps/server/src/index.ts",
       "--port",
       "17874",
@@ -99,7 +98,6 @@ describe("dev runner", () => {
     expect(plan.setupCommands).toEqual([]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server", "renderer"]);
     expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
-      "watch",
       "apps/server/src/index.ts",
       "--port",
       "19074",
@@ -139,3 +137,24 @@ describe("dev runner", () => {
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual(["server"]);
   });
 });
+
+  test("plans desktop dev with a watched server when --watch is passed", () => {
+    const options = parseDevRunnerArgs(["desktop", "--watch"], {
+      OPENPOND_APP_CHANNEL: "stable",
+    });
+    const plan = buildDevRunnerPlan(options, {}, root);
+
+    expect(plan.mode).toBe("desktop");
+    expect(options.watch).toBe(true);
+    expect(plan.processes.find((processPlan) => processPlan.id === "server")?.args).toEqual([
+      "watch",
+      "apps/server/src/index.ts",
+      "--port",
+      "17874",
+    ]);
+  });
+
+  test("defaults to stable server when --watch is not passed", () => {
+    const options = parseDevRunnerArgs(["server"]);
+    expect(options.watch).toBe(false);
+  });

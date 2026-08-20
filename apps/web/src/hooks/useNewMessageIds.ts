@@ -24,7 +24,8 @@ export function useNewMessageIds(
   const snapshotRef = useRef({
     scopeKey,
     ids: new Set(messages.map((message) => message.id)),
-    initialized: messages.length > 0,
+    initialized: false,
+    pendingInitial: messages.length > 0,
   });
   const sameScope = snapshotRef.current.scopeKey === scopeKey;
   const newIds =
@@ -33,13 +34,19 @@ export function useNewMessageIds(
       : new Set<string>();
 
   useLayoutEffect(() => {
+    const wasPendingInitial = snapshotRef.current.pendingInitial;
+    const hadMessages = messages.length > 0;
     snapshotRef.current = {
       scopeKey,
       ids: new Set(messages.map((message) => message.id)),
       initialized:
         sameScope && snapshotRef.current.initialized
           ? true
-          : messages.length > 0,
+          : wasPendingInitial && hadMessages,
+      pendingInitial:
+        sameScope && snapshotRef.current.initialized
+          ? false
+          : !wasPendingInitial && hadMessages,
     };
   }, [messages, sameScope, scopeKey]);
 

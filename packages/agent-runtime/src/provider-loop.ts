@@ -70,7 +70,7 @@ export async function runProviderRound<
 >(input: {
   stream: AsyncIterable<ProviderStreamDelta<TToolCall, TContinuation>>;
   signal: AbortSignal;
-  onDelta?(delta: ProviderStreamDelta<TToolCall, TContinuation>): void;
+  onDelta?(delta: ProviderStreamDelta<TToolCall, TContinuation>): void | Promise<void>;
   onCompleted?(result: ProviderRoundResult<TToolCall, TContinuation>): Promise<void>;
   onFailed?(error: unknown): Promise<void>;
 }): Promise<ProviderRoundResult<TToolCall, TContinuation>> {
@@ -83,7 +83,7 @@ export async function runProviderRound<
 
   try {
     for await (const delta of input.stream) {
-      input.onDelta?.(delta);
+      await input.onDelta?.(delta);
       if (input.signal.aborted) {
         throw input.signal.reason ?? new Error("Provider round interrupted.");
       }

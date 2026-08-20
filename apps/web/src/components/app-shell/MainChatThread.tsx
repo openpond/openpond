@@ -78,13 +78,23 @@ export function MainChatThread({
     if (!element || typeof MutationObserver === "undefined") return undefined;
 
     onContentMutation(element);
-    const observer = new MutationObserver(() => onContentMutation(element));
+    let rafId: number | null = null;
+    const observer = new MutationObserver(() => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        onContentMutation(element);
+      });
+    });
     observer.observe(element, {
       childList: true,
       characterData: true,
       subtree: true,
     });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) window.cancelAnimationFrame(rafId);
+    };
   }, [onContentMutation, threadRef]);
 
   return (
