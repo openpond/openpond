@@ -185,7 +185,7 @@ describe("local Harness workspace service", () => {
     );
   });
 
-  it("persists structured observations and queues semantic routing at a tool boundary", async () => {
+  it("persists structured observations after more than 1,000 earlier session events", async () => {
     const { store, workspace, release } = await fixture();
     const session = SessionSchema.parse({
       id: "session-observer",
@@ -225,6 +225,20 @@ describe("local Harness workspace service", () => {
         },
       },
     });
+    await Promise.all(
+      Array.from({ length: 1_001 }, (_, index) =>
+        store.appendRuntimeEvent({
+          id: `earlier-reasoning-${index}`,
+          sessionId: session.id,
+          turnId: "earlier-turn",
+          name: "assistant.reasoning.delta",
+          timestamp: NOW,
+          source: "provider",
+          status: "completed",
+          output: `Earlier reasoning ${index}`,
+        }),
+      ),
+    );
     await store.appendRuntimeEvent({
       id: "tool-failed",
       sessionId: session.id,

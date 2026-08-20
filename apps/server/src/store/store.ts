@@ -486,6 +486,35 @@ export class SqliteStore extends SqliteWorkEvidenceStore {
     return rows.map((row) => runtimeEventWithSequence(row.payload, row.sequence));
   }
 
+  async runtimeEventsForTurn(
+    turnId: string,
+    query: {
+      names?: readonly RuntimeEvent["name"][];
+      limit?: number | null;
+    } = {},
+  ): Promise<RuntimeEvent[]> {
+    await this.ready;
+    await this.writeQueue;
+    const where = ["turn_id = ?"];
+    const params: unknown[] = [turnId];
+    if (query.names && query.names.length > 0) {
+      where.push(`name IN (${query.names.map(() => "?").join(", ")})`);
+      params.push(...query.names);
+    }
+    const limit = query.limit === undefined || query.limit === null
+      ? null
+      : Math.max(1, Math.min(100_000, Math.trunc(query.limit)));
+    if (limit !== null) params.push(limit);
+    const rows = await this.all<EventPagePayloadRow>(
+      `SELECT sequence, payload FROM events
+       WHERE ${where.join(" AND ")}
+       ORDER BY sequence ASC
+       ${limit === null ? "" : "LIMIT ?"}`,
+      params,
+    );
+    return rows.map((row) => runtimeEventWithSequence(row.payload, row.sequence));
+  }
+
   async persistedRuntimeEventsForSession(
     sessionId: string,
     query: {

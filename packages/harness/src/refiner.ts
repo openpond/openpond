@@ -345,7 +345,9 @@ export async function authorLocalHarnessRefinementWithModel(input: {
       stream: input.stream,
       signal: timeout.signal,
     });
-    if (draft.decision === "no_action") return draft;
+    if (draft.decision === "no_action" && !requiresNoActionChallenge(evidence)) {
+      return draft;
+    }
     const draftAdmissionIssues = decisionAdmissionIssues(draft, evidence);
     const reviewed = await requestRefinerDecision({
       messages: [
@@ -354,15 +356,22 @@ export async function authorLocalHarnessRefinementWithModel(input: {
         {
           role: "user",
           content: [
-            "Perform a mandatory independent critique before any Harness mutation.",
+            draft.decision === "no_action"
+              ? "Perform an independent challenge of the proposed no_action decision."
+              : "Perform a mandatory independent critique before any Harness mutation.",
             "Re-read the chronological packet and verify the declared evidence basis, failure mechanism, ownership, target layer, exact edit, and expected future effect.",
+            "A completed user outcome and successful recovery do not erase a concrete, avoidable internal execution error. When a recovered failure exposes a specific prevention rule that would avoid future tool calls, retries, or token burn, prefer the smallest validated Harness correction.",
+            "Do not treat a generic instruction to recover and continue as proof that no narrower prevention guidance is useful. Treat repeated failures in the same turn as reinforcing evidence when they share a mechanism.",
+            "If the model violated a loaded instruction and only later recovered, do not use the instruction's presence as a reason for no_action. Test whether a small, non-duplicative operationalization of that instruction would improve first-attempt compliance; no_action is defensible only when the existing rule was followed or no such improvement is supported by the supplied evidence.",
             "Reject invented recurrence, unsupported evidence references, material counterevidence, unavailable capability layers, task-specific or benchmark content, inferred memory, broad instructions, and workarounds for runtime, product, taskset, or grader defects.",
             "Do not reject a concise correction merely because the deterministic failure appeared once when the mechanism and reusable prevention are clear.",
             "For adaptation cohorts, reject drafts that add work instead of removing the repeated foreground-token cost while preserving quality.",
             ...(draftAdmissionIssues.length
               ? [`The draft also failed deterministic admission: ${draftAdmissionIssues.join("; ")}. Correct it or return no_action.`]
               : []),
-            "Return the complete final JSON decision. Use no_action or route when the proposed Harness edit does not survive this critique.",
+            draft.decision === "no_action"
+              ? "Return no_action only if you can identify no concrete reusable prevention rule in the supplied recovery evidence. Otherwise return the smallest valid route or proposal."
+              : "Return the complete final JSON decision. Use no_action or route when the proposed Harness edit does not survive this critique.",
           ].join("\n"),
         },
       ],
@@ -378,6 +387,13 @@ export async function authorLocalHarnessRefinementWithModel(input: {
   } finally {
     timeout.cleanup();
   }
+}
+
+function requiresNoActionChallenge(evidence: LocalHarnessRefinerEvidence): boolean {
+  return evidence.observations.some(
+    (observation) =>
+      observation.kind === "recovery" || observation.kind === "tool_failure",
+  );
 }
 
 async function requestRefinerDecision(input: {
@@ -451,6 +467,8 @@ export function refinerMessages(
         "A taskset_grade diagnostic is authoritative evaluation evidence. A failed grade is not cancelled by polished output or successful tools; identify whether its root cause belongs in the Harness or an external owner.",
         "A taskset grade proves only the measured outcome. It does not prove that the root owner is the Harness rather than runtime, product, fixture, grader, taskset, or model behavior.",
         "Optimize future work, not the completed turn. A repeated avoidable strategy is strong evidence, but one high-confidence deterministic failure may justify a small validated correction when the failure mechanism and reusable prevention are both clear. Recurrence strengthens confidence; it is not universally required.",
+        "Recovered internal mistakes are not automatically ordinary successful work. A concrete API mismatch, incompatible dependency or format, or repeated command construction error can justify a narrow preventive skill or prompt correction when the trace shows how to avoid it next time.",
+        "When the supplied trace shows that the model violated an already-loaded Harness instruction before recovering, the instruction's existence is not counterevidence. Treat that as evidence that its current wording, placement, or operational form was ineffective. Evaluate the smallest non-duplicative change that makes the rule actionable at the decision point, such as a concise preflight or checklist. Do not merely restate the existing rule.",
         crossRunCandidate
           ? "This is a bounded cross-Work candidate continuation. Verify the supplied candidate, review, authorization, admitted release, independent occurrences, and counterevidence. Use recurrent_independent only; do not reinterpret unrelated wording as recurrence."
           : "This is an immediate completed-turn review, not an unbounded cross-Work archive review. Use only supplied observations and priorIncidents. Defer ambiguous recurrence to recurring-pattern review.",

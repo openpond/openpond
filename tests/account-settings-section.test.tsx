@@ -240,14 +240,14 @@ describe("AccountSettingsSection", () => {
     );
     expect(html).toContain('aria-label="Remove Stale QA"');
     expect(html).toContain(
-      'aria-label="Configure Stale QA environment endpoints"'
+      'aria-label="Configure Stale QA environment"'
     );
     expect(html).not.toContain('aria-label="Remove Active user"');
     expect(html).not.toContain(">Remove<");
 
     const staleRow = html.slice(html.indexOf("Stale QA"));
     expect(staleRow.indexOf("account-state auth_error")).toBeLessThan(
-      staleRow.indexOf("account-env-toggle active")
+      staleRow.indexOf("account-endpoint-action")
     );
   });
 
@@ -350,7 +350,7 @@ describe("AccountSettingsSection", () => {
       })
     );
 
-    expect(html).toContain("Account endpoints");
+    expect(html).toContain("Account environment");
     expect(html).toContain("Base URL");
     expect(html).toContain("API base URL");
     expect(html).toContain("Update account");

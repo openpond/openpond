@@ -13,6 +13,16 @@ import {
   type HarnessImprovementDetection,
 } from "./improvement-trigger-detector.js";
 
+const HARNESS_IMPROVEMENT_EVENT_NAMES = [
+  "turn.started",
+  "tool.started",
+  "tool.completed",
+  "skill.loaded",
+  "turn.completed",
+  "turn.failed",
+  "turn.interrupted",
+] as const;
+
 export async function recordLocalHarnessImprovementBoundary(input: {
   store: SqliteStore;
   session: Session;
@@ -27,9 +37,9 @@ export async function recordLocalHarnessImprovementBoundary(input: {
   const backgroundReview = await input.store.getHarnessBackgroundReviewSettings(workspace.id);
   if (!backgroundReview.enabled) return null;
 
-  const events = (await input.store.runtimeEventsForSession(input.session.id, {
-    limit: 1_000,
-  })).filter((runtimeEvent) => runtimeEvent.turnId === input.turn.id);
+  const events = await input.store.runtimeEventsForTurn(input.turn.id, {
+    names: HARNESS_IMPROVEMENT_EVENT_NAMES,
+  });
   const eventSequence = events.reduce(
     (latest, runtimeEvent) => Math.max(latest, runtimeEvent.sequence ?? 0),
     0,

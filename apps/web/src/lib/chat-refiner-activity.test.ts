@@ -28,9 +28,12 @@ describe("Harness Refiner Work receipts", () => {
     expect(messages.filter((message) => message.role === "assistant")).toHaveLength(1);
   });
 
-  it("hides clean no-action in ordinary Work and shows it in evaluation Work", () => {
+  it("retains clean no-action receipts in ordinary and evaluation Work", () => {
     const ordinary = buildChatMessages(baseEvents("material_only"));
-    expect(ordinary.some((message) => message.refinerActivity)).toBe(false);
+    expect(ordinary.find((message) => message.refinerActivity)?.refinerActivity).toMatchObject({
+      result: "no_action",
+      visibility: "material_only",
+    });
 
     const evaluation = buildChatMessages(baseEvents("always"));
     expect(evaluation.find((message) => message.refinerActivity)?.refinerActivity).toMatchObject({
@@ -58,7 +61,7 @@ describe("Harness Refiner Work receipts", () => {
     expect(second).toEqual(first);
   });
 
-  it("removes a temporary receipt-only Work disclosure after ordinary no-action", () => {
+  it("updates a temporary receipt-only Work disclosure after ordinary no-action", () => {
     const messages = buildChatMessages([
       event("turn.started", { args: { prompt: "Answer briefly" } }),
       event("assistant.delta", { output: "Answer." }),
@@ -67,7 +70,8 @@ describe("Harness Refiner Work receipts", () => {
       refinerEvent("harness.refiner.completed", completedActivity("no_action")),
     ]);
 
-    expect(messages.some((message) => message.role === "activity_group")).toBe(false);
+    expect(messages.find((message) => message.role === "activity_group")?.refinerActivity)
+      .toMatchObject({ state: "completed", result: "no_action" });
   });
 });
 

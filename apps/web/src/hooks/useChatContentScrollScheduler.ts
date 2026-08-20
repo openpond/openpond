@@ -15,14 +15,27 @@ export function useChatContentScrollScheduler(input: {
     const element = threadRef.current;
     if (!enabled || !element || typeof window === "undefined") return undefined;
     let animationFrame: number | null = null;
-    const schedule = () => {
+    let remainingSettleFrames = 0;
+    let lastScrollHeight = element.scrollHeight;
+    const schedule = (resetSettleFrames = true) => {
+      // A streamed message can change its rendered height after React has
+      // committed it (for example, while markdown is laid out or an image
+      // finishes loading). Keep the viewport pinned through that short layout
+      // window instead of correcting it only once on the next frame.
+      if (resetSettleFrames)
+        remainingSettleFrames = Math.max(remainingSettleFrames, 4);
       if (animationFrame !== null) return;
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = null;
         if (threadRef.current === element) callbackRef.current(element);
+        const scrollHeightChanged =
+          Math.abs(element.scrollHeight - lastScrollHeight) > 1;
+        lastScrollHeight = element.scrollHeight;
+        remainingSettleFrames -= 1;
+        if (remainingSettleFrames > 0 || scrollHeightChanged) schedule(false);
       });
     };
-    scheduleRef.current = schedule;
+    scheduleRef.current = () => schedule();
     const mutationObserver = typeof MutationObserver === "undefined"
       ? null
       : new MutationObserver(() => {
@@ -31,7 +44,7 @@ export function useChatContentScrollScheduler(input: {
       });
     const resizeObserver = typeof ResizeObserver === "undefined"
       ? null
-      : new ResizeObserver(schedule);
+      : new ResizeObserver(() => schedule());
     const observedChildren = new Set<HTMLElement>();
     const syncObservedChildren = () => {
       if (!resizeObserver) return;
@@ -59,12 +72,13 @@ export function useChatContentScrollScheduler(input: {
       subtree: true,
     });
     syncObservedChildren();
-    element.addEventListener("load", schedule, true);
+    const handleLoad = () => schedule();
+    element.addEventListener("load", handleLoad, true);
     return () => {
       scheduleRef.current = null;
       mutationObserver?.disconnect();
       resizeObserver?.disconnect();
-      element.removeEventListener("load", schedule, true);
+      element.removeEventListener("load", handleLoad, true);
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
     };
   }, [enabled, threadRef]);

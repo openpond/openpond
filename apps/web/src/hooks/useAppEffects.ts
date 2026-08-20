@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
-import { openEventStream, type ClientConnection } from "../api";
+import { api, openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
@@ -67,9 +67,13 @@ export function useRuntimeEvents({
 }: RuntimeEventsInput) {
   useEffect(() => {
     if (!connection?.token || afterSequence === null) return;
+    const eventConnection = connection;
     let disconnectTimer: number | null = null;
     let pendingRuntimeEvents: RuntimeEvent[] = [];
     let flushTimer: number | null = null;
+    let refinerPollTimer: number | null = null;
+    let refinerPollInFlight = false;
+    const pendingRefinerSessions = new Map<string, number>();
     let lastFlushMs = 0;
     const MIN_FLUSH_INTERVAL_MS = 16;
 
@@ -130,8 +134,67 @@ export function useRuntimeEvents({
     }
 
     function queueRuntimeEvent(runtimeEvent: RuntimeEvent) {
+      trackRefinerEvent(runtimeEvent);
       pendingRuntimeEvents.push(runtimeEvent);
       scheduleFlush();
+    }
+
+    function trackRefinerEvent(runtimeEvent: RuntimeEvent) {
+      if (!runtimeEvent.sessionId || !runtimeEvent.name.startsWith("harness.refiner.")) return;
+      if (
+        runtimeEvent.name === "harness.refiner.completed" ||
+        runtimeEvent.name === "harness.refiner.failed"
+      ) {
+        pendingRefinerSessions.delete(runtimeEvent.sessionId);
+        return;
+      }
+      if (
+        runtimeEvent.name === "harness.refiner.queued" ||
+        runtimeEvent.name === "harness.refiner.started"
+      ) {
+        pendingRefinerSessions.set(
+          runtimeEvent.sessionId,
+          typeof runtimeEvent.sequence === "number" ? runtimeEvent.sequence : 0,
+        );
+        scheduleRefinerCompletionPoll();
+      }
+    }
+
+    function scheduleRefinerCompletionPoll() {
+      if (refinerPollTimer !== null || pendingRefinerSessions.size === 0) return;
+      refinerPollTimer = window.setTimeout(() => {
+        refinerPollTimer = null;
+        void pollRefinerCompletions();
+      }, 1_000);
+    }
+
+    async function pollRefinerCompletions() {
+      if (refinerPollInFlight || pendingRefinerSessions.size === 0) return;
+      refinerPollInFlight = true;
+      try {
+        await Promise.all(
+          [...pendingRefinerSessions].map(async ([sessionId, afterSequence]) => {
+            const page = await api.runtimeEventsPage(eventConnection, {
+              sessionId,
+              afterSequence,
+              limit: 100,
+            });
+            for (const entry of page.events) {
+              const runtimeEvent = entry.event;
+              pendingRefinerSessions.set(
+                sessionId,
+                Math.max(pendingRefinerSessions.get(sessionId) ?? 0, entry.sequence),
+              );
+              queueRuntimeEvent(runtimeEvent);
+            }
+          }),
+        );
+      } catch {
+        // The event stream remains primary; retry only while a Refiner is pending.
+      } finally {
+        refinerPollInFlight = false;
+        scheduleRefinerCompletionPoll();
+      }
     }
 
     function flushPendingOnVisibilityChange() {
@@ -168,7 +231,9 @@ export function useRuntimeEvents({
     return () => {
       clearDisconnectTimer();
       if (flushTimer !== null) window.clearTimeout(flushTimer);
+      if (refinerPollTimer !== null) window.clearTimeout(refinerPollTimer);
       flushTimer = null;
+      refinerPollTimer = null;
       pendingRuntimeEvents = [];
       document.removeEventListener("visibilitychange", flushPendingOnVisibilityChange);
       source.close();

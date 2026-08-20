@@ -26,6 +26,18 @@ const MAX_REVIEW_TIMELINE_CHARS = 24_000;
 const MAX_PRIOR_CONVERSATION_TURNS = 3;
 const MAX_PRIOR_INCIDENTS = 3;
 const MAX_PRIOR_INCIDENT_TIMELINE_EVENTS = 6;
+const REFINER_CONTEXT_EVENT_NAMES = [
+  "turn.started",
+  "assistant.delta",
+  "tool.started",
+  "tool.completed",
+  "skill.loaded",
+  "workspace_action_result",
+  "diagnostic",
+  "turn.completed",
+  "turn.failed",
+  "turn.interrupted",
+] as const;
 const execFileAsync = promisify(execFile);
 
 export async function loadBoundedRefinerContext(
@@ -92,7 +104,7 @@ export async function loadBoundedRefinerContext(
   const [session, turn, events, turns, usageRecords] = await Promise.all([
     store.getSession(trigger.runRef),
     store.getTurn(trigger.turnId),
-    store.runtimeEventsForSession(trigger.runRef, { limit: 1_000 }),
+    store.runtimeEventsForTurn(trigger.turnId, { names: REFINER_CONTEXT_EVENT_NAMES }),
     store.turnsForSession(trigger.runRef, 1_000),
     store.listModelUsageRecords({ turnId: trigger.turnId, limit: 10_000 }),
   ]);
@@ -101,6 +113,18 @@ export async function loadBoundedRefinerContext(
   );
   const turnIndex = orderedTurns.findIndex((candidate) => candidate.id === trigger.turnId);
   const previousTurn = turnIndex > 0 ? orderedTurns[turnIndex - 1] : null;
+  const priorConversationTurns = orderedTurns.slice(
+    Math.max(0, turnIndex - MAX_PRIOR_CONVERSATION_TURNS),
+    Math.max(0, turnIndex),
+  );
+  const priorConversationEvents = new Map(
+    await Promise.all(
+      priorConversationTurns.map(async (candidate) => [
+        candidate.id,
+        await store.runtimeEventsForTurn(candidate.id, { names: ["assistant.delta"] }),
+      ] as const),
+    ),
+  );
   const eventRefs = new Map(
     observations.flatMap((observation) =>
       observation.eventRefs.map((reference) => [reference.id, reference] as const),
@@ -161,9 +185,9 @@ export async function loadBoundedRefinerContext(
     )
     .sort(compareRuntimeEvents);
   const timeline = boundedReviewTimeline(timelineCandidates);
-  const priorConversation = orderedTurns
-    .slice(Math.max(0, turnIndex - MAX_PRIOR_CONVERSATION_TURNS), Math.max(0, turnIndex))
-    .map((candidate) => conversationTurn(candidate, events));
+  const priorConversation = priorConversationTurns.map((candidate) =>
+    conversationTurn(candidate, priorConversationEvents.get(candidate.id) ?? [])
+  );
   const priorIncidents = workspaceId
     ? await loadRelevantPriorIncidentPackets({
         store,
@@ -180,7 +204,10 @@ export async function loadBoundedRefinerContext(
       assistantOutput,
       assistantOutputLinkCount: countAbsoluteLinks(assistantOutput),
       previousAssistantOutput: previousTurn
-        ? assistantOutputForTurn(events, previousTurn.id)
+        ? assistantOutputForTurn(
+            priorConversationEvents.get(previousTurn.id) ?? [],
+            previousTurn.id,
+          )
         : null,
     },
     artifactDiagnostics,
@@ -392,7 +419,7 @@ async function loadRelevantPriorIncidentPackets(input: {
     const first = group[0]!;
     const [turn, events] = await Promise.all([
       input.store.getTurn(first.turnId),
-      input.store.runtimeEventsForSession(first.runRef, { limit: 1_000 }),
+      input.store.runtimeEventsForTurn(first.turnId, { names: REFINER_CONTEXT_EVENT_NAMES }),
     ]);
     if (!turn) continue;
     const matchingClasses = [...new Set(group.flatMap((observation) =>

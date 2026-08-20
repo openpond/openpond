@@ -13,24 +13,6 @@ export function appendHarnessRefinementStatus(
   if (!activity) return;
 
   const group = findParentWorkGroup(messages, item.turnId);
-  if (
-    activity.state === "completed"
-    && activity.result === "no_action"
-    && activity.visibility === "material_only"
-  ) {
-    if (group) {
-      delete group.refinerActivity;
-      if (
-        group.id.endsWith(":work-refiner")
-        && (group.activities?.length ?? 0) === 0
-        && (group.deliverables?.length ?? 0) === 0
-      ) {
-        messages.splice(messages.indexOf(group), 1);
-      }
-    }
-    return;
-  }
-
   if (group) {
     group.refinerActivity = activity;
     return;

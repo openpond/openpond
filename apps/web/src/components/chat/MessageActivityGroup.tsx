@@ -104,78 +104,98 @@ export function ActivityGroup({
     activities.every((activity) => activity.subagentMessage);
 
   if (childMessageSummary) {
-    return <SubagentMessageActivityGroup activities={activities} />;
+    return (
+      <>
+        <SubagentMessageActivityGroup activities={activities} />
+        <RefinerActivityRow activity={message.refinerActivity} />
+      </>
+    );
   }
 
   return (
-    <article
-      className={`activity-group work-trace ${running ? "running" : "settled"}`}
-    >
-      {activities.length > 0 ? (
-        <div className="activity-summary-row">
-          <ChatActivitySummary
-            controls={presentation.toolCount > 0 ? toolListId : undefined}
-            danger={danger}
-            expanded={presentation.toolsExpanded}
-            icon={
-              summaryImage ? (
-                <ActivitySummaryImage
-                  activeWorkspaceAppId={activeWorkspaceAppId}
-                  connection={connection}
-                  image={summaryImage}
+    <>
+      {activities.length > 0 || artifacts.length > 0 ? (
+        <article
+          className={`activity-group work-trace ${running ? "running" : "settled"}`}
+        >
+          {activities.length > 0 ? (
+            <div className="activity-summary-row">
+              <ChatActivitySummary
+                controls={presentation.toolCount > 0 ? toolListId : undefined}
+                danger={danger}
+                expanded={presentation.toolsExpanded}
+                icon={
+                  summaryImage ? (
+                    <ActivitySummaryImage
+                      activeWorkspaceAppId={activeWorkspaceAppId}
+                      connection={connection}
+                      image={summaryImage}
+                    />
+                  ) : (
+                    <ActivitySummaryIcon kind={summary.kind} />
+                  )
+                }
+                onToggle={
+                  presentation.toolCount > 0
+                    ? () => setToolsExpanded((current) => !current)
+                    : undefined
+                }
+                running={running}
+              >
+                {summaryText}
+              </ChatActivitySummary>
+              {summaryOpenSessions.length > 0 && onOpenSession ? (
+                <SubagentAvatarGroup
+                  onOpenSession={onOpenSession}
+                  onShowAll={() => setToolsExpanded(true)}
+                  sessions={summaryOpenSessions}
                 />
-              ) : (
-                <ActivitySummaryIcon kind={summary.kind} />
-              )
-            }
-            onToggle={
-              presentation.toolCount > 0
-                ? () => setToolsExpanded((current) => !current)
-                : undefined
-            }
-            running={running}
-          >
-            {summaryText}
-          </ChatActivitySummary>
-          {summaryOpenSessions.length > 0 && onOpenSession ? (
-            <SubagentAvatarGroup
-              onOpenSession={onOpenSession}
-              onShowAll={() => setToolsExpanded(true)}
-              sessions={summaryOpenSessions}
+              ) : null}
+            </div>
+          ) : null}
+          {artifacts.length > 0 ? (
+            <ActivityArtifacts
+              artifacts={artifacts}
+              connection={connection}
+              onOpenFileInSidebar={onOpenFileInSidebar}
             />
           ) : null}
-        </div>
+          {presentation.visibleActivities.length > 0 ? (
+            <div className="work-trace-flow" id={toolListId}>
+              {presentation.visibleActivities.map((activity) => (
+                <ActivityToolRow
+                  activeWorkspaceAppId={activeWorkspaceAppId}
+                  activity={activity}
+                  connection={connection}
+                  key={activity.id}
+                  onOpenImage={setOpenImage}
+                  onOpenSession={onOpenSession}
+                />
+              ))}
+            </div>
+          ) : null}
+          <ImageLightbox
+            open={Boolean(openImageSrc)}
+            src={openImageSrc}
+            title={openImage?.path ?? ""}
+            onClose={() => setOpenImage(null)}
+          />
+        </article>
       ) : null}
-      {message.refinerActivity ? (
-        <HarnessRefinerReceipt activity={message.refinerActivity} />
-      ) : null}
-      {artifacts.length > 0 ? (
-        <ActivityArtifacts
-          artifacts={artifacts}
-          connection={connection}
-          onOpenFileInSidebar={onOpenFileInSidebar}
-        />
-      ) : null}
-      {presentation.visibleActivities.length > 0 ? (
-        <div className="work-trace-flow" id={toolListId}>
-          {presentation.visibleActivities.map((activity) => (
-            <ActivityToolRow
-              activeWorkspaceAppId={activeWorkspaceAppId}
-              activity={activity}
-              connection={connection}
-              key={activity.id}
-              onOpenImage={setOpenImage}
-              onOpenSession={onOpenSession}
-            />
-          ))}
-        </div>
-      ) : null}
-      <ImageLightbox
-        open={Boolean(openImageSrc)}
-        src={openImageSrc}
-        title={openImage?.path ?? ""}
-        onClose={() => setOpenImage(null)}
-      />
+      <RefinerActivityRow activity={message.refinerActivity} />
+    </>
+  );
+}
+
+function RefinerActivityRow({
+  activity,
+}: {
+  activity: ChatMessage["refinerActivity"];
+}) {
+  if (!activity) return null;
+  return (
+    <article className="refiner-activity-row">
+      <HarnessRefinerReceipt activity={activity} />
     </article>
   );
 }

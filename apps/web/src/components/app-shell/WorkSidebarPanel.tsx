@@ -85,6 +85,10 @@ export function WorkSidebarPanel({
     () => visibleWorkActivities(chatMessages),
     [chatMessages]
   );
+  const chatFileArtifacts = useMemo(
+    () => visibleChatFileArtifacts(chatMessages),
+    [chatMessages]
+  );
   const contextItems = useMemo(
     () => workContextItems(chatMessages),
     [chatMessages]
@@ -539,6 +543,29 @@ export function WorkSidebarPanel({
                 );
               })}
             </div>
+          ) : chatFileArtifacts.length > 0 ? (
+            <div className="work-output-list">
+              {chatFileArtifacts.map((artifact) => (
+                <article className="work-output-card" key={artifact.path}>
+                  <header>
+                    <FileText size={16} />
+                    <span>
+                      <strong>{artifact.title}</strong>
+                      <small>{formatBytes(artifact.sizeBytes)}</small>
+                    </span>
+                  </header>
+                  <div className="work-output-actions">
+                    <button
+                      type="button"
+                      onClick={() => void revealLocalFile(artifact.path)}
+                    >
+                      <FolderOpen size={13} />
+                      Reveal
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
           ) : (
             <WorkEmptyState
               icon={FileText}
@@ -614,6 +641,29 @@ export function visibleWorkActivities(
     .flatMap((message) => message.activities ?? [])
     .filter((activity) => activity.kind !== "reasoning")
     .reverse();
+}
+
+export function visibleChatFileArtifacts(messages: ChatMessage[]): Array<{
+  path: string;
+  title: string;
+  sizeBytes: number;
+}> {
+  const artifacts = new Map<string, { path: string; title: string; sizeBytes: number }>();
+  for (const message of messages) {
+    for (const activity of message.activities ?? []) {
+      for (const artifact of activity.artifacts ?? []) {
+        if (!artifact.path || artifact.sizeBytes === null) continue;
+        artifacts.set(artifact.path, {
+          path: artifact.path,
+          title: artifact.title,
+          sizeBytes: artifact.sizeBytes,
+        });
+      }
+    }
+  }
+  return [...artifacts.values()].sort((left, right) =>
+    right.path.localeCompare(left.path)
+  );
 }
 
 export function workOutputsFromEvents(events: RuntimeEvent[]): OutputRef[] {

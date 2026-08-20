@@ -1,5 +1,5 @@
 import {
-  DEFAULT_OPENPOND_CHAT_MODEL,
+  DEFAULT_HARNESS_REFINER_MODEL,
   TurnSchema,
   createImprovementRouteDecision,
   type ModelUsageRecord,
@@ -176,7 +176,7 @@ export function createLocalHarnessImprovementRuntime(input: {
                 session: boundary.session,
                 turn: boundary.turn,
                 provider: "openpond",
-                model: DEFAULT_OPENPOND_CHAT_MODEL,
+                model: DEFAULT_HARNESS_REFINER_MODEL,
                 requestId,
                 requestOrdinal: ordinal,
                 requestKind: "harness_refiner",
@@ -184,7 +184,7 @@ export function createLocalHarnessImprovementRuntime(input: {
               });
               try {
                 for await (const delta of input.streamOpenPondHostedChatTurn({
-                  model: DEFAULT_OPENPOND_CHAT_MODEL,
+                  model: DEFAULT_HARNESS_REFINER_MODEL,
                   messages,
                   requestId,
                   reasoningEffort: "low",

@@ -35,6 +35,9 @@ describe("HarnessRefinerReceipt", () => {
     expect(html).toContain("Review 1 exact edit");
     expect(html).toContain("New exact skill content");
     expect(html).toContain("Receipt references");
+    expect(html).toContain("Trigger");
+    expect(html).toContain("Outcome");
+    expect(html).toContain("Input Harness");
     expect(html).toContain("harness-2 · aaaaaaaaaaaa");
   });
 });
