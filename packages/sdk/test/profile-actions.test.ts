@@ -49,7 +49,7 @@ describe("OpenPondProfileActionsClient", () => {
     expect(client.profileActions).toBeInstanceOf(OpenPondProfileActionsClient);
   });
 
-  test("runs a published Profile action through its explicit action entrypoint", async () => {
+  test("runs a catalog-pinned Profile action with an ephemeral capability lease", async () => {
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({
         run: {
@@ -67,23 +67,34 @@ describe("OpenPondProfileActionsClient", () => {
 
     const result = await client.run<{ tradeCount: number }>({
       teamId: "team_1",
-      agentId: "agent_1",
-      actionId: "review-recent-hyperliquid-trades",
+      profileId: "profile_1",
+      actionKey: "hyperliquid-trade-reviewer.review-recent-hyperliquid-trades",
       value: { lookbackHours: 24 },
       idempotencyKey: "task_1:turn_1",
       catalogVersion: "profile-catalog-v1:test",
+      externalCapabilityLeases: [
+        {
+          provider: "ducky-capital",
+          capabilities: ["ducky.hyperliquid.read_recent_fills"],
+          proxyUrl: "https://ducky.example.test/api/openpond/capabilities/grant_1",
+          bearerToken: "one-time-bearer",
+        },
+      ],
     });
 
     expect(result.run.resultJson?.tradeCount).toBe(3);
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
-      "https://api.example.test/v1/agents/agent_1/run?teamId=team_1",
+      "https://api.example.test/v1/profile/actions/run?teamId=team_1",
     );
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
-      entrypoint: { scope: "action", name: "review-recent-hyperliquid-trades" },
-      input: { lookbackHours: 24 },
+      profileId: "profile_1",
+      actionKey: "hyperliquid-trade-reviewer.review-recent-hyperliquid-trades",
+      value: { lookbackHours: 24 },
       idempotencyKey: "task_1:turn_1",
-      runtimeSourcePolicy: { requirePublishedSnapshot: true, source: "manual" },
-      metadata: { profileCatalogVersion: "profile-catalog-v1:test" },
+      catalogVersion: "profile-catalog-v1:test",
+      externalCapabilityLeases: [
+        expect.objectContaining({ bearerToken: "one-time-bearer" }),
+      ],
     });
   });
 

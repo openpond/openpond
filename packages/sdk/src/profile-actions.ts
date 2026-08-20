@@ -47,6 +47,16 @@ export type OpenPondProfileActionInvocation<TOutput = Record<string, unknown>> =
   };
 };
 
+/** A short-lived capability granted by the calling product for one Profile Action run. */
+export type OpenPondExternalCapabilityLease = {
+  provider: string;
+  capabilities: string[];
+  proxyUrl: string;
+  bearerToken: string;
+  expiresAt?: string;
+  resourcePolicy?: Record<string, unknown>;
+};
+
 type ProfileActionsClientInput = {
   apiKey: string;
   apiBaseUrl: string;
@@ -87,36 +97,39 @@ export class OpenPondProfileActionsClient {
 
   async run<TOutput = Record<string, unknown>>(input: {
     teamId: string;
-    agentId: string;
-    actionId: string;
+    actionKey: string;
+    profileId?: string;
+    profileName?: string;
     value?: Record<string, unknown>;
     conversationId?: string | null;
     createConversation?: boolean;
     conversationTitle?: string | null;
     idempotencyKey: string;
     catalogVersion: string;
+    externalCapabilityLeases?: OpenPondExternalCapabilityLease[];
   }): Promise<OpenPondProfileActionInvocation<TOutput>> {
     const teamId = requiredValue(input.teamId, "teamId");
-    const agentId = requiredValue(input.agentId, "agentId");
-    const actionId = requiredValue(input.actionId, "actionId");
+    const actionKey = requiredValue(input.actionKey, "actionKey");
     const idempotencyKey = requiredValue(input.idempotencyKey, "idempotencyKey");
     const catalogVersion = requiredValue(input.catalogVersion, "catalogVersion");
     const response = await apiFetch(
       this.#apiBaseUrl,
       this.#apiKey,
-      `/v1/agents/${encodeURIComponent(agentId)}/run?${new URLSearchParams({ teamId }).toString()}`,
+      `/v1/profile/actions/run?${new URLSearchParams({ teamId }).toString()}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          entrypoint: { scope: "action", name: actionId },
-          input: input.value ?? {},
+          ...(input.profileId?.trim() ? { profileId: input.profileId.trim() } : {}),
+          ...(input.profileName?.trim() ? { profileName: input.profileName.trim() } : {}),
+          actionKey,
+          value: input.value ?? {},
           conversationId: input.conversationId ?? null,
           createConversation: input.createConversation,
           conversationTitle: input.conversationTitle ?? null,
           idempotencyKey,
-          runtimeSourcePolicy: { requirePublishedSnapshot: true, source: "manual" },
-          metadata: { profileCatalogVersion: catalogVersion },
+          catalogVersion,
+          externalCapabilityLeases: input.externalCapabilityLeases,
         }),
       },
     );
