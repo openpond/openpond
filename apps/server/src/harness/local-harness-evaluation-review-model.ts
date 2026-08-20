@@ -1,4 +1,4 @@
-import { DEFAULT_OPENPOND_CHAT_MODEL } from "@openpond/contracts";
+import { DEFAULT_HARNESS_REFINER_MODEL } from "@openpond/contracts";
 import {
   DEFAULT_EVALUATION_REVIEW_MAX_OUTPUT_TOKENS,
   type HarnessEvaluationReviewModelStream,
@@ -12,7 +12,7 @@ export function createLocalHarnessEvaluationReviewModelStream(
 ): HarnessEvaluationReviewModelStream {
   return async function* ({ messages, signal }) {
     for await (const delta of streamOpenPondHostedChatTurn({
-      model: DEFAULT_OPENPOND_CHAT_MODEL,
+      model: DEFAULT_HARNESS_REFINER_MODEL,
       messages,
       requestId: `harness-continuous-review:${randomUUID()}`,
       reasoningEffort: "medium",

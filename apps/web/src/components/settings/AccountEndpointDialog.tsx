@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 import type { FormEvent } from "react";
 import "../../styles/workspace/git-dialogs.css";
 import type { AccountState } from "@openpond/contracts";
-import { KeyRound, Save, SlidersHorizontal, X } from "../icons";
+import { KeyRound, Save, Settings, X } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
 
 type AccountRow = AccountState["accounts"][number];
@@ -115,12 +115,10 @@ export function AccountEndpointDialog({
         baseUrl: normalizedBaseUrl,
         apiBaseUrl: normalizedApiBaseUrl,
         apiKey: connectMode ? trimmedApiKey : undefined,
-        environment: connectMode
-          ? accountEnvironmentForEndpoints(
-              normalizedBaseUrl,
-              normalizedApiBaseUrl
-            )
-          : account?.environment ?? null,
+        environment: accountEnvironmentForEndpoints(
+          normalizedBaseUrl,
+          normalizedApiBaseUrl
+        ),
       });
     } catch (caught) {
       setRequestError(caught instanceof Error ? caught.message : String(caught));
@@ -153,12 +151,14 @@ export function AccountEndpointDialog({
           <X size={16} />
         </button>
         <div className="git-dialog-icon">
-          {connectMode ? <KeyRound size={18} /> : <SlidersHorizontal size={18} />}
+          {connectMode ? <KeyRound size={18} /> : <Settings size={18} />}
         </div>
-        <h2 id={titleId}>{connectMode ? "Add account" : "Account endpoints"}</h2>
+        <h2 id={titleId}>{connectMode ? "Add account" : "Account environment"}</h2>
         {connectMode ? (
           <p>Enter your OpenPond API key to connect another account.</p>
-        ) : null}
+        ) : (
+          <p>Update the web and API endpoints used by this account.</p>
+        )}
         {connectMode ? (
           <label className="git-dialog-field">
             <span>API key</span>
@@ -222,7 +222,7 @@ export function AccountEndpointDialog({
   );
 }
 
-function accountEnvironmentForEndpoints(
+export function accountEnvironmentForEndpoints(
   baseUrl: string,
   apiBaseUrl: string
 ): "production" | "custom" {

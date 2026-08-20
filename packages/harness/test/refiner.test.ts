@@ -63,6 +63,7 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("good fallback");
     expect(system).toContain("Never force a change");
     expect(system).toContain("Optimize future work");
+    expect(system).toContain("violated an already-loaded Harness instruction");
     expect(system).toContain("immediate completed-turn review");
     expect(system).toContain("supportingEvidenceIds");
     expect(system).toContain("explicitly stated durable user preference");
@@ -107,8 +108,111 @@ describe("public model-driven Harness Refiner", () => {
       signal: new AbortController().signal,
     });
 
-    expect(calls).toBe(2);
+    expect(calls).toBe(3);
     expect(decision.decision).toBe("no_action");
+  });
+
+  test("challenges a no-action decision when recovered tool failures expose a prevention rule", async () => {
+    let calls = 0;
+    const decision = await authorLocalHarnessRefinementWithModel({
+      evidence,
+      stream: async function* () {
+        calls += 1;
+        if (calls === 1) {
+          yield { text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+            decision: "no_action",
+            reason: "The user-facing artifact succeeded after recovery.",
+          }) };
+          return;
+        }
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+          decision: "propose",
+          route: "skill",
+          operation: "create",
+          target: "skills/pdf-tool-preflight/SKILL.md",
+          summary: "Prevent known PDF tool incompatibilities before generation.",
+          evidenceBasis: {
+            kind: "single_deterministic",
+            supportingEvidenceIds: ["observation-1"],
+            counterevidence: [],
+          },
+          createContent: "---\nname: pdf-tool-preflight\n---\nVerify compatible PDF APIs and fonts before generating a document.",
+          find: null,
+          replace: null,
+          expectedOutcome: "Future PDF work avoids the observed incompatible tool path.",
+          reason: "The recovered failure exposes a reusable prevention rule.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(calls).toBe(2);
+    expect(decision).toMatchObject({
+      decision: "propose",
+      target: "skills/pdf-tool-preflight/SKILL.md",
+    });
+  });
+
+  test("does not treat an ignored loaded instruction as evidence for no action", async () => {
+    const ignoredInstructionEvidence: LocalHarnessRefinerEvidence = {
+      ...evidence,
+      observations: [{
+        id: "observation-sigpipe",
+        kind: "tool_failure",
+        rawError: "fc-list | head exited with SIGPIPE (exit 141)",
+        recovered: true,
+      }],
+      sourceFiles: [{
+        path: "instructions/system.md",
+        kind: "instruction",
+        loaded: true,
+        content: "Avoid piping large font listings through head; constrain the query at the source.",
+      }],
+      sourceCatalog: [{ path: "instructions/system.md", kind: "instruction", loaded: true }],
+    };
+    const messagesSeen: HarnessRefinerMessage[][] = [];
+    const decision = await authorLocalHarnessRefinementWithModel({
+      evidence: ignoredInstructionEvidence,
+      stream: async function* ({ messages }) {
+        messagesSeen.push(messages);
+        if (messagesSeen.length === 1) {
+          yield { text: JSON.stringify({
+            schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+            decision: "no_action",
+            reason: "The existing instruction already covers this failure.",
+          }) };
+          return;
+        }
+        yield { text: JSON.stringify({
+          schemaVersion: "openpond.localHarnessRefinerDecision.v2",
+          decision: "propose",
+          route: "prompt",
+          operation: "update",
+          target: "instructions/system.md",
+          summary: "Make font discovery guidance an explicit preflight.",
+          evidenceBasis: {
+            kind: "single_deterministic",
+            supportingEvidenceIds: ["observation-sigpipe"],
+            counterevidence: [],
+          },
+          createContent: null,
+          find: "Avoid piping large font listings through head; constrain the query at the source.",
+          replace: "Before listing fonts, use a targeted family query or known font path. Do not use a broad fc-list pipeline with head, tail, or grep -m; it can terminate the command with SIGPIPE.",
+          expectedOutcome: "Future PDF work chooses a bounded font lookup before invoking the shell.",
+          reason: "The loaded rule was ignored, so it needs a more actionable decision-point form.",
+        }) };
+      },
+      signal: new AbortController().signal,
+    });
+
+    expect(decision).toMatchObject({
+      decision: "propose",
+      target: "instructions/system.md",
+    });
+    expect(messagesSeen).toHaveLength(2);
+    expect(messagesSeen[1]!.at(-1)!.content).toContain("violated a loaded instruction");
   });
 
   test("requires a model critique before returning a proposal", async () => {

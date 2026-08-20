@@ -1,8 +1,12 @@
+.refiner-activity-row {
+  width: min(960px, 100%);
+}
+
 .harness-refiner-receipt {
   display: grid;
   gap: 8px;
   width: min(760px, 100%);
-  padding-left: 20px;
+  padding-left: 0;
 }
 
 .harness-refiner-receipt-summary {
@@ -10,6 +14,7 @@
   align-items: center;
   justify-self: start;
   gap: 6px;
+  max-width: min(480px, 100%);
   min-width: 0;
   border: 0;
   background: transparent;
@@ -34,6 +39,7 @@
 }
 
 .harness-refiner-receipt-summary > span {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -104,7 +110,6 @@
 .harness-refiner-references dt {
   color: #717985;
   font-size: 10px;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 

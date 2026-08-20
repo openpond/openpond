@@ -9,6 +9,8 @@ import { SubagentPreferencesSchema } from "./subagents.js";
 
 export const DEFAULT_CODEX_CHAT_MODEL = "gpt-5.6-sol" as const;
 export const DEFAULT_OPENPOND_CHAT_MODEL = "openpond-chat" as const;
+export const DEFAULT_HARNESS_REFINER_MODEL =
+  "accounts/fireworks/models/deepseek-v4-flash" as const;
 export const DEFAULT_CHAT_PROVIDER = "openpond" as const;
 export const DEFAULT_CHAT_MODEL = DEFAULT_OPENPOND_CHAT_MODEL;
 export const DEFAULT_CODEX_PERMISSION_MODE = "default" as const;

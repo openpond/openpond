@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AccountState, BootstrapPayload } from "@openpond/contracts";
-import { Plus, RefreshCw, Trash2 } from "../icons";
+import { Plus, RefreshCw, Settings, Trash2 } from "../icons";
 import { api, type ClientConnection, type PreferencesPayload } from "../../api";
 import { DropdownSelect } from "../DropdownSelect";
 import { AccountAvatar, AccountStateBadge } from "../account/AccountBadges";
@@ -457,9 +457,6 @@ export function AccountSettingsSection({
               "Unknown account"
             );
             const candidateEmail = candidate.email?.trim() || null;
-            const candidateHasEnvironment = isCustomAccountEnvironment(
-              candidate.environment
-            );
             const candidateKey = accountListKey(candidate);
             return (
               <div className="account-row" key={candidateKey}>
@@ -486,9 +483,7 @@ export function AccountSettingsSection({
                     <span className="active-pill">Active</span>
                   ) : null}
                   <button
-                    className={`account-env-toggle ${
-                      candidateHasEnvironment ? "active" : ""
-                    }`}
+                    className="settings-icon-button ghost account-endpoint-action"
                     disabled={
                       !connection ||
                       saving ||
@@ -496,15 +491,11 @@ export function AccountSettingsSection({
                       !candidateHandle
                     }
                     type="button"
-                    aria-label={`Configure ${candidateLabel} environment endpoints`}
-                    aria-pressed={candidateHasEnvironment}
-                    title="Configure environment endpoints"
+                    aria-label={`Configure ${candidateLabel} environment`}
+                    title="Configure account environment"
                     onClick={() => setEndpointDialogAccount(candidate)}
                   >
-                    <span
-                      className="account-env-toggle-switch"
-                      aria-hidden="true"
-                    />
+                    <Settings size={15} />
                   </button>
                   {!candidate.isActive ? (
                     <>
@@ -644,9 +635,4 @@ function customEnvironmentName(value?: string | null): string {
   const trimmed = value?.trim();
   if (!trimmed || trimmed.toLowerCase() === "production") return "custom";
   return trimmed;
-}
-
-function isCustomAccountEnvironment(value?: string | null): boolean {
-  const normalized = value?.trim().toLowerCase();
-  return Boolean(normalized && normalized !== "production");
 }

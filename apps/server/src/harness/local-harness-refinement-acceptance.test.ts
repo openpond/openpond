@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  DEFAULT_HARNESS_REFINER_MODEL,
   SessionSchema,
   TurnSchema,
   type RuntimeEvent,
@@ -152,6 +153,20 @@ describe("Local Harness refinement acceptance", () => {
       runId: "refinement-acceptance-before",
       admittedAt: BEFORE,
     });
+    await Promise.all(
+      Array.from({ length: 1_001 }, (_, index) =>
+        store.appendRuntimeEvent({
+          id: `earlier-reasoning-${index}`,
+          sessionId: first.session.id,
+          turnId: "earlier-turn",
+          name: "assistant.reasoning.delta",
+          timestamp: BEFORE,
+          source: "provider",
+          status: "completed",
+          output: `Earlier reasoning ${index}`,
+        })
+      ),
+    );
     const firstCommands = await executeScriptedConverterTask({
       store,
       sessionId: first.session.id,
@@ -168,6 +183,7 @@ describe("Local Harness refinement acceptance", () => {
       queueId: "local-harness-refinement-acceptance",
     });
     let refinerModelCalls = 0;
+    const refinerModels: Array<string | null> = [];
     const processBoundary = createLocalHarnessImprovementRuntime({
       store,
       storeDir: directory,
@@ -176,8 +192,9 @@ describe("Local Harness refinement acceptance", () => {
       upsertModelUsageRecord: async (record) => {
         await store.upsertModelUsageRecord(record);
       },
-      streamOpenPondHostedChatTurn: async function* ({ messages }) {
+      streamOpenPondHostedChatTurn: async function* ({ messages, model }) {
         refinerModelCalls += 1;
+        refinerModels.push(model ?? null);
         const evidence = messages.at(-1)?.content ?? "";
         if (evidence.includes(SAFE_COMMAND_GUIDANCE)) {
           yield refinerDelta({
@@ -218,6 +235,10 @@ describe("Local Harness refinement acceptance", () => {
     });
     await queue.drain();
     expect(refinerModelCalls).toBe(2);
+    expect(refinerModels).toEqual([
+      DEFAULT_HARNESS_REFINER_MODEL,
+      DEFAULT_HARNESS_REFINER_MODEL,
+    ]);
 
     expect(queue.receipts()).toEqual([
       expect.objectContaining({ status: "completed" }),
