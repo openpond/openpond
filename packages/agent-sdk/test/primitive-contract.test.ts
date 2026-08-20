@@ -306,6 +306,7 @@ export default defineAgentProject({
       "agent-inspect.json",
       "openpond-manifest.preview.yaml",
       "runtime-bridge.mjs",
+      "runtime-bundle.mjs",
       "validator-report.md",
       "prompts/instructions.md",
       "skills/tone/SKILL.md",

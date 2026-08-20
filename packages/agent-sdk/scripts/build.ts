@@ -43,7 +43,7 @@ await build({
   ),
   outdir: dist,
   bundle: true,
-  external: ["tsx"],
+  external: ["esbuild", "tsx"],
   platform: "node",
   target: "node24.18",
   format: "esm",

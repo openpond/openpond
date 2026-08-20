@@ -38,12 +38,31 @@ await runJson([cli, "build", "--json"], fixtureDir);
 await assertFile(path.join(fixtureDir, ".openpond", "agent-manifest.json"));
 await assertFile(path.join(fixtureDir, ".openpond", "action-registry.json"));
 await assertFile(path.join(fixtureDir, ".openpond", "runtime-bridge.mjs"));
+await assertFile(path.join(fixtureDir, ".openpond", "runtime-bundle.mjs"));
 await assertFile(path.join(fixtureDir, ".openpond", "prompts", "instructions.md"));
 await assertFile(path.join(fixtureDir, ".openpond", "skills", "installed-skill", "SKILL.md"));
 await runJson([cli, "build", "--json", "--out-dir", ".openpond-alt"], fixtureDir);
 await assertFile(path.join(fixtureDir, ".openpond-alt", "agent-manifest.json"));
 await assertFile(path.join(fixtureDir, ".openpond-alt", "action-registry.json"));
 await assertFile(path.join(fixtureDir, ".openpond-alt", "runtime-bridge.mjs"));
+await assertFile(path.join(fixtureDir, ".openpond-alt", "runtime-bundle.mjs"));
+
+const standaloneDir = path.join(workRoot, "standalone-runtime");
+await mkdir(path.join(standaloneDir, ".openpond"), { recursive: true });
+await cp(
+  path.join(fixtureDir, ".openpond", "runtime-bundle.mjs"),
+  path.join(standaloneDir, ".openpond", "runtime-bundle.mjs"),
+);
+const standaloneResult = await runJson([
+  process.execPath,
+  path.join(standaloneDir, ".openpond", "runtime-bundle.mjs"),
+  "chat",
+  "--input",
+  JSON.stringify({ prompt: "standalone", channel: "openpond_chat" }),
+], standaloneDir);
+if (standaloneResult.result?.intent !== "answer") {
+  throw new Error(`Standalone runtime returned unexpected intent: ${JSON.stringify(standaloneResult)}`);
+}
 
 const evalResult = await runJson([cli, "eval", "--json"], fixtureDir);
 if (evalResult.summary?.failed !== 0) {
