@@ -26,6 +26,7 @@ export const ARTIFACT_SCHEMAS = {
   remoteAgent: "openpond.agent.remote-agent.v1",
   runtimeManifest: "openpond.runtime.manifest.v1",
   runtimeBridge: "openpond.agent.runtime-bridge.v1",
+  runtimeBundle: "openpond.agent.runtime-bundle.v1",
   schedule: "openpond.agent.schedule.v1",
   skill: "openpond.agent.skill.v1",
   tool: "openpond.agent.tool.v1",

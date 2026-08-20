@@ -11,6 +11,7 @@ import {
   createRuntimeManifest,
 } from "../core/manifest";
 import { compilePromptArtifacts } from "../core/prompts";
+import { writeRuntimeBundle } from "../core/runtime-bundle";
 import { toYaml } from "../core/yaml";
 import type { CliOptions } from "../core/types";
 import { validateAgentProject, writeValidationReport } from "../core/validation";
@@ -33,6 +34,9 @@ export async function buildCommand(options: CliOptions) {
   await writeJson(options.cwd, path.join(options.outDir, "agent-inspect.json"), inspect);
   await writeText(options.cwd, path.join(options.outDir, "openpond-manifest.preview.yaml"), `${toYaml(createRuntimeManifest(project))}\n`);
   await writeText(options.cwd, path.join(options.outDir, "runtime-bridge.mjs"), createRuntimeBridge(actionRegistry));
+  if (project.manifestMode !== "openpond-yaml") {
+    await writeRuntimeBundle(options.cwd, options.outDir);
+  }
   await writeValidationReport(options.cwd, validation, options.outDir);
   const artifactIndex = await writeArtifactIndex(options.cwd, project, options.outDir, {
     promptArtifacts,

@@ -16,6 +16,7 @@ export type ArtifactIndexEntry = {
     | "inspect"
     | "runtime-manifest-preview"
     | "runtime-bridge"
+    | "runtime-bundle"
     | "validator-report"
     | "instructions"
     | "skill"
@@ -48,7 +49,9 @@ export function createArtifactIndex(
   } = {},
 ): ArtifactIndex {
   const entries = [
-    ...(options.includeStandard === false ? [] : standardEntries(artifactDir)),
+    ...(options.includeStandard === false
+      ? []
+      : standardEntries(artifactDir, project.manifestMode !== "openpond-yaml")),
     ...promptEntries(options.promptArtifacts),
     ...(options.extraEntries ?? []),
   ];
@@ -143,7 +146,10 @@ export function traceEntry(traceArtifactRef: string): ArtifactIndexEntry {
   };
 }
 
-function standardEntries(artifactDir: string): ArtifactIndexEntry[] {
+function standardEntries(
+  artifactDir: string,
+  includeRuntimeBundle: boolean,
+): ArtifactIndexEntry[] {
   return [
     {
       path: path.join(artifactDir, "artifact-index.json"),
@@ -181,6 +187,14 @@ function standardEntries(artifactDir: string): ArtifactIndexEntry[] {
       schema: ARTIFACT_SCHEMAS.runtimeBridge,
       format: "javascript",
     },
+    ...(includeRuntimeBundle
+      ? [{
+          path: path.join(artifactDir, "runtime-bundle.mjs"),
+          kind: "runtime-bundle" as const,
+          schema: ARTIFACT_SCHEMAS.runtimeBundle,
+          format: "javascript" as const,
+        }]
+      : []),
     {
       path: path.join(artifactDir, "validator-report.md"),
       kind: "validator-report",
