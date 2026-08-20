@@ -37,6 +37,13 @@ describe("sidebar task list controls", () => {
           activeSessions: [activeSession, regularSession],
           chatRows: [activeSession, regularSession],
           chatRowsVisibleCount: 5,
+          pinnedRows: [{
+            type: "session",
+            key: `session:${activeSession.id}`,
+            id: activeSession.id,
+            session: activeSession,
+            order: 0,
+          }],
           sectionMenuOpen: "tasks-filter",
           visibleChatRows: [activeSession, regularSession],
         })
@@ -67,9 +74,8 @@ describe("sidebar task list controls", () => {
     expect(markup).toContain(
       "sidebar-section sidebar-task-section development"
     );
-    expect(markup).toContain(
-      "sidebar-session-group pinned-group-first pinned-group-last"
-    );
+    expect(markup).toContain("sidebar-section sidebar-pinned-section");
+    expect(markup).not.toContain("pinned-group-first");
     expect(markup.match(/draggable="true"/g)).toHaveLength(1);
     expect(markup).toContain(">Work<");
     expect(markup).not.toContain(">No project<");
@@ -215,6 +221,49 @@ describe("sidebar task list controls", () => {
     expect(workMarkup).toContain(">Active workspace<");
     expect(workMarkup).not.toContain(">2h 7m<");
     expect(workMarkup).not.toContain(">Jul 29 ");
+  });
+
+  test("renders global pins before the project folders", () => {
+    const project = localProject();
+    const projectItem: SidebarProjectItem = {
+      id: `local:${project.id}`,
+      kind: "local",
+      project,
+      pinned: true,
+      order: 0,
+    };
+    const task = session({
+      id: "project-task",
+      title: "Project task",
+      localProjectId: project.id,
+      workspaceId: project.id,
+    });
+    const markup = renderToStaticMarkup(
+      createElement(
+        SidebarSectionList,
+        sidebarProps({
+          activeSessions: [task],
+          chatRows: [task],
+          chatRowsVisibleCount: 5,
+          localProjectRows: [projectItem],
+          pinnedRows: [{
+            type: "project",
+            key: `project:${projectItem.id}`,
+            id: projectItem.id,
+            item: projectItem,
+            order: 0,
+          }],
+          projectRows: [projectItem],
+          sidebarProjectIdBySessionId: { [task.id]: projectItem.id },
+          visibleChatRows: [task],
+        }),
+      ),
+    );
+
+    expect(markup.indexOf("sidebar-pinned-section")).toBeGreaterThan(-1);
+    expect(markup.indexOf("sidebar-pinned-section")).toBeLessThan(
+      markup.indexOf("sidebar-task-project-group"),
+    );
   });
 });
 

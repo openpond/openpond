@@ -26,6 +26,8 @@ import {
 } from "../terminal/terminal-state";
 import type { SidebarProps } from "./Sidebar.types";
 import {
+  SidebarFileRow,
+  SidebarProjectRow,
   SidebarSection,
   SidebarSessionRow,
   SidebarShowMoreButton,
@@ -115,13 +117,18 @@ export function SidebarSectionList({
   experience = "work",
   goalRuntimeBySessionId = EMPTY_GOAL_RUNTIME_BY_SESSION_ID,
   localProjectRows,
+  openSidebarFile,
+  pinnedCollapsed,
+  pinnedRows,
   previewTaskDrop,
+  previewPinnedDrop,
   projectRows,
   renameSession,
   restoreSession,
   runningSessionIds,
   savedForLaterSessions,
   sectionMenuOpen,
+  selectedProjectId,
   selectedSessionId,
   setChatRowsVisibleCount,
   setSectionMenuOpen,
@@ -131,6 +138,7 @@ export function SidebarSectionList({
   setView,
   sidebarProjectIdBySessionId,
   startTaskDrag,
+  startPinnedDrag,
   subagentRuntimeBySessionId = EMPTY_SUBAGENT_RUNTIME_BY_SESSION_ID,
   taskDragSessionId,
   taskPreviewSessionIds,
@@ -141,6 +149,12 @@ export function SidebarSectionList({
   clearTaskDrag,
   removeProject,
   toggleProjectPinned,
+  onTogglePinnedCollapsed,
+  setSidebarFileStatus,
+  commitPinnedDrop,
+  commitPinnedPreviewDrop,
+  clearSidebarDrag,
+  dragItem,
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
@@ -258,9 +272,12 @@ export function SidebarSectionList({
     },
     [activeSessions, archivedSessions]
   );
-  const visibleTaskRows = filteredTaskRows.slice(
-    0,
-    Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)
+  const visibleTaskRows = useMemo(
+    () =>
+      filteredTaskRows
+        .filter((session) => !isSidebarTaskPinned(session))
+        .slice(0, Math.max(SIDEBAR_TASK_INITIAL_LIMIT, chatRowsVisibleCount)),
+    [chatRowsVisibleCount, filteredTaskRows],
   );
   const groupedTaskRows = useMemo(
     () =>
@@ -304,22 +321,10 @@ export function SidebarSectionList({
       ),
     [groupedTaskRows, inProgressSessionIds, selectedSessionId],
   );
-  const allManualTaskIds = allManualTaskRows.map((session) => session.id);
-  const filteredTaskIds = filteredTaskRows.map((session) => session.id);
-  const pinnedTaskRows =
-    taskSort === "recent"
-      ? filteredTaskRows.filter(isSidebarTaskPinned)
-      : [];
-  const pinnedTaskIds = pinnedTaskRows.map((session) => session.id);
-  const separatePinnedTaskRows =
-    pinnedTaskRows.length > 0 &&
-    pinnedTaskRows.length < filteredTaskRows.length;
-  const firstPinnedTaskId = separatePinnedTaskRows
-    ? pinnedTaskRows[0]?.id ?? null
-    : null;
-  const lastPinnedTaskId = separatePinnedTaskRows
-    ? pinnedTaskRows[pinnedTaskRows.length - 1]?.id ?? null
-    : null;
+  const allManualTaskIds = allManualTaskRows
+    .filter((session) => !isSidebarTaskPinned(session))
+    .map((session) => session.id);
+  const filteredTaskIds = visibleTaskRows.map((session) => session.id);
   const activeChildSessionExpansionKey = JSON.stringify(
     Object.entries(childSessionRowsByParentId)
       .filter(
@@ -476,25 +481,14 @@ export function SidebarSectionList({
     const archived = session.archived;
     const isDragged = taskDragSessionId === session.id;
     const childSessions = childSessionsFor(session);
-    const groupClassName = [
-      "sidebar-session-group",
-      session.id === firstPinnedTaskId ? "pinned-group-first" : "",
-      session.id === lastPinnedTaskId ? "pinned-group-last" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const pinnedInRecentMode =
-      taskSort === "recent" && isSidebarTaskPinned(session);
-    const draggableTaskIds = pinnedInRecentMode
-      ? pinnedTaskIds
-      : filteredTaskIds;
+    const groupClassName = "sidebar-session-group";
     const dragProps =
-      taskSort === "manual" || pinnedInRecentMode
+      taskSort === "manual"
         ? {
             onDragStart: (event: React.DragEvent<HTMLDivElement>) =>
               startTaskDrag(event, {
                 allSessionIds: allManualTaskIds,
-                visibleSessionIds: draggableTaskIds,
+                visibleSessionIds: filteredTaskIds,
                 sessionId: session.id,
               }),
             onDragEnd: clearTaskDrag,
@@ -612,8 +606,107 @@ export function SidebarSectionList({
     );
   }
 
+  function pinnedDragProps(item: {
+    id: string;
+    type: "file" | "project" | "session";
+  }) {
+    const dragTarget = { id: item.id, type: item.type } as const;
+    return {
+      onDragStart: (event: React.DragEvent<HTMLDivElement>) =>
+        startPinnedDrag(event, dragTarget),
+      onDragEnd: clearSidebarDrag,
+      onDragOver: (event: React.DragEvent<HTMLDivElement>) =>
+        previewPinnedDrop(event, dragTarget),
+      onDrop: (event: React.DragEvent<HTMLDivElement>) => {
+        if (dragItem?.id === item.id && dragItem.type === item.type) {
+          commitPinnedPreviewDrop();
+        } else {
+          commitPinnedDrop(event, dragTarget);
+        }
+      },
+    };
+  }
+
+  function renderPinnedRow(row: (typeof pinnedRows)[number]) {
+    const dragProps = pinnedDragProps(row);
+    const placeholder = dragItem?.id === row.id && dragItem.type === row.type;
+    if (row.type === "project") {
+      const project = row.item;
+      return (
+        <SidebarProjectRow
+          key={row.key}
+          kind={project.kind}
+          project={project.project}
+          pinned
+          selected={view === "chat" && selectedProjectId === project.id}
+          expanded={false}
+          disclosure={false}
+          placeholder={placeholder}
+          onSelect={() => {
+            setSelectedAppId(null);
+            setSelectedProjectId(project.id);
+            setSelectedSessionId(null);
+            setView("chat");
+          }}
+          onNewChat={() => beginProjectChat(project.id)}
+          onTogglePin={() => toggleProjectPinned(project)}
+          onRemove={() => removeProject(project)}
+          {...dragProps}
+        />
+      );
+    }
+    if (row.type === "file") {
+      return (
+        <SidebarFileRow
+          key={row.key}
+          file={row.file}
+          placeholder={placeholder}
+          onSelect={() => openSidebarFile(row.file)}
+          onTogglePin={() => setSidebarFileStatus(row.file, "none")}
+          onToggleSaveForLater={() =>
+            setSidebarFileStatus(row.file, "saved_for_later")
+          }
+          {...dragProps}
+        />
+      );
+    }
+    const session = row.session;
+    return (
+      <SidebarSessionRow
+        key={row.key}
+        session={session}
+        selected={view === "chat" && selectedSessionId === session.id}
+        hideIcon
+        placeholder={placeholder}
+        running={inProgressSessionIds.has(session.id)}
+        goalRuntime={goalRuntimeBySessionId.get(session.id) ?? null}
+        subagentRuntime={subagentRuntimeBySessionId.get(session.id) ?? null}
+        terminalIndicator={terminalIndicatorForSession(session.id)}
+        projectLabel={projectLabelForSession(session)}
+        metadataPresentation="flyout"
+        onSelect={() => selectSession(session)}
+        onTogglePin={() => toggleSessionPinned(session)}
+        onToggleSaveForLater={() => toggleSessionSavedForLater(session)}
+        onDockRight={() => dockSessionRight(session)}
+        onArchive={() => archiveSession(session)}
+        onRename={renameSession}
+        {...dragProps}
+      />
+    );
+  }
+
   return (
     <div className="sidebar-scroll">
+      {pinnedRows.length > 0 ? (
+        <SidebarSection
+          label="Pinned"
+          className="sidebar-pinned-section"
+          collapsed={pinnedCollapsed}
+          onToggleCollapsed={onTogglePinnedCollapsed}
+        >
+          {pinnedRows.map(renderPinnedRow)}
+        </SidebarSection>
+      ) : null}
       <SidebarSection
         label={taskSectionLabel}
         className={`sidebar-task-section${

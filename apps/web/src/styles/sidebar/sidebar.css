@@ -810,16 +810,6 @@
   min-width: 0;
 }
 
-.sidebar-session-group.pinned-group-first {
-  padding-top: 3px;
-}
-
-.sidebar-session-group.pinned-group-last {
-  margin-bottom: 4px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 5px;
-}
-
 .sidebar-child-session-group.nested .sidebar-row.nested {
   width: calc(100% - 50px);
   margin-left: 50px;
