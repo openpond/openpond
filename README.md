@@ -1,27 +1,21 @@
 <div align="center">
-  <h2>OpenPond Harness</h2>
+  <h1>OpenPond</h1>
+  <p><strong>Get real work done with agents.</strong></p>
 </div>
 
-OpenPond Harness is an open-source, mutable agent harness designed to continuously improve alongside your work.
+OpenPond is an open-source, local-first agent workspace and runtime.
 
-- Harness is adaptable to your daily workflow - code agents/skills/harness extensions and train models, all in the same harness, 100% opensource and owned by you.
-- The training module is optimized for smaller models, SFT and RL techniques are in beta.
-- Works with local training and OpenPond Managed RL.
+- Run the same task from Desktop, Web, CLI, or TUI.
+- Give agents scoped access to Git projects, files, terminal commands, browser
+  tools, and isolated cloud sandboxes.
+- Keep the conversation, tool calls, command output, files, code changes, and
+  result together with the project.
+- Use Refiner to review bounded evidence from completed work and return no
+  action, a reviewable Harness proposal, or a route to the owning system.
+- Build Tasksets and run evaluations before using evidence for model training;
+  a completed conversation is not automatically treated as training data.
 
-```mermaid
-flowchart LR
-    S["Conversations"] --> E["Evals"]
-    E --> A["Agent"]
-    E --> K["Skill"]
-    E --> M["Model"]
-    E --> X["Extension"]
-    A --> V["Compare against baseline"]
-    K --> V
-    M --> V
-    X --> V
-    V --> P["Adopt or iterate"]
-    P --> S
-```
+![OpenPond Work interface](docs/public/assets/openpond-work-interface.png)
 
 ## Installation
 
@@ -85,28 +79,55 @@ never imports Evals.
 
 A harness optimized to turn your conversations into datasets, run evals and facilitate code updates (agents/skills/extensions) or model training through local training and OpenPond Managed RL.
 
-## Profile
+## Refine the harness
 
-Your profile is the portable mutable, Git-backed version of your OpenPond harness, syncable to your team and the Openpond Cloud for RFT rollouts. [docs](docs/public/agents-and-skills.md)
+The Refiner turns a completed turn into a bounded, reviewable improvement decision. It examines only the evidence you provide, then either returns no action, proposes a targeted change to an available Harness layer, or routes an issue to its actual owner. Proposed changes receive a separate model critique and deterministic admission checks before a host can apply them.
 
-#### Agents
-- full software packages with instructions, tools, actions, evals, and their own runtime.
-- shippable to non technical team members
+Use the provider-neutral Refiner from @openpond/harness with your own model stream and authorized evidence packet:
 
-#### Skills
-- standard markdown files for generalized instructions
+~~~ts
+import { authorLocalHarnessRefinementWithModel } from "@openpond/harness";
 
-#### Extensions
-- code & models that modifies specific portions of the harness itself.
+const decision = await authorLocalHarnessRefinementWithModel({
+  evidence, // bounded observations, turn history, sources, and capabilities
+  stream: ({ messages, signal }) => provider.stream({ messages, signal }),
+  signal: new AbortController().signal,
+});
 
-| Feature | Extension | Code | Model |
-| --- | --- | :---: | :---: |
-| Resource search | Beta | ✅ | ☐ |
-| Compaction | Planned | ☐ | ☐ |
+if (decision.decision === "propose") {
+  // Present the proposal for host validation and review before applying it.
+  console.log(decision.route, decision.summary);
+}
+~~~
 
-- Profiles start local and can stay local. Since they are normal source files backed by Git, you can move the same harness between machines and review every change.
-- Sync your profile with OpenPond Pro when you want to share the same harness with your team, use it in Team Chat, Slack, or Microsoft Teams, or continue from another computer.
-- Once synced, that same harness can be used for cloud and sandbox runs instead of rebuilding an agent from a private chat.
+The Refiner never treats a prompt keyword, an error string, or a fixed recurrence count as authority to change the Harness. See the [@openpond/harness README](packages/harness/README.md) for the evidence contract, decision schema, and verification command.
+
+## Use the SDK with an API key
+
+Use [openpond-sdk](https://www.npmjs.com/package/openpond-sdk) from a Node.js server, worker, or Next.js route handler to run hosted Work and manage sandboxes directly. Create an OpenPond API key, keep it in server-side configuration, and never expose it in browser code or a NEXT_PUBLIC_* variable.
+
+~~~bash
+npm install openpond-sdk
+export OPENPOND_API_KEY="opk_..."
+~~~
+
+~~~ts
+import { createOpenPondClient } from "openpond-sdk";
+
+const openpond = createOpenPondClient({
+  apiKey: process.env.OPENPOND_API_KEY!,
+});
+
+const result = await openpond.work.run({
+  prompt: "Review this repository and summarize the highest-priority issues.",
+  cleanup: "delete",
+  discardOutputs: true,
+});
+
+console.log(result.text);
+~~~
+
+work.run creates a sandbox when you do not supply one. For files you want to keep, provide persistOutput instead of discardOutputs; for direct sandbox lifecycle and command access, use openpond.sandboxes. The [SDK README](packages/sdk/README.md) includes complete Work, output-persistence, workflow, and raw-sandbox examples.
 
 ### Other features
 
