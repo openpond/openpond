@@ -92,16 +92,16 @@ describe("Right chat panel stack", () => {
     expect(markup).not.toContain('aria-label="Steer"');
   });
 
-  test("keeps Stop visible for a running side-chat with a drafted follow-up", () => {
+  test("shows the steer send control for a running side-chat with a drafted follow-up", () => {
     const markup = renderRightChatStack({
       panels: [{ ...rightChatPanel("panel_running", "Running chat"), prompt: "new idea", running: true }],
     });
 
     expect(markup.toLowerCase()).toContain('contenteditable="true"');
-    expect(markup).not.toContain('aria-label="Steer"');
     expect(markup).not.toContain("Steer active response");
     expect(markup).not.toContain('aria-label="Queue steer draft"');
-    expect(markup).toContain('aria-label="Stop response"');
+    expect(markup).toContain('aria-label="Steer"');
+    expect(markup).not.toContain('aria-label="Stop response"');
   });
 
   test("projects the canonical Create run into the side-chat composer", () => {

@@ -400,7 +400,9 @@ export function Composer({
   const sendDisabled = serializingAttachments || !hasComposerInput;
   const sendTooltip = serializingAttachments
     ? "Preparing files"
-    : "Send";
+    : running
+      ? "Steer"
+      : "Send";
   const inputDisabled = serializingAttachments;
   const controlsDisabled = serializingAttachments;
 
@@ -1860,7 +1862,7 @@ export function Composer({
           provider={provider}
           providerSettings={providerSettings}
           providerOptions={providerOptions}
-          running={running}
+          running={running && !hasComposerInput}
           sendDisabled={sendDisabled}
           sendTooltip={sendTooltip}
           showToast={showToast}

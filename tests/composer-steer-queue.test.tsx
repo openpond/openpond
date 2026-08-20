@@ -125,7 +125,8 @@ describe("composer steer queue", () => {
 
     expect(markup).not.toContain('aria-label="Queue steer draft"');
     expect(markup).not.toContain("Steer active response");
-    expect(markup).toContain('aria-label="Stop response"');
+    expect(markup).toContain('aria-label="Steer"');
+    expect(markup).not.toContain('aria-label="Stop response"');
   });
 
   test("moves a queued edit back to the composer without losing a typed message", () => {
