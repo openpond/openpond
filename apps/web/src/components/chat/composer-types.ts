@@ -51,8 +51,6 @@ export type ComposerProps = {
   running?: boolean;
   submissionScopeKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
-  steerAutoDispatchReady?: boolean;
-  steerAutoDispatchBlocked?: boolean;
   showProjectFooter?: boolean;
   autoFocus?: boolean;
   focusRequestId?: number;

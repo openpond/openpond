@@ -6,6 +6,7 @@
 @import "./styles/shell.css";
 @import "./styles/app-shell/main-pane.css";
 @import "./styles/sidebar/sidebar.css";
+@import "./styles/sidebar/task-project-group.css";
 @import "./styles/sidebar/team-sidebar.css";
 @import "./styles/sidebar/sidebar-peek.css";
 @import "./styles/workspace-diff/workspace-diff-panel.css";

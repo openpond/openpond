@@ -1146,60 +1146,6 @@
   to { background-position: -120% 0; }
 }
 
-.sidebar-task-project-group + .sidebar-task-project-group {
-  margin-top: 8px;
-}
-
-.sidebar-task-project-group-header {
-  display: flex;
-  align-items: center;
-  width: calc(100% - 8px);
-  min-height: 27px;
-  gap: 6px;
-  margin: 0 4px;
-  padding: 3px 7px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: #858585;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 16px;
-  letter-spacing: 0.01em;
-  text-align: left;
-}
-
-.sidebar-task-project-group-header:hover,
-.sidebar-task-project-group-header:focus-visible {
-  background: rgba(255, 255, 255, 0.045);
-  color: #b5b5b5;
-  outline: 0;
-}
-
-.sidebar-task-project-group-icon,
-.sidebar-task-project-group-caret {
-  flex: 0 0 auto;
-}
-
-.sidebar-task-project-group-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-task-project-group-count {
-  margin-left: auto;
-  color: #666;
-  font-variant-numeric: tabular-nums;
-}
-
-.sidebar-task-project-group-caret {
-  display: inline-grid;
-  place-items: center;
-  color: #707070;
-}
-
 .sidebar-task-detail-popover {
   position: fixed;
   z-index: 126;
@@ -1231,12 +1177,6 @@
   color: #929292;
   font-size: 11px;
   line-height: 15px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sidebar-task-project-group-header {
-    transition: none;
-  }
 }
 
 .sidebar-task-title[data-overflowing="true"]:hover .sidebar-task-title-text {

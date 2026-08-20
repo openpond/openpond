@@ -24,7 +24,6 @@ import {
   type PendingChatUserMessage,
 } from "../lib/pending-chat-messages";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
-import { latestTurnCompletionState } from "../lib/turn-completion-state";
 import { isCloudWorkspaceKind } from "../lib/workspace-location";
 
 const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
@@ -71,7 +70,6 @@ export function useRightChatPanelViews(input: {
             : EMPTY_RUNTIME_EVENTS)
         : EMPTY_RUNTIME_EVENTS;
       const panelIndexes = buildRuntimeIndexes(panelEvents, []);
-      const panelTurnCompletionState = latestTurnCompletionState(panelEvents);
       const pendingApproval = panel.sessionId
         ? pendingApprovalBySessionId.get(panel.sessionId) ?? null
         : null;
@@ -115,13 +113,6 @@ export function useRightChatPanelViews(input: {
         goalRuntime: latestGoalRuntimeForSession(panelIndexes, panel.sessionId),
         pendingApproval,
         running,
-        steerAutoDispatchBlocked:
-          Boolean(pendingApproval) || panelTurnCompletionState === "blocked",
-        steerAutoDispatchReady:
-          isHistoryPanel &&
-          panelTurnCompletionState === "completed" &&
-          !pendingApproval &&
-          !running,
         workspaceRootPath,
         activeWorkspaceAppId,
         pendingUserMessage,

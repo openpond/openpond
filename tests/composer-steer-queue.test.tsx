@@ -10,7 +10,6 @@ import {
   composerSteerPreview,
   createComposerSteerDraft,
   replaceComposerSteerDraftForEdit,
-  shouldAutoDispatchComposerSteer,
   updateComposerSteerDraftScope,
   type ComposerSteerDraft,
 } from "../apps/web/src/components/chat/composer-steer-queue";
@@ -29,56 +28,6 @@ describe("composer steer queue", () => {
     expect(composerSteerPreview("abcdefghijklmnopqrstuvwxyz", 12)).toBe("abcdefghijk...");
   });
 
-  test("only auto-dispatches after a completed active turn", () => {
-    expect(shouldAutoDispatchComposerSteer({
-      autoDispatchReady: true,
-      hasQueuedDrafts: true,
-      running: false,
-      sending: false,
-      waitingForStartedTurn: false,
-      wasRunning: true,
-    })).toBe(true);
-
-    expect(shouldAutoDispatchComposerSteer({
-      autoDispatchReady: false,
-      hasQueuedDrafts: true,
-      running: false,
-      sending: false,
-      waitingForStartedTurn: false,
-      wasRunning: true,
-    })).toBe(false);
-
-    expect(shouldAutoDispatchComposerSteer({
-      autoDispatchReady: true,
-      hasQueuedDrafts: true,
-      running: false,
-      sending: true,
-      waitingForStartedTurn: false,
-      wasRunning: true,
-    })).toBe(false);
-  });
-
-  test("serial auto-dispatch waits for the auto-sent turn to start and complete", () => {
-    const completedTurnWithTwoDrafts = {
-      autoDispatchReady: true,
-      hasQueuedDrafts: true,
-      running: false,
-      sending: false,
-      waitingForStartedTurn: false,
-      wasRunning: true,
-    };
-
-    expect(shouldAutoDispatchComposerSteer(completedTurnWithTwoDrafts)).toBe(true);
-    expect(shouldAutoDispatchComposerSteer({
-      ...completedTurnWithTwoDrafts,
-      waitingForStartedTurn: true,
-    })).toBe(false);
-    expect(shouldAutoDispatchComposerSteer({
-      ...completedTurnWithTwoDrafts,
-      wasRunning: false,
-    })).toBe(false);
-  });
-
   test("classifies latest turn completion state", () => {
     expect(latestTurnCompletionState([
       event("started", "turn.started", "turn_a"),
@@ -95,7 +44,7 @@ describe("composer steer queue", () => {
     ])).toBe("pending");
   });
 
-  test("does not render legacy queued rows in the full composer stack", () => {
+  test("renders staged steer drafts above the active goal strip", () => {
     const queuedDraft = draft("draft_order", "queued steer before goal");
     const markup = renderToStaticMarkup(
       createElement(Composer, {
@@ -133,16 +82,16 @@ describe("composer steer queue", () => {
     const queueIndex = markup.indexOf('class="composer-steer-stack"');
     const goalIndex = markup.indexOf("composer-goal-strip");
     const inputIndex = markup.indexOf('class="composer-input-shell"');
-    expect(queueIndex).toBe(-1);
-    expect(goalIndex).toBeGreaterThan(-1);
+    expect(queueIndex).toBeGreaterThan(-1);
+    expect(goalIndex).toBeGreaterThan(queueIndex);
     expect(inputIndex).toBeGreaterThan(goalIndex);
-    expect(markup).not.toContain('aria-label="Steer queued draft: queued steer before goal"');
-    expect(markup).not.toContain('aria-label="Delete queued steer"');
+    expect(markup).toContain('aria-label="Steer: queued steer before goal"');
+    expect(markup).toContain('aria-label="Delete steer draft"');
     expect(markup).toContain('aria-label="Pause goal"');
     expect(markup).toContain('contentEditable="true"');
   });
 
-  test("shows one steer control and no queue control while a response is running", () => {
+  test("keeps Stop available while a response is running", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
         mode: "dock",
@@ -175,9 +124,8 @@ describe("composer steer queue", () => {
     );
 
     expect(markup).not.toContain('aria-label="Queue steer draft"');
-    expect(markup).toContain('aria-label="Steer"');
-    expect(markup).toContain("Steer active response");
-    expect(markup).not.toContain('aria-label="Stop response"');
+    expect(markup).not.toContain("Steer active response");
+    expect(markup).toContain('aria-label="Stop response"');
   });
 
   test("moves a queued edit back to the composer without losing a typed message", () => {

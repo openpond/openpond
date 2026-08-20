@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   SIDEBAR_CHAT_PAGE_SIZE,
   SIDEBAR_TASK_INITIAL_LIMIT,
+  type SidebarProjectItem,
 } from "../../lib/app-models";
 import { projectlessSidebarSessionLabel } from "../../lib/experience-sessions";
 import { isTaskDraftSession } from "../../lib/task-drafts";
@@ -81,6 +82,7 @@ export type SidebarTaskGroup = {
   key: string;
   label: string;
   projectId: string | null;
+  project: SidebarProjectItem | null;
   kind: SidebarTaskGroupKind;
   sessions: Session[];
 };
@@ -106,6 +108,7 @@ export function SidebarSectionList({
   chatRowsVisibleCount,
   childSessionRowsByParentId = {},
   cloudProjectRows,
+  beginProjectChat,
   commitTaskDrop,
   commitTaskPreviewDrop,
   dockSessionRight,
@@ -136,6 +139,8 @@ export function SidebarSectionList({
   toggleSessionSavedForLater,
   view,
   clearTaskDrag,
+  removeProject,
+  toggleProjectPinned,
 }: SidebarProps) {
   const [taskFilter, setTaskFilter] = useState<SidebarTaskFilter>("active");
   const [taskSort, setTaskSort] = useState<SidebarTaskSort>("recent");
@@ -179,6 +184,10 @@ export function SidebarSectionList({
         projectsSectionRows.map((item) => [item.id, item.project.name] as const)
       ),
     [projectsSectionRows]
+  );
+  const projectRowById = useMemo(
+    () => new Map(projectsSectionRows.map((item) => [item.id, item] as const)),
+    [projectsSectionRows],
   );
   const inProgressSessionIds = useMemo(() => {
     const next = new Set(runningSessionIds);
@@ -261,6 +270,7 @@ export function SidebarSectionList({
             key: "draft",
             label: "Drafts",
             projectId: null,
+            project: null,
             kind: "draft" as const,
           };
         }
@@ -270,10 +280,11 @@ export function SidebarSectionList({
           key: projectId ? `project:${projectId}` : `projectless:${label}`,
           label,
           projectId: projectId ?? null,
+          project: projectId ? (projectRowById.get(projectId) ?? null) : null,
           kind: projectId ? ("project" as const) : ("projectless" as const),
         };
       }),
-    [projectLabelById, sidebarProjectIdBySessionId, visibleTaskRows],
+    [projectLabelById, projectRowById, sidebarProjectIdBySessionId, visibleTaskRows],
   );
   const canShowMoreTasks = visibleTaskRows.length < filteredTaskRows.length;
   const canShowLessTasks =
@@ -657,7 +668,6 @@ export function SidebarSectionList({
               return (
                 <SidebarTaskProjectGroup
                   key={group.key}
-                  count={group.sessions.length}
                   expanded={expanded}
                   groupKey={group.key}
                   kind={group.kind}
@@ -669,6 +679,16 @@ export function SidebarSectionList({
                       return next;
                     });
                   }}
+                  onNewTask={group.project ? () => beginProjectChat(group.project!.id) : undefined}
+                  onOpenProject={group.project ? () => {
+                    setSelectedAppId(null);
+                    setSelectedProjectId(group.project!.id);
+                    setSelectedSessionId(null);
+                    setView("chat");
+                  } : undefined}
+                  onRemoveProject={group.project ? () => removeProject(group.project!) : undefined}
+                  onTogglePin={group.project ? () => toggleProjectPinned(group.project!) : undefined}
+                  project={group.project}
                 >
                   {group.sessions.map((session) =>
                     renderTaskSession(session, {

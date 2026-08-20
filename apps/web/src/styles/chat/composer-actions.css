@@ -13,24 +13,6 @@
   background: #efefef;
 }
 
-.send-button.steer-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  width: auto;
-  min-width: 70px;
-  padding: 0 11px;
-  background: #eeeeee;
-  color: #181818;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.send-button.steer-button:hover:not(:disabled) {
-  background: #fff;
-}
-
 .send-button.stop-button {
   background: #3a3a3a;
   color: #fff;

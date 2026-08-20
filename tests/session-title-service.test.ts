@@ -3,10 +3,15 @@ import {
   autoTitlePromptFromPayload,
   fallbackSessionTitle,
   normalizeGeneratedSessionTitle,
+  SESSION_TITLE_REASONING_EFFORT,
   withPendingAutoTitle,
 } from "../apps/server/src/session-title-service";
 
 describe("session title service", () => {
+  test("disables reasoning for the small title request", () => {
+    expect(SESSION_TITLE_REASONING_EFFORT).toBe("low");
+  });
+
   test("normalizes model output to at most seven plain words", () => {
     expect(
       normalizeGeneratedSessionTitle(
