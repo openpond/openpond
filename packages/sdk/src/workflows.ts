@@ -75,6 +75,14 @@ export type OpenPondWorkflowCreateInput = {
   prompt: string;
   recurrence: OpenPondWorkflowRecurrence;
   modelId?: string;
+  enabled?: boolean;
+  target?:
+    | { kind: "prompt" }
+    | {
+        kind: "external_callback";
+        callbackUrl: string;
+        externalReference: string;
+      };
 };
 
 export type OpenPondWorkflowCreateResult = {

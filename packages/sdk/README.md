@@ -119,6 +119,25 @@ await openpond.workflows.runNow(workflow.scheduleId);
 await openpond.workflows.update(workflow.scheduleId, { enabled: false });
 ```
 
+An external product can also let OpenPond own recurrence while keeping the
+work itself inside that product. External callbacks are created disabled by
+default by the caller, carry only an opaque external reference, and receive a
+verifiable Saved Work run identity when OpenPond fires them:
+
+```ts
+await openpond.workflows.create({
+  name: "Daily account review",
+  prompt: "Run the account-owned daily review.",
+  recurrence,
+  enabled: false,
+  target: {
+    kind: "external_callback",
+    callbackUrl: "https://app.example.com/api/workflows/openpond-callback",
+    externalReference: "opaque_binding_id",
+  },
+});
+```
+
 `openpond.workflows` is distinct from `openpond.sandboxes.createSchedule()`. Workflows schedule model-driven Work and create normal Work conversations and run history. Raw sandbox schedules execute a declared sandbox command or action.
 
 ## Project Actions

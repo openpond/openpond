@@ -5,6 +5,7 @@ import { event } from "./utils.js";
 
 export const SESSION_TITLE_MODEL =
   "accounts/fireworks/models/deepseek-v4-flash";
+export const SESSION_TITLE_REASONING_EFFORT = "low";
 
 const TITLE_TIMEOUT_MS = 12_000;
 const MAX_TITLE_WORDS = 7;
@@ -35,6 +36,10 @@ export function normalizeGeneratedSessionTitle(
   generated: string,
   prompt: string,
 ): string {
+  return generatedSessionTitle(generated) ?? fallbackSessionTitle(prompt);
+}
+
+function generatedSessionTitle(generated: string): string | null {
   const withoutThinking = generated
     .replace(/<think>[\s\S]*?<\/think>/giu, " ")
     .replace(/^\s*(?:title|conversation title)\s*:\s*/iu, "")
@@ -43,7 +48,7 @@ export function normalizeGeneratedSessionTitle(
     .replace(/\s+/gu, " ")
     .trim();
   const words = withoutThinking.split(" ").filter(Boolean);
-  if (words.length < 2) return fallbackSessionTitle(prompt);
+  if (words.length < 2) return null;
   return words.slice(0, MAX_TITLE_WORDS).join(" ");
 }
 
@@ -85,6 +90,7 @@ export function createSessionTitleService(deps: {
           { role: "system", content: TITLE_SYSTEM_PROMPT },
           { role: "user", content: prompt.slice(0, 20_000) },
         ],
+        reasoningEffort: SESSION_TITLE_REASONING_EFFORT,
         maxTokens: 32,
         temperature: 0.2,
         requestId: `session-title-${randomUUID()}`,
@@ -92,7 +98,11 @@ export function createSessionTitleService(deps: {
       })) {
         if (delta.type === "text_delta" && delta.text) generated += delta.text;
       }
-      return normalizeGeneratedSessionTitle(generated, prompt);
+      const title = generatedSessionTitle(generated);
+      if (!title) {
+        throw new Error("session_title_generation_empty_response");
+      }
+      return title;
     } finally {
       clearTimeout(timeout);
     }
@@ -100,10 +110,12 @@ export function createSessionTitleService(deps: {
 
   async function run(sessionId: string, prompt: string): Promise<void> {
     let title: string;
+    let titleSource: "model" | "fallback" = "model";
     try {
       title = await generate(prompt);
     } catch (error) {
       title = fallbackSessionTitle(prompt);
+      titleSource = "fallback";
       deps.logger.warn("session title generation used local fallback", {
         error: error instanceof Error ? error.message : String(error),
         model: SESSION_TITLE_MODEL,
@@ -120,7 +132,7 @@ export function createSessionTitleService(deps: {
         name: "session.title.updated",
         source: "server",
         status: "completed",
-        data: { session, model: SESSION_TITLE_MODEL },
+        data: { session, model: SESSION_TITLE_MODEL, titleSource },
       }),
     );
   }

@@ -21,6 +21,7 @@ describe("sidebar task project grouping", () => {
           key: project,
           label: project.toUpperCase(),
           projectId: project,
+          project: null,
           kind: "project" as const,
         };
       }).map((group) => ({
@@ -40,7 +41,6 @@ describe("sidebar task project grouping", () => {
       createElement(
         SidebarTaskProjectGroup,
         {
-          count: 2,
           expanded: true,
           groupKey: "project:openpond",
           kind: "project",
@@ -54,14 +54,13 @@ describe("sidebar task project grouping", () => {
     expect(expanded).toContain('class="sidebar-task-project-group-header"');
     expect(expanded).toContain('aria-expanded="true"');
     expect(expanded).toContain('aria-controls="sidebar-task-group-project-openpond"');
-    expect(expanded).toContain("folder-open");
+    expect(expanded).not.toContain("sidebar-task-project-group-count");
     expect(expanded).toContain("Task row");
 
     const collapsed = renderToStaticMarkup(
       createElement(
         SidebarTaskProjectGroup,
         {
-          count: 2,
           expanded: false,
           groupKey: "project:openpond",
           kind: "project",

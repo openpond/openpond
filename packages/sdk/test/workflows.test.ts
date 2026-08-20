@@ -65,6 +65,12 @@ describe("OpenPondWorkflowsClient", () => {
       name: "Morning market brief",
       prompt: "Summarize the overnight market.",
       recurrence,
+      enabled: false,
+      target: {
+        kind: "external_callback",
+        callbackUrl: "https://customer.example.test/workflows/callback",
+        externalReference: "binding_1",
+      },
     });
     await client.update(created.scheduleId, { enabled: false });
     await client.runNow(created.scheduleId, { clientRequestId: "run_1" });
@@ -83,6 +89,12 @@ describe("OpenPondWorkflowsClient", () => {
         name: "Morning market brief",
         prompt: "Summarize the overnight market.",
         recurrence,
+        enabled: false,
+        target: {
+          kind: "external_callback",
+          callbackUrl: "https://customer.example.test/workflows/callback",
+          externalReference: "binding_1",
+        },
       },
     });
     expect(request(fetch, 2)).toMatchObject({

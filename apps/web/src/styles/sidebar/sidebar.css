@@ -1155,7 +1155,7 @@
   align-items: center;
   width: calc(100% - 8px);
   min-height: 27px;
-  gap: 6px;
+  gap: 5px;
   margin: 0 4px;
   padding: 3px 7px;
   border: 0;
@@ -1181,6 +1181,10 @@
   flex: 0 0 auto;
 }
 
+.sidebar-task-project-group-icon {
+  color: #8f8f8f;
+}
+
 .sidebar-task-project-group-name {
   min-width: 0;
   overflow: hidden;
@@ -1188,16 +1192,25 @@
   white-space: nowrap;
 }
 
-.sidebar-task-project-group-count {
-  margin-left: auto;
-  color: #666;
-  font-variant-numeric: tabular-nums;
-}
-
 .sidebar-task-project-group-caret {
   display: inline-grid;
   place-items: center;
+  width: 12px;
+  height: 16px;
   color: #707070;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.sidebar-task-project-group-header:hover .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header:focus-visible .sidebar-task-project-group-caret,
+.sidebar-task-project-group-header:focus-within .sidebar-task-project-group-caret {
+  opacity: 1;
+}
+
+.sidebar-task-project-group-content {
+  width: calc(100% - 14px);
+  margin-left: 14px;
 }
 
 .sidebar-task-detail-popover {
