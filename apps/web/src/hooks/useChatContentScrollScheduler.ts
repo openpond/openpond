@@ -23,18 +23,47 @@ export function useChatContentScrollScheduler(input: {
       });
     };
     scheduleRef.current = schedule;
-    const observer = typeof MutationObserver === "undefined"
+    const mutationObserver = typeof MutationObserver === "undefined"
       ? null
-      : new MutationObserver(schedule);
-    observer?.observe(element, {
+      : new MutationObserver(() => {
+        syncObservedChildren();
+        schedule();
+      });
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(schedule);
+    const observedChildren = new Set<HTMLElement>();
+    const syncObservedChildren = () => {
+      if (!resizeObserver) return;
+      const currentChildren = new Set(
+        Array.from(element.children).filter(
+          (child): child is HTMLElement => child instanceof HTMLElement,
+        ),
+      );
+      for (const child of observedChildren) {
+        if (!currentChildren.has(child)) {
+          resizeObserver.unobserve(child);
+          observedChildren.delete(child);
+        }
+      }
+      for (const child of currentChildren) {
+        if (!observedChildren.has(child)) {
+          resizeObserver.observe(child);
+          observedChildren.add(child);
+        }
+      }
+    };
+    mutationObserver?.observe(element, {
       childList: true,
       characterData: true,
       subtree: true,
     });
+    syncObservedChildren();
     element.addEventListener("load", schedule, true);
     return () => {
       scheduleRef.current = null;
-      observer?.disconnect();
+      mutationObserver?.disconnect();
+      resizeObserver?.disconnect();
       element.removeEventListener("load", schedule, true);
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
     };
