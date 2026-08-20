@@ -129,7 +129,7 @@ describe("OpenPond runtime OpChat routing", () => {
     expect(result.data.map((provider) => provider.id)).toEqual(["openpond", "openrouter"]);
   });
 
-  test("buffers live chat streams so whitespace and proxy keepalives survive provider chunk boundaries", async () => {
+  test("preserves whitespace and proxy keepalives across live provider chunk boundaries", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
       requests.push({
@@ -165,18 +165,26 @@ describe("OpenPond runtime OpChat routing", () => {
         },
       },
     ]);
-    expect(deltas.map((delta) => delta.type)).toEqual([
-      "reasoning_delta",
-      "text_delta",
-      "usage",
-      "finish",
-    ]);
-    expect(deltas[1]).toMatchObject({
-      type: "text_delta",
-      text: "hello world\n\n- one\n- two",
+    expect(
+      deltas
+        .filter((delta) => delta.type === "reasoning_delta")
+        .map((delta) => delta.text)
+        .join(""),
+    ).toBe("thinking clearly");
+    expect(
+      deltas
+        .filter((delta) => delta.type === "text_delta")
+        .map((delta) => delta.text)
+        .join(""),
+    ).toBe("hello world\n\n- one\n- two");
+    expect(deltas.find((delta) => delta.type === "usage")).toMatchObject({
+      type: "usage",
+      usage: { total_tokens: 12 },
     });
-    expect(deltas[2]).toMatchObject({ type: "usage", usage: { total_tokens: 12 } });
-    expect(deltas[3]).toMatchObject({ type: "finish", finishReason: "stop" });
+    expect(deltas.find((delta) => delta.type === "finish")).toMatchObject({
+      type: "finish",
+      finishReason: "stop",
+    });
   });
 
   test("sends native tools to OpChat and preserves reasoning for tool follow-ups", async () => {

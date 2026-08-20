@@ -6,7 +6,6 @@ import {
   type CSSProperties,
 } from "react";
 import {
-  ChevronDown,
   CircleAlert,
   Bot,
   FileText,
@@ -46,6 +45,7 @@ import {
   subagentRoleLabel,
 } from "./SubagentAvatarGroup";
 import { HarnessRefinerReceipt } from "./HarnessRefinerReceipt";
+import { ChatActivitySummary } from "./ChatActivitySummary";
 
 const SUBAGENT_MESSAGE_VISIBLE_LINES = 5;
 const SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS = 280;
@@ -111,60 +111,41 @@ export function ActivityGroup({
     <article
       className={`activity-group work-trace ${running ? "running" : "settled"}`}
     >
-      {activities.length > 0 ? <div className="activity-summary-row">
-        {presentation.toolCount > 0 ? (
-          <button
-            type="button"
-            aria-controls={toolListId}
-            aria-expanded={presentation.toolsExpanded}
-            className={`activity-summary ${danger ? "danger" : ""} ${
-              running ? "working" : ""
-            }`}
-            onClick={() => setToolsExpanded((current) => !current)}
+      {activities.length > 0 ? (
+        <div className="activity-summary-row">
+          <ChatActivitySummary
+            controls={presentation.toolCount > 0 ? toolListId : undefined}
+            danger={danger}
+            expanded={presentation.toolsExpanded}
+            icon={
+              summaryImage ? (
+                <ActivitySummaryImage
+                  activeWorkspaceAppId={activeWorkspaceAppId}
+                  connection={connection}
+                  image={summaryImage}
+                />
+              ) : (
+                <ActivitySummaryIcon kind={summary.kind} />
+              )
+            }
+            onToggle={
+              presentation.toolCount > 0
+                ? () => setToolsExpanded((current) => !current)
+                : undefined
+            }
+            running={running}
           >
-            {summaryImage ? (
-              <ActivitySummaryImage
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                connection={connection}
-                image={summaryImage}
-              />
-            ) : (
-              <ActivitySummaryIcon kind={summary.kind} />
-            )}
-            <ActivitySummaryText summary={summaryText} />
-            <ChevronDown
-              className={`activity-summary-toggle ${
-                presentation.toolsExpanded ? "expanded" : ""
-              }`}
-              size={14}
+            {summaryText}
+          </ChatActivitySummary>
+          {summaryOpenSessions.length > 0 && onOpenSession ? (
+            <SubagentAvatarGroup
+              onOpenSession={onOpenSession}
+              onShowAll={() => setToolsExpanded(true)}
+              sessions={summaryOpenSessions}
             />
-          </button>
-        ) : (
-          <div
-            className={`activity-summary static ${danger ? "danger" : ""} ${
-              running ? "working" : ""
-            }`}
-          >
-            {summaryImage ? (
-              <ActivitySummaryImage
-                activeWorkspaceAppId={activeWorkspaceAppId}
-                connection={connection}
-                image={summaryImage}
-              />
-            ) : (
-              <ActivitySummaryIcon kind={summary.kind} />
-            )}
-            <ActivitySummaryText summary={summaryText} />
-          </div>
-        )}
-        {summaryOpenSessions.length > 0 && onOpenSession ? (
-          <SubagentAvatarGroup
-            onOpenSession={onOpenSession}
-            onShowAll={() => setToolsExpanded(true)}
-            sessions={summaryOpenSessions}
-          />
-        ) : null}
-      </div> : null}
+          ) : null}
+        </div>
+      ) : null}
       {message.refinerActivity ? (
         <HarnessRefinerReceipt activity={message.refinerActivity} />
       ) : null}
@@ -214,11 +195,6 @@ function ActivityToolRow({
 }) {
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
-  const imageSrc = useActivityImageUrl(
-    activity.imagePreview ?? null,
-    connection,
-    activeWorkspaceAppId
-  );
   if (activity.subagentMessage) {
     return <SubagentMessageDetailRow activity={activity} />;
   }
@@ -228,24 +204,60 @@ function ActivityToolRow({
         activity.controlKind === "turn_aborted" ? "danger" : ""
       }`}
     >
-      <button
-        type="button"
-        aria-controls={detailsId}
-        aria-expanded={expanded}
+      <ChatActivitySummary
         className="activity-tool-summary"
-        onClick={() => setExpanded((current) => !current)}
+        controls={detailsId}
+        danger={activity.controlKind === "turn_aborted"}
+        expanded={expanded}
+        icon={
+          activity.kind === "command" ? (
+            <SquareTerminal
+              aria-hidden
+              className="activity-summary-kind-icon"
+              size={12}
+            />
+          ) : undefined
+        }
+        onToggle={() => setExpanded((current) => !current)}
       >
-        {activity.kind === "command" ? (
-          <SquareTerminal aria-hidden className="activity-tool-kind-icon" size={12} />
-        ) : null}
-        <span>{activityToolRowLabel(activity)}</span>
-        <ChevronDown
-          className={`activity-tool-toggle ${expanded ? "expanded" : ""}`}
-          size={13}
-        />
-      </button>
+        {activityToolRowLabel(activity)}
+      </ChatActivitySummary>
       {expanded ? (
-        <div className="activity-tool-details" id={detailsId}>
+        <ActivityToolDetails
+          activeWorkspaceAppId={activeWorkspaceAppId}
+          activity={activity}
+          connection={connection}
+          detailsId={detailsId}
+          onOpenImage={onOpenImage}
+          onOpenSession={onOpenSession}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ActivityToolDetails({
+  activeWorkspaceAppId,
+  activity,
+  connection,
+  detailsId,
+  onOpenImage,
+  onOpenSession,
+}: {
+  activeWorkspaceAppId: string | null;
+  activity: ActivityItem;
+  connection: ClientConnection | null;
+  detailsId: string;
+  onOpenImage: (image: ActivityItem["imagePreview"] | null) => void;
+  onOpenSession?: (sessionId: string) => void;
+}) {
+  const imageSrc = useActivityImageUrl(
+    activity.imagePreview ?? null,
+    connection,
+    activeWorkspaceAppId
+  );
+  return (
+    <div className="activity-tool-details" id={detailsId}>
           {activity.kind === "command" && activity.content ? (
             <CommandTerminal
               command={activity.content}
@@ -291,8 +303,6 @@ function ActivityToolRow({
             />
           ) : null}
         </div>
-      ) : null}
-    </div>
   );
 }
 
@@ -601,14 +611,6 @@ export function subagentMessageNeedsCollapse(body: string): boolean {
   return (
     body.length > SUBAGENT_MESSAGE_COLLAPSE_MIN_CHARS ||
     body.split(/\r?\n/).length > SUBAGENT_MESSAGE_VISIBLE_LINES
-  );
-}
-
-function ActivitySummaryText({ summary }: { summary: string }) {
-  return (
-    <span className="activity-summary-text">
-      <span>{summary}</span>
-    </span>
   );
 }
 

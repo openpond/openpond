@@ -161,6 +161,7 @@ export const CreateSessionRequestSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
   cwd: z.string().nullable().optional(),
   title: z.string().optional(),
+  autoTitlePrompt: z.string().trim().min(1).max(20_000).optional(),
 });
 
 export type CreateSessionRequest = z.infer<typeof CreateSessionRequestSchema>;

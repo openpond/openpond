@@ -108,7 +108,6 @@ export function useProjectTargetActions({
         appDispatch({ type: "selectProject", projectId: projectKey });
         expandProject(projectKey);
         setDiffPanelOpen(false);
-        showToast(`Selected ${project.name}.`, "info");
         return;
       }
       if (kind === "cloud") {
@@ -123,7 +122,6 @@ export function useProjectTargetActions({
         setDraftProvider("openpond");
         setDraftModel((current) => normalizeChatModel("openpond", current));
         setDiffPanelOpen(false);
-        showToast(`Selected Cloud Project: ${project.name}.`, "info");
       }
     },
     [

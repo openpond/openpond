@@ -10,8 +10,8 @@ import {
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import {
   buildRuntimeIndexes,
-  runtimeEventsForSession,
 } from "../lib/runtime-indexes";
+import type { RuntimeEventStore } from "../lib/runtime-event-store";
 import {
   latestRuntimeEventSequence,
   mergeRuntimeEventLists,
@@ -35,6 +35,7 @@ export function useSelectedChatHistory(input: {
   connection: ClientConnection | null;
   latestServerSequence: number | null | undefined;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
+  runtimeEventStore: RuntimeEventStore;
   selectedSessionId: string | null;
   serverId: string | null | undefined;
   setCodexHistoryEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
@@ -48,6 +49,7 @@ export function useSelectedChatHistory(input: {
     connection,
     latestServerSequence,
     runtimeIndexes,
+    runtimeEventStore,
     selectedSessionId,
     serverId,
     setCodexHistoryEvents,
@@ -137,7 +139,7 @@ export function useSelectedChatHistory(input: {
 
     const currentSessionEvents = mergeRuntimeEventLists(
       pagedSessionEvents[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS,
-      runtimeEventsForSession(runtimeIndexes, selectedSessionId),
+      runtimeEventStore.getSessionEvents(selectedSessionId),
     );
     const beforeSequence =
       currentState?.cursorSequence ?? oldestRuntimeEventSequence(currentSessionEvents);
@@ -198,7 +200,7 @@ export function useSelectedChatHistory(input: {
     codexHistoryEvents.length,
     connection,
     pagedSessionEvents,
-    runtimeIndexes,
+    runtimeEventStore,
     selectedSessionId,
     setCodexHistoryEvents,
     setCodexHistorySessions,
@@ -209,8 +211,8 @@ export function useSelectedChatHistory(input: {
     ? (pagedSessionEvents[selectedSessionId] ?? EMPTY_RUNTIME_EVENTS)
     : EMPTY_RUNTIME_EVENTS;
   const selectedRuntimeEventCount = useMemo(
-    () => runtimeEventsForSession(runtimeIndexes, selectedSessionId).length,
-    [runtimeIndexes, selectedSessionId],
+    () => runtimeEventStore.getSessionEvents(selectedSessionId).length,
+    [runtimeEventStore, selectedSessionId],
   );
   const selectedForwardEventSyncKeyRef = useRef<string | null>(null);
 
@@ -294,7 +296,7 @@ export function useSelectedChatHistory(input: {
 
     const selectedEvents = mergeRuntimeEventLists(
       selectedPagedSessionEvents,
-      runtimeEventsForSession(runtimeIndexes, selectedSessionId),
+      runtimeEventStore.getSessionEvents(selectedSessionId),
     );
     const latestSelectedSequence = latestRuntimeEventSequence(selectedEvents);
     if (!latestSelectedSequence || latestSelectedSequence >= latestServerSequence) return undefined;
@@ -330,7 +332,7 @@ export function useSelectedChatHistory(input: {
   }, [
     latestServerSequence,
     connection,
-    runtimeIndexes,
+    runtimeEventStore,
     selectedPagedSessionEvents,
     selectedSessionId,
     setError,
@@ -342,7 +344,7 @@ export function useSelectedChatHistory(input: {
     return buildRuntimeIndexes(
       mergeRuntimeEventLists(
         selectedPagedSessionEvents,
-        runtimeEventsForSession(runtimeIndexes, selectedSessionId),
+        runtimeEventStore.getSessionEvents(selectedSessionId),
       ),
       approvals,
     );

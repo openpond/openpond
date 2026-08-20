@@ -1,6 +1,7 @@
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   BootstrapPayload,
+  AppPreferences,
   ChatAttachment,
   ChatAttachmentSummary,
   ChatProvider,
@@ -16,6 +17,7 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import { useNewMessageIds } from "../../hooks/useNewMessageIds";
 import { openBrowserLink } from "../../lib/browser-sidebar-links";
+import { IncrementalChatProjector } from "../../lib/incremental-chat-projector";
 import {
   buildChatTimelineRows,
   shouldShowThinkingIndicator,
@@ -23,6 +25,18 @@ import {
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
 import type { ComposerSlashCommand } from "../../lib/composer-slash-commands";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
+import {
+  latestGoalRuntimeForSession,
+  latestContextUsageForSession,
+  buildRuntimeIndexes,
+} from "../../lib/runtime-indexes";
+import { contextWindowStatusFromUsage } from "../../lib/context-window";
+import { latestCreateImproveRunProjection } from "../../lib/create-pipeline-runtime";
+import { appendPendingUserChatMessage } from "../../lib/pending-chat-messages";
+import type { RuntimeEventStore } from "../../lib/runtime-event-store";
+import { latestTurnCompletionState } from "../../lib/turn-completion-state";
+import { useRuntimeEventSession } from "../../hooks/useRuntimeEventSession";
+import { useChatContentScrollScheduler } from "../../hooks/useChatContentScrollScheduler";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import { ApprovalRequestCard } from "../chat/ApprovalRequestCard";
 import {
@@ -37,8 +51,10 @@ import type { RightChatPanelView, RightChatScrollState } from "./right-chat-pane
 
 export function RightChatPane({
   panel,
+  runtimeEventStore,
   actionCatalog,
   createImproveActions,
+  contextCompaction,
   initialScrollState,
   codexPermissionMode,
   codexReasoningEffort,
@@ -77,8 +93,10 @@ export function RightChatPane({
   onWorkspaceTargetChange,
 }: {
   panel: RightChatPanelView;
+  runtimeEventStore: RuntimeEventStore;
   actionCatalog: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
+  contextCompaction: AppPreferences["contextCompaction"];
   initialScrollState: RightChatScrollState | null;
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
@@ -126,29 +144,60 @@ export function RightChatPane({
   onWorkspaceTargetChange: (target: WorkspaceTargetValue) => void;
 }) {
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const [chatProjector] = useState(() => new IncrementalChatProjector());
   const stickyToBottomRef = useRef(initialScrollState?.stickyToBottom ?? true);
   const initialScrollRestoredRef = useRef(false);
-  const showThinking = panel.running
-    && !panel.pendingApproval
-    && shouldShowThinkingIndicator(panel.messages);
+  const liveSessionSnapshot = useRuntimeEventSession(
+    runtimeEventStore,
+    panel.runtimeSource === "live" ? panel.sessionId : null,
+  );
+  const activePanelView = useMemo<RightChatPanelView>(() => {
+    if (panel.runtimeSource === "history" || !panel.sessionId) return panel;
+    const events = liveSessionSnapshot.events;
+    const indexes = buildRuntimeIndexes(events, []);
+    const turnCompletionState = latestTurnCompletionState(events);
+    return {
+      ...panel,
+      messages: appendPendingUserChatMessage(
+        chatProjector.project(events),
+        panel.pendingUserMessage,
+      ),
+      createImproveRun: latestCreateImproveRunProjection({ events }),
+      contextWindowStatus: contextWindowStatusFromUsage({
+        provider: panel.provider,
+        snapshot: latestContextUsageForSession(indexes, panel.sessionId),
+        preferences: contextCompaction,
+      }),
+      goalRuntime: latestGoalRuntimeForSession(indexes, panel.sessionId),
+      steerAutoDispatchBlocked:
+        Boolean(panel.pendingApproval) || turnCompletionState === "blocked",
+      steerAutoDispatchReady:
+        turnCompletionState === "completed" &&
+        !panel.pendingApproval &&
+        !panel.running,
+    };
+  }, [chatProjector, contextCompaction, liveSessionSnapshot, panel]);
+  const showThinking = activePanelView.running
+    && !activePanelView.pendingApproval
+    && shouldShowThinkingIndicator(activePanelView.messages);
   const createImproveRuntime = useMemo(
-    () => panel.createImproveRun
-      ? { ...createImproveActions, run: panel.createImproveRun }
+    () => activePanelView.createImproveRun
+      ? { ...createImproveActions, run: activePanelView.createImproveRun }
       : null,
-    [createImproveActions, panel.createImproveRun],
+    [activePanelView.createImproveRun, createImproveActions],
   );
   const timelineRows = useMemo(
-    () => buildChatTimelineRows(panel.messages, { showThinkingIndicator: showThinking }),
-    [panel.messages, showThinking],
+    () => buildChatTimelineRows(activePanelView.messages, { showThinkingIndicator: showThinking }),
+    [activePanelView.messages, showThinking],
   );
   const newMessageIds = useNewMessageIds(
-    panel.messages,
-    panel.sessionId ?? `draft:${panel.id}`
+    activePanelView.messages,
+    activePanelView.sessionId ?? `draft:${activePanelView.id}`
   );
-  const latestMessage = panel.messages.at(-1);
+  const latestMessage = activePanelView.messages.at(-1);
   const contentKey = [
-    panel.id,
-    panel.sessionId ?? "draft",
+    activePanelView.id,
+    activePanelView.sessionId ?? "draft",
     timelineRows.length,
     latestMessage?.id ?? "",
     latestMessage?.content?.length ?? 0,
@@ -158,37 +207,23 @@ export function RightChatPane({
 
   useLayoutEffect(() => {
     const element = threadRef.current;
-    if (!element) return;
-    if (!initialScrollRestoredRef.current) {
-      initialScrollRestoredRef.current = true;
-      element.scrollTop = initialScrollState?.stickyToBottom
-        ? element.scrollHeight
-        : initialScrollState?.scrollTop ?? 0;
-      return;
-    }
-    if (stickyToBottomRef.current) element.scrollTop = element.scrollHeight;
-  }, [contentKey, initialScrollState]);
-
-  useLayoutEffect(() => {
-    const element = threadRef.current;
-    if (!element || typeof MutationObserver === "undefined") return undefined;
-
-    if (stickyToBottomRef.current) element.scrollTop = element.scrollHeight;
-    const observer = new MutationObserver(() => {
-      if (!stickyToBottomRef.current) return;
-      element.scrollTop = element.scrollHeight;
-    });
-    observer.observe(element, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    return () => observer.disconnect();
-  }, [panel.id]);
+    if (!element || initialScrollRestoredRef.current) return;
+    initialScrollRestoredRef.current = true;
+    element.scrollTop = initialScrollState?.stickyToBottom
+      ? element.scrollHeight
+      : initialScrollState?.scrollTop ?? 0;
+  }, [initialScrollState]);
+  useChatContentScrollScheduler({
+    contentKey,
+    onContentChange: (element) => {
+      if (stickyToBottomRef.current) element.scrollTop = element.scrollHeight;
+    },
+    threadRef,
+  });
 
   const handleOpenBrowserLink = useCallback(
     (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => {
-      const conversationId = panel.sessionId ?? `side-chat:${panel.id}`;
+      const conversationId = activePanelView.sessionId ?? `side-chat:${activePanelView.id}`;
       void openBrowserLink({
         conversationId,
         href,
@@ -198,7 +233,7 @@ export function RightChatPane({
         if (opened) onShowBrowserPanel();
       });
     },
-    [onShowBrowserPanel, panel.id, panel.sessionId],
+    [activePanelView.id, activePanelView.sessionId, onShowBrowserPanel],
   );
   const handleResolveUserQuestion = useCallback<NonNullable<
     import("react").ComponentProps<typeof MessageRow>["onResolveUserQuestion"]
@@ -216,10 +251,10 @@ export function RightChatPane({
 
   return (
     <section
-      className={`right-chat-pane ${panel.pendingApproval ? "has-approval" : ""}`}
-      id={`right-chat-panel-${panel.id}`}
+      className={`right-chat-pane ${activePanelView.pendingApproval ? "has-approval" : ""}`}
+      id={`right-chat-panel-${activePanelView.id}`}
       role="tabpanel"
-      aria-labelledby={`right-chat-tab-${panel.id}`}
+      aria-labelledby={`right-chat-tab-${activePanelView.id}`}
     >
       <div
         className="chat-thread right-chat-thread"
@@ -238,7 +273,7 @@ export function RightChatPane({
           <ThinkingIndicator key={row.id} />
         ) : (
           <MessageRow
-            activeWorkspaceAppId={panel.activeWorkspaceAppId}
+            activeWorkspaceAppId={activePanelView.activeWorkspaceAppId}
             accountBaseUrl={accountBaseUrl}
             billingOrganizationSlug={billingOrganizationSlug}
             billingTeamId={billingTeamId}
@@ -258,13 +293,13 @@ export function RightChatPane({
             userAttachmentDisplay={
               panel.provider === "codex" ? "compact" : "full"
             }
-            workspaceRootPath={panel.workspaceRootPath}
+            workspaceRootPath={activePanelView.workspaceRootPath}
             showFooter={row.showFooter}
           />
         ))}
       </div>
-      <div className={`composer-stack dock right-chat-composer ${panel.pendingApproval ? "has-approval" : ""}`}>
-        <ApprovalRequestCard approval={panel.pendingApproval} onResolve={onResolveApproval} />
+      <div className={`composer-stack dock right-chat-composer ${activePanelView.pendingApproval ? "has-approval" : ""}`}>
+        <ApprovalRequestCard approval={activePanelView.pendingApproval} onResolve={onResolveApproval} />
         <Composer
           mode="dock"
           prompt={panel.prompt}
@@ -273,14 +308,14 @@ export function RightChatPane({
           profileSkills={panel.provider === "codex" ? codexPersonalSkills : profileSkills}
           profileTarget={panel.provider === "codex" ? null : profileTarget}
           selectedMentionAppId={null}
-          contextWindowStatus={panel.contextWindowStatus}
-          goalRuntime={panel.goalRuntime}
+          contextWindowStatus={activePanelView.contextWindowStatus}
+          goalRuntime={activePanelView.goalRuntime}
           createImproveRuntime={createImproveRuntime}
-          busy={panel.running}
-          running={panel.running}
-          submissionScopeKey={panel.sessionId ?? panel.id}
-          steerAutoDispatchBlocked={panel.steerAutoDispatchBlocked}
-          steerAutoDispatchReady={panel.steerAutoDispatchReady}
+          busy={activePanelView.running}
+          running={activePanelView.running}
+          submissionScopeKey={activePanelView.sessionId ?? activePanelView.id}
+          steerAutoDispatchBlocked={activePanelView.steerAutoDispatchBlocked}
+          steerAutoDispatchReady={activePanelView.steerAutoDispatchReady}
           showProjectFooter={false}
           connection={connection}
           providerSettings={providerSettings}
@@ -294,7 +329,7 @@ export function RightChatPane({
           openPondCommandAccessMode={
             panel.provider === "codex"
               ? openPondCommandAccessMode
-              : panel.session?.openPondCommandAccessMode ?? openPondCommandAccessMode
+              : activePanelView.session?.openPondCommandAccessMode ?? openPondCommandAccessMode
           }
           onProviderChange={onProviderChange}
           onProviderSetupOpen={onProviderSetupOpen}

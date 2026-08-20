@@ -276,77 +276,29 @@ export async function* streamOpChatChatCompletion(
     throw new Error("OpenPond OpChat request failed: streaming response body is missing.");
   }
 
-  // Consume the live SSE stream so proxy keepalives remain effective, but
-  // publish one complete turn only after the provider finishes. This preserves
-  // the runtime's atomic turn semantics and exact whitespace across chunks.
-  const completion = await readBufferedOpChatStream(response.body);
-  const {
-    content,
-    finishReason,
-    raw,
-    reasoningText,
-    toolCalls,
-    usage,
-  } = completion;
-
-  if (reasoningText) yield { type: "reasoning_delta", text: reasoningText, raw };
-  if (content) yield { type: "text_delta", text: content, raw };
-  if (toolCalls.length > 0) {
-    yield { type: "tool_call_delta", toolCalls, raw };
-  }
-  if (toolCalls.length > 0 && reasoningText) {
-    yield {
-      type: "continuation",
-      continuation: {
-        kind: "chat_completions_reasoning",
-        reasoningContent: reasoningText,
-      },
-      raw,
-    };
-  }
-  if (usage) yield { type: "usage", usage, raw };
-  yield {
-    type: "finish",
-    finishReason,
-    raw,
-  };
-}
-
-type PendingOpChatToolCall = {
-  id?: string;
-  name?: string;
-  arguments: string;
-};
-
-async function readBufferedOpChatStream(
-  body: ReadableStream<Uint8Array>,
-): Promise<{
-  content: string | null;
-  finishReason: string | null;
-  raw: unknown;
-  reasoningText: string | null;
-  toolCalls: HostedChatToolCall[];
-  usage: HostedChatUsage | null;
-}> {
-  const reader = body.getReader();
-  const decoder = new TextDecoder();
+  // Stream reasoning and text deltas live as they arrive from the provider.
+  // Tool call argument fragments are accumulated and yielded as a single
+  // complete batch after the stream finishes, since partial JSON arguments
+  // are not actionable until complete.
   const toolCalls = new Map<number, PendingOpChatToolCall>();
-  let buffer = "";
-  let content = "";
-  let dataLines: string[] = [];
+  let sawDone = false;
   let finishReason: string | null = null;
   let lastPayload: unknown = {};
-  let reasoningText = "";
-  let sawDone = false;
+  let accumulatedReasoning = "";
   let usage: HostedChatUsage | null = null;
 
-  const consumeEvent = () => {
-    if (dataLines.length === 0) return;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let dataLines: string[] = [];
+
+  const consumeEvent = (): HostedChatStreamDelta[] => {
+    if (dataLines.length === 0) return [];
     const data = dataLines.join("\n");
     dataLines = [];
     if (data === "[DONE]") {
       sawDone = true;
-      return;
+      return [];
     }
     let payload: unknown;
     try {
@@ -368,23 +320,32 @@ async function readBufferedOpChatStream(
     const delta = choice.delta && typeof choice.delta === "object"
       ? choice.delta as Record<string, unknown>
       : {};
-    content += streamTextValue(delta.content) ?? "";
-    reasoningText += streamTextValue(delta.reasoning_content) ?? "";
+    const deltas: HostedChatStreamDelta[] = [];
+    const reasoningChunk = streamTextValue(delta.reasoning_content);
+    if (reasoningChunk) {
+      accumulatedReasoning += reasoningChunk;
+      deltas.push({ type: "reasoning_delta", text: reasoningChunk, raw: payload });
+    }
+    const textChunk = streamTextValue(delta.content);
+    if (textChunk) {
+      deltas.push({ type: "text_delta", text: textChunk, raw: payload });
+    }
     mergeOpChatToolCallDeltas(toolCalls, delta.tool_calls);
     finishReason = stringValue(choice.finish_reason) ?? finishReason;
     usage = parseUsage(payload) ?? usage;
+    return deltas;
   };
 
-  const consumeLine = (line: string) => {
+  const consumeLine = (line: string): HostedChatStreamDelta[] => {
     const normalized = line.endsWith("\r") ? line.slice(0, -1) : line;
     if (!normalized) {
-      consumeEvent();
-      return;
+      return consumeEvent();
     }
-    if (normalized.startsWith(":")) return;
+    if (normalized.startsWith(":")) return [];
     if (normalized.startsWith("data:")) {
       dataLines.push(normalized.slice("data:".length).trimStart());
     }
+    return [];
   };
 
   try {
@@ -394,11 +355,15 @@ async function readBufferedOpChatStream(
       buffer += decoder.decode(result.value, { stream: true });
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
-      for (const line of lines) consumeLine(line);
+      for (const line of lines) {
+        for (const delta of consumeLine(line)) yield delta;
+      }
     }
     buffer += decoder.decode();
-    if (buffer) consumeLine(buffer);
-    consumeEvent();
+    if (buffer) {
+      for (const delta of consumeLine(buffer)) yield delta;
+    }
+    for (const delta of consumeEvent()) yield delta;
   } finally {
     reader.releaseLock();
   }
@@ -406,15 +371,30 @@ async function readBufferedOpChatStream(
   if (!sawDone) {
     throw new Error("OpenPond OpChat request failed: stream ended before [DONE].");
   }
-  return {
-    content: content || null,
-    finishReason,
-    raw: lastPayload,
-    reasoningText: reasoningText || null,
-    toolCalls: completedOpChatToolCalls(toolCalls),
-    usage,
-  };
+
+  const completedToolCalls = completedOpChatToolCalls(toolCalls);
+  if (completedToolCalls.length > 0) {
+    yield { type: "tool_call_delta", toolCalls: completedToolCalls, raw: lastPayload };
+  }
+  if (completedToolCalls.length > 0 && accumulatedReasoning) {
+    yield {
+      type: "continuation",
+      continuation: {
+        kind: "chat_completions_reasoning",
+        reasoningContent: accumulatedReasoning,
+      },
+      raw: lastPayload,
+    };
+  }
+  if (usage) yield { type: "usage", usage, raw: lastPayload };
+  yield { type: "finish", finishReason, raw: lastPayload };
 }
+
+type PendingOpChatToolCall = {
+  id?: string;
+  name?: string;
+  arguments: string;
+};
 
 function mergeOpChatToolCallDeltas(
   calls: Map<number, PendingOpChatToolCall>,

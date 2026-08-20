@@ -34,6 +34,8 @@ import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions
 import type { ContextWindowStatus } from "../../lib/context-window";
 import type { GoalRuntimeStatus } from "../../lib/goal-runtime";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
+import type { RuntimeEventStore } from "../../lib/runtime-event-store";
+import type { PendingChatUserMessage } from "../../lib/pending-chat-messages";
 import type { SubagentRuntimeStatus } from "../../lib/subagent-runtime";
 import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import type {
@@ -73,6 +75,7 @@ export type MainPaneProps = {
   bootstrap: BootstrapPayload | null;
   runtimeEvents: RuntimeEvent[];
   chatMessages: ChatMessage[];
+  pendingUserMessage: PendingChatUserMessage | null;
   contextWindowStatus: ContextWindowStatus;
   goalRuntime: GoalRuntimeStatus | null;
   subagentRuntime: SubagentRuntimeStatus | null;
@@ -115,6 +118,7 @@ export type MainPaneProps = {
   rightPanelMode: RightPanelMode;
   rightPanelTabRequest: WorkspaceDiffTabRequest | null;
   rightChatPanels: RightChatPanelView[];
+  runtimeEventStore: RuntimeEventStore;
   nativeSkillSidebar: SkillSourceDocument | null;
   extensionSkillSidebar: SkillPackageSourceSelection | null;
   workspaceDiffPanelViewState: WorkspaceDiffPanelViewState;

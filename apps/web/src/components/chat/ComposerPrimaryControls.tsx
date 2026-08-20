@@ -80,15 +80,12 @@ export function ComposerPrimaryControls({
   onOpenFilePicker,
   onProviderChange,
   onProviderSetupOpen,
-  onQueueDraft,
   onStop,
   onToggleAddMenu,
   onTranscript,
   provider,
   providerSettings,
   providerOptions,
-  queueDraftDisabled,
-  queueDraftTooltip,
   running,
   sendDisabled,
   sendTooltip,
@@ -128,15 +125,12 @@ export function ComposerPrimaryControls({
   onOpenFilePicker: () => void;
   onProviderChange: (value: ChatProvider) => void;
   onProviderSetupOpen?: () => void;
-  onQueueDraft: () => void;
   onStop: () => Promise<boolean | void> | boolean | void;
   onToggleAddMenu: () => void;
   onTranscript: (text: string) => void;
   provider: ChatProvider;
   providerSettings?: ProviderSettings | null;
   providerOptions: DropdownOption[];
-  queueDraftDisabled: boolean;
-  queueDraftTooltip: string;
   running: boolean;
   sendDisabled: boolean;
   sendTooltip: string;
@@ -400,19 +394,6 @@ export function ComposerPrimaryControls({
         showToast={showToast}
         onTranscript={onTranscript}
       />
-      {steering ? (
-        <button
-          type="button"
-          className="composer-queue-control"
-          disabled={queueDraftDisabled}
-          data-tooltip={queueDraftTooltip}
-          aria-label="Queue steer draft"
-          onClick={onQueueDraft}
-        >
-          <Plus size={13} />
-          <span>Queue</span>
-        </button>
-      ) : null}
       {running ? (
         <button
           type="button"

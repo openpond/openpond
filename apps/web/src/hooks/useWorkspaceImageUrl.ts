@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type ClientConnection } from "../api";
-
-type CachedWorkspaceImageUrl =
-  | { state: "ready"; url: string; expiresAt: number }
-  | { state: "loading"; promise: Promise<string | null> };
-
-const cache = new Map<string, CachedWorkspaceImageUrl>();
-const EXPIRY_SKEW_MS = 15_000;
+import { signedResourceCacheKey, signedResourceUrlCache } from "../lib/signed-resource-url-cache";
 
 export type WorkspaceImageUrlResolver = {
   ensureUrl: (appId: string | null | undefined, path: string | null | undefined) => void;
@@ -42,7 +36,10 @@ export function useWorkspaceImageUrlResolver(connection: ClientConnection | null
   const getUrl = useCallback(
     (appId: string | null | undefined, path: string | null | undefined) => {
       if (!connection || !appId || !path) return null;
-      return cachedUrl(cacheKey(connection, appId, path));
+      signedResourceUrlCache.activateConnection(connection);
+      return signedResourceUrlCache.get(
+        signedResourceCacheKey(connection, "workspace-image", appId, path),
+      );
     },
     [connection],
   );
@@ -50,25 +47,11 @@ export function useWorkspaceImageUrlResolver(connection: ClientConnection | null
   const loadUrl = useCallback(
     async (appId: string | null | undefined, path: string | null | undefined) => {
       if (!connection || !appId || !path) return null;
-      const key = cacheKey(connection, appId, path);
-      const existingUrl = cachedUrl(key);
-      if (existingUrl) return existingUrl;
-      const existing = cache.get(key);
-      if (existing?.state === "loading") return existing.promise;
-      const promise = api
-        .signWorkspaceImageUrl(connection, { appId, path })
-        .then((response) => {
-          cache.set(key, { state: "ready", url: response.url, expiresAt: response.expiresAt });
-          setVersion((version) => version + 1);
-          return response.url;
-        })
-        .catch(() => {
-          cache.delete(key);
-          setVersion((version) => version + 1);
-          return null;
-        });
-      cache.set(key, { state: "loading", promise });
-      return promise;
+      signedResourceUrlCache.activateConnection(connection);
+      const key = signedResourceCacheKey(connection, "workspace-image", appId, path);
+      return signedResourceUrlCache
+        .load(key, () => api.signWorkspaceImageUrl(connection, { appId, path }))
+        .finally(() => setVersion((version) => version + 1));
     },
     [connection],
   );
@@ -81,18 +64,4 @@ export function useWorkspaceImageUrlResolver(connection: ClientConnection | null
   );
 
   return useMemo(() => ({ ensureUrl, getUrl, loadUrl }), [ensureUrl, getUrl, loadUrl]);
-}
-
-function cachedUrl(key: string): string | null {
-  const existing = cache.get(key);
-  if (existing?.state !== "ready") return null;
-  if (existing.expiresAt <= Date.now() + EXPIRY_SKEW_MS) {
-    cache.delete(key);
-    return null;
-  }
-  return existing.url;
-}
-
-function cacheKey(connection: ClientConnection, appId: string, path: string): string {
-  return `${connection.serverUrl}\0${connection.token}\0${appId}\0${path}`;
 }

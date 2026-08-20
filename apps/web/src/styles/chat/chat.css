@@ -53,6 +53,8 @@
 .message-row {
   display: flex;
   width: 100%;
+  content-visibility: auto;
+  contain-intrinsic-block-size: auto 112px;
 }
 
 .message-row.user {
@@ -1340,4 +1342,31 @@ button.user-message-attachment {
   .status-divider.running::after {
     animation: none;
   }
+}
+
+/* Assistant reasoning section — collapsible thinking shown above the answer */
+.assistant-reasoning {
+  width: 100%;
+  max-width: 736px;
+}
+
+.assistant-reasoning-content {
+  border-left: 2px solid rgba(255, 255, 255, 0.08);
+  padding-left: 14px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.assistant-reasoning-content .markdown-message {
+  gap: 8px;
+}
+
+.assistant-reasoning-content .markdown-heading {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+}
+
+.assistant-reasoning-content .markdown-paragraph {
+  color: rgba(255, 255, 255, 0.58);
 }

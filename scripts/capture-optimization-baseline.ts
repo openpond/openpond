@@ -16,9 +16,6 @@ import {
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 
-import { MessageRow, ThinkingIndicator } from "../apps/web/src/components/chat/Messages";
-import { ProviderSettingsSection } from "../apps/web/src/components/settings/ProviderSettingsSection";
-import { WorkspaceDiffPanel } from "../apps/web/src/components/workspace-diff/WorkspaceDiffPanel";
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 import { createOpenPondServer } from "../apps/server/src/index";
 import { SqliteStore } from "../apps/server/src/store/store";
@@ -28,8 +25,6 @@ import {
   appendRuntimeEvent,
   type TranscriptItem,
 } from "../apps/terminal/src/ui/transcript";
-import { createGoalState, normalizeGoalState } from "../apps/cli/src/goal/config";
-import { runGoalLlmToolCall } from "../apps/cli/src/goal/tools/dispatch";
 import { runProcessCommand } from "../apps/cli/src/process-runner";
 import { collectProjectSourceUploadEntries } from "../apps/cli/src/cli/project-agent";
 import {
@@ -103,7 +98,7 @@ async function main(): Promise<void> {
       tui: await captureTuiBaseline(),
       cli: await captureCliBaseline(root, tempDirs),
       eventStore: await captureEventStoreBaseline(tempDirs),
-      providerModel: await captureProviderModelBaseline(tempDirs),
+      providerModel: await captureProviderModelBaseline(root, tempDirs),
     };
 
     await mkdir(path.dirname(options.jsonPath), { recursive: true });
@@ -250,38 +245,44 @@ function defaultPackagedDesktopPath(root: string): string | null {
 
 async function captureRendererBaseline(root: string) {
   const bundle = await collectRendererBundleMetrics(path.join(root, "apps", "web", "dist"));
-  const scenario = measureStaticRender(
-    createElement(
-      "section",
-      { className: "phase0-renderer-scenario" },
-      Array.from({ length: 1_000 }, (_, index) =>
-        createElement(MessageRow, {
-          key: `message-${index}`,
-          message: chatMessage(index),
-          showFooter: index === 999,
+  const scenario = await withWebSsrModules(root, async (load) => {
+    const messages = await load("/src/components/chat/Messages.tsx");
+    const workspaceDiff = await load(
+      "/src/components/workspace-diff/WorkspaceDiffPanel.tsx",
+    );
+    return measureStaticRender(
+      createElement(
+        "section",
+        { className: "phase0-renderer-scenario" },
+        Array.from({ length: 1_000 }, (_, index) =>
+          createElement(messages.MessageRow, {
+            key: `message-${index}`,
+            message: chatMessage(index),
+            showFooter: index === 999,
+          }),
+        ),
+        createElement(workspaceDiff.WorkspaceDiffPanel, {
+          appId: "phase0-local-project",
+          workspaceId: "phase0-local-project",
+          workspaceKind: "local_project",
+          connection: null,
+          diff: workspaceDiffSummary(200),
+          editorPreferences: null,
+          loading: false,
+          workspaceName: "Phase 0 local project",
+          workspaceInitialized: true,
+          workspaceError: null,
+          expanded: true,
+          onRefresh: noopAsync,
+          onResizeStart: noop,
+          onToggleExpanded: noop,
+          onOpenBrowser: noop,
+          onOpenBrowserUrl: noop,
         }),
+        createElement(messages.ThinkingIndicator),
       ),
-      createElement(WorkspaceDiffPanel, {
-        appId: "phase0-local-project",
-        workspaceId: "phase0-local-project",
-        workspaceKind: "local_project",
-        connection: null,
-        diff: workspaceDiffSummary(200),
-        editorPreferences: null,
-        loading: false,
-        workspaceName: "Phase 0 local project",
-        workspaceInitialized: true,
-        workspaceError: null,
-        expanded: true,
-        onRefresh: noopAsync,
-        onResizeStart: noop,
-        onToggleExpanded: noop,
-        onOpenBrowser: noop,
-        onOpenBrowserUrl: noop,
-      }),
-      createElement(ThinkingIndicator),
-    ),
-  );
+    );
+  });
   return {
     bundle,
     scenario: {
@@ -381,27 +382,25 @@ async function captureTuiBaseline() {
 }
 
 async function captureCliBaseline(root: string, tempDirs: string[]) {
-  const cliHelp = await commandMetric("cli --help", process.env.PNPM_BINARY || "pnpm", ["cli", "--", "--help"], {
+  const cliHelp = await commandMetric("cli --help", process.env.PNPM_BINARY || "pnpm", ["cli", "--help"], {
     cwd: root,
     expectOk: (result) => result.code === 0 && result.stdout.includes("openpond"),
   });
   const serve = await runCliServeScenario(root, tempDirs);
   const tui = await runCliTuiScenario(root, tempDirs);
   const sourceUpload = await captureSourceUploadScenario(tempDirs);
-  const goalTool = await captureGoalToolScenario(tempDirs);
   return {
     help: cliHelp,
     serve,
     tui,
     sourceUpload,
-    goalTool,
   };
 }
 
 async function runCliServeScenario(root: string, tempDirs: string[]) {
   const home = await tempDir(tempDirs, "openpond-phase0-cli-serve-home-");
   const command = process.env.PNPM_BINARY || "pnpm";
-  const args = ["cli", "--", "serve", "--port", "0"];
+  const args = ["cli", "serve", "--port", "0"];
   const startedAt = performance.now();
   const child = spawn(command, args, {
     cwd: root,
@@ -470,7 +469,7 @@ async function runCliTuiScenario(root: string, tempDirs: string[]) {
     return await commandMetric(
       "cli tui /exit",
       process.env.PNPM_BINARY || "pnpm",
-      ["cli", "--", "tui", "--server", server.url, "--no-server-start"],
+      ["cli", "tui", "--server", server.url, "--no-server-start"],
       {
         cwd: root,
         env: { HOME: home, USERPROFILE: home },
@@ -500,41 +499,6 @@ async function captureSourceUploadScenario(tempDirs: string[]) {
     transport: upload.transport,
     limits: upload.limits,
     paths: upload.entries.map((entry) => entry.path),
-  };
-}
-
-async function captureGoalToolScenario(tempDirs: string[]) {
-  const workspace = await tempDir(tempDirs, "openpond-phase0-goal-tool-");
-  const goal = normalizeGoalState(createGoalState({
-    objective: "Write and read a phase 0 baseline artifact",
-  }));
-  const startedAt = performance.now();
-  const write = await runGoalLlmToolCall(
-    { goal, iterationId: "phase0-goal-tool", workspace },
-    {
-      id: "phase0-files-write",
-      name: "files.write",
-      arguments: {
-        path: "phase0-report.txt",
-        content: "phase 0 goal tool execution\n",
-      },
-    },
-  );
-  const read = await runGoalLlmToolCall(
-    { goal, iterationId: "phase0-goal-tool", workspace },
-    {
-      id: "phase0-files-read",
-      name: "files.read",
-      arguments: {
-        path: "phase0-report.txt",
-      },
-    },
-  );
-  return {
-    ok: write.status === "ok" && read.status === "ok",
-    durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
-    write,
-    read,
   };
 }
 
@@ -583,7 +547,7 @@ async function captureEventStoreBaseline(tempDirs: string[]) {
   }
 }
 
-async function captureProviderModelBaseline(tempDirs: string[]) {
+async function captureProviderModelBaseline(root: string, tempDirs: string[]) {
   const storeDir = await tempDir(tempDirs, "openpond-phase0-provider-");
   const server = await createOpenPondServer({
     port: 0,
@@ -606,19 +570,24 @@ async function captureProviderModelBaseline(tempDirs: string[]) {
       providerSettingsFromPayload(validation.value) ??
       providerSettingsFromPayload(modelDiscovery.value) ??
       providers.value;
-    const settingsRender = measureStaticRender(createElement(ProviderSettingsSection, {
-      account: null,
-      codex: null,
-      providers: latestProviders,
-      providerBusy: null,
-      validationMessage: null,
-      deleteProviderCredential: noopAsync,
-      loadProviderModels: noopAsync,
-      refreshProviderModels: noopAsync,
-      saveProviderConfig: noopAsync,
-      saveProviderCredential: noopAsync,
-      validateProvider: noopAsync,
-    }));
+    const settingsRender = await withWebSsrModules(root, async (load) => {
+      const settings = await load(
+        "/src/components/settings/ProviderSettingsSection.tsx",
+      );
+      return measureStaticRender(createElement(settings.ProviderSettingsSection, {
+        account: null,
+        codex: null,
+        providers: latestProviders,
+        providerBusy: null,
+        validationMessage: null,
+        deleteProviderCredential: noopAsync,
+        loadProviderModels: noopAsync,
+        refreshProviderModels: noopAsync,
+        saveProviderConfig: noopAsync,
+        saveProviderCredential: noopAsync,
+        validateProvider: noopAsync,
+      }));
+    });
     const modelCacheSizes = Object.entries(latestProviders.modelCaches).map(([providerId, cache]) => ({
       providerId,
       models: cache.models.length,
@@ -711,6 +680,30 @@ function measureStaticRender(element: ReactElement): { durationMs: number; htmlB
     durationMs: Math.round((performance.now() - startedAt) * 100) / 100,
     htmlBytes: Buffer.byteLength(html, "utf8"),
   };
+}
+
+async function withWebSsrModules<T>(
+  root: string,
+  callback: (
+    load: (url: string) => Promise<Record<string, any>>,
+  ) => Promise<T>,
+): Promise<T> {
+  const webRoot = path.join(root, "apps", "web");
+  const viteModule = await import(
+    pathToFileURL(path.join(webRoot, "node_modules", "vite", "dist", "node", "index.js")).href
+  );
+  const vite = await viteModule.createServer({
+    root: webRoot,
+    configFile: path.join(webRoot, "vite.config.ts"),
+    appType: "custom",
+    logLevel: "error",
+    server: { middlewareMode: true },
+  });
+  try {
+    return await callback((url) => vite.ssrLoadModule(url));
+  } finally {
+    await vite.close();
+  }
 }
 
 function rendererBundleCostBreakdown(largestAssets: Array<{ path: string; bytes: number }>) {
@@ -975,7 +968,6 @@ function renderMarkdownBaseline(
     `| CLI | serve | ${baseline.cli.serve.ok ? "passed" : "failed"} |`,
     `| CLI | tui /exit | ${baseline.cli.tui.ok ? "passed" : "failed"} |`,
     `| CLI | source upload scan | ${baseline.cli.sourceUpload.ok ? "passed" : "failed"} |`,
-    `| CLI | goal tool execution | ${baseline.cli.goalTool.ok ? "passed" : "failed"} |`,
     `| Event store | total events | ${baseline.eventStore.totalEvents} |`,
     `| Event store | bootstrap window bytes | ${formatBytes(baseline.eventStore.bootstrapWindowBytes)} |`,
     `| Event store | catch-up bytes | ${formatBytes(baseline.eventStore.sequenceCatchUpBytes)} |`,

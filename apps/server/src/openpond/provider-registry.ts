@@ -165,6 +165,12 @@ const FALLBACK_PROVIDER_PRESETS: readonly ServerProviderPreset[] = [
         capabilities: REASONING_MODEL_CAPABILITIES,
       },
       {
+        id: "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
+        displayName: "Nemotron Lightning 3.5 30B A3B",
+        contextWindow: 262_144,
+        capabilities: REASONING_MODEL_CAPABILITIES,
+      },
+      {
         id: "accounts/fireworks/models/minimax-m3",
         displayName: "MiniMax M3",
         contextWindow: 512_000,

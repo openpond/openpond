@@ -22,11 +22,6 @@
   opacity: 0.65;
 }
 
-.voice-input-control.recording,
-.voice-input-control > button.recording {
-  color: #ff7777;
-}
-
 .voice-input-status {
   position: absolute;
   z-index: 90;
@@ -48,4 +43,27 @@
 
 .cloud-composer-mic.voice-input-control > button {
   border-radius: inherit;
+}
+.voice-input-control > .composer-icon:hover:not(:disabled),
+.voice-input-control > .composer-icon:focus-visible {
+  background: transparent;
+  color: #cfcfcf;
+  outline: 0;
+  box-shadow: none;
+}
+
+.voice-input-control > .composer-icon.active {
+  background: transparent;
+}
+
+.voice-input-control.starting,
+.voice-input-control > button.starting {
+  color: #8bc7ff;
+}
+
+.voice-input-control.recording,
+.voice-input-control > button.recording,
+.voice-input-control.recording > .composer-icon:hover,
+.voice-input-control.recording > .composer-icon:focus-visible {
+  color: #ff7777;
 }

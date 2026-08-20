@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { streamVoiceModelResponseToFile } from "../apps/server/src/voice-transcription";
+import { streamVoiceModelResponseToFile, streamBinaryResponseToFile, getPlatformAssetInfo } from "../apps/server/src/voice-transcription";
 
 const tempDirs: string[] = [];
 
@@ -67,3 +67,69 @@ function chunkedResponse(chunks: string[]): Response {
     },
   }));
 }
+
+describe("whisper binary auto-download", () => {
+  test("getPlatformAssetInfo returns an asset for supported platforms", () => {
+    // We can't override process.platform in a pure import, but we can verify
+    // the function runs without error and returns a well-shaped result or null.
+    const info = getPlatformAssetInfo();
+    if (info) {
+      expect(info.assetName).toBeTruthy();
+      expect(info.archiveType === "tar.gz" || info.archiveType === "zip").toBe(true);
+    }
+  });
+
+  test("streamBinaryResponseToFile writes chunks to a file and returns the size", async () => {
+    const targetPath = await tempFile("whisper-cli");
+    const response = chunkedResponse(["bin", "ary"]);
+    const sizeBytes = await streamBinaryResponseToFile({
+      response,
+      targetPath,
+      signal: new AbortController().signal,
+      minBytes: 1,
+      maxBytes: 10,
+    });
+
+    expect(sizeBytes).toBe(6);
+    expect(await readFile(targetPath, "utf8")).toBe("binary");
+    expect((await stat(targetPath)).mode & 0o777).toBe(0o600);
+  });
+
+  test("streamBinaryResponseToFile cancels oversized downloads and removes the partial file", async () => {
+    const oversizedPath = await tempFile("oversized-bin");
+    await expect(streamBinaryResponseToFile({
+      response: chunkedResponse(["123", "456"]),
+      targetPath: oversizedPath,
+      signal: new AbortController().signal,
+      minBytes: 1,
+      maxBytes: 5,
+    })).rejects.toThrow("byte limit");
+    await expect(stat(oversizedPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("streamBinaryResponseToFile cancels aborted downloads and removes the partial file", async () => {
+    const cancelledPath = await tempFile("cancelled-bin");
+    const controller = new AbortController();
+    controller.abort();
+    await expect(streamBinaryResponseToFile({
+      response: chunkedResponse(["123"]),
+      targetPath: cancelledPath,
+      signal: controller.signal,
+      minBytes: 1,
+      maxBytes: 5,
+    })).rejects.toThrow("cancelled");
+    await expect(stat(cancelledPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  test("streamBinaryResponseToFile rejects files below the minimum byte threshold", async () => {
+    const tinyPath = await tempFile("tiny-bin");
+    await expect(streamBinaryResponseToFile({
+      response: chunkedResponse(["x"]),
+      targetPath: tinyPath,
+      signal: new AbortController().signal,
+      minBytes: 100,
+      maxBytes: 1000,
+    })).rejects.toThrow("incomplete");
+    await expect(stat(tinyPath)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+});

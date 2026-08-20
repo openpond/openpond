@@ -147,7 +147,6 @@
   font-size: 11px;
 }
 
-.thinking-summary span,
 .activity-summary.working .activity-summary-text > span {
   background: linear-gradient(90deg, #818181 0%, #e7e7e7 42%, #818181 84%);
   background-size: 220% 100%;
@@ -168,7 +167,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .thinking-summary span,
   .activity-summary.working .activity-summary-text > span {
     animation: none;
     color: #9b9b9b;
@@ -308,19 +306,10 @@
 }
 
 .activity-tool-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
   max-width: min(720px, 100%);
-  min-width: 0;
-  border: 0;
-  background: transparent;
   color: #7f8791;
-  padding: 0;
-  text-align: left;
   font-size: 12px;
   line-height: 1.35;
-  cursor: pointer;
 }
 
 .activity-tool-summary:hover,
@@ -329,28 +318,8 @@
   color: #c8d0d9;
 }
 
-.activity-tool-summary > span {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activity-tool-kind-icon {
-  flex: 0 0 auto;
-  opacity: 0.8;
-}
-
-.activity-tool-toggle {
-  flex: 0 0 auto;
+.activity-tool-summary .activity-summary-toggle {
   opacity: 0.72;
-  transform: rotate(-90deg);
-  transition: transform 160ms ease;
-}
-
-.activity-tool-toggle.expanded {
-  transform: rotate(0deg);
 }
 
 .activity-tool-row.danger .activity-tool-summary,

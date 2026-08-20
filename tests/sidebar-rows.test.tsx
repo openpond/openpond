@@ -7,6 +7,10 @@ import {
   SidebarProjectRow,
   SidebarSessionRow,
 } from "../apps/web/src/components/sidebar/SidebarRows";
+import {
+  SidebarTaskDetailPopover,
+  sidebarTaskDetailPosition,
+} from "../apps/web/src/components/sidebar/SidebarTaskDetailPopover";
 
 describe("sidebar row updated dates", () => {
   beforeEach(() => {
@@ -59,6 +63,64 @@ describe("sidebar row updated dates", () => {
     expect(markup.indexOf("sidebar-session-project-label")).toBeLessThan(
       markup.indexOf("sidebar-row-updated-at"),
     );
+  });
+
+  test("keeps grouped task dates out of the default row", () => {
+    const markup = renderToStaticMarkup(
+      createElement(SidebarSessionRow, {
+        session: sessionFixture(),
+        selected: false,
+        projectLabel: "OpenPond",
+        metadataPresentation: "flyout",
+        ariaDescribedBy: "task-detail-session-1",
+        onSelect: () => undefined,
+        onTogglePin: () => undefined,
+        onToggleSaveForLater: () => undefined,
+        onDockRight: () => undefined,
+        onArchive: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('aria-describedby="task-detail-session-1"');
+    expect(markup).not.toContain("sidebar-row-updated-at");
+    expect(markup).not.toContain("sidebar-session-detail-line");
+    expect(markup).toContain('aria-label="Open in right panel"');
+    expect(markup).toContain('aria-label="Save for later"');
+    expect(markup).toContain('aria-label="Mark done"');
+  });
+
+  test("renders one semantic exact-time task detail popout", () => {
+    const session = sessionFixture();
+    const markup = renderToStaticMarkup(
+      createElement(SidebarTaskDetailPopover, {
+        detail: {
+          descriptionId: "task-detail-session-1",
+          projectLabel: "OpenPond",
+          sessionId: session.id,
+          title: session.title,
+          updatedAt: session.updatedAt,
+          style: {},
+        },
+        onClose: () => undefined,
+      }),
+    );
+
+    expect(markup).toContain('id="task-detail-session-1"');
+    expect(markup).toContain("OpenPond");
+    expect(markup).toContain(`dateTime="${session.updatedAt}"`);
+    expect(markup).toContain("Sunday, August 9, 2026");
+  });
+
+  test("keeps the task detail popout inside narrow viewports", () => {
+    expect(
+      sidebarTaskDetailPosition(
+        { right: 310, top: 730 },
+        { width: 420, height: 780 },
+      ),
+    ).toEqual({
+      "--sidebar-task-detail-left": "120px",
+      "--sidebar-task-detail-top": "656px",
+    });
   });
 
   test("renders a project's last updated date beside its name", () => {

@@ -234,6 +234,7 @@ export type ChatMessage = {
   refinerActivity?: HarnessRefinerActivity;
   createImproveRun?: CreateImproveRun | null;
   userQuestion?: SessionUserQuestion;
+  reasoningContent?: string;
 };
 
 export const SIDEBAR_SECTION_LIMIT = 5;
@@ -325,6 +326,11 @@ const OPENPOND_MODEL_OPTIONS = [
   {
     value: "accounts/fireworks/models/deepseek-v4-flash",
     label: "DeepSeek V4 Flash (Fireworks)",
+    description: "reasoning",
+  },
+  {
+    value: "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
+    label: "Nemotron Lightning 3.5 30B A3B",
     description: "reasoning",
   },
   {

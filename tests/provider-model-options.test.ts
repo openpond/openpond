@@ -24,6 +24,7 @@ describe("provider model option capping", () => {
       "accounts/fireworks/models/glm-5p2",
       "accounts/fireworks/models/deepseek-v4-pro",
       "accounts/fireworks/models/deepseek-v4-flash",
+      "accounts/fireworks/models/nemotron-lightning-3p5-30b-a3b",
       "accounts/fireworks/models/minimax-m3",
     ];
     const settings = buildProviderSettings({

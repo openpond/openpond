@@ -8,6 +8,7 @@ import {
 } from "react";
 import type {
   BootstrapPayload,
+  AppPreferences,
   ChatAttachment,
   ChatAttachmentSummary,
   ChatProvider,
@@ -26,6 +27,7 @@ import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
+import type { RuntimeEventStore } from "../../lib/runtime-event-store";
 import type { WorkspaceTargetState, WorkspaceTargetValue } from "../../lib/workspace-location";
 import type { ComposerProjectTargetState, ComposerSubmitOptions } from "../chat/Composer";
 import type { ComposerCreateImproveActions } from "../chat/ComposerCreateImproveStrip";
@@ -47,8 +49,10 @@ export type { RightChatPanelView } from "./right-chat-panel-types";
 
 export function RightChatPanelStack({
   panels,
+  runtimeEventStore,
   actionCatalog = [],
   createImproveActions,
+  contextCompaction,
   busy,
   codexPermissionMode,
   codexReasoningEffort,
@@ -93,8 +97,10 @@ export function RightChatPanelStack({
   onWorkspaceTargetChange,
 }: {
   panels: RightChatPanelView[];
+  runtimeEventStore: RuntimeEventStore;
   actionCatalog?: SandboxActionCatalogEntry[];
   createImproveActions: ComposerCreateImproveActions;
+  contextCompaction: AppPreferences["contextCompaction"];
   busy: boolean;
   codexPermissionMode: CodexPermissionMode;
   codexReasoningEffort: CodexReasoningEffort;
@@ -370,6 +376,7 @@ export function RightChatPanelStack({
           <RightChatPane
             busy={busy}
             createImproveActions={createImproveActions}
+            contextCompaction={contextCompaction}
             codexPermissionMode={codexPermissionMode}
             codexReasoningEffort={codexReasoningEffort}
             openPondCommandAccessMode={openPondCommandAccessMode}
@@ -382,6 +389,7 @@ export function RightChatPanelStack({
             profileSkills={activeProfileSkills}
             profileTarget={null}
             panel={activePanel}
+            runtimeEventStore={runtimeEventStore}
             initialScrollState={{
               scrollTop: activePanel.scrollTop,
               stickyToBottom: activePanel.stickyToBottom,

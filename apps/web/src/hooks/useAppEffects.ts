@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
-import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
 type ShortcutInput = {
@@ -49,8 +48,8 @@ export function useCommandShortcuts({
 
 type RuntimeEventsInput = {
   afterSequence: number | null;
+  appendEvents: (events: readonly RuntimeEvent[]) => void;
   connection: ClientConnection | null;
-  setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setApprovals: Dispatch<SetStateAction<Approval[]>>;
   setSessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -59,8 +58,8 @@ type RuntimeEventsInput = {
 
 export function useRuntimeEvents({
   afterSequence,
+  appendEvents,
   connection,
-  setEvents,
   setApprovals,
   setSessions,
   setError,
@@ -70,7 +69,9 @@ export function useRuntimeEvents({
     if (!connection?.token || afterSequence === null) return;
     let disconnectTimer: number | null = null;
     let pendingRuntimeEvents: RuntimeEvent[] = [];
-    let flushFrame: number | null = null;
+    let flushTimer: number | null = null;
+    let lastFlushMs = 0;
+    const MIN_FLUSH_INTERVAL_MS = 16;
 
     function clearDisconnectTimer() {
       if (disconnectTimer === null) return;
@@ -83,12 +84,13 @@ export function useRuntimeEvents({
     }
 
     function flushRuntimeEvents() {
-      flushFrame = null;
+      flushTimer = null;
       const nextEvents = pendingRuntimeEvents;
       pendingRuntimeEvents = [];
       if (nextEvents.length === 0) return;
 
-      setEvents((current) => mergeLiveRuntimeEventLists(current, nextEvents));
+      lastFlushMs = Date.now();
+      appendEvents(nextEvents);
       const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
       if (liveSessions.length > 0) {
         setSessions((current) =>
@@ -110,11 +112,36 @@ export function useRuntimeEvents({
       });
     }
 
+    function scheduleFlush() {
+      const elapsedMs = Date.now() - lastFlushMs;
+      if (elapsedMs >= MIN_FLUSH_INTERVAL_MS) {
+        if (flushTimer !== null) {
+          window.clearTimeout(flushTimer);
+          flushTimer = null;
+        }
+        flushRuntimeEvents();
+        return;
+      }
+      if (flushTimer !== null) return;
+      flushTimer = window.setTimeout(
+        flushRuntimeEvents,
+        MIN_FLUSH_INTERVAL_MS - elapsedMs
+      );
+    }
+
     function queueRuntimeEvent(runtimeEvent: RuntimeEvent) {
       pendingRuntimeEvents.push(runtimeEvent);
-      if (flushFrame !== null) return;
-      flushFrame = window.requestAnimationFrame(flushRuntimeEvents);
+      scheduleFlush();
     }
+
+    function flushPendingOnVisibilityChange() {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+      flushRuntimeEvents();
+    }
+    document.addEventListener("visibilitychange", flushPendingOnVisibilityChange);
 
     const source = openEventStream(
       connection,
@@ -140,10 +167,13 @@ export function useRuntimeEvents({
     );
     return () => {
       clearDisconnectTimer();
-      if (flushFrame !== null) window.cancelAnimationFrame(flushFrame);
+      if (flushTimer !== null) window.clearTimeout(flushTimer);
+      flushTimer = null;
+      pendingRuntimeEvents = [];
+      document.removeEventListener("visibilitychange", flushPendingOnVisibilityChange);
       source.close();
     };
-  }, [afterSequence, connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
+  }, [afterSequence, appendEvents, connection, onDisconnected, setApprovals, setError, setSessions]);
 }
 
 export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {
@@ -152,7 +182,8 @@ export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[]
     const data = runtimeEvent.data;
     if (!data || typeof data !== "object" || Array.isArray(data)) continue;
     const sessionKey =
-      runtimeEvent.name === "session.started"
+      runtimeEvent.name === "session.started" ||
+      runtimeEvent.name === "session.title.updated"
         ? "session"
         : runtimeEvent.name === "subagent.started" ||
           runtimeEvent.name === "subagent.failed"

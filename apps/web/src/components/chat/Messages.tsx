@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Globe2,
   ImageIcon,
+  Lightbulb,
 } from "../icons";
 import type {
   ChatAttachmentSummary,
@@ -24,6 +25,7 @@ import { buildOpenPondBillingUrl } from "../../lib/cloud-environment-setup";
 import { copyToClipboard } from "../../lib/clipboard";
 import { MarkdownText } from "./MarkdownText";
 import { StreamingMarkdownText } from "./StreamingMarkdownText";
+import { ChatActivitySummary } from "./ChatActivitySummary";
 import {
   ActionRunCard,
   isProfileActionRun,
@@ -161,6 +163,17 @@ export const MessageRow = memo(function MessageRow({
 
   return (
     <article className="message-row assistant">
+      {message.reasoningContent ? (
+        <ReasoningSection
+          activeWorkspaceAppId={activeWorkspaceAppId}
+          animateInitialContent={animateInitialContent}
+          connection={connection}
+          reasoningContent={message.reasoningContent}
+          onOpenBrowserLink={onOpenBrowserLink}
+          onOpenFileInSidebar={onOpenFileInSidebar}
+          workspaceRootPath={workspaceRootPath}
+        />
+      ) : null}
       {message.content ? (
         <div className="assistant-message">
           <StreamingMarkdownText
@@ -264,6 +277,77 @@ export const MessageRow = memo(function MessageRow({
 },
 areMessageRowPropsEqual);
 
+const ReasoningSection = memo(function ReasoningSection({
+  activeWorkspaceAppId,
+  animateInitialContent,
+  connection,
+  reasoningContent,
+  onOpenBrowserLink,
+  onOpenFileInSidebar,
+  workspaceRootPath,
+}: {
+  activeWorkspaceAppId?: string | null;
+  animateInitialContent?: boolean;
+  connection?: ClientConnection | null;
+  reasoningContent: string;
+  onOpenBrowserLink?: (
+    href: string,
+    options?: { explicitFile?: boolean; newTab?: boolean }
+  ) => void;
+  onOpenFileInSidebar?: (path: string) => void;
+  workspaceRootPath?: string | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="activity-group assistant-reasoning">
+      <ChatActivitySummary
+        expanded={expanded}
+        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
+        onToggle={() => setExpanded((value) => !value)}
+      >
+        Thinking
+      </ChatActivitySummary>
+      {expanded ? (
+        <div className="assistant-reasoning-content">
+          <StreamingMarkdownText
+            activeWorkspaceAppId={activeWorkspaceAppId}
+            animateInitialContent={animateInitialContent}
+            connection={connection}
+            content={reasoningContent}
+            onOpenBrowserLink={onOpenBrowserLink}
+            onOpenFileInSidebar={onOpenFileInSidebar}
+            workspaceRootPath={workspaceRootPath}
+          />
+        </div>
+      ) : null}
+    </div>
+  );
+},
+areReasoningSectionPropsEqual);
+
+function areReasoningSectionPropsEqual(
+  previous: {
+    activeWorkspaceAppId?: string | null;
+    animateInitialContent?: boolean;
+    connection?: ClientConnection | null;
+    reasoningContent: string;
+    onOpenBrowserLink?: (href: string, options?: { explicitFile?: boolean; newTab?: boolean }) => void;
+    onOpenFileInSidebar?: (path: string) => void;
+    workspaceRootPath?: string | null;
+  },
+  next: typeof previous
+): boolean {
+  return (
+    previous.activeWorkspaceAppId === next.activeWorkspaceAppId &&
+    previous.animateInitialContent === next.animateInitialContent &&
+    previous.connection === next.connection &&
+    previous.reasoningContent === next.reasoningContent &&
+    previous.onOpenBrowserLink === next.onOpenBrowserLink &&
+    previous.onOpenFileInSidebar === next.onOpenFileInSidebar &&
+    previous.workspaceRootPath === next.workspaceRootPath
+  );
+}
+
 const USER_MESSAGE_COLLAPSE_LINE_LIMIT = 10;
 
 function UserMessageContent({ content }: { content: string }) {
@@ -342,7 +426,8 @@ function chatMessageShallowEqual(
     previous.actionRun === next.actionRun &&
     previous.changeSummary === next.changeSummary &&
     previous.createImproveRun === next.createImproveRun &&
-    previous.userQuestion === next.userQuestion
+    previous.userQuestion === next.userQuestion &&
+    previous.reasoningContent === next.reasoningContent
   );
 }
 
@@ -804,9 +889,12 @@ function MessageImageAttachment({
 export const ThinkingIndicator = memo(function ThinkingIndicator() {
   return (
     <article className="activity-group thinking-row" aria-live="polite">
-      <div className="activity-summary thinking-summary" role="status">
-        <span>Thinking...</span>
-      </div>
+      <ChatActivitySummary
+        icon={<Lightbulb aria-hidden className="activity-summary-kind-icon" size={13} />}
+        running
+      >
+        Thinking…
+      </ChatActivitySummary>
     </article>
   );
 });

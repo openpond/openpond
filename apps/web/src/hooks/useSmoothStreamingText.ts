@@ -7,8 +7,10 @@ const VERY_LARGE_BACKLOG_CHARACTERS_PER_SECOND = 360;
 const MEDIUM_BACKLOG_LENGTH = 40;
 const LARGE_BACKLOG_LENGTH = 120;
 const VERY_LARGE_BACKLOG_LENGTH = 600;
-const MAX_FRAME_ELAPSED_MS = 64;
-const REVEAL_INTERVAL_MS = 16;
+const MAX_FRAME_ELAPSED_MS = 100;
+const REVEAL_INTERVAL_MS = 33;
+const visibilitySubscribers = new Set<() => void>();
+let visibilityListenerAttached = false;
 
 export type StreamingRevealStep = {
   characterCount: number;
@@ -98,6 +100,18 @@ export function useSmoothStreamingText(
   const revealTimerRef = useRef<number | null>(null);
   const lastFrameTimeRef = useRef<number | null>(null);
   const remainderRef = useRef(0);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     targetContentRef.current = content;
@@ -110,7 +124,7 @@ export function useSmoothStreamingText(
       lastFrameTimeRef.current = null;
       remainderRef.current = 0;
       visibleContentRef.current = content;
-      setVisibleContent(content);
+      if (mountedRef.current) setVisibleContent(content);
       return;
     }
 
@@ -122,6 +136,10 @@ export function useSmoothStreamingText(
     }
 
     const revealNextCharacters = () => {
+      if (!mountedRef.current) {
+        revealTimerRef.current = null;
+        return;
+      }
       const current = visibleContentRef.current;
       const target = targetContentRef.current;
       const timestamp = performance.now();
@@ -174,6 +192,12 @@ export function useSmoothStreamingText(
       revealNextCharacters,
       REVEAL_INTERVAL_MS
     );
+    return () => {
+      if (revealTimerRef.current !== null) {
+        window.clearTimeout(revealTimerRef.current);
+        revealTimerRef.current = null;
+      }
+    };
   }, [content]);
 
   useEffect(() => {
@@ -186,11 +210,11 @@ export function useSmoothStreamingText(
       lastFrameTimeRef.current = null;
       remainderRef.current = 0;
       visibleContentRef.current = targetContentRef.current;
-      setVisibleContent(targetContentRef.current);
+      if (mountedRef.current) setVisibleContent(targetContentRef.current);
     };
-    document.addEventListener("visibilitychange", finishWhenHidden);
+    const unsubscribe = subscribeToVisibilityChange(finishWhenHidden);
     return () => {
-      document.removeEventListener("visibilitychange", finishWhenHidden);
+      unsubscribe();
       if (revealTimerRef.current !== null) {
         window.clearTimeout(revealTimerRef.current);
         revealTimerRef.current = null;
@@ -199,4 +223,23 @@ export function useSmoothStreamingText(
   }, []);
 
   return visibleContent;
+}
+
+function subscribeToVisibilityChange(callback: () => void): () => void {
+  visibilitySubscribers.add(callback);
+  if (!visibilityListenerAttached) {
+    document.addEventListener("visibilitychange", notifyVisibilitySubscribers);
+    visibilityListenerAttached = true;
+  }
+  return () => {
+    visibilitySubscribers.delete(callback);
+    if (visibilitySubscribers.size === 0 && visibilityListenerAttached) {
+      document.removeEventListener("visibilitychange", notifyVisibilitySubscribers);
+      visibilityListenerAttached = false;
+    }
+  };
+}
+
+function notifyVisibilitySubscribers(): void {
+  for (const subscriber of visibilitySubscribers) subscriber();
 }

@@ -14,6 +14,7 @@ import {
   codexHistoryPayloadWithLiveStatus,
   subscribeCodexHistoryLiveRefresh,
 } from "../lib/codex-history-live-refresh";
+import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 
 export function useCodexHistoryEvents({
   connection,
@@ -72,7 +73,15 @@ export function useCodexHistoryEvents({
 
     const applyPayload = (payload: CodexHistoryThreadPayload) => {
       const livePayload = codexHistoryPayloadWithLiveStatus(payload, locallyActive);
-      setHistoryState({ events: livePayload.events, sessionId: historySessionId });
+      setHistoryState((current) => {
+        if (current.sessionId !== historySessionId) {
+          return { events: livePayload.events, sessionId: historySessionId };
+        }
+        return {
+          events: mergeLiveRuntimeEventLists(current.events, livePayload.events),
+          sessionId: historySessionId,
+        };
+      });
       setError((current) => (current === "Session not found" ? null : current));
       setCodexHistorySessions((current) =>
         upsertSessionPreservingLocalSidebarStateAndRecency(current, livePayload.session),

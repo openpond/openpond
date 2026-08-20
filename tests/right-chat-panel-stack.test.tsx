@@ -10,6 +10,7 @@ import type { ContextWindowStatus } from "../apps/web/src/lib/context-window";
 import type { WorkspaceTargetState } from "../apps/web/src/lib/workspace-location";
 import { COMPOSER_SLASH_COMMANDS } from "../apps/web/src/lib/composer-slash-commands";
 import { rightChatCommandPolicy } from "../apps/web/src/lib/right-chat-command-policy";
+import { RuntimeEventStore } from "../apps/web/src/lib/runtime-event-store";
 import { createImproveRunFixture } from "./helpers/create-improve-fixtures";
 
 const noop = () => undefined;
@@ -98,7 +99,8 @@ describe("Right chat panel stack", () => {
 
     expect(markup.toLowerCase()).toContain('contenteditable="true"');
     expect(markup).toContain('aria-label="Steer"');
-    expect(markup).toContain('aria-label="Queue steer draft"');
+    expect(markup).toContain("Steer active response");
+    expect(markup).not.toContain('aria-label="Queue steer draft"');
     expect(markup).not.toContain('aria-label="Stop response"');
   });
 
@@ -111,19 +113,58 @@ describe("Right chat panel stack", () => {
     expect(markup).toContain("has-create-runtime");
     expect(markup).toContain("Account Health Agent");
   });
+
+  test("derives live context usage from the active panel session store", () => {
+    const runtimeEventStore = new RuntimeEventStore();
+    runtimeEventStore.append([{
+      id: "context-1",
+      name: "session.context.updated",
+      sessionId: "session-live",
+      timestamp: "2026-08-20T05:00:00.000Z",
+      source: "provider",
+      data: {
+        provider: "openpond",
+        model: "openpond-chat",
+        usedTokens: 64_000,
+        maxContextTokens: 128_000,
+        usableContextTokens: 117_760,
+        percentFull: 50,
+        source: "provider_usage",
+        updatedAtEventId: "context-1",
+      },
+    }]);
+    const markup = renderRightChatStack({
+      runtimeEventStore,
+      panels: [{
+        ...rightChatPanel("panel_live", "Live chat"),
+        sessionId: "session-live",
+      }],
+    });
+
+    expect(markup).toContain("50% full");
+    expect(markup).toContain("64k / 128k tokens used");
+  });
 });
 
 function renderRightChatStack({
   busy = false,
   panels,
+  runtimeEventStore = new RuntimeEventStore(),
 }: {
   busy?: boolean;
   panels: RightChatPanelView[];
+  runtimeEventStore?: RuntimeEventStore;
 }): string {
   return renderToStaticMarkup(
     createElement(RightChatPanelStack, {
       panels,
+      runtimeEventStore,
       createImproveActions: {},
+      contextCompaction: {
+        autoEnabled: true,
+        triggerPercent: 85,
+        summaryModel: "same_model",
+      },
       busy,
       codexPermissionMode: "default",
       codexReasoningEffort: "medium",
@@ -185,6 +226,8 @@ function rightChatPanel(id: string, title: string): RightChatPanelView {
     steerAutoDispatchReady: false,
     workspaceRootPath: null,
     activeWorkspaceAppId: null,
+    pendingUserMessage: null,
+    runtimeSource: "live",
   };
 }
 

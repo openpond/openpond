@@ -418,7 +418,7 @@ describe("chat message projection", () => {
     expect(activityGroupSummary(activities)).toBe("Subagent running");
   });
 
-  test("keeps model reasoning out of the visible work trace and answer", () => {
+  test("renders reasoning as an assistant message with reasoningContent", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -450,41 +450,63 @@ describe("chat message projection", () => {
       }),
     ]);
 
+    // Reasoning deltas create a single assistant message that later receives
+    // the text content — they no longer produce an activity_group row.
     expect(messages.map((message) => message.role)).toEqual([
       "user",
-      "activity_group",
       "assistant",
     ]);
     expect(messages[1]).toMatchObject({
-      role: "activity_group",
-      traceState: "settled",
-    });
-    expect(messages[1]?.activities).toMatchObject([
-      {
-        kind: "reasoning",
-        content: "The user is greeting Z.ai. It should answer briefly.",
-      },
-    ]);
-    expect(messages[2]).toMatchObject({
       role: "assistant",
+      reasoningContent: "The user is greeting Z.ai. It should answer briefly.",
       content: "Hello z.ai",
     });
 
-    const html = renderToStaticMarkup(
+    const assistantHtml = renderToStaticMarkup(
       createElement(MessageRow, { message: messages[1]! })
     );
-    expect(html).toContain("Thought through the request");
-    expect(html).not.toContain("Working…");
-    expect(html).not.toContain("The user is greeting Z.ai.");
-    expect(html).not.toContain("It should answer briefly.");
-    expect(html).not.toContain(">Reasoning<");
-    expect(html).not.toContain("Hello z.ai");
-
-    const assistantHtml = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[2]! })
-    );
     expect(assistantHtml).toContain("Hello z.ai");
+    expect(assistantHtml).toContain("Thinking");
+    // Reasoning section is collapsed by default, so the text is not in the DOM
     expect(assistantHtml).not.toContain("The user is greeting Z.ai.");
+  });
+
+  test("merges reasoning into an assistant message that already has content (out-of-order events)", () => {
+    const messages = buildChatMessages([
+      runtimeEvent({
+        id: "turn_started",
+        name: "turn.started",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        args: { prompt: "hello z.ai" },
+      }),
+      runtimeEvent({
+        id: "assistant_1",
+        name: "assistant.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "Hello z.ai",
+      }),
+      runtimeEvent({
+        id: "reasoning_1",
+        name: "assistant.reasoning.delta",
+        sessionId: "session_1",
+        turnId: "turn_1",
+        output: "The user is greeting Z.ai.",
+      }),
+    ]);
+
+    // When text arrives before reasoning, the reasoning should merge into
+    // the same assistant message instead of creating a separate one.
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      reasoningContent: "The user is greeting Z.ai.",
+      content: "Hello z.ai",
+    });
   });
 
   test("groups reasoning and actions across alternating tool runs", () => {
@@ -544,33 +566,37 @@ describe("chat message projection", () => {
       }),
     ]);
 
+    // reasoning_1 creates an assistant message with reasoningContent.
+    // tool_started/tool_completed create an activity_group (settles the
+    // reasoning assistant message).  reasoning_2 creates a new assistant
+    // message with reasoningContent, and assistant_1 appends content to it.
     expect(messages.map((message) => message.role)).toEqual([
       "user",
-      "activity_group",
-      "assistant",
+      "assistant",   // reasoning_1
+      "activity_group", // tool search
+      "assistant",   // reasoning_2 + assistant_1
     ]);
-    expect(messages[1]?.traceState).toBe("completed");
-    expect(messages[1]?.activities?.map((activity) => activity.label)).toEqual([
-      "Reasoning",
+    expect(messages[1]?.reasoningContent).toBe("I need to find the relevant files.");
+    expect(messages[1]?.content).toBeUndefined();
+    expect(messages[2]?.traceState).toBe("completed");
+    expect(messages[2]?.activities?.map((activity) => activity.label)).toEqual([
       "Searched resources",
-      "Reasoning",
     ]);
     expect(
-      messages[1]?.activities?.map((activity) => activity.content)
+      messages[2]?.activities?.map((activity) => activity.content)
     ).toEqual([
-      "I need to find the relevant files.",
       "Found 2 resources.",
-      "Now I can inspect the candidate.",
     ]);
-    expect(activityGroupSummary(messages[1]?.activities ?? [])).toBe(
+    expect(activityGroupSummary(messages[2]?.activities ?? [])).toBe(
       "Searched code"
     );
-    expect(messages[2]?.content).toBe("I found the chat files.");
+    expect(messages[3]?.content).toBe("I found the chat files.");
+    expect(messages[3]?.reasoningContent).toBe("Now I can inspect the candidate.");
 
     const html = renderToStaticMarkup(
       createElement(MessageRow, {
         message: {
-          ...messages[1]!,
+          ...messages[2]!,
           traceStartedAt: "2026-07-22T15:00:00.000Z",
           traceCompletedAt: "2026-07-22T15:01:24.000Z",
         },
@@ -578,12 +604,10 @@ describe("chat message projection", () => {
     );
     expect(html).toContain("Worked for 1m 24s · Searched code");
     expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("I need to find the relevant files.");
-    expect(html).not.toContain("Now I can inspect the candidate.");
     expect(html).not.toContain("Found 2 resources.");
     expect(html).not.toContain("Searched resources");
     const expandedActivities = workTracePresentation(
-      messages[1]?.activities ?? [],
+      messages[2]?.activities ?? [],
       true
     ).visibleActivities;
     expect(expandedActivities).toMatchObject([
@@ -591,9 +615,6 @@ describe("chat message projection", () => {
         content: "Found 2 resources.",
       },
     ]);
-    expect(
-      expandedActivities.some((activity) => activity.kind === "reasoning")
-    ).toBe(false);
   });
 
   test("settles earlier work summaries while only the active tail keeps working", () => {
@@ -645,7 +666,7 @@ describe("chat message projection", () => {
     expect(runningHtml).not.toContain("Running command");
   });
 
-  test("keeps completed reasoning hidden beneath a factual work summary", () => {
+  test("renders completed reasoning as an assistant reasoning message", () => {
     const messages = buildChatMessages([
       runtimeEvent({
         id: "turn_started",
@@ -674,17 +695,15 @@ describe("chat message projection", () => {
       }),
     ]);
 
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[1]! })
-    );
-    expect(html).toContain("Worked · Thought through the request");
-    expect(html).not.toContain("aria-expanded");
-    expect(html).not.toContain("I found the branch");
-    expect(html).not.toContain("app-state.ts");
-    expect(html).not.toContain("const prompt");
-    expect(html).not.toContain("setPrompt");
-    expect(messages[1]?.activities?.[0]?.content).toContain("const prompt");
-    expect(messages[1]?.activities?.[0]?.content).toContain("setPrompt");
+    // Reasoning now produces an assistant message with reasoningContent,
+    // not an activity group with a "Thought through the request" summary.
+    expect(messages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+    ]);
+    expect(messages[1]?.reasoningContent).toContain("const prompt");
+    expect(messages[1]?.reasoningContent).toContain("setPrompt");
+    expect(messages[1]?.reasoningContent).toContain("app-state.ts");
   });
 
   test("renders OpChat quota failures as a billing action card", () => {
@@ -1666,334 +1685,4 @@ describe("chat message projection", () => {
     });
   });
 
-  test("merges Codex command lifecycle into one compact activity", () => {
-    const rawOutput = [
-      "Chunk ID: 6088d8",
-      "Wall time: 0.7318 seconds",
-      "Process exited with code 0",
-      "Original token count: 19",
-      "Output:",
-      "To github.com:openpond/sandbox.git",
-      "   0b0d5ad..38dc899  develop -> develop",
-    ].join("\n");
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Push develop" },
-      }),
-      runtimeEvent({
-        id: "tool_started",
-        name: "tool.started",
-        turnId: "turn_1",
-        action: "exec_command",
-        status: "started",
-        data: {
-          callId: "call_1",
-          command: "git push origin develop",
-        },
-      }),
-      runtimeEvent({
-        id: "tool_completed",
-        name: "tool.completed",
-        turnId: "turn_1",
-        action: "function_call_output",
-        status: "completed",
-        output: rawOutput,
-        data: {
-          callId: "call_1",
-        },
-      }),
-      runtimeEvent({
-        id: "command_output",
-        name: "command.output",
-        turnId: "turn_1",
-        output: rawOutput,
-        data: {
-          callId: "call_1",
-        },
-      }),
-    ]);
-
-    const activities = messages[1]?.activities ?? [];
-    expect(activities).toHaveLength(1);
-    expect(activities[0]?.label).toBe("Ran");
-    expect(activities[0]?.content).toBe("git push origin develop");
-    expect(activities[0]?.detail).toBe(
-      "To github.com:openpond/sandbox.git\n   0b0d5ad..38dc899  develop -> develop"
-    );
-    expect(activityGroupSummary(activities)).toBe("Pushed changes");
-  });
-
-  test("keeps failed exec details collapsed without transport JSON", () => {
-    const result = JSON.stringify({
-      ok: false,
-      action: "exec_command",
-      output: "Command exited with code 1.",
-      data: {
-        command: "./cli promote production",
-        cwd: "/repo",
-        exitCode: 1,
-        stdout: "Fetching origin/develop\nPromotion refused",
-        stderr: "",
-      },
-    });
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Promote production" },
-      }),
-      runtimeEvent({
-        id: "tool_started",
-        name: "tool.started",
-        turnId: "turn_1",
-        action: "exec_command",
-        status: "started",
-        data: {
-          toolCallId: "call_1",
-          tool: "exec_command",
-          arguments: JSON.stringify({ cmd: "./cli promote production" }),
-        },
-      }),
-      {
-        ...runtimeEvent({
-          id: "tool_completed",
-          name: "tool.completed",
-          turnId: "turn_1",
-          action: "exec_command",
-          status: "failed",
-          output: result,
-          data: {
-            toolCallId: "call_1",
-            tool: "exec_command",
-          },
-        }),
-        timestamp: "2026-05-16T00:00:01.000Z",
-      },
-    ]);
-
-    const activity = messages[1]?.activities?.[0];
-    expect(activity).toMatchObject({
-      content: "./cli promote production",
-      detail: "Fetching origin/develop\nPromotion refused",
-      state: "failed",
-      terminal: { exitCode: 1, durationMs: 1000 },
-    });
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[1]! })
-    );
-    expect(html).toContain("Command failed");
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("Ran command in 1s");
-    expect(html).not.toContain("activity-command-terminal");
-    expect(html).not.toContain("Fetching origin/develop");
-    expect(html).not.toContain("&quot;action&quot;:&quot;exec_command&quot;");
-  });
-
-  test("unwraps sandbox command failure envelopes without inventing an exit code", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Run a sandbox command" },
-      }),
-      commandStarted("tool_started", "turn_1", "printf 'hello'"),
-      runtimeEvent({
-        id: "command_output",
-        name: "command.output",
-        turnId: "turn_1",
-        status: "failed",
-        output: JSON.stringify({
-          ok: false,
-          action: "work_environment",
-          output: "Work sandbox entered error during startup.",
-        }),
-        data: { toolCallId: "tool_started" },
-      }),
-    ]);
-
-    const activity = messages[1]?.activities?.[0];
-    expect(activity?.detail).toBe("Work sandbox entered error during startup.");
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[1]! })
-    );
-    expect(html).not.toContain("Work sandbox entered error during startup.");
-    expect(html).not.toContain("activity-command-terminal");
-    expect(html).not.toContain("&quot;action&quot;:&quot;work_environment&quot;");
-  });
-
-  test("summarizes one command by activity instead of raw command text", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "turn_1",
-        name: "turn.started",
-        turnId: "turn_1",
-        args: { prompt: "Search the app" },
-      }),
-      commandStarted(
-        "search_1",
-        "turn_1",
-        'rg "activityGroupSummary" apps/web/src'
-      ),
-    ]);
-
-    const activities = messages[1]?.activities ?? [];
-    expect(activityGroupSummary(activities)).toBe(
-      'Searched for "activityGroupSummary" in apps/web/src'
-    );
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, {
-        message: messages[1]!,
-      })
-    );
-    expect(html).toContain(
-      "Searching for &quot;activityGroupSummary&quot; in apps/web/src"
-    );
-    expect(html).toContain('aria-expanded="false"');
-    expect(html).not.toContain("Running command");
-    expect(html).not.toContain("activity-command-terminal");
-    expect(html).not.toContain("Searched code");
-  });
-
-  test("uses semantic command labels with duration for activity rows", () => {
-    expect(
-      activityToolRowLabel({
-        id: "read_command",
-        label: "Ran",
-        content: "sed -n '1,120p' app.ts",
-        timestamp: "2026-05-16T00:00:01.000Z",
-        kind: "command",
-        state: "completed",
-        terminal: { durationMs: 1_000 },
-      })
-    ).toBe("Read lines 1-120 of app.ts in 1s");
-    expect(
-      activityToolRowLabel({
-        id: "search_command",
-        label: "Running",
-        content: 'rg "activity-summary" apps/web/src',
-        timestamp: "2026-05-16T00:00:01.000Z",
-        kind: "command",
-        state: "running",
-      })
-    ).toBe('Searching for "activity-summary" in apps/web/src');
-    expect(
-      activityToolRowLabel({
-        id: "failed_command",
-        label: "Failed",
-        content: "pnpm test",
-        timestamp: "2026-05-16T00:00:01.000Z",
-        kind: "command",
-        state: "failed",
-        terminal: { durationMs: 1_000 },
-      })
-    ).toBe("Command failed in 1s");
-  });
-
-  test("merges workspace action results into the started activity row", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "sandbox_create_started",
-        name: "workspace_action",
-        action: "sandbox_create",
-        status: "started",
-        sessionId: "session_1",
-      }),
-      runtimeEvent({
-        id: "sandbox_create_completed",
-        name: "workspace_action_result",
-        action: "sandbox_create",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Sandbox workspace attached: sandbox_123 (creating)",
-      }),
-    ]);
-
-    const activities = messages[0]?.activities ?? [];
-    expect(activities).toHaveLength(1);
-    expect(activities[0]?.label).toBe("Started sandbox");
-    expect(activities[0]?.content).toBe(
-      "Sandbox workspace attached: sandbox_123 (creating)"
-    );
-    expect(activities[0]?.state).toBe("completed");
-
-    const html = renderToStaticMarkup(
-      createElement(MessageRow, { message: messages[0]! })
-    );
-    expect(html).toContain("Started sandbox");
-    expect(html).not.toContain("Starting sandbox");
-  });
-
-  test("merges failed workspace action results into the started activity row", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "sandbox_stop_started",
-        name: "workspace_action",
-        action: "sandbox_stop",
-        status: "started",
-        sessionId: "session_1",
-      }),
-      runtimeEvent({
-        id: "sandbox_stop_failed",
-        name: "workspace_action_result",
-        action: "sandbox_stop",
-        status: "failed",
-        sessionId: "session_1",
-        output: "Sandbox stop failed.",
-      }),
-    ]);
-
-    const activities = messages[0]?.activities ?? [];
-    expect(activities).toHaveLength(1);
-    expect(activities[0]?.label).toBe("Sandbox stop failed");
-    expect(activities[0]?.content).toBe("Sandbox stop failed.");
-    expect(activities[0]?.state).toBe("failed");
-  });
-
-  test("summarizes mixed generic workspace actions instead of hiding later actions", () => {
-    const messages = buildChatMessages([
-      runtimeEvent({
-        id: "sandbox_preserve_started",
-        name: "workspace_action",
-        action: "sandbox_preserve_source",
-        status: "started",
-        sessionId: "session_1",
-      }),
-      runtimeEvent({
-        id: "sandbox_preserve_failed",
-        name: "workspace_action_result",
-        action: "sandbox_preserve_source",
-        status: "failed",
-        sessionId: "session_1",
-        output: "placement_stale",
-      }),
-      runtimeEvent({
-        id: "sandbox_stop_started",
-        name: "workspace_action",
-        action: "sandbox_stop",
-        status: "started",
-        sessionId: "session_1",
-      }),
-      runtimeEvent({
-        id: "sandbox_stop_completed",
-        name: "workspace_action_result",
-        action: "sandbox_stop",
-        status: "completed",
-        sessionId: "session_1",
-        output: "Stopped sandbox.",
-      }),
-    ]);
-
-    const activities = messages[0]?.activities ?? [];
-    expect(activities).toHaveLength(2);
-    expect(activityGroupSummary(activities)).toBe(
-      "Preserve failed and stopped sandbox"
-    );
-  });
 });

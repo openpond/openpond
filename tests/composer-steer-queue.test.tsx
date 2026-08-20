@@ -4,7 +4,6 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { Composer } from "../apps/web/src/components/chat/Composer";
-import { ComposerSteerQueue } from "../apps/web/src/components/chat/ComposerSteerQueue";
 import {
   composerSteerDraftsAfterSubmit,
   composerSteerDraftsForScope,
@@ -96,30 +95,7 @@ describe("composer steer queue", () => {
     ])).toBe("pending");
   });
 
-  test("renders queued rows with steer, delete, and edit message actions", () => {
-    const draft = createComposerSteerDraft("also tighten the internal padding", {
-      id: "draft_1",
-      now: "2026-07-04T20:10:00.000Z",
-    });
-    const markup = renderToStaticMarkup(
-      createElement(ComposerSteerQueue, {
-        drafts: [draft],
-        sendingDraftId: null,
-        onDeleteDraft: noop,
-        onEditDraft: noop,
-        onSteerDraft: noop,
-      }),
-    );
-
-    expect(markup).toContain('aria-label="Queued steer drafts"');
-    expect(markup).toContain("also tighten the internal padding");
-    expect(markup).toContain("Steer");
-    expect(markup).toContain('aria-label="Delete queued steer"');
-    expect(markup).toContain("Edit message");
-    expect(markup).not.toContain("More queued steer actions");
-  });
-
-  test("keeps queued rows above the active goal strip in the full composer stack", () => {
+  test("does not render legacy queued rows in the full composer stack", () => {
     const queuedDraft = draft("draft_order", "queued steer before goal");
     const markup = renderToStaticMarkup(
       createElement(Composer, {
@@ -157,17 +133,16 @@ describe("composer steer queue", () => {
     const queueIndex = markup.indexOf('class="composer-steer-stack"');
     const goalIndex = markup.indexOf("composer-goal-strip");
     const inputIndex = markup.indexOf('class="composer-input-shell"');
-    expect(queueIndex).toBeGreaterThan(-1);
-    expect(goalIndex).toBeGreaterThan(queueIndex);
+    expect(queueIndex).toBe(-1);
+    expect(goalIndex).toBeGreaterThan(-1);
     expect(inputIndex).toBeGreaterThan(goalIndex);
-    expect(markup).toContain('aria-label="Steer queued draft: queued steer before goal"');
-    expect(markup).toContain('aria-label="Edit message: queued steer before goal"');
-    expect(markup).toContain('aria-label="Delete queued steer"');
+    expect(markup).not.toContain('aria-label="Steer queued draft: queued steer before goal"');
+    expect(markup).not.toContain('aria-label="Delete queued steer"');
     expect(markup).toContain('aria-label="Pause goal"');
     expect(markup).toContain('contentEditable="true"');
   });
 
-  test("shows queue and steer controls while a response is running", () => {
+  test("shows one steer control and no queue control while a response is running", () => {
     const markup = renderToStaticMarkup(
       createElement(Composer, {
         mode: "dock",
@@ -199,34 +174,10 @@ describe("composer steer queue", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="Queue steer draft"');
+    expect(markup).not.toContain('aria-label="Queue steer draft"');
     expect(markup).toContain('aria-label="Steer"');
+    expect(markup).toContain("Steer active response");
     expect(markup).not.toContain('aria-label="Stop response"');
-  });
-
-  test("keeps multiple queued rows and their actions in keyboard order", () => {
-    const firstDraft = draft("draft_focus_a", "first queued steer");
-    const secondDraft = draft("draft_focus_b", "second queued steer");
-    const markup = renderToStaticMarkup(
-      createElement(ComposerSteerQueue, {
-        drafts: [firstDraft, secondDraft],
-        sendingDraftId: null,
-        onDeleteDraft: noop,
-        onEditDraft: noop,
-        onSteerDraft: noop,
-      }),
-    );
-
-    const firstRowIndex = markup.indexOf("first queued steer");
-    const steerIndex = markup.indexOf('aria-label="Steer queued draft: first queued steer"');
-    const deleteIndex = markup.indexOf('aria-label="Delete queued steer"', steerIndex);
-    const editIndex = markup.indexOf('aria-label="Edit message: first queued steer"', deleteIndex);
-    const secondRowIndex = markup.indexOf("second queued steer", editIndex);
-
-    expect(steerIndex).toBeGreaterThan(firstRowIndex);
-    expect(deleteIndex).toBeGreaterThan(steerIndex);
-    expect(editIndex).toBeGreaterThan(deleteIndex);
-    expect(secondRowIndex).toBeGreaterThan(editIndex);
   });
 
   test("moves a queued edit back to the composer without losing a typed message", () => {
