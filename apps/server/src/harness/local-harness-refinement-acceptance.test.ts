@@ -488,7 +488,7 @@ describe("Local Harness refinement acceptance", () => {
     await expect(processBoundary.reconcilePending()).resolves.toBe(1);
     await queue.drain();
 
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(3);
     expect(queue.receipts().map((receipt) => receipt.status)).toEqual([
       "failed",
       "completed",
@@ -511,7 +511,7 @@ describe("Local Harness refinement acceptance", () => {
     );
 
     await expect(processBoundary.reconcilePending()).resolves.toBe(0);
-    expect(attempts).toBe(2);
+    expect(attempts).toBe(3);
   });
 });
 

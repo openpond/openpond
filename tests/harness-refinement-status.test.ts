@@ -4,7 +4,7 @@ import { appendHarnessRefinementStatus } from "../apps/web/src/lib/chat-activiti
 import type { ChatMessage } from "../apps/web/src/lib/app-models";
 
 describe("Harness refinement status", () => {
-  test("keeps routine queued and no-action background reviews out of chat", () => {
+  test("retains routine queued and no-action background reviews in chat", () => {
     const messages: ChatMessage[] = [];
 
     appendHarnessRefinementStatus(messages, {
@@ -38,7 +38,16 @@ describe("Harness refinement status", () => {
       },
     });
 
-    expect(messages).toEqual([]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "activity_group",
+      turnId: "turn-a",
+      refinerActivity: {
+        state: "completed",
+        result: "no_action",
+        decision: "no_action",
+      },
+    });
   });
 
   test("labels a routed recommendation instead of reporting no reusable change", () => {
