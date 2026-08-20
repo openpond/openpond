@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type {
   AppPreferences,
+  Approval,
   ChatAttachment,
   OpenPondCommandAccessMode,
   ProviderSettings,
@@ -23,7 +24,7 @@ import {
   newlyObservedSubagentSessions,
 } from "../lib/right-chat-panels";
 import { loadCodexHistoryThreadPayload } from "../lib/codex-history-thread-cache";
-import { buildRuntimeIndexes, runtimeEventsForSession } from "../lib/runtime-indexes";
+import { buildRuntimeIndexes } from "../lib/runtime-indexes";
 import { buildCachedChatMessages } from "../lib/chat-messages";
 import { isCodexHistorySessionId } from "../lib/sidebar-session-projects";
 import { hasGitHubIssueSubmitConnection } from "../lib/submit-issue-command";
@@ -31,6 +32,7 @@ import type { SandboxActionCatalogEntry } from "../lib/sandbox-types";
 import type { ConnectedAppMentionOption } from "../lib/connected-app-mentions";
 import { mergeRuntimeEventLists } from "../lib/runtime-event-lists";
 import { rightChatCommandPolicy } from "../lib/right-chat-command-policy";
+import type { RuntimeEventStore } from "../lib/runtime-event-store";
 import type { useChatActions } from "./useChatActions";
 import { useRightChatPanelViews } from "./useRightChatPanelViews";
 import { useRightChatHistorySubscriptions } from "./useRightChatHistorySubscriptions";
@@ -40,6 +42,7 @@ const EMPTY_RUNTIME_EVENTS: RuntimeEvent[] = [];
 export function useRightChatPanels(input: {
   activeModel: string;
   activeProvider: RightChatPanel["provider"];
+  approvals: Approval[];
   applyRightCodexHistoryPayload: (
     payload: Awaited<ReturnType<typeof loadCodexHistoryThreadPayload>>,
   ) => void;
@@ -56,6 +59,7 @@ export function useRightChatPanels(input: {
   rightChatPanels: RightChatPanel[];
   rightPanelMode: RightPanelMode;
   runtimeIndexes: ReturnType<typeof buildRuntimeIndexes>;
+  runtimeEventStore: RuntimeEventStore;
   runningSessionIds: ReadonlySet<string>;
   selectedSession: Session | null;
   selectedSessionId: string | null;
@@ -75,6 +79,7 @@ export function useRightChatPanels(input: {
   const {
     activeModel,
     activeProvider,
+    approvals,
     applyRightCodexHistoryPayload,
     codexHistoryEvents,
     connectedAppMentions,
@@ -89,6 +94,7 @@ export function useRightChatPanels(input: {
     rightChatPanels,
     rightPanelMode,
     runtimeIndexes,
+    runtimeEventStore,
     runningSessionIds,
     selectedSession,
     selectedSessionId,
@@ -317,12 +323,12 @@ export function useRightChatPanels(input: {
   });
 
   const rightChatPanelViews = useRightChatPanelViews({
+    approvals,
     codexHistoryEvents,
     contextCompaction,
     pendingChatUserMessages,
     rightChatHistoryEvents,
     rightChatPanels,
-    runtimeIndexes,
     runningSessionIds,
     selectedSessionId,
     sidebarSessions,
@@ -386,7 +392,7 @@ export function useRightChatPanels(input: {
       const sessionEvents = isCodexHistorySessionId(panel.sessionId)
         ? ((panel.sessionId ? rightChatHistoryEvents[panel.sessionId] : undefined) ??
           (panel.sessionId === selectedSessionId ? codexHistoryEvents : EMPTY_RUNTIME_EVENTS))
-        : runtimeEventsForSession(runtimeIndexes, panel.sessionId);
+        : runtimeEventStore.getSessionEvents(panel.sessionId);
       const appendRightCodexHistoryEvent =
         isCodexHistorySessionId(panel.sessionId) && panel.sessionId
           ? (event: RuntimeEvent) => {
@@ -444,6 +450,7 @@ export function useRightChatPanels(input: {
       rightChatHistoryEvents,
       rightChatPanels,
       runtimeIndexes,
+      runtimeEventStore,
       selectedSessionId,
       openLabTraining,
       openPondCommandAccessMode,

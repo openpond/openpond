@@ -3,7 +3,6 @@ import type { Dispatch, SetStateAction } from "react";
 import { SessionSchema, type Approval, type RuntimeEvent, type Session } from "@openpond/contracts";
 import { openEventStream, type ClientConnection } from "../api";
 import type { SidebarSectionMenuId } from "../app/app-state";
-import { mergeLiveRuntimeEventLists } from "../lib/runtime-event-lists";
 import { upsertSessionPreservingLocalSidebarState } from "../lib/session-state";
 
 type ShortcutInput = {
@@ -49,8 +48,8 @@ export function useCommandShortcuts({
 
 type RuntimeEventsInput = {
   afterSequence: number | null;
+  appendEvents: (events: readonly RuntimeEvent[]) => void;
   connection: ClientConnection | null;
-  setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setApprovals: Dispatch<SetStateAction<Approval[]>>;
   setSessions: Dispatch<SetStateAction<Session[]>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -59,8 +58,8 @@ type RuntimeEventsInput = {
 
 export function useRuntimeEvents({
   afterSequence,
+  appendEvents,
   connection,
-  setEvents,
   setApprovals,
   setSessions,
   setError,
@@ -91,7 +90,7 @@ export function useRuntimeEvents({
       if (nextEvents.length === 0) return;
 
       lastFlushMs = Date.now();
-      setEvents((current) => mergeLiveRuntimeEventLists(current, nextEvents));
+      appendEvents(nextEvents);
       const liveSessions = liveSessionsFromRuntimeEvents(nextEvents);
       if (liveSessions.length > 0) {
         setSessions((current) =>
@@ -174,7 +173,7 @@ export function useRuntimeEvents({
       document.removeEventListener("visibilitychange", flushPendingOnVisibilityChange);
       source.close();
     };
-  }, [afterSequence, connection, onDisconnected, setApprovals, setError, setEvents, setSessions]);
+  }, [afterSequence, appendEvents, connection, onDisconnected, setApprovals, setError, setSessions]);
 }
 
 export function liveSessionsFromRuntimeEvents(events: RuntimeEvent[]): Session[] {

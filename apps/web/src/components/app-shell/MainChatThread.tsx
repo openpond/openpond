@@ -1,7 +1,6 @@
 import {
   lazy,
   Suspense,
-  useLayoutEffect,
   useMemo,
   type ComponentProps,
   type RefObject,
@@ -33,7 +32,6 @@ export function MainChatThread({
   onOpenAttachmentInSidebar,
   onOpenFileInSidebar,
   onOpenProfileSettings,
-  onContentMutation,
   onResolveUserQuestion,
   onOpenSession,
   onScroll,
@@ -54,7 +52,6 @@ export function MainChatThread({
   onOpenAttachmentInSidebar: MessageRowProps["onOpenAttachmentInSidebar"];
   onOpenFileInSidebar: MessageRowProps["onOpenFileInSidebar"];
   onOpenProfileSettings: MessageRowProps["onOpenProfileSettings"];
-  onContentMutation: (element: HTMLElement) => void;
   onResolveUserQuestion: MessageRowProps["onResolveUserQuestion"];
   onOpenSession: MessageRowProps["onOpenSession"];
   onScroll: (event: UIEvent<HTMLElement>) => void;
@@ -72,30 +69,6 @@ export function MainChatThread({
     [rows]
   );
   const newMessageIds = useNewMessageIds(messages, conversationKey);
-
-  useLayoutEffect(() => {
-    const element = threadRef.current;
-    if (!element || typeof MutationObserver === "undefined") return undefined;
-
-    onContentMutation(element);
-    let rafId: number | null = null;
-    const observer = new MutationObserver(() => {
-      if (rafId !== null) return;
-      rafId = window.requestAnimationFrame(() => {
-        rafId = null;
-        onContentMutation(element);
-      });
-    });
-    observer.observe(element, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-    });
-    return () => {
-      observer.disconnect();
-      if (rafId !== null) window.cancelAnimationFrame(rafId);
-    };
-  }, [onContentMutation, threadRef]);
 
   return (
     <section

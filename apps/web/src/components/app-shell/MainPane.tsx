@@ -16,6 +16,10 @@ import type {
 import { api } from "../../api";
 import { normalizePreferences } from "../../lib/app-models";
 import { isCodexHistorySessionId } from "../../lib/sidebar-session-projects";
+import { IncrementalChatProjector } from "../../lib/incremental-chat-projector";
+import { mergeRuntimeEventLists } from "../../lib/runtime-event-lists";
+import { appendPendingUserChatMessage } from "../../lib/pending-chat-messages";
+import { useRuntimeEventSession } from "../../hooks/useRuntimeEventSession";
 import type { SandboxActionCatalogEntry } from "../../lib/sandbox-types";
 import type { ComposerSubmitOptions } from "../chat/Composer";
 import { DraftBoundComposer } from "../chat/DraftBoundComposer";
@@ -133,8 +137,9 @@ export function MainPane({
   teamChat,
   community,
   bootstrap,
-  runtimeEvents,
-  chatMessages,
+  runtimeEvents: suppliedRuntimeEvents,
+  chatMessages: suppliedChatMessages,
+  pendingUserMessage,
   contextWindowStatus,
   goalRuntime,
   subagentRuntime,
@@ -177,6 +182,7 @@ export function MainPane({
   rightPanelMode,
   rightPanelTabRequest,
   rightChatPanels,
+  runtimeEventStore,
   nativeSkillSidebar,
   extensionSkillSidebar,
   workspaceDiffPanelViewState,
@@ -264,6 +270,26 @@ export function MainPane({
   onCloseTerminal,
   onLoadMoreChatHistory,
 }: MainPaneProps) {
+  const [chatProjector] = useState(() => new IncrementalChatProjector());
+  const liveSessionId = selectedSessionId && !isCodexHistorySessionId(selectedSessionId)
+    ? selectedSessionId
+    : null;
+  const liveSessionSnapshot = useRuntimeEventSession(runtimeEventStore, liveSessionId);
+  const runtimeEvents = useMemo(
+    () => liveSessionId
+      ? mergeRuntimeEventLists(suppliedRuntimeEvents, liveSessionSnapshot.events)
+      : suppliedRuntimeEvents,
+    [liveSessionId, liveSessionSnapshot.events, suppliedRuntimeEvents],
+  );
+  const chatMessages = useMemo(
+    () => liveSessionId
+      ? appendPendingUserChatMessage(
+          chatProjector.project(runtimeEvents),
+          pendingUserMessage,
+        )
+      : suppliedChatMessages,
+    [chatProjector, liveSessionId, pendingUserMessage, runtimeEvents, suppliedChatMessages],
+  );
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
   const [openDiffFileRequest, setOpenDiffFileRequest] =
@@ -999,7 +1025,6 @@ export function MainPane({
     chatTimelineRows,
     composerStackRef,
     goToUserMessage,
-    handleChatContentMutation,
     handleChatScroll,
     jumpToLatestChatMessage,
     showScrollToBottomButton,
@@ -1271,8 +1296,10 @@ export function MainPane({
   const rightChatPanel = showRightChatPanel ? (
     <RightChatPanelStack
       panels={rightChatPanels}
+      runtimeEventStore={runtimeEventStore}
       actionCatalog={composerActionCatalog}
       createImproveActions={createImproveActions}
+      contextCompaction={appPreferences.contextCompaction}
       busy={busy}
       codexPermissionMode={codexPermissionMode}
       codexReasoningEffort={codexReasoningEffort}
@@ -1623,7 +1650,6 @@ export function MainPane({
                 onOpenAttachmentInSidebar={handleOpenAttachmentInSidebar}
                 onOpenFileInSidebar={handleOpenFileInSidebar}
                 onOpenProfileSettings={onOpenProfileSettings}
-                onContentMutation={handleChatContentMutation}
                 onResolveUserQuestion={async (_question, resolution) => {
                   const displayPrompt =
                     resolution.action === "answer"

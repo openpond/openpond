@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import type {
   Approval,
   BootstrapPayload,
@@ -47,9 +55,9 @@ import {
 } from "../lib/session-state";
 import {
   latestRuntimeEventSequence,
-  limitRuntimeEventList,
-  mergeBootstrapRuntimeEvents,
 } from "../lib/runtime-event-lists";
+import { RuntimeEventStore } from "../lib/runtime-event-store";
+import { signedResourceUrlCache } from "../lib/signed-resource-url-cache";
 import {
   appStartupState,
   type AppStartupStageId,
@@ -86,7 +94,21 @@ export function useAppBootstrap(params: {
   } = params;
   const [connection, setConnection] = useState<ClientConnection | null>(null);
   const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
-  const [events, setEvents] = useState<RuntimeEvent[]>([]);
+  const [runtimeEventStore] = useState(() => new RuntimeEventStore());
+  const events = useSyncExternalStore(
+    runtimeEventStore.subscribeSummary,
+    runtimeEventStore.getSummaryEvents,
+    runtimeEventStore.getSummaryEvents,
+  );
+  const setEvents = useCallback<Dispatch<SetStateAction<RuntimeEvent[]>>>((action) => {
+    const current = runtimeEventStore.getAllEvents();
+    const next = typeof action === "function" ? action(current) : action;
+    if (next === current) return;
+    runtimeEventStore.replace(next);
+  }, [runtimeEventStore]);
+  const appendRuntimeEvents = useCallback((nextEvents: readonly RuntimeEvent[]) => {
+    runtimeEventStore.append(nextEvents);
+  }, [runtimeEventStore]);
   const [runtimeEventStreamStart, setRuntimeEventStreamStart] = useState<{
     afterSequence: number;
     serverId: string;
@@ -111,6 +133,11 @@ export function useAppBootstrap(params: {
   const startupStartedAtRef = useRef(Date.now());
   const startupCompleteTimerRef = useRef<number | null>(null);
   const profileRefreshCreatePipelineKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    signedResourceUrlCache.activateConnection(connection);
+    signedResourceUrlCache.activateAccountScope(organizationRefreshAccountKey);
+  }, [connection, organizationRefreshAccountKey]);
 
   const setBlockingStartupStage = useCallback((stage: Exclude<AppStartupStageId, "ready">) => {
     if (!startupReadyRef.current) setStartupStage(stage);
@@ -185,9 +212,8 @@ export function useAppBootstrap(params: {
       );
       latestDefaultTeamIdRef.current = payload.preferences.defaultTeamId?.trim() ?? "";
       setBootstrap(payload);
-      setEvents((current) => sameServer
-        ? mergeBootstrapRuntimeEvents(payload.events, current)
-        : limitRuntimeEventList(payload.events));
+      if (sameServer) runtimeEventStore.mergeBootstrap(payload.events);
+      else runtimeEventStore.replace(payload.events);
       setSessionsState((current) => {
         const next = sameServer
           ? mergeBootstrapSessionListPreservingLocalState(
@@ -256,7 +282,7 @@ export function useAppBootstrap(params: {
           : null;
       });
     },
-    [setSelectedAppId, setSelectedProjectId, setSelectedSessionId]
+    [runtimeEventStore, setSelectedAppId, setSelectedProjectId, setSelectedSessionId]
   );
 
   const applyPreferencesPayload = useCallback((payload: PreferencesPayload) => {
@@ -552,8 +578,8 @@ export function useAppBootstrap(params: {
 
   useRuntimeEvents({
     afterSequence: runtimeEventStreamStart?.afterSequence ?? null,
+    appendEvents: appendRuntimeEvents,
     connection,
-    setEvents,
     setApprovals,
     setSessions,
     setError,
@@ -597,6 +623,7 @@ export function useAppBootstrap(params: {
     codexHistorySessions,
     connection,
     events,
+    runtimeEventStore,
     refreshOpenPondAccount,
     sessions,
     startup: appStartupState(startupStage),

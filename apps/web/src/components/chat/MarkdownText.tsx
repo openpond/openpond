@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  memo,
   useMemo,
   useState,
   type ReactNode,
@@ -27,6 +28,8 @@ export function MarkdownText({
   activeWorkspaceAppId = null,
   connection = null,
   content,
+  finalizedContent,
+  mutableContent,
   onOpenBrowserLink,
   onOpenFileInSidebar,
   workspaceRootPath = null,
@@ -34,11 +37,22 @@ export function MarkdownText({
   activeWorkspaceAppId?: string | null;
   connection?: ClientConnection | null;
   content: string;
+  finalizedContent?: string;
+  mutableContent?: string;
   onOpenBrowserLink?: OpenBrowserLink;
   onOpenFileInSidebar?: OpenFileLink;
   workspaceRootPath?: string | null;
 }) {
-  const blocks = useMemo(() => parseBlocks(content), [content]);
+  const segmented = finalizedContent !== undefined || mutableContent !== undefined;
+  const blocks = useMemo(() => segmented ? [] : parseBlocks(content), [content, segmented]);
+  const finalizedBlocks = useMemo(
+    () => segmented && finalizedContent ? parseBlocks(finalizedContent) : [],
+    [finalizedContent, segmented],
+  );
+  const mutableBlocks = useMemo(
+    () => segmented && mutableContent ? parseBlocks(mutableContent) : [],
+    [mutableContent, segmented],
+  );
   const [openImage, setOpenImage] = useState<{ src: string; title: string } | null>(null);
   const [hoverImage, setHoverImage] = useState<ImageLinkPreview | null>(null);
   const [linkMenu, setLinkMenu] = useState<LinkContextMenu | null>(null);
@@ -96,7 +110,29 @@ export function MarkdownText({
 
   return (
     <div className="markdown-message">
-      {renderMarkdownBlocks(blocks, context, workspaceRootPath)}
+      {segmented ? (
+        <>
+          <MarkdownBlockList
+            blocks={finalizedBlocks}
+            context={context}
+            keyPrefix="finalized"
+            workspaceRootPath={workspaceRootPath}
+          />
+          <MarkdownBlockList
+            blocks={mutableBlocks}
+            context={context}
+            keyPrefix="mutable"
+            workspaceRootPath={workspaceRootPath}
+          />
+        </>
+      ) : (
+        <MarkdownBlockList
+          blocks={blocks}
+          context={context}
+          keyPrefix="block"
+          workspaceRootPath={workspaceRootPath}
+        />
+      )}
       {hoverImage && (
         <MarkdownImageHoverPreview preview={hoverImage} />
       )}
@@ -117,6 +153,20 @@ export function MarkdownText({
     </div>
   );
 }
+
+const MarkdownBlockList = memo(function MarkdownBlockList({
+  blocks,
+  context,
+  keyPrefix,
+  workspaceRootPath,
+}: {
+  blocks: ReturnType<typeof parseBlocks>;
+  context: MarkdownContext;
+  keyPrefix: string;
+  workspaceRootPath: string | null;
+}) {
+  return renderMarkdownBlocks(blocks, context, workspaceRootPath, keyPrefix);
+});
 
 function renderMarkdownBlocks(
   blocks: ReturnType<typeof parseBlocks>,

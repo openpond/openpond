@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type ClientConnection } from "../api";
-
-type CachedLocalVideoUrl =
-  | { state: "ready"; url: string; expiresAt: number }
-  | { state: "loading"; promise: Promise<string | null> };
-
-const cache = new Map<string, CachedLocalVideoUrl>();
-const EXPIRY_SKEW_MS = 15_000;
+import { signedResourceCacheKey, signedResourceUrlCache } from "../lib/signed-resource-url-cache";
 
 export type LocalVideoUrlResolver = {
   getUrl: (path: string | null | undefined) => string | null;
@@ -40,7 +34,8 @@ export function useLocalVideoUrlResolver(connection: ClientConnection | null): L
   const getUrl = useCallback(
     (path: string | null | undefined) => {
       if (!connection || !path) return null;
-      return cachedUrl(cacheKey(connection, path));
+      signedResourceUrlCache.activateConnection(connection);
+      return signedResourceUrlCache.get(signedResourceCacheKey(connection, "local-video", path));
     },
     [connection],
   );
@@ -48,42 +43,14 @@ export function useLocalVideoUrlResolver(connection: ClientConnection | null): L
   const loadUrl = useCallback(
     async (path: string | null | undefined) => {
       if (!connection || !path) return null;
-      const key = cacheKey(connection, path);
-      const existingUrl = cachedUrl(key);
-      if (existingUrl) return existingUrl;
-      const existing = cache.get(key);
-      if (existing?.state === "loading") return existing.promise;
-      const promise = api
-        .signLocalVideoUrl(connection, { path })
-        .then((response) => {
-          cache.set(key, { state: "ready", url: response.url, expiresAt: response.expiresAt });
-          setVersion((version) => version + 1);
-          return response.url;
-        })
-        .catch(() => {
-          cache.delete(key);
-          setVersion((version) => version + 1);
-          return null;
-        });
-      cache.set(key, { state: "loading", promise });
-      return promise;
+      signedResourceUrlCache.activateConnection(connection);
+      const key = signedResourceCacheKey(connection, "local-video", path);
+      return signedResourceUrlCache
+        .load(key, () => api.signLocalVideoUrl(connection, { path }))
+        .finally(() => setVersion((version) => version + 1));
     },
     [connection],
   );
 
   return useMemo(() => ({ getUrl, loadUrl }), [getUrl, loadUrl]);
-}
-
-function cachedUrl(key: string): string | null {
-  const existing = cache.get(key);
-  if (existing?.state !== "ready") return null;
-  if (existing.expiresAt <= Date.now() + EXPIRY_SKEW_MS) {
-    cache.delete(key);
-    return null;
-  }
-  return existing.url;
-}
-
-function cacheKey(connection: ClientConnection, path: string): string {
-  return `${connection.serverUrl}\0${connection.token}\0${path}`;
 }

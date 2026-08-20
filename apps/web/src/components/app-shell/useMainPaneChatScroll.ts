@@ -22,6 +22,7 @@ import {
   type UserMessageNavigationState,
 } from "./main-pane-helpers";
 import type { MainPaneProps } from "./main-pane-types";
+import { useChatContentScrollScheduler } from "../../hooks/useChatContentScrollScheduler";
 
 export function useMainPaneChatScroll({
   browserConversationId,
@@ -400,6 +401,12 @@ export function useMainPaneChatScroll({
     stickyChatScrollRef.current = true;
     element.scrollTop = element.scrollHeight;
   }, []);
+  useChatContentScrollScheduler({
+    contentKey: chatScrollContentKey,
+    enabled: view === "chat" && showChatThread,
+    onContentChange: handleChatContentMutation,
+    threadRef: chatThreadRef,
+  });
   useLayoutEffect(() => {
     if (view !== "chat" || !showChatThread || typeof window === "undefined")
       return undefined;
@@ -535,7 +542,6 @@ export function useMainPaneChatScroll({
     }
     updateChatScrollControls(element, { nearBottom });
   }, [
-    chatScrollContentKey,
     conversationKey,
     finishInitialChatScroll,
     pendingApproval?.id,
@@ -559,7 +565,6 @@ export function useMainPaneChatScroll({
     chatThreadRef,
     composerStackRef,
     goToUserMessage,
-    handleChatContentMutation,
     handleChatScroll,
     jumpToLatestChatMessage,
     showScrollToBottomButton,

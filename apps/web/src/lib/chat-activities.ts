@@ -15,6 +15,9 @@ import {
   isCodexGoalContextEvent,
 } from "./codex-control-messages";
 
+export const MAX_PROJECTED_COMMAND_OUTPUT_CHARS = 64 * 1024;
+const PROJECTED_COMMAND_OUTPUT_HEAD_CHARS = 8 * 1024;
+
 export { activityGroupSummary, summarizeActivityGroup } from "./chat-activity-summary";
 export {
   codexControlMessage,
@@ -825,14 +828,14 @@ function cleanCommandOutput(value: string): string {
   let output = value.replace(/\r\n/g, "\n").trim();
   if (!output) return "";
   const commandResult = commandResultFromJson(output);
-  if (commandResult !== null) return commandResult;
+  if (commandResult !== null) return boundProjectedCommandOutput(commandResult);
   const marker = "\nOutput:\n";
   const markerIndex = output.indexOf(marker);
   if (markerIndex >= 0 && looksLikeCommandEnvelope(output.slice(0, markerIndex))) {
     output = output.slice(markerIndex + marker.length).trim();
   }
   output = output.replace(/^Total output lines: \d+\n\n/, "");
-  return output.trim();
+  return boundProjectedCommandOutput(output.trim());
 }
 
 function commandOutputFromEvent(item: RuntimeEvent): string {
@@ -840,7 +843,7 @@ function commandOutputFromEvent(item: RuntimeEvent): string {
   if (output) return output;
   const result = asRecord(asRecord(item.data)?.result);
   if (!result) return "";
-  return commandResultOutput(result);
+  return boundProjectedCommandOutput(commandResultOutput(result));
 }
 
 function commandTerminalFromEvent(item: RuntimeEvent): ActivityItem["terminal"] {
@@ -899,9 +902,19 @@ function looksLikeCommandEnvelope(header: string): boolean {
 
 function appendCommandOutput(existing: string | undefined, next: string): string {
   const current = existing ?? "";
-  if (!current) return next;
+  if (!current) return boundProjectedCommandOutput(next);
   if (current === next || current.includes(next)) return current;
-  if (next.includes(current)) return next;
+  if (next.includes(current)) return boundProjectedCommandOutput(next);
   const separator = current.endsWith("\n") || next.startsWith("\n") ? "" : "\n";
-  return `${current}${separator}${next}`;
+  return boundProjectedCommandOutput(`${current}${separator}${next}`);
+}
+
+export function boundProjectedCommandOutput(value: string): string {
+  if (value.length <= MAX_PROJECTED_COMMAND_OUTPUT_CHARS) return value;
+  const marker = "\n\n… output omitted from live view; full output remains in task history …\n\n";
+  const tailLength = Math.max(
+    0,
+    MAX_PROJECTED_COMMAND_OUTPUT_CHARS - PROJECTED_COMMAND_OUTPUT_HEAD_CHARS - marker.length,
+  );
+  return `${value.slice(0, PROJECTED_COMMAND_OUTPUT_HEAD_CHARS)}${marker}${value.slice(-tailLength)}`;
 }
