@@ -6,8 +6,6 @@ import {
   FileText,
   MessageSquare,
   MoreHorizontal,
-  Pin,
-  PinOff,
   SquarePen,
   X,
 } from "../icons";
@@ -25,7 +23,6 @@ export function SidebarTaskProjectGroup({
   onNewTask,
   onOpenProject,
   onRemoveProject,
-  onTogglePin,
   project,
 }: {
   children: ReactNode;
@@ -37,15 +34,12 @@ export function SidebarTaskProjectGroup({
   onNewTask?: () => void;
   onOpenProject?: () => void;
   onRemoveProject?: () => void;
-  onTogglePin?: () => void;
   project?: SidebarProjectItem | null;
 }) {
   const contentId = `sidebar-task-group-${groupKey.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
   const FallbackIcon = kind === "draft" ? FileText : MessageSquare;
   const [menuOpen, setMenuOpen] = useState(false);
-  const hasProjectActions = Boolean(
-    onNewTask || onOpenProject || onRemoveProject || onTogglePin,
-  );
+  const hasProjectActions = Boolean(onNewTask || onOpenProject || onRemoveProject);
 
   return (
     <section className="sidebar-task-project-group">
@@ -80,17 +74,6 @@ export function SidebarTaskProjectGroup({
         </button>
         {project && hasProjectActions ? (
           <div className="sidebar-task-project-group-actions">
-            {onTogglePin ? (
-              <button
-                type="button"
-                className="sidebar-row-action"
-                data-tooltip={project.pinned ? "Unpin project" : "Pin project"}
-                aria-label={project.pinned ? "Unpin project" : "Pin project"}
-                onClick={onTogglePin}
-              >
-                {project.pinned ? <PinOff size={13} /> : <Pin size={13} />}
-              </button>
-            ) : null}
             {(onOpenProject || onRemoveProject) ? (
               <button
                 type="button"

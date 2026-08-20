@@ -697,16 +697,6 @@ export function SidebarSectionList({
 
   return (
     <div className="sidebar-scroll">
-      {pinnedRows.length > 0 ? (
-        <SidebarSection
-          label="Pinned"
-          className="sidebar-pinned-section"
-          collapsed={pinnedCollapsed}
-          onToggleCollapsed={onTogglePinnedCollapsed}
-        >
-          {pinnedRows.map(renderPinnedRow)}
-        </SidebarSection>
-      ) : null}
       <SidebarSection
         label={taskSectionLabel}
         className={`sidebar-task-section${
@@ -753,6 +743,16 @@ export function SidebarSectionList({
           />
         }
       >
+        {pinnedRows.length > 0 ? (
+          <SidebarSection
+            label="Pinned"
+            className="sidebar-pinned-section"
+            collapsed={pinnedCollapsed}
+            onToggleCollapsed={onTogglePinnedCollapsed}
+          >
+            {pinnedRows.map(renderPinnedRow)}
+          </SidebarSection>
+        ) : null}
         {groupByProject && experience !== "chat"
           ? groupedTaskRows.map((group) => {
               const expanded =
@@ -780,7 +780,6 @@ export function SidebarSectionList({
                     setView("chat");
                   } : undefined}
                   onRemoveProject={group.project ? () => removeProject(group.project!) : undefined}
-                  onTogglePin={group.project ? () => toggleProjectPinned(group.project!) : undefined}
                   project={group.project}
                 >
                   {group.sessions.map((session) =>

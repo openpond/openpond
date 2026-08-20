@@ -261,6 +261,9 @@ describe("sidebar task list controls", () => {
     );
 
     expect(markup.indexOf("sidebar-pinned-section")).toBeGreaterThan(-1);
+    expect(markup.indexOf(">Tasks<")).toBeLessThan(
+      markup.indexOf("sidebar-pinned-section"),
+    );
     expect(markup.indexOf("sidebar-pinned-section")).toBeLessThan(
       markup.indexOf("sidebar-task-project-group"),
     );

@@ -757,6 +757,10 @@
   gap: 3px;
 }
 
+.sidebar-task-section > .sidebar-section-body > .sidebar-pinned-section {
+  padding: 2px 0 8px;
+}
+
 .sidebar-task-mode-buttons {
   display: inline-flex;
   align-items: center;
