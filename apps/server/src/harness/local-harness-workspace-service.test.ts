@@ -782,6 +782,10 @@ describe("local Harness workspace service", () => {
     });
 
     const admittedBeforeRefine = await loadSelectedLocalHarnessRuntime(store);
+    expect(admittedBeforeRefine?.instructionContext).toContain("Active Harness preflight:");
+    expect(admittedBeforeRefine?.instructionContext).toContain("Harness capability receipt:");
+    expect(admittedBeforeRefine?.instructionContext).not.toContain("Use the document runtime.");
+    expect(admittedBeforeRefine?.instructionContext).not.toContain("export const agent = {};");
     const improvedSkill = "---\nname: documents\ndescription: Create documents.\n---\n\nUse the bundled document runtime before importing DOCX libraries.\n";
     const edit = HarnessOverlayEditSchema.parse({
       id: "improve-documents-skill",

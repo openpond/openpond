@@ -193,7 +193,23 @@ async function executeLocalHarnessRefinerWorker(
   const source = await readBoundedRefinerSource(
     release.bundlePath,
     trigger,
+    { forceUnloaded: rebasedOntoCurrent },
   );
+  const admittedRelease = rebasedOntoCurrent
+    ? await input.store.getHarnessReleaseRecord(
+        overlay.baseHarnessRelease.contentHash,
+      )
+    : release;
+  if (
+    !admittedRelease ||
+    admittedRelease.harnessRelease.id !== overlay.baseHarnessRelease.id ||
+    admittedRelease.workspaceId !== workspace.id
+  ) {
+    throw new Error("Queued Refiner trigger references an unavailable admitted Harness release.");
+  }
+  const admittedSource = rebasedOntoCurrent
+    ? await readBoundedRefinerSource(admittedRelease.bundlePath, trigger)
+    : source;
   const memorySource = (await input.store.listHarnessMemories(workspace.id))
     .slice(0, 100)
     .map((entry) => ({
@@ -217,11 +233,27 @@ async function executeLocalHarnessRefinerWorker(
     skill: true,
     agent: false,
   } as const;
+  const admissibleEvidenceIds = [
+    ...observations.map((observation) => observation.id),
+    ...boundedContext.reviewPacket.priorIncidents.flatMap((incident) =>
+      typeof incident.id === "string" && incident.id.trim()
+        ? [incident.id.trim()]
+        : [],
+    ),
+  ];
   const refinerEvidence = {
     capabilities,
     trigger: boundedTriggerEvidence(trigger),
     observations: observations.map(boundedObservationEvidence),
+    admissibleEvidenceIds,
     reviewPacket: boundedContext.reviewPacket,
+    runtimeActivation: {
+      admittedRelease: overlay.baseHarnessRelease,
+      currentRelease: effectiveReleaseRef,
+      rebasedOntoCurrent,
+      admittedSourceFiles: admittedSource.files,
+      admittedSourceCatalog: admittedSource.catalog,
+    },
     sourceFiles: source.files,
     sourceCatalog: source.catalog,
     additionalEvidence: input.additionalEvidence ?? null,

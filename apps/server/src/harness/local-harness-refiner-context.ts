@@ -712,8 +712,15 @@ export async function loadExactObservations(
 export async function readBoundedRefinerSource(
   bundlePath: string,
   trigger: RefinementTriggerDecision,
+  options: { forceUnloaded?: boolean } = {},
 ) {
   const loadedSkillNames = loadedSkillNamesFromTrigger(trigger);
+  const sourceWasAdmitted = options.forceUnloaded !== true;
+  const wasLoaded = (kind: "instruction" | "skill" | "agent", filePath: string) =>
+    sourceWasAdmitted && (
+      kind === "instruction" ||
+      (kind === "skill" && loadedSkillNames.has(skillNameFromPath(filePath)))
+    );
   const sourceRoot = path.resolve(bundlePath, "source");
   const manifest = HarnessSourceManifestSchema.parse(
     JSON.parse(await fs.readFile(path.join(sourceRoot, "harness.json"), "utf8")),
@@ -736,11 +743,13 @@ export async function readBoundedRefinerSource(
     .map((file) => ({
       path: file.path,
       kind: file.kind,
-      loaded: file.kind === "skill" && loadedSkillNames.has(skillNameFromPath(file.path)),
+      loaded: wasLoaded(file.kind, file.path),
     }));
   const rankedFiles = manifest.files.slice().sort((left, right) => {
-    const leftLoaded = left.kind === "skill" && loadedSkillNames.has(skillNameFromPath(left.path));
-    const rightLoaded = right.kind === "skill" && loadedSkillNames.has(skillNameFromPath(right.path));
+    const leftLoaded = ["instruction", "skill", "agent"].includes(left.kind)
+      && wasLoaded(left.kind as "instruction" | "skill" | "agent", left.path);
+    const rightLoaded = ["instruction", "skill", "agent"].includes(right.kind)
+      && wasLoaded(right.kind as "instruction" | "skill" | "agent", right.path);
     if (leftLoaded !== rightLoaded) return leftLoaded ? -1 : 1;
     const rank = (kind: string) => kind === "instruction" ? 0 : kind === "skill" ? 1 : 2;
     return rank(left.kind) - rank(right.kind) || left.path.localeCompare(right.path);
@@ -762,7 +771,7 @@ export async function readBoundedRefinerSource(
       path: file.path,
       kind: file.kind as "instruction" | "skill" | "agent",
       content: bytes.toString("utf8"),
-      loaded: file.kind === "skill" && loadedSkillNames.has(skillNameFromPath(file.path)),
+      loaded: wasLoaded(file.kind as "instruction" | "skill" | "agent", file.path),
     });
     remaining -= bytes.byteLength;
   }
