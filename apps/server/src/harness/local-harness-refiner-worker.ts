@@ -38,8 +38,8 @@ import {
 import {
   loadBoundedRefinerContext,
   loadExactObservations,
-  readBoundedRefinerSource,
 } from "./local-harness-refiner-context.js";
+import { loadRefinerReleaseContext } from "./local-harness-refiner-release-context.js";
 import {
   boundedObservationEvidence,
   boundedTriggerEvidence,
@@ -174,42 +174,14 @@ async function executeLocalHarnessRefinerWorker(
     });
   }
 
-  const effectiveReleaseRef = rebasedOntoCurrent
-    ? workspace.currentChannel.release
-    : overlay.baseHarnessRelease;
-  if (!effectiveReleaseRef) {
-    throw new Error("Queued Refiner trigger references a Harness workspace without a current release.");
-  }
-  const release = await input.store.getHarnessReleaseRecord(
-    effectiveReleaseRef.contentHash,
-  );
-  if (
-    !release ||
-    release.harnessRelease.id !== effectiveReleaseRef.id ||
-    release.workspaceId !== workspace.id
-  ) {
-    throw new Error("Queued Refiner trigger references an unavailable effective Harness release.");
-  }
-  const source = await readBoundedRefinerSource(
-    release.bundlePath,
-    trigger,
-    { forceUnloaded: rebasedOntoCurrent },
-  );
-  const admittedRelease = rebasedOntoCurrent
-    ? await input.store.getHarnessReleaseRecord(
-        overlay.baseHarnessRelease.contentHash,
-      )
-    : release;
-  if (
-    !admittedRelease ||
-    admittedRelease.harnessRelease.id !== overlay.baseHarnessRelease.id ||
-    admittedRelease.workspaceId !== workspace.id
-  ) {
-    throw new Error("Queued Refiner trigger references an unavailable admitted Harness release.");
-  }
-  const admittedSource = rebasedOntoCurrent
-    ? await readBoundedRefinerSource(admittedRelease.bundlePath, trigger)
-    : source;
+  const { admittedSource, effectiveReleaseRef, release, source } =
+    await loadRefinerReleaseContext({
+      store: input.store,
+      workspace,
+      overlay,
+      trigger,
+      rebasedOntoCurrent,
+    });
   const memorySource = (await input.store.listHarnessMemories(workspace.id))
     .slice(0, 100)
     .map((entry) => ({
