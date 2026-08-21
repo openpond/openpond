@@ -1,18 +1,43 @@
 # OpenPond Agent SDK
 
-This folder is the TypeScript-first OpenPond Agent SDK package. Releases use the repository's npm trusted-publishing workflow; local source remains executable for package development.
+`openpond-agent-sdk` is the TypeScript SDK and CLI for authoring, inspecting,
+validating, evaluating, and packaging deployable OpenPond Agents. It provides
+the source primitives, local runtime, generated manifests, and validation
+contracts used by Agent projects.
 
-The package name is:
+## Install
 
-```text
-openpond-agent-sdk
+Node.js 22.14 or newer is required. Install the package in an Agent project:
+
+```bash
+npm install openpond-agent-sdk
+# or
+pnpm add openpond-agent-sdk
 ```
 
-The local CLI is:
+The package installs the `openpond-agent` CLI. Once an Agent project contains
+an `agent/agent.ts` entrypoint, inspect and validate it with:
 
-```text
-openpond-agent
+```bash
+npx openpond-agent inspect --json
+npx openpond-agent validate --json
+npx openpond-agent eval --json
 ```
+
+With pnpm, use `pnpm exec openpond-agent` in place of `npx openpond-agent`.
+
+## Which OpenPond SDK?
+
+OpenPond publishes two SDKs with separate responsibilities:
+
+| Package | Use it for |
+| --- | --- |
+| [`openpond-agent-sdk`](https://www.npmjs.com/package/openpond-agent-sdk) | Authoring, validating, evaluating, and packaging deployable Agent projects. |
+| [`openpond-sdk`](https://www.npmjs.com/package/openpond-sdk) | Calling hosted Work, sandbox, workflow, and Project Action APIs from server-side applications. |
+
+Agent source imports `openpond-agent-sdk`. A Node.js server, worker, or Next.js
+route that calls the OpenPond API imports `openpond-sdk`. The packages are
+complementary; neither replaces the other.
 
 ## Templates
 
@@ -30,13 +55,15 @@ Templates included in the package:
 - `customer-reply-agent`: small customer-response template with optional Slack setup.
 - `integration-heavy-agent`: setup-heavy template with Slack, model access, env/secret refs, a project volume, a disabled schedule, artifacts, evals, and edit policy.
 
-The current local examples are:
+The repository examples are:
 
-- `examples/PILOT-SCENARIOS.md`: checked pilot snapshots, setup projections, edit scenarios, channel coverage, volume/setup cases, and migration notes.
 - `examples/blank-agent`: raw/blank scaffold for the no-template path.
+- `examples/cross-system-operations`: multi-system actions and tool-driven operations.
 - `examples/customer-reply-agent`: small first-party template proving template-copy ergonomics.
-- `examples/water-estimator-agent`: complex workflow example with actions, tools, workflows, integrations, volumes, channels, schedules, evals, and editable policy.
 - `examples/integration-heavy-agent`: setup-heavy example proving integrations, env/secrets, volumes, schedules, artifacts, evals, and edit policy.
+- `examples/local-schedule-writer-agent`: locally runnable scheduled writer example.
+- `examples/validation-failures`: intentionally invalid projects used to demonstrate validation and eval gates.
+- `examples/water-estimator-agent`: complex workflow example with actions, tools, workflows, integrations, volumes, channels, schedules, evals, and editable policy.
 
 Package docs live under `docs/`:
 
@@ -95,9 +122,10 @@ evals/* = repeatable tests for behavior
 agent-inspect.json = source inspection contract after source materialization
 ```
 
-## Local Commands
+## Repository Development
 
-Run these from this package root:
+For contributors working from the OpenPond monorepo, run these from this
+package directory:
 
 ```bash
 pnpm install
@@ -108,7 +136,12 @@ pnpm eval --cwd examples/blank-agent
 pnpm check
 ```
 
-Root scripts are package-first and do not name a specific example. Use `--cwd` to point the CLI at any SDK agent project and `--out-dir` when generated artifacts should go somewhere other than `.openpond`. `pnpm check` runs typecheck, package tests, and the example matrix in `scripts/check-examples.ts`.
+These package scripts are for repository development. npm consumers should use
+the installed `openpond-agent` binary shown above. The scripts are package-first
+and do not name a specific example. Use `--cwd` to point the CLI at any SDK
+agent project and `--out-dir` when generated artifacts should go somewhere
+other than `.openpond`. `pnpm check` runs typecheck, package tests, packed-install
+tests, and the example matrix in `scripts/check-examples.ts`.
 
 Each example also has local agent scripts:
 

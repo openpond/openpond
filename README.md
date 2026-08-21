@@ -60,13 +60,14 @@ Corepack is only needed when running from source. It makes the repository's pinn
 
 ## npm packages
 
-OpenPond publishes four packages to npm. Internal application and workspace
+OpenPond publishes five packages to npm. Internal application and workspace
 packages are implementation details and are documented in the
 [development guide](docs/public/development.md).
 
 | Package | Role |
 | --- | --- |
 | [`openpond`](https://www.npmjs.com/package/openpond) | CLI, TUI, Local OpenPond app, and bundled app-server executable. |
+| [`openpond-agent-sdk`](https://www.npmjs.com/package/openpond-agent-sdk) | TypeScript SDK and CLI for authoring, validating, evaluating, and packaging deployable OpenPond Agents. |
 | [`openpond-sdk`](https://www.npmjs.com/package/openpond-sdk) | Server-side TypeScript SDK for hosted Work and sandboxes. |
 | [`@openpond/harness`](https://www.npmjs.com/package/@openpond/harness) | Portable immutable Harness releases, workspaces, improvements, tools, models, and Refiner contracts. |
 | [`@openpond/evals`](https://www.npmjs.com/package/@openpond/evals) | Portable Tasksets, graders, evaluation runs, receipts, conformance, and Work evidence. |
