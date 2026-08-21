@@ -517,12 +517,12 @@ export function TeamAgentConversationPanel(
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [props.onCloseAgentConversation]);
 
-  async function submitAgentMessage(): Promise<boolean> {
+  async function submitAgentMessage(promptOverride?: string): Promise<boolean> {
     const clientRequestId =
       clientRequestIdRef.current ?? crypto.randomUUID();
     clientRequestIdRef.current = clientRequestId;
     const sent = await props.onSendAgentTurn({
-      body: agentPrompt,
+      body: promptOverride ?? agentPrompt,
       clientRequestId,
     });
     if (sent) {
@@ -597,6 +597,7 @@ export function TeamAgentConversationPanel(
           contextWindowStatus={props.contextWindowStatus}
           busy={props.busy || running}
           running={running}
+          interruptRunningTurnBeforeSteer={false}
           submissionScopeKey={`team-agent:${conversation.conversationId}`}
           showProjectFooter={false}
           connection={props.connection}
@@ -623,7 +624,9 @@ export function TeamAgentConversationPanel(
             setAgentPrompt(value);
           }}
           showToast={props.showToast}
-          onSubmit={submitAgentMessage}
+          onSubmit={async (_attachments, _action, _command, options) =>
+            submitAgentMessage(options?.promptOverride)
+          }
           onStop={() => false}
         />
       </div>
@@ -664,9 +667,9 @@ export function TeamAiThreadPanel(
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [props.onCloseAiThread]);
 
-  async function submitAiMessage(): Promise<boolean> {
+  async function submitAiMessage(promptOverride?: string): Promise<boolean> {
     const sent = await props.onSendAiTurn({
-      body: aiPrompt,
+      body: promptOverride ?? aiPrompt,
       providerId: provider,
       modelId: model,
     });
@@ -781,7 +784,9 @@ export function TeamAiThreadPanel(
           onOpenPondCommandAccessModeChange={props.onOpenPondCommandAccessModeChange}
           onPromptChange={setAiPrompt}
           showToast={props.showToast}
-          onSubmit={submitAiMessage}
+          onSubmit={async (_attachments, _action, _command, options) =>
+            submitAiMessage(options?.promptOverride)
+          }
           onStop={props.onStopAiTurn}
         />
       </div>

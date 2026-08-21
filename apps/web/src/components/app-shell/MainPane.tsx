@@ -290,6 +290,7 @@ export function MainPane({
   );
   const [composerAttachmentRequest, setComposerAttachmentRequest] =
     useState<ComposerAttachmentRequest | null>(null);
+  const [chatSubmissionVersion, setChatSubmissionVersion] = useState(0);
   const [openDiffFileRequest, setOpenDiffFileRequest] =
     useState<WorkspaceDiffOpenFileRequest | null>(null);
   const [rightSidebarSourceOverride, setRightSidebarSourceOverride] =
@@ -924,6 +925,7 @@ export function MainPane({
               );
               return false;
             }
+            setChatSubmissionVersion((version) => version + 1);
             return sendPrompt(
               [],
               null,
@@ -948,6 +950,7 @@ export function MainPane({
                     bootstrap?.profile.sourcePath ?? null
                   )
                 : promptForAppSlashCommand(command);
+            setChatSubmissionVersion((version) => version + 1);
             return sendPrompt([], null, skillPrompt, {
               clearPrompt: options.preservePrompt ? () => undefined : undefined,
               usageAttribution: usageAttributionForComposerSlashCommand(
@@ -956,6 +959,7 @@ export function MainPane({
               ),
             });
           }
+          setChatSubmissionVersion((version) => version + 1);
           return sendPrompt([], null, promptForAppSlashCommand(command), {
             clearPrompt: options.preservePrompt ? () => undefined : undefined,
             usageAttribution: usageAttributionForComposerSlashCommand(
@@ -965,6 +969,7 @@ export function MainPane({
           });
         }
       }
+      setChatSubmissionVersion((version) => version + 1);
       return sendPrompt(attachments, action, options.promptOverride, {
         clearPrompt: options.preservePrompt ? () => undefined : undefined,
         displayPrompt: options.displayPrompt,
@@ -1029,6 +1034,7 @@ export function MainPane({
     userMessageNavigation,
   } = useMainPaneChatScroll({
     browserConversationId,
+    chatSubmissionVersion,
     chatHistoryHasMore,
     chatHistoryLoading,
     chatMessages,
