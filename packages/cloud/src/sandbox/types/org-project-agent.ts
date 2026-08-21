@@ -445,6 +445,21 @@ export type SandboxAgentSourceChecksRequestResult = Record<string, unknown> & {
   };
 };
 
+export type SandboxAgentSourceSetupConfigureInput = {
+  teamId: string;
+  integrationBindings?: Array<{
+    provider: string;
+    ref?: string | null;
+    mode?: "connected" | "connect_later";
+    connectionMode?: "member_connection" | "workspace_connection";
+    grantPolicy?: "read_only" | "ask_before_write" | "allow_write_for_action";
+    allowedActions?: string[];
+    enabled?: boolean;
+  }>;
+};
+
+export type SandboxAgentSourceSetupConfigureResult = Record<string, unknown>;
+
 export type SandboxAgentSourcePublishInput = {
   teamId: string;
   expectedManifestHash?: string | null;

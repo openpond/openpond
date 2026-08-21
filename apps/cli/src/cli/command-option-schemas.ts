@@ -78,12 +78,13 @@ export const PROJECT_OPTION_SCHEMA = {
 
 export const AGENT_OPTION_SCHEMA = {
   agentId: string, agentEdit: json, allowLatestSource: boolean,
+  allowedActions: string,
   attachmentsJson: json, baseSha: string, chatMode: string, checkKind: string,
   conversationId: string, cwd: string, dispatch: string, entrypointName: string,
   entrypointScope: string, expectedManifestHash: string,
   evalStatus: string, expectedSourceCommitSha: string, idempotencyKey: string, input: json,
   inputFile: string, json: boolean, limit: integer, message: string, metadata: json,
-  name: string, path: string, payload: json, projectId: string, prompt: string,
+  name: string, path: string, payload: json, projectId: string, prompt: string, provider: string,
   publishedSnapshotId: string, ref: string, requirePublishedSnapshot: boolean,
   requiredEnv: string, requiredIntegrations: string, runtimePromotionPolicy: string,
   runtimeSourceMode: string, sourceCheckDispatch: string, sourceMode: string,

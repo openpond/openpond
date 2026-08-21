@@ -54,6 +54,8 @@ import type {
   SandboxAgentSourceDeployPlanResponse,
   SandboxAgentSourcePublishInput,
   SandboxAgentSourcePublishResult,
+  SandboxAgentSourceSetupConfigureInput,
+  SandboxAgentSourceSetupConfigureResult,
   SandboxAgentManifestSnapshot,
   SandboxAgentManifestSnapshotsResponse,
   SandboxProjectListResponse,
@@ -526,6 +528,18 @@ export class OpenPondSandboxClient extends OpenPondSandboxInstanceClient {
         body: JSON.stringify(body),
         timeoutMs: 15 * 60 * 1000,
       }
+    );
+  }
+
+  configureAgentSourceSetup(
+    agentId: string,
+    input: SandboxAgentSourceSetupConfigureInput
+  ): Promise<SandboxAgentSourceSetupConfigureResult> {
+    const query = new URLSearchParams({ teamId: input.teamId });
+    const { teamId: _teamId, ...body } = input;
+    return this.requestApiRoot<SandboxAgentSourceSetupConfigureResult>(
+      `/agents/${encodeURIComponent(agentId)}/source/setup?${query.toString()}`,
+      { method: "POST", body: JSON.stringify(body) }
     );
   }
 

@@ -14,7 +14,7 @@ export async function runAgentSourceWorkflow(
   const sourceCommand = rest[1]?.trim();
   const agentId = rest[2]?.trim();
   const usage =
-    "usage: agent source <deploy-plan|checks|manifest-snapshots|publish> <agent-id> --team-id <id>";
+    "usage: agent source <deploy-plan|checks|manifest-snapshots|setup|publish> <agent-id> --team-id <id>";
   const teamId = requiredTeamId(options, usage);
   if (!sourceCommand || !agentId) {
     throw new Error(usage);
@@ -39,6 +39,28 @@ export async function runAgentSourceWorkflow(
       agentId,
       buildAgentSourceChecksInput(teamId, options)
     );
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (sourceCommand === "setup") {
+    const provider = typeof options.provider === "string" ? options.provider.trim() : "";
+    const allowedActions = typeof options.allowedActions === "string"
+      ? options.allowedActions.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+    if (!provider || allowedActions.length === 0) {
+      throw new Error(`${usage}; setup requires --provider and --allowed-actions`);
+    }
+    const result = await client.agents.configureSourceSetup(agentId, {
+      teamId,
+      integrationBindings: [{
+        provider,
+        mode: "connected",
+        connectionMode: "member_connection",
+        grantPolicy: "read_only",
+        allowedActions,
+        enabled: true,
+      }],
+    });
     console.log(JSON.stringify(result, null, 2));
     return;
   }

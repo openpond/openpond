@@ -89,6 +89,10 @@ export async function materializeHostedProfileAgentSource(input: {
     sandboxProjectSourceRef(syncedProject) ??
     sandboxProjectSourceRef(uploadedProject) ??
     input.sourceRef;
+  const runtimeAgentExternalId = `openpond-profile-agent:${input.profileProjectId}:${input.profileName}:${input.agentId}`;
+  const existingRuntimeAgent = (await input.client.agents.list({
+    teamId: input.teamId,
+  })).find((candidate) => candidate.externalId === runtimeAgentExternalId);
   const runtimeAgent = await input.client.agents.upsert({
     teamId: input.teamId,
     projectId: syncedProject.id,
@@ -105,6 +109,7 @@ export async function materializeHostedProfileAgentSource(input: {
       ...(sourceCommitSha ? { sourceCommitSha } : {}),
     },
     metadata: {
+      ...(existingRuntimeAgent?.metadata ?? {}),
       source: "openpond_profile_agent_materialization",
       profileProjectId: input.profileProjectId,
       profileName: input.profileName,
@@ -113,7 +118,7 @@ export async function materializeHostedProfileAgentSource(input: {
       localHead: input.localHead,
       hostedHead: input.hostedHead,
     },
-    externalId: `openpond-profile-agent:${input.profileProjectId}:${input.profileName}:${input.agentId}`,
+    externalId: runtimeAgentExternalId,
   });
 
   const uploadMetadata = record(agentSdk.uploadMetadata);

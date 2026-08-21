@@ -3,6 +3,7 @@ import type {
   SandboxAgentRunInput,
   SandboxAgentSourceChecksRequestInput,
   SandboxAgentSourcePublishInput,
+  SandboxAgentSourceSetupConfigureInput,
   SandboxAgentUpdateInput,
   SandboxAgentUpsertInput,
   SandboxCreateInput,
@@ -151,6 +152,10 @@ export function createSandboxAgentNamespace(client: OpenPondSandboxClient) {
       agentId: string,
       input: SandboxAgentSourceChecksRequestInput
     ) => client.requestAgentSourceChecks(agentId, input),
+    configureSourceSetup: (
+      agentId: string,
+      input: SandboxAgentSourceSetupConfigureInput
+    ) => client.configureAgentSourceSetup(agentId, input),
     publishSource: (agentId: string, input: SandboxAgentSourcePublishInput) =>
       client.publishAgentSource(agentId, input),
   };
