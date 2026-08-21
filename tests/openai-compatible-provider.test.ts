@@ -466,7 +466,7 @@ describe("OpenAI-compatible provider adapter", () => {
     ).toThrow(/The raw OpenAI provider uses Platform API credentials/);
   });
 
-  test("streams OpenAI ChatGPT subscription requests through the Codex Responses endpoint without unsupported sampling fields", async () => {
+  test("streams OpenAI ChatGPT subscription requests with reasoning summaries and without unsupported sampling fields", async () => {
     const requests: Array<{
       url: string;
       authorization: string | null;
@@ -552,6 +552,7 @@ describe("OpenAI-compatible provider adapter", () => {
           stream: true,
           store: false,
           instructions: "Be concise.",
+          reasoning: { summary: "auto" },
           tools: [
             {
               type: "function",

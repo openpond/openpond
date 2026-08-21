@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   HarnessEvaluationReviewReceipt,
   HarnessEvaluationReviewSchedule,
@@ -6,17 +6,21 @@ import type {
   HarnessHistoryPayload,
   HarnessHistoryPendingReview,
   HarnessHistoryReleaseSummary,
-  HarnessHistoryRoute,
 } from "@openpond/contracts";
 
 import { api, type ClientConnection } from "../../api";
-import { Check, RefreshCw, RotateCcw, X } from "../icons";
+import { ConfirmDialog, useConfirmDialog } from "../common/ConfirmDialog";
+import { AppDialog } from "../dialogs/AppDialog";
+import { Check, Columns2, Eye, MessageSquare, RotateCcw, X } from "../icons";
 import { HarnessEvaluationReviewSettings } from "./HarnessEvaluationReviewSettings";
 import type { HarnessReleaseDiffSelection } from "./HarnessReleaseDiffSidebar";
+
+export type HarnessSettingsPage = "overview" | "refiner" | "continuous-review" | "contents" | "releases";
 
 type Props = {
   connection: ClientConnection | null;
   enabled: boolean;
+  page: HarnessSettingsPage;
   onError: (message: string | null) => void;
   onDefaultReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
   onOpenReleaseDiff: (selection: HarnessReleaseDiffSelection) => void;
@@ -29,10 +33,10 @@ type Props = {
 };
 
 const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
-  enabled: true,
-  activityEnabled: true,
+  enabled: false,
+  activityEnabled: false,
   activityBatchSize: 10,
-  cadence: "daily",
+  cadence: "manual",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
   lastRunAt: null,
@@ -41,7 +45,31 @@ const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
   updatedAt: null,
 };
 
-function formatDate(value: string): string {
+const PAGE_COPY: Record<HarnessSettingsPage, { title: string; description: string }> = {
+  overview: {
+    title: "Harness overview",
+    description: "Current state, items needing attention, and recent learning activity.",
+  },
+  refiner: {
+    title: "Refiner",
+    description: "Validated per-turn improvements and recommendations routed outside the Harness.",
+  },
+  "continuous-review": {
+    title: "Continuous Review",
+    description: "Recurring patterns found across completed work and their immutable review receipts.",
+  },
+  contents: {
+    title: "Harness contents",
+    description: "The instructions, skills, agents, and memory available in the current release.",
+  },
+  releases: {
+    title: "Harness releases",
+    description: "Immutable versions, diffs, and rollback controls.",
+  },
+};
+
+function formatDate(value: string | null | undefined): string {
+  if (!value) return "Not yet";
   const date = new Date(value);
   return Number.isNaN(date.valueOf()) ? value : date.toLocaleString();
 }
@@ -57,123 +85,10 @@ function releaseDiffSelection(
 ): HarnessReleaseDiffSelection {
   return {
     workspaceId,
-    baseRelease: baseRelease
-      ? { id: baseRelease.id, contentHash: baseRelease.contentHash }
-      : null,
+    baseRelease: baseRelease ? { id: baseRelease.id, contentHash: baseRelease.contentHash } : null,
     targetRelease: { id: targetRelease.id, contentHash: targetRelease.contentHash },
-    title: targetRelease.current
-      ? "Current Harness release"
-      : `Harness release ${shortHash(targetRelease.contentHash)}`,
+    title: targetRelease.current ? "Current Harness release" : `Harness release ${shortHash(targetRelease.contentHash)}`,
   };
-}
-
-function HistoryChangeCard({
-  change,
-  onOpenDiff,
-  onOpenSourceSession,
-}: {
-  change: HarnessHistoryChange;
-  onOpenDiff?: () => void;
-  onOpenSourceSession?: (sessionId: string) => void;
-}) {
-  const sourceSession = change.trigger?.runRef ?? null;
-  const proposal = change.proposal;
-  return (
-    <article className="harness-history-card">
-      <header>
-        <div>
-          <div className="harness-history-kicker">
-            <span className={`harness-status harness-status-${change.receipt.decision}`}>
-              {change.receipt.decision.replaceAll("_", " ")}
-            </span>
-            <span>{proposal?.route ?? (change.receipt.rollbackOf ? "rollback" : "workspace")}</span>
-          </div>
-          <h2>{proposal?.expectedOutcome ?? change.receipt.reason}</h2>
-        </div>
-        <time>{formatDate(change.receipt.createdAt)}</time>
-      </header>
-
-      <div className="harness-history-release-flow">
-        <code>{shortHash(change.receipt.previousRelease?.contentHash)}</code>
-        <span aria-hidden="true">→</span>
-        <code>{shortHash(change.receipt.nextRelease?.contentHash)}</code>
-        <span>channel {change.receipt.previousChannelRevision} → {change.receipt.nextChannelRevision}</span>
-      </div>
-
-      <p>{change.receipt.reason}</p>
-
-      {onOpenDiff || (sourceSession && onOpenSourceSession) ? (
-        <div className="harness-history-actions">
-          {onOpenDiff ? (
-            <button className="settings-secondary compact" onClick={onOpenDiff} type="button">
-              View release diff
-            </button>
-          ) : null}
-          {sourceSession && onOpenSourceSession ? (
-            <button
-              className="settings-secondary compact"
-              onClick={() => onOpenSourceSession(sourceSession)}
-              type="button"
-            >
-              Open source conversation
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {proposal ? (
-        <details className="harness-history-details">
-          <summary>Review {proposal.edits.length} exact edit{proposal.edits.length === 1 ? "" : "s"}</summary>
-          <div className="harness-edit-list">
-            {proposal.edits.map((edit) => (
-              <section className="harness-edit" key={edit.id}>
-                <div>
-                  <strong>{edit.operation} · {edit.target}</strong>
-                  <span>{edit.summary}</span>
-                </div>
-                {edit.content !== null ? <pre>{edit.content}</pre> : <p>File deleted.</p>}
-              </section>
-            ))}
-          </div>
-        </details>
-      ) : null}
-
-      {change.validations.length ? (
-        <div className="harness-validation-list">
-          {change.validations.map((validation) => (
-            <div key={validation.id}>
-              <span className={`harness-validation-status ${validation.status}`}>
-                {validation.status}
-              </span>
-              <strong>{validation.kind.replaceAll("_", " ")}</strong>
-              <span>{validation.summary}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {change.outcome ? (
-        <footer>
-          <span>Refiner: {change.outcome.decision.replaceAll("_", " ")}</span>
-          <span>Estimated cost ${change.outcome.estimatedCostUsd.toFixed(4)}</span>
-        </footer>
-      ) : null}
-    </article>
-  );
-}
-
-function RouteCard({ route }: { route: HarnessHistoryRoute }) {
-  return (
-    <article className="harness-route-card">
-      <div>
-        <span className="harness-status harness-status-retained">recommendation</span>
-        <strong>{route.decision.route}</strong>
-        <time>{formatDate(route.decision.createdAt)}</time>
-      </div>
-      <p>{route.decision.reason}</p>
-      {route.trigger ? <small>Triggered by {route.trigger.reason}</small> : null}
-    </article>
-  );
 }
 
 function PendingReviewCard({
@@ -198,8 +113,8 @@ function PendingReviewCard({
         <time>{formatDate(review.proposal.createdAt)}</time>
       </header>
       <p>{review.proposal.edits.map((edit) => edit.summary).join(" ")}</p>
-      <details className="harness-history-details" open>
-        <summary>Review {review.proposal.edits.length} exact edit{review.proposal.edits.length === 1 ? "" : "s"}</summary>
+      <details className="harness-history-details">
+        <summary>Exact edits ({review.proposal.edits.length})</summary>
         <div className="harness-edit-list">
           {review.proposal.edits.map((edit) => (
             <section className="harness-edit" key={edit.id}>
@@ -209,20 +124,28 @@ function PendingReviewCard({
           ))}
         </div>
       </details>
-      <div className="harness-validation-list">
-        {review.validations.map((validation) => (
-          <div key={validation.id}>
-            <span className={`harness-validation-status ${validation.status}`}>{validation.status}</span>
-            <strong>{validation.kind.replaceAll("_", " ")}</strong>
-            <span>{validation.summary}</span>
+      {review.validations.length ? (
+        <details className="harness-history-details">
+          <summary>Validation receipts ({review.validations.length})</summary>
+          <div className="harness-validation-list">
+            {review.validations.map((validation) => (
+              <div key={validation.id}>
+                <span className={`harness-validation-status ${validation.status}`}>{validation.status}</span>
+                <strong>{validation.kind.replaceAll("_", " ")}</strong>
+                <span>{validation.summary}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </details>
+      ) : null}
       <footer className="harness-review-actions">
-        <button className="settings-secondary compact" disabled={busy} onClick={() => onReview(review, "decline")} type="button">
-          <X size={13} /> Decline
-        </button>
-        <button className="settings-primary compact" disabled={busy || review.validations.some((item) => item.status !== "passed")} onClick={() => onReview(review, "approve")} type="button">
+        <button className="settings-secondary compact" disabled={busy} onClick={() => onReview(review, "decline")} type="button"><X size={13} /> Decline</button>
+        <button
+          className="settings-primary compact"
+          disabled={busy || review.validations.some((item) => item.status !== "passed")}
+          onClick={() => onReview(review, "approve")}
+          type="button"
+        >
           <Check size={13} /> Approve and release
         </button>
       </footer>
@@ -230,69 +153,263 @@ function PendingReviewCard({
   );
 }
 
-function ReleaseRow({
-  baseRelease,
-  release,
-  busy,
-  onOpenDiff,
-  onRollback,
+function RefinerChangeDetailsDialog({
+  change,
+  onClose,
 }: {
-  baseRelease: HarnessHistoryReleaseSummary | null;
-  release: HarnessHistoryReleaseSummary;
-  busy: boolean;
-  onOpenDiff: (
-    baseRelease: HarnessHistoryReleaseSummary | null,
-    targetRelease: HarnessHistoryReleaseSummary,
-  ) => void;
-  onRollback: (release: HarnessHistoryReleaseSummary) => void;
+  change: HarnessHistoryChange;
+  onClose: () => void;
 }) {
-  const [confirming, setConfirming] = useState(false);
+  const proposal = change.proposal;
   return (
-    <div className="harness-release-row">
-      <div>
-        <strong>{release.current ? "Current release" : release.id}</strong>
-        <span>{shortHash(release.contentHash)} · {release.files.length} files · {formatDate(release.createdAt)}</span>
+    <AppDialog
+      ariaLabel="Refiner change details"
+      backdropClassName="harness-details-dialog-backdrop"
+      className="harness-details-dialog"
+      onClose={onClose}
+    >
+      <header>
+        <div>
+          <span className={`harness-status harness-status-${change.receipt.decision}`}>{change.receipt.decision.replaceAll("_", " ")}</span>
+          <h2>{proposal?.expectedOutcome ?? change.receipt.reason}</h2>
+          <p>{change.receipt.reason}</p>
+        </div>
+        <button aria-label="Close change details" onClick={onClose} type="button"><X size={16} /></button>
+      </header>
+      <div className="harness-details-dialog-body">
+        {proposal?.edits.length ? (
+          <section>
+            <h3>Exact edits</h3>
+            <div className="harness-edit-list">
+              {proposal.edits.map((edit) => (
+                <article className="harness-edit" key={edit.id}>
+                  <div><strong>{edit.operation} · {edit.target}</strong><span>{edit.summary}</span></div>
+                  {edit.content !== null ? <pre>{edit.content}</pre> : <p>File deleted.</p>}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {change.validations.length ? (
+          <section>
+            <h3>Validation</h3>
+            <div className="harness-validation-list">
+              {change.validations.map((validation) => (
+                <div key={validation.id}>
+                  <span className={`harness-validation-status ${validation.status}`}>{validation.status}</span>
+                  <strong>{validation.kind.replaceAll("_", " ")}</strong>
+                  <span>{validation.summary}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
       </div>
-      {confirming ? (
-        <div className="harness-inline-actions">
-          <button className="settings-secondary compact" disabled={busy} onClick={() => setConfirming(false)} type="button">
-            <X size={13} /> Cancel
-          </button>
-          <button
-            className="settings-primary compact"
-            disabled={busy}
-            onClick={() => {
-              setConfirming(false);
-              onRollback(release);
-            }}
-            type="button"
-          >
-            <RotateCcw size={13} /> Confirm rollback
-          </button>
-        </div>
-      ) : (
-        <div className="harness-inline-actions">
-          {release.current ? <span className="harness-current-pill">current</span> : null}
-          <button
-            className="settings-secondary compact"
-            onClick={() => onOpenDiff(baseRelease, release)}
-            type="button"
-          >
-            View changes
-          </button>
-          {!release.current ? (
-            <button
-              className="settings-secondary compact"
-              disabled={busy}
-              onClick={() => setConfirming(true)}
-              type="button"
-            >
-              <RotateCcw size={13} /> Roll back
-            </button>
-          ) : null}
-        </div>
-      )}
+    </AppDialog>
+  );
+}
+
+function OverviewPage({
+  history,
+  reviewingProposalId,
+  onReviewProposal,
+}: {
+  history: HarnessHistoryPayload;
+  reviewingProposalId: string | null;
+  onReviewProposal: (review: HarnessHistoryPendingReview, decision: "approve" | "decline") => void;
+}) {
+  const recent = useMemo(() => [
+    ...history.changes.map((change) => ({
+      id: `change:${change.receipt.id}`,
+      at: change.receipt.createdAt,
+      kind: "Refiner",
+      title: change.proposal?.expectedOutcome ?? change.receipt.reason,
+      detail: change.receipt.decision.replaceAll("_", " "),
+    })),
+    ...history.routes.map((route) => ({
+      id: `route:${route.decision.id}`,
+      at: route.decision.createdAt,
+      kind: "Routed",
+      title: route.decision.reason,
+      detail: route.decision.route,
+    })),
+    ...history.evaluationReviews.map((review) => ({
+      id: `review:${review.id}`,
+      at: review.createdAt,
+      kind: "Continuous Review",
+      title: review.claim?.statement ?? review.reason,
+      detail: review.classification.replaceAll("_", " "),
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6), [history]);
+
+  return (
+    <div className="harness-page-sections">
+      {history.pendingReviews.length ? (
+        <section className="harness-history-section">
+          <div className="harness-section-heading"><div><h2>Needs review</h2><p>Sensitive or high-impact proposals require your approval.</p></div><span>{history.pendingReviews.length}</span></div>
+          {history.pendingReviews.map((review) => (
+            <PendingReviewCard busy={reviewingProposalId !== null} key={`${review.proposal.id}:${review.proposal.contentHash}`} onReview={onReviewProposal} review={review} />
+          ))}
+        </section>
+      ) : null}
+
+      <section className="harness-history-section">
+        <div className="harness-section-heading"><div><h2>Recent activity</h2><p>The latest events from both learning loops.</p></div><span>{recent.length}</span></div>
+        {recent.length ? (
+          <div className="harness-activity-list">
+            {recent.map((item) => (
+              <article key={item.id}><span>{item.kind}</span><div><strong>{item.title}</strong><small>{item.detail}</small></div><time>{formatDate(item.at)}</time></article>
+            ))}
+          </div>
+        ) : <div className="harness-empty compact">No Harness learning activity yet.</div>}
+      </section>
     </div>
+  );
+}
+
+function RefinerPage({
+  history,
+  onOpenChangeDiff,
+  onOpenSourceSession,
+}: {
+  history: HarnessHistoryPayload;
+  onOpenChangeDiff: (change: HarnessHistoryChange) => void;
+  onOpenSourceSession?: (sessionId: string) => void;
+}) {
+  const [detailsChange, setDetailsChange] = useState<HarnessHistoryChange | null>(null);
+  return (
+    <div className="harness-page-sections">
+      <section className="harness-history-section">
+        <div className="harness-section-heading"><div><h2>Applied changes</h2><p>Every release transition with exact edits and validation receipts.</p></div><span>{history.changes.length}</span></div>
+        {history.changes.length ? (
+          <div className="harness-table-wrap">
+            <table className="harness-table harness-refiner-table">
+              <thead><tr><th>Change</th><th>Target</th><th>Release</th><th>Created</th><th>Result</th><th><span className="sr-only">Actions</span></th></tr></thead>
+              <tbody>
+                {history.changes.map((change) => {
+                  const sourceSession = change.trigger?.runRef ?? null;
+                  const proposal = change.proposal;
+                  return (
+                    <tr key={`${change.receipt.id}:${change.receipt.contentHash}`}>
+                      <td><strong>{proposal?.expectedOutcome ?? change.receipt.reason}</strong></td>
+                      <td><code>{proposal?.edits[0]?.target ?? proposal?.route ?? "workspace"}</code></td>
+                      <td><code>{shortHash(change.receipt.nextRelease?.contentHash)}</code></td>
+                      <td>{formatDate(change.receipt.createdAt)}</td>
+                      <td><span className={`harness-status harness-status-${change.receipt.decision}`}>{change.receipt.decision.replaceAll("_", " ")}</span></td>
+                      <td>
+                        <div className="harness-inline-actions">
+                          <button aria-label="View evidence and exact edits" className="harness-table-icon-action" onClick={() => setDetailsChange(change)} title="View evidence and exact edits" type="button"><Eye size={14} /></button>
+                          {change.receipt.nextRelease ? <button aria-label="View release diff" className="harness-table-icon-action" onClick={() => onOpenChangeDiff(change)} title="View release diff" type="button"><Columns2 size={14} /></button> : null}
+                          {sourceSession && onOpenSourceSession ? <button aria-label="Open source conversation" className="harness-table-icon-action" onClick={() => onOpenSourceSession(sourceSession)} title="Open source conversation" type="button"><MessageSquare size={14} /></button> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="harness-empty compact">No Harness changes have been applied.</div>}
+      </section>
+      <section className="harness-history-section">
+        <div className="harness-section-heading"><div><h2>Routed recommendations</h2><p>Observations sent to runtime, product, Tasksets, or training without mutating the Harness.</p></div><span>{history.routes.length}</span></div>
+        {history.routes.length ? (
+          <div className="harness-table-wrap"><table className="harness-table harness-route-table"><thead><tr><th>Recommendation</th><th>Source evidence</th><th>Created</th><th>Route</th></tr></thead><tbody>{history.routes.map((route) => <tr key={`${route.decision.id}:${route.decision.contentHash}`}><td><p>{route.decision.reason}</p></td><td><p>{route.trigger?.reason ?? "Completed work"}</p></td><td>{formatDate(route.decision.createdAt)}</td><td><span className="harness-status">{route.decision.route}</span></td></tr>)}</tbody></table></div>
+        ) : <div className="harness-empty compact">No recommendations have been routed.</div>}
+      </section>
+      {detailsChange ? <RefinerChangeDetailsDialog change={detailsChange} onClose={() => setDetailsChange(null)} /> : null}
+    </div>
+  );
+}
+
+function contentKind(path: string): string {
+  if (path.includes("/skills/") || path.startsWith("skills/")) return "Skill";
+  if (path.includes("/agents/") || path.startsWith("agents/")) return "Agent";
+  if (path.includes("memory")) return "Memory";
+  if (path.endsWith(".md")) return "Instruction";
+  return "File";
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`;
+  return `${(value / 1024).toFixed(value < 10_240 ? 1 : 0)} KB`;
+}
+
+function ContentsPage({ history, onOpenCurrentRelease }: { history: HarnessHistoryPayload; onOpenCurrentRelease: () => void }) {
+  const currentRelease = history.releases.find((release) => release.current) ?? history.releases[0] ?? null;
+  return (
+    <div className="harness-page-sections">
+      <section className="harness-history-section">
+        <div className="harness-section-heading">
+          <div><h2>Current release</h2><p>Read-only source contents currently supplied by the Personal Harness.</p></div>
+          {currentRelease ? <button className="settings-secondary compact" onClick={onOpenCurrentRelease} type="button">View release diff</button> : null}
+        </div>
+        {currentRelease?.files.length ? (
+          <div className="harness-table-wrap">
+            <table className="harness-table">
+              <thead><tr><th>Type</th><th>Source</th><th>Size</th><th>Revision</th></tr></thead>
+              <tbody>
+                {currentRelease.files.map((file) => (
+                  <tr key={file.id}><td><span className="harness-status">{contentKind(file.path)}</span></td><td><code>{file.path}</code></td><td>{formatBytes(file.sizeBytes)}</td><td><code>{shortHash(file.contentHash)}</code></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="harness-empty compact">The current release has no source files.</div>}
+      </section>
+      <section className="harness-history-section">
+        <div className="harness-section-heading"><div><h2>Memory</h2><p>Bounded memory available through search; it is not copied into every prompt.</p></div><span>{history.memories.length}</span></div>
+        <div className="harness-disclosure-list">
+          {history.memories.length ? history.memories.map((entry) => (
+            <details className="harness-disclosure-row" key={`${entry.id}:${entry.revision}`}>
+              <summary><span className="harness-status">Memory</span><strong>{entry.key}</strong><small>revision {entry.revision}</small><time>{formatDate(entry.updatedAt)}</time></summary>
+              <div className="harness-disclosure-body"><p>{entry.content}</p>{entry.tags.length ? <small>{entry.tags.join(" · ")}</small> : null}</div>
+            </details>
+          )) : <div className="harness-empty compact">No Harness memory has been saved.</div>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ReleasesPage({
+  busy,
+  history,
+  onOpenDiff,
+  onRequestRollback,
+}: {
+  busy: boolean;
+  history: HarnessHistoryPayload;
+  onOpenDiff: (baseRelease: HarnessHistoryReleaseSummary | null, release: HarnessHistoryReleaseSummary) => void;
+  onRequestRollback: (release: HarnessHistoryReleaseSummary) => void;
+}) {
+  return (
+    <section className="harness-history-section">
+      <div className="harness-section-heading"><div><h2>Release history</h2><p>New work uses the current release; active runs stay pinned to the version they started with.</p></div><span>{history.releases.length}</span></div>
+      {history.releases.length ? (
+        <div className="harness-table-wrap">
+          <table className="harness-table harness-release-table">
+            <thead><tr><th>Release</th><th>Contents</th><th>Created</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+              {history.releases.map((release, index) => (
+                <tr key={`${release.id}:${release.contentHash}`}>
+                  <td><div className="harness-release-identity"><strong>{release.id}</strong><code>{shortHash(release.contentHash)}</code></div></td>
+                  <td>{release.files.length} files</td>
+                  <td>{formatDate(release.createdAt)}</td>
+                  <td>{release.current ? <span className="harness-current-pill">Current</span> : <span className="harness-status">Previous</span>}</td>
+                  <td>
+                    <div className="harness-inline-actions">
+                      <button aria-label="View release changes" className="harness-table-icon-action" onClick={() => onOpenDiff(history.releases[index + 1] ?? null, release)} title="View release changes" type="button"><Columns2 size={14} /></button>
+                      {!release.current ? <button aria-label="Roll back to release" className="harness-table-icon-action" disabled={busy} onClick={() => onRequestRollback(release)} title="Roll back to release" type="button"><RotateCcw size={14} /></button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <div className="harness-empty compact">No Harness releases exist yet.</div>}
+    </section>
   );
 }
 
@@ -305,15 +422,29 @@ export function HarnessHistorySettingsSection({
   onOpenReleaseDiff,
   onOpenSourceSession,
   onToast,
+  page,
 }: Props) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
   const [loading, setLoading] = useState(false);
   const [rollbackHash, setRollbackHash] = useState<string | null>(null);
   const [reviewingProposalId, setReviewingProposalId] = useState<string | null>(null);
-  const [savingBackgroundReview, setSavingBackgroundReview] = useState(false);
+  const [savingLoopSettings, setSavingLoopSettings] = useState(false);
   const [reviewingEvaluation, setReviewingEvaluation] = useState(false);
   const [acceptingEvaluationReviewId, setAcceptingEvaluationReviewId] = useState<string | null>(null);
-  const [savingEvaluationSchedule, setSavingEvaluationSchedule] = useState(false);
+  const { confirmAction, confirmDialog, resolveConfirmDialog } = useConfirmDialog();
+  const continuousReviewEnabled = Boolean(
+    history?.evaluationReviewSchedule.activityEnabled || history?.evaluationReviewSchedule.enabled,
+  );
+  const [refinerDraftEnabled, setRefinerDraftEnabled] = useState(false);
+  const [continuousReviewDraftEnabled, setContinuousReviewDraftEnabled] = useState(false);
+
+  useEffect(() => {
+    if (history) setRefinerDraftEnabled(history.backgroundReview.enabled);
+  }, [history?.backgroundReview.enabled]);
+
+  useEffect(() => {
+    setContinuousReviewDraftEnabled(continuousReviewEnabled);
+  }, [continuousReviewEnabled]);
 
   const refresh = useCallback(async () => {
     if (!connection) return;
@@ -324,11 +455,7 @@ export function HarnessHistorySettingsSection({
       const currentIndex = payload.releases.findIndex((release) => release.current);
       const currentRelease = currentIndex >= 0 ? payload.releases[currentIndex] : null;
       if (payload.workspace && currentRelease) {
-        onDefaultReleaseDiff(releaseDiffSelection(
-          payload.workspace.id,
-          payload.releases[currentIndex + 1] ?? null,
-          currentRelease,
-        ));
+        onDefaultReleaseDiff(releaseDiffSelection(payload.workspace.id, payload.releases[currentIndex + 1] ?? null, currentRelease));
       }
       onError(null);
     } catch (error) {
@@ -340,84 +467,64 @@ export function HarnessHistorySettingsSection({
 
   useEffect(() => {
     if (enabled) void refresh();
-  }, [enabled, refresh]);
-
-  const setBackgroundReviewEnabled = useCallback(async (nextEnabled: boolean) => {
-    if (!connection || !history?.workspace) return;
-    setSavingBackgroundReview(true);
-    try {
-      const response = await api.updateHarnessBackgroundReview(connection, {
-        workspaceId: history.workspace.id,
-        enabled: nextEnabled,
-      });
-      setHistory(response.history);
-      onError(null);
-      onToast?.(
-        nextEnabled ? "Harness background review enabled." : "Harness background review disabled.",
-        "info",
-      );
-    } catch (error) {
-      onError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSavingBackgroundReview(false);
-    }
-  }, [connection, history?.workspace, onError, onToast]);
+  }, [enabled, page, refresh]);
 
   const reviewEvaluation = useCallback(async (maxEstimatedCostUsd: number) => {
     if (!connection || !history?.workspace) return;
     setReviewingEvaluation(true);
     try {
-      const response = await api.reviewHarnessEvaluation(connection, {
-        workspaceId: history.workspace.id,
-        maxEstimatedCostUsd,
-      });
+      const response = await api.reviewHarnessEvaluation(connection, { workspaceId: history.workspace.id, maxEstimatedCostUsd });
       setHistory(response.history);
       onError(null);
-      onToast?.(
-        `Harness review completed: ${response.receipt.classification.replaceAll("_", " ")}.`,
-        "success",
-      );
+      onToast?.(`Continuous Review completed: ${response.receipt.classification.replaceAll("_", " ")}.`, "success");
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
       setReviewingEvaluation(false);
     }
-  }, [connection, history?.workspace, onError, onToast]);
+  }, [connection, history, onError, onToast]);
 
-  const saveEvaluationSchedule = useCallback(async (input: {
-    enabled: boolean;
-    activityEnabled: boolean;
-    activityBatchSize: number;
-    cadence: "manual" | "daily" | "weekly";
-    maxEstimatedCostUsd: number;
-  }) => {
+  const saveLoopSettings = useCallback(async (
+    scope: "refiner" | "continuous-review",
+    refinerEnabled: boolean,
+    continuousReviewEnabled: boolean,
+  ) => {
     if (!connection || !history?.workspace) return;
-    setSavingEvaluationSchedule(true);
+    setSavingLoopSettings(true);
     try {
-      const response = await api.updateHarnessEvaluationReviewSchedule(connection, {
-        workspaceId: history.workspace.id,
-        ...input,
-      });
-      setHistory(response.history);
+      let nextHistory = history;
+      if (scope === "refiner" && refinerEnabled !== history.backgroundReview.enabled) {
+        const response = await api.updateHarnessBackgroundReview(connection, { workspaceId: history.workspace.id, enabled: refinerEnabled });
+        nextHistory = response.history;
+      }
+      const currentlyEnabled = history.evaluationReviewSchedule.activityEnabled || history.evaluationReviewSchedule.enabled;
+      if (scope === "continuous-review" && (continuousReviewEnabled !== currentlyEnabled || history.evaluationReviewSchedule.enabled)) {
+        const schedule = history.evaluationReviewSchedule;
+        const response = await api.updateHarnessEvaluationReviewSchedule(connection, {
+          workspaceId: history.workspace.id,
+          enabled: false,
+          activityEnabled: continuousReviewEnabled,
+          activityBatchSize: schedule.activityBatchSize,
+          cadence: "manual",
+          maxEstimatedCostUsd: schedule.maxEstimatedCostUsd,
+        });
+        nextHistory = response.history;
+      }
+      setHistory(nextHistory);
       onError(null);
-      onToast?.(input.enabled ? "Harness review schedule saved." : "Harness review schedule disabled.", "info");
+      onToast?.(`${scope === "refiner" ? "Refiner" : "Continuous Review"} settings applied.`, "success");
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
-      setSavingEvaluationSchedule(false);
+      setSavingLoopSettings(false);
     }
-  }, [connection, history?.workspace, onError, onToast]);
+  }, [connection, history, onError, onToast]);
 
-  const acceptEvaluationReview = useCallback(async (
-    review: HarnessEvaluationReviewReceipt,
-  ) => {
+  const acceptEvaluationReview = useCallback(async (review: HarnessEvaluationReviewReceipt) => {
     if (!history?.workspace) return;
     setAcceptingEvaluationReviewId(review.id);
     try {
-      const accepted = await onAcceptEvaluationReview(history.workspace.id, {
-        id: review.id,
-        contentHash: review.contentHash,
-      });
+      const accepted = await onAcceptEvaluationReview(history.workspace.id, { id: review.id, contentHash: review.contentHash });
       if (accepted) {
         onError(null);
         onToast?.("Taskset review opened in Models.", "success");
@@ -429,32 +536,21 @@ export function HarnessHistorySettingsSection({
     }
   }, [history?.workspace, onAcceptEvaluationReview, onError, onToast]);
 
-  const openReleaseDiff = useCallback((
-    baseRelease: HarnessHistoryReleaseSummary | null,
-    targetRelease: HarnessHistoryReleaseSummary,
-  ) => {
+  const openReleaseDiff = useCallback((baseRelease: HarnessHistoryReleaseSummary | null, targetRelease: HarnessHistoryReleaseSummary) => {
     if (!history?.workspace) return;
     onOpenReleaseDiff(releaseDiffSelection(history.workspace.id, baseRelease, targetRelease));
   }, [history?.workspace, onOpenReleaseDiff]);
 
   const openChangeDiff = useCallback((change: HarnessHistoryChange) => {
     if (!history?.workspace || !change.receipt.nextRelease) return;
-    onOpenReleaseDiff({
-      workspaceId: history.workspace.id,
-      baseRelease: change.receipt.previousRelease,
-      targetRelease: change.receipt.nextRelease,
-      title: change.proposal?.expectedOutcome ?? change.receipt.reason,
-    });
+    onOpenReleaseDiff({ workspaceId: history.workspace.id, baseRelease: change.receipt.previousRelease, targetRelease: change.receipt.nextRelease, title: change.proposal?.expectedOutcome ?? change.receipt.reason });
   }, [history?.workspace, onOpenReleaseDiff]);
 
   const rollback = useCallback(async (release: HarnessHistoryReleaseSummary) => {
     if (!connection || !history?.workspace) return;
     setRollbackHash(release.contentHash);
     try {
-      const response = await api.rollbackHarness(connection, {
-        workspaceId: history.workspace.id,
-        targetRelease: { id: release.id, contentHash: release.contentHash },
-      });
+      const response = await api.rollbackHarness(connection, { workspaceId: history.workspace.id, targetRelease: { id: release.id, contentHash: release.contentHash } });
       setHistory(response.history);
       onError(null);
       onToast?.("Personal Harness rolled back. Existing runs remain pinned.", "success");
@@ -465,24 +561,23 @@ export function HarnessHistorySettingsSection({
     }
   }, [connection, history?.workspace, onError, onToast]);
 
-  const reviewProposal = useCallback(async (
-    review: HarnessHistoryPendingReview,
-    decision: "approve" | "decline",
-  ) => {
+  const requestRollback = useCallback(async (release: HarnessHistoryReleaseSummary) => {
+    const confirmed = await confirmAction({
+      title: "Roll back Harness release?",
+      body: `New work will use ${shortHash(release.contentHash)}. Active runs remain pinned to their current release.`,
+      confirmLabel: "Roll back",
+    });
+    if (confirmed) await rollback(release);
+  }, [confirmAction, rollback]);
+
+  const reviewProposal = useCallback(async (review: HarnessHistoryPendingReview, decision: "approve" | "decline") => {
     if (!connection || !history?.workspace) return;
     setReviewingProposalId(review.proposal.id);
     try {
-      const response = await api.reviewHarnessProposal(connection, {
-        workspaceId: history.workspace.id,
-        proposal: { id: review.proposal.id, contentHash: review.proposal.contentHash },
-        decision,
-      });
+      const response = await api.reviewHarnessProposal(connection, { workspaceId: history.workspace.id, proposal: { id: review.proposal.id, contentHash: review.proposal.contentHash }, decision });
       setHistory(response.history);
       onError(null);
-      onToast?.(
-        decision === "approve" ? "Harness proposal approved and released." : "Harness proposal declined.",
-        decision === "approve" ? "success" : "info",
-      );
+      onToast?.(decision === "approve" ? "Harness proposal approved and released." : "Harness proposal declined.", decision === "approve" ? "success" : "info");
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -490,108 +585,68 @@ export function HarnessHistorySettingsSection({
     }
   }, [connection, history?.workspace, onError, onToast]);
 
+  const currentRelease = history?.releases.find((release) => release.current) ?? history?.releases[0] ?? null;
+  const currentIndex = currentRelease ? history?.releases.indexOf(currentRelease) ?? -1 : -1;
+  const copy = PAGE_COPY[page];
+  const loopSettingsDirty = history ? (
+    page === "refiner"
+      ? refinerDraftEnabled !== history.backgroundReview.enabled
+      : continuousReviewDraftEnabled !== continuousReviewEnabled || history.evaluationReviewSchedule.enabled
+  ) : false;
+  const showLoopActions = page === "refiner" || page === "continuous-review";
+
   return (
     <section className="account-settings harness-history-settings" aria-labelledby="harness-history-title">
-      <div className="account-settings-title">
-        <div>
-          <h1 id="harness-history-title">Harness</h1>
-          <p>Immutable releases, Refiner changes, validation evidence, and rollback history.</p>
-        </div>
-        <button className="settings-secondary" disabled={loading} onClick={() => void refresh()} type="button">
-          <RefreshCw className={loading ? "settings-spin" : undefined} size={14} /> Refresh
-        </button>
+      <div className="account-settings-title harness-page-title">
+        <div><h1 id="harness-history-title">{copy.title}</h1><p>{copy.description}</p></div>
+        {history?.workspace && showLoopActions ? (
+          <div className="harness-page-header-actions">
+            {page === "continuous-review" ? <button className="settings-secondary compact" disabled={reviewingEvaluation} onClick={() => void reviewEvaluation(history.evaluationReviewSchedule.maxEstimatedCostUsd)} type="button">{reviewingEvaluation ? "Reviewing…" : "Review now"}</button> : null}
+            <label className="harness-page-toggle">
+              <span>{page === "refiner" ? (refinerDraftEnabled ? "On" : "Off") : (continuousReviewDraftEnabled ? "On" : "Off")}</span>
+              <span className="provider-toggle">
+                <input
+                  aria-label={page === "refiner" ? "Enable Refiner" : "Enable Continuous Review"}
+                  checked={page === "refiner" ? refinerDraftEnabled : continuousReviewDraftEnabled}
+                  disabled={savingLoopSettings}
+                  onChange={(event) => page === "refiner" ? setRefinerDraftEnabled(event.target.checked) : setContinuousReviewDraftEnabled(event.target.checked)}
+                  type="checkbox"
+                />
+                <span aria-hidden="true" />
+              </span>
+            </label>
+            <button className="settings-primary compact" disabled={savingLoopSettings || !loopSettingsDirty} onClick={() => void saveLoopSettings(page, refinerDraftEnabled, continuousReviewDraftEnabled)} type="button">{savingLoopSettings ? "Applying…" : "Apply changes"}</button>
+          </div>
+        ) : null}
       </div>
 
       {!connection ? <div className="harness-empty">Connect to the Local OpenPond server to inspect the Harness.</div> : null}
       {connection && loading && !history ? <div className="harness-empty">Loading Harness history…</div> : null}
       {history && !history.workspace ? <div className="harness-empty">No Personal Harness workspace has been created yet.</div> : null}
 
-      {history?.workspace ? (
-        <>
-          <HarnessEvaluationReviewSettings
-            acceptingReviewId={acceptingEvaluationReviewId}
-            backgroundReviewBusy={savingBackgroundReview}
-            backgroundReviewEnabled={history.backgroundReview.enabled}
-            busy={reviewingEvaluation || savingEvaluationSchedule}
-            onBackgroundReviewChange={(nextEnabled) => void setBackgroundReviewEnabled(nextEnabled)}
-            onAcceptTasksetReview={(review) => void acceptEvaluationReview(review)}
-            onReview={(maxEstimatedCostUsd) => void reviewEvaluation(maxEstimatedCostUsd)}
-            onSaveSchedule={(input) => void saveEvaluationSchedule(input)}
-            qualifications={history.modelImprovementQualifications}
-            candidates={history.refinementCandidates}
-            reviews={history.evaluationReviews}
-            schedule={history.evaluationReviewSchedule ?? DEFAULT_EVALUATION_REVIEW_SCHEDULE}
-          />
-
-          <section className="account-list">
-            <div className="account-list-heading"><span>Releases</span><small>New runs use current; active runs stay pinned.</small></div>
-            {history.releases.map((release, index) => (
-              <ReleaseRow
-                baseRelease={history.releases[index + 1] ?? null}
-                busy={rollbackHash !== null}
-                key={`${release.id}:${release.contentHash}`}
-                onOpenDiff={openReleaseDiff}
-                onRollback={rollback}
-                release={release}
-              />
-            ))}
-          </section>
-
-          <section className="harness-history-section">
-            <div className="harness-section-heading">
-              <div><h2>Needs review</h2><p>Executable, Agent, destructive, and sensitive changes never advance without your approval.</p></div>
-              <span>{history.pendingReviews.length}</span>
-            </div>
-            {history.pendingReviews.length ? history.pendingReviews.map((review) => (
-              <PendingReviewCard
-                busy={reviewingProposalId !== null}
-                key={`${review.proposal.id}:${review.proposal.contentHash}`}
-                onReview={reviewProposal}
-                review={review}
-              />
-            )) : <div className="harness-empty">No Harness proposals need review.</div>}
-          </section>
-
-          <section className="harness-history-section">
-            <div className="harness-section-heading">
-              <div><h2>Applied history</h2><p>Every release transition with its exact change and validation receipts.</p></div>
-              <span>{history.changes.length}</span>
-            </div>
-            {history.changes.length ? history.changes.map((change) => (
-              <HistoryChangeCard
-                change={change}
-                key={`${change.receipt.id}:${change.receipt.contentHash}`}
-                onOpenDiff={change.receipt.nextRelease ? () => openChangeDiff(change) : undefined}
-                onOpenSourceSession={onOpenSourceSession}
-              />
-            )) : <div className="harness-empty">No Harness changes have been applied.</div>}
-          </section>
-
-          <section className="harness-history-section">
-            <div className="harness-section-heading">
-              <div><h2>Routed recommendations</h2><p>Runtime, memory, product, Taskset, and training observations that did not mutate the Harness.</p></div>
-              <span>{history.routes.length}</span>
-            </div>
-            {history.routes.length ? history.routes.map((route) => (
-              <RouteCard key={`${route.decision.id}:${route.decision.contentHash}`} route={route} />
-            )) : <div className="harness-empty">No external recommendations have been routed.</div>}
-          </section>
-
-          <section className="harness-history-section">
-            <div className="harness-section-heading">
-              <div><h2>Memory</h2><p>Bounded external memory available through search; it is not copied into every Agent prompt or sandbox.</p></div>
-              <span>{history.memories.length}</span>
-            </div>
-            {history.memories.length ? history.memories.map((entry) => (
-              <article className="harness-route-card" key={`${entry.id}:${entry.revision}`}>
-                <div><strong>{entry.key}</strong><span>revision {entry.revision}</span><time>{formatDate(entry.updatedAt)}</time></div>
-                <p>{entry.content}</p>
-                {entry.tags.length ? <small>{entry.tags.join(" · ")}</small> : null}
-              </article>
-            )) : <div className="harness-empty">No Harness memory has been saved.</div>}
-          </section>
-        </>
+      {history?.workspace && page === "overview" ? <OverviewPage history={history} onReviewProposal={reviewProposal} reviewingProposalId={reviewingProposalId} /> : null}
+      {history?.workspace && page === "refiner" ? <RefinerPage history={history} onOpenChangeDiff={openChangeDiff} onOpenSourceSession={onOpenSourceSession} /> : null}
+      {history?.workspace && page === "continuous-review" ? (
+        <HarnessEvaluationReviewSettings
+          acceptingReviewId={acceptingEvaluationReviewId}
+          candidates={history.refinementCandidates}
+          onAcceptTasksetReview={(review) => void acceptEvaluationReview(review)}
+          qualifications={history.modelImprovementQualifications}
+          reviews={history.evaluationReviews}
+          schedule={history.evaluationReviewSchedule ?? DEFAULT_EVALUATION_REVIEW_SCHEDULE}
+        />
       ) : null}
+      {history?.workspace && page === "contents" ? (
+        <ContentsPage
+          history={history}
+          onOpenCurrentRelease={() => {
+            if (currentRelease) openReleaseDiff(currentIndex >= 0 ? history.releases[currentIndex + 1] ?? null : null, currentRelease);
+          }}
+        />
+      ) : null}
+      {history?.workspace && page === "releases" ? <ReleasesPage busy={rollbackHash !== null} history={history} onOpenDiff={openReleaseDiff} onRequestRollback={(release) => void requestRollback(release)} /> : null}
+
+      <ConfirmDialog onResolve={resolveConfirmDialog} state={confirmDialog} />
     </section>
   );
 }

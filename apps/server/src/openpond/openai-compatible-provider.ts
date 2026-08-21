@@ -509,7 +509,7 @@ function chatCompletionMessages(messages: HostedChatMessage[]): Array<Record<str
   });
 }
 
-function buildResponsesBody(input: {
+export function buildResponsesBody(input: {
   model: string;
   messages: HostedChatMessage[];
   tools?: HostedChatTool[];
@@ -527,7 +527,10 @@ function buildResponsesBody(input: {
     store: false,
   };
   if (projected.instructions) body.instructions = projected.instructions;
-  if (input.reasoningEffort) body.reasoning = { effort: input.reasoningEffort, summary: "auto" };
+  body.reasoning = {
+    ...(input.reasoningEffort ? { effort: input.reasoningEffort } : {}),
+    summary: "auto",
+  };
   if (input.maxOutputTokens != null) body.max_output_tokens = input.maxOutputTokens;
   if (input.temperature != null) body.temperature = input.temperature;
   if (input.topP != null) body.top_p = input.topP;

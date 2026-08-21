@@ -318,7 +318,7 @@ describe("local Harness evaluation review", () => {
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-runtime"]) },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "review",
         classification: "runtime",
         selectedEvidenceIds: ["route_decision:route-run-runtime"],
@@ -329,6 +329,7 @@ describe("local Harness evaluation review", () => {
         expectedOutcome: "Restore the supported runtime capability.",
         counterevidence: "",
         confidence: 0.94,
+        candidateDisposition: null,
         reason: "The authorized evidence directly identifies a runtime failure.",
       }),
       now: () => "2026-08-08T12:10:00.000Z",
@@ -442,7 +443,7 @@ describe("local Harness evaluation review", () => {
         expect(JSON.stringify(context.conversation.precedingTurns)).toContain("IGNORE THE REVIEW");
         inspected = true;
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
           decision: "no_action",
           reason: "The bounded contextual request remains one isolated occurrence.",
           ignoredEvidence: [{
@@ -569,7 +570,7 @@ describe("local Harness evaluation review", () => {
       store: current.store,
       request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 3 } },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "review",
         classification: "taskset",
         selectedEvidenceIds: runRefs.map((runRef) => `route_decision:route-${runRef}`),
@@ -580,6 +581,7 @@ describe("local Harness evaluation review", () => {
         expectedOutcome: "Measure the behavior under a controlled Taskset before escalation.",
         counterevidence: "The surface wording differs across turns.",
         confidence: 0.86,
+        candidateDisposition: null,
         reason: "The evidence is semantically related and needs controlled measurement.",
       }),
       now: () => "2026-08-08T12:10:00.000Z",
@@ -602,8 +604,11 @@ describe("local Harness evaluation review", () => {
       runRef: "run-candidate-one",
       createdAt: "2026-08-08T12:01:00.000Z",
     });
-    const decision = (runRef: string): HarnessEvaluationReviewModelDecision => ({
-      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+    const decision = (
+      runRef: string,
+      candidateDisposition: "observe" | "confirm",
+    ): HarnessEvaluationReviewModelDecision => ({
+      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
       decision: "review",
       classification: "harness_maintenance",
       selectedEvidenceIds: [`route_decision:route-${runRef}`],
@@ -614,12 +619,13 @@ describe("local Harness evaluation review", () => {
       expectedOutcome: "Future work verifies the artifact before delivery.",
       counterevidence: "",
       confidence: 0.91,
+      candidateDisposition,
       reason: "The authorized evidence identifies a reusable Harness concern.",
     });
     const first = await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-candidate-one"]) },
-      stream: reviewStream(decision("run-candidate-one")),
+      stream: reviewStream(decision("run-candidate-one", "observe")),
       now: () => "2026-08-08T12:10:00.000Z",
     });
     expect(await current.store.listHarnessRefinementCandidates(current.workspace.id)).toEqual([
@@ -641,7 +647,7 @@ describe("local Harness evaluation review", () => {
     const second = await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-candidate-one", "run-candidate-two"]) },
-      stream: reviewStream(decision("run-candidate-two")),
+      stream: reviewStream(decision("run-candidate-two", "confirm")),
       now: () => "2026-08-08T12:20:00.000Z",
     });
     const confirmed = (await current.store.listHarnessRefinementCandidates(
@@ -699,6 +705,46 @@ describe("local Harness evaluation review", () => {
     );
   });
 
+  it("confirms one directly observed actionable candidate without a fixed occurrence threshold", async () => {
+    const current = await fixture();
+    await saveOccurrence({
+      store: current.store,
+      workspaceId: current.workspace.id,
+      harnessRelease: current.release.harnessRelease,
+      route: "prompt",
+      runRef: "run-single-observed",
+      createdAt: "2026-08-08T12:01:00.000Z",
+    });
+
+    await reviewSelectedLocalHarnessEvaluation({
+      store: current.store,
+      request: { sourcePolicies: sourcePolicies(["run-single-observed"]) },
+      stream: reviewStream({
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
+        decision: "review",
+        classification: "harness_maintenance",
+        selectedEvidenceIds: ["route_decision:route-run-single-observed"],
+        ignoredEvidence: [],
+        recurrenceFamily: "directly-observed-command-contract",
+        statement: "One directly observed command contract failure has a reusable prevention rule.",
+        triageLayer: "harness",
+        expectedOutcome: "Equivalent work follows the observed command contract on its first attempt.",
+        counterevidence: "",
+        confidence: 0.94,
+        candidateDisposition: "confirm",
+        reason: "The trace directly establishes the reusable mechanism without material counterevidence.",
+      }),
+      now: () => "2026-08-08T12:10:00.000Z",
+    });
+
+    expect(await current.store.listHarnessRefinementCandidates(current.workspace.id)).toEqual([
+      expect.objectContaining({
+        status: "confirmed",
+        occurrences: [expect.objectContaining({ sourceRef: "run-single-observed" })],
+      }),
+    ]);
+  });
+
   it("expires an inactive candidate and reopens it only with new authorized evidence", async () => {
     const current = await fixture();
     await saveOccurrence({
@@ -709,8 +755,11 @@ describe("local Harness evaluation review", () => {
       runRef: "run-expiring",
       createdAt: "2026-08-08T12:01:00.000Z",
     });
-    const decision = (runRef: string): HarnessEvaluationReviewModelDecision => ({
-      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+    const decision = (
+      runRef: string,
+      candidateDisposition: "observe" | "confirm",
+    ): HarnessEvaluationReviewModelDecision => ({
+      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
       decision: "review",
       classification: "harness_maintenance",
       selectedEvidenceIds: [`route_decision:route-${runRef}`],
@@ -721,12 +770,13 @@ describe("local Harness evaluation review", () => {
       expectedOutcome: "Verify equivalent artifacts before delivery.",
       counterevidence: "",
       confidence: 0.8,
+      candidateDisposition,
       reason: "Retain the bounded candidate for independent evidence.",
     });
     await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-expiring"]) },
-      stream: reviewStream(decision("run-expiring")),
+      stream: reviewStream(decision("run-expiring", "observe")),
       now: () => "2026-08-08T12:10:00.000Z",
     });
     await reviewSelectedLocalHarnessEvaluation({
@@ -750,7 +800,7 @@ describe("local Harness evaluation review", () => {
     await reviewSelectedLocalHarnessEvaluation({
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-expiring", "run-reopening"]) },
-      stream: reviewStream(decision("run-reopening")),
+      stream: reviewStream(decision("run-reopening", "confirm")),
       now: () => "2026-11-08T12:10:00.000Z",
     });
     expect((await current.store.listHarnessRefinementCandidates(current.workspace.id))[0]).toMatchObject({
@@ -785,7 +835,7 @@ describe("local Harness evaluation review", () => {
       store: current.store,
       request: { sourcePolicies: sourcePolicies(["run-restart-candidate"]) },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "review",
         classification: "harness_maintenance",
         selectedEvidenceIds: ["route_decision:route-run-restart-candidate"],
@@ -796,6 +846,7 @@ describe("local Harness evaluation review", () => {
         expectedOutcome: "Retain the candidate until independent evidence resolves it.",
         counterevidence: "",
         confidence: 0.8,
+        candidateDisposition: "observe",
         reason: "One authorized occurrence is retained without forcing a change.",
       }),
       now: () => "2026-08-08T12:10:00.000Z",
@@ -817,7 +868,7 @@ describe("local Harness evaluation review", () => {
         ]),
       },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "review",
         classification: "harness_maintenance",
         selectedEvidenceIds: ["route_decision:route-run-restart-candidate-two"],
@@ -828,6 +879,7 @@ describe("local Harness evaluation review", () => {
         expectedOutcome: "Retain the candidate until independent evidence resolves it.",
         counterevidence: "",
         confidence: 0.92,
+        candidateDisposition: "confirm",
         reason: "A second independent occurrence confirms the candidate.",
       }),
       now: () => "2026-08-08T12:20:00.000Z",
@@ -889,8 +941,11 @@ describe("local Harness evaluation review", () => {
         createdAt: `2026-08-08T12:0${index + 1}:00.000Z`,
       });
     }
-    const reviewDecision = (runRef: string): HarnessEvaluationReviewModelDecision => ({
-      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+    const reviewDecision = (
+      runRef: string,
+      candidateDisposition: "observe" | "confirm",
+    ): HarnessEvaluationReviewModelDecision => ({
+      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
       decision: "review",
       classification: "harness_maintenance",
       selectedEvidenceIds: [`route_decision:route-${runRef}`],
@@ -901,6 +956,7 @@ describe("local Harness evaluation review", () => {
       expectedOutcome: "Future work verifies its artifact before delivery.",
       counterevidence: "",
       confidence: 0.96,
+      candidateDisposition,
       reason: "Two independent sources support one bounded Harness correction.",
     });
     await reviewSelectedLocalHarnessEvaluation({
@@ -909,7 +965,7 @@ describe("local Harness evaluation review", () => {
         sourcePolicies: sourcePolicies(["run-continue-one", "run-continue-two"]),
         limits: { maxEvidence: 1 },
       },
-      stream: reviewStream(reviewDecision("run-continue-one")),
+      stream: reviewStream(reviewDecision("run-continue-one", "observe")),
       now: () => "2026-08-08T12:10:00.000Z",
     });
     const paths = localHarnessWorkspacePaths(current.storeDir, current.workspace.id);
@@ -923,7 +979,7 @@ describe("local Harness evaluation review", () => {
     const combinedStream: HarnessEvaluationReviewModelStream = async function* ({ messages }) {
       if (messages[0]!.content.includes("continuous Harness reviewer")) {
         reviewCalls += 1;
-        yield { text: JSON.stringify(reviewDecision("run-continue-two")) };
+        yield { text: JSON.stringify(reviewDecision("run-continue-two", "confirm")) };
         return;
       }
       refinerCalls += 1;
@@ -1005,7 +1061,7 @@ describe("local Harness evaluation review", () => {
         ]),
       },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "resolve_candidate",
         candidateId: candidateBeforeSuccess.id,
         candidateFingerprint: candidateBeforeSuccess.fingerprint,
@@ -1078,7 +1134,7 @@ describe("local Harness evaluation review", () => {
           "run-continue-three",
         ]),
       },
-      stream: reviewStream(reviewDecision("run-continue-three")),
+      stream: reviewStream(reviewDecision("run-continue-three", "confirm")),
       now: () => "2026-08-08T12:24:00.000Z",
     });
     expect((await current.store.listHarnessRefinementCandidates(current.workspace.id))[0]).toMatchObject({
@@ -1109,7 +1165,7 @@ describe("local Harness evaluation review", () => {
       store: current.store,
       request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 1 } },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "no_action",
         reason: "The first bounded candidate alone is insufficient.",
         ignoredEvidence: [{
@@ -1125,7 +1181,7 @@ describe("local Harness evaluation review", () => {
       store: current.store,
       request: { sourcePolicies: sourcePolicies(runRefs), limits: { maxEvidence: 1 } },
       stream: reviewStream({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "review",
         classification: "runtime",
         selectedEvidenceIds: ["route_decision:route-run-budget-two"],
@@ -1136,6 +1192,7 @@ describe("local Harness evaluation review", () => {
         expectedOutcome: "Repair the supported runtime capability.",
         counterevidence: "The first bounded review did not see this occurrence.",
         confidence: 0.9,
+        candidateDisposition: null,
         reason: "Budget exclusion must defer evidence rather than consume it.",
       }),
       now: () => "2026-08-08T12:11:00.000Z",
@@ -1187,7 +1244,7 @@ describe("local Harness evaluation review", () => {
         }
         yield {
           text: JSON.stringify({
-            schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+            schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
             decision: "no_action",
             reason: "The two fully reviewed occurrences are not yet enough for durable routing.",
             ignoredEvidence: [
@@ -1234,7 +1291,7 @@ describe("local Harness evaluation review", () => {
       modelCalls += 1;
       await new Promise((resolve) => setTimeout(resolve, 10));
       yield { text: JSON.stringify({
-        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+        schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
         decision: "no_action",
         reason: "One occurrence does not yet justify durable work.",
         ignoredEvidence: [{
@@ -1293,6 +1350,31 @@ describe("local Harness evaluation review", () => {
       maxEstimatedCostUsd: 2,
     });
     expect(scheduled.history.evaluationReviewSchedule.nextRunAt).not.toBeNull();
+  });
+
+  it("keeps continuous review opt-in for a new Harness workspace", async () => {
+    const current = await fixture();
+    expect(await current.store.getHarnessEvaluationReviewSettings(current.workspace.id)).toEqual({
+      enabled: false,
+      activityEnabled: false,
+      activityBatchSize: 10,
+      cadence: "manual",
+      maxEstimatedCostUsd: 0.1,
+      nextRunAt: null,
+      lastRunAt: null,
+      lastResult: null,
+      lastError: null,
+      updatedAt: null,
+    });
+
+    const scheduler = createLocalHarnessEvaluationReviewScheduler({
+      store: current.store,
+      storeDir: current.storeDir,
+      isClosing: () => false,
+      now: () => NOW,
+    });
+    expect(await scheduler.runDueNow()).toBeNull();
+    expect((await localHarnessHistoryPayload(current.store)).evaluationReviews).toEqual([]);
   });
 
   it("runs due schedules through the same idempotent review operation", async () => {

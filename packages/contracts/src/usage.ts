@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ChatProviderSchema, WorkspaceKindSchema } from "./settings.js";
+import { WorkspaceKindSchema } from "./settings.js";
 
 export const ModelUsageRouteSchema = z.enum([
   "openpond_hosted",
@@ -97,7 +97,10 @@ export const UsageRequestAttributionSchema = z.object({
   commandSource: UsageCommandSourceSchema.nullable().optional(),
 }).strict();
 
-export const UsageProviderSchema = z.union([ChatProviderSchema, z.literal("unknown")]);
+// Usage records preserve the actual provider lineage. Hosted and compatible
+// routes can therefore report infrastructure providers that are intentionally
+// not exposed as selectable chat providers in the client.
+export const UsageProviderSchema = z.string().trim().min(1).max(160);
 
 export const ModelUsageRecordSchema = z.object({
   id: z.string().trim().min(1),

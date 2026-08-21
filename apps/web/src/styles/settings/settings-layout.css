@@ -156,6 +156,16 @@
   padding-inline: clamp(24px, 5vw, 72px);
 }
 
+.settings-stacked-sections {
+  display: grid;
+  gap: 34px;
+}
+
+.account-settings-embedded {
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 28px;
+}
+
 .settings-content::-webkit-scrollbar {
   display: none;
 }

@@ -103,6 +103,7 @@ export const HarnessReviewClaimSchema = z
     fingerprint: ReleaseHashSchema,
     recurrenceFamily: z.string().trim().min(1).max(1_000),
     statement: BoundedTextSchema,
+    candidateDisposition: z.enum(["observe", "confirm"]).optional(),
     independentOccurrences: z.number().int().positive().max(1_000_000),
     unresolvedOccurrences: z.number().int().positive().max(1_000_000),
   })
@@ -289,7 +290,7 @@ export const HarnessEvaluationReviewModelEvidenceSchema = z
 
 const HarnessEvaluationReviewModelNoActionSchema = z
   .object({
-    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v1"),
+    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v2"),
     decision: z.literal("no_action"),
     reason: BoundedTextSchema,
     ignoredEvidence: z
@@ -307,7 +308,7 @@ const HarnessEvaluationReviewModelNoActionSchema = z
 
 const HarnessEvaluationReviewModelActionSchema = z
   .object({
-    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v1"),
+    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v2"),
     decision: z.literal("review"),
     classification: z.enum([
       "harness_maintenance",
@@ -332,13 +333,25 @@ const HarnessEvaluationReviewModelActionSchema = z
     expectedOutcome: BoundedTextSchema,
     counterevidence: z.string().trim().max(10_000),
     confidence: z.number().min(0).max(1),
+    candidateDisposition: z.enum(["observe", "confirm"]).nullable(),
     reason: BoundedTextSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((decision, context) => {
+    const requiresDisposition = decision.classification === "harness_maintenance";
+    if (requiresDisposition !== (decision.candidateDisposition !== null)) {
+      context.addIssue({
+        code: "custom",
+        message:
+          "Harness maintenance requires a candidate disposition; external routes require null",
+        path: ["candidateDisposition"],
+      });
+    }
+  });
 
 const HarnessEvaluationReviewModelResolutionSchema = z
   .object({
-    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v1"),
+    schemaVersion: z.literal("openpond.harnessEvaluationReviewModelDecision.v2"),
     decision: z.literal("resolve_candidate"),
     candidateId: ReleaseIdSchema,
     candidateFingerprint: ReleaseHashSchema,
@@ -460,7 +473,7 @@ export async function authorHarnessEvaluationReviewWithModel(input: {
           {
             role: "user",
             content:
-              "Return one corrected openpond.harnessEvaluationReviewModelDecision.v1 JSON object using only supplied evidence IDs.",
+              "Return one corrected openpond.harnessEvaluationReviewModelDecision.v2 JSON object using only supplied evidence IDs.",
           },
         ],
       }),
@@ -616,6 +629,7 @@ export function evaluationReviewMessages(input: {
         "Verify each deep packet's owner/workspace, source policy, source turn, admitted Harness, Refiner outcome, and content-hash binding before relying on it. Weigh later outcomes, applications, advancements, and rollbacks as possible confirmation or contradiction.",
         "Use semantic judgment: differently worded errors, tools, or tasks may share a cause, while repeated identical strings may still be unrelated.",
         "Do not require an arbitrary occurrence count. Weigh independence, severity, recovery, counterevidence, prior changes, and later outcomes.",
+        "For harness_maintenance, set candidateDisposition to confirm only when the supplied evidence is actionable now: either one directly observed reusable failure mechanism with no material counterevidence, or a semantically coherent pattern across independent work. Set it to observe when the concern is plausible but needs more evidence. Occurrence count is evidence, not the decision rule. For every external classification, candidateDisposition must be null.",
         "A successful recovery can still expose a reusable first-attempt defect. A prior applied fix is evidence to test, not automatic proof of resolution.",
         "Choose resolve_candidate only when a listed candidate has an applied change on the current Harness release and new independent outcome evidence shows the expected behavior now succeeds. Bind the exact candidate ID, fingerprint, and supplied evidence IDs. An applied edit alone is not later-success evidence.",
         "Compare each request with its actual user-visible answer and artifacts. A completed status, successful tool calls, gathered sources, or hidden metadata do not prove that the requested outcome was delivered.",
