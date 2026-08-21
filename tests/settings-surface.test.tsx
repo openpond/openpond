@@ -17,8 +17,9 @@ describe("settings surface", () => {
     }));
     expect(markup.indexOf("Account")).toBeLessThan(markup.indexOf("Notifications"));
     expect(markup.indexOf("Notifications")).toBeLessThan(markup.indexOf("Providers"));
-    expect(markup.indexOf("Compute")).toBeLessThan(markup.indexOf("Dataset Storage"));
-    expect(markup.indexOf("Dataset Storage")).toBeLessThan(markup.indexOf("Activity"));
+    expect(markup.indexOf("Providers")).toBeLessThan(markup.indexOf("Activity"));
+    expect(markup.indexOf("Activity")).toBeLessThan(markup.indexOf("Harness"));
+    expect(markup.indexOf("Profiles")).toBeLessThan(markup.indexOf("Dataset Storage"));
     expect(markup).toContain('class="settings-nav-item active"');
   });
 
@@ -29,7 +30,9 @@ describe("settings surface", () => {
       onSectionChange: () => undefined,
     }));
     expect(markup.indexOf("Harness")).toBeLessThan(markup.indexOf("Profiles"));
-    expect(markup.indexOf("Training")).toBeLessThan(markup.indexOf("Subagents"));
+    expect(markup.indexOf("Continuous Review")).toBeLessThan(markup.indexOf("Profiles"));
+    expect(markup).not.toContain("Training");
+    expect(markup).not.toContain("Subagents");
     expect(markup).not.toContain("Insights");
     expect(markup).not.toContain("Goals");
   });
