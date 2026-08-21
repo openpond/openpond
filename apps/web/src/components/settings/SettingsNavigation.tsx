@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Archive,
   Bell,
   BookOpenText,
   Bot,
@@ -9,6 +10,7 @@ import {
   MessageSquare,
   HardDrive,
   RadioTower,
+  RefreshCw,
   ScrollText,
   SlidersHorizontal,
   SquarePen,
@@ -43,11 +45,24 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     label: "Harness",
     items: [
-      { section: "harness", label: "Harness", Icon: Workflow },
+      { section: "harness", label: "Overview", Icon: Workflow },
+      { section: "harness-refiner", label: "Refiner", Icon: SquarePen },
+      { section: "harness-continuous-review", label: "Continuous Review", Icon: RefreshCw },
+      { section: "harness-contents", label: "Contents", Icon: BookOpenText },
+      { section: "harness-releases", label: "Releases", Icon: Archive },
+    ],
+  },
+  {
+    label: "Customization",
+    items: [
       { section: "skills", label: "Skills", Icon: FileText },
-      { section: "context", label: "Context", Icon: BookOpenText },
-      { section: "training", label: "Training", Icon: Workflow },
-      { section: "subagents", label: "Subagents", Icon: Workflow },
+      { section: "personalization", label: "Personalization", Icon: SquarePen },
+    ],
+  },
+  {
+    label: "Agents",
+    items: [
+      { section: "subagents", label: "Agents", Icon: Bot },
     ],
   },
   {
@@ -55,7 +70,6 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
       { section: "profile", label: "Legacy Profiles", Icon: Bot },
       { section: "editor", label: "Editor", Icon: Code2 },
       { section: "remote", label: "Remote", Icon: RadioTower },
-      { section: "personalization", label: "Personalization", Icon: SquarePen },
       { section: "diagnostics", label: "Diagnostics", Icon: ScrollText },
     ],
   },

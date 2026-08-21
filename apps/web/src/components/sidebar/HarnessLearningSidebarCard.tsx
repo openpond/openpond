@@ -16,7 +16,6 @@ export function HarnessLearningSidebarCard({
   onOpenSettings: () => void;
 }) {
   const [history, setHistory] = useState<HarnessHistoryPayload | null>(null);
-  const [busy, setBusy] = useState<"refiner" | "review" | null>(null);
   const [dismissed, setDismissed] = useState(
     readHarnessLearningNoticeDismissed
   );
@@ -39,6 +38,11 @@ export function HarnessLearningSidebarCard({
 
   if (dismissed || !connection || !history?.workspace) return null;
   const schedule = history.evaluationReviewSchedule;
+  const continuousReviewStatus = schedule.activityEnabled
+    ? `${schedule.activityBatchSize} outcomes${schedule.enabled ? ` + ${schedule.cadence}` : ""}`
+    : schedule.enabled
+      ? schedule.cadence
+      : "Manual";
 
   return (
     <section className="sidebar-learning-notice" aria-label="Continuous learning">
@@ -66,53 +70,14 @@ export function HarnessLearningSidebarCard({
           </button>
         </div>
       </header>
-      <label className="sidebar-learning-control">
+      <div className="sidebar-learning-status">
         <strong>Refiner</strong>
-        <span className="sidebar-learning-toggle">
-          <input
-            checked={history.backgroundReview.enabled}
-            disabled={busy !== null}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              setBusy("refiner");
-              void api.updateHarnessBackgroundReview(connection, {
-                workspaceId: history.workspace!.id,
-                enabled,
-              }).then((response) => setHistory(response.history))
-                .finally(() => setBusy(null));
-            }}
-            type="checkbox"
-          />
-          <span aria-hidden="true" />
-        </span>
-      </label>
-      <label className="sidebar-learning-control">
-        <strong>Scheduled review</strong>
-        <span className="sidebar-learning-toggle">
-          <input
-            checked={schedule.enabled}
-            disabled={busy !== null}
-            onChange={(event) => {
-              const enabled = event.target.checked;
-              const cadence = enabled && schedule.cadence === "manual"
-                ? "daily"
-                : schedule.cadence;
-              setBusy("review");
-              void api.updateHarnessEvaluationReviewSchedule(connection, {
-                workspaceId: history.workspace!.id,
-                enabled,
-                activityEnabled: schedule.activityEnabled,
-                activityBatchSize: schedule.activityBatchSize,
-                cadence,
-                maxEstimatedCostUsd: schedule.maxEstimatedCostUsd,
-              }).then((response) => setHistory(response.history))
-                .finally(() => setBusy(null));
-            }}
-            type="checkbox"
-          />
-          <span aria-hidden="true" />
-        </span>
-      </label>
+        <span>{history.backgroundReview.enabled ? "On" : "Off"}</span>
+      </div>
+      <div className="sidebar-learning-status">
+        <strong>Continuous Review</strong>
+        <span>{continuousReviewStatus}</span>
+      </div>
     </section>
   );
 }

@@ -61,6 +61,22 @@ import { WindowControls, isDesktopShell, isMacPlatform } from "../app-shell/Wind
 import { PanelRight } from "../icons";
 import type { SkillSourceDocument } from "../app-shell/skill-source-document";
 
+const HARNESS_SECTIONS = new Set<SettingsSection>([
+  "harness",
+  "harness-refiner",
+  "harness-continuous-review",
+  "harness-contents",
+  "harness-releases",
+]);
+
+function harnessPageForSection(section: SettingsSection) {
+  if (section === "harness-refiner") return "refiner" as const;
+  if (section === "harness-continuous-review") return "continuous-review" as const;
+  if (section === "harness-contents") return "contents" as const;
+  if (section === "harness-releases") return "releases" as const;
+  return "overview" as const;
+}
+
 const UsageSettingsSection = lazy(() =>
   import("./UsageSettingsSection").then((module) => ({ default: module.UsageSettingsSection })),
 );
@@ -236,7 +252,8 @@ export function SettingsView({
   const settingsStyle = {
     "--diff-panel-width": `${diffPanelWidth}px`,
   } as CSSProperties;
-  const harnessSidebarVisible = section === "harness" && harnessDiffOpen && harnessDiffSelection;
+  const harnessSectionActive = HARNESS_SECTIONS.has(section);
+  const harnessSidebarVisible = harnessSectionActive && harnessDiffOpen && harnessDiffSelection;
 
   return (
     <div
@@ -245,7 +262,7 @@ export function SettingsView({
     >
       <div className="settings-drag-region" aria-hidden="true" />
       <div className="settings-window-controls">
-        {section === "harness" ? (
+        {harnessSectionActive ? (
           <button
             type="button"
             className={`topbar-diff-button ${harnessSidebarVisible ? "active" : ""}`}
@@ -261,7 +278,7 @@ export function SettingsView({
         <WindowControls platform={connection?.platform} />
       </div>
       <SettingsNavigation section={section} onBack={goBack} onSectionChange={changeSection} />
-      <main className={`settings-content ${section === "profile" || section === "harness" ? "settings-content-wide" : ""}`}>
+      <main className={`settings-content ${section === "profile" || harnessSectionActive ? "settings-content-wide" : ""}`}>
         {section === "account" ? (
           <AccountSettingsSection
             payload={payload}
@@ -281,10 +298,10 @@ export function SettingsView({
             onModeChange={onTeamChatNotificationModeChange}
             onThreadMuteChange={onTeamChatThreadMuteChange}
           />
-        ) : section === "harness" ? (
+        ) : harnessSectionActive ? (
           <HarnessHistorySettingsSection
             connection={connection}
-            enabled={section === "harness"}
+            enabled={harnessSectionActive}
             onAcceptEvaluationReview={onAcceptEvaluationReview}
             onError={onError}
             onDefaultReleaseDiff={setHarnessDiffSelection}
@@ -294,6 +311,7 @@ export function SettingsView({
               setHarnessDiffOpen(true);
             }}
             onToast={onToast}
+            page={harnessPageForSection(section)}
           />
         ) : section === "profile" ? (
           <ProfileSettingsSection
@@ -336,7 +354,10 @@ export function SettingsView({
             onSave={saveDatasetStorage}
           />
         ) : section === "defaults" ? (
-          <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
+          <div className="settings-stacked-sections">
+            <DefaultsSettingsSection preferences={preferences} {...defaultsSettings} />
+            <ContextSettingsSection embedded preferences={preferences} {...defaultsSettings} />
+          </div>
         ) : section === "context" ? (
           <ContextSettingsSection preferences={preferences} {...defaultsSettings} />
         ) : section === "training" ? (
@@ -373,7 +394,7 @@ export function SettingsView({
           <DiagnosticsSettingsSection diagnostics={savedDiagnostics} {...diagnosticsSettings} />
         )}
       </main>
-      {section === "harness" && connection && harnessSidebarVisible ? (
+      {harnessSectionActive && connection && harnessSidebarVisible ? (
         <HarnessReleaseDiffSidebar
           connection={connection}
           expanded={diffPanelExpanded}

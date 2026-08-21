@@ -25,14 +25,10 @@ describe("HarnessEvaluationReviewSettings", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
-        backgroundReviewBusy={false}
-        backgroundReviewEnabled
         busy={false}
         candidates={[]}
-        onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
-        onSaveSchedule={() => undefined}
         qualifications={[]}
         reviews={[reviewReceipt("taskset")]}
         schedule={schedule}
@@ -41,29 +37,22 @@ describe("HarnessEvaluationReviewSettings", () => {
 
     expect(html).toContain("Build training Taskset");
     expect(html).toContain("3</strong> independent occurrences");
-    expect(html).toContain("Update schedule");
-    expect(html).toContain("Last run");
-    expect(html).toContain("Next scheduled run");
-    expect(html).toContain("Activity trigger");
-    expect(html).not.toContain("Maximum estimated cost");
-    expect(html).not.toContain("maximum cost");
+    expect(html).toContain("Review now");
+    expect(html).toContain("Last review");
+    expect(html).toContain("Last result");
+    expect(html).toContain("Patterns");
+    expect(html).toContain("Receipts stay compact");
     expect(html).not.toContain("Watermark");
-    expect(html).not.toContain("Last result");
-    expect(html).not.toContain("Save schedule");
   });
 
   it("does not offer Taskset authoring for no-action review receipts", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
-        backgroundReviewBusy={false}
-        backgroundReviewEnabled
         busy={false}
         candidates={[]}
-        onBackgroundReviewChange={() => undefined}
         onAcceptTasksetReview={() => undefined}
         onReview={() => undefined}
-        onSaveSchedule={() => undefined}
         qualifications={[]}
         reviews={[reviewReceipt("no_action")]}
         schedule={schedule}
@@ -71,11 +60,9 @@ describe("HarnessEvaluationReviewSettings", () => {
     );
 
     expect(html).not.toContain("Build training Taskset");
-    expect(html).toContain("Refiner");
-    expect(html).toContain("Activity review");
-    expect(html).toContain("Scheduled backstop");
-    expect(html).toContain("enabled by default for new users");
-    expect(html).toContain("provider-toggle harness-learning-toggle");
+    expect(html).toContain("No action");
+    expect(html).toContain("No recurring patterns are being tracked");
+    expect(html).toContain("Manual only");
   });
 });
 

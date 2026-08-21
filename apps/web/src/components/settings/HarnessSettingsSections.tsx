@@ -26,6 +26,7 @@ type SharedHarnessSettingsProps = {
 
 type ContextSettingsSectionProps = SharedHarnessSettingsProps & {
   contextCompactionAutoEnabled: boolean;
+  embedded?: boolean;
   setContextCompactionAutoEnabled: (value: boolean) => void;
 };
 
@@ -59,14 +60,20 @@ type SubagentsSettingsSectionProps = SharedHarnessSettingsProps & {
 
 export function ContextSettingsSection({
   contextCompactionAutoEnabled,
+  embedded = false,
   preferences,
   saving,
   saveDefaults,
   setContextCompactionAutoEnabled,
 }: ContextSettingsSectionProps) {
   return (
-    <section className="account-settings">
-      <h1>Context</h1>
+    <section className={`account-settings${embedded ? " account-settings-embedded" : ""}`}>
+      {embedded ? (
+        <div className="account-list-heading">
+          <span>Context</span>
+          <small>Compaction defaults for long chats</small>
+        </div>
+      ) : <h1>Context</h1>}
       <form className="provider-settings-form" onSubmit={(event) => void saveDefaults(event)}>
         <div className="account-list-heading">
           <span>Compaction</span>
@@ -152,7 +159,7 @@ export function SubagentsSettingsSection({
     <section className="account-settings subagents-settings">
       <form className="subagent-settings-form" onSubmit={(event) => void saveDefaults(event)}>
         <div className="subagent-settings-title-row">
-          <h1>Subagents</h1>
+          <h1>Agents</h1>
           <div className="subagent-settings-actions">
             <button className={`settings-primary subagent-save-button${unchanged ? "" : " dirty"}`} disabled={saving || unchanged}>
               <span>{saving ? "Saving" : "Save agents"}</span>
