@@ -3,7 +3,7 @@ import {
   Suspense,
   useMemo,
   type ComponentProps,
-  type RefObject,
+  type Ref,
   type UIEvent,
 } from "react";
 import type { TaskCreationSnapshot } from "@openpond/contracts";
@@ -58,7 +58,7 @@ export function MainChatThread({
   preparingInitialScroll: boolean;
   rows: ReturnType<typeof buildChatTimelineRows>;
   userAttachmentDisplay: NonNullable<MessageRowProps["userAttachmentDisplay"]>;
-  threadRef: RefObject<HTMLElement | null>;
+  threadRef: Ref<HTMLElement>;
   workspaceRootPath: string | null;
 }) {
   const messages = useMemo(

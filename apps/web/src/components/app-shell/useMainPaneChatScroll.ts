@@ -48,8 +48,15 @@ export function useMainPaneChatScroll({
   view: MainPaneProps["view"];
 }) {
   const chatThreadRef = useRef<HTMLElement | null>(null);
+  const [chatThreadElement, setChatThreadElement] =
+    useState<HTMLElement | null>(null);
+  const attachChatThreadRef = useCallback((element: HTMLElement | null) => {
+    chatThreadRef.current = element;
+    setChatThreadElement((current) => (current === element ? current : element));
+  }, []);
   const composerStackRef = useRef<HTMLDivElement | null>(null);
   const stickyChatScrollRef = useRef(true);
+  const lastChatScrollTopRef = useRef(0);
   const previousConversationKeyRef = useRef<string | null>(null);
   const pendingChatScrollRestoreRef = useRef<{
     scrollHeight: number;
@@ -378,8 +385,17 @@ export function useMainPaneChatScroll({
         return;
       }
       const nearBottom = isNearChatBottom(element);
-      stickyChatScrollRef.current = nearBottom;
-      updateChatScrollControls(element, { nearBottom });
+      const movedUp = element.scrollTop < lastChatScrollTopRef.current - 1;
+      lastChatScrollTopRef.current = element.scrollTop;
+      if (nearBottom) {
+        stickyChatScrollRef.current = true;
+        updateChatScrollControls(element, { nearBottom: true });
+      } else if (movedUp) {
+        stickyChatScrollRef.current = false;
+        updateChatScrollControls(element, { nearBottom: false });
+      } else {
+        updateChatScrollControls(element, { nearBottom: false });
+      }
       if (
         !initialChatScrollPendingRef.current &&
         element.scrollTop <= CHAT_HISTORY_TOP_THRESHOLD_PX &&
@@ -407,6 +423,7 @@ export function useMainPaneChatScroll({
     contentKey: chatScrollContentKey,
     enabled: view === "chat" && showChatThread,
     onContentChange: handleChatContentMutation,
+    threadElement: chatThreadElement,
     threadRef: chatThreadRef,
   });
   useLayoutEffect(() => {
@@ -479,6 +496,7 @@ export function useMainPaneChatScroll({
     remoteHistoryLoadPendingRef.current = false;
     initialChatScrollPendingRef.current = true;
     stickyChatScrollRef.current = true;
+    lastChatScrollTopRef.current = 0;
     cancelSmoothChatScroll();
     cancelScheduledChatBottomScroll();
     setInitialChatScrollReadyKey(null);
@@ -561,6 +579,7 @@ export function useMainPaneChatScroll({
     updateChatScrollControls(element, { nearBottom });
   }, [
     conversationKey,
+    chatThreadElement,
     finishInitialChatScroll,
     pendingApproval?.id,
     scrollChatToBottom,
@@ -580,7 +599,7 @@ export function useMainPaneChatScroll({
   return {
     chatColumnStyle,
     chatThreadPreparingInitialScroll,
-    chatThreadRef,
+    chatThreadRef: attachChatThreadRef,
     composerStackRef,
     goToUserMessage,
     handleChatScroll,

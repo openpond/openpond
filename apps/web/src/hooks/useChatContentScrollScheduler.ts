@@ -2,17 +2,24 @@ import { useLayoutEffect, useRef, type RefObject } from "react";
 
 export function useChatContentScrollScheduler(input: {
   contentKey: string;
+  threadElement?: HTMLElement | null;
   enabled?: boolean;
   onContentChange: (element: HTMLElement) => void;
   threadRef: RefObject<HTMLElement | null>;
 }): void {
-  const { contentKey, enabled = true, onContentChange, threadRef } = input;
+  const {
+    contentKey,
+    threadElement = null,
+    enabled = true,
+    onContentChange,
+    threadRef,
+  } = input;
   const callbackRef = useRef(onContentChange);
   const scheduleRef = useRef<(() => void) | null>(null);
   callbackRef.current = onContentChange;
 
   useLayoutEffect(() => {
-    const element = threadRef.current;
+    const element = threadElement ?? threadRef.current;
     if (!enabled || !element || typeof window === "undefined") return undefined;
     let animationFrame: number | null = null;
     let remainingSettleFrames = 0;
@@ -81,7 +88,7 @@ export function useChatContentScrollScheduler(input: {
       element.removeEventListener("load", handleLoad, true);
       if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
     };
-  }, [enabled, threadRef]);
+  }, [enabled, threadElement, threadRef]);
 
   useLayoutEffect(() => {
     if (enabled) scheduleRef.current?.();
