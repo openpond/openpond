@@ -45,8 +45,8 @@ export function classifyCiChanges(rawFiles, eventName = "pull_request", deletedF
 
   return {
     affectedTests,
-    agentSdk: files.some((file) => file.startsWith("packages/agent-sdk/")),
-    cli: files.some((file) => file.startsWith("apps/cli/")),
+    agentSdk: !docsOnly && files.some((file) => file.startsWith("packages/agent-sdk/")),
+    cli: !docsOnly && files.some((file) => file.startsWith("apps/cli/")),
     docsOnly,
     files,
     full,

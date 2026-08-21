@@ -27,6 +27,16 @@ describe("CI change scope", () => {
       full: false,
       install: false,
     });
+    expect(classifyCiChanges([
+      "apps/cli/README.md",
+      "packages/agent-sdk/README.md",
+    ])).toMatchObject({
+      agentSdk: false,
+      cli: false,
+      docsOnly: true,
+      full: false,
+      install: false,
+    });
     expect(classifyCiChanges([".github/workflows/release-sdk.yml"])).toMatchObject({
       full: false,
       release: true,

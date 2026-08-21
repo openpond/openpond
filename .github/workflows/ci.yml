@@ -88,11 +88,11 @@ jobs:
         run: pnpm run typecheck
 
       - name: Typecheck CLI
-        if: needs.scope.outputs.cli == 'true'
+        if: needs.scope.outputs.install == 'true' && needs.scope.outputs.cli == 'true'
         run: pnpm run cli:typecheck
 
       - name: Typecheck agent SDK
-        if: needs.scope.outputs.agent_sdk == 'true'
+        if: needs.scope.outputs.install == 'true' && needs.scope.outputs.agent_sdk == 'true'
         run: pnpm run agent-sdk:typecheck
 
       - name: Install image inspection dependency
