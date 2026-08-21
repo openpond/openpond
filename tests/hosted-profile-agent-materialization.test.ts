@@ -63,6 +63,7 @@ describe("hosted profile agent materialization", () => {
           sync: syncProject,
         },
         agents: {
+          list: vi.fn(async () => []),
           upsert: agentUpsert,
         },
       } as unknown as OpenPondSandboxClient;

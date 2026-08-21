@@ -495,6 +495,7 @@ Usage:
 Options:
   --agent-edit <json>
   --agent-id <string>
+  --allowed-actions <string>
   --allow-latest-source
   --attachments-json <json>
   --base-sha <string>
@@ -520,6 +521,7 @@ Options:
   --payload <json>
   --project-id <string>
   --prompt <string>
+  --provider <string>
   --published-snapshot-id <string>
   --ref <string>
   --required-env <string>
