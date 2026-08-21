@@ -23,10 +23,10 @@ export type HarnessEvaluationReviewSettings = {
 };
 
 const DEFAULT_SETTINGS: HarnessEvaluationReviewSettings = {
-  enabled: true,
-  activityEnabled: true,
+  enabled: false,
+  activityEnabled: false,
   activityBatchSize: 10,
-  cadence: "daily",
+  cadence: "manual",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
   lastRunAt: null,
@@ -103,7 +103,7 @@ export class SqliteHarnessEvaluationReviewSettingsStore extends SqliteHarnessMem
        FROM harness_evaluation_review_settings WHERE workspace_id = ?`,
       [workspaceId],
     );
-    if (!row) return { ...DEFAULT_SETTINGS, nextRunAt: new Date().toISOString() };
+    if (!row) return { ...DEFAULT_SETTINGS };
     const lastResult = row.last_review_id && row.last_review_hash && row.last_classification
       ? {
           id: row.last_review_id,

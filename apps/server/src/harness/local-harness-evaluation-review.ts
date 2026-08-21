@@ -352,7 +352,7 @@ async function runSelectedLocalHarnessEvaluation(input: {
   }
 
   let modelDecision: HarnessEvaluationReviewModelDecision = {
-    schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+    schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
     decision: "no_action",
     reason: "No authorized unresolved evidence qualified for model review.",
     ignoredEvidence: [],
@@ -368,7 +368,7 @@ async function runSelectedLocalHarnessEvaluation(input: {
       });
     }
     modelDecision = {
-      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+      schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
       decision: "no_action",
       reason: "Continuous review is disabled by a zero model-cost ceiling.",
       ignoredEvidence: candidates.map((candidate) => ({
@@ -488,6 +488,9 @@ async function runSelectedLocalHarnessEvaluation(input: {
       }),
       recurrenceFamily: modelDecision.recurrenceFamily,
       statement: modelDecision.statement,
+      ...(modelDecision.classification === "harness_maintenance"
+        ? { candidateDisposition: modelDecision.candidateDisposition! }
+        : {}),
       independentOccurrences: new Set(selectedCandidates.map((item) => item.sourceRef)).size,
       unresolvedOccurrences: new Set(selectedCandidates.map((item) => item.sourceRef)).size,
     } : null,

@@ -51,6 +51,7 @@ describe("Harness Evaluation review contracts", () => {
     expect(messages[0]!.content).toContain("missing requested citations or links");
     expect(messages[0]!.content).toContain("hidden metadata do not prove");
     expect(messages[0]!.content).toContain("An applied edit alone is not later-success evidence");
+    expect(messages[0]!.content).toContain("Occurrence count is evidence, not the decision rule");
   });
 
   test("creates and verifies an immutable bounded no-action receipt", () => {
@@ -119,7 +120,7 @@ describe("Harness Evaluation review contracts", () => {
       harnessRelease: ref("harness-release"),
       stream: async function* () {
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
           decision: "review",
           classification: "harness_maintenance",
           selectedEvidenceIds: ["route-one"],
@@ -130,6 +131,7 @@ describe("Harness Evaluation review contracts", () => {
           expectedOutcome: "Choose the supported edit path first on equivalent PDF tasks.",
           counterevidence: "Only one independent occurrence is currently available.",
           confidence: 0.72,
+          candidateDisposition: "confirm",
           reason: "The recovery is concrete and the proposed personal guidance is low risk.",
         }) };
       },
@@ -165,7 +167,7 @@ describe("Harness Evaluation review contracts", () => {
       stream: async function* () {
         calls += 1;
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
           decision: "resolve_candidate",
           candidateId: "candidate-one",
           candidateFingerprint: calls === 1 ? contentHash("wrong") : candidate.fingerprint,
@@ -218,7 +220,7 @@ describe("Harness Evaluation review contracts", () => {
         }
         expect(messages[1]!.content).not.toContain('"id": "unrelated"');
         yield { text: JSON.stringify({
-          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v1",
+          schemaVersion: "openpond.harnessEvaluationReviewModelDecision.v2",
           decision: "review",
           classification: "runtime",
           selectedEvidenceIds: ["route-one", "route-two"],
@@ -229,6 +231,7 @@ describe("Harness Evaluation review contracts", () => {
           expectedOutcome: "Provide a compatible renderer.",
           counterevidence: "Both tasks recovered.",
           confidence: 0.9,
+          candidateDisposition: null,
           reason: "The recovered failures share a runtime cause.",
         }) };
       },

@@ -177,6 +177,16 @@ authorized windows from compact previews, then inspects a bounded set of full
 payloads. Evidence outside that full-review bound is deferred rather than
 silently consumed. Neither operation launches training or activates a Model.
 
+Hosts should keep continuous review opt-in. OpenPond defaults new Harness
+workspaces to manual review with activity-triggered review disabled; enabling a
+schedule or activity batch is an explicit host/user decision.
+
+For a Harness-maintenance finding, the continuous reviewer explicitly chooses
+whether to `observe` the candidate for more evidence or `confirm` that it is
+actionable now. Independent occurrence count is evidence for that semantic
+decision, not a hard promotion threshold. External runtime, product, and
+Taskset classifications do not create refinement candidates.
+
 Runtime authoring uses `openpond.localHarnessRefinerDecision.v2`. Every route
 or proposal names a `single_deterministic` or `recurrent_independent` evidence
 basis, and the package rejects references that are not present in the bounded

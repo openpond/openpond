@@ -29,10 +29,10 @@ type Props = {
 };
 
 const DEFAULT_EVALUATION_REVIEW_SCHEDULE: HarnessEvaluationReviewSchedule = {
-  enabled: true,
-  activityEnabled: true,
+  enabled: false,
+  activityEnabled: false,
   activityBatchSize: 10,
-  cadence: "daily",
+  cadence: "manual",
   maxEstimatedCostUsd: 0.1,
   nextRunAt: null,
   lastRunAt: null,
