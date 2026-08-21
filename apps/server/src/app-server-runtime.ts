@@ -41,6 +41,7 @@ import { listAppServerIntegrationConnections } from "./openpond/app-server-conne
 import { createCloudConnectedAppToolExecutor } from "./openpond/connected-app-executor.js";
 import { createHostedTurnHelpers } from "./openpond/hosted-turn-helpers.js";
 import { loadPersonalizationSettings } from "./openpond/personalization.js";
+import { createHostedSavedWork } from "./openpond/saved-work.js";
 import { createProjectActionRunPayload } from "./project-actions/project-action-payload.js";
 import {
   createScriptedOpenPondChatStream,
@@ -305,6 +306,7 @@ export async function createOpenPondAppServer(
       return readBundledAuthoringProfileSkill(name);
     },
     executeWebSearch: createWebSearchExecutorFromEnv(),
+    createScheduledWork: createHostedSavedWork,
     executeConnectedAppTool: createCloudConnectedAppToolExecutor(),
     listIntegrationConnections: listAppServerIntegrationConnections,
     loadPersonalizationSoul: async () =>
