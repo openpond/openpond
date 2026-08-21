@@ -1,6 +1,6 @@
 {
   "name": "@openpond/local-server",
-  "version": "0.0.61",
+  "version": "0.0.62",
   "openpondReleaseVersioned": true,
   "license": "MIT",
   "main": "./dist/index.js",
