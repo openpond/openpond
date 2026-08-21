@@ -62,7 +62,12 @@ export async function buildAgentSdkMaterializedDependency(
     const sdkContents =
       sdkSource.kind === "package_root"
         ? await packOpenPondAgentSdkPackageRoot(sdkSource.packageRoot, tempDir)
-        : sdkSource.tarballContents;
+        : sdkSource.kind === "registry"
+          ? await packOpenPondAgentSdkRegistryPackage(
+              sdkSource.versionSpec,
+              tempDir,
+            )
+          : sdkSource.tarballContents;
     const sdkDependencyTarballs = await packAgentSdkRuntimeDependencyTarballs({
       sdkPackageJson: sdkSource.packageJson,
       dependencyBaseDir: sdkSource.dependencyBaseDir,
@@ -167,7 +172,11 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
   const projectDependencies = recordStringMap(
     params.projectPackageJson.dependencies,
   );
+  const projectDevDependencies = recordStringMap(
+    params.projectPackageJson.devDependencies,
+  );
   delete projectDependencies["openpond-agent-sdk"];
+  delete projectDevDependencies["openpond-agent-sdk"];
   const pending = [
     ...Object.entries(sdkDependencies).map(([packageName, versionSpec]) => ({
       packageName,
@@ -179,6 +188,13 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
       versionSpec,
       dependencyBaseDir: params.projectPath,
     })),
+    ...Object.entries(projectDevDependencies).map(
+      ([packageName, versionSpec]) => ({
+        packageName,
+        versionSpec,
+        dependencyBaseDir: params.projectPath,
+      }),
+    ),
   ].sort((left, right) => left.packageName.localeCompare(right.packageName));
   const seen = new Set<string>();
   const tarballs: AgentSdkMaterializedTarball[] = [];
@@ -211,7 +227,16 @@ async function packAgentSdkRuntimeDependencyTarballs(params: {
       );
     }
     const contents = await fs.readFile(path.join(params.tempDir, tarballName));
-    const packedPackageJson = readPackageJsonFromNpmTarball(contents);
+    let packedPackageJson: Record<string, unknown>;
+    try {
+      packedPackageJson = readPackageJsonFromNpmTarball(contents);
+    } catch (error) {
+      throw new Error(
+        `failed to inspect packed dependency ${packageName}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
     tarballs.push({
       packageName,
       source: "npm_dependency_tarball",
@@ -288,7 +313,45 @@ type OpenPondAgentSdkMaterializationSource =
       tarballContents: Buffer;
       dependencyBaseDir: string;
       packageJson: Record<string, unknown>;
+    }
+  | {
+      kind: "registry";
+      versionSpec: string;
+      dependencyBaseDir: string;
+      packageJson: Record<string, unknown>;
     };
+
+async function packOpenPondAgentSdkRegistryPackage(
+  versionSpec: string,
+  tempDir: string,
+): Promise<Buffer> {
+  const pack = await runCommand(
+    "npm",
+    [
+      "pack",
+      "--silent",
+      "--pack-destination",
+      tempDir,
+      `openpond-agent-sdk@${versionSpec}`,
+    ],
+    { cwd: tempDir },
+  );
+  if (pack.code !== 0) {
+    const details = [pack.stderr.trim(), pack.stdout.trim()]
+      .filter(Boolean)
+      .join("\n");
+    throw new Error(
+      `failed to pack openpond-agent-sdk for source upload${details ? `:\n${details}` : ""}`,
+    );
+  }
+  const tarballName = pack.stdout.trim().split(/\r?\n/).filter(Boolean).pop();
+  if (!tarballName) {
+    throw new Error(
+      "failed to pack openpond-agent-sdk for source upload: npm pack did not return a tarball name",
+    );
+  }
+  return fs.readFile(path.join(tempDir, tarballName));
+}
 
 function resolveLocalOpenPondAgentSdkMaterializationSource(
   projectPath: string,
@@ -334,6 +397,23 @@ function resolveLocalOpenPondAgentSdkMaterializationSource(
         ) as Record<string, unknown>,
       };
     }
+  }
+  const installedPackageRoot = path.join(
+    projectPath,
+    "node_modules",
+    "openpond-agent-sdk",
+  );
+  if (isOpenPondAgentSdkPackageRoot(installedPackageRoot)) {
+    const installedPackageJson = JSON.parse(
+      readFileSyncUtf8(path.join(installedPackageRoot, "package.json")),
+    ) as Record<string, unknown>;
+    const installedVersion = text(installedPackageJson.version);
+    return {
+      kind: "registry",
+      versionSpec: installedVersion ?? versionSpec ?? "latest",
+      dependencyBaseDir: installedPackageRoot,
+      packageJson: installedPackageJson,
+    };
   }
   return null;
 }
@@ -393,7 +473,10 @@ function readPackageJsonFromNpmTarball(
 
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
-    if (entryPath === "package/package.json") {
+    if (
+      entryPath === "package/package.json" ||
+      entryPath.endsWith("/package.json")
+    ) {
       return JSON.parse(
         tarContents.subarray(dataStart, dataEnd).toString("utf8")
       ) as Record<string, unknown>;
@@ -401,7 +484,7 @@ function readPackageJsonFromNpmTarball(
 
     offset = dataStart + Math.ceil(size / 512) * 512;
   }
-  throw new Error("failed to read openpond-agent-sdk tarball: missing package.json");
+  throw new Error("failed to read npm package tarball: missing package.json");
 }
 
 function readTarString(
