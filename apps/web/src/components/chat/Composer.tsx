@@ -163,6 +163,7 @@ export function Composer({
   createImproveRuntime = null,
   busy,
   running = busy,
+  interruptRunningTurnBeforeSteer = true,
   submissionScopeKey = "default",
   initialSteerDrafts = EMPTY_STEER_DRAFTS,
   showProjectFooter = true,
@@ -1218,7 +1219,7 @@ export function Composer({
   }
 
   function stageCurrentSteerDraft(): boolean {
-    const value = prompt.trim();
+    const value = (inputRef.current?.getPrompt() ?? prompt).trim();
     if (!running || !value) return false;
     if (attachments.length > 0 || selectedAction || selectedCommand) {
       showToast(
@@ -1240,22 +1241,18 @@ export function Composer({
 
   async function submitQueuedSteerDraft(draftId: string): Promise<boolean> {
     const submissionScope = submissionScopeKey;
-    if (
-      isSubmittingScope(submissionScope) ||
-      sendingSteerDraft?.scopeKey === submissionScope
-    )
-      return false;
+    if (sendingSteerDraft?.scopeKey === submissionScope) return false;
     const draft = composerSteerDraftsForScope(
       steerDraftsByScope,
       submissionScope,
       initialSteerDrafts
     ).find((candidate) => candidate.id === draftId);
-    if (!draft || !beginSubmissionForScope(submissionScope)) return false;
+    if (!draft) return false;
     setSendingSteerDraft({ draftId, scopeKey: submissionScope });
     setAttachmentError(null);
     try {
       const steeringActiveTurn = running;
-      if (steeringActiveTurn) {
+      if (steeringActiveTurn && interruptRunningTurnBeforeSteer) {
         const stopped = await onStop();
         if (stopped === false) return false;
       }
@@ -1276,7 +1273,6 @@ export function Composer({
       );
       return false;
     } finally {
-      finishSubmissionForScope(submissionScope);
       setSendingSteerDraft((current) =>
         current?.scopeKey === submissionScope && current.draftId === draftId
           ? null
@@ -1312,6 +1308,10 @@ export function Composer({
   }
 
   async function submitComposer() {
+    if (running) {
+      stageCurrentSteerDraft();
+      return;
+    }
     if (isSubmittingCurrentScope()) return;
     const parsedSubmitIssuePrompt =
       selectedAction || selectedCommand
@@ -1326,10 +1326,6 @@ export function Composer({
           ? parsedSubmitIssuePrompt.args
           : prompt
       );
-      return;
-    }
-    if (running) {
-      stageCurrentSteerDraft();
       return;
     }
     if (sendDisabled) return;

@@ -61,7 +61,6 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     })),
   );
   const skills: OpenPondProfileSkill[] = [];
-  const skillContexts: string[] = [];
   const readers = new Map<string, () => Promise<ProfileSkillReadResult>>();
 
   for (const asset of release.agentSnapshot.skills) {
@@ -92,11 +91,6 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
       resourceFiles,
     };
     skills.push(skill);
-    skillContexts.push([
-      `Harness Skill (${asset.path}, ${parsed.name}):`,
-      parsed.description,
-      parsed.body.trim(),
-    ].filter(Boolean).join("\n"));
     readers.set(skill.name, async () => {
       const currentMarkdown = await readVerifiedAsset(sourceRoot, asset.path, asset.contentHash);
       const current = parseProfileSkillMarkdown(currentMarkdown);
@@ -127,25 +121,13 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
         }
       : null,
   };
-  const agents = await Promise.all(
-    release.agentSnapshot.agents.map(async (asset) => ({
-      path: asset.path,
-      content: await readVerifiedAsset(sourceRoot, asset.path, asset.contentHash),
-    })),
-  );
   const instructionSections = instructions
     .sort((left, right) => left.path.localeCompare(right.path))
     .map(({ path: instructionPath, content }) => [
-      `Harness instruction (${instructionPath}):`,
+      `Active Harness instruction (${instructionPath}):`,
       content.trim(),
     ].join("\n"))
     .filter((content) => content.trim().length > 0);
-  const agentSections = agents
-    .sort((left, right) => left.path.localeCompare(right.path))
-    .map(({ path: agentPath, content }) => [
-      `Harness Agent (${agentPath}):`,
-      content.trim(),
-    ].join("\n"));
   const capabilityReceipt = [
     "Harness capability receipt:",
     JSON.stringify({
@@ -168,11 +150,16 @@ export async function loadLocalHarnessRuntimeFromRelease(input: {
     }),
   ].join("\n");
   const instructionContext = [
-    ...instructionSections,
-    ...skillContexts.sort(),
-    ...agentSections,
     capabilityReceipt,
-  ].filter((content) => content.trim().length > 0).join("\n\n");
+    instructionSections.length > 0
+      ? [
+          "Active Harness preflight:",
+          "Apply the following released instructions when planning work and immediately before every tool call.",
+          "Preflight each call: (1) identify any active instruction that matches the planned operation, (2) inspect the exact tool arguments for a forbidden pattern, and (3) rewrite the call before sending it when a pattern matches. Compliance is required even when the prohibited call might still succeed.",
+          ...instructionSections,
+        ].join("\n\n")
+      : null,
+  ].filter((content): content is string => Boolean(content?.trim())).join("\n\n");
   return { workspace, release, instructionContext, skillRuntime };
 }
 

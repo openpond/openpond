@@ -232,12 +232,28 @@ export type HarnessRefinerCapabilities = z.infer<
 >;
 
 const SourceKindSchema = z.enum(["memory", "instruction", "skill", "agent"]);
+const RefinerSourceFileSchema = z
+  .object({
+    path: z.string().trim().min(1).max(2_000),
+    kind: SourceKindSchema,
+    content: z.string().max(60_000),
+    loaded: z.boolean(),
+  })
+  .strict();
+const RefinerSourceCatalogEntrySchema = z
+  .object({
+    path: z.string().trim().min(1).max(2_000),
+    kind: SourceKindSchema,
+    loaded: z.boolean(),
+  })
+  .strict();
 
 export const LocalHarnessRefinerEvidenceSchema = z
   .object({
     capabilities: HarnessRefinerCapabilitiesSchema,
     trigger: z.record(z.string(), z.unknown()),
     observations: z.array(z.record(z.string(), z.unknown())).max(20),
+    admissibleEvidenceIds: z.array(z.string().trim().min(1).max(2_000)).max(10_000),
     reviewPacket: z
       .object({
         currentTurn: z
@@ -287,29 +303,17 @@ export const LocalHarnessRefinerEvidenceSchema = z
           .strict(),
       })
       .strict(),
-    sourceFiles: z
-      .array(
-        z
-          .object({
-            path: z.string().trim().min(1).max(2_000),
-            kind: SourceKindSchema,
-            content: z.string().max(60_000),
-            loaded: z.boolean(),
-          })
-          .strict(),
-      )
-      .max(100),
-    sourceCatalog: z
-      .array(
-        z
-          .object({
-            path: z.string().trim().min(1).max(2_000),
-            kind: SourceKindSchema,
-            loaded: z.boolean(),
-          })
-          .strict(),
-      )
-      .max(1_000),
+    runtimeActivation: z
+      .object({
+        admittedRelease: ImmutableReleaseRefSchema,
+        currentRelease: ImmutableReleaseRefSchema,
+        rebasedOntoCurrent: z.boolean(),
+        admittedSourceFiles: z.array(RefinerSourceFileSchema).max(100),
+        admittedSourceCatalog: z.array(RefinerSourceCatalogEntrySchema).max(1_000),
+      })
+      .strict(),
+    sourceFiles: z.array(RefinerSourceFileSchema).max(100),
+    sourceCatalog: z.array(RefinerSourceCatalogEntrySchema).max(1_000),
     additionalEvidence: z.unknown().nullable().optional(),
   })
   .strict();
@@ -366,6 +370,7 @@ export async function authorLocalHarnessRefinementWithModel(input: {
             "Reject invented recurrence, unsupported evidence references, material counterevidence, unavailable capability layers, task-specific or benchmark content, inferred memory, broad instructions, and workarounds for runtime, product, taskset, or grader defects.",
             "Do not reject a concise correction merely because the deterministic failure appeared once when the mechanism and reusable prevention are clear.",
             "For adaptation cohorts, reject drafts that add work instead of removing the repeated foreground-token cost while preserving quality.",
+            `Copy supportingEvidenceIds only from this exact list: ${JSON.stringify(evidence.admissibleEvidenceIds)}.`,
             ...(draftAdmissionIssues.length
               ? [`The draft also failed deterministic admission: ${draftAdmissionIssues.join("; ")}. Correct it or return no_action.`]
               : []),
@@ -468,12 +473,14 @@ export function refinerMessages(
         "A taskset grade proves only the measured outcome. It does not prove that the root owner is the Harness rather than runtime, product, fixture, grader, taskset, or model behavior.",
         "Optimize future work, not the completed turn. A repeated avoidable strategy is strong evidence, but one high-confidence deterministic failure may justify a small validated correction when the failure mechanism and reusable prevention are both clear. Recurrence strengthens confidence; it is not universally required.",
         "Recovered internal mistakes are not automatically ordinary successful work. A concrete API mismatch, incompatible dependency or format, or repeated command construction error can justify a narrow preventive skill or prompt correction when the trace shows how to avoid it next time.",
+        "runtimeActivation is authoritative about activation timing. admittedSourceFiles describe the exact released source available to the reviewed turn. sourceFiles and sourceCatalog describe the current editable release. When rebasedOntoCurrent is true, do not claim a current-only instruction was loaded by the reviewed turn.",
         "When the supplied trace shows that the model violated an already-loaded Harness instruction before recovering, the instruction's existence is not counterevidence. Treat that as evidence that its current wording, placement, or operational form was ineffective. Evaluate the smallest non-duplicative change that makes the rule actionable at the decision point, such as a concise preflight or checklist. Do not merely restate the existing rule.",
+        "For command, API, or structured-output construction failures, prefer an observable invariant over a vague reminder: name the forbidden combination precisely, state where it is forbidden, remove ambiguous qualifiers, and include one valid alternative when the evidence proves it. A post-activation recurrence should strengthen the operational form rather than duplicate the same wording in another file.",
         crossRunCandidate
           ? "This is a bounded cross-Work candidate continuation. Verify the supplied candidate, review, authorization, admitted release, independent occurrences, and counterevidence. Use recurrent_independent only; do not reinterpret unrelated wording as recurrence."
           : "This is an immediate completed-turn review, not an unbounded cross-Work archive review. Use only supplied observations and priorIncidents. Defer ambiguous recurrence to recurring-pattern review.",
         "Every route or proposal must declare evidenceBasis. Use single_deterministic only when a supplied incident exposes an observed deterministic mechanism and reusable prevention rule with no material counterevidence. Use recurrent_independent only for at least two materially independent supplied incidents; similar wording, topic, tool name, or artifact family is not independence.",
-        "supportingEvidenceIds must name actual supplied observation or prior-incident IDs. List material counterevidence explicitly. Never invent recurrence or omit contradictory supplied evidence.",
+        "supportingEvidenceIds must copy exact values from admissibleEvidenceIds. Do not synthesize labels from timeline sequences, event names, tools, or descriptions. List material counterevidence explicitly. Never invent recurrence or omit contradictory supplied evidence.",
         "Use no_action for ordinary successful work, conversation-specific facts, or insufficient evidence. High token use alone is not a reason to edit the Harness.",
         "Use route whenever a runtime, product, taskset, or training defect materially prevented the requested outcome. Routing records ownership; it does not blame the agent and does not require recurrence. A good fallback, transparent disclosure, or likely transient outage does not erase the external defect.",
         "For a Harness proposal, encode only the reusable root behavior. Do not copy subject matter, named entities, business facts, requested artifact content, benchmark wording, secrets, raw user data, or transient paths.",
@@ -561,7 +568,10 @@ function decisionAdmissionIssues(
 }
 
 function suppliedEvidenceIds(evidence: LocalHarnessRefinerEvidence): Set<string> {
-  const ids = new Set<string>([evidence.reviewPacket.currentTurn.id]);
+  const ids = new Set<string>([
+    evidence.reviewPacket.currentTurn.id,
+    ...evidence.admissibleEvidenceIds,
+  ]);
   for (const item of evidence.observations) addRecordId(ids, item);
   for (const item of evidence.reviewPacket.priorIncidents) addRecordId(ids, item);
   collectNestedIds(ids, evidence.additionalEvidence, 0);

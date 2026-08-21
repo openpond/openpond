@@ -355,9 +355,15 @@ describe("local Harness Refiner worker", () => {
       signal: new AbortController().signal,
       now: () => LATER,
       refine: async ({ request }) => {
+        expect(request.evidence.runtimeActivation).toMatchObject({
+          admittedRelease: current.overlay.baseHarnessRelease,
+          currentRelease: current.overlay.baseHarnessRelease,
+          rebasedOntoCurrent: false,
+        });
         const source = request.evidence.sourceFiles.find(
           (candidate) => candidate.path === "instructions/system.md",
         );
+        expect(source?.loaded).toBe(true);
         const anchor = source?.content.trimEnd().split("\n").at(-1);
         if (!anchor) throw new Error("Expected instruction source evidence.");
         return hostedResult(request, {
@@ -391,6 +397,11 @@ describe("local Harness Refiner worker", () => {
         expect(request.harness.currentRelease).toEqual(
           first.workspace.currentChannel.release,
         );
+        expect(request.evidence.runtimeActivation).toMatchObject({
+          admittedRelease: stale.overlay.baseHarnessRelease,
+          currentRelease: first.workspace.currentChannel.release,
+          rebasedOntoCurrent: true,
+        });
         expect(request.evidence.reviewPacket.priorIncidents).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
@@ -409,6 +420,12 @@ describe("local Harness Refiner worker", () => {
         const source = request.evidence.sourceFiles.find(
           (candidate) => candidate.path === "instructions/system.md",
         );
+        expect(source?.loaded).toBe(false);
+        const admittedSource = request.evidence.runtimeActivation.admittedSourceFiles.find(
+          (candidate) => candidate.path === "instructions/system.md",
+        );
+        expect(admittedSource?.loaded).toBe(true);
+        expect(admittedSource?.content).not.toBe(source?.content);
         const anchor = source?.content.trimEnd().split("\n").at(-1);
         if (!anchor) throw new Error("Expected rebased instruction source evidence.");
         return hostedResult(request, {

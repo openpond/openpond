@@ -28,6 +28,7 @@ export type ComposerInlineToken = {
 
 export type ComposerInlineInputHandle = {
   element: HTMLDivElement | null;
+  getPrompt: () => string;
   focusAtPromptIndex: (index: number, options?: { afterToken?: boolean }) => void;
   resize: () => void;
 };
@@ -502,6 +503,10 @@ export const ComposerInlineInput = forwardRef<ComposerInlineInputHandle, {
   useImperativeHandle(ref, () => ({
     get element() {
       return rootRef.current;
+    },
+    getPrompt() {
+      const root = rootRef.current;
+      return root ? extractEditorState(root).text : prompt;
     },
     focusAtPromptIndex(index, options) {
       const root = rootRef.current;

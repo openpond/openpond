@@ -49,6 +49,7 @@ export type ComposerProps = {
   createImproveRuntime?: ComposerCreateImproveRuntime | null;
   busy: boolean;
   running?: boolean;
+  interruptRunningTurnBeforeSteer?: boolean;
   submissionScopeKey?: string;
   initialSteerDrafts?: ComposerSteerDraft[];
   showProjectFooter?: boolean;

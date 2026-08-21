@@ -38,8 +38,8 @@ import {
 import {
   loadBoundedRefinerContext,
   loadExactObservations,
-  readBoundedRefinerSource,
 } from "./local-harness-refiner-context.js";
+import { loadRefinerReleaseContext } from "./local-harness-refiner-release-context.js";
 import {
   boundedObservationEvidence,
   boundedTriggerEvidence,
@@ -174,26 +174,14 @@ async function executeLocalHarnessRefinerWorker(
     });
   }
 
-  const effectiveReleaseRef = rebasedOntoCurrent
-    ? workspace.currentChannel.release
-    : overlay.baseHarnessRelease;
-  if (!effectiveReleaseRef) {
-    throw new Error("Queued Refiner trigger references a Harness workspace without a current release.");
-  }
-  const release = await input.store.getHarnessReleaseRecord(
-    effectiveReleaseRef.contentHash,
-  );
-  if (
-    !release ||
-    release.harnessRelease.id !== effectiveReleaseRef.id ||
-    release.workspaceId !== workspace.id
-  ) {
-    throw new Error("Queued Refiner trigger references an unavailable effective Harness release.");
-  }
-  const source = await readBoundedRefinerSource(
-    release.bundlePath,
-    trigger,
-  );
+  const { admittedSource, effectiveReleaseRef, release, source } =
+    await loadRefinerReleaseContext({
+      store: input.store,
+      workspace,
+      overlay,
+      trigger,
+      rebasedOntoCurrent,
+    });
   const memorySource = (await input.store.listHarnessMemories(workspace.id))
     .slice(0, 100)
     .map((entry) => ({
@@ -217,11 +205,27 @@ async function executeLocalHarnessRefinerWorker(
     skill: true,
     agent: false,
   } as const;
+  const admissibleEvidenceIds = [
+    ...observations.map((observation) => observation.id),
+    ...boundedContext.reviewPacket.priorIncidents.flatMap((incident) =>
+      typeof incident.id === "string" && incident.id.trim()
+        ? [incident.id.trim()]
+        : [],
+    ),
+  ];
   const refinerEvidence = {
     capabilities,
     trigger: boundedTriggerEvidence(trigger),
     observations: observations.map(boundedObservationEvidence),
+    admissibleEvidenceIds,
     reviewPacket: boundedContext.reviewPacket,
+    runtimeActivation: {
+      admittedRelease: overlay.baseHarnessRelease,
+      currentRelease: effectiveReleaseRef,
+      rebasedOntoCurrent,
+      admittedSourceFiles: admittedSource.files,
+      admittedSourceCatalog: admittedSource.catalog,
+    },
     sourceFiles: source.files,
     sourceCatalog: source.catalog,
     additionalEvidence: input.additionalEvidence ?? null,

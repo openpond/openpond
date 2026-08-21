@@ -26,6 +26,7 @@ import { useChatContentScrollScheduler } from "../../hooks/useChatContentScrollS
 
 export function useMainPaneChatScroll({
   browserConversationId,
+  chatSubmissionVersion,
   chatHistoryHasMore,
   chatHistoryLoading,
   chatMessages,
@@ -36,6 +37,7 @@ export function useMainPaneChatScroll({
   view,
 }: {
   browserConversationId: string | null;
+  chatSubmissionVersion: number;
   chatHistoryHasMore: boolean;
   chatHistoryLoading: boolean;
   chatMessages: ChatMessage[];
@@ -455,6 +457,22 @@ export function useMainPaneChatScroll({
     stickyChatScrollRef.current = true;
     scrollChatToBottom(element, { settle: true });
   }, [chatComposerReservePx, scrollChatToBottom, showChatThread, view]);
+
+  useLayoutEffect(() => {
+    if (chatSubmissionVersion === 0 || view !== "chat" || !showChatThread)
+      return;
+    const element = chatThreadRef.current;
+    if (!element) return;
+    stickyChatScrollRef.current = true;
+    setChatAwayFromBottom(false);
+    scrollChatToBottom(element, { settle: true });
+  }, [
+    chatSubmissionVersion,
+    scrollChatToBottom,
+    setChatAwayFromBottom,
+    showChatThread,
+    view,
+  ]);
 
   useLayoutEffect(() => {
     pendingChatScrollRestoreRef.current = null;

@@ -12,6 +12,7 @@ const evidence: LocalHarnessRefinerEvidence = {
   capabilities: { memory: true, prompt: true, skill: true, agent: false },
   trigger: { decision: "queue_refiner", suggestedRoutes: ["runtime"] },
   observations: [{ id: "observation-1", kind: "recovery", rawError: "PDF edit failed", recovered: true }],
+  admissibleEvidenceIds: ["observation-1"],
   reviewPacket: {
     currentTurn: {
       id: "turn-1",
@@ -42,6 +43,13 @@ const evidence: LocalHarnessRefinerEvidence = {
       timelineTruncated: false,
     },
   },
+  runtimeActivation: {
+    admittedRelease: { id: "harness-admitted", contentHash: "a".repeat(64) },
+    currentRelease: { id: "harness-admitted", contentHash: "a".repeat(64) },
+    rebasedOntoCurrent: false,
+    admittedSourceFiles: [],
+    admittedSourceCatalog: [],
+  },
   sourceFiles: [],
   sourceCatalog: [],
 };
@@ -63,9 +71,12 @@ describe("public model-driven Harness Refiner", () => {
     expect(system).toContain("good fallback");
     expect(system).toContain("Never force a change");
     expect(system).toContain("Optimize future work");
+    expect(system).toContain("runtimeActivation is authoritative");
     expect(system).toContain("violated an already-loaded Harness instruction");
+    expect(system).toContain("observable invariant");
     expect(system).toContain("immediate completed-turn review");
     expect(system).toContain("supportingEvidenceIds");
+    expect(system).toContain("admissibleEvidenceIds");
     expect(system).toContain("explicitly stated durable user preference");
     expect(system).toContain("capabilities is authoritative");
   });
@@ -156,6 +167,12 @@ describe("public model-driven Harness Refiner", () => {
   });
 
   test("does not treat an ignored loaded instruction as evidence for no action", async () => {
+    const loadedInstruction = {
+      path: "instructions/system.md",
+      kind: "instruction" as const,
+      loaded: true,
+      content: "Avoid piping large font listings through head; constrain the query at the source.",
+    };
     const ignoredInstructionEvidence: LocalHarnessRefinerEvidence = {
       ...evidence,
       observations: [{
@@ -164,12 +181,12 @@ describe("public model-driven Harness Refiner", () => {
         rawError: "fc-list | head exited with SIGPIPE (exit 141)",
         recovered: true,
       }],
-      sourceFiles: [{
-        path: "instructions/system.md",
-        kind: "instruction",
-        loaded: true,
-        content: "Avoid piping large font listings through head; constrain the query at the source.",
-      }],
+      runtimeActivation: {
+        ...evidence.runtimeActivation,
+        admittedSourceFiles: [loadedInstruction],
+        admittedSourceCatalog: [{ path: loadedInstruction.path, kind: loadedInstruction.kind, loaded: true }],
+      },
+      sourceFiles: [loadedInstruction],
       sourceCatalog: [{ path: "instructions/system.md", kind: "instruction", loaded: true }],
     };
     const messagesSeen: HarnessRefinerMessage[][] = [];
