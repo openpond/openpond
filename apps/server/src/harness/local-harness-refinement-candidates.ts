@@ -215,9 +215,9 @@ function reauthorizeOrExpireCandidate(input: {
   const rejected = occurrences.length === 0;
   const status = rejected ? "rejected" as const
     : expired ? "expired" as const
-      : new Set(occurrences.map((item) => item.sourceRef)).size >= 2
-        ? "confirmed" as const
-        : "unresolved" as const;
+      : removed.length > 0
+        ? "unresolved" as const
+        : input.candidate.status;
   const decision = rejected ? "rejected" as const
     : expired ? "expired" as const
       : "merged" as const;
@@ -294,8 +294,9 @@ function upsertCandidateFromReview(input: {
     ...authorizedOccurrences,
     ...input.review.selectedEvidence,
   ]);
-  const independentOccurrences = new Set(occurrences.map((item) => item.sourceRef)).size;
-  const status = independentOccurrences >= 2 ? "confirmed" as const : "unresolved" as const;
+  const status = claim.candidateDisposition === "confirm"
+    ? "confirmed" as const
+    : "unresolved" as const;
   const firstSeenAt = occurrences.map((item) => item.occurredAt).sort()[0]!;
   const lastSeenAt = occurrences.map((item) => item.occurredAt).sort().at(-1)!;
   const candidate = createHarnessRefinementCandidate({
