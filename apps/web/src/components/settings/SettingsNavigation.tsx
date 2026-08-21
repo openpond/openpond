@@ -37,9 +37,7 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
       { section: "account", label: "Account", Icon: UserCircle },
       { section: "notifications", label: "Notifications", Icon: Bell },
       { section: "providers", label: "Providers", Icon: MessageSquare },
-      { section: "dataset-storage", label: "Dataset Storage", Icon: HardDrive },
       { section: "usage", label: "Activity", Icon: ChartColumnStacked },
-      { section: "defaults", label: "Defaults", Icon: SlidersHorizontal },
     ],
   },
   {
@@ -55,21 +53,24 @@ const SETTINGS_NAVIGATION_GROUPS: SettingsNavigationGroup[] = [
   {
     label: "Customization",
     items: [
-      { section: "skills", label: "Skills", Icon: FileText },
+      { section: "defaults", label: "Defaults", Icon: SlidersHorizontal },
       { section: "personalization", label: "Personalization", Icon: SquarePen },
+      { section: "editor", label: "Editor", Icon: Code2 },
+      { section: "skills", label: "Skills", Icon: FileText },
     ],
   },
   {
     label: "Agents",
     items: [
+      { section: "profile", label: "Profiles", Icon: UserCircle },
       { section: "subagents", label: "Agents", Icon: Bot },
     ],
   },
   {
+    label: "System",
     items: [
-      { section: "profile", label: "Legacy Profiles", Icon: Bot },
-      { section: "editor", label: "Editor", Icon: Code2 },
-      { section: "remote", label: "Remote", Icon: RadioTower },
+      { section: "dataset-storage", label: "Dataset Storage", Icon: HardDrive },
+      { section: "remote", label: "Remote Access", Icon: RadioTower },
       { section: "diagnostics", label: "Diagnostics", Icon: ScrollText },
     ],
   },

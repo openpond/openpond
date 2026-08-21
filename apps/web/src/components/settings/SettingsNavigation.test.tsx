@@ -30,7 +30,13 @@ describe("SettingsNavigation", () => {
     expect(html).toContain("Customization");
     expect(html).toContain("Skills");
     expect(html).toContain("Personalization");
+    expect(html).toContain("Defaults");
+    expect(html).toContain("Editor");
     expect(html).toContain("Agents</div>");
+    expect(html).toContain("Profiles");
+    expect(html).not.toContain("Legacy Profiles");
+    expect(html).toContain("System");
+    expect(html).toContain("Remote Access");
     expect(html).not.toContain("Subagents");
     expect(html).not.toContain(">Context<");
     expect(html).not.toContain(">Training<");

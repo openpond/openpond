@@ -7,13 +7,11 @@ import type {
 
 type Props = {
   acceptingReviewId: string | null;
-  busy: boolean;
   candidates: HarnessRefinementCandidate[];
   qualifications: ModelImprovementQualificationReceipt[];
   reviews: HarnessEvaluationReviewReceipt[];
   schedule: HarnessEvaluationReviewSchedule;
   onAcceptTasksetReview: (review: HarnessEvaluationReviewReceipt) => void;
-  onReview: (maxEstimatedCostUsd: number) => void;
 };
 
 function formatDate(value: string | null): string {
@@ -164,10 +162,8 @@ function QualificationDisclosure({ receipt }: { receipt: ModelImprovementQualifi
 
 export function HarnessEvaluationReviewSettings({
   acceptingReviewId,
-  busy,
   candidates,
   onAcceptTasksetReview,
-  onReview,
   qualifications,
   reviews,
   schedule,
@@ -183,13 +179,6 @@ export function HarnessEvaluationReviewSettings({
           </table>
         </div>
       </section>
-
-      <div className="harness-page-action-row">
-        <p>Review new evidence now with the current cost limit of ${schedule.maxEstimatedCostUsd.toFixed(2)}.</p>
-        <button className="settings-primary compact" disabled={busy} onClick={() => onReview(schedule.maxEstimatedCostUsd)} type="button">
-          {busy ? "Reviewing…" : "Review now"}
-        </button>
-      </div>
 
       <section className="harness-history-section">
         <div className="harness-section-heading">

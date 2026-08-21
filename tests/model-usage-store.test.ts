@@ -62,6 +62,27 @@ describe("model usage store", () => {
       await rm(storeDir, { recursive: true, force: true });
     }
   });
+
+  test("preserves hosted provider lineage outside the selectable chat provider catalog", async () => {
+    const storeDir = await mkdtemp(path.join(os.tmpdir(), "openpond-model-usage-lineage-store-"));
+    const store = new SqliteStore(storeDir);
+
+    try {
+      const hostedUsage = usageRecord({
+        id: "usage_fireworks",
+        requestId: "request_usage_fireworks",
+        provider: "fireworks",
+        route: "openpond_hosted",
+      });
+
+      await store.upsertModelUsageRecord(hostedUsage);
+
+      await expect(store.getModelUsageRecordByRequestId(hostedUsage.requestId)).resolves.toEqual(hostedUsage);
+    } finally {
+      await store.close();
+      await rm(storeDir, { recursive: true, force: true });
+    }
+  });
 });
 
 const expectedUsageRecordKeys = [

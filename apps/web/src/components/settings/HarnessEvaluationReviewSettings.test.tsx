@@ -25,10 +25,8 @@ describe("HarnessEvaluationReviewSettings", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
-        busy={false}
         candidates={[]}
         onAcceptTasksetReview={() => undefined}
-        onReview={() => undefined}
         qualifications={[]}
         reviews={[reviewReceipt("taskset")]}
         schedule={schedule}
@@ -37,7 +35,6 @@ describe("HarnessEvaluationReviewSettings", () => {
 
     expect(html).toContain("Build training Taskset");
     expect(html).toContain("3</strong> independent occurrences");
-    expect(html).toContain("Review now");
     expect(html).toContain("Last review");
     expect(html).toContain("Last result");
     expect(html).toContain("Patterns");
@@ -49,10 +46,8 @@ describe("HarnessEvaluationReviewSettings", () => {
     const html = renderToStaticMarkup(
       <HarnessEvaluationReviewSettings
         acceptingReviewId={null}
-        busy={false}
         candidates={[]}
         onAcceptTasksetReview={() => undefined}
-        onReview={() => undefined}
         qualifications={[]}
         reviews={[reviewReceipt("no_action")]}
         schedule={schedule}
