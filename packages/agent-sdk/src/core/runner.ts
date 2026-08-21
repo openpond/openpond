@@ -25,7 +25,7 @@ export function createRunState(): RunState {
 export async function executeAction(
   project: AgentProjectDefinition,
   actionName: string,
-  input: AgentChatInput,
+  input: Record<string, unknown>,
   state: RunState,
   options: ExecuteActionOptions = {},
 ): Promise<AgentChatResult> {
@@ -36,7 +36,8 @@ export async function executeAction(
   try {
     throwIfAborted(options.signal);
     const ctx = createAgentContext(project, state);
-    const run = () => executeActionTarget(project, ctx, action, input, state);
+    const actionInput = action.target.kind === "chat" ? normalizeInput(input) : input;
+    const run = () => executeActionTarget(project, ctx, action, actionInput as AgentChatInput, state);
     const result = await withExecutionGuards(
       run,
       {
@@ -64,7 +65,7 @@ export async function runAction(
   state.events.push(traceEvent("action.catalog.available", {
     actions: actionCatalog.map((action) => action.id),
   }));
-  const result = await executeAction(project, actionName, normalizeInput(input), state, options);
+  const result = await executeAction(project, actionName, input ?? {}, state, options);
   return { result, state, actionCatalog };
 }
 
@@ -147,11 +148,11 @@ export function createEvalContext(project: AgentProjectDefinition, state: RunSta
     async send(input) {
       const actionName = project.defaultAction ?? project.actions[0]?.name;
       if (!actionName) throw new Error("No default action available for eval send.");
-      lastResult = await executeAction(project, actionName, normalizeInput(input), state);
+      lastResult = await executeAction(project, actionName, input, state);
       return lastResult;
     },
     async runAction(actionName, input) {
-      lastResult = await executeAction(project, actionName, normalizeInput(input), state);
+      lastResult = await executeAction(project, actionName, input, state);
       return lastResult;
     },
     expectIntent(name) {
