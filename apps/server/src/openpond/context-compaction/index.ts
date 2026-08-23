@@ -16,6 +16,7 @@ import {
   usableHostedContextLimit,
 } from "../context-usage.js";
 import { buildChatMessagesForProvider } from "../hosted-chat.js";
+import { buildContinuationCapsule } from "./continuation-capsule.js";
 import { buildFileOperationLedger } from "./file-ledger.js";
 import { createCompactionMetrics } from "./metrics.js";
 import {
@@ -76,7 +77,7 @@ export function hostedAutoCompactionDecision(input: {
 export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {
   const model = hostedCompactionModel(input.provider, input.model);
   const maxContextTokens = hostedCompactionContextLimit(input.provider, model, input.maxContextTokens);
-  return runAgentCompactionProgram({
+  const result = await runAgentCompactionProgram({
     events: input.events,
     model,
     maxContextTokens,
@@ -122,6 +123,46 @@ export async function runHostedContextCompaction(input: HostedCompactionInput): 
       createMetrics: createCompactionMetrics,
     },
   });
+  const projectionEvents = eventsForHostedCompaction(input.events);
+  const continuationCapsule = buildContinuationCapsule({
+    session: input.session,
+    events: projectionEvents,
+    summary: result.summary,
+    fileLedger: result.fileLedger,
+    preservedResourceRefs: result.preservedResourceRefs,
+    compactedThroughEventId: result.compactedThroughEventId,
+    compactedThroughTurnId: result.compactedThroughTurnId,
+    preservedFromEventId: result.preservedFromEventId,
+    preservedEventIds: result.preservedEventIds,
+  });
+  const projectedMessages = buildChatMessagesForProvider(
+    [
+      ...projectionEvents,
+      {
+        id: `compaction-projection-${randomUUID()}`,
+        name: "session.compaction.completed",
+        data: {
+          summary: result.summary,
+          continuationCapsule,
+          preservedFromEventId: result.preservedFromEventId,
+          preservedEventIds: result.preservedEventIds,
+          preservedResourceRefs: result.preservedResourceRefs,
+        },
+      },
+    ],
+    "",
+    "Compaction projection",
+  );
+  const inputTokensAfter = estimateHostedMessageTokens(projectedMessages);
+  return {
+    ...result,
+    continuationCapsule,
+    inputTokensAfter,
+    metrics: {
+      ...result.metrics,
+      finalProviderContextTokens: inputTokensAfter,
+    },
+  };
 }
 
 function hostedCompactionModel(provider: ChatProvider, model?: string | null): string {

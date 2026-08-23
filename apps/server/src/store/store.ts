@@ -84,6 +84,10 @@ type ModelUsageRecordRow = {
   duration_ms: number | null;
   first_token_ms: number | null;
   prompt_tokens: number | null;
+  cached_prompt_tokens: number | null;
+  uncached_prompt_tokens: number | null;
+  cache_write_prompt_tokens: number | null;
+  cache_telemetry_source: string | null;
   completion_tokens: number | null;
   total_tokens: number | null;
   error_type: string | null;
@@ -670,13 +674,17 @@ export class SqliteStore extends SqliteWorkEvidenceStore {
            duration_ms,
            first_token_ms,
            prompt_tokens,
+           cached_prompt_tokens,
+           uncached_prompt_tokens,
+           cache_write_prompt_tokens,
+           cache_telemetry_source,
            completion_tokens,
            total_tokens,
            error_type,
            error_message,
            attribution_json
          )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(request_id)
          DO UPDATE SET
            id = excluded.id,
@@ -695,6 +703,10 @@ export class SqliteStore extends SqliteWorkEvidenceStore {
            duration_ms = excluded.duration_ms,
            first_token_ms = excluded.first_token_ms,
            prompt_tokens = excluded.prompt_tokens,
+           cached_prompt_tokens = excluded.cached_prompt_tokens,
+           uncached_prompt_tokens = excluded.uncached_prompt_tokens,
+           cache_write_prompt_tokens = excluded.cache_write_prompt_tokens,
+           cache_telemetry_source = excluded.cache_telemetry_source,
            completion_tokens = excluded.completion_tokens,
            total_tokens = excluded.total_tokens,
            error_type = excluded.error_type,

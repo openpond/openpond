@@ -1,10 +1,11 @@
 import type { CompactionRecord, FileLedgerEntry, FileLedgerOperation } from "./types.js";
+import { extractCompactionFilePaths } from "./file-paths.js";
 
 export function buildFileOperationLedger(records: readonly CompactionRecord[]): FileLedgerEntry[] {
   const entries = new Map<string, FileLedgerEntry>();
 
   for (const record of records) {
-    const paths = new Set([...record.filePaths, ...extractFilePaths(record.body)]);
+    const paths = new Set([...record.filePaths, ...extractCompactionFilePaths(record.body)]);
     if (paths.size === 0) continue;
 
     for (const path of paths) {
@@ -79,22 +80,5 @@ function relevanceRank(value: FileLedgerEntry["relevance"]): number {
   if (value === "active") return 3;
   if (value === "validation") return 2;
   return 1;
-}
-
-function extractFilePaths(value: string): string[] {
-  const paths = new Set<string>();
-  const durableRefPattern = /\b(?:workspace|sandbox):(file|dir):[^\s,)"']+/g;
-  for (const match of value.matchAll(durableRefPattern)) {
-    paths.add(match[0]);
-  }
-  const repoPathPattern = /\b(?:apps|packages|tests|scripts|docs|config|src)\/[A-Za-z0-9._/@+-]+/g;
-  for (const match of value.matchAll(repoPathPattern)) {
-    paths.add(match[0]);
-  }
-  const absolutePathPattern = /(?:^|\s)(\/(?:[A-Za-z0-9._@+-]+\/){1,}[A-Za-z0-9._@+-]+)/g;
-  for (const match of value.matchAll(absolutePathPattern)) {
-    paths.add(match[1]!);
-  }
-  return [...paths].slice(0, 20);
 }
 

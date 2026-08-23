@@ -1,5 +1,6 @@
 import type { HostedChatMessage } from "@openpond/cloud";
 import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
+import type { ContinuationCapsule } from "./continuation-capsule.js";
 
 export type HostedCompactionProvider = ChatProvider;
 
@@ -80,6 +81,7 @@ export type HostedCompactionResult = {
   sourceEventCount: number;
   preservedEventCount: number;
   fileLedger: FileLedgerEntry[];
+  continuationCapsule: ContinuationCapsule;
   inputTokensBefore: number;
   inputTokensAfter: number;
   maxContextTokens: number;

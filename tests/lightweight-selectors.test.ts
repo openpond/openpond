@@ -18,13 +18,45 @@ describe("small runtime selectors", () => {
 
   test("normalizes provider token usage shapes", () => {
     expect(normalizeModelUsageTokens({ prompt_tokens: 1200, completion_tokens: 300, total_tokens: 1500 }))
-      .toEqual({ promptTokens: 1200, completionTokens: 300, totalTokens: 1500 });
+      .toEqual({
+        promptTokens: 1200,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheTelemetrySource: null,
+        completionTokens: 300,
+        totalTokens: 1500,
+      });
     expect(normalizeModelUsageTokens({ inputTokens: "42", outputTokens: 8 }))
-      .toEqual({ promptTokens: 42, completionTokens: 8, totalTokens: 50 });
+      .toEqual({
+        promptTokens: 42,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheTelemetrySource: null,
+        completionTokens: 8,
+        totalTokens: 50,
+      });
     expect(normalizeModelUsageTokens({ totalTokens: 77 }))
-      .toEqual({ promptTokens: null, completionTokens: null, totalTokens: 77 });
+      .toEqual({
+        promptTokens: null,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheTelemetrySource: null,
+        completionTokens: null,
+        totalTokens: 77,
+      });
     expect(normalizeModelUsageTokens(null))
-      .toEqual({ promptTokens: null, completionTokens: null, totalTokens: null });
+      .toEqual({
+        promptTokens: null,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheTelemetrySource: null,
+        completionTokens: null,
+        totalTokens: null,
+      });
   });
 
   test("resolves only the qualified managed RL base profile", () => {

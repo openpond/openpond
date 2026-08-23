@@ -117,6 +117,18 @@ describe("manual context compaction usage", () => {
         event.sessionId === session.id && event.name === "session.compaction.completed"
       );
       expect(completedEvent?.data).toMatchObject({
+        continuationCapsule: expect.objectContaining({
+          schemaVersion: "openpond.continuation.v1",
+          activeFiles: expect.arrayContaining([
+            expect.objectContaining({ path: "tests/manual-compaction-usage.test.ts" }),
+          ]),
+          validations: expect.arrayContaining([
+            expect.objectContaining({
+              action: "pnpm test tests/manual-compaction-usage.test.ts",
+              status: "failed",
+            }),
+          ]),
+        }),
         fileLedger: expect.arrayContaining([
           expect.objectContaining({
             path: "tests/manual-compaction-usage.test.ts",

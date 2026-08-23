@@ -130,6 +130,18 @@ export function UsageActivityOverview({
       label: "Completion share",
       value: completionShare === null ? "Not reported" : formatPercent(completionShare),
     },
+    {
+      label: "Prompt cache reuse",
+      value: totals?.cacheHitRate === null || totals?.cacheHitRate === undefined
+        ? "Not reported"
+        : formatPercent(totals.cacheHitRate),
+    },
+    {
+      label: "Cache telemetry",
+      value: totals && totals.promptTokens !== null
+        ? formatPercent(totals.cacheTelemetryCoverage)
+        : "Not reported",
+    },
   ];
 
   return (
@@ -537,6 +549,14 @@ function buildModelColors(rows: UsageModelBreakdown[], daily: UsageDailyBucket[]
         route: "unknown",
         requests: model.requests,
         promptTokens: null,
+        cacheTelemetryRequests: 0,
+        cacheHitRequests: 0,
+        cachedPromptTokens: null,
+        uncachedPromptTokens: null,
+        cacheWritePromptTokens: null,
+        cacheHitRate: null,
+        cacheRequestHitRate: null,
+        cacheTelemetryCoverage: 0,
         completionTokens: null,
         totalTokens: model.totalTokens,
         averageLatencyMs: null,

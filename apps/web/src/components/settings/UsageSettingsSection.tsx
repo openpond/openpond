@@ -327,8 +327,8 @@ export function UsageSettingsContent({
           <h2>{modelFocused ? "Model usage" : "Detailed usage"}</h2>
           <span>
             {modelFocused
-              ? "Inspect model requests, tokens, providers, and latency."
-              : "Inspect latency, routes, threads, workflows, and individual requests."}
+              ? "Inspect model requests, tokens, prompt-cache reuse, providers, and latency."
+              : "Inspect cache reuse, latency, routes, threads, workflows, and individual requests."}
           </span>
         </div>
       </div>
@@ -666,6 +666,8 @@ const modelColumns: Array<UsageTableColumn<UsageModelBreakdown>> = [
     render: (row) => <UsagePrimaryCell title={row.model} detail={`${providerLabel(row.provider)} / ${routeLabel(row.route)}`} />,
   },
   { key: "tokens", label: "Tokens", align: "end", render: (row) => formatTokens(row.totalTokens) },
+  { key: "cache", label: "Cache reuse", align: "end", render: (row) => formatCacheRate(row.cacheHitRate) },
+  { key: "coverage", label: "Cache data", align: "end", render: (row) => formatPercent(row.cacheTelemetryCoverage) },
   { key: "requests", label: "Requests", align: "end", render: (row) => formatInteger(row.requests) },
   { key: "latency", label: "p95 latency", align: "end", render: (row) => formatDuration(row.p95LatencyMs) },
   { key: "first-token", label: "First token", align: "end", render: (row) => formatDuration(row.p95FirstTokenMs) },
@@ -728,6 +730,7 @@ const requestColumns: Array<UsageTableColumn<ModelUsageRecord>> = [
   },
   { key: "kind", label: "Kind", render: (row) => requestKindLabel(row.requestKind) },
   { key: "tokens", label: "Tokens", align: "end", render: (row) => formatTokens(row.totalTokens) },
+  { key: "cache", label: "Cache", align: "end", render: (row) => requestCacheLabel(row) },
   { key: "latency", label: "Latency", align: "end", render: (row) => formatDuration(row.durationMs) },
   {
     key: "context",
@@ -858,6 +861,17 @@ function formatDuration(value: number | null): string {
 
 function formatPercent(value: number): string {
   return `${percentFormatter.format(value * 100)}%`;
+}
+
+function formatCacheRate(value: number | null): string {
+  return value === null ? "not reported" : formatPercent(value);
+}
+
+function requestCacheLabel(row: ModelUsageRecord): string {
+  if (row.cacheTelemetrySource === null) return "not reported";
+  if (row.cachedPromptTokens === null || row.uncachedPromptTokens === null) return "reported";
+  const total = row.cachedPromptTokens + row.uncachedPromptTokens;
+  return total > 0 ? formatPercent(row.cachedPromptTokens / total) : "0%";
 }
 
 function formatShortDate(value: string): string {

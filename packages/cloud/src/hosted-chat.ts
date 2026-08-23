@@ -95,6 +95,21 @@ export type HostedChatUsage = {
   total_tokens?: number;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+  cache_telemetry_source?: "provider_usage_body" | "provider_response_headers";
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+    [key: string]: unknown;
+  };
+  input_tokens_details?: {
+    cached_tokens?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 };
 
 export type HostedChatCompletion = {

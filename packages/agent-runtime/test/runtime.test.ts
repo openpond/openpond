@@ -98,6 +98,32 @@ describe("@openpond/agent-runtime", () => {
     );
   });
 
+  test("sorts projected tool schemas deterministically for stable provider cache prefixes", () => {
+    const definition = (name: string) => ({
+      name,
+      description: `${name} tool`,
+      inputSchema: { type: "object", properties: {} },
+      placement: "local" as const,
+      executorAvailable: true,
+      execute: async () => null,
+    });
+    const first = createAgentToolCatalogProjection([
+      definition("zeta_tool"),
+      definition("alpha_tool"),
+    ]);
+    const second = createAgentToolCatalogProjection([
+      definition("alpha_tool"),
+      definition("zeta_tool"),
+    ]);
+
+    expect(first.modelTools.map((tool) => tool.name)).toEqual([
+      "alpha_tool",
+      "zeta_tool",
+    ]);
+    expect(first.modelTools).toEqual(second.modelTools);
+    expect(first.hash).toBe(second.hash);
+  });
+
   test("owns provider loop completion and exhaustion", async () => {
     const signal = new AbortController().signal;
     const visited: number[] = [];

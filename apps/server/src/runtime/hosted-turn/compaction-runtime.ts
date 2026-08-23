@@ -130,6 +130,7 @@ export function createHostedCompactionRuntime(deps: {
           sourceEventCount: result.sourceEventCount,
           preservedEventCount: result.preservedEventCount,
           fileLedger: result.fileLedger,
+          continuationCapsule: result.continuationCapsule,
           inputTokensBefore: result.inputTokensBefore,
           inputTokensAfter: result.inputTokensAfter,
           maxContextTokens: result.maxContextTokens,

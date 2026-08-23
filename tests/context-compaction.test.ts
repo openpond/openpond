@@ -257,6 +257,161 @@ describe("context compaction", () => {
       expect.arrayContaining(["validation", "failure"]),
     );
   });
+
+  test("carries exact operational state through two continuation capsules", async () => {
+    const firstEvents = [
+      runtimeEvent({
+        id: "turn_operational_old",
+        sessionId: "session_parent",
+        turnId: "turn_operational_old",
+        name: "turn.started",
+        args: { prompt: "Repair the cache ledger without deleting generated fixtures." },
+      }),
+      runtimeEvent({
+        id: "assistant_operational_old",
+        sessionId: "session_parent",
+        turnId: "turn_operational_old",
+        name: "assistant.delta",
+        output: "The active file is /repo/src/cache-ledger.ts. Never delete generated fixtures.",
+      }),
+      runtimeEvent({
+        id: "turn_operational_failed",
+        sessionId: "session_parent",
+        turnId: "turn_operational_failed",
+        name: "turn.started",
+        args: { prompt: "Run the cache ledger validation." },
+      }),
+      runtimeEvent({
+        id: "command_operational_failed",
+        sessionId: "session_parent",
+        turnId: "turn_operational_failed",
+        name: "command.output",
+        action: "pnpm test cache-ledger",
+        status: "failed",
+        output: "E_CACHE_17: schema v44 is missing. Do not retry pnpm test cache-ledger until schema v44 is migrated.",
+      }),
+      runtimeEvent({
+        id: "turn_operational_latest",
+        sessionId: "session_parent",
+        turnId: "turn_operational_latest",
+        name: "turn.started",
+        args: { prompt: "Continue safely from the failed validation." },
+      }),
+      runtimeEvent({
+        id: "assistant_operational_latest",
+        sessionId: "session_parent",
+        turnId: "turn_operational_latest",
+        name: "assistant.delta",
+        output: "The immediate next action is migrate schema v44.",
+      }),
+    ];
+    const first = await runHostedContextCompaction({
+      session: sessionFixture(),
+      events: firstEvents,
+      provider: "openrouter",
+      model: "test/model",
+      maxContextTokens: 1200,
+      streamCompactionChatTurn: async function* () {
+        yield {
+          text: [
+            "## Goal",
+            "- Repair the cache ledger safely.",
+            "## Constraints & Preferences",
+            "- Never delete generated fixtures.",
+            "## Key Decisions",
+            "- Migrate the schema before retrying validation.",
+            "## Next Steps",
+            "- migrate schema v44",
+          ].join("\n"),
+        };
+      },
+    });
+
+    expect(first.continuationCapsule).toMatchObject({
+      schemaVersion: "openpond.continuation.v1",
+      currentGoal: "Repair the cache ledger safely.",
+      constraints: ["Never delete generated fixtures."],
+      activeFiles: expect.arrayContaining([
+        expect.objectContaining({ path: "/repo/src/cache-ledger.ts" }),
+      ]),
+      blockedActions: [expect.objectContaining({
+        action: "pnpm test cache-ledger",
+        error: expect.stringContaining("E_CACHE_17"),
+        retryCondition: "until schema v44 is migrated",
+      })],
+      validations: [expect.objectContaining({
+        action: "pnpm test cache-ledger",
+        status: "failed",
+      })],
+      immediateNextActions: expect.arrayContaining(["migrate schema v44"]),
+    });
+    expect(first.metrics.finalProviderContextTokens).toBe(first.inputTokensAfter);
+
+    const firstCompletion = runtimeEvent({
+      id: "compaction_operational_first",
+      sessionId: "session_parent",
+      turnId: "turn_operational_latest",
+      name: "session.compaction.completed",
+      status: "completed",
+      data: {
+        summary: first.summary,
+        continuationCapsule: first.continuationCapsule,
+        preservedFromEventId: first.preservedFromEventId,
+        preservedEventIds: first.preservedEventIds,
+        preservedResourceRefs: first.preservedResourceRefs,
+      },
+    });
+    const second = await runHostedContextCompaction({
+      session: sessionFixture(),
+      events: [
+        ...firstEvents,
+        firstCompletion,
+        runtimeEvent({
+          id: "turn_after_first_compaction",
+          sessionId: "session_parent",
+          turnId: "turn_after_first_compaction",
+          name: "turn.started",
+          args: { prompt: "Keep the validation blocked and prepare the migration." },
+        }),
+        runtimeEvent({
+          id: "assistant_after_first_compaction",
+          sessionId: "session_parent",
+          turnId: "turn_after_first_compaction",
+          name: "assistant.delta",
+          output: "The next step is update /repo/src/schema-v44.ts.",
+        }),
+      ],
+      provider: "openrouter",
+      model: "test/model",
+      maxContextTokens: 1200,
+      streamCompactionChatTurn: async function* () {
+        yield {
+          text: [
+            "## Goal",
+            "- Complete the schema migration safely.",
+            "## Constraints & Preferences",
+            "- Never delete generated fixtures.",
+            "## Key Decisions",
+            "- Keep cache-ledger validation blocked until migration completes.",
+            "## Next Steps",
+            "- update /repo/src/schema-v44.ts",
+          ].join("\n"),
+        };
+      },
+    });
+
+    expect(second.continuationCapsule.activeFiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({ path: "/repo/src/cache-ledger.ts" }),
+      expect.objectContaining({ path: "/repo/src/schema-v44.ts" }),
+    ]));
+    expect(second.continuationCapsule.blockedActions).toEqual([
+      expect.objectContaining({
+        action: "pnpm test cache-ledger",
+        retryCondition: "until schema v44 is migrated",
+      }),
+    ]);
+    expect(second.continuationCapsule.immediateNextActions).toContain("update /repo/src/schema-v44.ts");
+  });
 });
 
 function sessionFixture(): Session {

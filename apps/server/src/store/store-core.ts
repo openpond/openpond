@@ -392,6 +392,10 @@ export class SqliteStoreCore {
         duration_ms INTEGER,
         first_token_ms INTEGER,
         prompt_tokens INTEGER,
+        cached_prompt_tokens INTEGER,
+        uncached_prompt_tokens INTEGER,
+        cache_write_prompt_tokens INTEGER,
+        cache_telemetry_source TEXT,
         completion_tokens INTEGER,
         total_tokens INTEGER,
         error_type TEXT,
@@ -417,6 +421,10 @@ export class SqliteStoreCore {
       CREATE INDEX IF NOT EXISTS model_usage_status_started_idx
         ON model_usage_records(status, started_at);
     `);
+    await this.addColumnIfMissing("model_usage_records", "cached_prompt_tokens", "INTEGER");
+    await this.addColumnIfMissing("model_usage_records", "uncached_prompt_tokens", "INTEGER");
+    await this.addColumnIfMissing("model_usage_records", "cache_write_prompt_tokens", "INTEGER");
+    await this.addColumnIfMissing("model_usage_records", "cache_telemetry_source", "TEXT");
   }
 
   async createLocalAgentScheduleTables(): Promise<void> {

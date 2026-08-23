@@ -8,6 +8,7 @@ import { formatPromptWithAttachmentContext } from "../../chat-attachments.js";
 import { textFromUnknown } from "../../utils.js";
 import { estimateTextTokens } from "./metrics.js";
 import type { CompactionRecord } from "./types.js";
+import { extractCompactionFilePaths } from "./file-paths.js";
 
 const MAX_SERIALIZED_EVENT_CHARS = 6_000;
 
@@ -216,7 +217,7 @@ function record(
     turnId: event?.turnId ?? null,
     action: event?.action ?? null,
     status: event?.status ?? null,
-    filePaths: extractFilePaths(`${title}\n${normalizedBody}`),
+    filePaths: extractCompactionFilePaths(`${title}\n${normalizedBody}`),
     tokenEstimate: estimateTextTokens(`${title}\n${normalizedBody}`),
     preserveVerbatim,
   };
@@ -336,23 +337,6 @@ function subagentUsagePreview(usage: Record<string, unknown>): string | null {
   const requestCount = numberValue(usage.requestCount);
   if (totalTokens <= 0 && requestCount <= 0) return null;
   return `usage: ${totalTokens} tokens across ${requestCount} ${requestCount === 1 ? "request" : "requests"}`;
-}
-
-function extractFilePaths(value: string): string[] {
-  const paths = new Set<string>();
-  const durableRefPattern = /\b(?:workspace|sandbox):(file|dir):[^\s,)"']+/g;
-  for (const match of value.matchAll(durableRefPattern)) {
-    paths.add(match[0]);
-  }
-  const repoPathPattern = /\b(?:apps|packages|tests|scripts|docs|config|src)\/[A-Za-z0-9._/@+-]+/g;
-  for (const match of value.matchAll(repoPathPattern)) {
-    paths.add(match[0]);
-  }
-  const absolutePathPattern = /(?:^|\s)(\/(?:[A-Za-z0-9._@+-]+\/){1,}[A-Za-z0-9._@+-]+)/g;
-  for (const match of value.matchAll(absolutePathPattern)) {
-    paths.add(match[1]!);
-  }
-  return [...paths].slice(0, 20);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

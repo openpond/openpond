@@ -2,6 +2,67 @@ import { describe, expect, test } from "vitest";
 import { buildChatMessagesForProvider } from "../apps/server/src/openpond/hosted-chat";
 
 describe("hosted chat compaction projection", () => {
+  test("projects exact continuation capsule state before summary prose", () => {
+    const messages = buildChatMessagesForProvider(
+      [
+        {
+          id: "compact_capsule",
+          name: "session.compaction.completed",
+          data: {
+            summary: "The cache migration remains active.",
+            continuationCapsule: {
+              schemaVersion: "openpond.continuation.v1",
+              workspace: { kind: "local", id: null, name: null, cwd: "/repo" },
+              currentGoal: "Repair the cache ledger.",
+              latestUserRequest: "Continue the migration.",
+              constraints: ["Never delete generated fixtures."],
+              decisions: ["Migrate schema v44 before retrying."],
+              activeFiles: [{
+                path: "/repo/src/cache-ledger.ts",
+                operations: ["edit", "validation", "failure"],
+                relevance: "failed",
+                latestStatus: "failed",
+                failure: "E_CACHE_17",
+                sourceEventIds: ["failure_event"],
+              }],
+              blockedActions: [{
+                action: "pnpm test cache-ledger",
+                error: "E_CACHE_17",
+                retryCondition: "until schema v44 is migrated",
+                sourceEventIds: ["failure_event"],
+              }],
+              validations: [{
+                action: "pnpm test cache-ledger",
+                status: "failed",
+                detail: "E_CACHE_17",
+                sourceEventIds: ["failure_event"],
+              }],
+              immediateNextActions: ["migrate schema v44"],
+              durableResourceRefs: [],
+              source: {
+                compactedThroughEventId: "failure_event",
+                compactedThroughTurnId: "failed_turn",
+                preservedFromEventId: null,
+                preservedEventIds: [],
+              },
+            },
+          },
+        },
+      ],
+      "next request",
+      "system prompt",
+    );
+
+    const context = messages[1]?.content ?? "";
+    expect(context.indexOf("<openpond-continuation-capsule>")).toBeLessThan(
+      context.indexOf("Conversation summary from earlier turns:"),
+    );
+    expect(context).toContain('"path":"/repo/src/cache-ledger.ts"');
+    expect(context).toContain('"action":"pnpm test cache-ledger"');
+    expect(context).toContain('"retryCondition":"until schema v44 is migrated"');
+    expect(context).toContain('"immediateNextActions":["migrate schema v44"]');
+  });
+
   test("injects preserved resource refs from compaction metadata", () => {
     const messages = buildChatMessagesForProvider(
       [
