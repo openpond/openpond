@@ -2,6 +2,9 @@ import type { HostedChatMessage } from "@openpond/cloud";
 import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
 import type { ContinuationCapsule } from "./continuation-capsule.js";
 
+export type { FileLedgerEntry, FileLedgerOperation } from "./file-ledger-types.js";
+import type { FileLedgerEntry } from "./file-ledger-types.js";
+
 export type HostedCompactionProvider = ChatProvider;
 
 export type ContextCompactionStreamDelta = {
@@ -43,16 +46,6 @@ export type CompactionRecord = {
   filePaths: string[];
   tokenEstimate: number;
   preserveVerbatim?: boolean;
-};
-
-export type FileLedgerOperation = "read" | "edit" | "diff" | "command" | "validation" | "failure";
-
-export type FileLedgerEntry = {
-  path: string;
-  operations: FileLedgerOperation[];
-  relevance: "referenced" | "active" | "validation" | "failed";
-  latestStatus: "unknown" | "ok" | "failed";
-  failure: string | null;
 };
 
 export type CompactionMetrics = {

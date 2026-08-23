@@ -1,7 +1,7 @@
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 
 import { textFromUnknown } from "../../utils.js";
-import type { FileLedgerEntry } from "./types.js";
+import type { FileLedgerEntry } from "./file-ledger-types.js";
 
 export const CONTINUATION_CAPSULE_SCHEMA_VERSION = "openpond.continuation.v1" as const;
 
