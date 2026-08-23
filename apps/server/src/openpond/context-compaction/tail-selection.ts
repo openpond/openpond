@@ -1,6 +1,7 @@
 import type { RuntimeEvent } from "@openpond/contracts";
 import { textFromUnknown } from "../../utils.js";
 import { usableHostedContextLimit } from "../context-usage.js";
+import { compactionAtomicGroupId } from "./atomic-groups.js";
 import { estimateTextTokens } from "./metrics.js";
 
 export type HostedCompactionEventSelection = {
@@ -61,6 +62,7 @@ export function selectEventsForHostedCompaction(
   }
 
   selectRecentFailures(units, selectedIds);
+  reconcileAtomicGroups(events, selectedIds, budget);
   const preservedEvents = events.filter((item) => selectedIds.has(item.id));
   const summaryEvents = events.filter((item) => !selectedIds.has(item.id));
   const finalRetainedTailTokens = preservedEvents.reduce((total, event) => total + estimateEventTokens(event), 0);
@@ -150,6 +152,42 @@ function selectRecentFailures(units: readonly EventUnit[], selectedIds: Set<stri
 
 function isFailureEvent(event: RuntimeEvent): boolean {
   return event.name === "turn.failed" || event.status === "failed";
+}
+
+function reconcileAtomicGroups(
+  events: readonly RuntimeEvent[],
+  selectedIds: Set<string>,
+  budget: number,
+): void {
+  const groups = new Map<string, RuntimeEvent[]>();
+  let selectedTokens = 0;
+  for (const event of events) {
+    if (selectedIds.has(event.id)) selectedTokens += estimateEventTokens(event);
+    const groupId = compactionAtomicGroupId(event);
+    if (!groupId) continue;
+    const group = groups.get(groupId);
+    if (group) group.push(event);
+    else groups.set(groupId, [event]);
+  }
+
+  for (const group of groups.values()) {
+    const selectedEvents = group.filter((event) => selectedIds.has(event.id));
+    const selectedCount = selectedEvents.length;
+    if (selectedCount === 0 || selectedCount === group.length) continue;
+    const selectedGroupTokens = selectedEvents.reduce(
+      (total, event) => total + estimateEventTokens(event),
+      0,
+    );
+    const outsideGroupTokens = selectedTokens - selectedGroupTokens;
+    const groupTokens = group.reduce((total, event) => total + estimateEventTokens(event), 0);
+    if (outsideGroupTokens + groupTokens <= budget) {
+      for (const event of group) selectedIds.add(event.id);
+      selectedTokens = outsideGroupTokens + groupTokens;
+    } else {
+      for (const event of group) selectedIds.delete(event.id);
+      selectedTokens = outsideGroupTokens;
+    }
+  }
 }
 
 function estimateEventTokens(event: RuntimeEvent): number {

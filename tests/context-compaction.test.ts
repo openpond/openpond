@@ -10,6 +10,194 @@ const NOW = "2026-07-07T12:00:00.000Z";
 
 describe("context compaction", () => {
 
+  test("selects newest useful records from oversized histories with explicit omission telemetry", () => {
+    const events: RuntimeEvent[] = [
+      runtimeEvent({
+        id: "previous_compaction",
+        sessionId: "session_parent",
+        name: "session.compaction.completed",
+        data: { summary: "durable previous summary marker" },
+      }),
+      runtimeEvent({
+        id: "goal_context",
+        sessionId: "session_parent",
+        name: "session.goal.updated",
+        data: { kind: "goal_context", goal: "ship the compaction source selector" },
+      }),
+      ...Array.from({ length: 400 }, (_, index) => runtimeEvent({
+        id: `old_filler_${index}`,
+        sessionId: "session_parent",
+        turnId: `turn_old_${index}`,
+        name: "assistant.delta",
+        output: `old low-value filler ${index} ${"x".repeat(500)}`,
+      })),
+      runtimeEvent({
+        id: "failed_validation",
+        sessionId: "session_parent",
+        turnId: "turn_latest",
+        name: "command.output",
+        status: "failed",
+        action: "pnpm test compaction",
+        output: "E_SOURCE_SELECTION: keep this unresolved failure",
+      }),
+      runtimeEvent({
+        id: "latest_user",
+        sessionId: "session_parent",
+        turnId: "turn_latest",
+        name: "turn.started",
+        args: { prompt: "latest request: continue after fixing source selection" },
+      }),
+      runtimeEvent({
+        id: "tool_started",
+        sessionId: "session_parent",
+        turnId: "turn_latest",
+        name: "tool.started",
+        action: "inspect_latest_state",
+        data: { toolCallId: "call_latest" },
+      }),
+      runtimeEvent({
+        id: "tool_completed",
+        sessionId: "session_parent",
+        turnId: "turn_latest",
+        name: "tool.completed",
+        action: "inspect_latest_state",
+        output: "newest tool result marker",
+        data: { toolCallId: "call_latest" },
+      }),
+    ];
+    const records = normalizeCompactionRecords(events);
+    const serialized = serializeRecordsForCompaction(records, 12_000);
+    const repeated = serializeRecordsForCompaction(records, 12_000);
+
+    expect(records.reduce((total, item) => total + item.body.length, 0)).toBeGreaterThan(180_000);
+    expect(serialized).toEqual(repeated);
+    expect(serialized.inputChars).toBe(serialized.text.length);
+    expect(serialized.inputChars).toBeLessThanOrEqual(12_000);
+    expect(serialized.sourceRecordCount).toBe(records.length);
+    expect(serialized.includedRecordCount + serialized.omittedRecordCount).toBe(records.length);
+    expect(serialized.omittedRecordCount).toBeGreaterThan(0);
+    expect(serialized.inputTruncated).toBe(true);
+    expect(serialized.selectionStrategy).toBe("newest_useful_v1");
+    expect(serialized.text).toContain("durable previous summary marker");
+    expect(serialized.text).toContain("ship the compaction source selector");
+    expect(serialized.text).toContain("E_SOURCE_SELECTION");
+    expect(serialized.text).toContain("latest request: continue after fixing source selection");
+    expect(serialized.text).toContain("inspect_latest_state");
+    expect(serialized.text).toContain("newest tool result marker");
+    expect(serialized.text.indexOf("durable previous summary marker"))
+      .toBeLessThan(serialized.text.indexOf("latest request: continue after fixing source selection"));
+  });
+
+  test("keeps tool invocation and result records atomic at every input budget", () => {
+    const records = normalizeCompactionRecords([
+      runtimeEvent({
+        id: "atomic_started",
+        sessionId: "session_parent",
+        turnId: "turn_atomic",
+        name: "tool.started",
+        action: "atomic tool call marker",
+        data: { toolCallId: "atomic_call" },
+      }),
+      runtimeEvent({
+        id: "atomic_completed",
+        sessionId: "session_parent",
+        turnId: "turn_atomic",
+        name: "tool.completed",
+        output: "atomic tool result marker",
+        data: { toolCallId: "atomic_call" },
+      }),
+    ]);
+    const complete = serializeRecordsForCompaction(records, 12_000);
+
+    for (let budget = 0; budget <= complete.inputChars + 10; budget += 13) {
+      const serialized = serializeRecordsForCompaction(records, budget);
+      expect(serialized.text.includes("atomic tool call marker"))
+        .toBe(serialized.text.includes("atomic tool result marker"));
+    }
+  });
+
+  test("reports individual record truncation separately from source omission", () => {
+    const records = normalizeCompactionRecords([
+      runtimeEvent({
+        id: "large_record",
+        sessionId: "session_parent",
+        turnId: "turn_large",
+        name: "assistant.delta",
+        output: `large record marker ${"z".repeat(7_000)}`,
+      }),
+    ]);
+    const serialized = serializeRecordsForCompaction(records, 12_000);
+
+    expect(serialized).toMatchObject({
+      sourceRecordCount: 1,
+      includedRecordCount: 1,
+      omittedRecordCount: 0,
+      truncatedRecordCount: 1,
+      inputTruncated: true,
+    });
+    expect(serialized.text).toContain("[record truncated]");
+  });
+
+  test("never splits an oversized tool call across the summary and retained tail", async () => {
+    let serializedPrompt = "";
+    const result = await runHostedContextCompaction({
+      session: sessionFixture(),
+      events: [
+        runtimeEvent({
+          id: "turn_old_atomic",
+          sessionId: "session_parent",
+          turnId: "turn_old_atomic",
+          name: "turn.started",
+          args: { prompt: "old request needed to make compaction eligible" },
+        }),
+        runtimeEvent({
+          id: "assistant_old_atomic",
+          sessionId: "session_parent",
+          turnId: "turn_old_atomic",
+          name: "assistant.delta",
+          output: "old answer",
+        }),
+        runtimeEvent({
+          id: "turn_latest_atomic",
+          sessionId: "session_parent",
+          turnId: "turn_latest_atomic",
+          name: "turn.started",
+          args: { prompt: "run the oversized atomic tool" },
+        }),
+        runtimeEvent({
+          id: "oversized_tool_started",
+          sessionId: "session_parent",
+          turnId: "turn_latest_atomic",
+          name: "tool.started",
+          action: "oversized atomic invocation marker",
+          data: { toolCallId: "oversized_atomic", payload: "q".repeat(20_000) },
+        }),
+        runtimeEvent({
+          id: "oversized_tool_completed",
+          sessionId: "session_parent",
+          turnId: "turn_latest_atomic",
+          name: "tool.completed",
+          output: "oversized atomic result marker",
+          data: { toolCallId: "oversized_atomic" },
+        }),
+      ],
+      provider: "openrouter",
+      model: "test/model",
+      maxContextTokens: 1200,
+      streamCompactionChatTurn: async function* (input) {
+        serializedPrompt = String(input.messages.at(-1)?.content ?? "");
+        yield { text: "Atomic tool summary." };
+      },
+    });
+
+    expect(result.preservedEventIds.includes("oversized_tool_started"))
+      .toBe(result.preservedEventIds.includes("oversized_tool_completed"));
+    expect(serializedPrompt.includes("oversized atomic invocation marker"))
+      .toBe(serializedPrompt.includes("oversized atomic result marker"));
+    expect(serializedPrompt).toContain("oversized atomic invocation marker");
+    expect(serializedPrompt).toContain("oversized atomic result marker");
+  });
+
   test("serializes subagent summaries and preserves child conversation refs", async () => {
     let serializedPrompt = "";
     const result = await runHostedContextCompaction({
@@ -46,6 +234,15 @@ describe("context compaction", () => {
     expect(result.preservedResourceRefs).toContain("workspace:file:/repo/docs/agents.md");
     expect(result.summary).toBe("Conversation summary with subagent evidence.");
     expect(result.metrics.summarizedEvents).toBe(1);
+    expect(result.metrics).toMatchObject({
+      sourceRecords: 1,
+      includedRecords: 1,
+      omittedRecords: 0,
+      preservedRecords: 0,
+      truncatedRecords: 0,
+      summaryInputTruncated: false,
+      sourceSelectionStrategy: "newest_useful_v1",
+    });
     expect(result.metrics.summaryInputChars).toBeGreaterThan(0);
     expect(result.metrics.fileLedgerEntries).toBeGreaterThan(0);
     expect(result.preservedEventIds).toEqual([]);

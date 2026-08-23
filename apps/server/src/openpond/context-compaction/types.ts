@@ -43,6 +43,7 @@ export type CompactionRecord = {
   turnId?: string | null;
   action?: string | null;
   status?: string | null;
+  atomicGroupId?: string | null;
   filePaths: string[];
   tokenEstimate: number;
   preserveVerbatim?: boolean;
@@ -52,6 +53,13 @@ export type CompactionMetrics = {
   sourceEvents: number;
   summarizedEvents: number;
   preservedEvents: number;
+  sourceRecords: number;
+  includedRecords: number;
+  omittedRecords: number;
+  preservedRecords: number;
+  truncatedRecords: number;
+  summaryInputTruncated: boolean;
+  sourceSelectionStrategy: "newest_useful_v1";
   summaryInputChars: number;
   summaryInputTokens: number;
   retainedTailTokens: number;

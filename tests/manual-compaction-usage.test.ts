@@ -138,6 +138,13 @@ describe("manual context compaction usage", () => {
         ]),
         metrics: expect.objectContaining({
           fileLedgerEntries: expect.any(Number),
+          sourceRecords: expect.any(Number),
+          includedRecords: expect.any(Number),
+          omittedRecords: expect.any(Number),
+          preservedRecords: expect.any(Number),
+          truncatedRecords: expect.any(Number),
+          summaryInputTruncated: expect.any(Boolean),
+          sourceSelectionStrategy: "newest_useful_v1",
         }),
       });
     } finally {

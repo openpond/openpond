@@ -6,18 +6,14 @@ import {
 } from "@openpond/contracts";
 import { formatPromptWithAttachmentContext } from "../../chat-attachments.js";
 import { textFromUnknown } from "../../utils.js";
+import { compactionAtomicGroupId } from "./atomic-groups.js";
 import { estimateTextTokens } from "./metrics.js";
 import type { CompactionRecord } from "./types.js";
 import { extractCompactionFilePaths } from "./file-paths.js";
-
-const MAX_SERIALIZED_EVENT_CHARS = 6_000;
-
-export type SerializedCompactionRecords = {
-  text: string;
-  inputChars: number;
-  includedRecordCount: number;
-  truncated: boolean;
-};
+export {
+  serializeRecordsForCompaction,
+  type SerializedCompactionRecords,
+} from "./source-selection.js";
 
 export function normalizeCompactionRecords(events: RuntimeEvent[]): CompactionRecord[] {
   const records: CompactionRecord[] = [];
@@ -75,40 +71,6 @@ export function normalizeCompactionRecords(events: RuntimeEvent[]): CompactionRe
   }
 
   return records;
-}
-
-export function serializeRecordsForCompaction(
-  records: readonly CompactionRecord[],
-  maxInputChars: number,
-): SerializedCompactionRecords {
-  const lines: string[] = [];
-  let totalChars = 0;
-  let includedRecordCount = 0;
-  let truncated = false;
-
-  function append(block: string): void {
-    if (!block.trim() || totalChars >= maxInputChars) return;
-    const remaining = maxInputChars - totalChars;
-    const value =
-      block.length > remaining
-        ? `${block.slice(0, Math.max(0, remaining - 32))}\n[compaction input truncated]`
-        : block;
-    if (block.length > remaining) truncated = true;
-    lines.push(value);
-    totalChars += value.length;
-    includedRecordCount += 1;
-  }
-
-  for (const item of records) {
-    append(section(item));
-  }
-
-  return {
-    text: lines.join("\n\n"),
-    inputChars: totalChars,
-    includedRecordCount,
-    truncated,
-  };
 }
 
 export function eventsForHostedCompaction(events: RuntimeEvent[]): RuntimeEvent[] {
@@ -217,24 +179,11 @@ function record(
     turnId: event?.turnId ?? null,
     action: event?.action ?? null,
     status: event?.status ?? null,
+    atomicGroupId: compactionAtomicGroupId(event),
     filePaths: extractCompactionFilePaths(`${title}\n${normalizedBody}`),
     tokenEstimate: estimateTextTokens(`${title}\n${normalizedBody}`),
     preserveVerbatim,
   };
-}
-
-function section(record: CompactionRecord): string {
-  const metadata = record.event
-    ? [
-        record.turnId ? `turn=${record.turnId}` : null,
-        record.action ? `action=${record.action}` : null,
-        record.status ? `status=${record.status}` : null,
-      ]
-        .filter(Boolean)
-        .join(" ")
-    : "";
-  const prefix = metadata ? `### ${record.title} (${metadata})` : `### ${record.title}`;
-  return `${prefix}\n${truncate(record.body.trim() || eventPreview(record.event), MAX_SERIALIZED_EVENT_CHARS)}`;
 }
 
 function isGoalContextEvent(event: RuntimeEvent): boolean {
@@ -345,8 +294,4 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-}
-
-function truncate(value: string, maxChars: number): string {
-  return value.length > maxChars ? `${value.slice(0, maxChars)}\n[truncated]` : value;
 }
