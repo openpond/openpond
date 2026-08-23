@@ -170,12 +170,15 @@ describe("desktop runtime staging", () => {
       files?: string[];
       extraResources?: Array<{ from?: string }>;
       npmRebuild?: boolean;
+      artifactName?: string;
       mac?: { identity?: string };
     };
 
     expect(config.directories?.app).toBe("apps/desktop/stage/app");
+    expect(config.artifactName).toBe("openpond-${version}-${os}-${arch}.${ext}");
     expect(config.npmRebuild).toBe(false);
     expect(config.mac?.identity).toBe("-");
+    expect((config as { linux?: { syncDesktopName?: boolean } }).linux?.syncDesktopName).toBe(true);
     expect(config.files).toContain("!node_modules/**/*");
     expect(config.extraResources?.map((entry) => entry.from)).toContain(
       "apps/desktop/stage/runtime"

@@ -265,6 +265,15 @@ async function buildPublicationPlan(
   };
   if (manifestIndex >= 0) files[manifestIndex] = manifestFile;
   else files.push(manifestFile);
+  const gitignoreFile = {
+    sourcePath: null,
+    relativePath: ".gitignore",
+    contents: Buffer.from(profilePublicationGitignoreContents(profileRoot)),
+    category: "settings",
+  };
+  const gitignoreIndex = files.findIndex((file) => file.relativePath === ".gitignore");
+  if (gitignoreIndex >= 0) files[gitignoreIndex] = gitignoreFile;
+  else files.push(gitignoreFile);
   files.sort((left, right) => left.relativePath.localeCompare(right.relativePath));
 
   const existingTarget = await resolveExistingTarget(request);
@@ -309,15 +318,24 @@ async function resolveExistingTarget(
   if (request.target.provider === "github") {
     const owner = request.target.owner?.trim() || await githubLogin();
     const fullName = `${owner}/${request.target.repository}`;
-    const result = await runCommand("gh", ["repo", "view", fullName, "--json", "url,defaultBranchRef"]);
+    const result = await runCommand("gh", [
+      "repo", "view", fullName, "--json", "url,defaultBranchRef,isPrivate",
+    ]);
     if (result.code !== 0) return null;
-    const parsed = JSON.parse(result.stdout) as { url?: string; defaultBranchRef?: { name?: string } };
+    const parsed = JSON.parse(result.stdout) as {
+      url?: string;
+      defaultBranchRef?: { name?: string };
+      isPrivate?: boolean;
+    };
     return {
       owner,
       repository: request.target.repository,
       remoteUrl: `${parsed.url ?? `https://github.com/${fullName}`}.git`,
       webUrl: parsed.url ?? `https://github.com/${fullName}`,
       defaultBranch: parsed.defaultBranchRef?.name || "master",
+      visibility: typeof parsed.isPrivate === "boolean"
+        ? parsed.isPrivate ? "private" : "public"
+        : undefined,
     };
   }
   const apps = await loadOpenPondApps({ limit: 100 });
@@ -357,11 +375,9 @@ async function publishToGitHub(
     await runRequired("gh", ["auth", "setup-git"]);
     await runRequired("git", ["remote", "add", "origin", existing.remoteUrl], exportPath);
     await runRequired("git", ["push", "--force", "origin", `HEAD:${existing.defaultBranch}`], exportPath);
-    await runRequired("gh", [
-      "repo", "edit", fullName,
-      "--visibility", request.target.visibility,
-      "--accept-visibility-change-consequences",
-    ]);
+    if (existing.visibility !== request.target.visibility) {
+      await updateGitHubRepositoryVisibility(fullName, request.target.visibility);
+    }
   }
   return {
     owner,
@@ -419,6 +435,23 @@ async function githubLogin(): Promise<string> {
   return result.stdout.trim();
 }
 
+async function updateGitHubRepositoryVisibility(
+  fullName: string,
+  visibility: "private" | "public",
+): Promise<void> {
+  const args = [
+    "repo", "edit", fullName,
+    "--visibility", visibility,
+    "--accept-visibility-change-consequences",
+  ];
+  const result = await runCommand("gh", args);
+  if (result.code === 0) return;
+  if (!result.stderr.includes("unknown flag: --accept-visibility-change-consequences")) {
+    throw new Error(result.stderr.trim() || result.stdout.trim() || "gh repo edit failed.");
+  }
+  await runRequired("gh", args.filter((arg) => arg !== "--accept-visibility-change-consequences"));
+}
+
 function tokenizedRemote(remoteUrl: string, token: string): string {
   const url = new URL(remoteUrl);
   url.username = "x-access-token";
@@ -462,6 +495,14 @@ export function profilePublicationRelativePath(
   childPath: string,
 ): string {
   return normalizePath(path.posix.join(profileRoot || ".", normalizePath(childPath)));
+}
+
+export function profilePublicationGitignoreContents(profileRoot: string): string {
+  return [
+    "# Generated OpenPond runtime state is local to each installation.",
+    `${profilePublicationRelativePath(profileRoot, ".openpond")}/`,
+    "",
+  ].join("\n");
 }
 
 async function runRequired(

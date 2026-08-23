@@ -156,6 +156,7 @@ async function stageDesktopApp(root: string, appRoot: string): Promise<void> {
     main: "dist/main.js",
     description: "OpenPond local-first desktop application",
     author: "OpenPond",
+    desktopName: "openpond.desktop",
   };
   await fs.mkdir(appRoot, { recursive: true, mode: 0o755 });
   await fs.writeFile(

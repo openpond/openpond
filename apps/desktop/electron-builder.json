@@ -1,6 +1,7 @@
 {
   "appId": "ai.openpond.app",
   "productName": "openpond",
+  "artifactName": "openpond-${version}-${os}-${arch}.${ext}",
   "asar": true,
   "directories": {
     "app": "apps/desktop/stage/app",
@@ -47,6 +48,7 @@
   },
   "linux": {
     "icon": "apps/desktop/build/icons",
+    "syncDesktopName": true,
     "target": ["AppImage"],
     "category": "Development",
     "desktop": {

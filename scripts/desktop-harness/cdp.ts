@@ -184,34 +184,37 @@ export class CdpDesktopHarnessRenderer implements DesktopHarnessRenderer {
   }
 
   async submitComposer(prompt: string): Promise<void> {
-    const focused = await this.evaluate<boolean>(
-      `(() => {
-        const inputs = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')];
-        const input = inputs.find((candidate) =>
-          candidate instanceof HTMLElement &&
-          candidate.offsetParent !== null &&
-          candidate.querySelector('[data-inline-token="true"]'))
-          ?? inputs.find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null)
-          ?? inputs[0];
-        if (!(input instanceof HTMLElement)) return false;
-        for (const candidate of inputs) delete candidate.dataset.desktopHarnessComposerTarget;
-        input.dataset.desktopHarnessComposerTarget = 'true';
-        input.focus();
-        const token = input.querySelector('[data-inline-token="true"]');
-        input.dataset.desktopHarnessExpectedToken = token ? 'true' : 'false';
-        for (const child of [...input.childNodes]) {
-          if (child !== token) child.remove();
-        }
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(input);
-        range.collapse(false);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-        return true;
-      })()`,
+    await waitFor(
+      async () => this.evaluate<boolean>(
+        `(() => {
+          const inputs = [...document.querySelectorAll('.composer-inline-input[role="textbox"]')];
+          const input = inputs.find((candidate) =>
+            candidate instanceof HTMLElement &&
+            candidate.offsetParent !== null &&
+            candidate.querySelector('[data-inline-token="true"]'))
+            ?? inputs.find((candidate) => candidate instanceof HTMLElement && candidate.offsetParent !== null)
+            ?? inputs[0];
+          if (!(input instanceof HTMLElement)) return false;
+          for (const candidate of inputs) delete candidate.dataset.desktopHarnessComposerTarget;
+          input.dataset.desktopHarnessComposerTarget = 'true';
+          input.focus();
+          const token = input.querySelector('[data-inline-token="true"]');
+          input.dataset.desktopHarnessExpectedToken = token ? 'true' : 'false';
+          for (const child of [...input.childNodes]) {
+            if (child !== token) child.remove();
+          }
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(input);
+          range.collapse(false);
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          return true;
+        })()`,
+      ),
+      Math.min(this.defaultTimeoutMs, 10_000),
+      "Desktop composer input did not become available.",
     );
-    if (!focused) throw new Error("Desktop composer input was not available.");
     const pasted = await this.evaluate<boolean>(
       `(() => {
         const input = document.querySelector('[data-desktop-harness-composer-target="true"]');

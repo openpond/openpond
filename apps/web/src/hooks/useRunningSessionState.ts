@@ -6,11 +6,11 @@ import type { SubagentRuntimeStatus } from "../lib/subagent-runtime";
 import { latestTurnCompletionState } from "../lib/turn-completion-state";
 
 function hasPendingTurn(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
-  if (session.systemKind || session.status !== "active") return false;
+  if (session.systemKind) return false;
   const events = runtimeEventsForSession(runtimeIndexes, session.id);
   if (events.length === 0) return false;
   const completion = latestTurnCompletionState(events);
-  return completion === "pending" || (completion === "none" && !latestTurnEvidenceIsTerminal(events));
+  return completion === "pending" || (completion === "none" && latestTurnEvidenceState(events) === "pending");
 }
 
 function shouldShowActiveSessionStatus(session: Session, runtimeIndexes: RuntimeIndexes): boolean {
@@ -18,10 +18,12 @@ function shouldShowActiveSessionStatus(session: Session, runtimeIndexes: Runtime
   const events = runtimeEventsForSession(runtimeIndexes, session.id);
   if (events.length === 0) return true;
   const completion = latestTurnCompletionState(events);
-  return completion === "pending" || (completion === "none" && !latestTurnEvidenceIsTerminal(events));
+  return completion === "pending" || (completion === "none" && latestTurnEvidenceState(events) !== "terminal");
 }
 
-function latestTurnEvidenceIsTerminal(events: ReturnType<typeof runtimeEventsForSession>): boolean {
+function latestTurnEvidenceState(
+  events: ReturnType<typeof runtimeEventsForSession>,
+): "none" | "pending" | "terminal" {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event) continue;
@@ -30,7 +32,7 @@ function latestTurnEvidenceIsTerminal(events: ReturnType<typeof runtimeEventsFor
       event.name === "turn.failed" ||
       event.name === "turn.interrupted"
     ) {
-      return true;
+      return "terminal";
     }
     if (
       event.name === "assistant.delta" ||
@@ -46,10 +48,10 @@ function latestTurnEvidenceIsTerminal(events: ReturnType<typeof runtimeEventsFor
       event.name === "workspace_action" ||
       event.name === "workspace_action_result"
     ) {
-      return false;
+      return "pending";
     }
   }
-  return false;
+  return "none";
 }
 
 export function useRunningSessionState({

@@ -50,10 +50,28 @@ Options:
 
 ```text
 Usage:
-  openpond init [--path <dir>]
+  openpond init [--path <dir>] [--profile <name>] [--template <name>] [--force] [--json]
 
 Options:
+  --account <string>
+  --api-baseurl <string>
+  --api-base-url <string>
+  --baseurl <string>
+  --base-url <string>
+  --chat-api-baseurl <string>
+  --chat-api-base-url <string>
+  --check-update
+  --cwd <string>
+  --force
+  --help
+  --json
   --path <string>
+  --profile <string>
+  --sandbox-apiurl <string>
+  --sandbox-api-url <string>
+  --template <string>
+  --tui
+  --version
 ```
 ## profile
 

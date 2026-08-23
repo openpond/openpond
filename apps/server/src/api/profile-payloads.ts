@@ -44,6 +44,10 @@ import {
   installOpenPondProfile,
   updateInstalledOpenPondProfile,
 } from "../profile-installation.js";
+import {
+  profileLibraryForClient,
+  profileStateForClient,
+} from "./client-payload-projection.js";
 
 export function createProfilePayloads(deps: {
   appendRuntimeEvent: (runtimeEvent: RuntimeEvent) => Promise<void>;
@@ -51,24 +55,27 @@ export function createProfilePayloads(deps: {
   const { appendRuntimeEvent } = deps;
 
   async function profileCurrentPayload() {
-    return loadOpenPondProfileState();
+    return profileStateForClient(await loadOpenPondProfileState());
   }
 
   async function profileCatalogPayload() {
-    return loadOpenPondProfileLibrary();
+    return profileLibraryForClient(await loadOpenPondProfileLibrary());
   }
 
   async function profileSelectPayload(payload: unknown) {
     const input = asRecord(payload);
     const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
     const profile = await selectOpenPondProfile(ref);
-    return { profile, library: await loadOpenPondProfileLibrary() };
+    return {
+      profile: profileStateForClient(profile),
+      library: profileLibraryForClient(await loadOpenPondProfileLibrary()),
+    };
   }
 
   async function profileRemovePayload(payload: unknown) {
     const input = asRecord(payload);
     const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
-    return removeOpenPondProfile(ref);
+    return profileLibraryForClient(await removeOpenPondProfile(ref));
   }
 
   async function profilePublicationPreviewPayload(payload: unknown) {
@@ -99,14 +106,20 @@ export function createProfilePayloads(deps: {
       url: stringValue(input.url),
       profile: stringValue(input.profile),
     });
-    return { profile: state, library: await loadOpenPondProfileLibrary() };
+    return {
+      profile: profileStateForClient(state),
+      library: profileLibraryForClient(await loadOpenPondProfileLibrary()),
+    };
   }
 
   async function profileUpdatePayload(payload: unknown) {
     const input = asRecord(payload);
     const ref = OpenPondProfileRefSchema.parse(input.ref ?? input);
     const state = await updateInstalledOpenPondProfile(ref);
-    return { profile: state, library: await loadOpenPondProfileLibrary() };
+    return {
+      profile: profileStateForClient(state),
+      library: profileLibraryForClient(await loadOpenPondProfileLibrary()),
+    };
   }
 
   async function profileInitPayload(payload: unknown) {
@@ -129,7 +142,7 @@ export function createProfilePayloads(deps: {
         }.`,
       })
     );
-    return state;
+    return profileStateForClient(state);
   }
 
   async function profileLoadPayload(payload: unknown) {
@@ -149,7 +162,7 @@ export function createProfilePayloads(deps: {
         output: `Loaded OpenPond profile ${state.activeProfile ?? "default"}.`,
       })
     );
-    return state;
+    return profileStateForClient(state);
   }
 
   async function profileCheckPayload(payload: unknown) {
@@ -166,7 +179,7 @@ export function createProfilePayloads(deps: {
         output: `Profile check completed for ${kind}.`,
       })
     );
-    return state;
+    return profileStateForClient(state);
   }
 
   async function profileRenameAgentPayload(agentId: string, payload: unknown) {
@@ -183,7 +196,7 @@ export function createProfilePayloads(deps: {
         output: `Renamed Profile agent ${agentId} to ${name.trim()}.`,
       })
     );
-    return state;
+    return profileStateForClient(state);
   }
 
   async function profileCommitPayload(payload: unknown) {

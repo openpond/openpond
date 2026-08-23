@@ -6,6 +6,9 @@ They can also be run through the CLI wrapper with `openpond harness desktop run 
 Implemented scenarios:
 
 - `chat-two-turns.ts`: visible composer submission for a deterministic two-turn chat.
+- `chat-multi-thread-stress.ts`: three concurrent delayed chat turns with switching, renderer reload, transcript isolation, persistence, timing, and screenshot proof.
+- `chat-interrupt-recovery.ts`: visible Stop-response interruption after the first streamed chunk, followed by same-thread recovery and reload persistence proof.
+- `chat-deepseek-live-stress.ts`: authenticated three-thread DeepSeek V4 Flash stress with model allowlisting, reload persistence, and a conservative usage-based cost ceiling.
 - `subagent-heartbeat-settings.ts`: Subagents Settings background-check cadence copy, bounds, save, and reload readback proof.
 - `subagent-heartbeat-no-progress-wake.ts`: long-running child proof that a routine heartbeat interval updates diagnostics without waking the parent model before submission.
 - `subagent-heartbeat-thread-scoped.ts`: no-goal child proof that watcher submission wake and Subagents details work from `parentSessionId` alone.
@@ -34,6 +37,9 @@ Useful commands:
 
 ```bash
 pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-two-turns.ts --isolated --json tmp/desktop-harness/chat-two-turns/report.json
+pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-multi-thread-stress.ts --isolated --json tmp/desktop-harness/chat-multi-thread-stress/report.json
+pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-interrupt-recovery.ts --isolated --json tmp/desktop-harness/chat-interrupt-recovery/report.json
+pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/chat-deepseek-live-stress.ts --attach --server http://127.0.0.1:17877 --token-file /path/to/token --devtools-port 9239 --json tmp/desktop-harness/chat-deepseek-live-stress/report.json
 pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-heartbeat-settings.ts --isolated --json tmp/desktop-harness/subagent-heartbeat-settings/report.json
 pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-heartbeat-no-progress-wake.ts --isolated --timeout-ms 150000 --json tmp/desktop-harness/subagent-heartbeat-no-progress-wake/report.json
 pnpm exec tsx scripts/desktop-harness.ts run tests/desktop-scenarios/subagent-heartbeat-thread-scoped.ts --isolated --json tmp/desktop-harness/subagent-heartbeat-thread-scoped/report.json

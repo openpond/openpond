@@ -96,8 +96,14 @@ export const CLI_COMMAND_REGISTRY: readonly CliCommandDefinition[] = [
   },
   {
     name: "init",
-    usage: "openpond init [--path <dir>]",
-    optionSchema: { path: "string" },
+    usage:
+      "openpond init [--path <dir>] [--profile <name>] [--template <name>] [--force] [--json]",
+    optionSchema: {
+      ...CLI_GLOBAL_OPTION_SCHEMA,
+      force: "boolean",
+      path: "string",
+      template: "string",
+    },
     handler: async ({ options }) => (await import("./profile")).runOpenPondInitCommand(options),
   },
   {

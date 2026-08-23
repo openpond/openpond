@@ -46,7 +46,7 @@ describe("running session state", () => {
     expect(html).toContain("running=chat_session");
   });
 
-  test("keeps active sessions visible as running when their events are not loaded", () => {
+  test("keeps active sessions visible in the sidebar while their events are not loaded", () => {
     const chatSession = session({ id: "chat_session", status: "active" });
     const otherSession = session({ id: "other_session", status: "idle" });
     const indexes = buildRuntimeIndexes([], []);
@@ -58,6 +58,16 @@ describe("running session state", () => {
     expect(activeHtml).toContain("running=chat_session");
     expect(otherHtml).toContain("selected=false");
     expect(otherHtml).toContain("running=chat_session");
+  });
+
+  test("does not mistake session lifecycle events for an interruptible turn", () => {
+    const chatSession = session({ id: "chat_session", status: "idle" });
+    const indexes = buildRuntimeIndexes([sessionStartedEvent(chatSession)], []);
+
+    const html = renderRunningProbe(chatSession, [chatSession], indexes);
+
+    expect(html).toContain("selected=false");
+    expect(html).not.toContain("running=chat_session");
   });
 
   test("does not treat active session status alone as a selected running turn when loaded events are terminal", () => {
@@ -79,8 +89,8 @@ describe("running session state", () => {
     expect(otherHtml).not.toContain("chat_session");
   });
 
-  test("keeps active sessions with pending turns in the running set", () => {
-    const chatSession = session({ id: "chat_session", status: "active" });
+  test("keeps event-backed pending turns running across a stale idle session update", () => {
+    const chatSession = session({ id: "chat_session", status: "idle" });
     const indexes = buildRuntimeIndexes([turnStartedEvent(chatSession.id)], []);
 
     const html = renderRunningProbe(chatSession, [chatSession], indexes);
@@ -209,6 +219,17 @@ function turnStartedEvent(sessionId: string): RuntimeEvent {
     timestamp: NOW,
     source: "chat_action",
     status: "started",
+  };
+}
+
+function sessionStartedEvent(chatSession: Session): RuntimeEvent {
+  return {
+    id: `${chatSession.id}_session_started`,
+    sessionId: chatSession.id,
+    name: "session.started",
+    timestamp: NOW,
+    source: "server",
+    data: { session: chatSession },
   };
 }
 

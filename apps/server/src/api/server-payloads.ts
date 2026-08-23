@@ -93,6 +93,11 @@ import {
 } from "../openpond/provider-registry.js";
 import { sessionsWithTasksetNames } from "./session-taskset-names.js";
 import {
+  accountStateForClient,
+  profileLibraryForClient,
+  profileStateForClient,
+} from "./client-payload-projection.js";
+import {
   isOpenAiCompatibleProviderId,
   listOpenAiCompatibleProviderModels,
   validateOpenAiCompatibleProvider,
@@ -910,7 +915,7 @@ export function createServerPayloads(deps: {
         version: version,
         runtimeVersion: runtimeVersion,
       },
-      account: openPond.account,
+      account: accountStateForClient(openPond.account),
       codex,
       preferences,
       providers,
@@ -918,8 +923,8 @@ export function createServerPayloads(deps: {
       apps: openPond.apps,
       localProjects: linkedLocalProjects,
       cloudProjects,
-      profile,
-      profileLibrary,
+      profile: profileStateForClient(profile),
+      profileLibrary: profileLibraryForClient(profileLibrary),
       codexPersonalSkills,
       extensionCatalog,
       codexHistorySessions: validBootstrapSessions(
