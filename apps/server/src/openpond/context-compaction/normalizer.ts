@@ -7,6 +7,7 @@ import {
 import { formatPromptWithAttachmentContext } from "../../chat-attachments.js";
 import { textFromUnknown } from "../../utils.js";
 import { compactionAtomicGroupId } from "./atomic-groups.js";
+import { extractCompactionDurableFacts } from "./durable-facts.js";
 import { estimateTextTokens } from "./metrics.js";
 import type { CompactionRecord } from "./types.js";
 import { extractCompactionFilePaths } from "./file-paths.js";
@@ -170,6 +171,7 @@ function record(
   preserveVerbatim = false,
 ): CompactionRecord {
   const normalizedBody = body.trim() || eventPreview(event);
+  const filePaths = extractCompactionFilePaths(`${title}\n${normalizedBody}`);
   return {
     kind,
     title,
@@ -180,7 +182,12 @@ function record(
     action: event?.action ?? null,
     status: event?.status ?? null,
     atomicGroupId: compactionAtomicGroupId(event),
-    filePaths: extractCompactionFilePaths(`${title}\n${normalizedBody}`),
+    filePaths,
+    durableFacts: extractCompactionDurableFacts({
+      text: normalizedBody,
+      filePaths,
+      action: event?.action,
+    }),
     tokenEstimate: estimateTextTokens(`${title}\n${normalizedBody}`),
     preserveVerbatim,
   };

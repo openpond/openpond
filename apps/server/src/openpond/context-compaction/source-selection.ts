@@ -132,6 +132,7 @@ function recordPriority(item: RenderedRecord, latestUserIndex: number): number {
   if (record.kind === "goal_context") return 650;
   if (record.kind === "turn_failed" || record.status === "failed") return 625;
   if (record.preserveVerbatim || OPERATIONAL_SIGNAL.test(`${record.title}\n${record.body}`)) return 600;
+  if (record.durableFacts.length > 0) return 590 + Math.min(9, record.durableFacts.length);
   if (record.kind === "user" && item.index === latestUserIndex) return 575;
   if (record.filePaths.length > 0) return 525;
   if (record.kind === "subagent_activity") return 475;

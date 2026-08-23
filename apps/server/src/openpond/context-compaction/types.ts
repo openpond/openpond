@@ -34,6 +34,23 @@ export type CompactionRecordKind =
   | "file_activity"
   | "other";
 
+export type CompactionDurableFactKind =
+  | "branch"
+  | "command"
+  | "endpoint"
+  | "error_code"
+  | "identifier"
+  | "labeled_value"
+  | "path"
+  | "port"
+  | "revision";
+
+export type CompactionDurableFact = {
+  kind: CompactionDurableFactKind;
+  label: string;
+  value: string;
+};
+
 export type CompactionRecord = {
   kind: CompactionRecordKind;
   title: string;
@@ -45,6 +62,7 @@ export type CompactionRecord = {
   status?: string | null;
   atomicGroupId?: string | null;
   filePaths: string[];
+  durableFacts: CompactionDurableFact[];
   tokenEstimate: number;
   preserveVerbatim?: boolean;
 };

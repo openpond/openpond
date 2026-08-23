@@ -5,10 +5,68 @@ import {
   normalizeCompactionRecords,
   serializeRecordsForCompaction,
 } from "../apps/server/src/openpond/context-compaction/normalizer";
+import { compactionInputCharBudget } from "../apps/server/src/openpond/context-compaction/prompt";
+import { selectEventsForHostedCompaction } from "../apps/server/src/openpond/context-compaction/tail-selection";
 
 const NOW = "2026-07-07T12:00:00.000Z";
 
 describe("context compaction", () => {
+
+  test("preserves sparse durable facts from the provider-backed long-history fixtures", () => {
+    const factual = syntheticLongTurns("atlas", 26, (index) => [
+      index === 1 ? "The Atlas service port is 4317." : "",
+      index === 4 ? "The active branch is feat/atlas-ledger." : "",
+      index === 7 ? "Irreversible constraint: never delete generated fixtures." : "",
+      index === 10 ? "The older-history continuity code is CEDAR-91." : "",
+      index === 25 ? "The next validation command is pnpm test:contract." : "",
+    ].filter(Boolean).join(" "));
+    const operational = syntheticLongTurns("cache-ledger", 22, (index) => [
+      index === 2 ? "The active file is /synthetic/src/cache-ledger.ts." : "",
+      index === 5 ? "Validation failed with E_CACHE_17." : "",
+      index === 6 ? "Do not retry pnpm test cache-ledger until schema migration completes." : "",
+      index === 9 ? "The operational continuity token is OPAL-63." : "",
+      index === 21 ? "The next safe action is migrate schema v44." : "",
+    ].filter(Boolean).join(" "));
+    operational.splice(14, 0, runtimeEvent({
+      id: "cache-ledger-command-failure",
+      sessionId: "session-cache-ledger",
+      turnId: "cache-ledger-turn-006",
+      name: "command.output",
+      action: "pnpm test cache-ledger",
+      status: "failed",
+      output: "E_CACHE_17: schema v44 has not been migrated; retry is blocked.",
+    }));
+    const orbit = syntheticLongTurns("orbit", 18, (index) => [
+      index === 1 ? "The original Orbit project token is ORBIT-771." : "",
+      index === 3 ? "The Orbit service port is 5902." : "",
+      index === 6 ? "The first-stage continuity color is AMBER." : "",
+    ].filter(Boolean).join(" "));
+
+    const factualPreTail = serializedCompactionPreTail(factual);
+    const operationalPreTail = serializedCompactionPreTail(operational);
+    const orbitPreTail = serializedCompactionPreTail(orbit);
+
+    expect(factualPreTail).toContain("4317");
+    expect(factualPreTail).toContain("feat/atlas-ledger");
+    expect(factualPreTail).toContain("CEDAR-91");
+    expect(operationalPreTail).toContain("OPAL-63");
+    expect(orbitPreTail).toContain("ORBIT-771");
+    expect(orbitPreTail).toContain("5902");
+    expect(orbitPreTail).toContain("AMBER");
+
+    const records = normalizeCompactionRecords(factual);
+    expect(records.find((record) => record.body.includes("4317"))?.durableFacts).toContainEqual({
+      kind: "port",
+      label: "The Atlas service port",
+      value: "4317",
+    });
+    expect(records.find((record) => record.body.includes("feat/atlas-ledger"))?.durableFacts)
+      .toContainEqual(expect.objectContaining({ kind: "branch", value: "feat/atlas-ledger" }));
+    expect(records.find((record) => record.eventId === "atlas-turn-000-assistant")?.durableFacts).toEqual([]);
+    const operationalRecords = normalizeCompactionRecords(operational);
+    expect(operationalRecords.find((record) => record.body.includes("E_CACHE_17"))?.durableFacts)
+      .toContainEqual(expect.objectContaining({ kind: "error_code", value: "E_CACHE_17" }));
+  });
 
   test("selects newest useful records from oversized histories with explicit omission telemetry", () => {
     const events: RuntimeEvent[] = [
@@ -640,6 +698,43 @@ function runtimeEvent(input: Omit<RuntimeEvent, "timestamp">): RuntimeEvent {
     timestamp: NOW,
     ...input,
   };
+}
+
+function syntheticLongTurns(
+  prefix: string,
+  count: number,
+  factForTurn: (index: number) => string,
+): RuntimeEvent[] {
+  const events: RuntimeEvent[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const turnId = `${prefix}-turn-${String(index).padStart(3, "0")}`;
+    events.push(runtimeEvent({
+      id: `${turnId}-started`,
+      sessionId: `session-${prefix}`,
+      turnId,
+      name: "turn.started",
+      args: { prompt: `Review synthetic ${prefix} checkpoint ${index} and retain durable operational state.` },
+    }));
+    const filler = Array.from({ length: 9 }, (_, note) =>
+      `Evidence ${index}.${note}: synthetic inspection completed without repository data; preserve decisions, failures, and next actions while discarding repetitive narration.`
+    ).join(" ");
+    events.push(runtimeEvent({
+      id: `${turnId}-assistant`,
+      sessionId: `session-${prefix}`,
+      turnId,
+      name: "assistant.delta",
+      output: `${factForTurn(index)} ${filler}`.trim(),
+    }));
+  }
+  return events;
+}
+
+function serializedCompactionPreTail(events: RuntimeEvent[]): string {
+  const selection = selectEventsForHostedCompaction(events, 6_000);
+  return serializeRecordsForCompaction(
+    normalizeCompactionRecords(selection.summaryEvents),
+    compactionInputCharBudget(6_000),
+  ).text;
 }
 
 function subagentRunFixture() {
