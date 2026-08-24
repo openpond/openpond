@@ -85,4 +85,8 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 44,
     run: (store) => store.createModelUsageTables(),
   },
+  {
+    version: 45,
+    run: (store) => store.createPreferenceComparisonTables(),
+  },
 ];

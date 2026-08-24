@@ -54,6 +54,16 @@ import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
 import { SqliteEvaluationResultStore } from "./store-evaluation-results.js";
 import {
+  PreferenceComparisonAssignmentRecordSchema,
+  PreferenceComparisonCalibrationRecordSchema,
+  PreferenceComparisonReleaseRecordSchema,
+  PreferenceComparisonSubmissionRecordSchema,
+  type PreferenceComparisonAssignmentRecord,
+  type PreferenceComparisonCalibrationRecord,
+  type PreferenceComparisonReleaseRecord,
+  type PreferenceComparisonSubmissionRecord,
+} from "../training/preference-comparison-records.js";
+import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
   trainingChatSearchResult,
@@ -490,6 +500,10 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
         await this.run("DELETE FROM benchmark_runs WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM benchmark_comparisons WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_submissions WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_assignments WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_calibrations WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_releases WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);
@@ -568,6 +582,299 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
     if (input.attemptId) return this.listParsedPayloads("SELECT payload FROM task_attempt_artifacts WHERE attempt_id = ? ORDER BY created_at", [input.attemptId], TaskAttemptArtifactSchema.parse);
     if (input.tasksetId) return this.listParsedPayloads("SELECT payload FROM task_attempt_artifacts WHERE taskset_id = ? ORDER BY created_at", [input.tasksetId], TaskAttemptArtifactSchema.parse);
     return [];
+  }
+
+  async savePreferenceComparisonRelease(
+    recordInput: PreferenceComparisonReleaseRecord,
+  ): Promise<PreferenceComparisonReleaseRecord> {
+    const record = PreferenceComparisonReleaseRecordSchema.parse(recordInput);
+    if (record.id !== record.release.id) {
+      throw new Error("Preference comparison release record ID must match its portable release ID.");
+    }
+    const existing = await this.getPreferenceComparisonRelease(record.id);
+    if (existing) {
+      if (
+        existing.tasksetId !== record.tasksetId
+        || existing.release.contentHash !== record.release.contentHash
+      ) {
+        throw new Error("A preference comparison release ID is immutable.");
+      }
+      if (existing.sourceConsent === "revoked" && record.sourceConsent !== "revoked") {
+        throw new Error("Revoked preference-comparison source consent cannot be restored through a release write.");
+      }
+    }
+    await this.upsertPayload(
+      `INSERT INTO preference_comparison_releases
+        (id, taskset_id, content_hash, source_consent, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET source_consent = excluded.source_consent, payload = excluded.payload`,
+      [
+        record.id,
+        record.tasksetId,
+        record.release.contentHash,
+        record.sourceConsent,
+        JSON.stringify(record),
+        record.createdAt,
+      ],
+    );
+    return record;
+  }
+
+  async getPreferenceComparisonRelease(
+    id: string,
+  ): Promise<PreferenceComparisonReleaseRecord | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM preference_comparison_releases WHERE id = ?",
+      [id],
+      PreferenceComparisonReleaseRecordSchema.parse,
+    );
+  }
+
+  async listPreferenceComparisonReleases(
+    tasksetId: string,
+  ): Promise<PreferenceComparisonReleaseRecord[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM preference_comparison_releases WHERE taskset_id = ? ORDER BY created_at DESC",
+      [tasksetId],
+      PreferenceComparisonReleaseRecordSchema.parse,
+    );
+  }
+
+  async revokePreferenceComparisonRelease(input: {
+    id: string;
+    retentionUntil: string | null;
+  }): Promise<PreferenceComparisonReleaseRecord> {
+    const current = await this.getPreferenceComparisonRelease(input.id);
+    if (!current) throw new Error("Preference comparison release was not found.");
+    return this.savePreferenceComparisonRelease({
+      ...current,
+      sourceConsent: "revoked",
+      retentionUntil: input.retentionUntil,
+    });
+  }
+
+  async savePreferenceComparisonAssignment(
+    recordInput: PreferenceComparisonAssignmentRecord,
+  ): Promise<PreferenceComparisonAssignmentRecord> {
+    const record = PreferenceComparisonAssignmentRecordSchema.parse(recordInput);
+    if (record.id !== record.assignment.id) {
+      throw new Error("Preference comparison assignment record ID must match its portable assignment ID.");
+    }
+    const release = await this.getPreferenceComparisonRelease(record.assignment.comparisonRelease.id);
+    if (!release || release.tasksetId !== record.tasksetId) {
+      throw new Error("Preference comparison assignment references an unavailable Taskset release.");
+    }
+    if (release.sourceConsent !== "authorized") {
+      throw new Error("Preference comparison assignments cannot be created from revoked source consent.");
+    }
+    if (release.release.contentHash !== record.assignment.comparisonRelease.contentHash) {
+      throw new Error("Preference comparison assignment does not reference the persisted immutable release.");
+    }
+    const existing = await this.getPreferenceComparisonAssignment(record.id);
+    if (existing) {
+      if (
+        existing.tasksetId !== record.tasksetId
+        || existing.assignment.contentHash !== record.assignment.contentHash
+      ) {
+        throw new Error("A preference comparison assignment is immutable.");
+      }
+      if (!isPreferenceAssignmentTransition(existing.state, record.state)) {
+        throw new Error("Invalid preference comparison assignment state transition.");
+      }
+    }
+    await this.upsertPayload(
+      `INSERT INTO preference_comparison_assignments
+        (id, taskset_id, release_id, purpose, state, reviewer_key, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET state = excluded.state, reviewer_key = excluded.reviewer_key,
+         payload = excluded.payload, updated_at = excluded.updated_at`,
+      [
+        record.id,
+        record.tasksetId,
+        record.assignment.comparisonRelease.id,
+        record.assignment.purpose,
+        record.state,
+        record.reviewerKey,
+        JSON.stringify(record),
+        record.createdAt,
+        record.updatedAt,
+      ],
+    );
+    return record;
+  }
+
+  async getPreferenceComparisonAssignment(
+    id: string,
+  ): Promise<PreferenceComparisonAssignmentRecord | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM preference_comparison_assignments WHERE id = ?",
+      [id],
+      PreferenceComparisonAssignmentRecordSchema.parse,
+    );
+  }
+
+  async listPreferenceComparisonAssignments(input: {
+    tasksetId: string;
+    reviewerKey?: string;
+    states?: PreferenceComparisonAssignmentRecord["state"][];
+  }): Promise<PreferenceComparisonAssignmentRecord[]> {
+    const states = input.states?.length ? input.states : null;
+    const stateSql = states ? ` AND state IN (${states.map(() => "?").join(", ")})` : "";
+    const reviewerSql = input.reviewerKey ? " AND (reviewer_key IS NULL OR reviewer_key = ?)" : "";
+    const params = [input.tasksetId, ...(input.reviewerKey ? [input.reviewerKey] : []), ...(states ?? [])];
+    return this.listParsedPayloads(
+      `SELECT payload FROM preference_comparison_assignments WHERE taskset_id = ?${reviewerSql}${stateSql} ORDER BY created_at ASC`,
+      params,
+      PreferenceComparisonAssignmentRecordSchema.parse,
+    );
+  }
+
+  async claimPreferenceComparisonAssignment(input: {
+    id: string;
+    reviewerKey: string;
+    updatedAt: string;
+  }): Promise<PreferenceComparisonAssignmentRecord> {
+    const current = await this.getPreferenceComparisonAssignment(input.id);
+    if (!current) throw new Error("Preference comparison assignment was not found.");
+    if (current.state === "queued") {
+      return this.savePreferenceComparisonAssignment({
+        ...current,
+        state: "in_review",
+        reviewerKey: input.reviewerKey,
+        updatedAt: input.updatedAt,
+      });
+    }
+    if (current.state === "in_review" && current.reviewerKey === input.reviewerKey) {
+      return current;
+    }
+    throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+  }
+
+  async markPreferenceComparisonUnreviewable(input: {
+    id: string;
+    reviewerKey: string;
+    reason: string;
+    updatedAt: string;
+  }): Promise<PreferenceComparisonAssignmentRecord> {
+    const current = await this.claimPreferenceComparisonAssignment(input);
+    return this.savePreferenceComparisonAssignment({
+      ...current,
+      state: "unreviewable",
+      reviewerKey: input.reviewerKey,
+      unreviewableReason: input.reason,
+      updatedAt: input.updatedAt,
+    });
+  }
+
+  async savePreferenceComparisonSubmission(
+    recordInput: PreferenceComparisonSubmissionRecord,
+  ): Promise<PreferenceComparisonSubmissionRecord> {
+    const record = PreferenceComparisonSubmissionRecordSchema.parse(recordInput);
+    const assignment = await this.claimPreferenceComparisonAssignment({
+      id: record.assignmentId,
+      reviewerKey: record.reviewerKey,
+      updatedAt: record.submittedAt,
+    });
+    if (assignment.tasksetId !== record.tasksetId) {
+      throw new Error("Preference comparison submission Taskset does not match its assignment.");
+    }
+    if (
+      record.receipt.assignmentRef.id !== assignment.assignment.id
+      || record.receipt.assignmentRef.contentHash !== assignment.assignment.contentHash
+    ) {
+      throw new Error("Preference comparison receipt does not belong to its assignment.");
+    }
+    const existing = await this.getPreferenceComparisonSubmission({
+      assignmentId: record.assignmentId,
+      reviewerKey: record.reviewerKey,
+    });
+    if (existing) {
+      if (existing.receipt.contentHash !== record.receipt.contentHash) {
+        throw new Error("Preference comparison submission is already recorded for this reviewer and assignment.");
+      }
+      return existing;
+    }
+    await this.upsertPayload(
+      `INSERT INTO preference_comparison_submissions
+        (id, taskset_id, assignment_id, reviewer_key, receipt_hash, payload, submitted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        record.id,
+        record.tasksetId,
+        record.assignmentId,
+        record.reviewerKey,
+        record.receipt.contentHash,
+        JSON.stringify(record),
+        record.submittedAt,
+      ],
+    );
+    await this.savePreferenceComparisonAssignment({
+      ...assignment,
+      state: "submitted",
+      reviewerKey: record.reviewerKey,
+      updatedAt: record.submittedAt,
+    });
+    return record;
+  }
+
+  async getPreferenceComparisonSubmission(input: {
+    assignmentId: string;
+    reviewerKey: string;
+  }): Promise<PreferenceComparisonSubmissionRecord | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM preference_comparison_submissions WHERE assignment_id = ? AND reviewer_key = ?",
+      [input.assignmentId, input.reviewerKey],
+      PreferenceComparisonSubmissionRecordSchema.parse,
+    );
+  }
+
+  async listPreferenceComparisonSubmissions(
+    assignmentId: string,
+  ): Promise<PreferenceComparisonSubmissionRecord[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM preference_comparison_submissions WHERE assignment_id = ? ORDER BY submitted_at ASC",
+      [assignmentId],
+      PreferenceComparisonSubmissionRecordSchema.parse,
+    );
+  }
+
+  async savePreferenceComparisonCalibration(
+    recordInput: PreferenceComparisonCalibrationRecord,
+  ): Promise<PreferenceComparisonCalibrationRecord> {
+    const record = PreferenceComparisonCalibrationRecordSchema.parse(recordInput);
+    const release = await this.getPreferenceComparisonRelease(record.report.comparisonRelease.id);
+    if (!release || release.tasksetId !== record.tasksetId) {
+      throw new Error("Preference calibration report references an unavailable Taskset release.");
+    }
+    if (release.release.contentHash !== record.report.comparisonRelease.contentHash) {
+      throw new Error("Preference calibration report does not reference the persisted immutable release.");
+    }
+    await this.upsertPayload(
+      `INSERT INTO preference_comparison_calibrations
+        (id, taskset_id, release_id, report_hash, passed, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      [
+        record.id,
+        record.tasksetId,
+        record.report.comparisonRelease.id,
+        record.report.contentHash,
+        record.report.passed ? 1 : 0,
+        JSON.stringify(record),
+        record.createdAt,
+      ],
+    );
+    return record;
+  }
+
+  async listPreferenceComparisonCalibrations(
+    tasksetId: string,
+  ): Promise<PreferenceComparisonCalibrationRecord[]> {
+    return this.listParsedPayloads(
+      "SELECT payload FROM preference_comparison_calibrations WHERE taskset_id = ? ORDER BY created_at DESC",
+      [tasksetId],
+      PreferenceComparisonCalibrationRecordSchema.parse,
+    );
   }
 
   async saveGradeResult(resultInput: GradeResult): Promise<GradeResult> {
@@ -959,6 +1266,16 @@ function normalizeStoredTasksetAuthoringProvenance(value: unknown): unknown {
 
 function storedPayloadId(value: unknown): string | null {
   return isRecord(value) && typeof value.id === "string" ? value.id : null;
+}
+
+function isPreferenceAssignmentTransition(
+  current: PreferenceComparisonAssignmentRecord["state"],
+  next: PreferenceComparisonAssignmentRecord["state"],
+): boolean {
+  if (current === next) return true;
+  if (current === "queued") return next === "in_review" || next === "unreviewable" || next === "revoked";
+  if (current === "in_review") return next === "submitted" || next === "unreviewable" || next === "revoked";
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
