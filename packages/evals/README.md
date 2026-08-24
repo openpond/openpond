@@ -8,6 +8,11 @@ eligibility, and no-training/SFT/preference/RL qualification receipts. The packa
 does not re-export Harness APIs. Applications import the two packages directly,
 which keeps refinement and evaluation authority visibly separate.
 
+The `@openpond/evals/preferences` subpath adds a bounded, artifact-backed
+comparison protocol: two to four attempts can be ranked by a human or model
+reviewer, calibrated against held-out human receipts, then projected into the
+existing reward-component boundary without encoding a specific visual domain.
+
 ```ts
 import {
   AttemptReceiptSchema,
@@ -29,7 +34,7 @@ import {
 ```
 
 Subpath exports are available at `/harness`, `/tasksets`, `/benchmarks`, `/graders`, `/runs`,
-`/conformance`, `/evidence`, `/review`, and
+`/conformance`, `/evidence`, `/preferences`, `/review`, and
 `/model-improvement-qualification`. The package is an evaluation protocol library,
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
