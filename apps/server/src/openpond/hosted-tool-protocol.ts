@@ -4,6 +4,7 @@ import {
   type WorkspaceToolRequest,
   type WorkspaceToolResult,
 } from "@openpond/contracts";
+import { toolOutputSpillForModel } from "./tool-output-spill.js";
 
 const MAX_TOOL_RESULT_CHARS = 20000;
 const MODEL_HIDDEN_DATA_KEYS = new Set(["remoteUrl", "repoPath", "workspacePath", "expectedRemoteUrl"]);
@@ -335,14 +336,24 @@ function dataForModel(value: unknown): unknown {
   return output;
 }
 
-export function formatWorkspaceToolResultForModel(result: WorkspaceToolResult): string {
+export function formatWorkspaceToolResultForModel(
+  result: WorkspaceToolResult,
+  options: { outputResourceRef?: string | null } = {},
+): string {
+  const output = options.outputResourceRef
+    ? toolOutputSpillForModel({
+        output: result.output,
+        callId: options.outputResourceRef.replace(/^tool-output:/, ""),
+      })
+    : { output: result.output, spill: null };
   return truncate(
     JSON.stringify(
       {
         ok: result.ok,
         action: result.action,
         appId: result.appId ?? null,
-        output: result.output,
+        output: output.output,
+        ...(output.spill ? { outputSpill: output.spill } : {}),
         data: dataForModel(result.data ?? null),
       },
       null,

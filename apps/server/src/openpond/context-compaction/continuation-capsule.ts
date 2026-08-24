@@ -28,6 +28,12 @@ export type ContinuationCapsuleValidation = {
   sourceEventIds: string[];
 };
 
+export type ContinuationCapsuleOmission = {
+  field: string;
+  omittedCount: number;
+  resourceRefs: string[];
+};
+
 export type ContinuationCapsule = {
   schemaVersion: typeof CONTINUATION_CAPSULE_SCHEMA_VERSION;
   workspace: {
@@ -45,6 +51,7 @@ export type ContinuationCapsule = {
   validations: ContinuationCapsuleValidation[];
   immediateNextActions: string[];
   durableResourceRefs: string[];
+  omissions: ContinuationCapsuleOmission[];
   source: {
     compactedThroughEventId: string | null;
     compactedThroughTurnId: string | null;
@@ -82,13 +89,31 @@ export function buildContinuationCapsule(input: {
     validations,
   );
   const explicitNextActions = nextActionsFromEvents(input.events);
-  const nextActions = uniqueBounded(
+  const nextActionCandidates =
     explicitNextActions.length > 0
       ? [...explicitNextActions, ...summary.nextActions]
       : summary.nextActions.length > 0
         ? summary.nextActions
-        : previous?.immediateNextActions ?? [],
-    12,
+        : previous?.immediateNextActions ?? [];
+  const nextActions = uniqueBounded(nextActionCandidates, 12);
+  const constraintCandidates = [...summary.constraints, ...(previous?.constraints ?? [])];
+  const decisionCandidates = [...summary.decisions, ...(previous?.decisions ?? [])];
+  const activeFileCandidates = mergeFiles(previous?.activeFiles ?? [], currentFiles);
+  const durableResourceCandidates = [
+    ...input.preservedResourceRefs,
+    ...(previous?.durableResourceRefs ?? []),
+  ].sort();
+  const omissions = mergeCapsuleOmissions(
+    previous?.omissions ?? [],
+    [
+      omissionForStrings("constraints", constraintCandidates, 20, input.events),
+      omissionForStrings("decisions", decisionCandidates, 20, input.events),
+      omissionForFiles(activeFileCandidates, 100),
+      omissionForBlockedActions(blockedActions, 30),
+      omissionForValidations(validations, 40),
+      omissionForStrings("immediateNextActions", nextActionCandidates, 12, input.events),
+      omissionForStrings("durableResourceRefs", durableResourceCandidates, 100, input.events),
+    ],
   );
 
   return {
@@ -101,16 +126,14 @@ export function buildContinuationCapsule(input: {
     },
     currentGoal: summary.goal ?? previous?.currentGoal ?? null,
     latestUserRequest: latestUserRequest(input.events) ?? previous?.latestUserRequest ?? null,
-    constraints: uniqueBounded([...summary.constraints, ...(previous?.constraints ?? [])], 20),
-    decisions: uniqueBounded([...summary.decisions, ...(previous?.decisions ?? [])], 20),
-    activeFiles: mergeFiles(previous?.activeFiles ?? [], currentFiles).slice(0, 100),
+    constraints: uniqueBounded(constraintCandidates, 20),
+    decisions: uniqueBounded(decisionCandidates, 20),
+    activeFiles: activeFileCandidates.slice(0, 100),
     blockedActions: blockedActions.slice(0, 30),
     validations: validations.slice(0, 40),
     immediateNextActions: nextActions,
-    durableResourceRefs: uniqueBounded(
-      [...input.preservedResourceRefs, ...(previous?.durableResourceRefs ?? [])].sort(),
-      100,
-    ),
+    durableResourceRefs: uniqueBounded(durableResourceCandidates, 100),
+    omissions,
     source: {
       compactedThroughEventId: input.compactedThroughEventId,
       compactedThroughTurnId: input.compactedThroughTurnId,
@@ -155,6 +178,7 @@ export function parseContinuationCapsule(value: unknown): ContinuationCapsule | 
     validations: parseValidations(value.validations),
     immediateNextActions: stringArray(value.immediateNextActions, 12),
     durableResourceRefs: stringArray(value.durableResourceRefs, 100),
+    omissions: parseOmissions(value.omissions),
     source: {
       compactedThroughEventId: stringOrNull(source.compactedThroughEventId),
       compactedThroughTurnId: stringOrNull(source.compactedThroughTurnId),
@@ -195,6 +219,97 @@ function mergeFiles(
   return [...byPath.values()].sort((left, right) =>
     relevanceRank(right.relevance) - relevanceRank(left.relevance) || left.path.localeCompare(right.path)
   );
+}
+
+function omissionForStrings(
+  field: string,
+  values: string[],
+  limit: number,
+  events: RuntimeEvent[],
+): ContinuationCapsuleOmission | null {
+  const unique = [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+  const omitted = unique.slice(limit);
+  if (omitted.length === 0) return null;
+  return {
+    field,
+    omittedCount: omitted.length,
+    resourceRefs: resourceRefsForOmittedText(events, omitted),
+  };
+}
+
+function omissionForFiles(
+  files: ContinuationCapsuleFile[],
+  limit: number,
+): ContinuationCapsuleOmission | null {
+  const omitted = files.slice(limit);
+  if (omitted.length === 0) return null;
+  return {
+    field: "activeFiles",
+    omittedCount: omitted.length,
+    resourceRefs: uniqueBounded(
+      omitted.flatMap((file) => file.sourceEventIds.map((id) => `event:${id}`)),
+      24,
+    ),
+  };
+}
+
+function omissionForBlockedActions(
+  actions: ContinuationCapsuleBlockedAction[],
+  limit: number,
+): ContinuationCapsuleOmission | null {
+  const omitted = actions.slice(limit);
+  if (omitted.length === 0) return null;
+  return {
+    field: "blockedActions",
+    omittedCount: omitted.length,
+    resourceRefs: uniqueBounded(
+      omitted.flatMap((item) => item.sourceEventIds.map((id) => `event:${id}`)),
+      24,
+    ),
+  };
+}
+
+function omissionForValidations(
+  validations: ContinuationCapsuleValidation[],
+  limit: number,
+): ContinuationCapsuleOmission | null {
+  const omitted = validations.slice(limit);
+  if (omitted.length === 0) return null;
+  return {
+    field: "validations",
+    omittedCount: omitted.length,
+    resourceRefs: uniqueBounded(
+      omitted.flatMap((item) => item.sourceEventIds.map((id) => `event:${id}`)),
+      24,
+    ),
+  };
+}
+
+function resourceRefsForOmittedText(events: RuntimeEvent[], values: string[]): string[] {
+  const refs: string[] = [];
+  for (const value of values) {
+    for (let index = events.length - 1; index >= 0; index -= 1) {
+      const event = events[index]!;
+      if (eventText(event).includes(value)) refs.push(`event:${event.id}`);
+    }
+  }
+  return uniqueBounded(refs, 24);
+}
+
+function mergeCapsuleOmissions(
+  previous: ContinuationCapsuleOmission[],
+  current: Array<ContinuationCapsuleOmission | null>,
+): ContinuationCapsuleOmission[] {
+  const byField = new Map<string, ContinuationCapsuleOmission>();
+  for (const item of [...previous, ...current.filter((item): item is ContinuationCapsuleOmission => Boolean(item))]) {
+    const prior = byField.get(item.field);
+    byField.set(item.field, {
+      field: item.field,
+      omittedCount: Math.max(prior?.omittedCount ?? 0, item.omittedCount),
+      resourceRefs: uniqueBounded([...(prior?.resourceRefs ?? []), ...item.resourceRefs], 24),
+    });
+  }
+  return [...byField.values()].sort((left, right) => left.field.localeCompare(right.field));
 }
 
 function blockedActionsFromEvents(events: RuntimeEvent[]): ContinuationCapsuleBlockedAction[] {
@@ -297,9 +412,9 @@ function summarySections(summary: string): {
   const values = (...names: string[]) => names.flatMap((name) => sections.get(name) ?? []);
   return {
     goal: values("goal", "objective")[0] ?? null,
-    constraints: uniqueBounded(values("constraints & preferences", "constraints", "important details"), 20),
-    decisions: uniqueBounded(values("key decisions", "decisions"), 20),
-    nextActions: uniqueBounded(values("next steps", "next move"), 12),
+    constraints: [...new Set(values("constraints & preferences", "constraints", "important details"))],
+    decisions: [...new Set(values("key decisions", "decisions"))],
+    nextActions: [...new Set(values("next steps", "next move"))],
   };
 }
 
@@ -428,6 +543,20 @@ function parseValidations(value: unknown): ContinuationCapsuleValidation[] {
       sourceEventIds: stringArray(item.sourceEventIds, 20),
     }];
   }).slice(0, 40);
+}
+
+function parseOmissions(value: unknown): ContinuationCapsuleOmission[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!isRecord(item) || typeof item.field !== "string" || !Number.isInteger(item.omittedCount)) return [];
+    const omittedCount = Math.max(0, item.omittedCount as number);
+    if (omittedCount === 0) return [];
+    return [{
+      field: item.field.trim(),
+      omittedCount,
+      resourceRefs: stringArray(item.resourceRefs, 24),
+    }];
+  }).sort((left, right) => left.field.localeCompare(right.field));
 }
 
 function stringArray(value: unknown, limit: number): string[] {

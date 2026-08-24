@@ -228,6 +228,7 @@ export function createHostedCompactionRuntime(deps: {
       ?? trustedProviderContextLimit({ provider: params.provider, model: params.model });
     const beforeBudget = estimateHostedRequestBudget({
       provider: params.provider,
+      model: params.model,
       messages: params.messages,
       tools: params.tools,
       maxOutputTokens: params.maxOutputTokens,
@@ -257,6 +258,7 @@ export function createHostedCompactionRuntime(deps: {
       : params.messages;
     const requestBudget = estimateHostedRequestBudget({
       provider: params.provider,
+      model: params.model,
       messages,
       tools: params.tools,
       maxOutputTokens: params.maxOutputTokens,

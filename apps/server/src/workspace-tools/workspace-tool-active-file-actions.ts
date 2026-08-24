@@ -239,6 +239,7 @@ function resourceReadRequest(args: Record<string, unknown>): ResourceReadRequest
   return {
     ref,
     ...(typeof args.maxBytes === "number" ? { maxBytes: args.maxBytes } : {}),
+    ...(typeof args.offsetBytes === "number" ? { offsetBytes: args.offsetBytes } : {}),
     ...(mode ? { mode } : {}),
   };
 }
@@ -252,9 +253,10 @@ function resourceSearchRequest(args: Record<string, unknown>): ResourceSearchReq
     scope !== "messages" &&
     scope !== "artifacts" &&
     scope !== "goal-context" &&
+    scope !== "tool-outputs" &&
     scope !== "sandbox"
   ) {
-    throw new Error("scope must be workspace, git, events, messages, artifacts, goal-context, or sandbox");
+    throw new Error("scope must be workspace, git, events, messages, artifacts, goal-context, tool-outputs, or sandbox");
   }
   return {
     scope,

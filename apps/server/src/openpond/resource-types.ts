@@ -1,11 +1,12 @@
 export type ResourceReadRequest = {
   ref: string;
   maxBytes?: number;
+  offsetBytes?: number;
   mode?: "content" | "summary" | "metadata";
 };
 
 export type ResourceSearchRequest = {
-  scope: "workspace" | "git" | "events" | "messages" | "artifacts" | "goal-context" | "sandbox";
+  scope: "workspace" | "git" | "events" | "messages" | "artifacts" | "goal-context" | "tool-outputs" | "sandbox";
   query: string;
   limit?: number;
   filters?: Record<string, unknown>;

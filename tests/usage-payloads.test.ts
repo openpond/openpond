@@ -33,6 +33,7 @@ describe("usage API payloads", () => {
         status: "failed",
         errorType: "Error",
         errorMessage: "provider failed",
+        requestKind: "tool_loop",
         startedAt: "2026-07-04T12:00:00.000Z",
       }),
       usageRecord({
@@ -44,6 +45,7 @@ describe("usage API payloads", () => {
         promptTokens: null,
         completionTokens: null,
         durationMs: 2000,
+        requestKind: "context_compaction",
         startedAt: "2026-07-04T13:00:00.000Z",
       }),
     ];
@@ -138,6 +140,11 @@ describe("usage API payloads", () => {
     expect(payload.sources.map((row) => [row.source, row.requests, row.totalTokens])).toEqual([
       ["provider_usage", 2, 1500],
       ["missing", 1, null],
+    ]);
+    expect(payload.cohorts.map((row) => [row.cohort, row.requests, row.totalTokens])).toEqual([
+      ["foreground", 1, 1200],
+      ["tool_loop", 1, 300],
+      ["compaction", 1, null],
     ]);
   });
 

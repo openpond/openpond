@@ -31,6 +31,18 @@ export const ModelUsageRequestKindSchema = z.enum([
   "other",
 ]);
 
+// These groups intentionally describe the request's execution role, rather
+// than its provider or model. That lets cache telemetry distinguish the
+// stable foreground prefix from tool-loop and compaction traffic.
+export const UsageCacheCohortSchema = z.enum([
+  "foreground",
+  "tool_loop",
+  "compaction",
+  "subagent",
+  "refiner",
+  "other",
+]);
+
 export const ModelUsageVisibilitySchema = z.enum([
   "user_facing",
   "background",
@@ -223,6 +235,10 @@ export const UsageSourceBreakdownSchema = UsageBreakdownBaseSchema.extend({
   source: ModelUsageSourceSchema,
 });
 
+export const UsageCacheCohortBreakdownSchema = UsageBreakdownBaseSchema.extend({
+  cohort: UsageCacheCohortSchema,
+});
+
 export const UsageDailyBucketSchema = z.object({
   date: z.string().trim().min(1),
   totalTokens: z.number().int().nonnegative(),
@@ -281,6 +297,7 @@ export const UsageSummaryResponseSchema = z.object({
   routes: z.array(UsageRouteBreakdownSchema),
   statuses: z.array(UsageStatusBreakdownSchema),
   sources: z.array(UsageSourceBreakdownSchema),
+  cohorts: z.array(UsageCacheCohortBreakdownSchema),
 });
 
 export const UsageRecordsResponseSchema = z.object({
@@ -319,6 +336,7 @@ export type ModelUsageRoute = z.infer<typeof ModelUsageRouteSchema>;
 export type ModelUsageSource = z.infer<typeof ModelUsageSourceSchema>;
 export type ModelUsageCacheTelemetrySource = z.infer<typeof ModelUsageCacheTelemetrySourceSchema>;
 export type ModelUsageRequestKind = z.infer<typeof ModelUsageRequestKindSchema>;
+export type UsageCacheCohort = z.infer<typeof UsageCacheCohortSchema>;
 export type ModelUsageVisibility = z.infer<typeof ModelUsageVisibilitySchema>;
 export type ModelUsageStatus = z.infer<typeof ModelUsageStatusSchema>;
 export type UsageCommandSource = z.infer<typeof UsageCommandSourceSchema>;
@@ -339,6 +357,7 @@ export type UsageCommandBreakdown = z.infer<typeof UsageCommandBreakdownSchema>;
 export type UsageRouteBreakdown = z.infer<typeof UsageRouteBreakdownSchema>;
 export type UsageStatusBreakdown = z.infer<typeof UsageStatusBreakdownSchema>;
 export type UsageSourceBreakdown = z.infer<typeof UsageSourceBreakdownSchema>;
+export type UsageCacheCohortBreakdown = z.infer<typeof UsageCacheCohortBreakdownSchema>;
 export type UsageDailyBucket = z.infer<typeof UsageDailyBucketSchema>;
 export type UsageTotals = z.infer<typeof UsageTotalsSchema>;
 export type UsageSummaryResponse = z.infer<typeof UsageSummaryResponseSchema>;

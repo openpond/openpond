@@ -20,8 +20,8 @@ import {
   type OpenPondCommandExecutionInput,
   type OpenPondCommandRunResult,
 } from "./command-access.js";
-import { formatWorkspaceToolResultForModel } from "./hosted-tool-protocol.js";
 import type { NativeModelToolResult } from "./native-tool-calls.js";
+import { workspaceToolResultToModelToolResult } from "./model-tool-result.js";
 import {
   readSessionResource,
   searchSessionResources,
@@ -131,8 +131,8 @@ export function createResourceModelToolDefinitions(deps: {
         properties: {
           scope: {
             type: "string",
-            enum: ["workspace", "events", "messages", "artifacts", "goal-context", "sandbox", "git"],
-            description: "Resource scope to search. Use workspace for files, sandbox for active sandbox files, git for git status/diff refs, events for runtime events, messages for chat messages, artifacts for artifact refs and check outputs, and goal-context for current goal runtime context events.",
+            enum: ["workspace", "events", "messages", "artifacts", "goal-context", "tool-outputs", "sandbox", "git"],
+            description: "Resource scope to search. Use workspace for files, sandbox for active sandbox files, git for git status/diff refs, events for runtime events, messages for chat messages, artifacts for artifact refs and check outputs, goal-context for current goal runtime context events, and tool-outputs for durable large tool output.",
           },
           query: {
             type: "string",
@@ -175,7 +175,7 @@ export function createResourceModelToolDefinitions(deps: {
       execute: async (context) => {
         const scope = context.args.scope;
         if (
-          (scope === "events" || scope === "messages" || scope === "artifacts" || scope === "goal-context") &&
+          (scope === "events" || scope === "messages" || scope === "artifacts" || scope === "goal-context" || scope === "tool-outputs") &&
           deps.runtimeEvents
         ) {
           const result = searchSessionResources({
@@ -248,13 +248,19 @@ export function createResourceModelToolDefinitions(deps: {
           ref: {
             type: "string",
             minLength: 1,
-            description: "Resource ref such as workspace:file:package.json, workspace:dir:src, sandbox:file:/workspace/app/src/index.ts, sandbox:dir:/workspace/app/src, git:status:working-tree, git:diff:working-tree, git:diff:staged, event:<id>, message:<id>, artifact:<eventId>:<encodedRef>, goal-context:<eventId>, or event:check-result:<eventId>:<index>.",
+            description: "Resource ref such as workspace:file:package.json, workspace:dir:src, sandbox:file:/workspace/app/src/index.ts, sandbox:dir:/workspace/app/src, git:status:working-tree, git:diff:working-tree, git:diff:staged, event:<id>, tool-output:<toolCallId>, message:<id>, artifact:<eventId>:<encodedRef>, goal-context:<eventId>, or event:check-result:<eventId>:<index>.",
           },
           maxBytes: {
             type: "integer",
             minimum: 1,
             maximum: 240000,
             description: "Maximum UTF-8 bytes of content to return.",
+          },
+          offsetBytes: {
+            type: "integer",
+            minimum: 0,
+            maximum: 100000000,
+            description: "Byte offset for paging a durable tool-output resource. Start at 0, then use nextOffsetBytes from metadata.",
           },
           mode: {
             type: "string",
@@ -269,6 +275,7 @@ export function createResourceModelToolDefinitions(deps: {
         const ref = stringArg(context.args, "ref");
         if (
           (ref.startsWith("event:") ||
+            ref.startsWith("tool-output:") ||
             ref.startsWith("message:") ||
             ref.startsWith("artifact:") ||
             ref.startsWith("goal-context:")) &&
@@ -280,6 +287,7 @@ export function createResourceModelToolDefinitions(deps: {
             request: {
               ref,
               ...(typeof context.args.maxBytes === "number" ? { maxBytes: context.args.maxBytes } : {}),
+              ...(typeof context.args.offsetBytes === "number" ? { offsetBytes: context.args.offsetBytes } : {}),
               ...(context.args.mode === "content" || context.args.mode === "summary" || context.args.mode === "metadata"
                 ? { mode: context.args.mode }
                 : {}),
@@ -1469,20 +1477,6 @@ function bindHarnessEpisodeArguments(input: {
     resolved[binding.argument] = input.taskId;
   }
   return resolved;
-}
-
-function workspaceToolResultToModelToolResult(
-  callId: string,
-  name: string,
-  result: WorkspaceToolResult,
-): NativeModelToolResult {
-  return {
-    toolCallId: callId,
-    name,
-    ok: result.ok,
-    contentText: formatWorkspaceToolResultForModel(result),
-    data: result.data,
-  };
 }
 
 function sandboxWorkspaceToolSearchResult(
