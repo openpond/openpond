@@ -36,7 +36,11 @@
   "mac": {
     "icon": "apps/desktop/build/icon.icns",
     "category": "public.app-category.developer-tools",
-    "identity": "-",
+    "forceCodeSigning": true,
+    "hardenedRuntime": true,
+    "entitlements": "apps/desktop/build/entitlements.mac.plist",
+    "entitlementsInherit": "apps/desktop/build/entitlements.mac.inherit.plist",
+    "notarize": true,
     "extendInfo": {
       "NSMicrophoneUsageDescription": "OpenPond uses the microphone for local voice dictation."
     },

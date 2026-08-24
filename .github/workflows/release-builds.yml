@@ -304,7 +304,53 @@ jobs:
       - name: Prepare release build config
         run: pnpm exec tsx scripts/prepare-release.ts --channel "${{ needs.meta.outputs.channel }}" --version "${{ needs.meta.outputs.version }}"
 
-      - run: pnpm run ${{ matrix.package_script }}
+      - name: Package non-macOS desktop
+        if: runner.os != 'macOS'
+        run: pnpm run ${{ matrix.package_script }}
+
+      - name: Sign and notarize macOS desktop
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+
+          for required_name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [[ -z "${!required_name:-}" ]]; then
+              echo "Required macOS signing secret ${required_name} is not configured." >&2
+              exit 1
+            fi
+          done
+
+          : "${RUNNER_TEMP:?RUNNER_TEMP must be set}"
+          export APPLE_API_KEY="${RUNNER_TEMP}/openpond-app-store-connect-api-key.p8"
+          trap 'rm -f "${APPLE_API_KEY}"' EXIT
+          printf '%s' "${APPLE_API_KEY_P8}" | base64 -D > "${APPLE_API_KEY}"
+          chmod 600 "${APPLE_API_KEY}"
+
+          pnpm run "${{ matrix.package_script }}"
+
+      - name: Verify macOS Developer ID signature and notarization ticket
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app_path="$(find release -maxdepth 3 -type d -name '*.app' -print -quit)"
+          if [[ -z "${app_path}" ]]; then
+            echo "No packaged macOS app was found for signature verification." >&2
+            exit 1
+          fi
+
+          codesign --verify --deep --strict --verbose=2 "${app_path}"
+          codesign --display --verbose=2 "${app_path}" 2>&1 | grep -F "Authority=Developer ID Application: Lost Labs LLC (KLX9Q9L86F)"
+          xcrun stapler validate "${app_path}"
+          spctl --assess --type execute --verbose=4 "${app_path}"
 
       - name: Enforce desktop package budgets
         run: pnpm run budgets:desktop-package
