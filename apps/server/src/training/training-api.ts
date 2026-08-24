@@ -12,6 +12,7 @@ import {
   RunTaskMinerRequestSchema,
   TaskCreationRequestSchema,
   TaskMinerConfigSchema,
+  TasksetSchema,
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type BaseModelPreference,
@@ -23,10 +24,15 @@ import {
   type ComparisonAssignmentCandidateInput,
   type HarnessCompatibilityReceipt,
   type PreferenceComparisonPurpose,
+  type PreferenceComparisonRelease,
   type PreferenceReviewer,
   type TasksetRelease,
 } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
+import {
+  computeTasksetHash,
+  materializePortableTasksetRelease,
+} from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
@@ -134,22 +140,26 @@ export function createTrainingApi(deps: {
       const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
       const taskset = await requireTaskset(deps.store, tasksetId);
-      return preferenceComparisons.publishRelease({
+      const published = await preferenceComparisons.publishRelease({
         tasksetId,
         tasksetRelease: await requireReleasedTaskset(deps.benchmarkTasksets, taskset),
         release: PreferenceComparisonReleaseSchema.parse(input.release),
         publisherKey: requiredString(input.publisherKey, "publisherKey"),
         retentionUntil: nullableString(input.retentionUntil),
       });
+      await bindTasksetPreferenceComparison({
+        store: deps.store,
+        taskset,
+        release: published.release,
+      });
+      return published;
     }
     if (action === "preference_comparison_create_assignment") {
       const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
       const tasksetId = requiredString(input.tasksetId, "tasksetId");
-      const taskset = await requireTaskset(deps.store, tasksetId);
       return preferenceComparisons.createAssignment({
         id: requiredString(input.id, "id"),
         tasksetId,
-        tasksetRelease: await requireReleasedTaskset(deps.benchmarkTasksets, taskset),
         comparisonReleaseId: requiredString(input.comparisonReleaseId, "comparisonReleaseId"),
         candidates: requiredRecordArray(input.candidates, "candidates") as ComparisonAssignmentCandidateInput[],
         harnessCompatibilityReceipts: optionalRecordArray(input.harnessCompatibilityReceipts) as HarnessCompatibilityReceipt[] | undefined,
@@ -1078,8 +1088,35 @@ async function requireReleasedTaskset(
   taskset: Awaited<ReturnType<typeof requireTaskset>>,
 ): Promise<TasksetRelease> {
   const release = await benchmarkTasksets.releaseForTaskset(taskset);
-  if (!release) throw new Error("Taskset must have an immutable execution release before creating preference comparisons.");
-  return release;
+  if (release) return release;
+  return materializePortableTasksetRelease({
+    taskset,
+    adapterId: "openpond-preference-comparisons-v1",
+  }).tasksetRelease;
+}
+async function bindTasksetPreferenceComparison(input: {
+  store: SqliteStore;
+  taskset: Awaited<ReturnType<typeof requireTaskset>>;
+  release: PreferenceComparisonRelease;
+}): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const unhashed = TasksetSchema.parse({
+    ...input.taskset,
+    revision: input.taskset.revision + 1,
+    preferenceComparison: {
+      schemaVersion: "openpond.tasksetPreferenceComparisonBinding.v1",
+      releaseId: input.release.id,
+      releaseHash: input.release.contentHash,
+      publishedAt: timestamp,
+      metadata: {},
+    },
+    contentHash: "00000000",
+    updatedAt: timestamp,
+  });
+  await input.store.upsertTaskset(TasksetSchema.parse({
+    ...unhashed,
+    contentHash: computeTasksetHash(unhashed),
+  }));
 }
 function humanPreferenceReviewer(reviewerKey: string): PreferenceReviewer {
   const id = `human-reviewer:${reviewerKey}`;

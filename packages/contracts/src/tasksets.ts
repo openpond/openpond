@@ -87,6 +87,17 @@ export const TasksetBenchmarkBindingSchema = z.object({
   source: z.enum(["builtin", "imported"]),
   metadata: MetadataSchema,
 });
+/**
+ * Product-level pointer to the portable comparison policy. The policy itself
+ * remains in @openpond/evals; product Tasksets retain only its immutable ref.
+ */
+export const TasksetPreferenceComparisonBindingSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetPreferenceComparisonBinding.v1"),
+  releaseId: IdSchema,
+  releaseHash: Sha256Schema,
+  publishedAt: TimestampSchema,
+  metadata: MetadataSchema,
+});
 export const TaskCreationSurfaceSchema = z.enum([
   "slash_train",
   "session_menu",
@@ -646,6 +657,7 @@ export const TasksetSchema = z.object({
   objective: z.string().trim().min(1).max(20_000),
   purpose: TasksetPurposeSchema.default("general"),
   benchmark: TasksetBenchmarkBindingSchema.nullable().default(null),
+  preferenceComparison: TasksetPreferenceComparisonBindingSchema.nullable().default(null),
   status: TasksetStatusSchema,
   sourceRefs: z.array(TasksetSourceRefSchema).min(1).max(100_000),
   datasetArtifact: DatasetArtifactManifestSchema.nullable().optional(),

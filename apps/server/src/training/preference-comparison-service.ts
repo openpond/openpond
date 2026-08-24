@@ -54,6 +54,7 @@ export function createPreferenceComparisonService(deps: {
       schemaVersion: "openpond.preferenceComparisonReleaseRecord.v1",
       id: input.release.id,
       tasksetId: input.tasksetId,
+      tasksetRelease: input.tasksetRelease,
       release: input.release,
       publishedBy: input.publisherKey,
       sourceConsent: "authorized",
@@ -65,7 +66,6 @@ export function createPreferenceComparisonService(deps: {
   async function createAssignment(input: {
     id: string;
     tasksetId: string;
-    tasksetRelease: TasksetRelease;
     comparisonReleaseId: string;
     candidates: readonly ComparisonAssignmentCandidateInput[];
     harnessCompatibilityReceipts?: readonly HarnessCompatibilityReceipt[];
@@ -81,14 +81,14 @@ export function createPreferenceComparisonService(deps: {
     const assignment = createComparisonAssignment({
       id: input.id,
       comparisonRelease: releaseRecord.release,
-      taskset: input.tasksetRelease,
+      taskset: releaseRecord.tasksetRelease,
       candidates: input.candidates,
       harnessCompatibilityReceipts: input.harnessCompatibilityReceipts,
       purpose: input.purpose,
       presentedCandidateOrder: input.presentedCandidateOrder,
       createdAt: now(),
     });
-    enforceSplitPurpose({ assignment, tasksetRelease: input.tasksetRelease });
+    enforceSplitPurpose({ assignment, tasksetRelease: releaseRecord.tasksetRelease });
     return deps.store.savePreferenceComparisonAssignment({
       schemaVersion: "openpond.preferenceComparisonAssignmentRecord.v1",
       id: assignment.id,

@@ -54,6 +54,7 @@ describe("preference comparison persistence", () => {
         schemaVersion: "openpond.preferenceComparisonReleaseRecord.v1",
         id: release.id,
         tasksetId: "taskset-local",
+        tasksetRelease: genericToolConformance.taskset,
         release,
         publishedBy: "publisher-local",
         sourceConsent: "authorized",

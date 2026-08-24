@@ -6,6 +6,7 @@ import {
   PreferenceComparisonReleaseSchema,
   PreferenceReceiptSchema,
 } from "@openpond/evals/preferences";
+import { TasksetReleaseSchema } from "@openpond/evals";
 
 const IdSchema = z.string().trim().min(1).max(500);
 const TimestampSchema = z.iso.datetime({ offset: true });
@@ -14,6 +15,7 @@ export const PreferenceComparisonReleaseRecordSchema = z.object({
   schemaVersion: z.literal("openpond.preferenceComparisonReleaseRecord.v1"),
   id: IdSchema,
   tasksetId: IdSchema,
+  tasksetRelease: TasksetReleaseSchema,
   release: PreferenceComparisonReleaseSchema,
   publishedBy: IdSchema,
   sourceConsent: z.enum(["authorized", "revoked"]),
