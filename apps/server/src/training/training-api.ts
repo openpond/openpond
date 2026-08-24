@@ -198,6 +198,18 @@ export function createTrainingApi(deps: {
         startedAt: requiredString(input.startedAt, "startedAt"),
       });
     }
+    if (action === "preference_comparison_model_review") {
+      const actorKey = requiredString(input.reviewerKey, "reviewerKey");
+      return requirePreferenceComparisons(deps.preferenceComparisons).submitModelReceipt({
+        id: requiredString(input.id, "id"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        assignmentId: requiredString(input.assignmentId, "assignmentId"),
+        actorKey,
+        model: ChatModelRefSchema.parse(input.model),
+        rubric: requiredString(input.rubric, "rubric"),
+        signal: new AbortController().signal,
+      });
+    }
     if (action === "preference_comparison_unreviewable") {
       return requirePreferenceComparisons(deps.preferenceComparisons).markUnreviewable({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),

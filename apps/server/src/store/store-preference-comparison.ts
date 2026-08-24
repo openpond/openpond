@@ -125,13 +125,20 @@ export class SqlitePreferenceComparisonStore extends SqliteEvaluationResultStore
         saved = existing;
         return;
       }
-      const assignment = await this.claimPreferenceComparisonAssignmentRecordInWrite({ current, reviewerKey: record.reviewerKey, updatedAt: record.submittedAt });
-      if (!assignment) throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+      // Calibration records one human and one model receipt for the same
+      // immutable assignment. Once either reviewer submits, retain the
+      // submitted state while admitting a distinct reviewer exactly once.
+      if (current.state !== "submitted") {
+        const assignment = await this.claimPreferenceComparisonAssignmentRecordInWrite({ current, reviewerKey: record.reviewerKey, updatedAt: record.submittedAt });
+        if (!assignment) throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+      }
       await this.run(
         `INSERT INTO preference_comparison_submissions (id, taskset_id, assignment_id, reviewer_key, receipt_hash, payload, submitted_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [record.id, record.tasksetId, record.assignmentId, record.reviewerKey, record.receipt.contentHash, JSON.stringify(record), record.submittedAt],
       );
-      await this.writePreferenceComparisonAssignmentInWrite({ ...assignment, state: "submitted", reviewerKey: record.reviewerKey, updatedAt: record.submittedAt });
+      if (current.state !== "submitted") {
+        await this.writePreferenceComparisonAssignmentInWrite({ ...current, state: "submitted", reviewerKey: record.reviewerKey, updatedAt: record.submittedAt });
+      }
       saved = record;
     });
     this.writeQueue = write.catch(() => undefined);
