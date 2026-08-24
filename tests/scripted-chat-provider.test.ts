@@ -10,6 +10,7 @@ import {
   createScriptedOpenPondChatStream,
   OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL,
   OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL,
+  OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
   OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL,
   OPENPOND_HARNESS_SCRIPTED_MODELS_ENV,
   scriptedOpenPondModelsEnabled,
@@ -76,6 +77,40 @@ describe("scripted OpenPond chat provider", () => {
     const pending = stream.next();
     controller.abort(new Error("visible stop test"));
     await expect(pending).rejects.toThrow("visible stop test");
+  });
+
+  test("scripts the packaged long-turn resource reads and compaction summary", async () => {
+    const initial = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
+      messages: [{ role: "user", content: "Read the three deterministic logs." }],
+    })));
+    const calls = initial
+      .filter((delta): delta is Extract<HostedChatTurnDelta, { type: "tool_call_delta" }> =>
+        delta.type === "tool_call_delta"
+      )
+      .flatMap((delta) => delta.toolCalls);
+    expect(calls).toHaveLength(3);
+    expect(calls.map((call) => JSON.parse(call.function?.arguments ?? "{}"))).toEqual(
+      [0, 1, 2].map((index) => ({
+        ref: `workspace:file:large-${index}.log`,
+        maxBytes: 40_000,
+        mode: "content",
+      })),
+    );
+    expect(initial.at(-1)).toMatchObject({ type: "finish", finishReason: "tool_calls" });
+
+    const compacted = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
+      messages: [
+        { role: "system", content: "You compact conversation history for OpenPond App." },
+        { role: "user", content: "Compact the long-turn transcript." },
+      ],
+    })));
+    const summary = textFromDeltas(compacted);
+    expect(summary).toContain("## Goal");
+    expect(summary).toContain("workspace:file:large-2.log");
+    expect(summary).toContain("DESKTOP-LONG-TURN-COMPACTION-OK");
+    expect(compacted.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
   test("loads a Profile skill through the real model-tool protocol", async () => {

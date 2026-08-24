@@ -15,6 +15,8 @@ export const OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL = "openpond-scripted-chat-tw
 export const OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL = "openpond-scripted-chat-delayed-stream";
 export const OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL =
   "openpond-scripted-chat-interrupt-recovery";
+export const OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL =
+  "openpond-scripted-packaged-long-turn-32k";
 export const OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL =
   "openpond-scripted-profile-skill-load";
 export const OPENPOND_SCRIPTED_SUBAGENT_LIFECYCLE_MODEL = "openpond-scripted-subagent-lifecycle";
@@ -96,6 +98,10 @@ export async function* streamScriptedOpenPondChatTurn(
     yield* streamInterruptRecoveryChat(input);
     return;
   }
+  if (model === OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL) {
+    yield* streamPackagedLongTurn(input);
+    return;
+  }
   if (model === OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL) {
     yield* streamProfileSkillLoad(input);
     return;
@@ -131,6 +137,60 @@ async function* streamInterruptRecoveryChat(
   await delayWithSignal(8_000, input.signal);
   yield textDelta(" should not appear after stop");
   yield finishDelta("stop");
+}
+
+async function* streamPackagedLongTurn(
+  input: HostedChatTurnInput,
+): AsyncGenerator<HostedChatTurnDelta, void, unknown> {
+  const isCompactionRequest = input.messages.some((message) =>
+    message.role === "system" &&
+    typeof message.content === "string" &&
+    message.content.includes("You compact conversation history for OpenPond App.")
+  );
+  if (isCompactionRequest) {
+    yield textDelta([
+      "## Goal",
+      "- Complete the deterministic packaged-desktop long-turn proof.",
+      "## Constraints & Preferences",
+      "- Preserve the exact three resource reads and finish without repeating them.",
+      "## Progress",
+      "- Read workspace:file:large-0.log, workspace:file:large-1.log, and workspace:file:large-2.log successfully.",
+      "## Key Decisions",
+      "- Resume directly with the final response after automatic compaction.",
+      "## Next Steps",
+      "- Emit DESKTOP-LONG-TURN-COMPACTION-OK exactly once.",
+      "## Critical Context",
+      "- All three deterministic reads completed before compaction.",
+      "## Relevant Files",
+      "- large-0.log",
+      "- large-1.log",
+      "- large-2.log",
+    ].join("\n"));
+    yield finishDelta("stop");
+    return;
+  }
+
+  const hasCompactedContext = input.messages.some((message) =>
+    message.role === "system" &&
+    typeof message.content === "string" &&
+    message.content.includes("Conversation summary from earlier turns:")
+  );
+  if (hasCompactedContext) {
+    await delayWithSignal(2_500, input.signal);
+    yield textDelta("All three deterministic resource reads survived compaction. ");
+    yield textDelta("DESKTOP-LONG-TURN-COMPACTION-OK");
+    yield finishDelta("stop");
+    return;
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    yield toolCallDelta("resource_read", {
+      ref: `workspace:file:large-${index}.log`,
+      maxBytes: 40_000,
+      mode: "content",
+    });
+  }
+  yield finishDelta("tool_calls");
 }
 
 function* streamProfileSkillLoad(
