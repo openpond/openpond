@@ -20,6 +20,7 @@ import type {
   PreferenceComparisonAssignmentRecord,
   PreferenceComparisonReleaseRecord,
 } from "./preference-comparison-records.js";
+import type { createPreferenceComparisonModelJudge } from "./preference-comparison-model-judge.js";
 
 export type PreferenceComparisonAuthorization = (input: {
   action: "publish" | "review" | "calibrate";
@@ -30,6 +31,13 @@ export type PreferenceComparisonAuthorization = (input: {
 export function createPreferenceComparisonService(deps: {
   store: SqliteStore;
   authorize: PreferenceComparisonAuthorization;
+  /**
+   * Prepared here, but deliberately invoked only by the calibrated hosted
+   * review workflow. Keeping the judge at this boundary makes the native
+   * artifact path a production dependency without treating it as a generic
+   * metadata-only grader.
+   */
+  modelJudge?: ReturnType<typeof createPreferenceComparisonModelJudge>;
   now?: () => string;
 }) {
   const now = deps.now ?? (() => new Date().toISOString());
@@ -261,6 +269,7 @@ export function createPreferenceComparisonService(deps: {
     markUnreviewable,
     saveCalibration,
     projectModelReward,
+    modelJudge: deps.modelJudge,
   };
 }
 
