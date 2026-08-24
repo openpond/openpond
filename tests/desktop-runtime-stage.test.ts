@@ -171,13 +171,29 @@ describe("desktop runtime staging", () => {
       extraResources?: Array<{ from?: string }>;
       npmRebuild?: boolean;
       artifactName?: string;
-      mac?: { identity?: string };
+      mac?: {
+        identity?: string;
+        forceCodeSigning?: boolean;
+        hardenedRuntime?: boolean;
+        entitlements?: string;
+        entitlementsInherit?: string;
+        notarize?: boolean;
+      };
     };
 
     expect(config.directories?.app).toBe("apps/desktop/stage/app");
     expect(config.artifactName).toBe("openpond-${version}-${os}-${arch}.${ext}");
     expect(config.npmRebuild).toBe(false);
-    expect(config.mac?.identity).toBe("-");
+    expect(config.mac?.identity).toBeUndefined();
+    expect(config.mac?.forceCodeSigning).toBe(true);
+    expect(config.mac?.hardenedRuntime).toBe(true);
+    expect(config.mac?.entitlements).toBe(
+      "apps/desktop/build/entitlements.mac.plist"
+    );
+    expect(config.mac?.entitlementsInherit).toBe(
+      "apps/desktop/build/entitlements.mac.inherit.plist"
+    );
+    expect(config.mac?.notarize).toBe(true);
     expect((config as { linux?: { syncDesktopName?: boolean } }).linux?.syncDesktopName).toBe(true);
     expect(config.files).toContain("!node_modules/**/*");
     expect(config.extraResources?.map((entry) => entry.from)).toContain(
