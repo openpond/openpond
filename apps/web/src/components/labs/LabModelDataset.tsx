@@ -13,6 +13,7 @@ import type { ShowAppToast } from "../../app/app-state";
 import { DetailSection } from "../training/DetailSection";
 import type { useTraining } from "../../hooks/useTraining";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { PreferenceComparisonReview } from "./PreferenceComparisonReview";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
 type DatasetDetailTab = "overview" | "cases" | "scoring";
@@ -344,6 +345,11 @@ export function LabModelDataset({
             ))}
           </div>
         </DetailSection>
+        <PreferenceComparisonReview
+          reviewerKey={taskset.profileId}
+          tasksetId={taskset.id}
+          training={training}
+        />
       </>
     );
   }

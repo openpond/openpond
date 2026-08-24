@@ -116,6 +116,12 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/resume$/, method: "POST", action: "resume_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "GET", action: "preference_comparison_list", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "POST", action: "preference_comparison_publish", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/assignments$/, method: "POST", action: "preference_comparison_create_assignment", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/next$/, method: "POST", action: "preference_comparison_next", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/submit$/, method: "POST", action: "preference_comparison_submit", key: "tasksetId", assignmentKey: "assignmentId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/unreviewable$/, method: "POST", action: "preference_comparison_unreviewable", key: "tasksetId", assignmentKey: "assignmentId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/, method: "POST", action: "run_taskset_benchmark", key: "tasksetId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
     { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
@@ -148,7 +154,11 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     const match = item.pattern.exec(requestUrl.pathname);
     if (!match || request.method !== item.method) continue;
     const body = request.method === "GET" || request.method === "DELETE" ? {} : await readJson(request);
-    const payload = { ...(item.wrap ? { [item.wrap]: body } : record(body)), [item.key]: decodeURIComponent(match[1]!) };
+    const payload = {
+      ...(item.wrap ? { [item.wrap]: body } : record(body)),
+      [item.key]: decodeURIComponent(match[1]!),
+      ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
+    };
     sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl));
     return true;
   }

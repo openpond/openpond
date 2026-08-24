@@ -129,6 +129,7 @@ export type {
 export type {
   HostedChatCompletion,
   HostedChatContinuation,
+  HostedChatImageInput,
   HostedChatMessage,
   HostedChatRequestOptions,
   HostedChatRole,

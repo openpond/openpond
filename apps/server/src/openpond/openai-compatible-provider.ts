@@ -501,11 +501,25 @@ function buildChatCompletionBody(input: {
 
 function chatCompletionMessages(messages: HostedChatMessage[]): Array<Record<string, unknown>> {
   return messages.map((message) => {
-    const { continuation, ...projected } = message;
+    const { continuation, images, ...projected } = message;
+    const content = images?.length
+      ? [
+          ...(typeof message.content === "string" && message.content.trim()
+            ? [{ type: "text", text: message.content }]
+            : []),
+          ...images.map((image) => ({
+            type: "image_url",
+            image_url: {
+              url: image.url,
+              ...(image.detail ? { detail: image.detail } : {}),
+            },
+          })),
+        ]
+      : message.content;
     if (continuation?.kind === "chat_completions_reasoning") {
-      return { ...projected, reasoning_content: continuation.reasoningContent };
+      return { ...projected, ...(content !== undefined ? { content } : {}), reasoning_content: continuation.reasoningContent };
     }
-    return projected;
+    return { ...projected, ...(content !== undefined ? { content } : {}) };
   });
 }
 
@@ -564,15 +578,22 @@ function responsesInputFromMessages(messages: HostedChatMessage[]): {
     if (message.continuation?.kind === "responses_reasoning_items") {
       input.push(...message.continuation.items);
     }
-    if (content.trim()) {
+    if (content.trim() || message.images?.length) {
       input.push({
         type: "message",
         role: message.role,
         content: [
-          {
-            type: message.role === "assistant" ? "output_text" : "input_text",
-            text: content,
-          },
+          ...(content.trim()
+            ? [{
+                type: message.role === "assistant" ? "output_text" : "input_text",
+                text: content,
+              }]
+            : []),
+          ...(message.images ?? []).map((image) => ({
+            type: "input_image",
+            image_url: image.url,
+            ...(image.detail ? { detail: image.detail } : {}),
+          })),
         ],
       });
     }

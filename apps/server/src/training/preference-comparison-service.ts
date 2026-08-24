@@ -107,15 +107,8 @@ export function createPreferenceComparisonService(deps: {
     reviewerKey: string;
   }): Promise<PreferenceComparisonAssignmentRecord | null> {
     await requireAuthorized("review", input.tasksetId, input.reviewerKey);
-    const candidates = await deps.store.listPreferenceComparisonAssignments({
+    return deps.store.claimNextPreferenceComparisonAssignment({
       tasksetId: input.tasksetId,
-      reviewerKey: input.reviewerKey,
-      states: ["queued", "in_review"],
-    });
-    const next = candidates.find((candidate) => candidate.state === "queued" || candidate.reviewerKey === input.reviewerKey);
-    if (!next) return null;
-    return deps.store.claimPreferenceComparisonAssignment({
-      id: next.id,
       reviewerKey: input.reviewerKey,
       updatedAt: now(),
     });

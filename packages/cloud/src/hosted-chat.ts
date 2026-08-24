@@ -47,9 +47,15 @@ export type HostedChatContinuation =
       items: Array<Record<string, unknown>>;
     };
 
+export type HostedChatImageInput = {
+  url: string;
+  detail?: "low" | "high" | "auto";
+};
+
 export type HostedChatMessage = {
   role: HostedChatRole;
   content?: string | null;
+  images?: HostedChatImageInput[];
   continuation?: HostedChatContinuation;
   name?: string;
   tool_call_id?: string;

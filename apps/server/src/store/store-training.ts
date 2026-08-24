@@ -734,20 +734,38 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
     reviewerKey: string;
     updatedAt: string;
   }): Promise<PreferenceComparisonAssignmentRecord> {
-    const current = await this.getPreferenceComparisonAssignment(input.id);
-    if (!current) throw new Error("Preference comparison assignment was not found.");
-    if (current.state === "queued") {
-      return this.savePreferenceComparisonAssignment({
-        ...current,
-        state: "in_review",
+    const claimed = await this.claimPreferenceComparisonAssignmentRecord(input);
+    if (!claimed) throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+    return claimed;
+  }
+
+  async claimNextPreferenceComparisonAssignment(input: {
+    tasksetId: string;
+    reviewerKey: string;
+    updatedAt: string;
+  }): Promise<PreferenceComparisonAssignmentRecord | null> {
+    await this.ready;
+    let claimed: PreferenceComparisonAssignmentRecord | null = null;
+    const write = this.writeQueue.then(async () => {
+      const row = await this.get<PayloadRow>(
+        `SELECT payload FROM preference_comparison_assignments
+         WHERE taskset_id = ?
+           AND (state = 'queued' OR (state = 'in_review' AND reviewer_key = ?))
+         ORDER BY CASE state WHEN 'in_review' THEN 0 ELSE 1 END, created_at ASC
+         LIMIT 1`,
+        [input.tasksetId, input.reviewerKey],
+      );
+      if (!row) return;
+      const current = PreferenceComparisonAssignmentRecordSchema.parse(JSON.parse(row.payload));
+      claimed = await this.claimPreferenceComparisonAssignmentRecordInWrite({
+        current,
         reviewerKey: input.reviewerKey,
         updatedAt: input.updatedAt,
       });
-    }
-    if (current.state === "in_review" && current.reviewerKey === input.reviewerKey) {
-      return current;
-    }
-    throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return claimed;
   }
 
   async markPreferenceComparisonUnreviewable(input: {
@@ -770,51 +788,138 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
     recordInput: PreferenceComparisonSubmissionRecord,
   ): Promise<PreferenceComparisonSubmissionRecord> {
     const record = PreferenceComparisonSubmissionRecordSchema.parse(recordInput);
-    const assignment = await this.claimPreferenceComparisonAssignment({
-      id: record.assignmentId,
-      reviewerKey: record.reviewerKey,
-      updatedAt: record.submittedAt,
-    });
-    if (assignment.tasksetId !== record.tasksetId) {
-      throw new Error("Preference comparison submission Taskset does not match its assignment.");
-    }
-    if (
-      record.receipt.assignmentRef.id !== assignment.assignment.id
-      || record.receipt.assignmentRef.contentHash !== assignment.assignment.contentHash
-    ) {
-      throw new Error("Preference comparison receipt does not belong to its assignment.");
-    }
-    const existing = await this.getPreferenceComparisonSubmission({
-      assignmentId: record.assignmentId,
-      reviewerKey: record.reviewerKey,
-    });
-    if (existing) {
-      if (existing.receipt.contentHash !== record.receipt.contentHash) {
-        throw new Error("Preference comparison submission is already recorded for this reviewer and assignment.");
+    await this.ready;
+    let saved: PreferenceComparisonSubmissionRecord | null = null;
+    const write = this.writeQueue.then(async () => {
+      const assignmentRow = await this.get<PayloadRow>(
+        "SELECT payload FROM preference_comparison_assignments WHERE id = ?",
+        [record.assignmentId],
+      );
+      if (!assignmentRow) throw new Error("Preference comparison assignment was not found.");
+      const current = PreferenceComparisonAssignmentRecordSchema.parse(JSON.parse(assignmentRow.payload));
+      const releaseRow = await this.get<PayloadRow>(
+        "SELECT payload FROM preference_comparison_releases WHERE id = ?",
+        [current.assignment.comparisonRelease.id],
+      );
+      if (!releaseRow) throw new Error("Preference comparison release was not found.");
+      const release = PreferenceComparisonReleaseRecordSchema.parse(JSON.parse(releaseRow.payload));
+      if (release.sourceConsent !== "authorized") {
+        throw new Error("Preference comparison submissions cannot use revoked source consent.");
       }
-      return existing;
+      if (current.tasksetId !== record.tasksetId) {
+        throw new Error("Preference comparison submission Taskset does not match its assignment.");
+      }
+      if (
+        record.receipt.assignmentRef.id !== current.assignment.id
+        || record.receipt.assignmentRef.contentHash !== current.assignment.contentHash
+      ) {
+        throw new Error("Preference comparison receipt does not belong to its assignment.");
+      }
+      const existingRow = await this.get<PayloadRow>(
+        "SELECT payload FROM preference_comparison_submissions WHERE assignment_id = ? AND reviewer_key = ?",
+        [record.assignmentId, record.reviewerKey],
+      );
+      if (existingRow) {
+        const existing = PreferenceComparisonSubmissionRecordSchema.parse(JSON.parse(existingRow.payload));
+        if (existing.receipt.contentHash !== record.receipt.contentHash) {
+          throw new Error("Preference comparison submission is already recorded for this reviewer and assignment.");
+        }
+        saved = existing;
+        return;
+      }
+      const assignment = await this.claimPreferenceComparisonAssignmentRecordInWrite({
+        current,
+        reviewerKey: record.reviewerKey,
+        updatedAt: record.submittedAt,
+      });
+      if (!assignment) throw new Error("Preference comparison assignment is unavailable for this reviewer.");
+      await this.run(
+        `INSERT INTO preference_comparison_submissions
+          (id, taskset_id, assignment_id, reviewer_key, receipt_hash, payload, submitted_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          record.id,
+          record.tasksetId,
+          record.assignmentId,
+          record.reviewerKey,
+          record.receipt.contentHash,
+          JSON.stringify(record),
+          record.submittedAt,
+        ],
+      );
+      await this.writePreferenceComparisonAssignmentInWrite({
+        ...assignment,
+        state: "submitted",
+        reviewerKey: record.reviewerKey,
+        updatedAt: record.submittedAt,
+      });
+      saved = record;
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    if (!saved) throw new Error("Preference comparison submission was not saved.");
+    return saved;
+  }
+
+  private async claimPreferenceComparisonAssignmentRecord(input: {
+    id: string;
+    reviewerKey: string;
+    updatedAt: string;
+  }): Promise<PreferenceComparisonAssignmentRecord | null> {
+    await this.ready;
+    let claimed: PreferenceComparisonAssignmentRecord | null = null;
+    const write = this.writeQueue.then(async () => {
+      const row = await this.get<PayloadRow>(
+        "SELECT payload FROM preference_comparison_assignments WHERE id = ?",
+        [input.id],
+      );
+      if (!row) throw new Error("Preference comparison assignment was not found.");
+      const current = PreferenceComparisonAssignmentRecordSchema.parse(JSON.parse(row.payload));
+      claimed = await this.claimPreferenceComparisonAssignmentRecordInWrite({
+        current,
+        reviewerKey: input.reviewerKey,
+        updatedAt: input.updatedAt,
+      });
+    });
+    this.writeQueue = write.catch(() => undefined);
+    await write;
+    return claimed;
+  }
+
+  private async claimPreferenceComparisonAssignmentRecordInWrite(input: {
+    current: PreferenceComparisonAssignmentRecord;
+    reviewerKey: string;
+    updatedAt: string;
+  }): Promise<PreferenceComparisonAssignmentRecord | null> {
+    if (input.current.state === "in_review" && input.current.reviewerKey === input.reviewerKey) {
+      return input.current;
     }
-    await this.upsertPayload(
-      `INSERT INTO preference_comparison_submissions
-        (id, taskset_id, assignment_id, reviewer_key, receipt_hash, payload, submitted_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    if (input.current.state !== "queued") return null;
+    const claimed: PreferenceComparisonAssignmentRecord = {
+      ...input.current,
+      state: "in_review",
+      reviewerKey: input.reviewerKey,
+      updatedAt: input.updatedAt,
+    };
+    await this.writePreferenceComparisonAssignmentInWrite(claimed);
+    return claimed;
+  }
+
+  private async writePreferenceComparisonAssignmentInWrite(
+    record: PreferenceComparisonAssignmentRecord,
+  ): Promise<void> {
+    await this.run(
+      `UPDATE preference_comparison_assignments
+       SET state = ?, reviewer_key = ?, payload = ?, updated_at = ?
+       WHERE id = ?`,
       [
-        record.id,
-        record.tasksetId,
-        record.assignmentId,
+        record.state,
         record.reviewerKey,
-        record.receipt.contentHash,
         JSON.stringify(record),
-        record.submittedAt,
+        record.updatedAt,
+        record.id,
       ],
     );
-    await this.savePreferenceComparisonAssignment({
-      ...assignment,
-      state: "submitted",
-      reviewerKey: record.reviewerKey,
-      updatedAt: record.submittedAt,
-    });
-    return record;
   }
 
   async getPreferenceComparisonSubmission(input: {

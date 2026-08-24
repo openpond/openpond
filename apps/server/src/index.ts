@@ -179,6 +179,7 @@ import { createDatasetArtifactService } from "./training/dataset-artifact-servic
 import { createDatasetImportService } from "./training/dataset-imports/import-service.js";
 import { createHarnessRefinerBenchmarkService } from "./training/harness-refiner-benchmark-service.js";
 import { createTaskAttemptModelJudge } from "./training/task-attempt-grader-evidence.js";
+import { createPreferenceComparisonService } from "./training/preference-comparison-service.js";
 import { createHarnessRefinerBenchmarkModelStream } from "./training/harness-refiner-benchmark-model.js";
 import { resolveBenchmarkUpstreamModel } from "./training/training-model-runtime.js";
 import { createBenchmarkRuntimeComposition } from "./training/benchmark-runtime-composition.js";
@@ -599,6 +600,12 @@ export async function createOpenPondServer(
     store,
     modelText: trainingModelText,
   });
+  const preferenceComparisonService = createPreferenceComparisonService({
+    store,
+    // The local server is already protected by its bearer boundary. Hosted
+    // deployments replace this with organization-scoped authorization.
+    authorize: ({ reviewerKey }) => Boolean(reviewerKey.trim()),
+  });
   const taskEvaluationService = createTaskEvaluationService({
     store,
     storeDir,
@@ -722,6 +729,7 @@ export async function createOpenPondServer(
     datasetImports: datasetImportService,
     benchmarkTasksets,
     harnessRefinerBenchmarks,
+    preferenceComparisons: preferenceComparisonService,
   });
   const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({

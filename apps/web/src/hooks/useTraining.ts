@@ -31,6 +31,22 @@ import type {
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 
+export type PreferenceComparisonReview = {
+  assignment: {
+    id: string;
+    assignment: {
+      presentedCandidateOrder: string[];
+    };
+  };
+  taskPrompt: unknown;
+  candidates: Array<{
+    label: string;
+    attemptId: string;
+    output: Record<string, unknown>;
+    artifacts: Array<{ id: string; mediaType: string | null; sizeBytes: number }>;
+  }>;
+};
+
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
   const { connection, profileId } = input;
   const [payload, setPayload] = useState<TrainingStateResponse | null>(null);
@@ -305,6 +321,42 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       },
     ),
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
+    nextPreferenceComparison: (tasksetId: string, reviewerKey: string) => mutate<PreferenceComparisonReview | null>(
+      "next-preference-comparison",
+      `/tasksets/${encodeURIComponent(tasksetId)}/preference-comparisons/next`,
+      { reviewerKey },
+    ),
+    submitPreferenceComparison: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      reviewerKey: string;
+      order: string[][];
+      rejectAll: boolean;
+      startedAt: string;
+    }) => mutate(
+      "submit-preference-comparison",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/submit`,
+      input,
+    ),
+    markPreferenceComparisonUnreviewable: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      reviewerKey: string;
+      reason: string;
+    }) => mutate(
+      "mark-preference-comparison-unreviewable",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/unreviewable`,
+      input,
+    ),
+    preferenceArtifactUrl: async (artifactId: string) => {
+      if (!connection) return null;
+      const response = await fetch(
+        `${connection.serverUrl}/v1/training/artifacts/${encodeURIComponent(artifactId)}/download`,
+        { headers: { Authorization: `Bearer ${connection.token}` } },
+      );
+      if (!response.ok) throw new Error(await response.text());
+      return URL.createObjectURL(await response.blob());
+    },
     readiness: (tasksetId: string) => mutate("readiness", "/readiness", { tasksetId }),
     previewExpertBootstrap: (tasksetId: string) => mutate<CrossSystemExpertBootstrapPreview>(
       "preview-expert-bootstrap",
