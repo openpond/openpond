@@ -16,6 +16,8 @@ import {
 } from "@openpond/evals";
 
 import type { SqliteStore } from "../store/store.js";
+import type { ChatModelRef } from "@openpond/contracts";
+import { contentHash } from "@openpond/harness";
 import type {
   PreferenceComparisonAssignmentRecord,
   PreferenceComparisonReleaseRecord,
@@ -164,6 +166,55 @@ export function createPreferenceComparisonService(deps: {
     return record.receipt;
   }
 
+  async function submitModelReceipt(input: {
+    id: string;
+    tasksetId: string;
+    assignmentId: string;
+    actorKey: string;
+    model: ChatModelRef;
+    rubric: string;
+    signal: AbortSignal;
+  }) {
+    await requireAuthorized("calibrate", input.tasksetId, input.actorKey);
+    if (!deps.modelJudge) throw new Error("Preference model review is unavailable in this server build.");
+    const assignmentRecord = await requireAssignment(input.tasksetId, input.assignmentId);
+    const release = await requireRelease(input.tasksetId, assignmentRecord.assignment.comparisonRelease.id);
+    if (contentHash(input.rubric) !== release.release.rubricRef.contentHash) {
+      throw new Error("Preference model review rubric does not match the immutable comparison release.");
+    }
+    const taskset = await deps.store.getTaskset(input.tasksetId);
+    const task = taskset?.tasks.find((candidate) => candidate.id === assignmentRecord.assignment.taskRef.id) ?? null;
+    const reviewer: PreferenceReviewer = {
+      kind: "model",
+      releaseRef: {
+        id: `model-reviewer:${input.model.providerId}:${input.model.modelId}`,
+        contentHash: contentHash({ schemaVersion: "openpond.preferenceModelReviewer.v1", model: input.model }),
+      },
+    };
+    const reviewerKey = `${reviewer.releaseRef.id}:${reviewer.releaseRef.contentHash}`;
+    const outcome = await deps.modelJudge.judge({
+      id: input.id,
+      assignment: assignmentRecord.assignment,
+      comparisonRelease: release.release,
+      reviewer,
+      model: input.model,
+      rubric: input.rubric,
+      taskPrompt: typeof task?.input.prompt === "string" ? task.input.prompt : null,
+      signal: input.signal,
+    });
+    if (outcome.status === "unscorable") return outcome;
+    const record = await deps.store.savePreferenceComparisonSubmission({
+      schemaVersion: "openpond.preferenceComparisonSubmissionRecord.v1",
+      id: outcome.receipt.id,
+      tasksetId: input.tasksetId,
+      assignmentId: input.assignmentId,
+      reviewerKey,
+      receipt: outcome.receipt,
+      submittedAt: now(),
+    });
+    return { ...outcome, receipt: record.receipt };
+  }
+
   async function markUnreviewable(input: {
     tasksetId: string;
     assignmentId: string;
@@ -266,6 +317,7 @@ export function createPreferenceComparisonService(deps: {
     createAssignment,
     nextAssignment,
     submitHumanReceipt,
+    submitModelReceipt,
     markUnreviewable,
     saveCalibration,
     projectModelReward,
