@@ -1,5 +1,6 @@
 import type { HostedChatMessage } from "@openpond/cloud";
 import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
+import type { HostedRequestBudget } from "../context-usage.js";
 import type { ContinuationCapsule } from "./continuation-capsule.js";
 
 export type { FileLedgerEntry, FileLedgerOperation } from "./file-ledger-types.js";
@@ -115,6 +116,7 @@ export type HostedAutoCompactionDecision = {
   usableContextTokens: number;
   maxContextTokens: number;
   tokenSource: "heuristic";
+  requestBudget: HostedRequestBudget;
 };
 
 export type HostedCompactionInput = {

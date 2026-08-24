@@ -5,11 +5,24 @@ import {
   type HostedContextProvider,
   type ProviderSettings,
 } from "@openpond/contracts";
-import type { HostedChatMessage } from "@openpond/cloud";
+import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 
 const ESTIMATED_CHARS_PER_TOKEN = 4;
 const DEFAULT_HOSTED_CONTEXT_TOKENS = 128_000;
 const MIN_CONTEXT_RESERVE_TOKENS = 8_000;
+const DEFAULT_REQUESTED_OUTPUT_TOKENS = 8_192;
+const MIN_REQUEST_SAFETY_RESERVE_TOKENS = 1_024;
+
+export type HostedRequestBudget = {
+  messageTokens: number;
+  toolDefinitionTokens: number;
+  continuationTokens: number;
+  outputAllowanceTokens: number;
+  safetyReserveTokens: number;
+  projectedTokens: number;
+  maxContextTokens: number | null;
+  tokenSource: "heuristic";
+};
 
 export function hostedContextProvider(provider: ChatProvider): HostedContextProvider | null {
   return provider === "openpond" ? provider : null;
@@ -46,11 +59,93 @@ export function trustedProviderContextLimit(input: {
   return null;
 }
 
+export function trustedProviderOutputLimit(input: {
+  provider: ChatProvider;
+  model: string | null | undefined;
+  settings?: ProviderSettings | null;
+}): number | null {
+  const model = input.model?.trim();
+  if (!model) return null;
+  const cachedModel = input.settings?.modelCaches[input.provider]?.models.find(
+    (candidate) => candidate.id === model,
+  );
+  return cachedModel?.outputLimit ?? null;
+}
+
 export function estimateHostedMessageTokens(messages: HostedChatMessage[]): number {
   const characterCount = messages.reduce((total, message) => {
     return total + message.role.length + (message.name?.length ?? 0) + (message.content?.length ?? 0) + 8;
   }, 0);
   return Math.max(1, Math.ceil(characterCount / ESTIMATED_CHARS_PER_TOKEN) + messages.length * 4);
+}
+
+export function hostedRequestedOutputTokens(input: {
+  maxContextTokens?: number | null;
+  modelOutputLimit?: number | null;
+}): number {
+  const contextBound = input.maxContextTokens
+    ? Math.max(256, Math.floor(input.maxContextTokens / 8))
+    : DEFAULT_REQUESTED_OUTPUT_TOKENS;
+  const modelBound = input.modelOutputLimit && input.modelOutputLimit > 0
+    ? Math.floor(input.modelOutputLimit)
+    : Number.MAX_SAFE_INTEGER;
+  return Math.max(1, Math.min(DEFAULT_REQUESTED_OUTPUT_TOKENS, contextBound, modelBound));
+}
+
+export function estimateHostedRequestBudget(input: {
+  provider: ChatProvider;
+  messages: HostedChatMessage[];
+  tools?: readonly HostedChatTool[];
+  maxOutputTokens: number;
+  maxContextTokens?: number | null;
+}): HostedRequestBudget {
+  const maxContextTokens = input.maxContextTokens ?? null;
+  const messageTokens = estimateHostedMessageTokens(input.messages);
+  const toolDefinitionTokens = estimatedSerializedTokens(input.tools ?? []);
+  const continuationTokens = estimatedSerializedTokens(
+    input.messages.flatMap((message) => {
+      const structural: Record<string, unknown> = {};
+      if (message.continuation !== undefined) structural.continuation = message.continuation;
+      if (message.tool_calls !== undefined) structural.tool_calls = message.tool_calls;
+      if (message.tool_call_id !== undefined) structural.tool_call_id = message.tool_call_id;
+      return Object.keys(structural).length > 0 ? [structural] : [];
+    }),
+  );
+  const outputAllowanceTokens = Math.max(1, Math.floor(input.maxOutputTokens));
+  const safetyReserveTokens = requestSafetyReserveTokens(input.provider, maxContextTokens);
+  return {
+    messageTokens,
+    toolDefinitionTokens,
+    continuationTokens,
+    outputAllowanceTokens,
+    safetyReserveTokens,
+    projectedTokens:
+      messageTokens
+      + toolDefinitionTokens
+      + continuationTokens
+      + outputAllowanceTokens
+      + safetyReserveTokens,
+    maxContextTokens,
+    tokenSource: "heuristic",
+  };
+}
+
+function estimatedSerializedTokens(value: unknown): number {
+  if (Array.isArray(value) && value.length === 0) return 0;
+  const serialized = JSON.stringify(value);
+  if (!serialized || serialized === "[]" || serialized === "{}") return 0;
+  return Math.max(1, Math.ceil(serialized.length / ESTIMATED_CHARS_PER_TOKEN));
+}
+
+function requestSafetyReserveTokens(
+  _provider: ChatProvider,
+  maxContextTokens: number | null,
+): number {
+  if (!maxContextTokens) return MIN_REQUEST_SAFETY_RESERVE_TOKENS * 2;
+  return Math.min(
+    Math.max(1, Math.floor(maxContextTokens / 8)),
+    Math.max(MIN_REQUEST_SAFETY_RESERVE_TOKENS, Math.ceil(maxContextTokens * 0.02)),
+  );
 }
 
 function numericUsageValue(usage: unknown, keys: string[]): number | null {

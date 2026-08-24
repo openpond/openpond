@@ -6,9 +6,10 @@ import type {
   Turn,
 } from "@openpond/contracts";
 import { streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn } from "@openpond/runtime";
+import type { HostedChatTool } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
 import {
-  estimateHostedMessageTokens,
+  estimateHostedRequestBudget,
   trustedProviderContextLimit,
 } from "../../openpond/context-usage.js";
 import { resolveContextCompactionAdapter } from "../../openpond/context-adapter.js";
@@ -28,6 +29,7 @@ type HostedMessages = ReturnType<typeof buildChatMessagesForProvider>;
 export function createHostedCompactionRuntime(deps: {
   loadAppPreferences: NonNullable<TurnRunnerDependencies["loadAppPreferences"]>;
   appendRuntimeEvent: TurnRunnerDependencies["appendRuntimeEvent"];
+  runtimeEventsForSession: TurnRunnerDependencies["store"]["runtimeEventsForSession"];
   streamOpenPondHostedChatTurn?: typeof defaultStreamOpenPondHostedChatTurn;
   upsertModelUsageRecord(record: ModelUsageRecord): Promise<void>;
   throwIfInterrupted(signal: AbortSignal): void;
@@ -57,21 +59,35 @@ export function createHostedCompactionRuntime(deps: {
       requestId: string;
       signal?: AbortSignal;
     }) => AsyncGenerator<ContextCompactionStreamDelta, void, unknown>;
+    messagesOverride?: HostedMessages;
+    tools?: readonly HostedChatTool[];
+    maxOutputTokens?: number;
+    force?: boolean;
+    failClosed?: boolean;
+    reason?: "auto" | "overflow_recovery";
+    roundIndex?: number;
   }): Promise<RuntimeEvent[]> {
     throwIfInterrupted(params.signal);
     const preferences = await loadAppPreferences();
     if (!preferences.contextCompaction.autoEnabled) return params.priorEvents;
     const adapter = resolveContextCompactionAdapter(params.provider);
     if (adapter.kind !== "app_summary") return params.priorEvents;
-    const projectedMessages = buildChatMessagesForProvider(params.priorEvents, params.prompt, params.systemPrompt);
+    const projectedMessages = params.messagesOverride
+      ?? buildChatMessagesForProvider(params.priorEvents, params.prompt, params.systemPrompt);
     const decision = hostedAutoCompactionDecision({
       provider: params.provider,
       model: params.model,
       messages: projectedMessages,
+      tools: params.tools,
+      maxOutputTokens: params.maxOutputTokens,
       maxContextTokens: params.maxContextTokens,
       triggerPercent: preferences.contextCompaction.triggerPercent,
     });
-    if (!decision.shouldCompact || params.priorEvents.length === 0) return params.priorEvents;
+    if ((!decision.shouldCompact && !params.force) || params.priorEvents.length === 0) return params.priorEvents;
+    const reason = params.reason ?? "auto";
+    const compactionOrdinal = params.priorEvents.filter(
+      (item) => item.name === "session.compaction.started" && item.turnId === params.turn.id,
+    ).length;
 
     const startedEvent = event({
       sessionId: params.session.id,
@@ -85,7 +101,9 @@ export function createHostedCompactionRuntime(deps: {
         version: 1,
         provider: params.provider,
         model: params.model,
-        reason: "auto",
+        reason,
+        roundIndex: params.roundIndex ?? null,
+        requestBudget: decision.requestBudget,
         projectedTokens: decision.projectedTokens,
         thresholdTokens: decision.thresholdTokens,
         usableContextTokens: decision.usableContextTokens,
@@ -104,6 +122,7 @@ export function createHostedCompactionRuntime(deps: {
         model: params.model,
         maxContextTokens: params.maxContextTokens,
         signal: params.signal,
+        compactionOrdinal,
         streamCompactionChatTurn: params.streamCompactionChatTurn,
       });
       throwIfInterrupted(params.signal);
@@ -119,7 +138,7 @@ export function createHostedCompactionRuntime(deps: {
           version: 1,
           provider: params.provider,
           model: result.model,
-          reason: "auto",
+          reason,
           mode: "summary",
           summary: result.summary,
           compactedThroughEventId: result.compactedThroughEventId,
@@ -139,6 +158,8 @@ export function createHostedCompactionRuntime(deps: {
           projectedTokens: decision.projectedTokens,
           thresholdTokens: decision.thresholdTokens,
           usableContextTokens: decision.usableContextTokens,
+          roundIndex: params.roundIndex ?? null,
+          requestBudget: decision.requestBudget,
         },
       });
       await appendRuntimeEvent(completedEvent);
@@ -159,39 +180,102 @@ export function createHostedCompactionRuntime(deps: {
           version: 1,
           provider: params.provider,
           model: params.model,
-          reason: "auto",
+          reason,
           error: message,
           projectedTokens: decision.projectedTokens,
           thresholdTokens: decision.thresholdTokens,
           usableContextTokens: decision.usableContextTokens,
           maxContextTokens: decision.maxContextTokens,
           tokenSource: decision.tokenSource,
+          roundIndex: params.roundIndex ?? null,
+          requestBudget: decision.requestBudget,
         },
       });
       await appendRuntimeEvent(failedEvent);
+      if (params.failClosed) throw error;
       return [...params.priorEvents, startedEvent, failedEvent];
     }
   }
 
-  async function throwIfAutoCompactionOffWouldExceedLimit(input: {
-    provider: ChatProvider;
+  async function prepareHostedProviderRequest(params: {
+    session: Session;
+    turn: Turn;
+    provider: HostedCompactionProvider;
     model: string;
-    messages: HostedMessages;
     maxContextTokens?: number | null;
-  }): Promise<void> {
-    const preferences = await loadAppPreferences();
-    if (preferences.contextCompaction.autoEnabled) return;
+    messages: HostedMessages;
+    tools?: readonly HostedChatTool[];
+    maxOutputTokens: number;
+    prompt: string;
+    systemPrompt: string;
+    signal: AbortSignal;
+    roundIndex: number;
+    force?: boolean;
+    streamCompactionChatTurn?: (input: {
+      provider: ChatProvider;
+      model: string;
+      messages: HostedMessages;
+      requestId: string;
+      signal?: AbortSignal;
+    }) => AsyncGenerator<ContextCompactionStreamDelta, void, unknown>;
+  }): Promise<{
+    messages: HostedMessages;
+    compacted: boolean;
+    requestBudget: ReturnType<typeof estimateHostedRequestBudget>;
+  }> {
     const maxContextTokens =
-      input.maxContextTokens ?? trustedProviderContextLimit({ provider: input.provider, model: input.model });
-    if (!maxContextTokens) return;
-    const projectedTokens = estimateHostedMessageTokens(input.messages);
-    if (projectedTokens < maxContextTokens) return;
-    throw new Error(
-      [
-        `This chat is at the context limit for ${input.provider}/${input.model}.`,
-        "Start a new chat or turn auto compaction on to continue.",
-      ].join(" "),
+      params.maxContextTokens
+      ?? trustedProviderContextLimit({ provider: params.provider, model: params.model });
+    const beforeBudget = estimateHostedRequestBudget({
+      provider: params.provider,
+      messages: params.messages,
+      tools: params.tools,
+      maxOutputTokens: params.maxOutputTokens,
+      maxContextTokens,
+    });
+    if (!maxContextTokens && !params.force) {
+      return {
+        messages: params.messages,
+        compacted: false,
+        requestBudget: beforeBudget,
+      };
+    }
+    const priorEvents = await deps.runtimeEventsForSession(params.session.id);
+    const preparedEvents = await maybeAutoCompactHostedContext({
+      ...params,
+      maxContextTokens,
+      priorEvents,
+      messagesOverride: params.messages,
+      failClosed: Boolean(params.force),
+      reason: params.force ? "overflow_recovery" : "auto",
+    });
+    const compacted = preparedEvents.some(
+      (item, index) => index >= priorEvents.length && item.name === "session.compaction.completed",
     );
+    const messages = compacted
+      ? buildChatMessagesForProvider(preparedEvents, "", params.systemPrompt)
+      : params.messages;
+    const requestBudget = estimateHostedRequestBudget({
+      provider: params.provider,
+      messages,
+      tools: params.tools,
+      maxOutputTokens: params.maxOutputTokens,
+      maxContextTokens,
+    });
+    if (maxContextTokens && requestBudget.projectedTokens >= maxContextTokens) {
+      throw new Error([
+        `The physical provider request for ${params.provider}/${params.model} exceeds its context window`,
+        `(${requestBudget.projectedTokens}/${maxContextTokens} projected tokens).`,
+        compacted
+          ? "Compaction completed, but tool schemas, output allowance, and retained context still do not fit."
+          : "Turn auto compaction on, reduce the active tool/profile surface, or start a new task.",
+      ].join(" "));
+    }
+    return {
+      messages,
+      compacted,
+      requestBudget: compacted ? requestBudget : beforeBudget,
+    };
   }
 
   async function runRecordedHostedContextCompaction(input: {
@@ -202,6 +286,7 @@ export function createHostedCompactionRuntime(deps: {
     model: string;
     maxContextTokens?: number | null;
     signal: AbortSignal;
+    compactionOrdinal?: number;
     streamCompactionChatTurn?: (input: {
       provider: ChatProvider;
       model: string;
@@ -214,7 +299,8 @@ export function createHostedCompactionRuntime(deps: {
       recorder: Awaited<ReturnType<typeof startProviderRequestUsageRecorder>> | null;
       finalized: boolean;
     } = { recorder: null, finalized: false };
-    const requestId = `${input.turn.id}:context-compaction:0`;
+    const requestOrdinal = input.compactionOrdinal ?? 0;
+    const requestId = `${input.turn.id}:context-compaction:${requestOrdinal}`;
 
     async function failUsageRecorder(error: unknown): Promise<void> {
       if (!usageState.recorder || usageState.finalized) return;
@@ -265,7 +351,7 @@ export function createHostedCompactionRuntime(deps: {
             provider: input.provider,
             model: streamInput.model ?? input.model,
             requestId,
-            requestOrdinal: 0,
+            requestOrdinal,
             requestKind: "context_compaction",
             upsert: safeUpsertModelUsageRecord,
           });
@@ -296,6 +382,6 @@ export function createHostedCompactionRuntime(deps: {
 
   return {
     maybeAutoCompactHostedContext,
-    throwIfAutoCompactionOffWouldExceedLimit,
+    prepareHostedProviderRequest,
   };
 }

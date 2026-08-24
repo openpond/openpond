@@ -252,6 +252,7 @@ export type ProviderRuntime = {
     messages: HostedMessages;
     tools?: HostedChatTool[];
     toolChoice?: HostedChatToolChoice;
+    maxOutputTokens?: number;
     requestId: string;
     reasoningEffort?: CodexReasoningEffort;
     signal: AbortSignal;

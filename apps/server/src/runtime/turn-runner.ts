@@ -28,7 +28,10 @@ import {
   formatPromptWithAttachmentContext,
   materializeChatAttachments,
 } from "../chat-attachments.js";
-import { trustedProviderContextLimit } from "../openpond/context-usage.js";
+import {
+  trustedProviderContextLimit,
+  trustedProviderOutputLimit,
+} from "../openpond/context-usage.js";
 import { buildChatMessagesForProvider } from "../openpond/hosted-chat.js";
 import type { ResolvedConnectedAppContext } from "../openpond/connected-app-context.js";
 import { isOpenAiCompatibleProviderId } from "../openpond/openai-compatible-provider.js";
@@ -457,12 +460,11 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     appendRuntimeEvent,
     completeTurn,
   });
-  const {
-    maybeAutoCompactHostedContext,
-    throwIfAutoCompactionOffWouldExceedLimit,
-  } = createHostedCompactionRuntime({
+  const { prepareHostedProviderRequest } = createHostedCompactionRuntime({
     loadAppPreferences,
     appendRuntimeEvent,
+    runtimeEventsForSession: (sessionId, query) =>
+      store.runtimeEventsForSession(sessionId, query),
     streamOpenPondHostedChatTurn,
     upsertModelUsageRecord: safeUpsertModelUsageRecord,
     throwIfInterrupted,
@@ -576,6 +578,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
     readProfileSkillForModel,
     executeWorkspaceTool,
     appendAssistantText,
+    prepareHostedProviderRequest,
     throwIfInterrupted,
   });
   const {
@@ -1252,26 +1255,12 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
             extraSystemContext,
           }
         );
-        const hostedPriorEvents = await maybeAutoCompactHostedContext({
-          session,
-          turn,
-          provider: "openpond",
-          model,
-          priorEvents,
-          prompt: providerPrompt,
-          systemPrompt,
-          signal: controller.signal,
-        });
+        const hostedPriorEvents = priorEvents;
         const messages = buildChatMessagesForProvider(
           hostedPriorEvents,
           providerPrompt,
           systemPrompt
         );
-        await throwIfAutoCompactionOffWouldExceedLimit({
-          provider: "openpond",
-          model,
-          messages,
-        });
         session = await runHostedToolLoop({
           appPreferences,
           session,
@@ -1280,6 +1269,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           provider: "openpond",
           model,
           messages,
+          systemPrompt,
           resourceEvents: hostedPriorEvents,
           mentionedApps,
           connectedApps,
@@ -1300,6 +1290,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               tools: options?.tools,
               toolChoice: options?.toolChoice,
               requestId: options?.requestId ?? turn.id,
+              maxTokens: options?.maxOutputTokens,
               reasoningEffort: turnPermissions.codexReasoningEffort,
               signal: controller.signal,
             })) {
@@ -1350,97 +1341,92 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           )?.id ??
           null;
         const contextLimitTokens = trustedProviderContextLimit({
-            provider: session.provider,
-            model: runtimeModel,
-            settings: providerSettings,
-          });
+          provider: session.provider,
+          model: runtimeModel,
+          settings: providerSettings,
+        });
+        const modelOutputLimit = trustedProviderOutputLimit({
+          provider: session.provider,
+          model: runtimeModel,
+          settings: providerSettings,
+        });
         await updateStoredTurn(turn.id, (current) => ({
           ...current,
           providerTurnId,
         }));
         const systemPrompt = await hostedSystemPrompt(
-                HOSTED_CHAT_SYSTEM_PROMPT,
-                personalizationSoul,
-                session,
-                {
-                  mentionedApps,
-                  openPondActionCatalog:
-                    sessionUsesRepositoryWork(session)
-                      ? input.openPondActionCatalog
-                      : [],
-                  openPondProfileSkills: profileSkillRuntime.skills,
-                  loadedProfileSkills,
-                  connectedApps,
-                  toolInstructionMode: hostedToolInstructionModeForProvider(
-                    hostedToolFlags,
-                    session.provider
-                  ),
-                  actionCatalogInstructionMode:
-                    actionCatalogInstructionModeForProvider(session.provider),
-                  profileSkillInstructionMode:
-                    profileSkillInstructionModeForProvider(
-                      session.provider,
-                      profileSkillRuntime
-                    ),
-                  browserControlAvailable:
-                    sessionUsesRepositoryWork(session) &&
-                    browserControlAvailable(session),
-                  extraSystemContext,
-                }
-              );
-        const hostedPriorEvents = await maybeAutoCompactHostedContext({
-              session,
-              turn,
-              provider: session.provider,
-              model: runtimeModel ?? "default",
-              maxContextTokens: contextLimitTokens,
-              priorEvents,
-              prompt: providerPrompt,
-              systemPrompt,
-              signal: controller.signal,
-              streamCompactionChatTurn: async function* (streamInput) {
-                if (!streamLocalByokChatTurn) {
-                  throw new Error(
-                    `Provider ${session.provider} is not configured for local BYOK chat.`
-                  );
-                }
-                for await (const delta of streamLocalByokChatTurn({
-                  providerId: session.provider,
-                  modelId: runtimeModel,
-                  messages: streamInput.messages,
-                  requestId: streamInput.requestId,
-                  reasoningEffort: turnPermissions.codexReasoningEffort,
-                  signal: streamInput.signal ?? controller.signal,
-                })) {
-                  if (delta.text) yield { text: delta.text, raw: delta.raw };
-                  if (delta.reasoningText)
-                    yield {
-                      reasoningText: delta.reasoningText,
-                      raw: delta.raw,
-                    };
-                  if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
-                }
-              },
-            });
+          HOSTED_CHAT_SYSTEM_PROMPT,
+          personalizationSoul,
+          session,
+          {
+            mentionedApps,
+            openPondActionCatalog:
+              sessionUsesRepositoryWork(session)
+                ? input.openPondActionCatalog
+                : [],
+            openPondProfileSkills: profileSkillRuntime.skills,
+            loadedProfileSkills,
+            connectedApps,
+            toolInstructionMode: hostedToolInstructionModeForProvider(
+              hostedToolFlags,
+              session.provider
+            ),
+            actionCatalogInstructionMode:
+              actionCatalogInstructionModeForProvider(session.provider),
+            profileSkillInstructionMode:
+              profileSkillInstructionModeForProvider(
+                session.provider,
+                profileSkillRuntime
+              ),
+            browserControlAvailable:
+              sessionUsesRepositoryWork(session) &&
+              browserControlAvailable(session),
+            extraSystemContext,
+          }
+        );
+        const streamByokCompactionChatTurn = async function* (streamInput: {
+          provider: ChatProvider;
+          model: string;
+          messages: ReturnType<typeof buildChatMessagesForProvider>;
+          requestId: string;
+          signal?: AbortSignal;
+        }) {
+          if (!streamLocalByokChatTurn) {
+            throw new Error(
+              `Provider ${session.provider} is not configured for local BYOK chat.`
+            );
+          }
+          for await (const delta of streamLocalByokChatTurn({
+            providerId: session.provider,
+            modelId: runtimeModel,
+            messages: streamInput.messages,
+            requestId: streamInput.requestId,
+            reasoningEffort: turnPermissions.codexReasoningEffort,
+            signal: streamInput.signal ?? controller.signal,
+          })) {
+            if (delta.text) yield { text: delta.text, raw: delta.raw };
+            if (delta.reasoningText)
+              yield { reasoningText: delta.reasoningText, raw: delta.raw };
+            if (delta.usage) yield { usage: delta.usage, raw: delta.raw };
+          }
+        };
+        const hostedPriorEvents = priorEvents;
         const messages = buildChatMessagesForProvider(
           hostedPriorEvents,
           providerPrompt,
           systemPrompt
         );
-        await throwIfAutoCompactionOffWouldExceedLimit({
-          provider: session.provider,
-          model: runtimeModel ?? "default",
-          messages,
-          maxContextTokens: contextLimitTokens,
-        });
         session = await runHostedToolLoop({
           appPreferences,
+          streamCompactionChatTurn: streamByokCompactionChatTurn,
           session,
           turn,
           turnPermissions,
           provider: session.provider,
           model: runtimeModel ?? "default",
+          modelOutputLimit,
           messages,
+          systemPrompt,
           contextLimitTokens,
           resourceEvents: hostedPriorEvents,
           mentionedApps,
@@ -1467,6 +1453,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
               messages: loopMessages,
               tools: options?.tools,
               toolChoice: options?.toolChoice,
+              maxOutputTokens: options?.maxOutputTokens,
               requestId: options?.requestId ?? turn.id,
               signal: controller.signal,
             })) {

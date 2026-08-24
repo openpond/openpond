@@ -22,7 +22,10 @@ import {
 } from "@openpond/agent-runtime";
 import type { HostedChatTool, HostedChatToolChoice } from "@openpond/cloud";
 import { buildChatMessagesForProvider } from "../../openpond/hosted-chat.js";
-import { trustedProviderContextLimit } from "../../openpond/context-usage.js";
+import {
+  hostedRequestedOutputTokens,
+  trustedProviderContextLimit,
+} from "../../openpond/context-usage.js";
 import {
   extractProfileSkillReadRequests,
   extractWorkspaceToolRequests,
@@ -71,6 +74,8 @@ import {
   RESOURCE_TEXT_FALLBACK_ACTIONS,
 } from "./tool-loop-action-policy.js";
 import { subagentModelAsideMessages } from "./tool-loop-subagent-asides.js";
+import type { createHostedCompactionRuntime } from "./compaction-runtime.js";
+import { runWithSingleContextOverflowRecovery } from "./context-overflow-recovery.js";
 
 export { hostedTrainingHarnessRound } from "./training-harness-round.js";
 
@@ -79,7 +84,11 @@ type HostedToolLoopStreamOptions = {
   tools?: HostedChatTool[];
   toolChoice?: HostedChatToolChoice;
   requestId?: string;
+  maxOutputTokens?: number;
 };
+type PrepareHostedProviderRequest = ReturnType<
+  typeof createHostedCompactionRuntime
+>["prepareHostedProviderRequest"];
 
 export function createHostedToolLoopRuntime(deps: {
   hostedToolFlags: HostedToolRolloutFlags;
@@ -152,6 +161,7 @@ export function createHostedToolLoopRuntime(deps: {
   }): Promise<string>;
   executeWorkspaceTool: TurnRunnerDependencies["executeWorkspaceTool"];
   appendAssistantText: TurnRunnerDependencies["appendAssistantText"];
+  prepareHostedProviderRequest: PrepareHostedProviderRequest;
   throwIfInterrupted(signal: AbortSignal): void;
 }) {
   const hostedToolFlags = deps.hostedToolFlags;
@@ -170,6 +180,7 @@ export function createHostedToolLoopRuntime(deps: {
   const readProfileSkillForModel = deps.readProfileSkillForModel;
   const executeWorkspaceTool = deps.executeWorkspaceTool;
   const appendAssistantText = deps.appendAssistantText;
+  const prepareHostedProviderRequest = deps.prepareHostedProviderRequest;
   const throwIfInterrupted = deps.throwIfInterrupted;
   const store = { runtimeEventsForSession: deps.runtimeEventsForSession };
   const getSession = deps.getSession;
@@ -179,6 +190,7 @@ export function createHostedToolLoopRuntime(deps: {
     turnPermissions: SubagentTurnPermissions;
     provider: ChatProvider;
     model: string;
+    modelOutputLimit?: number | null;
     messages: HostedMessages;
     contextLimitTokens?: number | null;
     resourceEvents: RuntimeEvent[];
@@ -191,6 +203,7 @@ export function createHostedToolLoopRuntime(deps: {
       storageName?: string;
     }>;
     userPrompt: string;
+    systemPrompt: string;
     workspaceDiffBaseline: WorkspaceDiffSummary | null;
     signal: AbortSignal;
     stream: (
@@ -198,6 +211,7 @@ export function createHostedToolLoopRuntime(deps: {
       options?: HostedToolLoopStreamOptions
     ) => AsyncGenerator<HostedToolLoopDelta, void, unknown>;
     appPreferences: AppPreferences | null;
+    streamCompactionChatTurn?: Parameters<PrepareHostedProviderRequest>[0]["streamCompactionChatTurn"];
   }): Promise<Session> {
     let session = params.session;
     const messages = [...params.messages];
@@ -207,6 +221,10 @@ export function createHostedToolLoopRuntime(deps: {
         provider: params.provider,
         model: params.model,
       });
+    const maxOutputTokens = hostedRequestedOutputTokens({
+      maxContextTokens: contextLimitTokens,
+      modelOutputLimit: params.modelOutputLimit,
+    });
     const invalidRequestCounts = new Map<string, number>();
     let workspaceToolResultCount = 0;
     let toolRequiredCorrectionSent = false;
@@ -305,6 +323,36 @@ export function createHostedToolLoopRuntime(deps: {
           0
         );
     const deliveredSubagentAsideKeys = new Set<string>();
+    let overflowRecoveryUsed = false;
+    function replaceMessages(nextMessages: HostedMessages): void {
+      messages.splice(0, messages.length, ...nextMessages);
+    }
+    async function recordRequestBudget(input: {
+      roundIndex: number;
+      requestId: string;
+      retry: boolean;
+      budget: Awaited<ReturnType<PrepareHostedProviderRequest>>["requestBudget"];
+    }): Promise<void> {
+      if (input.budget.maxContextTokens === null) return;
+      await appendRuntimeEvent(event({
+        sessionId: session.id,
+        turnId: params.turn.id,
+        name: "diagnostic",
+        source: "server",
+        appId: session.appId,
+        status: "completed",
+        output: "Prepared hosted provider request budget",
+        data: {
+          kind: "hosted_request_budget",
+          provider: params.provider,
+          model: params.model,
+          roundIndex: input.roundIndex,
+          requestId: input.requestId,
+          retry: input.retry,
+          ...input.budget,
+        },
+      }));
+    }
     async function appendContextUsage(input: {
       messages: HostedMessages;
       usage?: unknown;
@@ -349,75 +397,135 @@ export function createHostedToolLoopRuntime(deps: {
       maxRounds: maxHostedWorkspaceToolRounds,
       signal: params.signal,
       runRound: async (round) => {
-      const { index } = round;
-      throwIfInterrupted(params.signal);
-      await appendPendingSubagentAsides();
-      await appendContextUsage({ messages });
-      const nativeToolAccumulator = new NativeToolCallAccumulator();
-      const usageRequestId = round.requestId;
-      const usageRecorder = await startProviderRequestUsageRecorder({
-        session,
-        turn: params.turn,
-        provider: params.provider,
-        model: params.model,
-        requestId: usageRequestId,
-        requestOrdinal: index,
-        upsert: safeUpsertModelUsageRecord,
-      });
-      const trainingHarnessRound = hostedTrainingHarnessRound({
-        trainingHarness,
-        completedActionCount: completedTrainingHarnessActions,
-        nativeTools,
-      });
-      const requestTools = trainingHarnessRound?.tools ?? nativeTools;
-      const toolChoice: HostedChatToolChoice =
-        trainingHarnessRound?.toolChoice ?? "auto";
-      const providerRound = await runProviderRound({
-        stream: params.stream(
+        const { index } = round;
+        throwIfInterrupted(params.signal);
+        await appendPendingSubagentAsides();
+        const trainingHarnessRound = hostedTrainingHarnessRound({
+          trainingHarness,
+          completedActionCount: completedTrainingHarnessActions,
+          nativeTools,
+        });
+        const requestTools = trainingHarnessRound?.tools ?? nativeTools;
+        const toolChoice: HostedChatToolChoice =
+          trainingHarnessRound?.toolChoice ?? "auto";
+        const prepared = await prepareHostedProviderRequest({
+          session,
+          turn: params.turn,
+          provider: params.provider,
+          model: params.model,
+          maxContextTokens: contextLimitTokens,
           messages,
-          requestTools.length > 0
-            ? { tools: requestTools, toolChoice, requestId: usageRequestId }
-            : { requestId: usageRequestId },
-        ),
-        signal: params.signal,
-        onDelta: async (delta) => {
-          throwIfInterrupted(params.signal);
-          usageRecorder.observeDelta(delta);
-          if (delta.reasoningText) {
-            await appendRuntimeEvent(
-              event({
-                sessionId: session.id,
-                turnId: params.turn.id,
-                name: "assistant.reasoning.delta",
-                source: "provider",
-                appId: session.appId,
-                output: delta.reasoningText,
-              })
-            );
-          }
-          if (delta.text) {
-            await appendAssistantText(session, params.turn.id, delta.text);
-          }
-        },
-        onCompleted: async () => usageRecorder.complete(),
-        onFailed: async (error) => {
-          let recordedError = error;
-          if (params.signal.aborted) {
-            try {
-              throwIfInterrupted(params.signal);
-            } catch (interruptedError) {
-              recordedError = interruptedError;
-            }
-          }
-          await usageRecorder.fail(
-            recordedError,
-            params.signal.aborted ||
-              (error instanceof Error && error.name === "AbortError")
-              ? "interrupted"
-              : "failed",
-          );
-        },
-      });
+          tools: requestTools,
+          maxOutputTokens,
+          prompt: params.userPrompt,
+          systemPrompt: params.systemPrompt,
+          signal: params.signal,
+          roundIndex: index,
+          streamCompactionChatTurn: params.streamCompactionChatTurn,
+        });
+        replaceMessages(prepared.messages);
+        await recordRequestBudget({
+          roundIndex: index,
+          requestId: round.requestId,
+          retry: false,
+          budget: prepared.requestBudget,
+        });
+        await appendContextUsage({ messages });
+        const nativeToolAccumulator = new NativeToolCallAccumulator();
+        const providerRound = await runWithSingleContextOverflowRecovery({
+          runAttempt: async ({ attempt, markOutputEscaped }) => {
+            const usageRequestId = attempt === 0
+              ? round.requestId
+              : `${round.requestId}:overflow-retry`;
+            const usageRecorder = await startProviderRequestUsageRecorder({
+              session,
+              turn: params.turn,
+              provider: params.provider,
+              model: params.model,
+              requestId: usageRequestId,
+              requestOrdinal: index,
+              upsert: safeUpsertModelUsageRecord,
+            });
+            return runProviderRound({
+              stream: params.stream(
+                messages,
+                requestTools.length > 0
+                  ? { tools: requestTools, toolChoice, requestId: usageRequestId, maxOutputTokens }
+                  : { requestId: usageRequestId, maxOutputTokens },
+              ),
+              signal: params.signal,
+              onDelta: async (delta) => {
+                throwIfInterrupted(params.signal);
+                usageRecorder.observeDelta(delta);
+                if (delta.text || delta.reasoningText || (delta.toolCalls && delta.toolCalls.length > 0)) {
+                  markOutputEscaped();
+                }
+                if (delta.reasoningText) {
+                  await appendRuntimeEvent(
+                    event({
+                      sessionId: session.id,
+                      turnId: params.turn.id,
+                      name: "assistant.reasoning.delta",
+                      source: "provider",
+                      appId: session.appId,
+                      output: delta.reasoningText,
+                    })
+                  );
+                }
+                if (delta.text) {
+                  await appendAssistantText(session, params.turn.id, delta.text);
+                }
+              },
+              onCompleted: async () => usageRecorder.complete(),
+              onFailed: async (error) => {
+                let recordedError = error;
+                if (params.signal.aborted) {
+                  try {
+                    throwIfInterrupted(params.signal);
+                  } catch (interruptedError) {
+                    recordedError = interruptedError;
+                  }
+                }
+                await usageRecorder.fail(
+                  recordedError,
+                  params.signal.aborted ||
+                    (error instanceof Error && error.name === "AbortError")
+                    ? "interrupted"
+                    : "failed",
+                );
+              },
+            });
+          },
+          recover: async () => {
+            if (overflowRecoveryUsed) return false;
+            overflowRecoveryUsed = true;
+            const recovered = await prepareHostedProviderRequest({
+              session,
+              turn: params.turn,
+              provider: params.provider,
+              model: params.model,
+              maxContextTokens: contextLimitTokens,
+              messages,
+              tools: requestTools,
+              maxOutputTokens,
+              prompt: params.userPrompt,
+              systemPrompt: params.systemPrompt,
+              signal: params.signal,
+              roundIndex: index,
+              force: true,
+              streamCompactionChatTurn: params.streamCompactionChatTurn,
+            });
+            if (!recovered.compacted) return false;
+            replaceMessages(recovered.messages);
+            await recordRequestBudget({
+              roundIndex: index,
+              requestId: `${round.requestId}:overflow-retry`,
+              retry: true,
+              budget: recovered.requestBudget,
+            });
+            return true;
+          },
+        });
       const assistantText = providerRound.text;
       const latestContinuation = providerRound.continuation;
       const latestUsage = providerRound.usage;

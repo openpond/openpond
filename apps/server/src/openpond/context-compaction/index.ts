@@ -8,11 +8,13 @@ import {
   agentCompactionDecision,
   runAgentCompactionProgram,
 } from "@openpond/agent-runtime";
-import type { HostedChatMessage } from "@openpond/cloud";
+import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 import {
+  estimateHostedRequestBudget,
   estimateHostedMessageTokens,
   hostedContextLimit,
   hostedContextProvider,
+  hostedRequestedOutputTokens,
   usableHostedContextLimit,
 } from "../context-usage.js";
 import { buildChatMessagesForProvider } from "../hosted-chat.js";
@@ -52,26 +54,41 @@ export function hostedAutoCompactionDecision(input: {
   provider: HostedCompactionProvider;
   model: string;
   messages: HostedChatMessage[];
+  tools?: readonly HostedChatTool[];
+  maxOutputTokens?: number;
   maxContextTokens?: number | null;
   triggerPercent?: number;
 }): HostedAutoCompactionDecision {
   const hostedProvider = hostedContextProvider(input.provider);
   const maxContextTokens = input.maxContextTokens ?? (hostedProvider ? hostedContextLimit(hostedProvider, input.model) : null);
+  const requestBudget = estimateHostedRequestBudget({
+    provider: input.provider,
+    messages: input.messages,
+    tools: input.tools,
+    maxOutputTokens: input.maxOutputTokens ?? hostedRequestedOutputTokens({ maxContextTokens }),
+    maxContextTokens,
+  });
   if (!maxContextTokens) {
-    return agentCompactionDecision({
-      projectedTokens: estimateHostedMessageTokens(input.messages),
-      maxContextTokens: null,
-      usableContextTokens: null,
-      triggerPercent: input.triggerPercent,
-    });
+    return {
+      ...agentCompactionDecision({
+        projectedTokens: requestBudget.projectedTokens,
+        maxContextTokens: null,
+        usableContextTokens: null,
+        triggerPercent: input.triggerPercent,
+      }),
+      requestBudget,
+    };
   }
   const usableContextTokens = usableHostedContextLimit(maxContextTokens);
-  return agentCompactionDecision({
-    projectedTokens: estimateHostedMessageTokens(input.messages),
-    usableContextTokens,
-    maxContextTokens,
-    triggerPercent: input.triggerPercent,
-  });
+  return {
+    ...agentCompactionDecision({
+      projectedTokens: requestBudget.projectedTokens,
+      usableContextTokens,
+      maxContextTokens,
+      triggerPercent: input.triggerPercent,
+    }),
+    requestBudget,
+  };
 }
 
 export async function runHostedContextCompaction(input: HostedCompactionInput): Promise<HostedCompactionResult> {

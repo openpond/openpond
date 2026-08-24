@@ -1024,6 +1024,7 @@ export async function createOpenPondServer(
         messages: input.messages,
         tools: input.tools,
         toolChoice: input.toolChoice,
+        maxOutputTokens: input.maxOutputTokens,
         requestId: input.requestId,
         signal: input.signal,
         saveChatGptSubscriptionCredential: async (providerId, credential) => {
