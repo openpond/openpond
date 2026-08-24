@@ -8,6 +8,7 @@ import {
   createAttemptReceipt,
   createComparisonAssignment,
   createEnvironmentRelease,
+  createHarnessCompatibilityReceipt,
   createPreferenceCalibrationReport,
   createPreferenceComparisonRelease,
   createPreferenceReceipt,
@@ -96,6 +97,54 @@ describe("preference comparison contracts", () => {
       pairwiseWinFractions: { [fixture.ids[0]!]: 1, [fixture.ids[1]!]: 0 },
     });
     expect(verifyPreferenceAggregationReceipt(aggregate)).toBe(true);
+  });
+
+  it("allows a frozen baseline-versus-candidate comparison only with explicit Harness compatibility", () => {
+    const fixture = comparisonFixture(2, { purpose: "frozen_eval" });
+    const { contentHash: _oldHash, ...runContent } = fixture.candidates[1]!.runManifest;
+    const alternativeRun = createRunManifest({
+      ...runContent,
+      id: "preference-fixture-candidate-run",
+      harnessRelease: { id: "preference-fixture-candidate-harness", contentHash: contentHash("candidate-harness") },
+      model: { ...runContent.model, model: "candidate-model" },
+    });
+    const alternativeCandidate = candidate(
+      "candidate-compatible",
+      alternativeRun,
+      fixture.taskset.tasks[0]!.id,
+    );
+    expect(() => createComparisonAssignment({
+      id: "incompatible-baseline-candidate",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates: [fixture.candidates[0]!, alternativeCandidate],
+      purpose: "frozen_eval",
+      createdAt: NOW,
+    })).toThrow("compatibility receipt");
+
+    const compatibility = createHarnessCompatibilityReceipt({
+      schemaVersion: "openpond.harnessCompatibility.v1",
+      id: "preference-fixture-harness-compatibility",
+      baseHarnessRelease: fixture.candidates[0]!.runManifest.harnessRelease,
+      candidateHarnessRelease: alternativeRun.harnessRelease,
+      tasksetRelease: { id: fixture.taskset.id, contentHash: fixture.taskset.contentHash },
+      environmentHash: contentHash(fixture.taskset.environment),
+      toolContractHash: contentHash(fixture.taskset.tools),
+      policyHash: contentHash(fixture.taskset.policy),
+      graderInterfaceHash: contentHash("preference-fixture-grader-interface"),
+      metadata: {},
+    });
+    const assignment = createComparisonAssignment({
+      id: "compatible-baseline-candidate",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates: [fixture.candidates[0]!, alternativeCandidate],
+      harnessCompatibilityReceipts: [compatibility],
+      purpose: "frozen_eval",
+      createdAt: NOW,
+    });
+    expect(assignment.lineage.harnessReleases).toHaveLength(2);
+    expect(assignment.lineage.runManifestRefs).toHaveLength(2);
   });
 
   it("requires held-out non-frozen human evidence to calibrate a model judge", () => {

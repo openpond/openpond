@@ -21,8 +21,10 @@ import {
 import {
   AttemptReceiptSchema,
   RunManifestSchema,
+  assertComparableRunManifests,
   verifyAttemptReceipt,
   type AttemptReceipt,
+  type HarnessCompatibilityReceipt,
   type RunManifest,
 } from "./runs.js";
 import {
@@ -137,7 +139,9 @@ const PreferenceTaskReferenceSchema = z.object({
 
 const PreferenceComparisonLineageSchema = z.object({
   tasksetRelease: ImmutableReleaseRefSchema,
-  harnessRelease: ImmutableReleaseRefSchema,
+  harnessReleases: z.array(ImmutableReleaseRefSchema).min(1).max(4),
+  runManifestRefs: z.array(ImmutableReleaseRefSchema).min(1).max(4),
+  harnessCompatibilityReceiptRefs: z.array(ImmutableReleaseRefSchema).max(6),
   environmentRelease: ImmutableReleaseRefSchema,
   verifierSetRelease: ImmutableReleaseRefSchema,
   toolContractHash: ReleaseHashSchema,
@@ -146,6 +150,7 @@ const PreferenceComparisonLineageSchema = z.object({
 
 const ComparisonCandidateSchema = z.object({
   attemptRef: ImmutableReleaseRefSchema,
+  runManifestRef: ImmutableReleaseRefSchema,
   artifactManifestRef: ImmutableReleaseRefSchema,
   visibleArtifactIds: z.array(ReleaseIdSchema).min(1).max(100_000),
 }).strict().superRefine((candidate, context) => {
@@ -288,6 +293,7 @@ export function createComparisonAssignment(input: {
   comparisonRelease: PreferenceComparisonRelease;
   taskset: TasksetRelease;
   candidates: readonly ComparisonAssignmentCandidateInput[];
+  harnessCompatibilityReceipts?: readonly HarnessCompatibilityReceipt[];
   purpose: PreferenceComparisonPurpose;
   presentedCandidateOrder?: readonly string[];
   createdAt: string;
@@ -307,8 +313,15 @@ export function createComparisonAssignment(input: {
     if (candidate.attempt.taskId !== first.attempt.taskId) {
       throw new Error("Preference comparison candidates must belong to the same Taskset task.");
     }
-    if (!sameRef(ref(candidate.runManifest), ref(first.runManifest))) {
-      throw new Error("Preference comparison candidates must use the same pinned Run Manifest.");
+    const compatibility = compatibilityForRunManifests(
+      first.runManifest,
+      candidate.runManifest,
+      input.harnessCompatibilityReceipts ?? [],
+    );
+    if (compatibility && sameRef(compatibility.baseHarnessRelease, candidate.runManifest.harnessRelease)) {
+      assertComparableRunManifests(candidate.runManifest, first.runManifest, compatibility);
+    } else {
+      assertComparableRunManifests(first.runManifest, candidate.runManifest, compatibility);
     }
   }
   const task = taskset.tasks.find((record) => record.id === first.attempt.taskId);
@@ -328,7 +341,9 @@ export function createComparisonAssignment(input: {
     },
     lineage: {
       tasksetRelease: ref(taskset),
-      harnessRelease: first.runManifest.harnessRelease,
+      harnessReleases: uniqueRefs(normalized.map((candidate) => candidate.runManifest.harnessRelease)),
+      runManifestRefs: uniqueRefs(normalized.map((candidate) => ref(candidate.runManifest))),
+      harnessCompatibilityReceiptRefs: uniqueRefs((input.harnessCompatibilityReceipts ?? []).map(ref)),
       environmentRelease: taskset.environmentRelease,
       verifierSetRelease: taskset.verifierSetRelease,
       toolContractHash: contentHash(taskset.tools),
@@ -336,6 +351,7 @@ export function createComparisonAssignment(input: {
     },
     candidates: normalized.map((candidate) => ({
       attemptRef: ref(candidate.attempt),
+      runManifestRef: ref(candidate.runManifest),
       artifactManifestRef: ref(candidate.artifactManifest),
       visibleArtifactIds: [...candidate.visibleArtifactIds],
     })),
@@ -780,6 +796,25 @@ function ref(value: { id: string; contentHash: string }): { id: string; contentH
 
 function sameRef(left: { id: string; contentHash: string }, right: { id: string; contentHash: string }): boolean {
   return left.id === right.id && left.contentHash === right.contentHash;
+}
+
+function uniqueRefs<T extends { id: string; contentHash: string }>(refs: readonly T[]): T[] {
+  return [...new Map(refs.map((value) => [`${value.id}:${value.contentHash}`, value])).values()];
+}
+
+function compatibilityForRunManifests(
+  base: RunManifest,
+  candidate: RunManifest,
+  receipts: readonly HarnessCompatibilityReceipt[],
+): HarnessCompatibilityReceipt | undefined {
+  if (sameRef(base.harnessRelease, candidate.harnessRelease)) return undefined;
+  return receipts.find((receipt) =>
+    sameRef(receipt.tasksetRelease, base.tasksetRelease)
+    && ((sameRef(receipt.baseHarnessRelease, base.harnessRelease)
+      && sameRef(receipt.candidateHarnessRelease, candidate.harnessRelease))
+      || (sameRef(receipt.baseHarnessRelease, candidate.harnessRelease)
+        && sameRef(receipt.candidateHarnessRelease, base.harnessRelease))),
+  );
 }
 
 function verifyHashed<T extends Record<string, unknown>>(
