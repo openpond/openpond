@@ -11,7 +11,7 @@ Stable GitHub releases provide packaged Desktop builds for:
 
 Windows is currently paused. The repository still contains a development NSIS command, but Windows is not a supported release target until its packaged smoke lane is restored. Homebrew and winget manifests are not published.
 
-Download a build from the GitHub release matching your architecture. Release assets are accompanied by `SHA256SUMS.txt`. macOS signing and notarization depend on the release environment; follow the release notes if Gatekeeper requires an explicit approval.
+Download a build from the GitHub release matching your architecture. Release assets are accompanied by `SHA256SUMS.txt`. macOS builds are signed with the Lost Labs LLC Developer ID, notarized by Apple, and validated with Gatekeeper before publication.
 
 ## Local-first behavior
 

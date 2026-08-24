@@ -28,6 +28,20 @@ pnpm package:mac
 
 `pnpm budgets:desktop-package` rejects oversized artifacts/resources, nonminimal `app.asar` contents, unexpected staged files, hash mismatches, foreign native binaries, maps, tests, sources, debug symbols, and static libraries.
 
+### macOS signing and notarization
+
+macOS packages use the hardened runtime, the Developer ID Application identity for Lost Labs LLC, and Apple notarization. `pnpm package:mac` requires a valid signing identity in the local keychain. Release CI fails closed when signing credentials are missing and verifies the Developer ID authority, stapled notarization ticket, and Gatekeeper assessment before publishing an artifact.
+
+The `openpond/openpond` Actions secret set is:
+
+- `MAC_CSC_LINK`: base64-encoded password-protected Developer ID `.p12` archive.
+- `MAC_CSC_KEY_PASSWORD`: the dedicated `.p12` export password.
+- `APPLE_API_KEY_P8`: base64-encoded App Store Connect team API key.
+- `APPLE_API_KEY_ID`: the App Store Connect key ID.
+- `APPLE_API_ISSUER`: the App Store Connect issuer ID.
+
+Use a dedicated `.p12` password; never reuse a macOS login, Apple ID, or GitHub password. The release job materializes the `.p8` only in the runner's temporary directory and removes it when packaging finishes.
+
 ## Smoke and diagnostics
 
 ```bash
@@ -37,4 +51,4 @@ pnpm smoke:desktop:packaged
 
 The dev smoke proves preload/renderer/server health and a browser-level render boundary: character-by-character composer typing must not commit the sidebar. The packaged smoke proves SQLite startup, browser snapshot/screenshot/input, detached-view cleanup, and app shutdown.
 
-Release CI runs packaged Desktop smokes on Linux and macOS for x64 and arm64. Windows is paused until an equivalent NSIS smoke is restored.
+Release CI runs packaged Desktop smokes on Linux and signed, notarized macOS builds for x64 and arm64. Windows is paused until an equivalent NSIS smoke is restored.
