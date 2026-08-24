@@ -557,17 +557,32 @@ export function opChatReasoningFields(
 }
 
 function opChatMessage(message: HostedChatMessage): Record<string, unknown> {
-  const { continuation, ...projected } = message;
+  const { continuation, images, ...projected } = message;
+  const content = images?.length
+    ? [
+        ...(typeof message.content === "string" && message.content.trim()
+          ? [{ type: "text", text: message.content }]
+          : []),
+        ...images.map((image) => ({
+          type: "image_url",
+          image_url: {
+            url: image.url,
+            ...(image.detail ? { detail: image.detail } : {}),
+          },
+        })),
+      ]
+    : message.content;
   if (
     message.role === "assistant" &&
     continuation?.kind === "chat_completions_reasoning"
   ) {
     return {
       ...projected,
+      ...(content !== undefined ? { content } : {}),
       reasoning_content: continuation.reasoningContent,
     };
   }
-  return projected;
+  return { ...projected, ...(content !== undefined ? { content } : {}) };
 }
 
 function opChatEndpointUrl(

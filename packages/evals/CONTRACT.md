@@ -17,6 +17,8 @@ runtime processes.
 | `HarnessRunTrace` | `HarnessTrace` | Preserve ordered actions, observations, lifecycle events, terminal state, failure class, and trace hash. Learning-signal envelopes remain a training projection of the trace and receipt. |
 | `TaskAttemptResult` | `AttemptReceipt` | Preserve the old record for application persistence while adding a lossless receipt reference. Output becomes `outputHash`; trace and artifacts are separately hash-bound. |
 | `GradeResult` | `GraderEvidence[]` | Preserve component score, pass, reward eligibility, failure class, feedback, and visible/private evidence references. Aggregate UI results remain host projections. |
+| Human or model comparison of attempts | `PreferenceComparisonRelease` + `ComparisonAssignment` + `PreferenceReceipt` | Keep release policy, blinded candidate ordering, exact attempt/artifact references, reviewer identity, and ranking immutable. Human and model reviewers emit the same receipt; provider sessions, identity details, queue state, and artifact bytes remain host-owned. |
+| Comparative reward | `PreferenceAggregationReceipt` + standard `RewardComponentReceipt` | Aggregate only with the release's named quorum algorithm, calibrate automated reviewers against non-frozen human receipts, then project the named pairwise-win fraction into the existing per-attempt reward component boundary. |
 | managed-RL local receipt | `AttemptReceipt` | Submit canonical manifest/task/trace/artifact/grader identities; policy token responses and provider request IDs remain host-private trace data. |
 | resolved training bundle | `HarnessRelease` + host training binding | Agent snapshot, program, lifecycle, tool declarations, files, and grader interface belong to the Harness. Taskset environment/policy/graders and dataset/evidence, recipe, compute, engine, approval, and opaque leases remain explicit host-side bindings. |
 | completed Work or Development turn | `WorkEvidenceReceipt` | Project the authoritative terminal turn, immutable Agent snapshot when available, model/runtime identity, sanitized trace reference, exact output revisions, validation evidence, interventions, timing, usage, and explicit consent provenance. Keep the raw source and trace host-private. |
@@ -51,6 +53,18 @@ runtime processes.
   upper bounds.
 - Immutable content never contains secret values, opaque lease values, mutable
   provider resource IDs, database keys, UI state, or process handles.
+- Preference comparisons are an additive group-evaluation protocol, not a new
+  per-attempt grader kind and not a replacement for benchmark comparisons.
+  Releases contain two through four candidates, an ordered-tie-group result
+  policy, a frozen rubric artifact, presentation policy, aggregation policy,
+  reward projection, and calibration thresholds. Assignments bind every visible
+  artifact to an existing attempt and manifest under one Taskset, Harness,
+  Environment, Verifier, tool, and policy lineage.
+- A model preference receipt is reward-eligible only when a passed calibration
+  report binds the exact comparison release and immutable model-reviewer
+  release. Frozen-evaluation assignments cannot contribute calibration or
+  training evidence. Invalid or unrenderable candidates remain unscorable;
+  they are not silently converted into aesthetic losses.
 - The Work evidence schemas first ship as additive `0.2.x` package exports. The
   package version does not replace the `openpond.workEvidenceReceipt.v1`,
   `openpond.workProcessTrace.v1`, `openpond.workFeedbackReceipt.v1`, or

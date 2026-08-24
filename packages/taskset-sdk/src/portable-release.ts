@@ -10,8 +10,10 @@ import {
   bindTasksetExecutionReleases,
   createEnvironmentRelease,
   createVerifierSetRelease,
+  verifyPreferenceComparisonRelease,
   type EnvironmentContract,
   type GraderSpec as PortableGraderSpec,
+  type PreferenceComparisonRelease,
   type TasksetRelease,
 } from "@openpond/evals";
 import type {
@@ -108,6 +110,28 @@ export function materializePortableTasksetRelease(input: {
       verifierSet: verifierSetRelease,
     });
   return { environmentRelease, verifierSetRelease, tasksetRelease };
+}
+
+/**
+ * Admits a published comparison policy against the exact portable Taskset
+ * release it names. A comparison is deliberately not embedded in that release:
+ * doing so would create a content-hash cycle between Taskset and comparison.
+ */
+export function projectPreferenceComparisonRelease(input: {
+  tasksetRelease: TasksetRelease;
+  preferenceComparison: PreferenceComparisonRelease;
+}): PreferenceComparisonRelease {
+  if (!verifyPreferenceComparisonRelease(input.preferenceComparison)) {
+    throw new Error("Preference comparison release failed immutable content verification.");
+  }
+  const release = input.preferenceComparison;
+  if (
+    release.tasksetRelease.id !== input.tasksetRelease.id
+    || release.tasksetRelease.contentHash !== input.tasksetRelease.contentHash
+  ) {
+    throw new Error("Preference comparison release must reference the admitted portable Taskset release.");
+  }
+  return release;
 }
 
 export function portableTasksetEnvironment(taskset: Taskset): EnvironmentContract {

@@ -14,6 +14,7 @@ import {
   createTasksetRevisionTables,
   createTrainingReceiptAndModelBindingTables,
 } from "./store-continuous-improvement-schema.js";
+import { createPreferenceComparisonTables } from "./store-preference-comparison-schema.js";
 import { createDatasetImportTables as ensureDatasetImportTables } from "./store-dataset-schema.js";
 import { createSidebarFileBookmarkTables as ensureSidebarFileBookmarkTables } from "./store-sidebar-file-bookmark-schema.js";
 import { createHarnessWorkspaceTables as ensureHarnessWorkspaceTables } from "./store-harness-workspace-schema.js";
@@ -584,6 +585,10 @@ export class SqliteStoreCore {
 
   async createTrainingReceiptAndModelBindingTables(): Promise<void> {
     await createTrainingReceiptAndModelBindingTables((sql) => this.exec(sql));
+  }
+
+  async createPreferenceComparisonTables(): Promise<void> {
+    await createPreferenceComparisonTables((sql) => this.exec(sql));
   }
 
   async createTaskCreationProjectionTables(): Promise<void> {

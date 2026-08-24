@@ -7,6 +7,7 @@ import { loadOpenPondHostedModels } from "@openpond/runtime";
 import type {
   streamOpenPondHostedChatTurn as defaultStreamOpenPondHostedChatTurn,
 } from "@openpond/runtime";
+import type { HostedChatImageInput } from "@openpond/cloud";
 
 import {
   streamOpenAiCompatibleChatCompletion,
@@ -54,7 +55,11 @@ export function createTrainingModelRuntime(deps: {
   async function trainingModelText(input: {
     model: ChatModelRef;
     reasoningEffort?: CodexReasoningEffort | "none" | null;
-    messages: Array<{ role: "system" | "user"; content: string }>;
+    messages: Array<{
+      role: "system" | "user";
+      content: string;
+      images?: HostedChatImageInput[];
+    }>;
     signal: AbortSignal;
     requestId: string;
     maxOutputTokens?: number;

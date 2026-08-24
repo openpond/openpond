@@ -67,6 +67,11 @@ export function createManagedAdapterChatRuntime(dependencies: {
     tools?: HostedChatTool[];
     toolChoice?: HostedChatToolChoice;
   }) {
+    if (input.messages.some((message) => message.images?.length)) {
+      throw new Error(
+        "The selected trained Model does not support native image review. Use a vision-capable reviewer; the comparison will remain unscorable otherwise.",
+      );
+    }
     const resolved = await context(input.modelId);
     if (!resolved || !managedAdapterProjectionReady(resolved.projection)) {
       throw new Error(

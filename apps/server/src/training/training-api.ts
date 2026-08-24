@@ -12,12 +12,27 @@ import {
   RunTaskMinerRequestSchema,
   TaskCreationRequestSchema,
   TaskMinerConfigSchema,
+  TasksetSchema,
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
   type BaseModelPreference,
   type TaskCreationRequest,
   type TaskCreationSnapshot,
 } from "@openpond/contracts";
+import {
+  PreferenceComparisonReleaseSchema,
+  type ComparisonAssignmentCandidateInput,
+  type HarnessCompatibilityReceipt,
+  type PreferenceComparisonPurpose,
+  type PreferenceComparisonRelease,
+  type PreferenceReviewer,
+  type TasksetRelease,
+} from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
+import {
+  computeTasksetHash,
+  materializePortableTasksetRelease,
+} from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
@@ -28,6 +43,7 @@ import type { createDatasetArtifactService } from "./dataset-artifact-service.js
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
 import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
+import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
 import { trainingRunDetail } from "./run-detail.js";
 import {
   advanceUnexecutedModelRunTasksetRef,
@@ -83,6 +99,7 @@ type DatasetArtifacts = ReturnType<typeof createDatasetArtifactService>;
 type DatasetImports = ReturnType<typeof createDatasetImportService>;
 type BenchmarkTasksets = ReturnType<typeof createBenchmarkTasksetService>;
 type HarnessRefinerBenchmarks = ReturnType<typeof createHarnessRefinerBenchmarkService>;
+type PreferenceComparisons = ReturnType<typeof createPreferenceComparisonService>;
 
 export function createTrainingApi(deps: {
   store: SqliteStore;
@@ -95,6 +112,7 @@ export function createTrainingApi(deps: {
   datasetImports: DatasetImports;
   benchmarkTasksets: BenchmarkTasksets;
   harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
+  preferenceComparisons?: PreferenceComparisons;
 }) {
   async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
     const input = record(payload);
@@ -112,6 +130,81 @@ export function createTrainingApi(deps: {
           ?? requestUrl?.searchParams.get("profileId")
           ?? "default",
       );
+    }
+    if (action === "preference_comparison_list") {
+      return deps.store.listPreferenceComparisonAssignments({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      });
+    }
+    if (action === "preference_comparison_publish") {
+      const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const taskset = await requireTaskset(deps.store, tasksetId);
+      const published = await preferenceComparisons.publishRelease({
+        tasksetId,
+        tasksetRelease: await requireReleasedTaskset(deps.benchmarkTasksets, taskset),
+        release: PreferenceComparisonReleaseSchema.parse(input.release),
+        publisherKey: requiredString(input.publisherKey, "publisherKey"),
+        retentionUntil: nullableString(input.retentionUntil),
+      });
+      await bindTasksetPreferenceComparison({
+        store: deps.store,
+        taskset,
+        release: published.release,
+      });
+      return published;
+    }
+    if (action === "preference_comparison_create_assignment") {
+      const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      return preferenceComparisons.createAssignment({
+        id: requiredString(input.id, "id"),
+        tasksetId,
+        comparisonReleaseId: requiredString(input.comparisonReleaseId, "comparisonReleaseId"),
+        candidates: requiredRecordArray(input.candidates, "candidates") as ComparisonAssignmentCandidateInput[],
+        harnessCompatibilityReceipts: optionalRecordArray(input.harnessCompatibilityReceipts) as HarnessCompatibilityReceipt[] | undefined,
+        purpose: preferenceComparisonPurpose(input.purpose),
+        presentedCandidateOrder: optionalStringArray(input.presentedCandidateOrder),
+        creatorKey: requiredString(input.creatorKey, "creatorKey"),
+      });
+    }
+    if (action === "preference_comparison_next") {
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const reviewerKey = requiredString(input.reviewerKey, "reviewerKey");
+      const assignment = await requirePreferenceComparisons(deps.preferenceComparisons).nextAssignment({
+        tasksetId,
+        reviewerKey,
+      });
+      return assignment
+        ? preferenceComparisonReviewPayload(deps.store, assignment, humanPreferenceReviewer(reviewerKey))
+        : null;
+    }
+    if (action === "preference_comparison_submit") {
+      const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
+      const reviewerKey = requiredString(input.reviewerKey, "reviewerKey");
+      const reviewer = input.reviewer
+        ? preferenceReviewer(input.reviewer)
+        : humanPreferenceReviewer(reviewerKey);
+      return preferenceComparisons.submitHumanReceipt({
+        id: requiredString(input.id, "id"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        assignmentId: requiredString(input.assignmentId, "assignmentId"),
+        reviewerKey,
+        reviewer,
+        order: requiredStringGroupArray(input.order, "order"),
+        rejectAll: input.rejectAll === true,
+        criterionScores: optionalScoreRecord(input.criterionScores),
+        feedbackArtifactRef: optionalArtifactRef(input.feedbackArtifactRef),
+        startedAt: requiredString(input.startedAt, "startedAt"),
+      });
+    }
+    if (action === "preference_comparison_unreviewable") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).markUnreviewable({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        assignmentId: requiredString(input.assignmentId, "assignmentId"),
+        reviewerKey: requiredString(input.reviewerKey, "reviewerKey"),
+        reason: requiredString(input.reason, "reason"),
+      });
     }
     if (action === "run_taskset_benchmark") {
       return runTasksetBenchmark(deps.evaluation, input);
@@ -917,6 +1010,158 @@ function portableMethod(
 function record(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function string(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : null; }
 function requiredString(value: unknown, name: string): string { const parsed = string(value); if (!parsed) throw new Error(`${name} is required.`); return parsed; }
+function nullableString(value: unknown): string | null { return string(value); }
+function optionalStringArray(value: unknown): string[] | undefined { return value === undefined ? undefined : requiredStringArray(value, "value"); }
+function requiredRecordArray(value: unknown, name: string): Record<string, unknown>[] {
+  if (!Array.isArray(value) || !value.length || value.some((item) => !item || typeof item !== "object" || Array.isArray(item))) {
+    throw new Error(`${name} requires at least one object.`);
+  }
+  return value as Record<string, unknown>[];
+}
+function optionalRecordArray(value: unknown): Record<string, unknown>[] | undefined {
+  return value === undefined ? undefined : requiredRecordArray(value, "value");
+}
+function requiredStringGroupArray(value: unknown, name: string): string[][] {
+  if (!Array.isArray(value) || value.some((group) => !Array.isArray(group) || !group.length)) {
+    throw new Error(`${name} must be an array of non-empty candidate groups.`);
+  }
+  return (value as unknown[][]).map((group) => group.map((candidate) => requiredString(candidate, `${name} candidate`)));
+}
+function preferenceComparisonPurpose(value: unknown): PreferenceComparisonPurpose {
+  if (value === "training_reward" || value === "validation" || value === "frozen_eval" || value === "calibration") return value;
+  throw new Error("purpose must be training_reward, validation, frozen_eval, or calibration.");
+}
+function preferenceReviewer(value: unknown): PreferenceReviewer {
+  const reviewer = record(value);
+  if (reviewer.kind !== "human") throw new Error("reviewer.kind must be human for reviewer submissions.");
+  const releaseRef = record(reviewer.releaseRef);
+  return {
+    kind: "human",
+    releaseRef: {
+      id: requiredString(releaseRef.id, "reviewer.releaseRef.id"),
+      contentHash: requiredString(releaseRef.contentHash, "reviewer.releaseRef.contentHash"),
+    },
+  };
+}
+function optionalArtifactRef(value: unknown): { id: string; contentHash: string; mediaType: string; sizeBytes: number } | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const artifact = record(value);
+  const sizeBytes = artifact.sizeBytes;
+  if (typeof sizeBytes !== "number" || !Number.isInteger(sizeBytes) || sizeBytes < 0) {
+    throw new Error("feedbackArtifactRef.sizeBytes must be a non-negative integer.");
+  }
+  return {
+    id: requiredString(artifact.id, "feedbackArtifactRef.id"),
+    contentHash: requiredString(artifact.contentHash, "feedbackArtifactRef.contentHash"),
+    mediaType: requiredString(artifact.mediaType, "feedbackArtifactRef.mediaType"),
+    sizeBytes,
+  };
+}
+function optionalScoreRecord(value: unknown): Record<string, Record<string, number>> | undefined {
+  if (value === undefined || value === null) return undefined;
+  const outer = record(value);
+  const scores: Record<string, Record<string, number>> = {};
+  for (const [candidateId, candidateScores] of Object.entries(outer)) {
+    const inner = record(candidateScores);
+    scores[candidateId] = {};
+    for (const [criterionId, score] of Object.entries(inner)) {
+      if (typeof score !== "number" || !Number.isFinite(score) || score < 0 || score > 1) {
+        throw new Error("criterion scores must be finite values from 0 to 1.");
+      }
+      scores[candidateId]![criterionId] = score;
+    }
+  }
+  return scores;
+}
+function requirePreferenceComparisons(value: PreferenceComparisons | undefined): PreferenceComparisons {
+  if (!value) throw new Error("Preference comparisons are unavailable in this server build.");
+  return value;
+}
+async function requireTaskset(store: SqliteStore, tasksetId: string) {
+  const taskset = await store.getTaskset(tasksetId);
+  if (!taskset) throw new Error("Taskset was not found.");
+  return taskset;
+}
+async function requireReleasedTaskset(
+  benchmarkTasksets: BenchmarkTasksets,
+  taskset: Awaited<ReturnType<typeof requireTaskset>>,
+): Promise<TasksetRelease> {
+  const release = await benchmarkTasksets.releaseForTaskset(taskset);
+  if (release) return release;
+  return materializePortableTasksetRelease({
+    taskset,
+    adapterId: "openpond-preference-comparisons-v1",
+  }).tasksetRelease;
+}
+async function bindTasksetPreferenceComparison(input: {
+  store: SqliteStore;
+  taskset: Awaited<ReturnType<typeof requireTaskset>>;
+  release: PreferenceComparisonRelease;
+}): Promise<void> {
+  const timestamp = new Date().toISOString();
+  const unhashed = TasksetSchema.parse({
+    ...input.taskset,
+    revision: input.taskset.revision + 1,
+    preferenceComparison: {
+      schemaVersion: "openpond.tasksetPreferenceComparisonBinding.v1",
+      releaseId: input.release.id,
+      releaseHash: input.release.contentHash,
+      publishedAt: timestamp,
+      metadata: {},
+    },
+    contentHash: "00000000",
+    updatedAt: timestamp,
+  });
+  await input.store.upsertTaskset(TasksetSchema.parse({
+    ...unhashed,
+    contentHash: computeTasksetHash(unhashed),
+  }));
+}
+function humanPreferenceReviewer(reviewerKey: string): PreferenceReviewer {
+  const id = `human-reviewer:${reviewerKey}`;
+  return {
+    kind: "human",
+    releaseRef: {
+      id,
+      contentHash: contentHash({ schemaVersion: "openpond.humanPreferenceReviewer.v1", reviewerKey }),
+    },
+  };
+}
+async function preferenceComparisonReviewPayload(
+  store: SqliteStore,
+  assignment: Awaited<ReturnType<PreferenceComparisons["nextAssignment"]>> & {},
+  reviewer: PreferenceReviewer,
+) {
+  const taskset = await store.getTaskset(assignment.tasksetId);
+  const task = taskset?.tasks.find((candidate) => candidate.id === assignment.assignment.taskRef.id) ?? null;
+  const attempts = await store.listTaskAttempts(assignment.tasksetId);
+  const attemptById = new Map(attempts.map((attempt) => [attempt.id, attempt]));
+  const candidates = await Promise.all(assignment.assignment.presentedCandidateOrder.map(async (attemptId, index) => {
+    const candidate = assignment.assignment.candidates.find((item) => item.attemptRef.id === attemptId)!;
+    const attempt = attemptById.get(attemptId) ?? null;
+    const artifacts = await store.listTaskAttemptArtifacts({ attemptId });
+    const visibleIds = new Set(candidate.visibleArtifactIds);
+    return {
+      label: `candidate-${index + 1}`,
+      attemptId,
+      output: attempt?.output ?? {},
+      artifacts: artifacts
+        .filter((artifact) => visibleIds.has(artifact.id))
+        .map((artifact) => ({
+          id: artifact.id,
+          mediaType: artifact.mediaType,
+          sizeBytes: artifact.sizeBytes,
+        })),
+    };
+  }));
+  return {
+    assignment,
+    reviewer,
+    taskPrompt: task?.input ?? null,
+    candidates,
+  };
+}
 function nullableBaseModelPreference(value: unknown, legacyId: unknown): BaseModelPreference | null {
   const parsed = BaseModelPreferenceSchema.safeParse(value);
   if (parsed.success) return parsed.data;

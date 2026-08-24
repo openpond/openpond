@@ -52,7 +52,7 @@ import {
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqliteEvaluationResultStore } from "./store-evaluation-results.js";
+import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
 import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
@@ -84,7 +84,7 @@ type TrainingChatSearchEvidenceRow = {
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
   "('openpond_managed')";
 
-export class SqliteTrainingStore extends SqliteEvaluationResultStore {
+export class SqliteTrainingStore extends SqlitePreferenceComparisonStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;
@@ -490,6 +490,10 @@ export class SqliteTrainingStore extends SqliteEvaluationResultStore {
         await this.run("DELETE FROM benchmark_runs WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM benchmark_comparisons WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempt_artifacts WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_submissions WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_assignments WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_calibrations WHERE taskset_id = ?", [id]);
+        await this.run("DELETE FROM preference_comparison_releases WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM task_attempts WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM grader_audit_reports WHERE taskset_id = ?", [id]);
         await this.run("DELETE FROM readiness_reports WHERE taskset_id = ?", [id]);

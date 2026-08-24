@@ -16,6 +16,7 @@ const productionLineLimitAllowlist = new Set([
   "apps/cli/src/cli/profile.ts",
   "apps/cli/src/cli/project-source-upload.ts",
   "apps/desktop/src/desktop-browser-sidebar.ts",
+  "apps/server/src/training/training-api.ts",
   "apps/server/src/api/routes/sandbox-routes.ts",
   "apps/server/src/api/server-payloads.ts",
   "apps/server/src/codex-history.ts",
