@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 43;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 44;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -137,6 +137,10 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
     duration_ms INTEGER,
     first_token_ms INTEGER,
     prompt_tokens INTEGER,
+    cached_prompt_tokens INTEGER,
+    uncached_prompt_tokens INTEGER,
+    cache_write_prompt_tokens INTEGER,
+    cache_telemetry_source TEXT,
     completion_tokens INTEGER,
     total_tokens INTEGER,
     error_type TEXT,

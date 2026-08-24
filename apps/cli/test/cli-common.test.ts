@@ -23,6 +23,29 @@ describe("CLI common parsing", () => {
     expect(parsed.options.json).toBe("true");
   });
 
+  test("accepts every option implemented by the init command", () => {
+    const parsed = parseArgs([
+      "init",
+      "--path",
+      "/tmp/openpond-profile",
+      "--profile",
+      "review",
+      "--template",
+      "blank-profile",
+      "--force",
+      "--json",
+    ]);
+
+    expect(parsed.command).toBe("init");
+    expect(parsed.options).toMatchObject({
+      path: "/tmp/openpond-profile",
+      profile: "review",
+      template: "blank-profile",
+      force: "true",
+      json: "true",
+    });
+  });
+
   test("keeps passthrough arguments after double dash", () => {
     const parsed = parseArgs([
       "run",

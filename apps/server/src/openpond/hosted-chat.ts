@@ -1,6 +1,11 @@
 import type { HostedChatMessage } from "@openpond/cloud";
 import { formatPromptWithAttachmentContext } from "../chat-attachments.js";
 import { textFromUnknown } from "../utils.js";
+import {
+  continuationCapsuleFromEventData,
+  renderContinuationCapsule,
+  type ContinuationCapsule,
+} from "./context-compaction/continuation-capsule.js";
 
 type ProviderProjectionEvent = {
   id?: string;
@@ -25,6 +30,9 @@ export function buildChatMessagesForProvider(
     messages.push({
       role: "system",
       content: [
+        compacted.continuationCapsule
+          ? renderContinuationCapsule(compacted.continuationCapsule)
+          : null,
         "Conversation summary from earlier turns:",
         compacted.summary,
         compacted.preservedResourceRefs.length > 0
@@ -71,6 +79,7 @@ type CompactionContext = {
   preservedFromEventId: string | null;
   preservedEventIds: string[];
   preservedResourceRefs: string[];
+  continuationCapsule: ContinuationCapsule | null;
   summary: string;
 };
 
@@ -85,6 +94,7 @@ function latestCompactionContext(events: ProviderProjectionEvent[]): CompactionC
       preservedFromEventId: compactionPreservedFromEventId(item.data),
       preservedEventIds: compactionPreservedEventIds(item.data),
       preservedResourceRefs: compactionPreservedResourceRefs(item.data),
+      continuationCapsule: continuationCapsuleFromEventData(item.data),
       summary,
     };
   }

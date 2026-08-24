@@ -8,6 +8,13 @@ export function createCompactionMetrics(input: {
   sourceEvents: number;
   summarizedEvents: number;
   preservedEvents: number;
+  sourceRecords: number;
+  includedRecords: number;
+  omittedRecords: number;
+  preservedRecords: number;
+  truncatedRecords: number;
+  summaryInputTruncated: boolean;
+  sourceSelectionStrategy: string;
   summaryInputChars: number;
   retainedTailTokens: number;
   retainedTailBudgetTokens: number;
@@ -20,6 +27,13 @@ export function createCompactionMetrics(input: {
     sourceEvents: input.sourceEvents,
     summarizedEvents: input.summarizedEvents,
     preservedEvents: input.preservedEvents,
+    sourceRecords: input.sourceRecords,
+    includedRecords: input.includedRecords,
+    omittedRecords: input.omittedRecords,
+    preservedRecords: input.preservedRecords,
+    truncatedRecords: input.truncatedRecords,
+    summaryInputTruncated: input.summaryInputTruncated,
+    sourceSelectionStrategy: "newest_useful_v1",
     summaryInputChars: input.summaryInputChars,
     summaryInputTokens: Math.max(0, Math.ceil(input.summaryInputChars / 4)),
     retainedTailTokens: input.retainedTailTokens,

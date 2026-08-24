@@ -74,6 +74,7 @@ export type OpenPondProfileGitState = {
   behind: number | null;
   remoteUrl: string | null;
   files: OpenPondProfileGitFileChange[];
+  fileCount?: number;
   error: string | null;
 };
 
@@ -145,6 +146,7 @@ export type OpenPondProfileDiffSummary = {
   setupChanges: string[];
   envRequirementChanges: string[];
   files: OpenPondProfileGitFileChange[];
+  fileCount?: number;
 };
 
 export type OpenPondProfileHostedBinding = {

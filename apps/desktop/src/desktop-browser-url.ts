@@ -1,5 +1,6 @@
 import { shell } from "electron";
 import { fileURLToPath } from "node:url";
+import { isAllowedExternalDesktopUrl } from "./desktop-navigation-policy.js";
 
 export function normalizeBrowserUrl(value: string, explicitFile = false): string {
   const trimmed = value.trim().replace(/^['"`]+|['"`]+$/g, "");
@@ -23,7 +24,9 @@ export async function openUrlExternal(url: string): Promise<void> {
     await shell.openPath(fileURLToPath(parsed));
     return;
   }
-  if (parsed.protocol === "javascript:" || parsed.protocol === "data:") return;
+  if (!isAllowedExternalDesktopUrl(url)) {
+    throw new Error("Unsupported external browser URL.");
+  }
   await shell.openExternal(url);
 }
 

@@ -38,6 +38,10 @@ export type ModelUsageRecordRow = {
   duration_ms: number | null;
   first_token_ms: number | null;
   prompt_tokens: number | null;
+  cached_prompt_tokens: number | null;
+  uncached_prompt_tokens: number | null;
+  cache_write_prompt_tokens: number | null;
+  cache_telemetry_source: string | null;
   completion_tokens: number | null;
   total_tokens: number | null;
   error_type: string | null;
@@ -213,6 +217,10 @@ export function modelUsageRecordFromRow(row: ModelUsageRecordRow): ModelUsageRec
     durationMs: row.duration_ms,
     firstTokenMs: row.first_token_ms,
     promptTokens: row.prompt_tokens,
+    cachedPromptTokens: row.cached_prompt_tokens,
+    uncachedPromptTokens: row.uncached_prompt_tokens,
+    cacheWritePromptTokens: row.cache_write_prompt_tokens,
+    cacheTelemetrySource: row.cache_telemetry_source,
     completionTokens: row.completion_tokens,
     totalTokens: row.total_tokens,
     errorType: row.error_type,
@@ -240,6 +248,10 @@ export function modelUsageRecordParams(record: ModelUsageRecord): unknown[] {
     record.durationMs,
     record.firstTokenMs,
     record.promptTokens,
+    record.cachedPromptTokens,
+    record.uncachedPromptTokens,
+    record.cacheWritePromptTokens,
+    record.cacheTelemetrySource,
     record.completionTokens,
     record.totalTokens,
     record.errorType,

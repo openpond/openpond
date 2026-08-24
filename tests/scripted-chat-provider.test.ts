@@ -8,6 +8,10 @@ import type { HostedChatTurnDelta, HostedChatTurnInput } from "@openpond/runtime
 import { createOpenPondServer } from "../apps/server/src/index";
 import {
   createScriptedOpenPondChatStream,
+  OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL,
+  OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL,
+  OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
+  OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL,
   OPENPOND_HARNESS_SCRIPTED_MODELS_ENV,
   scriptedOpenPondModelsEnabled,
   streamScriptedOpenPondChatTurn,
@@ -46,6 +50,108 @@ describe("scripted OpenPond chat provider", () => {
     expect(deltas.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
   });
 
+  test("streams delayed chat output in independently observable chunks", async () => {
+    const startedAt = Date.now();
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL,
+      messages: [{ role: "user", content: "thread alpha" }],
+    })));
+
+    expect(textFromDeltas(deltas)).toBe("delayed stream response for: thread alpha complete");
+    expect(deltas.filter((delta) => delta.type === "text_delta")).toHaveLength(3);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(1_200);
+  });
+
+  test("aborts the interrupt-recovery stream during its active pause", async () => {
+    const controller = new AbortController();
+    const stream = streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL,
+      messages: [{ role: "user", content: "interrupt me" }],
+      signal: controller.signal,
+    }));
+
+    await expect(stream.next()).resolves.toMatchObject({
+      value: { type: "text_delta", text: "interruptible stream response" },
+      done: false,
+    });
+    const pending = stream.next();
+    controller.abort(new Error("visible stop test"));
+    await expect(pending).rejects.toThrow("visible stop test");
+  });
+
+  test("scripts the packaged long-turn resource reads and compaction summary", async () => {
+    const initial = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
+      messages: [{ role: "user", content: "Read the three deterministic logs." }],
+    })));
+    const calls = initial
+      .filter((delta): delta is Extract<HostedChatTurnDelta, { type: "tool_call_delta" }> =>
+        delta.type === "tool_call_delta"
+      )
+      .flatMap((delta) => delta.toolCalls);
+    expect(calls).toHaveLength(3);
+    expect(calls.map((call) => JSON.parse(call.function?.arguments ?? "{}"))).toEqual(
+      [0, 1, 2].map((index) => ({
+        ref: `workspace:file:large-${index}.log`,
+        maxBytes: 40_000,
+        mode: "content",
+      })),
+    );
+    expect(initial.at(-1)).toMatchObject({ type: "finish", finishReason: "tool_calls" });
+
+    const compacted = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL,
+      messages: [
+        { role: "system", content: "You compact conversation history for OpenPond App." },
+        { role: "user", content: "Compact the long-turn transcript." },
+      ],
+    })));
+    const summary = textFromDeltas(compacted);
+    expect(summary).toContain("## Goal");
+    expect(summary).toContain("workspace:file:large-2.log");
+    expect(summary).toContain("DESKTOP-LONG-TURN-COMPACTION-OK");
+    expect(compacted.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
+  });
+
+  test("loads a Profile skill through the real model-tool protocol", async () => {
+    const initial = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL,
+      messages: [{ role: "user", content: "Load the create-agent skill" }],
+    })));
+    const call = onlyToolCall(initial);
+    expect(call.function).toMatchObject({
+      name: "profile_skill_read",
+      arguments: JSON.stringify({ name: "create-agent" }),
+    });
+
+    const completed = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL,
+      messages: [
+        { role: "user", content: "Load the create-agent skill" },
+        toolResult("profile_skill_read", { skill: { name: "create-agent" } }),
+      ],
+    })));
+    expect(textFromDeltas(completed)).toBe("loaded hosted profile skill: create-agent");
+
+    const failed = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL,
+      messages: [
+        { role: "user", content: "Load the create-agent skill" },
+        {
+          role: "tool",
+          tool_call_id: "call_profile_skill_read",
+          content: JSON.stringify({
+            ok: false,
+            action: "profile_skill_read",
+            output: "Unknown tool: profile_skill_read",
+            data: null,
+          }),
+        },
+      ],
+    })));
+    expect(textFromDeltas(failed)).toBe("failed to load hosted profile skill: create-agent");
+  });
+
   test("returns a deterministic Agent plan for Lab Create/Improve tests", async () => {
     const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
       model: "openpond-scripted-chat-two-turns",
@@ -81,6 +187,78 @@ describe("scripted OpenPond chat provider", () => {
         },
       },
     });
+  });
+
+  test("asks for Account Health risk priority before returning the multi-action plan", async () => {
+    const baseRun = {
+      operation: "create",
+      objective: "Monitor customer account health and produce a weekly account review.",
+      target: { kind: "agent", id: null },
+      questions: [],
+    };
+    const questionDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "You are the OpenPond Create/Improve planner." },
+        { role: "user", content: JSON.stringify({ run: baseRun }) },
+      ],
+    })));
+    const questionDecision = JSON.parse(textFromDeltas(questionDeltas));
+    expect(questionDecision).toMatchObject({
+      decision: "questions",
+      questions: [{ id: "account_health_priority", kind: "single_choice" }],
+    });
+
+    const planDeltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "You are the OpenPond Create/Improve planner." },
+        { role: "user", content: JSON.stringify({ run: {
+          ...baseRun,
+          questions: [{ id: "account_health_priority", status: "answered" }],
+        } }) },
+      ],
+    })));
+    const planDecision = JSON.parse(textFromDeltas(planDeltas));
+    expect(planDecision).toMatchObject({
+      decision: "plan",
+      plan: {
+        targetId: "account-health-agent",
+        targetName: "Account Health Agent",
+        actionShape: {
+          mode: "chat_and_direct_actions",
+          defaultActionKey: "account-health-agent.chat",
+        },
+      },
+    });
+    expect(planDecision.plan.actionShape.directActionHint).toContain("summarize-account");
+    expect(planDecision.plan.actionShape.directActionHint).toContain("triage-renewal-risk");
+    expect(planDecision.plan.actionShape.directActionHint).toContain("build-weekly-account-review");
+  });
+
+  test("returns deterministic source-backed Account Health evidence responses", async () => {
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [{
+        role: "user",
+        content: "Summarize Acme: renewal 21 days, seats -31%, invoice overdue, P1 open.",
+      }],
+    })));
+    expect(textFromDeltas(deltas)).toContain("Acme is high risk");
+    expect(textFromDeltas(deltas)).toContain("Resolve the billing dispute and P1 first");
+  });
+
+  test("retains Account Health context for a follow-up turn", async () => {
+    const deltas = await collect(streamScriptedOpenPondChatTurn(inputFixture({
+      model: "openpond-scripted-chat-two-turns",
+      messages: [
+        { role: "system", content: "Use the Account Health Agent for Acme." },
+        { role: "user", content: "Summarize Acme with source-backed facts." },
+        { role: "assistant", content: "Acme is high risk." },
+        { role: "user", content: "What should we do first, and who owns it?" },
+      ],
+    })));
+    expect(textFromDeltas(deltas)).toContain("Resolve the billing dispute and P1 first");
   });
 
   test("starts a generic child and joins its completed result", async () => {

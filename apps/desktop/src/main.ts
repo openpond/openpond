@@ -20,6 +20,10 @@ import { closeBrowserSidebarManagers, registerBrowserSidebarIpc } from "./deskto
 import { createReadyLineParser } from "./child-process-ready.js";
 import { DesktopBackendManager } from "./desktop-backend-manager.js";
 import { isTrustedDesktopIpcFrameUrl } from "./desktop-ipc-trust.js";
+import {
+  isAllowedExternalDesktopUrl,
+  isTrustedDesktopNavigationUrl,
+} from "./desktop-navigation-policy.js";
 import { DesktopProcessTreeSampler } from "./desktop-process-sampler.js";
 import { DesktopRequestTracker } from "./desktop-request-tracker.js";
 import { readDesktopServerToken } from "./desktop-server-token.js";
@@ -658,6 +662,41 @@ function installEditContextMenu(window: BrowserWindow): void {
   });
 }
 
+function openExternalDesktopUrl(url: string): void {
+  const protocol = (() => {
+    try {
+      return new URL(url).protocol;
+    } catch {
+      return "invalid";
+    }
+  })();
+  if (!isAllowedExternalDesktopUrl(url)) {
+    desktopLogger().warn("blocked unsafe external URL", { protocol });
+    return;
+  }
+  void shell.openExternal(url).catch((error) => {
+    desktopLogger().warn("external URL failed to open", { protocol, error });
+  });
+}
+
+function installNavigationHandlers(window: BrowserWindow): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    openExternalDesktopUrl(url);
+    return { action: "deny" };
+  });
+  const protectMainFrameNavigation = (event: Electron.Event, url: string) => {
+    if (isTrustedDesktopNavigationUrl({
+      navigationUrl: url,
+      packaged: app.isPackaged,
+      trustedRendererUrl,
+    })) return;
+    event.preventDefault();
+    openExternalDesktopUrl(url);
+  };
+  window.webContents.on("will-navigate", protectMainFrameNavigation);
+  window.webContents.on("will-redirect", protectMainFrameNavigation);
+}
+
 async function createWindow(): Promise<void> {
   registerIpcHandlers();
   const preloadPath = path.join(desktopDirname, "preload.js");
@@ -694,10 +733,7 @@ async function createWindow(): Promise<void> {
   mainWindow.setMenuBarVisibility(false);
   installMediaPermissionHandlers(mainWindow);
 
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: "deny" };
-  });
+  installNavigationHandlers(mainWindow);
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     desktopLogger().error("renderer process gone", { details });
   });

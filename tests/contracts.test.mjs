@@ -176,6 +176,10 @@ describe("contracts", () => {
       durationMs: 1200,
       firstTokenMs: 180,
       promptTokens: 1000,
+      cachedPromptTokens: 600,
+      uncachedPromptTokens: 400,
+      cacheWritePromptTokens: null,
+      cacheTelemetrySource: "provider_usage_body",
       completionTokens: 250,
       totalTokens: 1250,
       errorType: null,
@@ -199,6 +203,7 @@ describe("contracts", () => {
       },
     });
     assert.equal(record.totalTokens, 1250);
+    assert.equal(record.cachedPromptTokens, 600);
     assert.equal(record.attribution.workspaceKind, "local_project");
     assert.equal("rawUsage" in record, false);
     const started = ModelUsageRecordSchema.parse({
@@ -208,6 +213,10 @@ describe("contracts", () => {
       completedAt: null,
       durationMs: null,
       promptTokens: null,
+      cachedPromptTokens: null,
+      uncachedPromptTokens: null,
+      cacheWritePromptTokens: null,
+      cacheTelemetrySource: null,
       completionTokens: null,
       totalTokens: null,
     });

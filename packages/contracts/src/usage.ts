@@ -14,6 +14,11 @@ export const ModelUsageSourceSchema = z.enum([
   "missing",
 ]);
 
+export const ModelUsageCacheTelemetrySourceSchema = z.enum([
+  "provider_usage_body",
+  "provider_response_headers",
+]);
+
 export const ModelUsageRequestKindSchema = z.enum([
   "chat_turn",
   "tool_loop",
@@ -120,6 +125,10 @@ export const ModelUsageRecordSchema = z.object({
   durationMs: z.number().int().nonnegative().nullable(),
   firstTokenMs: z.number().int().nonnegative().nullable(),
   promptTokens: z.number().int().nonnegative().nullable(),
+  cachedPromptTokens: z.number().int().nonnegative().nullable(),
+  uncachedPromptTokens: z.number().int().nonnegative().nullable(),
+  cacheWritePromptTokens: z.number().int().nonnegative().nullable(),
+  cacheTelemetrySource: ModelUsageCacheTelemetrySourceSchema.nullable(),
   completionTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
   errorType: z.string().trim().min(1).max(160).nullable(),
@@ -164,6 +173,14 @@ export const UsageRecordsQuerySchema = UsageSummaryQuerySchema.extend({
 const UsageBreakdownBaseSchema = z.object({
   requests: z.number().int().nonnegative(),
   promptTokens: z.number().int().nonnegative().nullable(),
+  cacheTelemetryRequests: z.number().int().nonnegative(),
+  cacheHitRequests: z.number().int().nonnegative(),
+  cachedPromptTokens: z.number().int().nonnegative().nullable(),
+  uncachedPromptTokens: z.number().int().nonnegative().nullable(),
+  cacheWritePromptTokens: z.number().int().nonnegative().nullable(),
+  cacheHitRate: z.number().min(0).max(1).nullable(),
+  cacheRequestHitRate: z.number().min(0).max(1).nullable(),
+  cacheTelemetryCoverage: z.number().min(0).max(1),
   completionTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
   averageLatencyMs: z.number().nonnegative().nullable(),
@@ -224,6 +241,14 @@ export const UsageTotalsSchema = z.object({
   failedRequests: z.number().int().nonnegative(),
   missingUsageRequests: z.number().int().nonnegative(),
   promptTokens: z.number().int().nonnegative().nullable(),
+  cacheTelemetryRequests: z.number().int().nonnegative(),
+  cacheHitRequests: z.number().int().nonnegative(),
+  cachedPromptTokens: z.number().int().nonnegative().nullable(),
+  uncachedPromptTokens: z.number().int().nonnegative().nullable(),
+  cacheWritePromptTokens: z.number().int().nonnegative().nullable(),
+  cacheHitRate: z.number().min(0).max(1).nullable(),
+  cacheRequestHitRate: z.number().min(0).max(1).nullable(),
+  cacheTelemetryCoverage: z.number().min(0).max(1),
   completionTokens: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nonnegative().nullable(),
   averageLatencyMs: z.number().nonnegative().nullable(),
@@ -292,6 +317,7 @@ export const UsageSignalSchema = z.object({
 
 export type ModelUsageRoute = z.infer<typeof ModelUsageRouteSchema>;
 export type ModelUsageSource = z.infer<typeof ModelUsageSourceSchema>;
+export type ModelUsageCacheTelemetrySource = z.infer<typeof ModelUsageCacheTelemetrySourceSchema>;
 export type ModelUsageRequestKind = z.infer<typeof ModelUsageRequestKindSchema>;
 export type ModelUsageVisibility = z.infer<typeof ModelUsageVisibilitySchema>;
 export type ModelUsageStatus = z.infer<typeof ModelUsageStatusSchema>;

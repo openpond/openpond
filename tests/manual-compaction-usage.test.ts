@@ -117,6 +117,18 @@ describe("manual context compaction usage", () => {
         event.sessionId === session.id && event.name === "session.compaction.completed"
       );
       expect(completedEvent?.data).toMatchObject({
+        continuationCapsule: expect.objectContaining({
+          schemaVersion: "openpond.continuation.v1",
+          activeFiles: expect.arrayContaining([
+            expect.objectContaining({ path: "tests/manual-compaction-usage.test.ts" }),
+          ]),
+          validations: expect.arrayContaining([
+            expect.objectContaining({
+              action: "pnpm test tests/manual-compaction-usage.test.ts",
+              status: "failed",
+            }),
+          ]),
+        }),
         fileLedger: expect.arrayContaining([
           expect.objectContaining({
             path: "tests/manual-compaction-usage.test.ts",
@@ -126,6 +138,13 @@ describe("manual context compaction usage", () => {
         ]),
         metrics: expect.objectContaining({
           fileLedgerEntries: expect.any(Number),
+          sourceRecords: expect.any(Number),
+          includedRecords: expect.any(Number),
+          omittedRecords: expect.any(Number),
+          preservedRecords: expect.any(Number),
+          truncatedRecords: expect.any(Number),
+          summaryInputTruncated: expect.any(Boolean),
+          sourceSelectionStrategy: "newest_useful_v1",
         }),
       });
     } finally {

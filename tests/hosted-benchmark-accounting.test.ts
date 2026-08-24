@@ -30,6 +30,12 @@ describe("hosted benchmark accounting", () => {
       completion_tokens: 500_000,
       prompt_tokens_details: { cached_tokens: 200_000 },
     }, pricing)).toBeCloseTo(1.82, 10);
+    expect(hostedUsageCostUsd({
+      input_tokens: 20,
+      output_tokens: 5,
+      cache_read_input_tokens: 60,
+      cache_creation_input_tokens: 10,
+    }, pricing)).toBeCloseTo(0.000046, 10);
     expect(() => hostedTokenPricingFromCatalog({ metadata: {} })).toThrow(
       "pricing version",
     );

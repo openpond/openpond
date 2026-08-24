@@ -68,6 +68,44 @@ describe("SqliteStore hardening", () => {
     });
   });
 
+  test("migrates version 43 usage storage to cache telemetry columns", async () => {
+    await withStoreDir(async (storeDir) => {
+      const storePath = path.join(storeDir, "state.sqlite");
+      const initialStore = new SqliteStore(storeDir);
+      await initialStore.snapshot();
+      await initialStore.close();
+
+      const oldDb = openTestDatabase(storePath);
+      await run(oldDb, "ALTER TABLE model_usage_records DROP COLUMN cached_prompt_tokens");
+      await run(oldDb, "ALTER TABLE model_usage_records DROP COLUMN uncached_prompt_tokens");
+      await run(oldDb, "ALTER TABLE model_usage_records DROP COLUMN cache_write_prompt_tokens");
+      await run(oldDb, "ALTER TABLE model_usage_records DROP COLUMN cache_telemetry_source");
+      await run(oldDb, "PRAGMA user_version = 43");
+      await close(oldDb);
+
+      const migratedStore = new SqliteStore(storeDir);
+      await migratedStore.snapshot();
+      await migratedStore.close();
+
+      const migratedDb = openTestDatabase(storePath);
+      try {
+        const columns = await all<{ name: string }>(
+          migratedDb,
+          "PRAGMA table_info(model_usage_records)",
+        );
+        expect(columns.map((column) => column.name)).toEqual(expect.arrayContaining([
+          "cached_prompt_tokens",
+          "uncached_prompt_tokens",
+          "cache_write_prompt_tokens",
+          "cache_telemetry_source",
+        ]));
+        expect(await userVersion(storePath)).toBe(CURRENT_SQLITE_SCHEMA_VERSION);
+      } finally {
+        await close(migratedDb);
+      }
+    });
+  });
+
   test("migrates version 40 stores to benchmark run storage", async () => {
     await withStoreDir(async (storeDir) => {
       const storePath = path.join(storeDir, "state.sqlite");

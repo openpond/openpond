@@ -36,6 +36,17 @@ export type AgentCompactionProgramResult<TLedger, TMetrics> = {
   metrics: TMetrics;
 };
 
+export type AgentCompactionSerialization = {
+  text: string;
+  inputChars: number;
+  sourceRecordCount: number;
+  includedRecordCount: number;
+  omittedRecordCount: number;
+  truncatedRecordCount: number;
+  inputTruncated: boolean;
+  selectionStrategy: string;
+};
+
 export type AgentCompactionProgramHost<
   TEvent extends AgentCompactionEvent,
   TRecord,
@@ -54,7 +65,7 @@ export type AgentCompactionProgramHost<
   serializeRecords(
     records: readonly TRecord[],
     maxInputChars: number,
-  ): { text: string; inputChars: number };
+  ): AgentCompactionSerialization;
   buildSummaryMessages(input: {
     serializedHistory: string;
     fileLedger: TLedger[];
@@ -75,6 +86,13 @@ export type AgentCompactionProgramHost<
     sourceEvents: number;
     summarizedEvents: number;
     preservedEvents: number;
+    sourceRecords: number;
+    includedRecords: number;
+    omittedRecords: number;
+    preservedRecords: number;
+    truncatedRecords: number;
+    summaryInputTruncated: boolean;
+    sourceSelectionStrategy: string;
     summaryInputChars: number;
     retainedTailTokens: number;
     retainedTailBudgetTokens: number;
@@ -174,6 +192,7 @@ export async function runAgentCompactionProgram<
   }
 
   const summaryRecords = input.host.normalizeRecords(summaryEvents);
+  const preservedRecords = input.host.normalizeRecords(preservedEvents);
   const fileLedger = input.host.buildFileLedger(
     input.host.normalizeRecords(projectionEvents),
   );
@@ -209,6 +228,13 @@ export async function runAgentCompactionProgram<
     sourceEvents: projectionEvents.length,
     summarizedEvents: summaryEvents.length,
     preservedEvents: preservedEvents.length,
+    sourceRecords: serialized.sourceRecordCount,
+    includedRecords: serialized.includedRecordCount,
+    omittedRecords: serialized.omittedRecordCount,
+    preservedRecords: preservedRecords.length,
+    truncatedRecords: serialized.truncatedRecordCount,
+    summaryInputTruncated: serialized.inputTruncated,
+    sourceSelectionStrategy: serialized.selectionStrategy,
     summaryInputChars: serialized.inputChars,
     retainedTailTokens: selection.retainedTailTokens,
     retainedTailBudgetTokens: selection.retainedTailBudgetTokens,

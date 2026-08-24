@@ -12,6 +12,13 @@ import {
 export const OPENPOND_SCRIPTED_MODEL_PREFIX = "openpond-scripted-";
 export const OPENPOND_HARNESS_SCRIPTED_MODELS_ENV = "OPENPOND_HARNESS_SCRIPTED_MODELS";
 export const OPENPOND_SCRIPTED_CHAT_TWO_TURNS_MODEL = "openpond-scripted-chat-two-turns";
+export const OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL = "openpond-scripted-chat-delayed-stream";
+export const OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL =
+  "openpond-scripted-chat-interrupt-recovery";
+export const OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL =
+  "openpond-scripted-packaged-long-turn-32k";
+export const OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL =
+  "openpond-scripted-profile-skill-load";
 export const OPENPOND_SCRIPTED_SUBAGENT_LIFECYCLE_MODEL = "openpond-scripted-subagent-lifecycle";
 export const OPENPOND_SCRIPTED_SUBAGENT_RUNNING_MODEL = "openpond-scripted-subagent-running-delay";
 export const OPENPOND_SCRIPTED_GOAL_SUBAGENT_RUNNING_MODEL = "openpond-scripted-goal-subagent-running";
@@ -83,8 +90,130 @@ export async function* streamScriptedOpenPondChatTurn(
     yield* streamTwoTurnChat(input);
     return;
   }
+  if (model === OPENPOND_SCRIPTED_CHAT_DELAYED_STREAM_MODEL) {
+    yield* streamDelayedChat(input);
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_CHAT_INTERRUPT_RECOVERY_MODEL) {
+    yield* streamInterruptRecoveryChat(input);
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_PACKAGED_LONG_TURN_MODEL) {
+    yield* streamPackagedLongTurn(input);
+    return;
+  }
+  if (model === OPENPOND_SCRIPTED_PROFILE_SKILL_LOAD_MODEL) {
+    yield* streamProfileSkillLoad(input);
+    return;
+  }
   yield textDelta(`Scripted OpenPond model ${model || "(missing model)"} completed.`);
   yield finishDelta("stop");
+}
+
+async function* streamDelayedChat(
+  input: HostedChatTurnInput,
+): AsyncGenerator<HostedChatTurnDelta, void, unknown> {
+  const latest = latestUserText(input.messages)?.slice(0, 80) ?? "(missing prompt)";
+  for (const chunk of ["delayed stream response", ` for: ${latest}`, " complete"]) {
+    await delay(450);
+    yield textDelta(chunk);
+  }
+  yield finishDelta("stop");
+}
+
+async function* streamInterruptRecoveryChat(
+  input: HostedChatTurnInput,
+): AsyncGenerator<HostedChatTurnDelta, void, unknown> {
+  const latest = latestUserText(input.messages)?.slice(0, 80) ?? "(missing prompt)";
+  const userTurns = input.messages.filter((message) => message.role === "user").length;
+  if (userTurns > 1) {
+    yield textDelta(`recovered response for: ${latest}`);
+    yield finishDelta("stop");
+    return;
+  }
+  await delay(300);
+  if (input.signal?.aborted) throw abortReason(input.signal);
+  yield textDelta("interruptible stream response");
+  await delayWithSignal(8_000, input.signal);
+  yield textDelta(" should not appear after stop");
+  yield finishDelta("stop");
+}
+
+async function* streamPackagedLongTurn(
+  input: HostedChatTurnInput,
+): AsyncGenerator<HostedChatTurnDelta, void, unknown> {
+  const isCompactionRequest = input.messages.some((message) =>
+    message.role === "system" &&
+    typeof message.content === "string" &&
+    message.content.includes("You compact conversation history for OpenPond App.")
+  );
+  if (isCompactionRequest) {
+    yield textDelta([
+      "## Goal",
+      "- Complete the deterministic packaged-desktop long-turn proof.",
+      "## Constraints & Preferences",
+      "- Preserve the exact three resource reads and finish without repeating them.",
+      "## Progress",
+      "- Read workspace:file:large-0.log, workspace:file:large-1.log, and workspace:file:large-2.log successfully.",
+      "## Key Decisions",
+      "- Resume directly with the final response after automatic compaction.",
+      "## Next Steps",
+      "- Emit DESKTOP-LONG-TURN-COMPACTION-OK exactly once.",
+      "## Critical Context",
+      "- All three deterministic reads completed before compaction.",
+      "## Relevant Files",
+      "- large-0.log",
+      "- large-1.log",
+      "- large-2.log",
+    ].join("\n"));
+    yield finishDelta("stop");
+    return;
+  }
+
+  const hasCompactedContext = input.messages.some((message) =>
+    message.role === "system" &&
+    typeof message.content === "string" &&
+    message.content.includes("Conversation summary from earlier turns:")
+  );
+  if (hasCompactedContext) {
+    await delayWithSignal(2_500, input.signal);
+    yield textDelta("All three deterministic resource reads survived compaction. ");
+    yield textDelta("DESKTOP-LONG-TURN-COMPACTION-OK");
+    yield finishDelta("stop");
+    return;
+  }
+
+  for (let index = 0; index < 3; index += 1) {
+    yield toolCallDelta("resource_read", {
+      ref: `workspace:file:large-${index}.log`,
+      maxBytes: 40_000,
+      mode: "content",
+    });
+  }
+  yield finishDelta("tool_calls");
+}
+
+function* streamProfileSkillLoad(
+  input: HostedChatTurnInput,
+): Generator<HostedChatTurnDelta, void, unknown> {
+  const loaded = latestToolResult(input.messages, "profile_skill_read");
+  if (loaded) {
+    const skillName = latestUserText(input.messages)?.includes("website")
+      ? "create-website"
+      : "create-agent";
+    yield textDelta(
+      loaded.ok === true
+        ? `loaded hosted profile skill: ${skillName}`
+        : `failed to load hosted profile skill: ${skillName}`,
+    );
+    yield finishDelta("stop");
+    return;
+  }
+  const skillName = latestUserText(input.messages)?.includes("website")
+    ? "create-website"
+    : "create-agent";
+  yield toolCallDelta("profile_skill_read", { name: skillName });
+  yield finishDelta("tool_calls");
 }
 
 function* streamTwoTurnChat(input: HostedChatTurnInput): Generator<HostedChatTurnDelta, void, unknown> {
@@ -100,6 +229,16 @@ function* streamTwoTurnChat(input: HostedChatTurnInput): Generator<HostedChatTur
   }
   const userTurns = input.messages.filter((message) => message.role === "user").length;
   const latest = latestUserText(input.messages);
+  const accountHealthContext = input.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => typeof message.content === "string" ? message.content : "")
+    .join("\n");
+  const accountHealthResponse = latest ? scriptedAccountHealthResponse(latest, accountHealthContext) : null;
+  if (accountHealthResponse) {
+    yield textDelta(accountHealthResponse);
+    yield finishDelta("stop");
+    return;
+  }
   yield textDelta(`scripted turn ${Math.max(1, userTurns)} response`);
   if (latest) yield textDelta(` for: ${latest.slice(0, 80)}`);
   yield finishDelta("stop");
@@ -120,10 +259,45 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
     ? run.objective.trim()
     : "Create a useful Profile Agent.";
   const target = record(run.target);
-  const targetId = typeof target.id === "string" && target.id.trim()
-    ? target.id.trim()
-    : scriptedAgentId(objective);
-  const targetName = targetId
+  const accountHealth = /account health|renewal risk|weekly account review/i.test(objective);
+  const questions = Array.isArray(run.questions)
+    ? run.questions.filter((question) => record(question).status === "answered")
+    : [];
+  const operation = run.operation === "improve" ? "improve" : "create";
+  if (accountHealth && operation === "create" && questions.length === 0) {
+    return JSON.stringify({
+      schemaVersion: "openpond.createImprove.plannerDecision.v1",
+      decision: "questions",
+      summary: "Confirm how conflicting account-health signals should be prioritized.",
+      questions: [{
+        id: "account_health_priority",
+        kind: "single_choice",
+        title: "Risk priority",
+        prompt: "When signals conflict, which blockers should the Account Health Agent rank first?",
+        required: true,
+        options: [
+          {
+            id: "billing_support_first",
+            label: "Billing and P1 first",
+            value: "Rank overdue or disputed billing and open P1 support blockers before adoption decline.",
+            description: "Escalate urgent commercial and support blockers before usage signals.",
+          },
+          {
+            id: "adoption_first",
+            label: "Adoption first",
+            value: "Rank usage and adoption decline before billing and support blockers.",
+            description: "Treat engagement changes as the leading risk signal.",
+          },
+        ],
+      }],
+    });
+  }
+  const targetId = accountHealth
+    ? "account-health-agent"
+    : typeof target.id === "string" && target.id.trim()
+      ? target.id.trim()
+      : scriptedAgentId(objective);
+  const targetName = accountHealth ? "Account Health Agent" : targetId
     .split(/[-_.]+/)
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
@@ -137,12 +311,18 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
       summary: `Create ${targetName} as a Profile Agent.`,
       capturedContextSummary: "Lab-authored Agent objective.",
       actionShape: {
-        mode: "chat",
-        label: "Chat",
-        detail: "Use the Agent through its default chat action.",
+        mode: accountHealth ? "chat_and_direct_actions" : "chat",
+        label: accountHealth ? "Account health chat and reviews" : "Chat",
+        detail: accountHealth
+          ? "Answer source-backed account questions and expose repeatable account summary, renewal triage, and weekly review actions."
+          : "Use the Agent through its default chat action.",
         defaultActionKey: `${targetId}.chat`,
-        directActionHint: null,
-        artifactPolicy: "Persist Agent SDK traces and Eval receipts.",
+        directActionHint: accountHealth
+          ? "Expose summarize-account {accountId}, triage-renewal-risk {accountId, asOfDate}, and build-weekly-account-review {asOfDate, minimumRisk}; the weekly review must write Markdown and JSON artifacts."
+          : null,
+        artifactPolicy: accountHealth
+          ? "Persist source-backed Agent SDK traces, Eval receipts, and weekly-review Markdown and JSON artifacts."
+          : "Persist Agent SDK traces and Eval receipts.",
       },
       defaultChatAction: {
         key: `${targetId}.chat`,
@@ -161,6 +341,23 @@ function scriptedCreateImprovePlannerDecision(messages: HostedChatMessage[]): st
       ],
     },
   });
+}
+
+function scriptedAccountHealthResponse(prompt: string, context: string): string | null {
+  if (!/account health|acme|northstar|glacier|renewal|billing|p1|weekly review|correction/i.test(context)) return null;
+  if (/correction|billing and p1/i.test(prompt)) {
+    return "Billing/P1 priority comes first. For high-risk accounts, rank overdue or disputed billing and open P1 support blockers before adoption decline. Sources: billing-status.json, support-cases.json.";
+  }
+  if (/acme/i.test(prompt) || (/what should|who owns|do first/i.test(prompt) && /acme/i.test(context))) {
+    return "Acme is high risk. Renewal is in 21 days; active seats are down 31%; a disputed invoice is 19 days overdue; and a P1 support case is open. Resolve the billing dispute and P1 first. Owner: Revenue Operations with Support.";
+  }
+  if (/northstar/i.test(prompt)) {
+    return "Northstar is an expansion opportunity. Renewal is in 87 days, active seats are up 18%, there is no overdue balance, and the customer requested 25 additional seats. Owner: Account Executive for expansion follow-up.";
+  }
+  if (/glacier/i.test(prompt)) {
+    return "Glacier is medium risk. Renewal is in 43 days, usage is flat, there is no P1 support case, and the account owner is missing. Assign an owner before the weekly review.";
+  }
+  return "Account health evidence recorded with source-backed facts and explicit ownership.";
 }
 
 function scriptedAgentId(objective: string): string {
@@ -716,4 +913,27 @@ function scriptedParentWakeRunId(messages: HostedChatMessage[]): string | null {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function delayWithSignal(ms: number, signal?: AbortSignal): Promise<void> {
+  if (!signal) return delay(ms);
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      reject(abortReason(signal));
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function abortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("Scripted chat stream interrupted.");
 }

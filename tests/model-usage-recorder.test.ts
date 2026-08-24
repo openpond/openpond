@@ -39,7 +39,13 @@ describe("model usage recorder", () => {
     });
 
     recorder.observeDelta({ text: "hello" });
-    recorder.observeDelta({ usage: { input_tokens: 30, output_tokens: 12 } });
+    recorder.observeDelta({
+      usage: {
+        input_tokens: 30,
+        output_tokens: 12,
+        input_tokens_details: { cached_tokens: 18 },
+      },
+    });
     await recorder.complete();
 
     expect(rows).toHaveLength(1);
@@ -48,6 +54,10 @@ describe("model usage recorder", () => {
       source: "provider_usage",
       route: "local_byok",
       promptTokens: 30,
+      cachedPromptTokens: 18,
+      uncachedPromptTokens: 12,
+      cacheWritePromptTokens: null,
+      cacheTelemetrySource: "provider_usage_body",
       completionTokens: 12,
       totalTokens: 42,
       requestKind: "slash_command",
@@ -118,6 +128,10 @@ describe("model usage recorder", () => {
       errorType: "TypeError",
       errorMessage: "provider failed",
       promptTokens: null,
+      cachedPromptTokens: null,
+      uncachedPromptTokens: null,
+      cacheWritePromptTokens: null,
+      cacheTelemetrySource: null,
       completionTokens: null,
       totalTokens: null,
     });

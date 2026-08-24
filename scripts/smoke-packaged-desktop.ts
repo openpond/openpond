@@ -142,6 +142,23 @@ async function main(): Promise<void> {
         `Packaged renderer must share the bundled server origin (renderer=${renderer.href}, server=${connection.serverUrl}).`,
       );
     }
+    const rendererDocument = await fetch(renderer.href);
+    const contentSecurityPolicy = rendererDocument.headers.get("content-security-policy") ?? "";
+    if (!contentSecurityPolicy) {
+      throw new Error("Packaged renderer response is missing Content-Security-Policy.");
+    }
+    if (contentSecurityPolicy.includes("'unsafe-eval'") || /script-src[^;]*'unsafe-inline'/.test(contentSecurityPolicy)) {
+      throw new Error(`Packaged renderer uses an unsafe script policy: ${contentSecurityPolicy}`);
+    }
+    if (!/script-src[^;]*'nonce-[^']+'/.test(contentSecurityPolicy)) {
+      throw new Error(`Packaged renderer script policy is missing its bootstrap nonce: ${contentSecurityPolicy}`);
+    }
+    const rendererSecurity = {
+      contentSecurityPolicy,
+      contentTypeOptions: rendererDocument.headers.get("x-content-type-options"),
+      frameOptions: rendererDocument.headers.get("x-frame-options"),
+      referrerPolicy: rendererDocument.headers.get("referrer-policy"),
+    };
     const healthStartedAt = Date.now();
     const health = await fetchJson<{ ok?: boolean; server?: string }>(`${connection.serverUrl}/health`);
     const healthMs = Date.now() - healthStartedAt;
@@ -201,6 +218,7 @@ async function main(): Promise<void> {
         href: renderer.href,
         title: renderer.title,
         readyState: renderer.readyState,
+        security: rendererSecurity,
       },
       timings: {
         totalSmokeMs: Date.now() - startedAt,

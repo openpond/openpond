@@ -6,17 +6,15 @@ import {
 } from "@openpond/contracts";
 import { formatPromptWithAttachmentContext } from "../../chat-attachments.js";
 import { textFromUnknown } from "../../utils.js";
+import { compactionAtomicGroupId } from "./atomic-groups.js";
+import { extractCompactionDurableFacts } from "./durable-facts.js";
 import { estimateTextTokens } from "./metrics.js";
 import type { CompactionRecord } from "./types.js";
-
-const MAX_SERIALIZED_EVENT_CHARS = 6_000;
-
-export type SerializedCompactionRecords = {
-  text: string;
-  inputChars: number;
-  includedRecordCount: number;
-  truncated: boolean;
-};
+import { extractCompactionFilePaths } from "./file-paths.js";
+export {
+  serializeRecordsForCompaction,
+  type SerializedCompactionRecords,
+} from "./source-selection.js";
 
 export function normalizeCompactionRecords(events: RuntimeEvent[]): CompactionRecord[] {
   const records: CompactionRecord[] = [];
@@ -74,40 +72,6 @@ export function normalizeCompactionRecords(events: RuntimeEvent[]): CompactionRe
   }
 
   return records;
-}
-
-export function serializeRecordsForCompaction(
-  records: readonly CompactionRecord[],
-  maxInputChars: number,
-): SerializedCompactionRecords {
-  const lines: string[] = [];
-  let totalChars = 0;
-  let includedRecordCount = 0;
-  let truncated = false;
-
-  function append(block: string): void {
-    if (!block.trim() || totalChars >= maxInputChars) return;
-    const remaining = maxInputChars - totalChars;
-    const value =
-      block.length > remaining
-        ? `${block.slice(0, Math.max(0, remaining - 32))}\n[compaction input truncated]`
-        : block;
-    if (block.length > remaining) truncated = true;
-    lines.push(value);
-    totalChars += value.length;
-    includedRecordCount += 1;
-  }
-
-  for (const item of records) {
-    append(section(item));
-  }
-
-  return {
-    text: lines.join("\n\n"),
-    inputChars: totalChars,
-    includedRecordCount,
-    truncated,
-  };
 }
 
 export function eventsForHostedCompaction(events: RuntimeEvent[]): RuntimeEvent[] {
@@ -207,6 +171,7 @@ function record(
   preserveVerbatim = false,
 ): CompactionRecord {
   const normalizedBody = body.trim() || eventPreview(event);
+  const filePaths = extractCompactionFilePaths(`${title}\n${normalizedBody}`);
   return {
     kind,
     title,
@@ -216,24 +181,16 @@ function record(
     turnId: event?.turnId ?? null,
     action: event?.action ?? null,
     status: event?.status ?? null,
-    filePaths: extractFilePaths(`${title}\n${normalizedBody}`),
+    atomicGroupId: compactionAtomicGroupId(event),
+    filePaths,
+    durableFacts: extractCompactionDurableFacts({
+      text: normalizedBody,
+      filePaths,
+      action: event?.action,
+    }),
     tokenEstimate: estimateTextTokens(`${title}\n${normalizedBody}`),
     preserveVerbatim,
   };
-}
-
-function section(record: CompactionRecord): string {
-  const metadata = record.event
-    ? [
-        record.turnId ? `turn=${record.turnId}` : null,
-        record.action ? `action=${record.action}` : null,
-        record.status ? `status=${record.status}` : null,
-      ]
-        .filter(Boolean)
-        .join(" ")
-    : "";
-  const prefix = metadata ? `### ${record.title} (${metadata})` : `### ${record.title}`;
-  return `${prefix}\n${truncate(record.body.trim() || eventPreview(record.event), MAX_SERIALIZED_EVENT_CHARS)}`;
 }
 
 function isGoalContextEvent(event: RuntimeEvent): boolean {
@@ -338,31 +295,10 @@ function subagentUsagePreview(usage: Record<string, unknown>): string | null {
   return `usage: ${totalTokens} tokens across ${requestCount} ${requestCount === 1 ? "request" : "requests"}`;
 }
 
-function extractFilePaths(value: string): string[] {
-  const paths = new Set<string>();
-  const durableRefPattern = /\b(?:workspace|sandbox):(file|dir):[^\s,)"']+/g;
-  for (const match of value.matchAll(durableRefPattern)) {
-    paths.add(match[0]);
-  }
-  const repoPathPattern = /\b(?:apps|packages|tests|scripts|docs|config|src)\/[A-Za-z0-9._/@+-]+/g;
-  for (const match of value.matchAll(repoPathPattern)) {
-    paths.add(match[0]);
-  }
-  const absolutePathPattern = /(?:^|\s)(\/(?:[A-Za-z0-9._@+-]+\/){1,}[A-Za-z0-9._@+-]+)/g;
-  for (const match of value.matchAll(absolutePathPattern)) {
-    paths.add(match[1]!);
-  }
-  return [...paths].slice(0, 20);
-}
-
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-}
-
-function truncate(value: string, maxChars: number): string {
-  return value.length > maxChars ? `${value.slice(0, maxChars)}\n[truncated]` : value;
 }

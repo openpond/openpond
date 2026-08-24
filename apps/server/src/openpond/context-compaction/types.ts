@@ -1,5 +1,10 @@
 import type { HostedChatMessage } from "@openpond/cloud";
 import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
+import type { HostedRequestBudget } from "../context-usage.js";
+import type { ContinuationCapsule } from "./continuation-capsule.js";
+
+export type { FileLedgerEntry, FileLedgerOperation } from "./file-ledger-types.js";
+import type { FileLedgerEntry } from "./file-ledger-types.js";
 
 export type HostedCompactionProvider = ChatProvider;
 
@@ -30,6 +35,23 @@ export type CompactionRecordKind =
   | "file_activity"
   | "other";
 
+export type CompactionDurableFactKind =
+  | "branch"
+  | "command"
+  | "endpoint"
+  | "error_code"
+  | "identifier"
+  | "labeled_value"
+  | "path"
+  | "port"
+  | "revision";
+
+export type CompactionDurableFact = {
+  kind: CompactionDurableFactKind;
+  label: string;
+  value: string;
+};
+
 export type CompactionRecord = {
   kind: CompactionRecordKind;
   title: string;
@@ -39,25 +61,24 @@ export type CompactionRecord = {
   turnId?: string | null;
   action?: string | null;
   status?: string | null;
+  atomicGroupId?: string | null;
   filePaths: string[];
+  durableFacts: CompactionDurableFact[];
   tokenEstimate: number;
   preserveVerbatim?: boolean;
-};
-
-export type FileLedgerOperation = "read" | "edit" | "diff" | "command" | "validation" | "failure";
-
-export type FileLedgerEntry = {
-  path: string;
-  operations: FileLedgerOperation[];
-  relevance: "referenced" | "active" | "validation" | "failed";
-  latestStatus: "unknown" | "ok" | "failed";
-  failure: string | null;
 };
 
 export type CompactionMetrics = {
   sourceEvents: number;
   summarizedEvents: number;
   preservedEvents: number;
+  sourceRecords: number;
+  includedRecords: number;
+  omittedRecords: number;
+  preservedRecords: number;
+  truncatedRecords: number;
+  summaryInputTruncated: boolean;
+  sourceSelectionStrategy: "newest_useful_v1";
   summaryInputChars: number;
   summaryInputTokens: number;
   retainedTailTokens: number;
@@ -80,6 +101,7 @@ export type HostedCompactionResult = {
   sourceEventCount: number;
   preservedEventCount: number;
   fileLedger: FileLedgerEntry[];
+  continuationCapsule: ContinuationCapsule;
   inputTokensBefore: number;
   inputTokensAfter: number;
   maxContextTokens: number;
@@ -94,6 +116,7 @@ export type HostedAutoCompactionDecision = {
   usableContextTokens: number;
   maxContextTokens: number;
   tokenSource: "heuristic";
+  requestBudget: HostedRequestBudget;
 };
 
 export type HostedCompactionInput = {

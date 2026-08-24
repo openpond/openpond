@@ -21,6 +21,7 @@ export default desktopScenario({
     await registerScriptedOpenPondModel(harness, modelRef);
     const title = harness.uniqueTitle("chat-two-turns");
     const session = await harness.api.createSession<Session>({
+      experience: "chat",
       provider: "openpond",
       modelRef,
       title,

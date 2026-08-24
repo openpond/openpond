@@ -44,6 +44,16 @@ type BreakdownAccumulator = {
   requests: number;
   promptTokens: number;
   promptTokenRows: number;
+  cacheTelemetryRequests: number;
+  cacheHitRequests: number;
+  cachedPromptTokens: number;
+  cachedPromptTokenRows: number;
+  uncachedPromptTokens: number;
+  uncachedPromptTokenRows: number;
+  cacheWritePromptTokens: number;
+  cacheWritePromptTokenRows: number;
+  cacheRateCachedTokens: number;
+  cacheRatePromptTokens: number;
   completionTokens: number;
   completionTokenRows: number;
   totalTokens: number;
@@ -198,6 +208,7 @@ function usageTotals(records: ModelUsageRecord[], rangeEnd: string): UsageSummar
     failedRequests,
     missingUsageRequests,
     promptTokens: nullableTokenTotal(totals.promptTokens, totals.promptTokenRows),
+    ...cacheTotals(totals),
     completionTokens: nullableTokenTotal(totals.completionTokens, totals.completionTokenRows),
     totalTokens: nullableTokenTotal(totals.totalTokens, totals.totalTokenRows),
     averageLatencyMs: average(totals.durations),
@@ -415,6 +426,16 @@ function accumulator(): BreakdownAccumulator {
     requests: 0,
     promptTokens: 0,
     promptTokenRows: 0,
+    cacheTelemetryRequests: 0,
+    cacheHitRequests: 0,
+    cachedPromptTokens: 0,
+    cachedPromptTokenRows: 0,
+    uncachedPromptTokens: 0,
+    uncachedPromptTokenRows: 0,
+    cacheWritePromptTokens: 0,
+    cacheWritePromptTokenRows: 0,
+    cacheRateCachedTokens: 0,
+    cacheRatePromptTokens: 0,
     completionTokens: 0,
     completionTokenRows: 0,
     totalTokens: 0,
@@ -432,6 +453,26 @@ function addRecord(accumulator: BreakdownAccumulator, record: ModelUsageRecord):
   if (record.promptTokens !== null) {
     accumulator.promptTokens += record.promptTokens;
     accumulator.promptTokenRows += 1;
+  }
+  if (record.cacheTelemetrySource !== null && record.promptTokens !== null) {
+    accumulator.cacheTelemetryRequests += 1;
+    if ((record.cachedPromptTokens ?? 0) > 0) accumulator.cacheHitRequests += 1;
+  }
+  if (record.cachedPromptTokens !== null) {
+    accumulator.cachedPromptTokens += record.cachedPromptTokens;
+    accumulator.cachedPromptTokenRows += 1;
+  }
+  if (record.uncachedPromptTokens !== null) {
+    accumulator.uncachedPromptTokens += record.uncachedPromptTokens;
+    accumulator.uncachedPromptTokenRows += 1;
+  }
+  if (record.cacheWritePromptTokens !== null) {
+    accumulator.cacheWritePromptTokens += record.cacheWritePromptTokens;
+    accumulator.cacheWritePromptTokenRows += 1;
+  }
+  if (record.cachedPromptTokens !== null && record.uncachedPromptTokens !== null) {
+    accumulator.cacheRateCachedTokens += record.cachedPromptTokens;
+    accumulator.cacheRatePromptTokens += record.cachedPromptTokens + record.uncachedPromptTokens;
   }
   if (record.completionTokens !== null) {
     accumulator.completionTokens += record.completionTokens;
@@ -456,6 +497,7 @@ function breakdownTotals(accumulator: BreakdownAccumulator) {
   return {
     requests: accumulator.requests,
     promptTokens: nullableTokenTotal(accumulator.promptTokens, accumulator.promptTokenRows),
+    ...cacheTotals(accumulator),
     completionTokens: nullableTokenTotal(accumulator.completionTokens, accumulator.completionTokenRows),
     totalTokens: nullableTokenTotal(accumulator.totalTokens, accumulator.totalTokenRows),
     averageLatencyMs: average(accumulator.durations),
@@ -469,9 +511,49 @@ function breakdownTotals(accumulator: BreakdownAccumulator) {
   };
 }
 
+function cacheTotals(accumulator: BreakdownAccumulator) {
+  return {
+    cacheTelemetryRequests: accumulator.cacheTelemetryRequests,
+    cacheHitRequests: accumulator.cacheHitRequests,
+    cachedPromptTokens: nullableTokenTotal(
+      accumulator.cachedPromptTokens,
+      accumulator.cachedPromptTokenRows,
+    ),
+    uncachedPromptTokens: nullableTokenTotal(
+      accumulator.uncachedPromptTokens,
+      accumulator.uncachedPromptTokenRows,
+    ),
+    cacheWritePromptTokens: nullableTokenTotal(
+      accumulator.cacheWritePromptTokens,
+      accumulator.cacheWritePromptTokenRows,
+    ),
+    cacheHitRate: ratioOrNull(
+      accumulator.cacheRateCachedTokens,
+      accumulator.cacheRatePromptTokens,
+    ),
+    cacheRequestHitRate: ratioOrNull(
+      accumulator.cacheHitRequests,
+      accumulator.cacheTelemetryRequests,
+    ),
+    cacheTelemetryCoverage: ratioOrZero(
+      accumulator.cacheTelemetryRequests,
+      accumulator.promptTokenRows,
+    ),
+  };
+}
+
 function failureRate(failures: number, requests: number): number {
   if (requests <= 0) return 0;
   return Number((failures / requests).toFixed(4));
+}
+
+function ratioOrNull(numerator: number, denominator: number): number | null {
+  if (denominator <= 0) return null;
+  return Number((numerator / denominator).toFixed(4));
+}
+
+function ratioOrZero(numerator: number, denominator: number): number {
+  return ratioOrNull(numerator, denominator) ?? 0;
 }
 
 function nullableTokenTotal(total: number, rows: number): number | null {

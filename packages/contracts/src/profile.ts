@@ -59,6 +59,7 @@ export const OpenPondProfileGitStateSchema = z.object({
   behind: z.number().nullable(),
   remoteUrl: z.string().nullable(),
   files: z.array(OpenPondProfileGitFileChangeSchema),
+  fileCount: z.number().int().nonnegative().optional(),
   error: z.string().nullable(),
 });
 
@@ -109,6 +110,7 @@ export const OpenPondProfileDiffSummarySchema = z.object({
   setupChanges: z.array(z.string()),
   envRequirementChanges: z.array(z.string()),
   files: z.array(OpenPondProfileGitFileChangeSchema),
+  fileCount: z.number().int().nonnegative().optional(),
 });
 
 export const OpenPondProfileHostedSourceCheckStatusSchema = z.object({

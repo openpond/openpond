@@ -31,6 +31,7 @@ export function createByokTurnRunnerHarness(input: {
   usageByPass?: Record<number, unknown>;
   failOnPass?: number;
   failure?: Error;
+  compactionSummary?: string;
   preferences?: AppPreferences;
   providerSettings?: ProviderSettings;
   finalizeCrossSystemTurn?: NonNullable<
@@ -207,7 +208,16 @@ export function createByokTurnRunnerHarness(input: {
         messages: streamInput.messages,
         tools: streamInput.tools,
         toolChoice: streamInput.toolChoice,
+        maxOutputTokens: streamInput.maxTokens,
       });
+      if (isCompactionRequestId(streamInput.requestId)) {
+        yield {
+          type: "text_delta",
+          text: input.compactionSummary ?? "Compacted durable state; continue the active task.",
+          raw: { compaction: true },
+        };
+        return;
+      }
       for await (const delta of harnessStreamDeltas()) {
         if (delta.text)
           yield { type: "text_delta", text: delta.text, raw: delta.raw };
@@ -239,6 +249,13 @@ export function createByokTurnRunnerHarness(input: {
           "BYOK stream should not be used for OpenPond hosted tests"
         );
       streamInputs.push(streamInput);
+      if (isCompactionRequestId(streamInput.requestId)) {
+        yield {
+          text: input.compactionSummary ?? "Compacted durable state; continue the active task.",
+          raw: { compaction: true },
+        };
+        return;
+      }
       yield* harnessStreamDeltas();
     },
     turnFollowUpQueue,
@@ -320,6 +337,10 @@ export function createByokTurnRunnerHarness(input: {
     usageRecords,
     turnFollowUpQueue,
   };
+}
+
+function isCompactionRequestId(requestId: string): boolean {
+  return requestId.includes(":context-compaction:") || requestId.startsWith("compact-");
 }
 
 export function openRouterProviderSettingsWithContextWindow(

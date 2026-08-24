@@ -66,34 +66,13 @@ export function hostedUsageCostUsd(
     normalized.promptTokens === null
     && normalized.completionTokens === null
   ) return null;
-  const usageRecord = record(usage);
-  const cached = Math.min(
-    normalized.promptTokens ?? 0,
-    cachedInputTokens(usageRecord),
-  );
-  const uncached = Math.max(0, (normalized.promptTokens ?? 0) - cached);
+  const cached = normalized.cachedPromptTokens ?? 0;
+  const uncached = normalized.uncachedPromptTokens ?? normalized.promptTokens ?? 0;
   return (
     uncached * pricing.inputUsdPerMillionTokens
     + cached * pricing.cachedInputUsdPerMillionTokens
     + (normalized.completionTokens ?? 0) * pricing.outputUsdPerMillionTokens
   ) / 1_000_000;
-}
-
-function cachedInputTokens(usage: Record<string, unknown>): number {
-  const candidates = [
-    usage.cached_input_tokens,
-    usage.cachedInputTokens,
-    record(usage.prompt_tokens_details).cached_tokens,
-    record(usage.promptTokensDetails).cachedTokens,
-    record(usage.input_tokens_details).cached_tokens,
-    record(usage.inputTokensDetails).cachedTokens,
-  ];
-  for (const value of candidates) {
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-      return Math.trunc(value);
-    }
-  }
-  return 0;
 }
 
 function record(value: unknown): Record<string, unknown> {

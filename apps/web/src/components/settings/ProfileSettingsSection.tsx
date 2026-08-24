@@ -1079,7 +1079,10 @@ function profileSyncDifferences(profile: ProfileState, selectedDefaultTeamId: st
   }
 
   if (profile.git?.dirty) {
-    const fileCount = profile.git.files.length || profile.diff.files.length || 1;
+    const fileCount =
+      (profile.git.fileCount ?? profile.git.files.length) ||
+      (profile.diff.fileCount ?? profile.diff.files.length) ||
+      1;
     differences.push({
       label: "Uncommitted files",
       detail: `${fileCount} local ${fileCount === 1 ? "file" : "files"} changed.`,

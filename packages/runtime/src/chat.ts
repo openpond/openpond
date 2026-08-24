@@ -286,6 +286,7 @@ export async function* streamOpChatChatCompletion(
   let lastPayload: unknown = {};
   let accumulatedReasoning = "";
   let usage: HostedChatUsage | null = null;
+  const responseHeaderUsage = cacheUsageFromResponseHeaders(response.headers);
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
@@ -386,8 +387,75 @@ export async function* streamOpChatChatCompletion(
       raw: lastPayload,
     };
   }
-  if (usage) yield { type: "usage", usage, raw: lastPayload };
+  const completedUsage = usageWithResponseHeaderCache(usage, responseHeaderUsage);
+  if (completedUsage) yield { type: "usage", usage: completedUsage, raw: lastPayload };
   yield { type: "finish", finishReason, raw: lastPayload };
+}
+
+function cacheUsageFromResponseHeaders(headers: Headers): HostedChatUsage | null {
+  const promptTokens = firstHeaderTokenCount(headers, [
+    "fireworks-prompt-tokens",
+    "prompt-tokens",
+  ]);
+  const cachedPromptTokens = firstHeaderTokenCount(headers, [
+    "fireworks-cached-prompt-tokens",
+    "cached-prompt-tokens",
+  ]);
+  if (cachedPromptTokens === null) return null;
+  return {
+    ...(promptTokens === null ? {} : { prompt_tokens: promptTokens }),
+    cached_input_tokens: cachedPromptTokens,
+    cache_telemetry_source: "provider_response_headers",
+  };
+}
+
+function firstHeaderTokenCount(headers: Headers, names: readonly string[]): number | null {
+  for (const name of names) {
+    const value = headers.get(name);
+    if (value === null || !/^\d+$/.test(value.trim())) continue;
+    const parsed = Number(value);
+    if (Number.isSafeInteger(parsed) && parsed >= 0) return parsed;
+  }
+  return null;
+}
+
+function usageWithResponseHeaderCache(
+  usage: HostedChatUsage | null,
+  responseHeaderUsage: HostedChatUsage | null,
+): HostedChatUsage | null {
+  if (!responseHeaderUsage || usageHasCacheTelemetry(usage)) return usage;
+  const merged: HostedChatUsage = {
+    ...(usage ?? {}),
+    cached_input_tokens: responseHeaderUsage.cached_input_tokens,
+    cache_telemetry_source: "provider_response_headers",
+  };
+  if (
+    usageTokenCount(usage?.prompt_tokens) === null
+    && responseHeaderUsage.prompt_tokens !== undefined
+  ) {
+    merged.prompt_tokens = responseHeaderUsage.prompt_tokens;
+  }
+  return merged;
+}
+
+function usageHasCacheTelemetry(usage: HostedChatUsage | null): boolean {
+  if (!usage) return false;
+  if (
+    usageTokenCount(usage.cached_input_tokens) !== null
+    || usageTokenCount(usage.cache_read_input_tokens) !== null
+    || usageTokenCount(usage.cache_creation_input_tokens) !== null
+    || usageTokenCount(usage.prompt_cache_hit_tokens) !== null
+    || usageTokenCount(usage.prompt_cache_miss_tokens) !== null
+  ) return true;
+  return usageTokenCount(usage.prompt_tokens_details?.cached_tokens) !== null
+    || usageTokenCount(usage.input_tokens_details?.cached_tokens) !== null;
+}
+
+function usageTokenCount(value: unknown): number | null {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value !== "string" || !/^\d+$/.test(value.trim())) return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
 type PendingOpChatToolCall = {

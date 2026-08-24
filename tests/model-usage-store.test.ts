@@ -25,6 +25,9 @@ describe("model usage store", () => {
         completedAt: "2026-07-04T10:00:02.000Z",
         durationMs: 2000,
         promptTokens: 1200,
+        cachedPromptTokens: 800,
+        uncachedPromptTokens: 400,
+        cacheTelemetrySource: "provider_usage_body",
         completionTokens: 300,
         totalTokens: 1500,
       });
@@ -36,6 +39,7 @@ describe("model usage store", () => {
       const rows = await store.listModelUsageRecords({ sessionId: "session_usage_1" });
       expect(rows).toHaveLength(1);
       expect(rows[0]?.totalTokens).toBe(1500);
+      expect(rows[0]?.cachedPromptTokens).toBe(800);
       expect("rawUsage" in (rows[0] as Record<string, unknown>)).toBe(false);
 
       expect(Object.keys(stored ?? {}).sort()).toEqual(expectedUsageRecordKeys);
@@ -89,6 +93,10 @@ const expectedUsageRecordKeys = [
   "attribution",
   "completedAt",
   "completionTokens",
+  "cachedPromptTokens",
+  "uncachedPromptTokens",
+  "cacheWritePromptTokens",
+  "cacheTelemetrySource",
   "durationMs",
   "errorMessage",
   "errorType",
@@ -133,6 +141,10 @@ const expectedSqliteUsageColumns = [
   "attribution_json",
   "completed_at",
   "completion_tokens",
+  "cached_prompt_tokens",
+  "uncached_prompt_tokens",
+  "cache_write_prompt_tokens",
+  "cache_telemetry_source",
   "duration_ms",
   "error_message",
   "error_type",
@@ -196,6 +208,10 @@ function usageRecord(patch: Partial<ModelUsageRecord> = {}): ModelUsageRecord {
     durationMs: 1000,
     firstTokenMs: 120,
     promptTokens: 1000,
+    cachedPromptTokens: null,
+    uncachedPromptTokens: null,
+    cacheWritePromptTokens: null,
+    cacheTelemetrySource: null,
     completionTokens: 200,
     totalTokens: 1200,
     errorType: null,

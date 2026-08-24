@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  profilePublicationGitignoreContents,
   profilePublicationContentsLookSensitive,
   profilePublicationPathEscapesRepo,
   profilePublicationPathIsSensitive,
@@ -47,4 +48,12 @@ describe("Profile publication safety", () => {
       "profiles/default/skills/review",
     );
   });
+
+  test("publishes an ignore rule for generated Profile runtime state", () => {
+    expect(profilePublicationGitignoreContents("profiles/default")).toBe(
+      "# Generated OpenPond runtime state is local to each installation.\nprofiles/default/.openpond/\n",
+    );
+    expect(profilePublicationGitignoreContents(".")).toContain("\n.openpond/\n");
+  });
+
 });

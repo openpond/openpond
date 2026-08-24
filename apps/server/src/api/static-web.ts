@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { createReadStream, type Stats } from "node:fs";
 import { promises as fs } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -13,6 +14,34 @@ type StaticWebHandler = (request: IncomingMessage, response: ServerResponse, nex
 const API_PATH_PREFIXES = ["/v1/"];
 const API_PATHS = new Set(["/health"]);
 const ONE_YEAR_SECONDS = 31536000;
+
+function staticSecurityHeaders(): Record<string, string> {
+  return {
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+  };
+}
+
+function indexSecurityHeaders(nonce: string): Record<string, string> {
+  return {
+    ...staticSecurityHeaders(),
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      `script-src 'self' 'nonce-${nonce}'`,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https:",
+      "font-src 'self' data:",
+      "media-src 'self' data: blob: https:",
+      "connect-src 'self' http: https: ws: wss:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+    ].join("; "),
+  };
+}
 
 const MIME_TYPES: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
@@ -76,6 +105,7 @@ function cacheControl(filePath: string): string {
 
 function sendFile(request: IncomingMessage, response: ServerResponse, filePath: string, stat: Stats): void {
   response.writeHead(200, {
+    ...staticSecurityHeaders(),
     "Content-Length": stat.size,
     "Content-Type": contentType(filePath),
     "Cache-Control": cacheControl(filePath),
@@ -109,8 +139,9 @@ async function sendIndex({
   token: string;
 }): Promise<void> {
   let html = await fs.readFile(indexPath, "utf8");
+  const nonce = randomBytes(18).toString("base64url");
   if (isLoopbackHost(requestUrl.hostname)) {
-    const connectionScript = `<script>window.__OPENPOND_WEB_CONNECTION__=${escapeScriptJson(
+    const connectionScript = `<script nonce="${nonce}">window.__OPENPOND_WEB_CONNECTION__=${escapeScriptJson(
       JSON.stringify({
         serverUrl: requestUrl.origin,
         token,
@@ -122,6 +153,7 @@ async function sendIndex({
   }
   const body = Buffer.from(html, "utf8");
   response.writeHead(200, {
+    ...indexSecurityHeaders(nonce),
     "Content-Length": body.byteLength,
     "Content-Type": "text/html; charset=utf-8",
     "Cache-Control": "no-cache",
@@ -135,6 +167,7 @@ async function sendIndex({
 
 function sendNotFound(response: ServerResponse): void {
   response.writeHead(404, {
+    ...staticSecurityHeaders(),
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-cache",
   });

@@ -19,6 +19,10 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("Current streak");
     expect(html).toContain("Token activity");
     expect(html).toContain("Activity summary");
+    expect(html).toContain("Prompt cache reuse");
+    expect(html).toContain("Cache telemetry");
+    expect(html).toContain("66.7%");
+    expect(html).toContain("title=\"50%\"");
     expect(html).toContain("Model activity");
     expect(html).toContain("Model colors");
     expect(html).toContain("data-model-count=\"2\"");
@@ -139,6 +143,14 @@ function usageSummary(): UsageSummaryResponse {
       failedRequests: 1,
       missingUsageRequests: 1,
       promptTokens: 1120,
+      cacheTelemetryRequests: 1,
+      cacheHitRequests: 1,
+      cachedPromptTokens: 600,
+      uncachedPromptTokens: 300,
+      cacheWritePromptTokens: null,
+      cacheHitRate: 0.6667,
+      cacheRequestHitRate: 1,
+      cacheTelemetryCoverage: 0.5,
       completionTokens: 380,
       totalTokens: 1500,
       averageLatencyMs: 2000,
@@ -181,6 +193,7 @@ function usageSummary(): UsageSummaryResponse {
         route: "local_byok",
         requests: 2,
         promptTokens: 900,
+        ...cacheBreakdown(),
         completionTokens: 300,
         totalTokens: 1200,
         averageLatencyMs: 1000,
@@ -198,6 +211,7 @@ function usageSummary(): UsageSummaryResponse {
         route: "local_byok",
         requests: 1,
         promptTokens: 220,
+        ...emptyCacheBreakdown(),
         completionTokens: 80,
         totalTokens: 300,
         averageLatencyMs: 3000,
@@ -218,6 +232,7 @@ function usageSummary(): UsageSummaryResponse {
         workspaceId: "workspace_usage",
         requests: 3,
         promptTokens: 1120,
+        ...cacheBreakdown({ cacheTelemetryCoverage: 0.5 }),
         completionTokens: 380,
         totalTokens: 1500,
         averageLatencyMs: 2000,
@@ -236,6 +251,7 @@ function usageSummary(): UsageSummaryResponse {
         commandSource: "composer_selection",
         requests: 1,
         promptTokens: 900,
+        ...cacheBreakdown(),
         completionTokens: 300,
         totalTokens: 1200,
         averageLatencyMs: 1000,
@@ -311,6 +327,14 @@ function emptySummary(): UsageSummaryResponse {
       failedRequests: 0,
       missingUsageRequests: 0,
       promptTokens: null,
+      cacheTelemetryRequests: 0,
+      cacheHitRequests: 0,
+      cachedPromptTokens: null,
+      uncachedPromptTokens: null,
+      cacheWritePromptTokens: null,
+      cacheHitRate: null,
+      cacheRequestHitRate: null,
+      cacheTelemetryCoverage: 0,
       completionTokens: null,
       totalTokens: null,
       averageLatencyMs: null,
@@ -362,6 +386,10 @@ function usageRecord(): ModelUsageRecord {
     durationMs: 1000,
     firstTokenMs: 80,
     promptTokens: 900,
+    cachedPromptTokens: 600,
+    uncachedPromptTokens: 300,
+    cacheWritePromptTokens: null,
+    cacheTelemetrySource: "provider_usage_body",
     completionTokens: 300,
     totalTokens: 1200,
     errorType: null,
@@ -389,6 +417,7 @@ function breakdown<T extends object>(overrides: T) {
   return {
     requests: 3,
     promptTokens: 1120,
+    ...cacheBreakdown({ cacheTelemetryCoverage: 0.5 }),
     completionTokens: 380,
     totalTokens: 1500,
     averageLatencyMs: 2000,
@@ -400,5 +429,32 @@ function breakdown<T extends object>(overrides: T) {
     firstSeenAt: "2026-07-04T10:00:00.000Z",
     lastSeenAt: "2026-07-04T13:00:00.000Z",
     ...overrides,
+  };
+}
+
+function cacheBreakdown(overrides: Partial<ReturnType<typeof emptyCacheBreakdown>> = {}) {
+  return {
+    cacheTelemetryRequests: 1,
+    cacheHitRequests: 1,
+    cachedPromptTokens: 600,
+    uncachedPromptTokens: 300,
+    cacheWritePromptTokens: null,
+    cacheHitRate: 0.6667,
+    cacheRequestHitRate: 1,
+    cacheTelemetryCoverage: 1,
+    ...overrides,
+  };
+}
+
+function emptyCacheBreakdown() {
+  return {
+    cacheTelemetryRequests: 0,
+    cacheHitRequests: 0,
+    cachedPromptTokens: null,
+    uncachedPromptTokens: null,
+    cacheWritePromptTokens: null,
+    cacheHitRate: null,
+    cacheRequestHitRate: null,
+    cacheTelemetryCoverage: 0,
   };
 }

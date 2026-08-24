@@ -187,6 +187,88 @@ describe("OpenPond runtime OpChat routing", () => {
     });
   });
 
+  test("captures Fireworks prompt-cache response headers when the usage body omits them", async () => {
+    globalThis.fetch = async () => sseResponse([
+      { choices: [{ delta: { content: "cached" }, finish_reason: null }] },
+      {
+        choices: [{ delta: {}, finish_reason: "stop" }],
+        usage: { prompt_tokens: 100, completion_tokens: 5, total_tokens: 105 },
+      },
+      "[DONE]",
+    ], {
+      "fireworks-prompt-tokens": "100",
+      "fireworks-cached-prompt-tokens": "70",
+    });
+
+    const deltas = await collectStream();
+
+    expect(deltas.find((delta) => delta.type === "usage")).toMatchObject({
+      type: "usage",
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 5,
+        total_tokens: 105,
+        cached_input_tokens: 70,
+        cache_telemetry_source: "provider_response_headers",
+      },
+    });
+  });
+
+  test("prefers provider usage-body cache telemetry over response headers", async () => {
+    globalThis.fetch = async () => sseResponse([
+      {
+        choices: [{ delta: {}, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 5,
+          total_tokens: 105,
+          prompt_tokens_details: { cached_tokens: 40 },
+        },
+      },
+      "[DONE]",
+    ], {
+      "fireworks-prompt-tokens": "100",
+      "fireworks-cached-prompt-tokens": "70",
+    });
+
+    const usageDelta = (await collectStream()).find((delta) => delta.type === "usage");
+
+    expect(usageDelta).toMatchObject({
+      type: "usage",
+      usage: { prompt_tokens_details: { cached_tokens: 40 } },
+    });
+    expect(usageDelta && "usage" in usageDelta
+      ? usageDelta.usage.cache_telemetry_source
+      : undefined).toBeUndefined();
+  });
+
+  test("falls back to response headers when cache fields in the usage body are malformed", async () => {
+    globalThis.fetch = async () => sseResponse([
+      {
+        choices: [{ delta: {}, finish_reason: "stop" }],
+        usage: {
+          prompt_tokens: 100,
+          completion_tokens: 5,
+          cached_input_tokens: "unknown",
+        },
+      },
+      "[DONE]",
+    ], {
+      "fireworks-prompt-tokens": "100",
+      "fireworks-cached-prompt-tokens": "70",
+    });
+
+    expect((await collectStream()).find((delta) => delta.type === "usage")).toMatchObject({
+      type: "usage",
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 5,
+        cached_input_tokens: 70,
+        cache_telemetry_source: "provider_response_headers",
+      },
+    });
+  });
+
   test("sends native tools to OpChat and preserves reasoning for tool follow-ups", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     globalThis.fetch = async (input, init) => {
@@ -403,7 +485,10 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function sseResponse(events: Array<unknown | string>): Response {
+function sseResponse(
+  events: Array<unknown | string>,
+  headers: Record<string, string> = {},
+): Response {
   const body = events.map((event) => {
     if (typeof event === "string" && event.startsWith(":")) {
       return `${event}\n\n`;
@@ -411,7 +496,7 @@ function sseResponse(events: Array<unknown | string>): Response {
     return `data: ${typeof event === "string" ? event : JSON.stringify(event)}\n\n`;
   }).join("");
   return new Response(body, {
-    headers: { "content-type": "text/event-stream" },
+    headers: { "content-type": "text/event-stream", ...headers },
   });
 }
 
