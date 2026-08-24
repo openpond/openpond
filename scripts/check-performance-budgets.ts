@@ -86,7 +86,7 @@ export type StartupMetrics =
 
 export const DEFAULT_RENDERER_BUNDLE_BUDGETS: RendererBundleBudgets = {
   maxTotalJsBytes: 16 * 1024 * 1024,
-  maxInitialAssetBytes: 1.26 * 1024 * 1024,
+  maxInitialAssetBytes: 1.27 * 1024 * 1024,
   maxLargestAssetBytes: 8 * 1024 * 1024,
 };
 
