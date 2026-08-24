@@ -9,7 +9,13 @@ import {
   type AgentRuntimeServicePorts,
   type JsonRpcNotification,
 } from "@openpond/agent-runtime";
-import type { Approval, RuntimeEvent, Session, Turn } from "@openpond/contracts";
+import {
+  CONNECTED_APP_PROVIDER_ORDER,
+  type Approval,
+  type RuntimeEvent,
+  type Session,
+  type Turn,
+} from "@openpond/contracts";
 import { z } from "zod";
 
 export function createAgentRuntimePorts(deps: {
@@ -73,6 +79,7 @@ export function createAgentRuntimePorts(deps: {
         harnessRollback: true,
         harnessReview: true,
       },
+      connectedAppProviders: [...CONNECTED_APP_PROVIDER_ORDER],
       tools: recordedTools,
       toolCatalogHash: recordedHash,
     };

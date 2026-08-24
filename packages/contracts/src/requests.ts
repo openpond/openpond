@@ -42,6 +42,7 @@ const ConnectedAppProviderFamilyIdSchema = z.enum([
   "microsoft_teams",
   "github",
   "google",
+  "turnkey",
   "x",
   "mcp",
 ]);
@@ -51,6 +52,7 @@ const ConnectedAppIdSchema = z.enum([
   "microsoft_teams",
   "github",
   "google",
+  "turnkey",
   "x",
   "mcp",
 ]);
@@ -58,6 +60,7 @@ const ConnectedAppIdSchema = z.enum([
 const ConnectedAppSetupSurfaceSchema = z.enum([
   "native_bot",
   "oauth_connector",
+  "wallet_connector",
   "mcp_endpoint",
 ]);
 

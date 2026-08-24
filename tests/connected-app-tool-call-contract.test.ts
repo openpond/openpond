@@ -39,6 +39,27 @@ describe("connected app tool-call contract", () => {
     );
   });
 
+  test("accepts read-only Turnkey Agent Wallet calls", () => {
+    const request = {
+      provider: "turnkey",
+      operation: "read",
+      toolName: "connected_app_read",
+      sessionId: "session_1",
+      turnId: "turn_1",
+      toolCallId: "tool_call_turnkey_balance_1",
+      userPrompt: "show my Agent Wallet balance",
+      connectionIds: ["conn_turnkey"],
+      capabilityIds: ["turnkey.balances.read"],
+      args: {
+        provider: "turnkey",
+        operation: "turnkey.balances.read",
+        ref: "agent-wallet",
+      },
+    } as const;
+
+    expect(ConnectedAppToolCallRequestSchema.parse(request)).toEqual(request);
+  });
+
   test("rejects native ingestion and descriptor-only providers", () => {
     const slack = ConnectedAppToolCallRequestSchema.safeParse({
       ...googleSearchRequest(),

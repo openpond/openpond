@@ -21,6 +21,7 @@ const EXPECTED_CATALOG_IDS = [
   "google",
   "github",
   "x",
+  "turnkey",
   "microsoft_teams",
   "mcp",
 ] as const;
@@ -133,6 +134,7 @@ describe("connected app bundles", () => {
       "slack",
       "google",
       "github",
+      "turnkey",
       "x",
       "microsoft_teams",
       "mcp",
@@ -163,9 +165,12 @@ describe("connected app bundles", () => {
         continue;
       }
 
-      expect(toolNames, bundle.id).toEqual(
-        expect.arrayContaining(["connected_app_search", "connected_app_read"]),
-      );
+      expect(toolNames, bundle.id).toContain("connected_app_read");
+      if (bundle.id === "turnkey") {
+        expect(toolNames, bundle.id).not.toContain("connected_app_search");
+      } else {
+        expect(toolNames, bundle.id).toContain("connected_app_search");
+      }
       const writeCapabilities = bundle.capabilities.filter((capability) => capability.access === "write");
       if (writeCapabilities.length > 0) {
         expect(toolNames, bundle.id).toContain("connected_app_write");
@@ -183,6 +188,11 @@ describe("connected app bundles", () => {
     expect(connectedAppProviderOperations("slack")).toEqual([]);
     expect(connectedAppProviderOperations("microsoft_teams")).toEqual([]);
     expect(connectedAppProviderOperations("mcp")).toEqual([]);
+    expect(connectedAppProviderOperations("turnkey").map((operation) => operation.id)).toEqual([
+      "turnkey.wallets.read",
+      "turnkey.balances.read",
+      "turnkey.activities.read",
+    ]);
 
     expect(connectedAppProviderOperations("google").map((operation) => operation.id)).toEqual([
       "google.drive.search",
@@ -216,7 +226,7 @@ describe("connected app bundles", () => {
       "x.reply.create",
     ]);
 
-    for (const provider of ["google", "github", "x"] as const) {
+    for (const provider of ["google", "github", "turnkey", "x"] as const) {
       const bundle = connectedAppBundleByProvider(provider);
       expect(bundle?.operations.length, provider).toBeGreaterThan(0);
       for (const operation of connectedAppProviderOperations(provider)) {
@@ -249,6 +259,11 @@ describe("connected app bundles", () => {
       capabilityIds: ["github.issue.write"],
       requiresReadback: true,
       input: { requiredKeys: ["repo", "title", "body"] },
+    });
+    expect(connectedAppProviderOperationById("turnkey", "turnkey.balances.read")).toMatchObject({
+      operation: "read",
+      capabilityIds: ["turnkey.balances.read"],
+      requiresReadback: false,
     });
   });
 });

@@ -79,6 +79,7 @@ export type AgentProtocolCapabilities = {
   placement: "local" | "hosted_chat" | "hosted_work" | "development";
   methods: AgentRpcMethod[];
   features: Record<string, boolean>;
+  connectedAppProviders: string[];
   tools: Array<Record<string, unknown>>;
   toolCatalogHash: string;
 };

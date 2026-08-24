@@ -11,6 +11,7 @@ const ConnectedAppToolCallProviderSchema = z.enum([
   "microsoft_teams",
   "github",
   "google",
+  "turnkey",
   "x",
   "mcp",
 ]);

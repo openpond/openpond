@@ -1,10 +1,11 @@
-export type ConnectedAppKind = "native" | "oauth" | "mcp";
+export type ConnectedAppKind = "native" | "oauth" | "wallet" | "mcp";
 
 export type ConnectedAppId =
   | "slack"
   | "microsoft_teams"
   | "github"
   | "google"
+  | "turnkey"
   | "x"
   | "mcp";
 
@@ -13,12 +14,14 @@ export type ConnectedAppProviderFamilyId =
   | "microsoft_teams"
   | "github"
   | "google"
+  | "turnkey"
   | "x"
   | "mcp";
 
 export type ConnectedAppSetupSurface =
   | "native_bot"
   | "oauth_connector"
+  | "wallet_connector"
   | "mcp_endpoint";
 
 export type ConnectedAppStatusSource =
@@ -197,6 +200,7 @@ export const CONNECTED_APP_PROVIDER_ORDER: ConnectedAppProviderFamilyId[] = [
   "slack",
   "google",
   "github",
+  "turnkey",
   "x",
   "microsoft_teams",
   "mcp",
@@ -225,6 +229,11 @@ const CAPABILITIES = {
     capability("github.issue.write", "Update issues", "Create or update approved GitHub issue content.", "write", true),
     capability("github.pull_request.read", "Read pull requests", "Read pull request metadata, diffs, checks, and reviews.", "read", true),
     capability("github.pull_request.write", "Update pull requests", "Create approved comments or pull request updates.", "write", true),
+  ],
+  turnkey: [
+    capability("turnkey.wallets.read", "Read Agent Wallet", "Read the connected OpenPond Agent Wallet address and metadata.", "read", true),
+    capability("turnkey.balances.read", "Read wallet balances", "Read balances for the connected OpenPond Agent Wallet.", "read", true),
+    capability("turnkey.activities.read", "Read wallet activity", "Read recent Turnkey activity for the connected OpenPond Agent Wallet.", "read", true),
   ],
   x: [
     capability("x.profile.read", "Read profile", "Read the connected X profile.", "read", true),
@@ -264,6 +273,11 @@ const PROVIDER_OPERATIONS = {
     providerOperation("github.pull_request.comment", "write", "Comment on pull request", "Create an explicitly approved pull request comment and return readback verification.", ["github.pull_request.write"], { requiredKeys: ["ref", "body"] }),
     providerOperation("github.pull_request.update", "write", "Update pull request", "Apply an explicitly approved pull request metadata update and return readback verification.", ["github.pull_request.write"], { requiredKeys: ["ref"] }),
   ],
+  turnkey: [
+    providerOperation("turnkey.wallets.read", "read", "Read Agent Wallet", "Read the address and metadata for the connected OpenPond Agent Wallet.", ["turnkey.wallets.read"]),
+    providerOperation("turnkey.balances.read", "read", "Read wallet balances", "Read supported-network balances for the connected OpenPond Agent Wallet.", ["turnkey.balances.read"]),
+    providerOperation("turnkey.activities.read", "read", "Read wallet activity", "Read recent Turnkey activity for the connected OpenPond Agent Wallet.", ["turnkey.activities.read"]),
+  ],
   x: [
     providerOperation("x.profile.read", "read", "Read profile", "Read the connected X account profile.", ["x.profile.read"]),
     providerOperation("x.post.read", "read", "Read post", "Read a public X post by stable ref, status URL, or post id.", ["x.search.read"], { requiredKeys: ["ref"] }),
@@ -296,6 +310,15 @@ const INTEGRATION_SKILL_BODIES = {
     "For writes, require explicit user intent and avoid destructive repository changes. Create issues only when the user clearly asks to submit or file a new issue. Prefer comments, labels, or metadata updates unless a stronger operation is clearly requested.",
     "Do not claim CI, review, branch, or PR state changed until a tool result confirms it.",
     "Keep local workspace git operations separate from connected GitHub operations unless the user explicitly asks to bridge them.",
+  ].join("\n"),
+  turnkey: [
+    "# Turnkey Agent Wallet Connected App",
+    "",
+    "Use Turnkey only through server-provided connected app tools. Never ask for, expose, or infer API keys, P-256 credentials, wallet private keys, or lease material.",
+    "Use only declared Turnkey read operation ids: turnkey.wallets.read, turnkey.balances.read, and turnkey.activities.read.",
+    "Turnkey connected-app access is read-only. Do not claim that a transaction was created, signed, approved, rejected, or sent.",
+    "Use turnkey.wallets.read for the Agent Wallet address and metadata, turnkey.balances.read for supported-network balances, and turnkey.activities.read for recent Turnkey activity.",
+    "Report the wallet address and network with balance results, and distinguish an empty balance from a failed provider read.",
   ].join("\n"),
   x: [
     "# X Connected App",
@@ -524,6 +547,19 @@ const CATALOG = [
     description: "User profile, mentions, and approved reply access.",
     icon: "/connected-apps/x.svg",
     installLabel: "Continue to X details",
+  }),
+  catalogEntry({
+    id: "turnkey",
+    providerFamily: "turnkey",
+    setupSurface: "wallet_connector",
+    statusSource: "integration_connection",
+    label: "Turnkey Agent Wallet",
+    shortLabel: "Turnkey",
+    kind: "wallet",
+    category: "Wallet",
+    description: "Read your OpenPond Agent Wallet address, balances, and activity through policy-bound Turnkey access.",
+    icon: "/connected-apps/turnkey.svg",
+    installLabel: "Manage OpenPond wallet",
   }),
   catalogEntry({
     id: "microsoft_teams",
@@ -756,6 +792,7 @@ function providerFamilyLabel(provider: ConnectedAppProviderFamilyId): string {
 function setupSurfaceLabel(surface: ConnectedAppSetupSurface): string {
   if (surface === "native_bot") return "Native app";
   if (surface === "oauth_connector") return "OAuth connector";
+  if (surface === "wallet_connector") return "Wallet connector";
   return "MCP endpoint";
 }
 
@@ -780,6 +817,7 @@ function providerTools(
 ): ConnectedAppToolDescriptor[] {
   if (provider === "mcp") return [];
   const capabilities = CAPABILITIES[provider];
+  const operations = PROVIDER_OPERATIONS[provider];
   const readCapabilityIds = capabilities
     .filter((capability) => capability.access === "read")
     .map((capability) => capability.id);
@@ -787,23 +825,26 @@ function providerTools(
     .filter((capability) => capability.access === "write")
     .map((capability) => capability.id);
   const tools: ConnectedAppToolDescriptor[] = [];
-  if (readCapabilityIds.length > 0) {
-    tools.push(
-      {
-        name: "connected_app_search",
-        description: `Search ${providerFamilyLabel(provider)} through a server-owned connected app connector.`,
-        capabilityIds: readCapabilityIds,
-        write: false,
-      },
-      {
-        name: "connected_app_read",
-        description: `Read a grounded ${providerFamilyLabel(provider)} object through a server-owned connected app connector.`,
-        capabilityIds: readCapabilityIds,
-        write: false,
-      },
-    );
+  if (operations.some((operation) => operation.operation === "search")) {
+    tools.push({
+      name: "connected_app_search",
+      description: `Search ${providerFamilyLabel(provider)} through a server-owned connected app connector.`,
+      capabilityIds: readCapabilityIds,
+      write: false,
+    });
   }
-  if (writeCapabilityIds.length > 0) {
+  if (operations.some((operation) => operation.operation === "read")) {
+    tools.push({
+      name: "connected_app_read",
+      description: `Read a grounded ${providerFamilyLabel(provider)} object through a server-owned connected app connector.`,
+      capabilityIds: readCapabilityIds,
+      write: false,
+    });
+  }
+  if (
+    writeCapabilityIds.length > 0 &&
+    operations.some((operation) => operation.operation === "write")
+  ) {
     tools.push({
       name: "connected_app_write",
       description: `Perform an explicitly approved ${providerFamilyLabel(provider)} write through a server-owned connected app connector.`,
@@ -827,7 +868,7 @@ function leasePolicy(provider: ConnectedAppProviderFamilyId): ConnectedAppLeaseP
   const leaseable = provider !== "mcp" && capabilities.length > 0;
   return {
     leaseable,
-    defaultTtlSeconds: leaseable ? 3600 : null,
+    defaultTtlSeconds: leaseable ? (provider === "turnkey" ? 300 : 3600) : null,
     allowedCapabilityIds: capabilities,
     requiresProxy: leaseable,
   };

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import type { MentionedConnectedAppRef, Session } from "@openpond/contracts";
+import {
+  SendTurnRequestSchema,
+  type MentionedConnectedAppRef,
+  type Session,
+} from "@openpond/contracts";
 import { resolveConnectedAppContextsForTurn } from "../apps/server/src/runtime/turn-runner";
 import { createHostedTurnHelpers } from "../apps/server/src/openpond/hosted-turn-helpers";
 import {
@@ -24,6 +28,15 @@ const xRef: MentionedConnectedAppRef = {
   setupSurfaces: ["oauth_connector"],
   connectionIds: ["conn_x_social"],
   capabilities: ["x.search.read"],
+};
+
+const turnkeyRef: MentionedConnectedAppRef = {
+  kind: "integration",
+  provider: "turnkey",
+  appIds: ["turnkey"],
+  setupSurfaces: ["wallet_connector"],
+  connectionIds: ["conn_turnkey"],
+  capabilities: ["turnkey.balances.read"],
 };
 
 describe("connected app server context", () => {
@@ -169,6 +182,46 @@ describe("connected app server context", () => {
     expect(context).toContain("Docs User");
     expect(context).toContain("google_drive_search");
     expect(context).not.toContain("conn_google");
+  });
+
+  test("resolves Turnkey as a read-only wallet connector", () => {
+    expect(
+      SendTurnRequestSchema.parse({
+        prompt: "Review my Agent Wallet balance.",
+        mentionedConnectedApps: [turnkeyRef],
+      }).mentionedConnectedApps,
+    ).toEqual([turnkeyRef]);
+
+    const contexts = resolveMentionedConnectedAppContexts({
+      mentionedRefs: [turnkeyRef],
+      connections: [
+        {
+          id: "conn_turnkey",
+          provider: "turnkey",
+          providerAccountName: "Agent Wallet",
+          status: "active",
+        },
+      ],
+      toolNamesByProvider: {
+        turnkey: ["connected_app_read"],
+      },
+    });
+
+    expect(contexts).toHaveLength(1);
+    expect(contexts[0]).toMatchObject({
+      provider: "turnkey",
+      label: "Turnkey",
+      appIds: ["turnkey"],
+      setupSurfaces: ["wallet_connector"],
+      capabilities: [
+        {
+          access: "read",
+          id: "turnkey.balances.read",
+          label: "Read wallet balances",
+        },
+      ],
+      toolNames: ["connected_app_read"],
+    });
   });
 
   test("injects the connected app index into hosted system prompts", async () => {

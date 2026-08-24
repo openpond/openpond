@@ -31,11 +31,24 @@ export function connectedAppProviderToolNames(
   context: Pick<ResolvedConnectedAppContext, "capabilities" | "provider">,
 ): string[] {
   if (context.provider === "mcp") return [];
+  const operations = connectedAppBundleByProvider(context.provider)?.operations ?? [];
   const names: ConnectedAppProviderToolName[] = [];
-  if (capabilitiesForOperation(context, "read").length > 0) {
-    names.push("connected_app_search", "connected_app_read");
+  if (
+    capabilitiesForOperation(context, "read").length > 0 &&
+    operations.some((operation) => operation.operation === "search")
+  ) {
+    names.push("connected_app_search");
   }
-  if (capabilitiesForOperation(context, "write").length > 0) {
+  if (
+    capabilitiesForOperation(context, "read").length > 0 &&
+    operations.some((operation) => operation.operation === "read")
+  ) {
+    names.push("connected_app_read");
+  }
+  if (
+    capabilitiesForOperation(context, "write").length > 0 &&
+    operations.some((operation) => operation.operation === "write")
+  ) {
     names.push("connected_app_write");
   }
   return names;
@@ -123,7 +136,8 @@ export function createConnectedAppProviderModelToolDefinitions(deps: {
           ref: {
             type: "string",
             minLength: 1,
-            description: "Stable provider ref returned by connected_app_search or supplied by the user.",
+            description:
+              "Stable provider ref returned by connected_app_search or supplied by the user. Omit only for a declared provider operation that reads the canonical connected account, such as a Turnkey Agent Wallet read.",
           },
           operation: {
             type: "string",
@@ -143,7 +157,7 @@ export function createConnectedAppProviderModelToolDefinitions(deps: {
             description: "Optional narrower read capability ids from the provider's listed capabilities.",
           },
         },
-        required: ["provider", "ref"],
+        required: ["provider"],
       },
       execute: (context) =>
         executeConnectedAppToolDefinition({

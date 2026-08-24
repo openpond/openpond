@@ -29,6 +29,7 @@ const PROVIDER_TOKEN_ALIASES: Record<ConnectedAppProviderFamilyId, string[]> = {
   microsoft_teams: ["teams", "microsoft-teams", "microsoft_teams"],
   github: ["github", "gh"],
   google: ["google", "drive", "google-drive", "docs"],
+  turnkey: ["turnkey", "agent-wallet", "agent_wallet", "wallet"],
   x: ["x", "twitter"],
   mcp: ["mcp", "openpond-mcp"],
 };

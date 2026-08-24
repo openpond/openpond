@@ -1402,6 +1402,9 @@ describe("model tool registry", () => {
       "connected_app_write",
     ]);
     expect(connectedAppProviderToolNames(mcpConnectedAppContext())).toEqual([]);
+    expect(connectedAppProviderToolNames(turnkeyConnectedAppContext())).toEqual([
+      "connected_app_read",
+    ]);
     expect((search.parameters as any).properties.provider.enum).toEqual(["google"]);
 
     const missing = await search.execute(actionContext({ provider: "x", query: "mentions" }));
@@ -1577,6 +1580,44 @@ describe("model tool registry", () => {
           provider: "x",
           ref: "https://x.com/thsottiaux/status/2073551549494596079",
           operation: "x.post.read",
+        },
+      },
+    ]);
+  });
+
+  test("reads the canonical Turnkey Agent Wallet without requiring a synthetic ref", async () => {
+    const executorRequests: unknown[] = [];
+    const definitions = createConnectedAppProviderModelToolDefinitions({
+      connectedApps: [turnkeyConnectedAppContext()],
+      executeConnectedAppTool: async (request) => {
+        executorRequests.push(request);
+        return {
+          ok: true,
+          data: { address: "0x661486", networks: [] },
+        };
+      },
+    });
+    const read = definitions.find(
+      (definition) => definition.name === "connected_app_read",
+    );
+    if (!read) throw new Error("connected_app_read missing");
+
+    const result = await read.execute(
+      actionContext({
+        provider: "turnkey",
+        operation: "turnkey.balances.read",
+      }),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(executorRequests).toMatchObject([
+      {
+        provider: "turnkey",
+        operation: "read",
+        capabilityIds: ["turnkey.balances.read"],
+        args: {
+          provider: "turnkey",
+          operation: "turnkey.balances.read",
         },
       },
     ]);
@@ -1771,6 +1812,26 @@ function mcpConnectedAppContext(): ResolvedConnectedAppContext {
     ],
     toolNames: [],
     connectionIds: [],
+  };
+}
+
+function turnkeyConnectedAppContext(): ResolvedConnectedAppContext {
+  return {
+    provider: "turnkey",
+    label: "Turnkey",
+    appIds: ["turnkey"],
+    setupSurfaces: ["wallet_connector"],
+    accountLabels: ["Agent Wallet"],
+    workspaceLabels: [],
+    capabilities: [
+      {
+        access: "read",
+        id: "turnkey.balances.read",
+        label: "Read wallet balances",
+      },
+    ],
+    toolNames: [],
+    connectionIds: ["conn_turnkey"],
   };
 }
 
