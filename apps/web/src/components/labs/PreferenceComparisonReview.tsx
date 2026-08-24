@@ -97,13 +97,27 @@ export function PreferenceComparisonReview({
                   ) : null)}
                   <pre className="labs-detail-copy">{JSON.stringify(candidate.output, null, 2)}</pre>
                   {remaining ? (
-                    <button
-                      className="training-button secondary"
-                      type="button"
-                      onClick={() => setRanked((current) => [...current, [candidate.label]])}
-                    >
-                      Choose as next rank
-                    </button>
+                    <div className="labs-dataset-detail-actions">
+                      <button
+                        className="training-button secondary"
+                        type="button"
+                        onClick={() => setRanked((current) => [...current, [candidate.label]])}
+                      >
+                        Choose as next rank
+                      </button>
+                      {ranked.length ? (
+                        <button
+                          className="training-button secondary"
+                          type="button"
+                          onClick={() => setRanked((current) => [
+                            ...current.slice(0, -1),
+                            [...current[current.length - 1]!, candidate.label],
+                          ])}
+                        >
+                          Tie previous rank
+                        </button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               );
