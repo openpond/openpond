@@ -14,6 +14,45 @@ async function tempWorkspace(): Promise<string> {
 }
 
 describe("OpenPond resource read/search", () => {
+  test("pages durable tool output by native tool-call ref", () => {
+    const output = `head:${"a".repeat(16_000)}:tail`;
+    const events = [{
+      id: "tool-completed-1",
+      sessionId: "session_1",
+      turnId: "turn_1",
+      name: "tool.completed",
+      action: "sandbox_exec",
+      timestamp: "2026-08-23T00:00:00.000Z",
+      output,
+      data: { toolCallId: "call-large-output" },
+    }] as RuntimeEvent[];
+
+    const first = readSessionResource({
+      events,
+      sessionId: "session_1",
+      request: { ref: "tool-output:call-large-output", maxBytes: 4_000 },
+    });
+    const second = readSessionResource({
+      events,
+      sessionId: "session_1",
+      request: {
+        ref: "tool-output:call-large-output",
+        maxBytes: 4_000,
+        offsetBytes: first.metadata.nextOffsetBytes as number,
+      },
+    });
+    const search = searchSessionResources({
+      events,
+      sessionId: "session_1",
+      request: { scope: "tool-outputs", query: "tail" },
+    });
+
+    expect(first.contentText).toContain("head:");
+    expect(first.truncation).toMatchObject({ truncated: true, reason: "paged" });
+    expect(first.metadata).toMatchObject({ nextOffsetBytes: 4000, toolCallId: "call-large-output" });
+    expect(second.metadata).toMatchObject({ offsetBytes: 4000 });
+    expect(search.items).toEqual([expect.objectContaining({ ref: "tool-output:call-large-output" })]);
+  });
   test("reads workspace file refs with content and truncation metadata", async () => {
     const repoPath = await tempWorkspace();
     await mkdir(path.join(repoPath, "src"), { recursive: true });

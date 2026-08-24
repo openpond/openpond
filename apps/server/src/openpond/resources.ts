@@ -53,6 +53,7 @@ type ParsedResourceRef =
   | { scope: "workspace"; kind: "dir"; identifier: string }
   | { scope: "events"; kind: "event"; identifier: string }
   | { scope: "events"; kind: "check-result"; identifier: string; index: number }
+  | { scope: "tool-outputs"; kind: "tool-output"; identifier: string }
   | { scope: "messages"; kind: "message"; identifier: string }
   | { scope: "artifacts"; kind: "artifact"; identifier: string; artifactRef: string }
   | { scope: "goal-context"; kind: "goal-context"; identifier: string };
@@ -84,6 +85,35 @@ export function readSessionResource(input: {
   request: ResourceReadRequest;
 }): ResourceReadResult {
   const parsed = parseResourceRef(input.request.ref);
+  if (parsed.scope === "tool-outputs") {
+    const item = toolOutputResourceForCall(input.events, input.sessionId, parsed.identifier);
+    if (!item) throw new Error(`Tool output resource not found: ${parsed.identifier}`);
+    const content = trimUtf8TextPage(
+      item.output,
+      normalizeMaxBytes(input.request.maxBytes),
+      normalizeOffsetBytes(input.request.offsetBytes),
+    );
+    return {
+      ref: toolOutputRef(parsed.identifier),
+      kind: "session.tool-output",
+      title: item.title,
+      contentType: "text/plain",
+      ...(input.request.mode === "metadata" ? {} : { contentText: content.text }),
+      metadata: {
+        eventId: item.event.id,
+        sessionId: item.event.sessionId ?? null,
+        turnId: item.event.turnId ?? null,
+        toolCallId: parsed.identifier,
+        action: item.event.action ?? null,
+        offsetBytes: content.offsetBytes,
+        nextOffsetBytes: content.nextOffsetBytes,
+      },
+      relatedRefs: [eventRef(item.event.id)],
+      truncation: input.request.mode === "metadata"
+        ? { truncated: false, originalBytes: content.truncation.originalBytes, returnedBytes: 0 }
+        : content.truncation,
+    };
+  }
   if (parsed.scope === "events") {
     if (parsed.kind === "check-result") {
       const item = scopedEvents(input.events, input.sessionId).find((event) => event.id === parsed.identifier);
@@ -267,7 +297,8 @@ export function searchSessionResources(input: {
     input.request.scope !== "events" &&
     input.request.scope !== "messages" &&
     input.request.scope !== "artifacts" &&
-    input.request.scope !== "goal-context"
+    input.request.scope !== "goal-context" &&
+    input.request.scope !== "tool-outputs"
   ) {
     throw new Error(`Unsupported session resource search scope: ${input.request.scope}`);
   }
@@ -358,6 +389,27 @@ export function searchSessionResources(input: {
       }
       if (items.length >= limit) break;
     }
+  } else if (input.request.scope === "tool-outputs") {
+    for (const event of scopedEvents(input.events, input.sessionId)) {
+      const callId = toolCallIdFromEvent(event);
+      const output = event.output?.trim();
+      if (!callId || !output || !output.toLowerCase().includes(lowerQuery)) continue;
+      items.push({
+        ref: toolOutputRef(callId),
+        title: event.action ? `Tool output: ${event.action}` : "Tool output",
+        snippet: snippetFromText(output, lowerQuery),
+        score: 0.76,
+        metadata: {
+          source: "session.tool-outputs",
+          eventId: event.id,
+          turnId: event.turnId ?? null,
+          toolCallId: callId,
+          action: event.action ?? null,
+          timestamp: event.timestamp,
+        },
+      });
+      if (items.length >= limit) break;
+    }
   } else {
     const roleFilter = stringValue(input.request.filters?.role);
     const seen = new Set<string>();
@@ -445,6 +497,11 @@ function parseResourceRef(ref: string): ParsedResourceRef {
     }
     return { scope: "events", kind: "check-result", identifier, index };
   }
+  if (trimmed.startsWith("tool-output:")) {
+    const identifier = decodeURIComponent(trimmed.slice("tool-output:".length));
+    if (!identifier) throw new Error("Unsupported tool output ref. Use tool-output:<toolCallId>.");
+    return { scope: "tool-outputs", kind: "tool-output", identifier };
+  }
   if (trimmed.startsWith("event:")) {
     return { scope: "events", kind: "event", identifier: trimmed.slice("event:".length) };
   }
@@ -467,7 +524,7 @@ function parseResourceRef(ref: string): ParsedResourceRef {
   if (trimmed.startsWith("goal-context:")) {
     return { scope: "goal-context", kind: "goal-context", identifier: trimmed.slice("goal-context:".length) };
   }
-  throw new Error("Unsupported resource ref. Use workspace:file:<path>, workspace:dir:<path>, event:<eventId>, event:check-result:<eventId>:<index>, message:<eventId>, artifact:<eventId>:<encodedRef>, or goal-context:<eventId>.");
+  throw new Error("Unsupported resource ref. Use workspace:file:<path>, workspace:dir:<path>, event:<eventId>, event:check-result:<eventId>:<index>, tool-output:<toolCallId>, message:<eventId>, artifact:<eventId>:<encodedRef>, or goal-context:<eventId>.");
 }
 
 async function readWorkspaceFileResource(
@@ -601,6 +658,11 @@ function normalizeMaxBytes(value: number | undefined): number {
   return Math.min(Math.floor(value), MAX_RESOURCE_MAX_BYTES);
 }
 
+function normalizeOffsetBytes(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(100_000_000, Math.floor(value));
+}
+
 function normalizeLimit(value: number | undefined, fallback: number, max: number): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return fallback;
   return Math.min(Math.floor(value), max);
@@ -620,6 +682,10 @@ function eventRef(eventId: string): string {
 
 function checkResultRef(eventId: string, index: number): string {
   return `event:check-result:${eventId}:${index}`;
+}
+
+function toolOutputRef(callId: string): string {
+  return `tool-output:${encodeURIComponent(callId)}`;
 }
 
 function messageRef(eventId: string): string {
@@ -672,6 +738,35 @@ function eventRefsForTurn(events: RuntimeEvent[], sessionId: string, turnId: str
   return scopedEvents(events, sessionId)
     .filter((item) => item.turnId === turnId)
     .map((item) => eventRef(item.id));
+}
+
+function toolOutputResourceForCall(
+  events: RuntimeEvent[],
+  sessionId: string,
+  callId: string,
+): { event: RuntimeEvent; output: string; title: string } | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]!;
+    if (event.sessionId !== sessionId) continue;
+    const eventCallId = toolCallIdFromEvent(event);
+    if (eventCallId !== callId && event.id !== callId) continue;
+    if (!event.output?.trim()) continue;
+    return {
+      event,
+      output: event.output,
+      title: event.action ? `Tool output: ${event.action}` : "Tool output",
+    };
+  }
+  return null;
+}
+
+function toolCallIdFromEvent(event: RuntimeEvent): string | null {
+  const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
+    ? event.data as Record<string, unknown>
+    : null;
+  if (typeof data?.toolCallId === "string" && data.toolCallId.trim()) return data.toolCallId;
+  if (typeof data?.callId === "string" && data.callId.trim()) return data.callId;
+  return null;
 }
 
 function eventSearchText(item: RuntimeEvent): string {
@@ -1148,6 +1243,33 @@ function trimUtf8Text(value: string, maxBytes: number): Pick<ResourceReadResult,
       originalBytes: buffer.length,
       returnedBytes: maxBytes,
       reason: "maxBytes",
+    },
+  };
+}
+
+function trimUtf8TextPage(
+  value: string,
+  maxBytes: number,
+  offsetBytes: number,
+): Pick<ResourceReadResult, "truncation"> & {
+  text: string;
+  offsetBytes: number;
+  nextOffsetBytes: number | null;
+} {
+  const buffer = Buffer.from(value, "utf8");
+  const start = Math.min(offsetBytes, buffer.length);
+  const end = Math.min(buffer.length, start + maxBytes);
+  const page = buffer.subarray(start, end);
+  const truncated = start > 0 || end < buffer.length;
+  return {
+    text: page.toString("utf8"),
+    offsetBytes: start,
+    nextOffsetBytes: end < buffer.length ? end : null,
+    truncation: {
+      truncated,
+      originalBytes: buffer.length,
+      returnedBytes: page.length,
+      reason: truncated ? "paged" : undefined,
     },
   };
 }

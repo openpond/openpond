@@ -1,5 +1,5 @@
 import type { HostedChatMessage } from "@openpond/cloud";
-import type { ChatProvider, RuntimeEvent, Session } from "@openpond/contracts";
+import type { ChatProvider, ContextUsageSource, RuntimeEvent, Session } from "@openpond/contracts";
 import type { HostedRequestBudget } from "../context-usage.js";
 import type { ContinuationCapsule } from "./continuation-capsule.js";
 
@@ -87,7 +87,7 @@ export type CompactionMetrics = {
   durationMs: number;
   fileLedgerEntries: number;
   splitTurnId: string | null;
-  tokenSource: "heuristic";
+  tokenSource: ContextUsageSource;
 };
 
 export type HostedCompactionResult = {
@@ -105,7 +105,7 @@ export type HostedCompactionResult = {
   inputTokensBefore: number;
   inputTokensAfter: number;
   maxContextTokens: number;
-  tokenSource: "heuristic";
+  tokenSource: ContextUsageSource;
   metrics: CompactionMetrics;
 };
 
@@ -115,7 +115,7 @@ export type HostedAutoCompactionDecision = {
   thresholdTokens: number;
   usableContextTokens: number;
   maxContextTokens: number;
-  tokenSource: "heuristic";
+  tokenSource: ContextUsageSource;
   requestBudget: HostedRequestBudget;
 };
 

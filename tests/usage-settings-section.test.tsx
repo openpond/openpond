@@ -40,6 +40,8 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain("/skill");
     expect(html).toContain("Routes");
     expect(html).toContain("Local BYOK");
+    expect(html).toContain("Cache cohorts");
+    expect(html).toContain("Foreground");
     expect(html).toContain("Sources");
     expect(html).toContain("Provider usage");
     expect(html).toContain("Requests");
@@ -297,6 +299,18 @@ function usageSummary(): UsageSummaryResponse {
         totalTokens: null,
       }),
     ],
+    cohorts: [
+      breakdown({
+        cohort: "foreground",
+        requests: 2,
+        totalTokens: 1200,
+      }),
+      breakdown({
+        cohort: "tool_loop",
+        requests: 1,
+        totalTokens: 300,
+      }),
+    ],
   };
 }
 
@@ -356,6 +370,7 @@ function emptySummary(): UsageSummaryResponse {
     routes: [],
     statuses: [],
     sources: [],
+    cohorts: [],
   };
 }
 

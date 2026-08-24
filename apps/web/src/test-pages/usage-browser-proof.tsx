@@ -159,6 +159,11 @@ function usageSummary(): UsageSummaryResponse {
       { ...breakdown(63_400), source: "provider_usage" },
       { ...breakdown(null), source: "missing", requests: 1 },
     ],
+    cohorts: [
+      { ...breakdown(42_800), cohort: "foreground" },
+      { ...breakdown(16_800), cohort: "tool_loop" },
+      { ...breakdown(null), cohort: "compaction", requests: 1 },
+    ],
   };
 }
 

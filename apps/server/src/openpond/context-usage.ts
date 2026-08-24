@@ -1,6 +1,7 @@
 import {
   ContextUsageSnapshotSchema,
   type ChatProvider,
+  type ContextUsageSource,
   type ContextUsageSnapshot,
   type HostedContextProvider,
   type ProviderSettings,
@@ -21,7 +22,14 @@ export type HostedRequestBudget = {
   safetyReserveTokens: number;
   projectedTokens: number;
   maxContextTokens: number | null;
-  tokenSource: "heuristic";
+  tokenSource: ContextUsageSource;
+  tokenModelFamily: string | null;
+};
+
+export type HostedMessageTokenEstimate = {
+  tokens: number;
+  source: Extract<ContextUsageSource, "model_family" | "heuristic">;
+  modelFamily: string | null;
 };
 
 export function hostedContextProvider(provider: ChatProvider): HostedContextProvider | null {
@@ -79,6 +87,25 @@ export function estimateHostedMessageTokens(messages: HostedChatMessage[]): numb
   return Math.max(1, Math.ceil(characterCount / ESTIMATED_CHARS_PER_TOKEN) + messages.length * 4);
 }
 
+export function estimateHostedMessageTokensForProvider(input: {
+  provider: ChatProvider;
+  model: string | null | undefined;
+  messages: HostedChatMessage[];
+}): HostedMessageTokenEstimate {
+  const modelFamily = modelTokenFamily(input.provider, input.model);
+  if (!modelFamily) {
+    return { tokens: estimateHostedMessageTokens(input.messages), source: "heuristic", modelFamily: null };
+  }
+  const tokens = input.messages.reduce((total, message) => {
+    return total
+      + 4
+      + estimateModelFamilyTextTokens(message.role, modelFamily)
+      + estimateModelFamilyTextTokens(message.name ?? "", modelFamily)
+      + estimateModelFamilyTextTokens(message.content ?? "", modelFamily);
+  }, 1);
+  return { tokens: Math.max(1, tokens), source: "model_family", modelFamily };
+}
+
 export function hostedRequestedOutputTokens(input: {
   maxContextTokens?: number | null;
   modelOutputLimit?: number | null;
@@ -94,13 +121,19 @@ export function hostedRequestedOutputTokens(input: {
 
 export function estimateHostedRequestBudget(input: {
   provider: ChatProvider;
+  model?: string | null;
   messages: HostedChatMessage[];
   tools?: readonly HostedChatTool[];
   maxOutputTokens: number;
   maxContextTokens?: number | null;
 }): HostedRequestBudget {
   const maxContextTokens = input.maxContextTokens ?? null;
-  const messageTokens = estimateHostedMessageTokens(input.messages);
+  const messageEstimate = estimateHostedMessageTokensForProvider({
+    provider: input.provider,
+    model: input.model,
+    messages: input.messages,
+  });
+  const messageTokens = messageEstimate.tokens;
   const toolDefinitionTokens = estimatedSerializedTokens(input.tools ?? []);
   const continuationTokens = estimatedSerializedTokens(
     input.messages.flatMap((message) => {
@@ -126,7 +159,8 @@ export function estimateHostedRequestBudget(input: {
       + outputAllowanceTokens
       + safetyReserveTokens,
     maxContextTokens,
-    tokenSource: "heuristic",
+    tokenSource: messageEstimate.source,
+    tokenModelFamily: messageEstimate.modelFamily,
   };
 }
 
@@ -187,7 +221,12 @@ export function createContextUsageSnapshot(input: {
 }): ContextUsageSnapshot {
   const usedTokensFromUsage =
     input.usage === undefined ? null : tokenCountFromUsage(input.usage, Boolean(input.includeCompletion));
-  const usedTokens = usedTokensFromUsage ?? estimateHostedMessageTokens(input.messages);
+  const estimate = estimateHostedMessageTokensForProvider({
+    provider: input.provider,
+    model: input.model,
+    messages: input.messages,
+  });
+  const usedTokens = usedTokensFromUsage ?? estimate.tokens;
   const maxContextTokens = input.maxContextTokens ?? trustedProviderContextLimit({
     provider: input.provider,
     model: input.model,
@@ -204,7 +243,25 @@ export function createContextUsageSnapshot(input: {
     maxContextTokens,
     usableContextTokens: usableHostedContextLimit(maxContextTokens),
     percentFull,
-    source: usedTokensFromUsage === null ? "heuristic" : "provider_usage",
+    source: usedTokensFromUsage === null ? estimate.source : "provider_usage",
     updatedAtEventId: input.updatedAtEventId,
   });
+}
+
+function modelTokenFamily(provider: ChatProvider, model: string | null | undefined): string | null {
+  const normalized = `${provider}/${model ?? ""}`.toLowerCase();
+  if (/\b(?:gpt|o[1-9]|codex)\b/.test(normalized)) return "openai_cl100k";
+  if (normalized.includes("claude") || provider === "anthropic") return "anthropic_claude";
+  if (normalized.includes("deepseek") || normalized.includes("kimi") || normalized.includes("glm")) {
+    return "multilingual_code";
+  }
+  return null;
+}
+
+function estimateModelFamilyTextTokens(value: string, family: string): number {
+  if (!value) return 0;
+  const cjkCharacters = [...value].filter((character) => /[\u3000-\u9fff\uf900-\ufaff]/u.test(character)).length;
+  const remainingCharacters = Math.max(0, value.length - cjkCharacters);
+  const charsPerToken = family === "anthropic_claude" ? 3.85 : family === "multilingual_code" ? 3.65 : 3.75;
+  return Math.max(1, cjkCharacters + Math.ceil(remainingCharacters / charsPerToken));
 }

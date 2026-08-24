@@ -93,6 +93,20 @@ describe("hosted physical request budgeting", () => {
     expect(hostedRequestedOutputTokens({ maxContextTokens: 8_000 })).toBe(1_000);
     expect(hostedRequestedOutputTokens({ maxContextTokens: 128_000, modelOutputLimit: 2_048 })).toBe(2_048);
   });
+
+  test("uses a labeled model-family estimate when no provider usage is available", () => {
+    const budget = estimateHostedRequestBudget({
+      provider: "openrouter",
+      model: "deepseek-v4-flash",
+      maxContextTokens: 32_000,
+      maxOutputTokens: 1_024,
+      messages: [{ role: "user", content: "Review the durable tool output and preserve the tail failure." }],
+    });
+
+    expect(budget.tokenSource).toBe("model_family");
+    expect(budget.tokenModelFamily).toBe("multilingual_code");
+    expect(budget.messageTokens).toBeGreaterThan(0);
+  });
 });
 
 describe("bounded provider overflow recovery", () => {
@@ -147,7 +161,10 @@ describe("hosted request preparation integration", () => {
         workspaceKind: "local_project",
         cwd: "/tmp/openpond-request-budget",
       },
-      providerSettings: openRouterProviderSettingsWithContextWindow(32_000),
+      // Tool results are now bounded before the next provider request. Keep this
+      // fixture's window small enough to exercise the safe-boundary compaction
+      // path instead of depending on unbounded output inflation.
+      providerSettings: openRouterProviderSettingsWithContextWindow(12_000),
       toolCallsByPass: {
         1: [0, 1, 2].map((index) => ({
           name: "resource_read",
@@ -176,7 +193,7 @@ describe("hosted request preparation integration", () => {
       (request) => !request.requestId.startsWith("compact-"),
     );
     expect(providerRequests).toHaveLength(2);
-    expect(providerRequests.every((request) => request.maxOutputTokens === 4_000)).toBe(true);
+    expect(providerRequests.map((request) => request.maxOutputTokens)).toEqual([1_500, 1_500]);
     expect(JSON.stringify(providerRequests[1].messages)).toContain(
       "The three large resource reads completed successfully",
     );
@@ -190,7 +207,7 @@ describe("hosted request preparation integration", () => {
     );
     expect(completed).toBeDefined();
     expect((completed?.data as any)?.requestBudget.toolDefinitionTokens).toBeGreaterThan(0);
-    expect((completed?.data as any)?.requestBudget.outputAllowanceTokens).toBe(4_000);
+    expect((completed?.data as any)?.requestBudget.outputAllowanceTokens).toBe(1_500);
   });
 
   test("recovers once from a provider context overflow before output escapes", async () => {

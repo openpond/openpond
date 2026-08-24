@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { RuntimeEvent, Session } from "@openpond/contracts";
 import { runHostedContextCompaction } from "../apps/server/src/openpond/context-compaction/index";
+import { buildContinuationCapsule } from "../apps/server/src/openpond/context-compaction/continuation-capsule";
 import {
   normalizeCompactionRecords,
   serializeRecordsForCompaction,
@@ -11,6 +12,45 @@ import { selectEventsForHostedCompaction } from "../apps/server/src/openpond/con
 const NOW = "2026-07-07T12:00:00.000Z";
 
 describe("context compaction", () => {
+
+  test("records capped capsule fields with durable event references", () => {
+    const events = Array.from({ length: 24 }, (_, index) => runtimeEvent({
+      id: `constraint-${index}`,
+      sessionId: "session-capsule-omissions",
+      turnId: "turn-capsule-omissions",
+      name: "assistant.delta",
+      output: `Constraint ${index}: retain the source evidence.`,
+    }));
+    const summary = [
+      "## Constraints",
+      ...events.map((_, index) => `- Constraint ${index}: retain the source evidence.`),
+      "## Next Steps",
+      ...Array.from({ length: 14 }, (_, index) => `- next action ${index}`),
+    ].join("\n");
+
+    const capsule = buildContinuationCapsule({
+      session: { ...sessionFixture(), id: "session-capsule-omissions" },
+      events,
+      summary,
+      fileLedger: [],
+      preservedResourceRefs: [],
+      compactedThroughEventId: events.at(-1)?.id ?? null,
+      compactedThroughTurnId: "turn-capsule-omissions",
+      preservedFromEventId: null,
+      preservedEventIds: [],
+    });
+
+    expect(capsule.constraints).toHaveLength(20);
+    expect(capsule.immediateNextActions).toHaveLength(12);
+    expect(capsule.omissions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        field: "constraints",
+        omittedCount: 4,
+        resourceRefs: expect.arrayContaining(["event:constraint-20"]),
+      }),
+      expect.objectContaining({ field: "immediateNextActions", omittedCount: 2 }),
+    ]));
+  });
 
   test("preserves sparse durable facts from the provider-backed long-history fixtures", () => {
     const factual = syntheticLongTurns("atlas", 26, (index) => [

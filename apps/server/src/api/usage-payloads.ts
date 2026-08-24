@@ -6,6 +6,8 @@ import {
   type ModelUsageRecord,
   type Session,
   type UsageCommandBreakdown,
+  type UsageCacheCohort,
+  type UsageCacheCohortBreakdown,
   type UsageDailyBucket,
   type UsageModelBreakdown,
   type UsageRange,
@@ -114,6 +116,7 @@ export async function usageSummaryPayload(input: {
     routes: routeBreakdowns(records),
     statuses: statusBreakdowns(records),
     sources: sourceBreakdowns(records),
+    cohorts: cacheCohortBreakdowns(records),
   };
   return UsageSummaryResponseSchema.parse(response);
 }
@@ -419,6 +422,42 @@ function sourceBreakdowns(records: ModelUsageRecord[]): UsageSourceBreakdown[] {
       ...breakdownTotals(totals),
     }))
     .sort(breakdownSort);
+}
+
+function cacheCohortBreakdowns(records: ModelUsageRecord[]): UsageCacheCohortBreakdown[] {
+  const groups = new Map<UsageCacheCohort, BreakdownAccumulator>();
+  for (const record of records) {
+    const cohort = cacheCohortForRequest(record);
+    const totals = groups.get(cohort) ?? accumulator();
+    addRecord(totals, record);
+    groups.set(cohort, totals);
+  }
+  return [...groups.entries()]
+    .map(([cohort, totals]) => ({
+      cohort,
+      ...breakdownTotals(totals),
+    }))
+    .sort(breakdownSort);
+}
+
+function cacheCohortForRequest(record: ModelUsageRecord): UsageCacheCohort {
+  switch (record.requestKind) {
+    case "chat_turn":
+    case "slash_command":
+    case "create_improve_planner":
+      return "foreground";
+    case "tool_loop":
+      return "tool_loop";
+    case "context_compaction":
+      return "compaction";
+    case "subagent":
+      return "subagent";
+    case "harness_refiner":
+      return "refiner";
+    case "codex_context":
+    case "other":
+      return "other";
+  }
 }
 
 function accumulator(): BreakdownAccumulator {

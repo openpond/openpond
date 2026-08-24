@@ -12,6 +12,7 @@ import type { HostedChatMessage, HostedChatTool } from "@openpond/cloud";
 import {
   estimateHostedRequestBudget,
   estimateHostedMessageTokens,
+  estimateHostedMessageTokensForProvider,
   hostedContextLimit,
   hostedContextProvider,
   hostedRequestedOutputTokens,
@@ -63,6 +64,7 @@ export function hostedAutoCompactionDecision(input: {
   const maxContextTokens = input.maxContextTokens ?? (hostedProvider ? hostedContextLimit(hostedProvider, input.model) : null);
   const requestBudget = estimateHostedRequestBudget({
     provider: input.provider,
+    model: input.model,
     messages: input.messages,
     tools: input.tools,
     maxOutputTokens: input.maxOutputTokens ?? hostedRequestedOutputTokens({ maxContextTokens }),
@@ -170,14 +172,21 @@ export async function runHostedContextCompaction(input: HostedCompactionInput): 
     "",
     "Compaction projection",
   );
-  const inputTokensAfter = estimateHostedMessageTokens(projectedMessages);
+  const projectedEstimate = estimateHostedMessageTokensForProvider({
+    provider: input.provider,
+    model,
+    messages: projectedMessages,
+  });
+  const inputTokensAfter = projectedEstimate.tokens;
   return {
     ...result,
     continuationCapsule,
     inputTokensAfter,
+    tokenSource: projectedEstimate.source,
     metrics: {
       ...result.metrics,
       finalProviderContextTokens: inputTokensAfter,
+      tokenSource: projectedEstimate.source,
     },
   };
 }

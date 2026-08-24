@@ -46,7 +46,7 @@ export const HostedContextProviderSchema = z.enum(["openpond"]);
 
 export type HostedContextProvider = z.infer<typeof HostedContextProviderSchema>;
 
-export const ContextUsageSourceSchema = z.enum(["provider_usage", "provider_tokenizer", "heuristic"]);
+export const ContextUsageSourceSchema = z.enum(["provider_usage", "provider_tokenizer", "model_family", "heuristic"]);
 
 export type ContextUsageSource = z.infer<typeof ContextUsageSourceSchema>;
 

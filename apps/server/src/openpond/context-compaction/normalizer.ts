@@ -11,6 +11,7 @@ import { extractCompactionDurableFacts } from "./durable-facts.js";
 import { estimateTextTokens } from "./metrics.js";
 import type { CompactionRecord } from "./types.js";
 import { extractCompactionFilePaths } from "./file-paths.js";
+import { toolOutputPreviewForCompaction, toolOutputResourceRef } from "../tool-output-spill.js";
 export {
   serializeRecordsForCompaction,
   type SerializedCompactionRecords,
@@ -102,6 +103,8 @@ export function durableResourceRefs(events: RuntimeEvent[]): string[] {
   const refs = new Set<string>();
   for (const item of events) {
     if (isGoalContextEvent(item) && item.id) refs.add(`goal-context:${item.id}`);
+    const toolOutputRef = durableToolOutputRef(item);
+    if (toolOutputRef) refs.add(toolOutputRef);
     collectSubagentRefs(item, refs);
     collectResourceRefs(item.data, refs);
     collectResourceRefs(item.args, refs);
@@ -138,7 +141,11 @@ export function preservedEventIdsFromCompactionEvent(event: RuntimeEvent): strin
 
 export function eventPreview(event?: RuntimeEvent): string {
   if (!event) return "";
-  const parts = [event.output, event.error, event.action, event.data ? textFromUnknown(event.data) : null].filter(
+  const outputRef = durableToolOutputRef(event);
+  const output = outputRef && event.output
+    ? toolOutputPreviewForCompaction({ output: event.output, resourceRef: outputRef })
+    : event.output;
+  const parts = [output, event.error, event.action, event.data ? textFromUnknown(event.data) : null].filter(
     (value): value is string => Boolean(value),
   );
   return parts.join("\n");
@@ -262,7 +269,26 @@ function collectResourceRefs(value: unknown, refs: Set<string>): void {
 }
 
 function isDurableResourceRef(value: string): boolean {
-  return /^(workspace:(?:file|dir):|sandbox:(?:file|dir):|git:|event:|message:|artifact:|goal-context:|session:|subagent-run:)/.test(value);
+  return /^(workspace:(?:file|dir):|sandbox:(?:file|dir):|git:|event:|message:|artifact:|goal-context:|tool-output:|session:|subagent-run:)/.test(value);
+}
+
+function durableToolOutputRef(event: RuntimeEvent): string | null {
+  if (!event.output?.trim() || !isToolOutputEvent(event)) return null;
+  const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
+    ? event.data as Record<string, unknown>
+    : null;
+  const callId = typeof data?.toolCallId === "string"
+    ? data.toolCallId
+    : typeof data?.callId === "string"
+      ? data.callId
+      : event.id;
+  return toolOutputResourceRef(callId);
+}
+
+function isToolOutputEvent(event: RuntimeEvent): boolean {
+  return event.name === "tool.completed"
+    || event.name === "workspace_action_result"
+    || event.name === "command.output";
 }
 
 function subagentRunFromEvent(event: RuntimeEvent): SubagentRun | null {

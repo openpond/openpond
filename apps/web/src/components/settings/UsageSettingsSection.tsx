@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import type {
   AccountState,
+  UsageCacheCohortBreakdown,
   ModelUsageRecord,
   UsageCommandBreakdown,
   UsageDailyBucket,
@@ -448,6 +449,14 @@ export function UsageSettingsContent({
 
           <div className="usage-breakdown-grid">
             <UsageDataTable
+              title="Cache cohorts"
+              rows={summary?.cohorts ?? []}
+              rowKey={(row) => row.cohort}
+              emptyLabel="No cache cohorts"
+              columns={cacheCohortColumns}
+              compact
+            />
+            <UsageDataTable
               title="Routes"
               rows={summary?.routes ?? []}
               rowKey={(row) => row.route}
@@ -716,6 +725,13 @@ const sourceColumns: Array<UsageTableColumn<UsageSourceBreakdown>> = [
   { key: "tokens", label: "Tokens", align: "end", render: (row) => formatTokens(row.totalTokens) },
 ];
 
+const cacheCohortColumns: Array<UsageTableColumn<UsageCacheCohortBreakdown>> = [
+  { key: "cohort", label: "Cohort", render: (row) => cacheCohortLabel(row.cohort) },
+  { key: "cache", label: "Cache reuse", align: "end", render: (row) => formatCacheRate(row.cacheHitRate) },
+  { key: "coverage", label: "Cache data", align: "end", render: (row) => formatPercent(row.cacheTelemetryCoverage) },
+  { key: "requests", label: "Requests", align: "end", render: (row) => formatInteger(row.requests) },
+];
+
 const requestColumns: Array<UsageTableColumn<ModelUsageRecord>> = [
   { key: "started", label: "Started", render: (row) => formatDateTime(row.startedAt) },
   {
@@ -930,6 +946,15 @@ function commandSourceLabel(source: UsageCommandBreakdown["commandSource"]): str
   if (source === "server_parser") return "Server parser";
   if (source === "model_tool") return "Model tool";
   return titleFromIdentifier(source);
+}
+
+function cacheCohortLabel(cohort: UsageCacheCohortBreakdown["cohort"]): string {
+  if (cohort === "foreground") return "Foreground";
+  if (cohort === "tool_loop") return "Tool loop";
+  if (cohort === "compaction") return "Compaction";
+  if (cohort === "subagent") return "Subagent";
+  if (cohort === "refiner") return "Refiner";
+  return "Other";
 }
 
 function requestKindLabel(kind: string): string {
