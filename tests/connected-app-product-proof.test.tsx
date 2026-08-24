@@ -78,7 +78,12 @@ describe("connected app product proof", () => {
       }),
     );
 
-    expect(options.map((option) => option.provider)).toEqual(["google", "github", "x"]);
+    expect(options.map((option) => option.provider)).toEqual([
+      "google",
+      "github",
+      "x",
+      "turnkey",
+    ]);
     expect(markup).toContain("Google");
     expect(markup).toContain("./connected-apps/google.svg");
     expect(markup).toContain("Read Drive files");
@@ -95,7 +100,7 @@ describe("connected app product proof", () => {
       createElement(ScopedConversationProbe),
     );
 
-    expect(markup).toContain("connected:google,github,x");
+    expect(markup).toContain("connected:google,github,x,turnkey");
     expect(markup).toContain("apps:0");
   });
 
@@ -139,15 +144,19 @@ describe("connected app product proof", () => {
       expect(markup, app.id).toContain(app.capabilityLabels[0]!);
       expect(markup, app.id).not.toContain("conn_");
 
-      if (isLeaseableOAuthCatalogId(app.id)) {
+      if (isLeaseableIntegrationCatalogId(app.id)) {
         expect(app.connected, app.id).toBe(true);
         expect(app.statusLabel, app.id).toBe("Connected");
         expect(bundle?.leasePolicy.leaseable, app.id).toBe(true);
-        expect(bundle?.tools.map((tool) => tool.name), app.id).toEqual([
-          "connected_app_search",
-          "connected_app_read",
-          "connected_app_write",
-        ]);
+        expect(bundle?.tools.map((tool) => tool.name), app.id).toEqual(
+          app.id === "turnkey"
+            ? ["connected_app_read"]
+            : [
+                "connected_app_search",
+                "connected_app_read",
+                "connected_app_write",
+              ],
+        );
       } else {
         expect(app.connected, app.id).toBe(false);
         expect(bundle?.leasePolicy.leaseable, app.id).toBe(false);
@@ -234,6 +243,13 @@ function productProofStatusRows() {
         status: "active",
       },
       {
+        id: "conn_turnkey",
+        teamId: "team_wallet",
+        provider: "turnkey",
+        providerAccountName: "Agent Wallet",
+        status: "active",
+      },
+      {
         id: "conn_teams",
         provider: "microsoft_teams",
         providerAccountName: "Teams User",
@@ -250,6 +266,6 @@ function row(rows: ReturnType<typeof productProofStatusRows>, id: string) {
   return app;
 }
 
-function isLeaseableOAuthCatalogId(id: ConnectedAppId): boolean {
-  return id === "google" || id === "github" || id === "x";
+function isLeaseableIntegrationCatalogId(id: ConnectedAppId): boolean {
+  return id === "google" || id === "github" || id === "turnkey" || id === "x";
 }
