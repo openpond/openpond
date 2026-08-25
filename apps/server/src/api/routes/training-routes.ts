@@ -141,6 +141,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "GET", action: "preference_dataset_list", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "POST", action: "preference_dataset_materialize", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/reward-model-runs$/, method: "POST", action: "reward_model_run_launch", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/retry-qualification$/, method: "POST", action: "reward_model_qualification_retry", key: "runId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/learned-preference-reward-binding$/, method: "POST", action: "learned_preference_reward_binding", key: "tasksetId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },

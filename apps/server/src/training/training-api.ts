@@ -429,6 +429,11 @@ export function createTrainingApi(deps: {
         managedBaseModel: MANAGED_REWARD_MODEL_PROFILE,
       });
     }
+    if (action === "reward_model_qualification_retry") {
+      return deps.training.retryRewardModelQualification(
+        requiredString(input.runId, "runId"),
+      );
+    }
     if (action === "learned_preference_reward_binding") {
       return deps.training.learnedPreferenceRewardBinding({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),

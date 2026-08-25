@@ -357,6 +357,37 @@ export function createTrainingService(deps: {
     });
   }
 
+  async function retryRewardModelQualification(runId: string) {
+    const run = await deps.store.getRewardModelRun(runId);
+    if (
+      !run ||
+      run.status !== "failed" ||
+      run.failureOwner !== "qualification" ||
+      !run.managedRunId ||
+      run.rewardModelVersionId
+    ) {
+      throw new Error("Only a failed Reward Model qualification with a completed managed Run can be retried.");
+    }
+    const remote = await portableAdapters.rewardModelJob(run.managedRunId);
+    if (remote.job.state !== "completed") {
+      throw new Error("Reward Model qualification retry requires a completed managed Run.");
+    }
+    await deps.store.saveRewardModelRun({
+      ...run,
+      status: "running",
+      failureOwner: null,
+      failure: null,
+      completedAt: null,
+      updatedAt: new Date().toISOString(),
+    });
+    await reconcileRewardModelRuns();
+    const reconciled = await deps.store.getRewardModelRun(runId);
+    if (!reconciled) {
+      throw new Error("Reward Model Run disappeared during qualification retry.");
+    }
+    return reconciled;
+  }
+
   async function activity() {
     await portableModelRuns.reconcileActive();
     await reconcileRewardModelRuns();
@@ -585,6 +616,7 @@ export function createTrainingService(deps: {
     activity,
     state,
     launchRewardModel,
+    retryRewardModelQualification,
     learnedPreferenceRewardBinding,
     exportBundle,
     artifactDownload,
