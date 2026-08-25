@@ -321,20 +321,40 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
               "This Taskset harness is not yet supported by the selected OpenPond Managed rollout placement.",
           });
         }
-        if (
-          !requiresHarness &&
-          taskset.tasks.some(
-            (task) =>
-              task.split !== "frozen_eval" &&
-              typeof task.expectedOutput?.text !== "string",
-          )
-        ) {
-          issues.push({
-            code: "managed_exact_answer_missing",
-            path: "taskset.tasks",
-            message:
-              "Stateless OpenPond Managed tasks require an exact expected text answer.",
-          });
+        if (!requiresHarness) {
+          const learnedPreference = plan.recipe.method === "grpo"
+            ? plan.recipe.reward.learnedPreference ?? null
+            : null;
+          const scoredTasks = taskset.tasks.filter(
+            (task) => task.split !== "frozen_eval",
+          );
+          if (
+            learnedPreference &&
+            scoredTasks.some(
+              (task) =>
+                typeof task.expectedOutput?.artifactRendererRef !== "string" ||
+                typeof task.expectedOutput?.outputSchemaRef !== "string",
+            )
+          ) {
+            issues.push({
+              code: "managed_learned_reward_renderer_missing",
+              path: "taskset.tasks",
+              message:
+                "Stateless learned-reward tasks require an artifact renderer and output schema.",
+            });
+          } else if (
+            !learnedPreference &&
+            scoredTasks.some(
+              (task) => typeof task.expectedOutput?.text !== "string",
+            )
+          ) {
+            issues.push({
+              code: "managed_exact_answer_missing",
+              path: "taskset.tasks",
+              message:
+                "Stateless exact-reward tasks require an exact expected text answer.",
+            });
+          }
         }
       }
     }
