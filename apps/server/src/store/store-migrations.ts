@@ -89,4 +89,19 @@ export const SQLITE_MIGRATIONS: Migration[] = [
     version: 45,
     run: (store) => store.createPreferenceComparisonTables(),
   },
+  {
+    version: 46,
+    run: (store) => store.createTasksetDraftTables(),
+  },
+  {
+    version: 47,
+    run: (store) => store.createTrainingTables(),
+  },
+  {
+    // Existing stores may already be at v47 from before Reward Model rows
+    // were added to TRAINING_TABLES_SQL. Re-run the idempotent table builder
+    // so those stores receive the new lifecycle tables on startup.
+    version: 48,
+    run: (store) => store.createTrainingTables(),
+  },
 ];

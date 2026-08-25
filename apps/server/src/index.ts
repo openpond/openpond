@@ -728,6 +728,7 @@ export async function createOpenPondServer(
   await harnessRefinerBenchmarks.reconcileInterrupted();
   const trainingApi = createTrainingApi({
     store,
+    storeDir,
     taskCreator: taskCreatorService,
     taskMiner: taskMinerService,
     evaluation: taskEvaluationService,

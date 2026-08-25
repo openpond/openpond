@@ -3,7 +3,9 @@ import type {
   ChatModelRef,
   CreateImproveRun,
   Taskset,
+  TasksetDraft,
   TrainingStateResponse,
+  TasksetOperationalState,
 } from "@openpond/contracts";
 
 import type { ShowAppToast } from "../../app/app-state";
@@ -20,12 +22,25 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 
 const PAGE_SIZE = 10;
-type DatasetDetailTab = "overview" | "cases" | "scoring" | "history";
+type TasksetListItem =
+  | { kind: "draft"; value: TasksetDraft }
+  | { kind: "taskset"; value: Taskset };
+type DatasetDetailTab =
+  | "overview"
+  | "scenarios"
+  | "runs"
+  | "attempts"
+  | "review"
+  | "metrics"
+  | "versions";
 const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
-  { id: "cases", label: "Cases" },
-  { id: "scoring", label: "Scoring" },
-  { id: "history", label: "History" },
+  { id: "scenarios", label: "Scenarios" },
+  { id: "runs", label: "Generate & Runs" },
+  { id: "attempts", label: "Attempts" },
+  { id: "review", label: "Review" },
+  { id: "metrics", label: "Metrics" },
+  { id: "versions", label: "Versions" },
 ];
 
 export function LabDatasetsPage({
@@ -33,6 +48,7 @@ export function LabDatasetsPage({
   runs,
   selectedId,
   onSelectedIdChange,
+  onOpenDraft,
   defaultModel,
   onImproveInChat,
   onTrainModel,
@@ -44,6 +60,7 @@ export function LabDatasetsPage({
   runs: CreateImproveRun[];
   selectedId: string | null;
   onSelectedIdChange: (tasksetId: string | null) => void;
+  onOpenDraft: (draftId: string) => void;
   defaultModel: ChatModelRef;
   onImproveInChat: (taskset: Taskset) => void;
   onTrainModel: (tasksetId: string) => void;
@@ -68,17 +85,22 @@ export function LabDatasetsPage({
           && artifact.tasksetRevision === selected.revision,
       ) ?? null
     : null;
-  const filtered = useMemo(() => {
+  const filtered = useMemo<TasksetListItem[]>(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return tasksets;
-    return tasksets.filter((taskset) =>
-      [taskset.name, taskset.objective, taskset.id]
-        .some((value) => value.toLowerCase().includes(normalized)));
-  }, [query, tasksets]);
+    return [
+      ...(state?.tasksetDrafts ?? [])
+        .filter((draft) => draft.status !== "published")
+        .map((value) => ({ kind: "draft" as const, value })),
+      ...tasksets.map((value) => ({ kind: "taskset" as const, value })),
+    ]
+      .filter(({ value }) => !normalized || [value.name, value.objective, value.id]
+        .some((candidate) => candidate.toLowerCase().includes(normalized)))
+      .sort((left, right) => right.value.updatedAt.localeCompare(left.value.updatedAt));
+  }, [query, state?.tasksetDrafts, tasksets]);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const modelCountByDataset = useMemo(() => {
     const counts = new Map<string, number>();
-    if (!state) return counts;
+    if (!state || tasksets.length === 0) return counts;
     const models = labWorkproductProjection({
       profile: null,
       training: state,
@@ -90,7 +112,7 @@ export function LabDatasetsPage({
       }
     }
     return counts;
-  }, [runs, state]);
+  }, [runs, state, tasksets]);
 
   useEffect(() => {
     setDetailTab("overview");
@@ -139,23 +161,18 @@ export function LabDatasetsPage({
                 className="training-button"
                 disabled={readOnly}
                 type="button"
-                onClick={() => setDetailTab("scoring")}
+                onClick={() => setDetailTab("runs")}
               >
                 Run Benchmark
               </button>
             ) : (
               <button
                 className="training-button"
-                disabled={readOnly || !selected.readiness?.ready}
-                title={readOnly
-                  ? "Switch to this Taskset's Profile before launching a Model run."
-                  : selected.readiness?.ready
-                    ? "Create a Model run from this ready Taskset."
-                    : selected.readiness?.blockers[0]?.message ?? "Run Taskset checks before training."}
+                disabled={readOnly}
                 type="button"
-                onClick={() => onTrainModel(selected.id)}
+                onClick={() => setDetailTab("runs")}
               >
-                Train Model
+                Create run
               </button>
             )}
             <LabStatusBadge
@@ -182,8 +199,17 @@ export function LabDatasetsPage({
             </button>
           ))}
         </div>
-        {detailTab === "history" ? (
-          <TasksetHistory state={state} taskset={selected} />
+        {detailTab === "runs" ? (
+          <TasksetRuns
+            readOnly={readOnly}
+            state={state}
+            taskset={selected}
+            onCreateRun={() => onTrainModel(selected.id)}
+          />
+        ) : detailTab === "attempts" ? (
+          <TasksetAttempts taskset={selected} training={training} />
+        ) : detailTab === "versions" ? (
+          <TasksetVersions taskset={selected} />
         ) : (
           <>
             <LabModelDataset
@@ -195,7 +221,7 @@ export function LabDatasetsPage({
               onToast={onToast}
               training={training}
             />
-            {detailTab === "scoring" &&
+            {detailTab === "metrics" &&
             selected.metadata.flagship === "cross-system-operations" ? (
               <LabExpertBootstrap
                 busyAction={training.busyAction}
@@ -233,6 +259,14 @@ export function LabDatasetsPage({
             }}
           />
         </label>
+        <button
+          className="training-button secondary labs-compact-button"
+          disabled={training.loading}
+          type="button"
+          onClick={() => void training.refresh()}
+        >
+          {training.loading ? "Refreshing…" : "Refresh"}
+        </button>
       </div>
       <div className="training-table-wrap">
         <table className="training-data-table labs-datasets-table">
@@ -248,7 +282,34 @@ export function LabDatasetsPage({
             </tr>
           </thead>
           <tbody>
-            {visible.map((taskset) => {
+            {visible.map((item) => {
+              if (item.kind === "draft") {
+                const draft = item.value;
+                return (
+                  <tr key={`draft:${draft.id}`}>
+                    <td>
+                      <button
+                        className="labs-workproduct-link"
+                        type="button"
+                        onClick={() => onOpenDraft(draft.id)}
+                      >
+                        <strong>
+                          {draft.name || "Untitled Taskset"}
+                          <span className="labs-taskset-draft-badge">Draft</span>
+                        </strong>
+                        <span>{draft.objective || "Empty draft"}</span>
+                      </button>
+                    </td>
+                    <td>{draftSplitCount(draft, "train")}</td>
+                    <td>{draftSplitCount(draft, "validation")}</td>
+                    <td>{draftSplitCount(draft, "frozen_eval")}</td>
+                    <td>{draft.graders.length}</td>
+                    <td>Resume draft</td>
+                    <td>{formatCompactDate(draft.updatedAt)}</td>
+                  </tr>
+                );
+              }
+              const taskset = item.value;
               const modelCount = modelCountByDataset.get(taskset.id) ?? 0;
               const benchmarkRunCount = (state?.benchmarkRuns ?? []).filter(
                 (run) => run.metadata.sourceTasksetId === taskset.id,
@@ -295,6 +356,141 @@ export function LabDatasetsPage({
   );
 }
 
+function TasksetRuns({
+  readOnly,
+  state,
+  taskset,
+  onCreateRun,
+}: {
+  readOnly: boolean;
+  state: TrainingStateResponse | null;
+  taskset: Taskset;
+  onCreateRun: () => void;
+}) {
+  return (
+    <>
+      <section className="labs-dataset-run-intro">
+        <h2>Generate attempts or train from this Taskset</h2>
+        <p>
+          Choose a model and run type in the run builder. Collection, reward-model,
+          and policy runs keep their own immutable inputs and receipts.
+        </p>
+        <button
+          className="training-button"
+          disabled={readOnly}
+          type="button"
+          onClick={onCreateRun}
+        >
+          Create run
+        </button>
+      </section>
+      <TasksetHistory state={state} taskset={taskset} />
+    </>
+  );
+}
+
+function TasksetAttempts({
+  taskset,
+  training,
+}: {
+  taskset: Taskset;
+  training: ReturnType<typeof useTraining>;
+}) {
+  const [operations, setOperations] = useState<TasksetOperationalState | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    void training.actions.tasksetOperationalState(taskset.id)
+      .then((next) => {
+        if (active) setOperations(next);
+      })
+      .catch((caught) => {
+        if (active) setError(caught instanceof Error ? caught.message : String(caught));
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [taskset.id, training.actions]);
+
+  if (loading) return <div className="labs-table-empty">Loading Attempts…</div>;
+  if (error) return <div className="training-banner error" role="alert">{error}</div>;
+  if (!operations?.attempts.length) {
+    return <div className="labs-table-empty">No Attempts have been recorded for this Taskset.</div>;
+  }
+  const artifactsByAttempt = groupCount(operations.artifacts.map((artifact) => artifact.attemptId));
+  const gradeByAttempt = new Map(operations.grades.map((grade) => [grade.attemptId, grade]));
+  const distinctOutputs = new Set(operations.attempts.map((attempt) => JSON.stringify(attempt.output))).size;
+  return (
+    <>
+    <p className="labs-detail-copy">
+      {operations.attempts.length} Attempts · {distinctOutputs} distinct outputs · {operations.artifacts.length} artifacts
+    </p>
+    <div className="training-table-wrap">
+      <table className="training-data-table">
+        <thead>
+          <tr>
+            <th>Attempt</th>
+            <th>Scenario</th>
+            <th>Status</th>
+            <th>Evidence</th>
+            <th>Reward</th>
+            <th>Artifacts</th>
+          </tr>
+        </thead>
+        <tbody>
+          {operations.attempts.map((attempt) => {
+            const grade = gradeByAttempt.get(attempt.id);
+            return (
+              <tr key={attempt.id}>
+                <td><code>{attempt.id}</code></td>
+                <td>{attempt.taskId}</td>
+                <td>{attempt.infrastructureError ? "Infrastructure error" : "Completed"}</td>
+                <td>{attemptEvidenceLabel(attempt)}</td>
+                <td>{grade?.score == null ? "—" : grade.score.toFixed(3)}</td>
+                <td>{artifactsByAttempt.get(attempt.id) ?? 0}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+    </>
+  );
+}
+
+function attemptEvidenceLabel(attempt: TasksetOperationalState["attempts"][number]): string {
+  const metadata = attempt.metadata;
+  if (metadata.execution === "synthetic_collection_fixture") {
+    const label = typeof metadata.fixtureLabel === "string"
+      ? metadata.fixtureLabel.replace(/^./, (value) => value.toUpperCase())
+      : "Unlabeled";
+    const group = typeof metadata.collectionGroupIndex === "number"
+      ? `group ${metadata.collectionGroupIndex + 1}`
+      : "fixture group";
+    return `Fixture · ${group} · ${label}`;
+  }
+  return attempt.modelRef ? "Model attempt" : "Recorded attempt";
+}
+
+function TasksetVersions({ taskset }: { taskset: Taskset }) {
+  return (
+    <section className="labs-dataset-run-intro">
+      <h2>Published version</h2>
+      <dl className="labs-inline-facts">
+        <div><dt>Revision</dt><dd>{taskset.revision}</dd></div>
+        <div><dt>Content hash</dt><dd><code>{taskset.contentHash}</code></dd></div>
+        <div><dt>Updated</dt><dd>{formatCompactDate(taskset.updatedAt)}</dd></div>
+      </dl>
+      <p>Runs pin this immutable revision. Editing starts a new draft and publishes a new version.</p>
+    </section>
+  );
+}
+
 function TasksetHistory({
   state,
   taskset,
@@ -307,6 +503,9 @@ function TasksetHistory({
     .filter((run) => run.taskset.id === taskset.id)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const visibleRuns = showAll ? runs : runs.slice(0, 10);
+  const rewardRuns = (state?.rewardModelRuns ?? [])
+    .filter((run) => run.taskset.id === taskset.id)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
   const modelNames = new Map(
     (state?.modelProjects ?? []).map((project) => [project.id, project.name]),
   );
@@ -374,7 +573,7 @@ function TasksetHistory({
     );
   }
 
-  if (!runs.length) {
+  if (!runs.length && !rewardRuns.length) {
     return (
       <div className="labs-table-empty">
         This Taskset has not been used in a submitted run yet.
@@ -384,6 +583,28 @@ function TasksetHistory({
 
   return (
     <>
+      {rewardRuns.length ? (
+        <div className="training-table-wrap">
+          <table className="training-data-table">
+            <thead>
+              <tr><th>Reward Model Run</th><th>Scope</th><th>Progress</th><th>Loss</th><th>Status</th><th>Spend</th></tr>
+            </thead>
+            <tbody>
+              {rewardRuns.map((run) => (
+                <tr key={run.id}>
+                  <td>{run.id}</td>
+                  <td>{statusLabel(run.scope)}</td>
+                  <td>{run.progress.completedSteps}/{run.progress.totalSteps}</td>
+                  <td>{run.progress.latestLoss?.toFixed(4) ?? "—"}</td>
+                  <td><LabStatusBadge label={statusLabel(run.status)} value={run.status} /></td>
+                  <td>{run.accruedSpendUsd == null ? "—" : `$${run.accruedSpendUsd.toFixed(2)}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {runs.length ? (
       <div className="training-table-wrap">
         <table className="training-data-table">
           <thead>
@@ -413,6 +634,7 @@ function TasksetHistory({
           </tbody>
         </table>
       </div>
+      ) : null}
       {runs.length > 10 ? (
         <div className="labs-model-run-list-actions">
           <button
@@ -444,6 +666,13 @@ function splitCount(
   return taskset.tasks.filter((task) => task.split === split).length;
 }
 
+function draftSplitCount(
+  draft: TasksetDraft,
+  split: TasksetDraft["tasks"][number]["split"],
+): number {
+  return draft.tasks.filter((task) => task.split === split).length;
+}
+
 function datasetStatus(taskset: Taskset): string {
   if (taskset.readiness?.ready) return "Ready";
   if (taskset.status === "ready") return "Needs Evals";
@@ -454,6 +683,12 @@ function formatCompactDate(value: string): string {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "—";
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function groupCount(values: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return counts;
 }
 
 function DatasetPagination({

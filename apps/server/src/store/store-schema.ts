@@ -1,4 +1,4 @@
-export const CURRENT_SQLITE_SCHEMA_VERSION = 45;
+export const CURRENT_SQLITE_SCHEMA_VERSION = 48;
 
 export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS sessions (
@@ -382,6 +382,17 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS tasksets_profile_status_updated_idx ON tasksets(profile_id, status, updated_at DESC);
 
+  CREATE TABLE IF NOT EXISTS taskset_drafts (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS taskset_drafts_profile_updated_idx ON taskset_drafts(profile_id, updated_at DESC);
+
   CREATE TABLE IF NOT EXISTS taskset_revisions (
     taskset_id TEXT NOT NULL,
     revision INTEGER NOT NULL,
@@ -537,6 +548,32 @@ export const SQLITE_CREATE_SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS model_runs_profile_updated_idx ON model_runs(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS model_runs_model_updated_idx ON model_runs(model_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS model_runs_taskset_updated_idx ON model_runs(taskset_id, updated_at DESC);
+
+  CREATE TABLE IF NOT EXISTS reward_model_versions (
+    id TEXT PRIMARY KEY,
+    model_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    version_number INTEGER NOT NULL,
+    taskset_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(model_id, version_number)
+  );
+  CREATE INDEX IF NOT EXISTS reward_model_versions_profile_created_idx ON reward_model_versions(profile_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS reward_model_versions_taskset_created_idx ON reward_model_versions(taskset_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS reward_model_runs (
+    id TEXT PRIMARY KEY,
+    reward_model_id TEXT NOT NULL,
+    profile_id TEXT NOT NULL,
+    taskset_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS reward_model_runs_profile_updated_idx ON reward_model_runs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS reward_model_runs_taskset_updated_idx ON reward_model_runs(taskset_id, updated_at DESC);
 
   CREATE TABLE IF NOT EXISTS training_plans (
     id TEXT PRIMARY KEY,

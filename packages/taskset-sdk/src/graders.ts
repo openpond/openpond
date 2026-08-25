@@ -154,6 +154,21 @@ function runDeterministic(grader: Extract<GraderSpec, { kind: "content" | "schem
     return component(grader, passed ? 1 : 0, passed, passed ? "Content requirements passed." : "Content requirements failed.", []);
   }
   if (grader.kind === "schema") {
+    if (config.operator === "json_schema_subset") {
+      const parsed = structuredJsonOutput(attempt.output, config.jsonField);
+      if (!parsed.ok) {
+        return component(grader, 0, false, parsed.message, []);
+      }
+      const issues = validateJsonSchemaSubset(parsed.value, record(config.schema));
+      const passed = issues.length === 0;
+      return component(
+        grader,
+        passed ? 1 : 0,
+        passed,
+        passed ? "Structured output satisfied the declared JSON Schema." : issues.join(" "),
+        [],
+      );
+    }
     const requiredKeys = stringArray(config.requiredKeys);
     const passed = requiredKeys.every((key) => Object.hasOwn(attempt.output, key));
     return component(grader, passed ? 1 : 0, passed, passed ? "Schema requirements passed." : `Missing keys: ${requiredKeys.filter((key) => !Object.hasOwn(attempt.output, key)).join(", ")}.`, []);
@@ -221,4 +236,78 @@ function normalizedFinalAnswer(value: string): string {
     .replace(/[,，]/g, "")
     .replace(/[.\s]+$/g, "")
     .replace(/\s+/g, " ");
+}
+
+function structuredJsonOutput(
+  output: Record<string, unknown>,
+  jsonField: unknown,
+): { ok: true; value: unknown } | { ok: false; message: string } {
+  const field = typeof jsonField === "string" ? jsonField : "text";
+  const encoded = output[field];
+  if (typeof encoded !== "string") return { ok: true, value: output };
+  const trimmed = encoded.trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  try {
+    return { ok: true, value: JSON.parse(trimmed) as unknown };
+  } catch {
+    return { ok: false, message: "The model output was not valid JSON." };
+  }
+}
+
+function validateJsonSchemaSubset(
+  value: unknown,
+  schema: Record<string, unknown>,
+  path = "$",
+): string[] {
+  const issues: string[] = [];
+  const enumValues = Array.isArray(schema.enum) ? schema.enum : null;
+  if (enumValues && !enumValues.some((candidate) => Object.is(candidate, value))) {
+    issues.push(`${path} must be one of the declared values.`);
+    return issues;
+  }
+  if (schema.type === "object") {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return [`${path} must be an object.`];
+    }
+    const objectValue = value as Record<string, unknown>;
+    const properties = record(schema.properties);
+    for (const key of stringArray(schema.required)) {
+      if (!Object.hasOwn(objectValue, key)) issues.push(`${path}.${key} is required.`);
+    }
+    if (schema.additionalProperties === false) {
+      for (const key of Object.keys(objectValue)) {
+        if (!Object.hasOwn(properties, key)) issues.push(`${path}.${key} is not allowed.`);
+      }
+    }
+    for (const [key, propertySchema] of Object.entries(properties)) {
+      if (!Object.hasOwn(objectValue, key)) continue;
+      issues.push(...validateJsonSchemaSubset(
+        objectValue[key],
+        record(propertySchema),
+        `${path}.${key}`,
+      ));
+    }
+    return issues;
+  }
+  if (schema.type === "array") {
+    if (!Array.isArray(value)) return [`${path} must be an array.`];
+    const itemSchema = record(schema.items);
+    for (const [index, item] of value.entries()) {
+      issues.push(...validateJsonSchemaSubset(item, itemSchema, `${path}[${index}]`));
+    }
+    return issues;
+  }
+  if (schema.type === "string" && typeof value !== "string") issues.push(`${path} must be a string.`);
+  if (schema.type === "number" && (typeof value !== "number" || !Number.isFinite(value))) issues.push(`${path} must be a finite number.`);
+  if (schema.type === "integer" && (typeof value !== "number" || !Number.isInteger(value))) issues.push(`${path} must be an integer.`);
+  if (schema.type === "boolean" && typeof value !== "boolean") issues.push(`${path} must be a boolean.`);
+  if (schema.type === "null" && value !== null) issues.push(`${path} must be null.`);
+  return issues;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }

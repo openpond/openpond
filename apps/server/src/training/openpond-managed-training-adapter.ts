@@ -58,7 +58,13 @@ type ManagedJob = {
   terminalReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  resources?: Array<{
+    kind: string;
+    state: string;
+    metadata: Record<string, unknown>;
+  }>;
   inputBundle?: {
+    rewardModelTraining?: Record<string, unknown>;
     harnessRelease?: {
       contentHash?: string;
     };
@@ -66,8 +72,9 @@ type ManagedJob = {
       runtimeTarget?: {
         placement?: string;
       };
-    };
+    } & Record<string, unknown>;
   };
+  cleanupAttestation?: unknown;
 };
 
 type ManagedCandidateBundle = {
@@ -114,6 +121,56 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   async calibrationBatch(jobId: string) {
     return this.requestJson<{ job: ManagedJob; batch: unknown | null }>(
       `/v1/managed-rl/calibration-batches/${encodeURIComponent(jobId)}`,
+      {},
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  /** Uploads an immutable rendered artifact for a managed Reward Model run. */
+  async uploadRewardModelArtifact(input: {
+    bytes: Uint8Array;
+    mediaType: string;
+    idempotencyKey: string;
+  }) {
+    const bytes = Buffer.from(input.bytes);
+    return this.requestJson<{
+      objectRef: string;
+      sha256: string;
+      sizeBytes: number;
+      mediaType: string;
+    }>(
+      "/v1/managed-rl/reward-model-artifacts",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          contentBase64: bytes.toString("base64"),
+          expectedSha256: sha256(bytes),
+          idempotencyKey: input.idempotencyKey,
+          mediaType: input.mediaType,
+        }),
+      },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async createRewardModelLaunch(request: unknown) {
+    return this.requestJson<{ job: ManagedJob; requestHash: string }>(
+      "/v1/managed-rl/reward-model-launches",
+      { method: "POST", body: JSON.stringify(request) },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async rewardModelJob(jobId: string) {
+    return this.requestJson<{
+      job: ManagedJob;
+      resources: Array<{
+        kind: string;
+        state: string;
+        metadata: Record<string, unknown>;
+      }>;
+    }>(
+      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`,
       {},
       await this.resolveBoundAccess(),
     );

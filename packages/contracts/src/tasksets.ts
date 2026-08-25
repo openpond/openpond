@@ -11,6 +11,7 @@ const IdSchema = z.string().trim().min(1).max(240);
 const TimestampSchema = z.string().trim().min(1);
 const HashSchema = z.string().trim().min(8).max(256);
 const Sha256Schema = z.string().trim().regex(/^[a-f0-9]{64}$/);
+const CodeIdentifierSchema = z.string().trim().regex(/^[A-Za-z_$][A-Za-z0-9_$]*$/);
 const MetadataSchema = z.record(z.string(), z.unknown()).default({});
 const NullableIdSchema = IdSchema.nullable();
 
@@ -274,8 +275,20 @@ export const TaskDataRecordSchema = z.object({
   privilegedContextRef: NullableIdSchema,
   sourceRefs: z.array(IdSchema).min(1).max(100),
   assets: z.array(TaskAssetRefSchema).max(1_000).optional(),
+  resourceRefs: z.array(IdSchema).max(1_000).optional(),
   requiredOutputs: z.array(TaskRequiredOutputSchema).max(100).optional(),
   tags: z.array(IdSchema).max(100).default([]),
+  metadata: MetadataSchema,
+});
+
+export const TasksetEnvironmentResourceSchema = z.object({
+  id: IdSchema,
+  kind: z.enum(["file", "catalog", "configuration", "code_module"]),
+  path: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Environment resource paths must remain relative."),
+  mediaType: z.string().trim().min(1).max(200).nullable().optional(),
+  visibility: z.enum(["policy_visible", "policy_hidden", "privileged"]),
+  required: z.boolean(),
   metadata: MetadataSchema,
 });
 
@@ -367,6 +380,7 @@ export const TasksetEnvironmentContractSchema = z.object({
   lifecycle: z.array(z.enum(["create", "reset", "step", "grade", "cleanup"])).min(1),
   defaultTimeoutMs: z.number().int().positive().max(3_600_000),
   networkPolicy: z.enum(["none", "declared_read_only", "declared_scoped"]),
+  resources: z.array(TasksetEnvironmentResourceSchema).max(10_000).optional(),
   metadata: MetadataSchema,
 });
 
@@ -382,6 +396,36 @@ export const TasksetCapabilityManifestSchema = z.object({
   environmentPlacements: z.array(z.enum(["local", "remote", "colocated", "provider_native"])),
   exportable: z.boolean(),
   portabilityBlockers: z.array(z.string().trim().min(1).max(2_000)).default([]),
+});
+
+export const TasksetMetricPolicySchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetMetricPolicy.v1"),
+  primaryMetric: IdSchema,
+  aggregation: z.enum(["mean_score", "pass_rate", "weighted_mean", "custom"]),
+  missingReward: z.enum(["zero", "exclude"]),
+  customAggregator: z.object({
+    module: z.string().trim().min(1).max(1_000)
+      .refine(safeRelativeFilePath, "Custom metric modules must use a safe relative path."),
+    exportName: CodeIdentifierSchema,
+    contentHash: Sha256Schema,
+    timeoutMs: z.number().int().positive().max(300_000),
+    networkPolicy: z.literal("none"),
+  }).nullable(),
+}).superRefine((policy, context) => {
+  if (policy.aggregation === "custom" && !policy.customAggregator) {
+    context.addIssue({
+      code: "custom",
+      message: "Custom metric aggregation requires a content-hashed module.",
+      path: ["customAggregator"],
+    });
+  }
+  if (policy.aggregation !== "custom" && policy.customAggregator) {
+    context.addIssue({
+      code: "custom",
+      message: "Built-in metric aggregation cannot include a custom module.",
+      path: ["customAggregator"],
+    });
+  }
 });
 
 export const TaskFailureClassSchema = z.enum([
@@ -423,8 +467,9 @@ export const HumanGraderSpecSchema = GraderBaseSchema.extend({
 });
 export const CustomVerifierGraderSpecSchema = GraderBaseSchema.extend({
   kind: z.literal("custom_verifier"),
-  module: z.string().trim().min(1).max(1_000),
-  exportName: IdSchema,
+  module: z.string().trim().min(1).max(1_000)
+    .refine(safeRelativeFilePath, "Custom verifier modules must use a safe relative path."),
+  exportName: CodeIdentifierSchema,
   timeoutMs: z.number().int().positive().max(300_000),
   networkPolicy: z.literal("none"),
 });
@@ -664,6 +709,7 @@ export const TasksetSchema = z.object({
   policy: TaskPolicyBoundarySchema,
   environment: TasksetEnvironmentContractSchema,
   capabilities: TasksetCapabilityManifestSchema,
+  metrics: TasksetMetricPolicySchema.optional(),
   tasks: z.array(TaskDataRecordSchema).max(1_000_000),
   graders: z.array(GraderSpecSchema).min(1).max(1_000),
   graderFixtures: z.array(GraderFixtureSchema).min(1).max(100_000),
@@ -841,6 +887,7 @@ export type DatasetBuildSpecification = z.infer<typeof DatasetBuildSpecification
 export type TaskAssetRef = z.infer<typeof TaskAssetRefSchema>;
 export type TaskRequiredOutput = z.infer<typeof TaskRequiredOutputSchema>;
 export type TaskDataRecord = z.infer<typeof TaskDataRecordSchema>;
+export type TasksetEnvironmentResource = z.infer<typeof TasksetEnvironmentResourceSchema>;
 export type DemonstrationSignal = z.infer<typeof DemonstrationSignalSchema>;
 export type PreferenceSignal = z.infer<typeof PreferenceSignalSchema>;
 export type CorrectionSignal = z.infer<typeof CorrectionSignalSchema>;
@@ -850,6 +897,7 @@ export type LabelSignal = z.infer<typeof LabelSignalSchema>;
 export type LearningSignalInventory = z.infer<typeof LearningSignalInventorySchema>;
 export type TasksetEnvironmentContract = z.infer<typeof TasksetEnvironmentContractSchema>;
 export type TasksetCapabilityManifest = z.infer<typeof TasksetCapabilityManifestSchema>;
+export type TasksetMetricPolicy = z.infer<typeof TasksetMetricPolicySchema>;
 export type TaskFailureClass = z.infer<typeof TaskFailureClassSchema>;
 export type GraderSpec = z.infer<typeof GraderSpecSchema>;
 export type GraderFixture = z.infer<typeof GraderFixtureSchema>;

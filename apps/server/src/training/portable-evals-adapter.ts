@@ -67,6 +67,12 @@ export function compileDesktopHarnessContext(input: {
   profile?: OpenPondProfileState | null;
   releasedHarness?: Pick<DesktopHarnessContext, "agentSnapshot" | "harnessRelease"> | null;
   tasksetRelease?: TasksetRelease | null;
+  /**
+   * The immutable Taskset Release includes an adapter conformance binding.
+   * Callers that project evidence for an already-admitted release must use the
+   * same identifier; desktop remains the local execution default.
+   */
+  adapterId?: string;
   reasoningEffort?: string | null;
   model: ChatModelRef;
   now?: () => string;
@@ -96,7 +102,7 @@ export function compileDesktopHarnessContext(input: {
   } = materializePortableTasksetRelease({
     taskset: input.taskset,
     selectedTasks: sourceTasks,
-    adapterId: desktopTasksetRuntimeAdapterId(input.taskset),
+    adapterId: input.adapterId ?? desktopTasksetRuntimeAdapterId(input.taskset),
     admittedTasksetRelease: input.tasksetRelease,
   });
   const now = input.now ?? (() => new Date().toISOString());
@@ -114,7 +120,7 @@ export function compileDesktopHarnessContext(input: {
       chatTemplateHash: null,
     },
     runtimeTarget: {
-      adapterId: desktopTasksetRuntimeAdapterId(input.taskset),
+      adapterId: input.adapterId ?? desktopTasksetRuntimeAdapterId(input.taskset),
       placement: "local",
       runtimeVersion: "desktop-v1",
       capabilityReceipt: contentHash({ environment, tools: tasksetTools, capabilities: input.taskset.capabilities }),

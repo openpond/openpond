@@ -4,31 +4,74 @@ import type { ChatModelRef } from "@openpond/contracts";
 import type { useTraining } from "../../hooks/useTraining";
 import { DetailSection } from "../training/DetailSection";
 
+type PreferenceRating = "love" | "like" | "reject";
+
+const PREFERENCE_RATINGS: Array<{
+  id: PreferenceRating;
+  label: string;
+  score: number;
+}> = [
+  { id: "love", label: "Love", score: 1 },
+  { id: "like", label: "Like", score: 0.5 },
+  { id: "reject", label: "Reject", score: 0 },
+];
+
+export function preferenceRatingsSubmission(
+  candidateIds: string[],
+  ratings: Record<string, PreferenceRating>,
+): {
+  order: string[][];
+  rejectAll: boolean;
+  criterionScores: Record<string, Record<string, number>>;
+} {
+  const order = PREFERENCE_RATINGS
+    .map((rating) => candidateIds.filter((candidateId) => ratings[candidateId] === rating.id))
+    .filter((group) => group.length > 0);
+  const rejectAll = candidateIds.length > 0
+    && candidateIds.every((candidateId) => ratings[candidateId] === "reject");
+  return {
+    order: rejectAll ? [] : order,
+    rejectAll,
+    criterionScores: Object.fromEntries(candidateIds.map((candidateId) => [
+      candidateId,
+      {
+        overall_quality: PREFERENCE_RATINGS.find((rating) => rating.id === ratings[candidateId])?.score ?? 0,
+      },
+    ])),
+  };
+}
+
 export function PreferenceComparisonReview({
   tasksetId,
   reviewerKey,
   defaultModel,
   defaultRubric,
+  defaultMinimumSamples,
   training,
 }: {
   tasksetId: string;
   reviewerKey: string;
   defaultModel: ChatModelRef;
   defaultRubric: string;
+  defaultMinimumSamples: number;
   training: ReturnType<typeof useTraining>;
 }) {
   const [review, setReview] = useState<Awaited<ReturnType<typeof training.actions.nextPreferenceComparison>>>(null);
   const [startedAt, setStartedAt] = useState<string | null>(null);
-  const [ranked, setRanked] = useState<string[][]>([]);
+  const [ratings, setRatings] = useState<Record<string, PreferenceRating>>({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [rubric, setRubric] = useState(defaultRubric);
-  const [minimumSamples, setMinimumSamples] = useState(10);
+  const [minimumSamples, setMinimumSamples] = useState(defaultMinimumSamples);
   const [calibrationJobId, setCalibrationJobId] = useState<string | null>(null);
   const [calibration, setCalibration] = useState<Awaited<ReturnType<typeof training.actions.preferenceCalibrationStatus>>>(null);
+  const [datasets, setDatasets] = useState<Awaited<ReturnType<typeof training.actions.listPreferenceDatasets>>>(null);
   const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
-  const orderedLabels = useMemo(() => review?.candidates.map((candidate) => candidate.label) ?? [], [review]);
-  const rankedLabels = useMemo(() => new Set(ranked.flat()), [ranked]);
+  const candidateIds = useMemo(() => review?.candidates.map((candidate) => candidate.attemptId) ?? [], [review]);
+  const completedRatings = useMemo(
+    () => candidateIds.filter((candidateId) => ratings[candidateId]).length,
+    [candidateIds, ratings],
+  );
 
   useEffect(() => () => {
     for (const url of Object.values(previewUrls)) URL.revokeObjectURL(url);
@@ -37,7 +80,7 @@ export function PreferenceComparisonReview({
   async function loadNext(): Promise<void> {
     for (const url of Object.values(previewUrls)) URL.revokeObjectURL(url);
     setPreviewUrls({});
-    setRanked([]);
+    setRatings({});
     setReason("");
     const next = await training.actions.nextPreferenceComparison(tasksetId, reviewerKey);
     setReview(next);
@@ -53,14 +96,14 @@ export function PreferenceComparisonReview({
     setPreviewUrls(Object.fromEntries(settled.filter((entry): entry is [string, string] => entry[1] !== null)));
   }
 
-  async function submit(rejectAll: boolean): Promise<void> {
+  async function submit(): Promise<void> {
     if (!review || !startedAt) return;
+    const submission = preferenceRatingsSubmission(candidateIds, ratings);
     const result = await training.actions.submitPreferenceComparison({
       tasksetId,
       assignmentId: review.assignment.id,
       reviewerKey,
-      order: rejectAll ? [] : ranked,
-      rejectAll,
+      ...submission,
       startedAt,
     });
     if (result) await loadNext();
@@ -80,6 +123,10 @@ export function PreferenceComparisonReview({
   async function refreshCalibration(): Promise<void> {
     const status = await training.actions.preferenceCalibrationStatus(tasksetId, reviewerKey);
     setCalibration(status);
+  }
+
+  async function refreshDatasets(): Promise<void> {
+    setDatasets(await training.actions.listPreferenceDatasets(tasksetId));
   }
 
   async function runNextModelReview(): Promise<void> {
@@ -153,7 +200,34 @@ export function PreferenceComparisonReview({
   return (
     <DetailSection title="Preference review">
       <p className="labs-detail-copy">
-        Rank the presented outputs in visual or textual quality. Candidate identities are hidden; your order becomes immutable comparison evidence.
+        Rate every candidate Love, Like, or Reject. These are multiple Attempts for one scenario—not separate scenario definitions—and your choices become immutable comparison evidence.
+      </p>
+      <div className="labs-dataset-detail-actions">
+        <button className="training-button secondary" type="button" onClick={() => void refreshDatasets()}>
+          Refresh preference datasets
+        </button>
+      </div>
+      {datasets ? (
+        datasets.length ? (
+          <div className="training-table-wrap">
+            <table className="training-data-table">
+              <thead><tr><th>Dataset release</th><th>Evidence</th><th>Groups</th><th>Pairs</th></tr></thead>
+              <tbody>{datasets.map((dataset) => (
+                <tr key={dataset.id}>
+                  <td><code>{dataset.id}</code></td>
+                  <td>{dataset.authority === "human" ? "Human held-out" : "Fixture smoke only"}</td>
+                  <td>{dataset.groups.length} ({dataset.groups.filter((group) => group.partition === "reward_train").length} train / {dataset.groups.filter((group) => group.partition === "reward_validation").length} validation)</td>
+                  <td>{dataset.derivedPairs.length}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <p className="labs-detail-copy">No immutable preference dataset has been materialized yet.</p>
+      ) : null}
+      <details className="labs-dataset-advanced-details">
+        <summary>Advanced calibration and candidate generation</summary>
+      <p className="labs-detail-copy">
+        One managed batch creates one four-candidate human assignment. Repeat the generate, sync, and rank flow until the human target is reached; the target does not generate or approve comparisons automatically.
       </p>
       <div className="training-question-answer">
         <textarea
@@ -176,7 +250,7 @@ export function PreferenceComparisonReview({
             type="button"
             onClick={() => void startCalibrationBatch()}
           >
-            Generate 4 candidates
+            Generate 1 comparison (4 candidates)
           </button>
           <button
             className="training-button secondary"
@@ -214,6 +288,7 @@ export function PreferenceComparisonReview({
         </p>
       ) : null}
       {calibrationMessage ? <p className="labs-detail-copy" role="status">{calibrationMessage}</p> : null}
+      </details>
       {review === null ? (
         <button className="training-button secondary" type="button" onClick={() => void loadNext()}>
           Open next comparison
@@ -221,14 +296,15 @@ export function PreferenceComparisonReview({
       ) : (
         <>
           {review.taskPrompt ? <pre className="labs-detail-copy">{JSON.stringify(review.taskPrompt, null, 2)}</pre> : null}
-          <div className="labs-dataset-grader-list">
+          <div className="preference-review-grid">
             {review.candidates.map((candidate) => {
-              const rank = ranked.findIndex((group) => group.includes(candidate.label));
-              const remaining = !rankedLabels.has(candidate.label);
+              const rating = ratings[candidate.attemptId];
               return (
-                <div key={candidate.label}>
-                  <strong>{candidate.label}</strong>
-                  <small>{rank >= 0 ? `Rank ${rank + 1}` : "Unranked"}</small>
+                <article className="preference-review-card" key={candidate.attemptId}>
+                  <header>
+                    <strong>{candidate.label}</strong>
+                    <small>{rating ? PREFERENCE_RATINGS.find((option) => option.id === rating)?.label : "Not rated"}</small>
+                  </header>
                   {candidate.artifacts.map((artifact) => previewUrls[artifact.id] ? (
                     <img
                       alt={`${candidate.label} artifact`}
@@ -238,43 +314,41 @@ export function PreferenceComparisonReview({
                     />
                   ) : null)}
                   <pre className="labs-detail-copy">{JSON.stringify(candidate.output, null, 2)}</pre>
-                  {remaining ? (
-                    <div className="labs-dataset-detail-actions">
+                  <div className="preference-rating-options" aria-label={`${candidate.label} rating`}>
+                    {PREFERENCE_RATINGS.map((option) => (
                       <button
-                        className="training-button secondary"
+                        aria-pressed={rating === option.id}
+                        className={rating === option.id ? `active ${option.id}` : option.id}
+                        key={option.id}
                         type="button"
-                        onClick={() => setRanked((current) => [...current, [candidate.label]])}
+                        onClick={() => setRatings((current) => ({
+                          ...current,
+                          [candidate.attemptId]: option.id,
+                        }))}
                       >
-                        Choose as next rank
+                        {option.label}
                       </button>
-                      {ranked.length ? (
-                        <button
-                          className="training-button secondary"
-                          type="button"
-                          onClick={() => setRanked((current) => [
-                            ...current.slice(0, -1),
-                            [...current[current.length - 1]!, candidate.label],
-                          ])}
-                        >
-                          Tie previous rank
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
+                    ))}
+                  </div>
+                </article>
               );
             })}
           </div>
           <div className="labs-dataset-detail-actions">
             <button
               className="training-button"
-              disabled={rankedLabels.size !== orderedLabels.length || training.busyAction !== null}
+              disabled={completedRatings !== candidateIds.length || training.busyAction !== null}
               type="button"
-              onClick={() => void submit(false)}
+              onClick={() => void submit()}
             >
-              Submit ranking
+              Submit review
             </button>
-            <button className="training-button secondary" disabled={training.busyAction !== null} type="button" onClick={() => void submit(true)}>
+            <button
+              className="training-button secondary"
+              disabled={training.busyAction !== null}
+              type="button"
+              onClick={() => setRatings(Object.fromEntries(candidateIds.map((candidateId) => [candidateId, "reject"] as const)))}
+            >
               Reject all
             </button>
           </div>

@@ -28,6 +28,8 @@ import type {
   TaskAttemptArtifact,
   TaskAttemptResult,
   Taskset,
+  TasksetDraft,
+  TasksetOperationalState,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 
@@ -67,6 +69,20 @@ export type PreferenceCalibrationStatus = {
     tieAgreement: number;
     orderSwapAgreement: number;
   } | null;
+};
+
+export type PreferenceDatasetReleaseView = {
+  id: string;
+  contentHash: string;
+  authority: "human" | "synthetic_fixture";
+  qualificationEligibility: "smoke_only" | "human_heldout";
+  groups: Array<{
+    id: string;
+    partition: "reward_train" | "reward_validation" | "reward_qualification";
+    attemptRefs: Array<{ id: string; contentHash: string }>;
+  }>;
+  derivedPairs: Array<{ groupId: string; relation: "preferred" | "tie" }>;
+  createdAt: string;
 };
 
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
@@ -172,6 +188,50 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         "/model-run-drafts",
         draft,
         "PUT",
+      ),
+    createTasksetDraft: (name = "") =>
+      mutate<TasksetDraft>(
+        "create-taskset-draft",
+        "/taskset-drafts",
+        { profileId, name },
+      ),
+    saveTasksetDraft: (draft: TasksetDraft) =>
+      mutate<TasksetDraft>(
+        "save-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draft.id)}`,
+        draft,
+        "PUT",
+      ),
+    tasksetDraftWorkspace: async (draftId: string) => {
+      if (!connection) return null;
+      try {
+        return await api.trainingRequest<{
+          draftId: string;
+          workspacePath: string;
+          packageHash: string;
+        }>(
+          connection,
+          `/taskset-drafts/${encodeURIComponent(draftId)}/workspace`,
+          {},
+          "GET",
+        );
+      } catch (caught) {
+        setError(message(caught));
+        return null;
+      }
+    },
+    publishTasksetDraft: (draftId: string) =>
+      mutate<{ draft: TasksetDraft; taskset: Taskset }>(
+        "publish-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draftId)}/publish`,
+        {},
+      ),
+    deleteTasksetDraft: (draftId: string) =>
+      mutate<{ deleted: boolean; draftId: string }>(
+        "delete-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draftId)}`,
+        {},
+        "DELETE",
       ),
     deleteModelRunDraft: (draftId: string) =>
       mutate<{ deleted: boolean; draftId?: string }>(
@@ -342,6 +402,31 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         },
       },
     ),
+    materializeSyntheticPreferenceCollection: (input: {
+      tasksetId: string;
+      actorKey: string;
+      comparisonReleaseId: string;
+      preferenceDatasetId: string;
+      preferenceDatasetRevision: number;
+      collection: unknown;
+    }) => mutate<{
+      collection: { id: string; attempts: TaskAttemptResult[] };
+      assignments: Array<{ assignment: { id: string }; partition: "reward_train" | "reward_validation" }>;
+      dataset: PreferenceDatasetReleaseView;
+    }>(
+      "materialize-synthetic-preference-collection",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/synthetic-preference-collection`,
+      input,
+    ),
+    tasksetOperationalState: (tasksetId: string) => {
+      if (!connection) return Promise.resolve(null);
+      return api.trainingRequest<TasksetOperationalState>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/operations`,
+        {},
+        "GET",
+      );
+    },
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     nextPreferenceComparison: (tasksetId: string, reviewerKey: string) => mutate<PreferenceComparisonReview | null>(
       "next-preference-comparison",
@@ -354,11 +439,59 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       reviewerKey: string;
       order: string[][];
       rejectAll: boolean;
+      criterionScores?: Record<string, Record<string, number>>;
       startedAt: string;
     }) => mutate(
       "submit-preference-comparison",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/submit`,
       input,
+    ),
+    submitSyntheticFixturePreference: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      actorKey: string;
+      labelerRelease: { id: string; contentHash: string };
+      fixtureRelease: { id: string; contentHash: string };
+      ratings: Record<string, "love" | "like" | "reject">;
+      startedAt: string;
+    }) => mutate(
+      "submit-synthetic-fixture-preference",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/fixture-submit`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    listPreferenceDatasets: (tasksetId: string) => {
+      if (!connection) return Promise.resolve(null);
+      return api.trainingRequest<PreferenceDatasetReleaseView[]>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/preference-datasets`,
+        {},
+        "GET",
+      );
+    },
+    materializePreferenceDataset: (input: {
+      tasksetId: string;
+      comparisonReleaseId: string;
+      authority: "human" | "synthetic_fixture";
+      groups: Array<{
+        assignmentId: string;
+        partition: "reward_train" | "reward_validation" | "reward_qualification";
+      }>;
+      actorKey: string;
+    }) => mutate<PreferenceDatasetReleaseView>(
+      "materialize-preference-dataset",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-datasets`,
+      { ...input, id: `preference-dataset-${crypto.randomUUID()}`, revision: 1 },
+    ),
+    launchRewardModelRun: (input: {
+      tasksetId: string;
+      rewardModelId: string;
+      preferenceDatasetReleaseId: string;
+      recipe: unknown;
+      managedBaseModel: unknown;
+    }) => mutate<TrainingStateResponse["rewardModelRuns"][number]>(
+      "launch-reward-model-run",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/reward-model-runs`,
+      { ...input, id: `reward-model-run-${crypto.randomUUID()}` },
     ),
     markPreferenceComparisonUnreviewable: (input: {
       tasksetId: string;

@@ -2,18 +2,156 @@ import type {
   ModelBinding,
   ModelRun,
   ModelVersion,
+  RewardModelRun,
+  RewardModelVersion,
   RolloutTrajectoryReceipt,
 } from "@openpond/contracts";
 import {
   ModelBindingSchema,
   ModelRunSchema,
   ModelVersionSchema,
+  RewardModelRunSchema,
+  RewardModelVersionSchema,
   RolloutTrajectoryReceiptSchema,
 } from "@openpond/contracts";
 import type { PayloadRow } from "../types.js";
 import { SqliteStoreCore } from "./store-core.js";
 
 export class SqliteTrainingModelStore extends SqliteStoreCore {
+  async saveRewardModelVersion(
+    versionInput: RewardModelVersion,
+  ): Promise<RewardModelVersion> {
+    const version = RewardModelVersionSchema.parse(versionInput);
+    const existing = await this.getRewardModelVersion(version.id);
+    if (existing && existing.contentHash !== version.contentHash) {
+      throw new Error(`Reward Model Version ${version.id} is immutable and already has different content.`);
+    }
+    await this.upsertPayload(
+      `INSERT INTO reward_model_versions
+        (id, model_id, profile_id, version_number, taskset_id, status, payload, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      [
+        version.id,
+        version.modelId,
+        version.profileId,
+        version.version,
+        version.taskset.id,
+        version.status,
+        JSON.stringify(version),
+        version.createdAt,
+      ],
+    );
+    return version;
+  }
+
+  async getRewardModelVersion(id: string): Promise<RewardModelVersion | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM reward_model_versions WHERE id = ?",
+      [id],
+      RewardModelVersionSchema.parse,
+    );
+  }
+
+  async listRewardModelVersions(input: {
+    profileId?: string;
+    tasksetId?: string;
+  } = {}): Promise<RewardModelVersion[]> {
+    if (input.tasksetId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM reward_model_versions WHERE taskset_id = ? ORDER BY created_at DESC",
+        [input.tasksetId],
+        RewardModelVersionSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM reward_model_versions WHERE profile_id = ? ORDER BY created_at DESC",
+        [input.profileId],
+        RewardModelVersionSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM reward_model_versions ORDER BY created_at DESC",
+      [],
+      RewardModelVersionSchema.parse,
+    );
+  }
+
+  async saveRewardModelRun(runInput: RewardModelRun): Promise<RewardModelRun> {
+    const run = RewardModelRunSchema.parse(runInput);
+    const existing = await this.getRewardModelRun(run.id);
+    if (
+      existing &&
+      (existing.rewardModelId !== run.rewardModelId ||
+        existing.profileId !== run.profileId ||
+        existing.taskset.id !== run.taskset.id ||
+        existing.preferenceDatasetRelease.contentHash !== run.preferenceDatasetRelease.contentHash)
+    ) {
+      throw new Error("A Reward Model Run cannot change its immutable lineage.");
+    }
+    if (
+      existing &&
+      ["succeeded", "failed", "cancelled"].includes(existing.status) &&
+      JSON.stringify(existing) !== JSON.stringify(run)
+    ) {
+      throw new Error(`Terminal Reward Model Run ${run.id} is immutable.`);
+    }
+    await this.upsertPayload(
+      `INSERT INTO reward_model_runs
+        (id, reward_model_id, profile_id, taskset_id, status, payload, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         status = excluded.status,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [
+        run.id,
+        run.rewardModelId,
+        run.profileId,
+        run.taskset.id,
+        run.status,
+        JSON.stringify(run),
+        run.startedAt,
+        run.updatedAt,
+      ],
+    );
+    return run;
+  }
+
+  async getRewardModelRun(id: string): Promise<RewardModelRun | null> {
+    return this.getParsedPayload(
+      "SELECT payload FROM reward_model_runs WHERE id = ?",
+      [id],
+      RewardModelRunSchema.parse,
+    );
+  }
+
+  async listRewardModelRuns(input: {
+    profileId?: string;
+    tasksetId?: string;
+  } = {}): Promise<RewardModelRun[]> {
+    if (input.tasksetId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM reward_model_runs WHERE taskset_id = ? ORDER BY updated_at DESC",
+        [input.tasksetId],
+        RewardModelRunSchema.parse,
+      );
+    }
+    if (input.profileId) {
+      return this.listParsedPayloads(
+        "SELECT payload FROM reward_model_runs WHERE profile_id = ? ORDER BY updated_at DESC",
+        [input.profileId],
+        RewardModelRunSchema.parse,
+      );
+    }
+    return this.listParsedPayloads(
+      "SELECT payload FROM reward_model_runs ORDER BY updated_at DESC",
+      [],
+      RewardModelRunSchema.parse,
+    );
+  }
+
   async saveModelVersion(
     versionInput: ModelVersion,
   ): Promise<ModelVersion> {

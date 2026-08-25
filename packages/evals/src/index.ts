@@ -6,6 +6,7 @@ export * from "./execution-contracts.js";
 export * from "./execution-receipts.js";
 export * from "./graders.js";
 export * from "./harness.js";
+export * from "./learned-preference.js";
 export * from "./runs.js";
 export * from "./model-improvement-qualification.js";
 export * from "./preferences.js";

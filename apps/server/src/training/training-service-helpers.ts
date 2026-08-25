@@ -130,6 +130,7 @@ export function withAuthoritativeRecipeHashes(
       reward: {
         graderId: reward.graderId,
         graderHash: contentHash(taskset.graders),
+        learnedPreference: reward.learnedPreference ?? null,
       },
       kl: {
         coefficient: loss.klBeta ?? null,

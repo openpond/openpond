@@ -16,7 +16,7 @@ import { LabStatusBadge } from "./LabStatusBadge";
 import { PreferenceComparisonReview } from "./PreferenceComparisonReview";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
-type DatasetDetailTab = "overview" | "cases" | "scoring";
+type DatasetDetailTab = "overview" | "scenarios" | "review" | "metrics";
 type Task = Taskset["tasks"][number];
 
 const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
@@ -71,7 +71,7 @@ export function LabModelDataset({
     [taskset.sourceRefs],
   );
   useEffect(() => {
-    if (tab !== "cases" || !artifact) return undefined;
+    if (tab !== "scenarios" || !artifact) return undefined;
     let cancelled = false;
     setRowsLoading(true);
     setRowsError(null);
@@ -133,9 +133,19 @@ export function LabModelDataset({
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
-  const preferenceRubric = taskset.graders.find(
+  const reviewPolicy = taskset.metadata.tasksetReviewPolicy;
+  const storedReviewPolicy = reviewPolicy && typeof reviewPolicy === "object" && !Array.isArray(reviewPolicy)
+    ? reviewPolicy as Record<string, unknown>
+    : null;
+  const graderRubric = taskset.graders.find(
     (grader) => grader.kind === "model_judge" || grader.kind === "human",
   )?.rubric ?? "";
+  const preferenceRubric = typeof storedReviewPolicy?.rubric === "string"
+    ? storedReviewPolicy.rubric
+    : graderRubric;
+  const preferenceMinimumSamples = typeof storedReviewPolicy?.minimumSamples === "number"
+    ? storedReviewPolicy.minimumSamples
+    : 100;
   const workTask = taskset.environment.kind === "work"
     ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
     : null;
@@ -255,7 +265,23 @@ export function LabModelDataset({
     );
   }
 
-  if (tab === "scoring") {
+  if (tab === "review") {
+    return (
+      <>
+        <PreferenceComparisonReview
+          defaultModel={defaultModel}
+          defaultRubric={preferenceRubric}
+          defaultMinimumSamples={preferenceMinimumSamples}
+          reviewerKey={taskset.profileId}
+          tasksetId={taskset.id}
+          training={training}
+        />
+        <PreferenceDatasetSummary tasksetId={taskset.id} training={training} />
+      </>
+    );
+  }
+
+  if (tab === "metrics") {
     return (
       <>
         {taskset.purpose === "benchmark" ? (
@@ -348,19 +374,12 @@ export function LabModelDataset({
             ))}
           </div>
         </DetailSection>
-        <PreferenceComparisonReview
-          defaultModel={defaultModel}
-          defaultRubric={preferenceRubric}
-          reviewerKey={taskset.profileId}
-          tasksetId={taskset.id}
-          training={training}
-        />
       </>
     );
   }
 
   return (
-      <DetailSection title="Cases">
+      <DetailSection title="Scenarios">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Taskset splits">
           {SPLITS.map((item) => (
             <button
@@ -445,6 +464,51 @@ export function LabModelDataset({
           ) : null}
         </div>
       </DetailSection>
+  );
+}
+
+function PreferenceDatasetSummary({
+  tasksetId,
+  training,
+}: {
+  tasksetId: string;
+  training: ReturnType<typeof useTraining>;
+}) {
+  const [datasets, setDatasets] = useState<Awaited<ReturnType<typeof training.actions.listPreferenceDatasets>>>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh(): Promise<void> {
+    setLoading(true);
+    setDatasets(await training.actions.listPreferenceDatasets(tasksetId));
+    setLoading(false);
+  }
+
+  return (
+    <DetailSection title="Preference datasets">
+      <div className="labs-dataset-detail-actions">
+        <button className="training-button secondary" disabled={loading} type="button" onClick={() => void refresh()}>
+          {loading ? "Loading…" : "Load releases"}
+        </button>
+      </div>
+      {datasets?.length ? (
+        <div className="training-table-wrap">
+          <table className="training-data-table">
+            <thead><tr><th>Release</th><th>Authority</th><th>Groups</th><th>Pairs</th><th>Eligibility</th></tr></thead>
+            <tbody>
+              {datasets.map((dataset) => (
+                <tr key={dataset.contentHash}>
+                  <td>{dataset.id}</td>
+                  <td>{titleCase(dataset.authority)}</td>
+                  <td>{dataset.groups.length}</td>
+                  <td>{dataset.derivedPairs.length}</td>
+                  <td>{titleCase(dataset.qualificationEligibility)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : datasets ? <p className="labs-detail-copy">No Preference Dataset release has been materialized.</p> : null}
+    </DetailSection>
   );
 }
 

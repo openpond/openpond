@@ -14,6 +14,7 @@ import {
   type DatasetCreateSource,
 } from "../datasets/DatasetSourcePickerDialog";
 import { HuggingFaceDatasetImportDialog } from "../datasets/HuggingFaceDatasetImportDialog";
+import { TasksetDraftEditor } from "../datasets/TasksetDraftEditor";
 import { ModelUseDialog } from "../training/ModelUseDialog";
 import { api } from "../../api";
 import { useCreateImproveRuns } from "../../hooks/useCreateImproveRuns";
@@ -185,6 +186,7 @@ export function LabsRoute({
   const [datasetCreateRoute, setDatasetCreateRoute] = useState<
     "source" | DatasetCreateSource | null
   >(null);
+  const [datasetDraftId, setDatasetDraftId] = useState<string | null>(null);
   const [modelEditorSection, setModelEditorSection] = useState<"run" | "dataset">("run");
   const [modelEditorName, setModelEditorName] = useState<string | null>(null);
   const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
@@ -305,7 +307,14 @@ export function LabsRoute({
     }
     if (activeTab === "tasksets") {
       onDetailOpenChange(
-        selectedDatasetId
+        datasetCreateRoute === "build"
+          ? {
+              kind: "dataset",
+              kindLabel: "Tasksets",
+              workproductLabel: null,
+              segments: [{ label: "New Taskset" }],
+            }
+          : selectedDatasetId
           ? {
               kind: "dataset",
               kindLabel: "Tasksets",
@@ -329,6 +338,7 @@ export function LabsRoute({
     if (!selected) onDetailOpenChange(null);
   }, [
     activeTab,
+    datasetCreateRoute,
     onDetailOpenChange,
     selected,
     selectedDatasetId,
@@ -365,12 +375,14 @@ export function LabsRoute({
 
   function openDatasetCreation() {
     setDatasetCreateRoute("source");
+    setDatasetDraftId(null);
     setSelectedDatasetId(null);
     setActiveTab("tasksets");
   }
 
   function closeDatasetCreation() {
     setDatasetCreateRoute(null);
+    setDatasetDraftId(null);
   }
 
   function openDatasetBuilderChat(taskset?: {
@@ -390,6 +402,7 @@ export function LabsRoute({
 
   function finishDatasetCreation(tasksetId: string | null) {
     setDatasetCreateRoute(null);
+    setDatasetDraftId(null);
     setSelectedKey(null);
     setActiveTab("tasksets");
     setSelectedDatasetId(tasksetId);
@@ -427,28 +440,48 @@ export function LabsRoute({
   return (
     <LabsView
       activeTab={activeTab}
-      showHeader={!training.launchRequest && !selected && !selectedDatasetId}
+      showHeader={
+        !training.launchRequest
+        && !selected
+        && !selectedDatasetId
+        && datasetCreateRoute !== "build"
+      }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
     >
       {activeTab === "tasksets" ? (
-        <LabDatasetsPage
-          defaultModel={training.defaultModel}
-          runs={createImprove.runs}
-          selectedId={selectedDatasetId}
-          state={training.training.payload}
-          training={training.training}
-          onToast={(message, tone) =>
-            profileView.onToast?.(message, tone) ?? 0
-          }
-          onSelectedIdChange={setSelectedDatasetId}
-          onImproveInChat={(taskset) => openDatasetBuilderChat(taskset)}
-          onTrainModel={openModelRunEditor}
-          onOpenFiles={(tasksetId) => {
-            training.onSelectedTasksetIdChange(tasksetId);
-            training.onOpenTasksetFiles();
-          }}
-        />
+        datasetCreateRoute === "build" ? (
+          <TasksetDraftEditor
+            defaultModel={training.defaultModel}
+            draftId={datasetDraftId}
+            training={training.training}
+            onBack={closeDatasetCreation}
+            onOpenChat={openDatasetBuilderChat}
+            onPublished={finishDatasetCreation}
+          />
+        ) : (
+          <LabDatasetsPage
+            defaultModel={training.defaultModel}
+            runs={createImprove.runs}
+            selectedId={selectedDatasetId}
+            state={training.training.payload}
+            training={training.training}
+            onToast={(message, tone) =>
+              profileView.onToast?.(message, tone) ?? 0
+            }
+            onSelectedIdChange={setSelectedDatasetId}
+            onOpenDraft={(draftId) => {
+              setDatasetDraftId(draftId);
+              setDatasetCreateRoute("build");
+            }}
+            onImproveInChat={(taskset) => openDatasetBuilderChat(taskset)}
+            onTrainModel={openModelRunEditor}
+            onOpenFiles={(tasksetId) => {
+              training.onSelectedTasksetIdChange(tasksetId);
+              training.onOpenTasksetFiles();
+            }}
+          />
+        )
       ) : activeTab === "serving" ? (
         <LabServingPage
           state={training.training.payload}
@@ -486,10 +519,14 @@ export function LabsRoute({
             setActiveTab("models");
           }}
           onOpenProviderSettings={training.onOpenProviderSettings}
-          renderDatasetBuilder={(_onCreated, onUseExistingDataset) => (
-            <DatasetBuilderChatHandoff
-              onOpenChat={() => openDatasetBuilderChat()}
-              onUseExistingDataset={onUseExistingDataset}
+          renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
+            <TasksetDraftEditor
+              defaultModel={training.defaultModel}
+              training={training.training}
+              onBack={onUseExistingDataset}
+              onOpenChat={openDatasetBuilderChat}
+              onPublished={onCreated}
+              onUseExistingTaskset={onUseExistingDataset}
             />
           )}
         />
@@ -548,10 +585,14 @@ export function LabsRoute({
               }}
               onSectionChange={onSectionChange}
               onOpenProviderSettings={training.onOpenProviderSettings}
-              renderDatasetBuilder={(_onCreated, onUseExistingDataset) => (
-                <DatasetBuilderChatHandoff
-                  onOpenChat={() => openDatasetBuilderChat()}
-                  onUseExistingDataset={onUseExistingDataset}
+              renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
+                <TasksetDraftEditor
+                  defaultModel={training.defaultModel}
+                  training={training.training}
+                  onBack={onUseExistingDataset}
+                  onOpenChat={openDatasetBuilderChat}
+                  onPublished={onCreated}
+                  onUseExistingTaskset={onUseExistingDataset}
                 />
               )}
             />
@@ -603,9 +644,12 @@ export function LabsRoute({
       {datasetCreateRoute === "source" ? (
         <DatasetSourcePickerDialog
           onClose={closeDatasetCreation}
-          onSelect={(source) => {
+          onSelect={async (source) => {
             if (source === "build") {
-              openDatasetBuilderChat();
+              const created = await training.training.actions.createTasksetDraft();
+              if (!created) return;
+              setDatasetDraftId(created.id);
+              setDatasetCreateRoute("build");
               return;
             }
             setDatasetCreateRoute(source);
@@ -648,38 +692,5 @@ export function LabsRoute({
           })()
         : null}
     </LabsView>
-  );
-}
-
-function DatasetBuilderChatHandoff({
-  onOpenChat,
-  onUseExistingDataset,
-}: {
-  onOpenChat: () => void;
-  onUseExistingDataset?: () => void;
-}) {
-  return (
-    <section className="training-run-placeholder">
-      <h3>Build the Taskset in full Chat</h3>
-      <p>
-        The Taskset authoring Skill gathers tasks and data conversationally,
-        then uses typed actions to materialize graders, evaluations, and the
-        executable Taskset. No training starts from this flow.
-      </p>
-      <div className="labs-dataset-detail-actions">
-        <button className="training-button" type="button" onClick={onOpenChat}>
-          Open Taskset Builder
-        </button>
-        {onUseExistingDataset ? (
-          <button
-            className="training-button secondary"
-            type="button"
-            onClick={onUseExistingDataset}
-          >
-            Use existing Taskset
-          </button>
-        ) : null}
-      </div>
-    </section>
   );
 }

@@ -9,3 +9,4 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   node-pty: true
+  sharp: set this to true or false

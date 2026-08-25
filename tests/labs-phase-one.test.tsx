@@ -8,6 +8,7 @@ import {
   type ModelRun,
   type TrainingStateResponse,
 } from "@openpond/contracts";
+import { createTasksetDraft } from "@openpond/taskset-sdk";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
@@ -588,6 +589,43 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain("Embedded Taskset builder");
   });
 
+  test("shows resumable drafts in the normal Taskset table", () => {
+    const draft = {
+      ...createTasksetDraft({
+        id: "taskset-layered-artifact-v1-draft",
+        profileId: "artifact-lab",
+        name: "Layered artifact v1",
+        now: "2026-08-24T12:00:00.000Z",
+      }),
+      objective: "Choose six compatible visual traits.",
+    };
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        defaultModel: { providerId: "openpond", modelId: "openpond-chat" },
+        runs: [],
+        selectedId: null,
+        state: {
+          profileId: "artifact-lab",
+          tasksetDrafts: [draft],
+          tasksets: [],
+          modelTasksets: [],
+        } as unknown as TrainingStateResponse,
+        training: { loading: false, refresh: async () => null } as never,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onOpenDraft: noop,
+        onImproveInChat: noop,
+        onTrainModel: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Layered artifact v1");
+    expect(markup).toContain("Draft</span>");
+    expect(markup).toContain("Resume draft");
+    expect(markup).toContain("Choose six compatible visual traits.");
+  });
+
   test("uses Taskset language in Lab breadcrumbs", () => {
     const breadcrumbs = buildLabDetailBreadcrumbs(
       {
@@ -685,7 +723,7 @@ describe("Lab workspace", () => {
           providerId: "openrouter",
           modelId: "test/model",
         },
-        tab: "scoring",
+        tab: "metrics",
         taskset,
         onOpenFiles: noop,
         onToast: noop,
@@ -760,7 +798,7 @@ describe("Lab workspace", () => {
           providerId: "openpond",
           modelId: "openpond-chat",
         },
-        tab: "scoring",
+        tab: "metrics",
         taskset,
         onOpenFiles: noop,
         onToast: noop,

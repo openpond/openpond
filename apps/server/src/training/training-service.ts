@@ -3,8 +3,14 @@ import path from "node:path";
 import {
   type GradeResult,
   type OpenPondProfileState,
+  type RewardModelVersion,
+  RewardModelRunSchema,
+  type RewardModelRecipe,
   type TaskAttemptResult,
+  type Taskset,
 } from "@openpond/contracts";
+import type { PreferenceDatasetRelease } from "@openpond/evals";
+import { contentHash } from "@openpond/harness";
 import {
   TrainingAdapterRegistry,
   TrainingDestinationRegistry,
@@ -29,6 +35,11 @@ import { createPortableTrainingServiceSupport } from "./portable-training-servic
 import { createTrainingArtifactExportService } from "./training-artifact-export-service.js";
 import { createTrainingModelBindingService } from "./training-model-binding-service.js";
 import { createTrainingPlanLifecycleService } from "./training-plan-lifecycle-service.js";
+import {
+  buildManagedRewardModelLaunchInput,
+  type ManagedRewardModelBase,
+} from "./reward-model-launch-input.js";
+import { projectQualifiedRewardModel } from "./reward-model-qualification-projection.js";
 import { createTrainingModelConfigurationService } from "./training-model-controls.js";
 import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
@@ -204,9 +215,215 @@ export function createTrainingService(deps: {
   });
   void portableModelRuns.reconcileActive({ force: true });
 
+  async function launchRewardModel(input: {
+    id: string;
+    rewardModelId: string;
+    taskset: Taskset;
+    dataset: PreferenceDatasetRelease;
+    recipe: RewardModelRecipe;
+    managedBaseModel: ManagedRewardModelBase;
+  }) {
+    if (
+      input.recipe.tasksetRelease.id !== input.dataset.tasksetRelease.id ||
+      input.recipe.tasksetRelease.contentHash !== input.dataset.tasksetRelease.contentHash
+    ) {
+      throw new Error("Reward Model recipe and D0 must pin the same Taskset release.");
+    }
+    const now = new Date().toISOString();
+    const recipeHash = contentHash(input.recipe);
+    const prepared = RewardModelRunSchema.parse({
+      schemaVersion: "openpond.rewardModelRun.v1",
+      id: input.id,
+      rewardModelId: input.rewardModelId,
+      rewardModelVersionId: null,
+      profileId: input.taskset.profileId,
+      role: "reward",
+      scope: input.recipe.runScope,
+      status: "prepared",
+      taskset: {
+        id: input.taskset.id,
+        revision: input.taskset.revision,
+        contentHash: input.taskset.contentHash,
+      },
+      preferenceDatasetRelease: {
+        id: input.dataset.id,
+        contentHash: input.dataset.contentHash,
+      },
+      recipeRelease: {
+        id: `reward-model-recipe:${recipeHash.slice(0, 24)}`,
+        contentHash: recipeHash,
+      },
+      destinationId: "openpond_managed",
+      quote: { maximumSpendUsd: input.recipe.resourceLimits.maximumSpendUsd, hourlyCostUsd: null },
+      managedRunId: null,
+      progress: { completedSteps: 0, totalSteps: input.recipe.optimizer.maxSteps, latestLoss: null },
+      receipt: null,
+      qualificationReport: null,
+      accruedSpendUsd: null,
+      failureOwner: null,
+      failure: null,
+      startedAt: now,
+      completedAt: null,
+      updatedAt: now,
+    });
+    await deps.store.saveRewardModelRun(prepared);
+    try {
+      const [attempts, artifacts] = await Promise.all([
+        deps.store.listTaskAttempts(input.taskset.id),
+        deps.store.listTaskAttemptArtifacts({ tasksetId: input.taskset.id }),
+      ]);
+      const request = await buildManagedRewardModelLaunchInput({
+        idempotencyKey: `openpond-reward-model:${recipeHash}`.slice(0, 191),
+        name: `OpenPond Managed Reward · ${input.rewardModelId}`.slice(0, 191),
+        sourceRunRef: `openpond:reward-model-run:${prepared.id}`,
+        taskset: prepared.taskset,
+        dataset: input.dataset,
+        recipe: input.recipe,
+        managedBaseModel: input.managedBaseModel,
+        attempts,
+        artifacts,
+        uploadArtifact: (artifact) => portableAdapters.uploadRewardModelArtifact(artifact),
+      });
+      const launched = await portableAdapters.createRewardModelLaunch(request);
+      return deps.store.saveRewardModelRun({
+        ...prepared,
+        status: "running",
+        managedRunId: launched.job.id,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      return deps.store.saveRewardModelRun({
+        ...prepared,
+        status: "failed",
+        failureOwner: "authoring",
+        failure: error instanceof Error ? error.message : "Reward Model launch failed.",
+        completedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  }
+
   async function activity() {
     await portableModelRuns.reconcileActive();
+    await reconcileRewardModelRuns();
     return { jobs: await deps.store.listTrainingJobs() };
+  }
+
+  async function reconcileRewardModelRuns() {
+    const active = (await deps.store.listRewardModelRuns()).filter((run) =>
+      run.status === "prepared" || run.status === "running",
+    );
+    await Promise.all(active.map(async (run) => {
+      if (!run.managedRunId) return;
+      try {
+        const remote = await portableAdapters.rewardModelJob(run.managedRunId);
+        const upload = remote.resources.find((resource) =>
+          resource.kind === "artifact_upload" && resource.state === "consumed",
+        );
+        const evidence = upload?.metadata.evidence;
+        const evidenceRecord = evidence && typeof evidence === "object" && !Array.isArray(evidence)
+          ? evidence as Record<string, unknown>
+          : null;
+        const completedSteps = typeof evidenceRecord?.steps === "number"
+          && Number.isInteger(evidenceRecord.steps)
+          ? evidenceRecord.steps
+          : run.progress.completedSteps;
+        const latestLoss = typeof evidenceRecord?.loss === "number" && Number.isFinite(evidenceRecord.loss)
+          ? evidenceRecord.loss
+          : run.progress.latestLoss;
+        if (completedSteps !== run.progress.completedSteps || latestLoss !== run.progress.latestLoss) {
+          await deps.store.saveRewardModelRun({
+            ...run,
+            progress: { ...run.progress, completedSteps, latestLoss },
+            updatedAt: new Date().toISOString(),
+          });
+        }
+        if (remote.job.state === "failed" || remote.job.state === "cancelled") {
+          await deps.store.saveRewardModelRun({
+            ...run,
+            status: remote.job.state === "cancelled" ? "cancelled" : "failed",
+            failureOwner: "provider",
+            failure: remote.job.terminalReason ?? "Managed Reward Model job did not complete.",
+            completedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        if (remote.job.state === "completed") {
+          try {
+            const resourceMetadata = upload?.metadata;
+            const inventory = Array.isArray(resourceMetadata?.inventory)
+              ? resourceMetadata.inventory.filter(isInventoryFile)
+              : [];
+            const checkpointPrefix = typeof resourceMetadata?.objectPrefix === "string"
+              ? resourceMetadata.objectPrefix
+              : "";
+            const artifactSha256 = typeof resourceMetadata?.artifactSha256 === "string"
+              ? resourceMetadata.artifactSha256
+              : "";
+            const inputBundle = remote.job.inputBundle;
+            const rewardTraining = recordOrNull(inputBundle?.rewardModelTraining);
+            const rewardBase = recordOrNull(rewardTraining?.baseModel);
+            const harness = recordOrNull(inputBundle?.harnessRunManifest);
+            const taskset = await deps.store.getTaskset(run.taskset.id);
+            if (!taskset || !rewardBase || !harness || !checkpointPrefix || !artifactSha256) {
+              throw new Error("Completed managed Reward Model job is missing immutable launch lineage.");
+            }
+            const version = projectQualifiedRewardModel({
+              run,
+              baseModel: {
+                schemaVersion: "openpond.baseModelPreference.v1",
+                modelId: stringField(rewardBase, "repoId"),
+                revision: stringField(rewardBase, "revision"),
+                tokenizerRevision: stringField(rewardBase, "revision"),
+                chatTemplateHash: null,
+                modelAssetId: null,
+                source: "managed",
+              },
+              runtime: managedRewardModelRuntime(rewardBase),
+              resolvedBundleHash: stringField(harness, "resolvedBundleHash"),
+              profileRelease: { id: run.profileId, revision: taskset.revision, contentHash: taskset.contentHash },
+              harnessRelease: objectRef(harness.harnessRelease, "harness release"),
+              grader: taskset.preferenceComparison
+                ? { id: taskset.preferenceComparison.releaseId, contentHash: taskset.preferenceComparison.releaseHash }
+                : { id: `preference-dataset:${run.preferenceDatasetRelease.id}`, contentHash: run.preferenceDatasetRelease.contentHash },
+              providerRunId: run.managedRunId,
+              checkpointPrefix,
+              artifactSha256,
+              inventory,
+              evidence: evidenceRecord ?? {},
+              cleanup: {
+                computeReleased: remote.resources.every((resource) => resource.state !== "active"),
+                providerTerminalObserved: remote.job.cleanupAttestation !== null && remote.job.cleanupAttestation !== undefined,
+              },
+              createdAt: new Date().toISOString(),
+            });
+            await deps.store.saveRewardModelVersion(version.version);
+            await deps.store.saveRewardModelRun({
+              ...run,
+              status: "succeeded",
+              rewardModelVersionId: version.version.id,
+              receipt: version.receipt,
+              qualificationReport: { id: version.report.id, contentHash: version.report.contentHash },
+              progress: { ...run.progress, completedSteps: run.progress.totalSteps, latestLoss },
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (error) {
+            await deps.store.saveRewardModelRun({
+              ...run,
+              status: "failed",
+              failureOwner: "qualification",
+              failure: error instanceof Error ? error.message : "Reward Model qualification projection failed.",
+              completedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        }
+      } catch {
+        // The durable run remains inspectable and is retried on the next state refresh.
+      }
+    }));
   }
 
   async function state() {
@@ -220,6 +437,8 @@ export function createTrainingService(deps: {
       rolloutReceipts,
       modelBindings,
       destinationCapabilities,
+      rewardModelVersions,
+      rewardModelRuns,
     ] = await Promise.all([
       deps.store.listTrainingPlans(),
       deps.store.listTrainingBundles(),
@@ -229,6 +448,8 @@ export function createTrainingService(deps: {
       deps.store.listRolloutTrajectoryReceipts(),
       deps.store.listModelBindings(),
       destinations(),
+      deps.store.listRewardModelVersions(),
+      deps.store.listRewardModelRuns(),
     ]);
     return {
       plans,
@@ -239,6 +460,8 @@ export function createTrainingService(deps: {
       rolloutReceipts,
       modelBindings,
       destinations: destinationCapabilities,
+      rewardModelVersions,
+      rewardModelRuns,
       baseModelCandidates: projectBaseModelCandidates({ destinations: destinationCapabilities }),
     };
   }
@@ -297,6 +520,7 @@ export function createTrainingService(deps: {
     startPrepared,
     activity,
     state,
+    launchRewardModel,
     exportBundle,
     artifactDownload,
     modelPackageDownload,
@@ -312,6 +536,48 @@ export function createTrainingService(deps: {
     close,
   };
 
+}
+
+function recordOrNull(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function stringField(value: Record<string, unknown>, key: string): string {
+  const field = value[key];
+  if (typeof field !== "string" || !field.trim()) throw new Error(`Managed Reward Model ${key} is missing.`);
+  return field;
+}
+
+function managedRewardModelRuntime(
+  value: Record<string, unknown>,
+): NonNullable<RewardModelVersion["runtime"]> {
+  const source = stringField(value, "source");
+  if (source !== "huggingface") {
+    throw new Error("Managed Reward Model runtime must be a Hugging Face release.");
+  }
+  const repoId = stringField(value, "repoId");
+  const revision = stringField(value, "revision");
+  const configHash = stringField(value, "configHash");
+  const tokenizerHash = stringField(value, "tokenizerHash");
+  const licenseId = stringField(value, "licenseId");
+  const gated = value.gated === true;
+  return {
+    baseModel: { source, repoId, revision, configHash, tokenizerHash, licenseId, gated },
+    processor: { repository: repoId, revision, configHash },
+  };
+}
+
+function objectRef(value: unknown, label: string): { id: string; contentHash: string } {
+  const parsed = recordOrNull(value);
+  if (!parsed) throw new Error(`Managed Reward Model ${label} is missing.`);
+  return { id: stringField(parsed, "id"), contentHash: stringField(parsed, "contentHash") };
+}
+
+function isInventoryFile(value: unknown): value is { path: string; sha256: string; sizeBytes: number } {
+  const parsed = recordOrNull(value);
+  return Boolean(parsed && typeof parsed.path === "string" && typeof parsed.sha256 === "string" && typeof parsed.sizeBytes === "number");
 }
 
 async function materializeHarnessSource(input: {

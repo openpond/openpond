@@ -539,6 +539,22 @@ export class SqliteStoreCore {
     await this.exec(TRAINING_TABLES_SQL);
   }
 
+  async createTasksetDraftTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS taskset_drafts (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS taskset_drafts_profile_updated_idx
+        ON taskset_drafts(profile_id, updated_at DESC);
+    `);
+  }
+
   async createModelBuildDraftTables(): Promise<void> {
     await this.exec(`
       CREATE TABLE IF NOT EXISTS model_build_drafts (

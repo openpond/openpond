@@ -19,6 +19,35 @@ export const ModelVersionKindSchema = z.enum([
   "lora_adapter",
 ]);
 
+/** Exact multimodal runtime used to train and later serve a Reward Model. */
+export const RewardModelRuntimeSchema = z.object({
+  baseModel: z.object({
+    source: z.literal("huggingface"),
+    repoId: ReleaseIdSchema,
+    revision: z.string().regex(/^[a-f0-9]{40}$/),
+    configHash: ReleaseHashSchema,
+    tokenizerHash: ReleaseHashSchema,
+    licenseId: ReleaseIdSchema,
+    gated: z.boolean(),
+  }).strict(),
+  processor: z.object({
+    repository: ReleaseIdSchema,
+    revision: z.string().regex(/^[a-f0-9]{40}$/),
+    configHash: ReleaseHashSchema,
+  }).strict(),
+}).strict().superRefine((runtime, context) => {
+  if (
+    runtime.baseModel.repoId !== runtime.processor.repository
+    || runtime.baseModel.revision !== runtime.processor.revision
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["processor"],
+      message: "Reward Model processor must match the pinned scorer base model.",
+    });
+  }
+});
+
 export const ModelVersionSchema = z
   .object({
     schemaVersion: z.literal("openpond.modelVersion.v1"),
@@ -80,6 +109,116 @@ export const ModelVersionSchema = z
       });
     }
   });
+
+export const RewardModelVersionSchema = z.object({
+  schemaVersion: z.literal("openpond.rewardModelVersion.v1"),
+  id: ReleaseIdSchema,
+  modelId: ReleaseIdSchema,
+  profileId: ReleaseIdSchema,
+  version: z.number().int().positive(),
+  role: z.literal("reward"),
+  status: z.enum(["available", "failed"]),
+  scope: z.enum(["synthetic_smoke", "human_preference"]),
+  baseModel: BaseModelPreferenceSchema,
+  // Older persisted versions predate executable multimodal scorer identity.
+  // They remain readable but cannot be bound to a new policy run.
+  runtime: RewardModelRuntimeSchema.nullable().default(null),
+  taskset: VersionedReleaseRefSchema,
+  preferenceDatasetRelease: ImmutableReleaseRefSchema,
+  releaseGraph: z.object({
+    resolvedBundleHash: ReleaseHashSchema,
+    profileRelease: VersionedReleaseRefSchema,
+    harnessRelease: ImmutableReleaseRefSchema,
+    grader: z.object({
+      id: ReleaseIdSchema,
+      contentHash: ReleaseHashSchema,
+    }).strict(),
+  }).strict(),
+  artifacts: z.object({
+    checkpoint: ImmutableReleaseRefSchema.extend({
+      objectRef: z.string().regex(/^r2:\/\/[A-Za-z0-9._/-]+$/),
+      files: z.array(z.object({
+        path: z.string().trim().min(1).max(512),
+        sizeBytes: z.number().int().positive(),
+        sha256: ReleaseHashSchema,
+      }).strict()).min(4).max(128),
+    }).strict(),
+    adapter: ImmutableReleaseRefSchema,
+    scalarHead: ImmutableReleaseRefSchema,
+    bucketHead: ImmutableReleaseRefSchema.nullable(),
+    processorRelease: ImmutableReleaseRefSchema,
+  }).strict(),
+  qualificationReport: ImmutableReleaseRefSchema.nullable(),
+  createdAt: ReleaseTimestampSchema,
+  contentHash: ReleaseHashSchema,
+}).strict();
+
+export const RewardModelRunReceiptSchema = z.object({
+  schemaVersion: z.literal("openpond.rewardModelRunReceipt.v1"),
+  provider: ReleaseIdSchema,
+  providerRunId: ReleaseIdSchema,
+  resolvedBundleHash: ReleaseHashSchema,
+  finalCheckpoint: ImmutableReleaseRefSchema.extend({
+    objectRef: z.string().regex(/^r2:\/\/[A-Za-z0-9._/-]+$/),
+  }).strict(),
+  adapter: ImmutableReleaseRefSchema,
+  scalarHead: ImmutableReleaseRefSchema,
+  bucketHead: ImmutableReleaseRefSchema.nullable(),
+  processorRelease: ImmutableReleaseRefSchema,
+  optimizerEvidence: ImmutableReleaseRefSchema,
+  parameterDeltaHash: ReleaseHashSchema,
+  cleanup: z.object({
+    computeReleased: z.boolean(),
+    providerTerminalObserved: z.boolean(),
+  }).strict(),
+  contentHash: ReleaseHashSchema,
+}).strict();
+
+export const RewardModelRunSchema = z.object({
+  schemaVersion: z.literal("openpond.rewardModelRun.v1"),
+  id: ReleaseIdSchema,
+  rewardModelId: ReleaseIdSchema,
+  rewardModelVersionId: ReleaseIdSchema.nullable(),
+  profileId: ReleaseIdSchema,
+  role: z.literal("reward"),
+  scope: z.enum(["synthetic_smoke", "human_preference"]),
+  status: z.enum(["prepared", "running", "succeeded", "failed", "cancelled"]),
+  taskset: VersionedReleaseRefSchema,
+  preferenceDatasetRelease: ImmutableReleaseRefSchema,
+  recipeRelease: ImmutableReleaseRefSchema,
+  destinationId: ReleaseIdSchema,
+  quote: z.object({
+    maximumSpendUsd: z.number().positive(),
+    hourlyCostUsd: z.number().nonnegative().nullable(),
+  }).strict(),
+  managedRunId: ReleaseIdSchema.nullable(),
+  progress: z.object({
+    completedSteps: z.number().int().nonnegative(),
+    totalSteps: z.number().int().positive(),
+    latestLoss: z.number().finite().nullable(),
+  }).strict(),
+  receipt: RewardModelRunReceiptSchema.nullable(),
+  qualificationReport: ImmutableReleaseRefSchema.nullable(),
+  accruedSpendUsd: z.number().nonnegative().nullable(),
+  failureOwner: z.enum(["authoring", "admission", "provider", "runner", "artifact", "qualification", "cleanup"]).nullable(),
+  failure: z.string().trim().min(1).max(5_000).nullable(),
+  startedAt: ReleaseTimestampSchema,
+  completedAt: ReleaseTimestampSchema.nullable(),
+  updatedAt: ReleaseTimestampSchema,
+}).strict().superRefine((run, context) => {
+  if (run.status === "succeeded" && (!run.receipt || !run.qualificationReport)) {
+    context.addIssue({
+      code: "custom",
+      message: "A successful Reward Model Run requires a canonical receipt and qualification report.",
+    });
+  }
+  if (run.status !== "succeeded" && run.rewardModelVersionId !== null) {
+    context.addIssue({
+      code: "custom",
+      message: "Only a successful Reward Model Run can publish a Reward Model Version.",
+    });
+  }
+});
 
 export const ModelRunReceiptSchema = z
   .object({
@@ -434,6 +573,9 @@ export const ModelRunSchema = z
 
 export type ModelVersionKind = z.infer<typeof ModelVersionKindSchema>;
 export type ModelVersion = z.infer<typeof ModelVersionSchema>;
+export type RewardModelVersion = z.infer<typeof RewardModelVersionSchema>;
+export type RewardModelRunReceipt = z.infer<typeof RewardModelRunReceiptSchema>;
+export type RewardModelRun = z.infer<typeof RewardModelRunSchema>;
 export type ModelRunReceipt = z.infer<typeof ModelRunReceiptSchema>;
 export type ModelEvaluationReceipt = z.infer<typeof ModelEvaluationReceiptSchema>;
 export type ModelEvaluationStopReceipt = z.infer<typeof ModelEvaluationStopReceiptSchema>;

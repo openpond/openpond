@@ -7,11 +7,14 @@ import {
   DatasetCatalogResponseSchema,
   ModelProjectSchema,
   ModelRunDraftSchema,
+  RewardModelRecipeSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
   TaskCreationRequestSchema,
   TaskMinerConfigSchema,
+  TasksetDraftSchema,
+  TasksetOperationalStateSchema,
   TasksetSchema,
   TrainingDestinationIdSchema,
   TrainingChatSearchRequestSchema,
@@ -32,7 +35,9 @@ import {
 import { contentHash } from "@openpond/harness";
 import {
   computeTasksetHash,
+  createTasksetDraft,
   materializePortableTasksetRelease,
+  publishTasksetDraft,
 } from "@openpond/taskset-sdk";
 import type { SqliteStore } from "../store/store.js";
 import type { createTaskCreatorService } from "./task-creator.js";
@@ -46,6 +51,14 @@ import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
 import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
 import { trainingRunDetail } from "./run-detail.js";
+import {
+  materializeSyntheticCollectionRun,
+  SyntheticCollectionRunRequestSchema,
+} from "./synthetic-collection-run.js";
+import {
+  compileDesktopHarnessContext,
+  projectDesktopCanonicalReceipts,
+} from "./portable-evals-adapter.js";
 import {
   advanceUnexecutedModelRunTasksetRef,
   createExistingTasksetModelCreateImproveRun,
@@ -104,6 +117,7 @@ type PreferenceComparisons = ReturnType<typeof createPreferenceComparisonService
 
 export function createTrainingApi(deps: {
   store: SqliteStore;
+  storeDir: string;
   taskCreator: TaskCreator;
   taskMiner: TaskMiner;
   evaluation: Evaluation;
@@ -236,7 +250,10 @@ export function createTrainingApi(deps: {
         .map((candidate) => ({
           id: candidate.id,
           instruction: typeof candidate.input.prompt === "string" ? candidate.input.prompt : JSON.stringify(candidate.input),
-          context: candidate.policyVisibleContext,
+          context: {
+            ...candidate.policyVisibleContext,
+            outputContract: taskset.metadata.tasksetOutputContract ?? null,
+          },
           expectedText: null,
           artifactRenderer: candidate.expectedOutput?.artifactRenderer ?? null,
         }));
@@ -335,6 +352,56 @@ export function createTrainingApi(deps: {
         criterionScores: optionalScoreRecord(input.criterionScores),
         feedbackArtifactRef: optionalArtifactRef(input.feedbackArtifactRef),
         startedAt: requiredString(input.startedAt, "startedAt"),
+      });
+    }
+    if (action === "preference_comparison_fixture_submit") {
+      const labelerRelease = requiredImmutableRef(input.labelerRelease, "labelerRelease");
+      const fixtureRelease = requiredImmutableRef(input.fixtureRelease, "fixtureRelease");
+      return requirePreferenceComparisons(deps.preferenceComparisons).submitFixtureReceipt({
+        id: requiredString(input.id, "id"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        assignmentId: requiredString(input.assignmentId, "assignmentId"),
+        actorKey: requiredString(input.actorKey, "actorKey"),
+        labelerRelease,
+        fixtureRelease,
+        ratings: preferenceRatings(input.ratings),
+        startedAt: requiredString(input.startedAt, "startedAt"),
+      });
+    }
+    if (action === "preference_dataset_list") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).listPreferenceDatasets(
+        requiredString(input.tasksetId, "tasksetId"),
+      );
+    }
+    if (action === "preference_dataset_materialize") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).materializePreferenceDataset({
+        id: requiredString(input.id, "id"),
+        revision: boundedInteger(input.revision, "revision", 1, 1_000_000, 1),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        comparisonReleaseId: requiredString(input.comparisonReleaseId, "comparisonReleaseId"),
+        authority: input.authority === "human" ? "human" : "synthetic_fixture",
+        groups: requiredRecordArray(input.groups, "groups").map((group) => ({
+          assignmentId: requiredString(group.assignmentId, "groups.assignmentId"),
+          partition: preferenceDatasetPartition(group.partition),
+        })),
+        actorKey: requiredString(input.actorKey, "actorKey"),
+      });
+    }
+    if (action === "reward_model_run_launch") {
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const datasetId = requiredString(input.preferenceDatasetReleaseId, "preferenceDatasetReleaseId");
+      const taskset = await requireTaskset(deps.store, tasksetId);
+      const dataset = (await requirePreferenceComparisons(deps.preferenceComparisons)
+        .listPreferenceDatasets(tasksetId))
+        .find((candidate) => candidate.id === datasetId);
+      if (!dataset) throw new Error("Preference Dataset release was not found for this Taskset.");
+      return deps.training.launchRewardModel({
+        id: requiredString(input.id, "id"),
+        rewardModelId: requiredString(input.rewardModelId, "rewardModelId"),
+        taskset,
+        dataset,
+        recipe: RewardModelRecipeSchema.parse(input.recipe),
+        managedBaseModel: managedRewardModelBase(input.managedBaseModel),
       });
     }
     if (action === "preference_comparison_model_review") {
@@ -455,6 +522,22 @@ export function createTrainingApi(deps: {
         },
       );
     }
+    if (action === "taskset_operational_state") {
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const [attempts, artifacts, grades] = await Promise.all([
+        deps.store.listTaskAttempts(tasksetId),
+        deps.store.listTaskAttemptArtifacts({ tasksetId }),
+        deps.store.listGradeResultsForTaskset(tasksetId),
+      ]);
+      return TasksetOperationalStateSchema.parse({
+        schemaVersion: "openpond.tasksetOperationalState.v1",
+        tasksetId,
+        attempts,
+        artifacts,
+        grades,
+        generatedAt: new Date().toISOString(),
+      });
+    }
     if (action === "inspect_huggingface_dataset") {
       return deps.datasetImports.inspectHuggingFace(
         CreateHuggingFaceDatasetImportRequestSchema.parse(input),
@@ -469,6 +552,92 @@ export function createTrainingApi(deps: {
     }
     if (action === "cancel_dataset_import") {
       return deps.datasetImports.cancel(requiredString(input.importId, "importId"));
+    }
+    if (action === "init_taskset_draft") {
+      const draft = createTasksetDraft({
+        profileId: requiredString(input.profileId, "profileId"),
+        name: string(input.name) ?? "",
+      });
+      return deps.store.saveTasksetDraft(draft);
+    }
+    if (action === "save_taskset_draft") {
+      const submitted = TasksetDraftSchema.parse(input.draft);
+      const current = await requireTasksetDraft(deps.store, submitted.id);
+      if (submitted.profileId !== current.profileId) {
+        throw new Error("Taskset draft profile cannot change.");
+      }
+      if (submitted.revision !== current.revision) {
+        throw new Error(
+          `Taskset draft changed from revision ${submitted.revision} to ${current.revision}. Refresh before saving.`,
+        );
+      }
+      if (current.status === "published") {
+        throw new Error("Published Taskset drafts are immutable. Initialize a new draft to revise the Taskset.");
+      }
+      return deps.store.saveTasksetDraft(TasksetDraftSchema.parse({
+        ...submitted,
+        revision: current.revision + 1,
+        status: "draft",
+        updatedAt: new Date().toISOString(),
+      }));
+    }
+    if (action === "taskset_draft_workspace") {
+      const workspace = await deps.store.getTasksetDraftWorkspace(
+        requiredString(input.draftId, "draftId"),
+      );
+      if (!workspace) throw new Error("Taskset draft workspace was not found.");
+      return workspace;
+    }
+    if (action === "publish_taskset_draft") {
+      const draft = await requireTasksetDraft(
+        deps.store,
+        requiredString(input.draftId, "draftId"),
+      );
+      if (draft.status === "published") {
+        const taskset = draft.publishedTasksetRef
+          ? await deps.store.getTasksetRevision(
+              draft.publishedTasksetRef.id,
+              draft.publishedTasksetRef.revision,
+              draft.publishedTasksetRef.contentHash,
+            )
+          : null;
+        if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
+        return { draft, taskset };
+      }
+      const workspace = await deps.store.getTasksetDraftWorkspace(draft.id);
+      if (!workspace) throw new Error("Taskset draft workspace was not found.");
+      const materializedTaskset = publishTasksetDraft({
+        draft,
+        sourcePackageHash: workspace.packageHash,
+      });
+      await deps.store.upsertTaskset(materializedTaskset);
+      await deps.evaluation.readiness(materializedTaskset.id);
+      const taskset = await deps.store.getTaskset(materializedTaskset.id)
+        ?? materializedTaskset;
+      const published = TasksetDraftSchema.parse({
+        ...draft,
+        revision: draft.revision + 1,
+        status: "published",
+        publishedTasksetRef: {
+          id: taskset.id,
+          revision: taskset.revision,
+          contentHash: taskset.contentHash,
+        },
+        updatedAt: new Date().toISOString(),
+      });
+      await deps.store.saveTasksetDraft(published);
+      return { draft: published, taskset };
+    }
+    if (action === "delete_taskset_draft") {
+      const draft = await requireTasksetDraft(
+        deps.store,
+        requiredString(input.draftId, "draftId"),
+      );
+      if (draft.status === "published") {
+        throw new Error("Published Taskset draft history cannot be deleted from the authoring flow.");
+      }
+      await deps.store.deleteTasksetDraft(draft.id);
+      return { deleted: true, draftId: draft.id };
     }
     if (action === "remove_source") { await deps.store.deleteTrainingSource(requiredString(input.sourceId, "sourceId")); return { removed: true }; }
     if (action === "delete_taskset") return deps.training.deleteTaskset(requiredString(input.tasksetId, "tasksetId"));
@@ -556,6 +725,104 @@ export function createTrainingApi(deps: {
       return startModelCreation({ profileId: candidate.profileId, sourceIds, surface: "task_candidate", mode: input.mode === "customize" ? "customize" : "defaults", entryMode: "automated", objective: string(input.objective) ?? candidate.summary, candidateId: candidate.id, analysisModel: input.analysisModel ? ChatModelRefSchema.parse(input.analysisModel) : null, analysisReasoningEffort: input.analysisReasoningEffort ? CodexReasoningEffortSchema.parse(input.analysisReasoningEffort) : null });
     }
     if (action === "grade") return deps.evaluation.grade({ tasksetId: requiredString(input.tasksetId, "tasksetId"), taskId: requiredString(input.taskId, "taskId"), attempt: input.attempt });
+    if (action === "materialize_synthetic_collection") {
+      const collection = SyntheticCollectionRunRequestSchema.parse({
+        ...record(input.collection),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      });
+      const taskset = await deps.store.getTaskset(collection.tasksetId);
+      if (!taskset) throw new Error("Collection Run Taskset was not found.");
+      return materializeSyntheticCollectionRun({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        taskset,
+        request: collection,
+      });
+    }
+    if (action === "materialize_synthetic_preference_collection") {
+      const collection = SyntheticCollectionRunRequestSchema.parse({
+        ...record(input.collection),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+      });
+      const taskset = await requireTaskset(deps.store, collection.tasksetId);
+      const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
+      const actorKey = requiredString(input.actorKey, "actorKey");
+      const comparisonReleaseId = requiredString(input.comparisonReleaseId, "comparisonReleaseId");
+      const collectionReceipt = await materializeSyntheticCollectionRun({
+        store: deps.store,
+        storeDir: deps.storeDir,
+        taskset,
+        request: collection,
+      });
+      const tasksetRelease = await requireReleasedTaskset(deps.benchmarkTasksets, taskset);
+      // This identifies the fixture producer in immutable receipts. It is not
+      // a configured provider and is never eligible to execute a model call.
+      const context = compileDesktopHarnessContext({
+        taskset,
+        tasksetRelease,
+        adapterId: "openpond-preference-comparisons-v1",
+        model: { providerId: "custom-openai-compatible", modelId: "synthetic-collection-fixture-v1" },
+      });
+      const assignments = [];
+      for (const groupIndex of [...new Set(collectionReceipt.attempts.map((item) => item.groupIndex))]) {
+        const groupAttempts = collectionReceipt.attempts.filter((item) => item.groupIndex === groupIndex);
+        const candidates: ComparisonAssignmentCandidateInput[] = [];
+        for (const item of groupAttempts) {
+          const grade = await deps.evaluation.grade({
+            tasksetId: taskset.id,
+            taskId: item.attempt.taskId,
+            attempt: item.attempt,
+          });
+          const artifacts = await deps.store.listTaskAttemptArtifacts({ attemptId: item.attempt.id });
+          const canonical = projectDesktopCanonicalReceipts({
+            context,
+            attempt: item.attempt,
+            grade,
+            artifacts,
+          });
+          candidates.push({
+            attempt: canonical.attemptReceipt,
+            artifactManifest: canonical.artifactManifest,
+            runManifest: context.runManifest,
+            visibleArtifactIds: [item.artifact.id],
+          });
+        }
+        const assignmentId = `collection-comparison-${contentHash([collection.id, groupIndex, comparisonReleaseId]).slice(0, 24)}`;
+        const assignment = await preferenceComparisons.createAssignment({
+          id: assignmentId,
+          tasksetId: taskset.id,
+          comparisonReleaseId,
+          candidates,
+          purpose: groupAttempts[0]!.partition === "reward_train" ? "training_reward" : "validation",
+          creatorKey: actorKey,
+        });
+        const ratings = Object.fromEntries(groupAttempts.map((item, index) => [
+          candidates[index]!.attempt.id,
+          item.label,
+        ]));
+        await preferenceComparisons.submitFixtureReceipt({
+          id: `collection-preference-${contentHash([assignment.id, collection.labelerRelease]).slice(0, 24)}`,
+          tasksetId: taskset.id,
+          assignmentId: assignment.id,
+          actorKey,
+          labelerRelease: collection.labelerRelease,
+          fixtureRelease: collection.fixtureRelease,
+          ratings,
+          startedAt: collectionReceipt.createdAt,
+        });
+        assignments.push({ assignment, partition: groupAttempts[0]!.partition });
+      }
+      const dataset = await preferenceComparisons.materializePreferenceDataset({
+        id: requiredString(input.preferenceDatasetId, "preferenceDatasetId"),
+        revision: boundedInteger(input.preferenceDatasetRevision, "preferenceDatasetRevision", 1, 1_000_000, 1),
+        tasksetId: taskset.id,
+        comparisonReleaseId,
+        authority: "synthetic_fixture",
+        groups: assignments.map(({ assignment, partition }) => ({ assignmentId: assignment.id, partition })),
+        actorKey,
+      });
+      return { collection: collectionReceipt, assignments, dataset };
+    }
     if (action === "execute_taskset_attempt") {
       const sampling = record(input.sampling);
       return deps.evaluation.execute({
@@ -863,6 +1130,7 @@ export function createTrainingApi(deps: {
     const [
       sources,
       creations,
+      tasksetDrafts,
       tasksets,
       datasetImports,
       datasetArtifacts,
@@ -878,6 +1146,7 @@ export function createTrainingApi(deps: {
     ] = await Promise.all([
       deps.store.listTrainingSources(profileId),
       deps.store.listTaskCreationSnapshots(profileId),
+      deps.store.listTasksetDrafts(profileId),
       deps.store.listTasksets(profileId),
       deps.store.listDatasetImportJobs(profileId),
       deps.datasetArtifacts.summaries(profileId),
@@ -914,6 +1183,7 @@ export function createTrainingApi(deps: {
       profileId,
       sources,
       creations,
+      tasksetDrafts,
       tasksets,
       benchmarkRuns,
       benchmarkComparisons,
@@ -1269,6 +1539,11 @@ async function requireTaskset(store: SqliteStore, tasksetId: string) {
   if (!taskset) throw new Error("Taskset was not found.");
   return taskset;
 }
+async function requireTasksetDraft(store: SqliteStore, draftId: string) {
+  const draft = await store.getTasksetDraft(draftId);
+  if (!draft) throw new Error("Taskset draft was not found.");
+  return draft;
+}
 async function requireReleasedTaskset(
   benchmarkTasksets: BenchmarkTasksets,
   taskset: Awaited<ReturnType<typeof requireTaskset>>,
@@ -1400,6 +1675,52 @@ function boundedNumber(
   return value;
 }
 function managedRolloutPlacement(value: unknown): "local" | "remote" | undefined { return value === "local" || value === "remote" ? value : undefined; }
+
+function preferenceDatasetPartition(value: unknown): "reward_train" | "reward_validation" | "reward_qualification" {
+  if (value === "reward_train" || value === "reward_validation" || value === "reward_qualification") {
+    return value;
+  }
+  throw new Error("Preference dataset partition must be reward_train, reward_validation, or reward_qualification.");
+}
+
+function preferenceRatings(value: unknown): Record<string, "love" | "like" | "reject"> {
+  const ratings = record(value);
+  return Object.fromEntries(Object.entries(ratings).map(([attemptId, rating]) => {
+    if (rating !== "love" && rating !== "like" && rating !== "reject") {
+      throw new Error(`Preference rating for ${attemptId} must be love, like, or reject.`);
+    }
+    return [attemptId, rating];
+  }));
+}
+
+function managedRewardModelBase(value: unknown): {
+  source: "huggingface";
+  repoId: string;
+  revision: string;
+  configHash: string;
+  tokenizerHash: string;
+  licenseId: string;
+  gated: boolean;
+} {
+  const input = record(value);
+  const revision = requiredString(input.revision, "managedBaseModel.revision");
+  const configHash = requiredString(input.configHash, "managedBaseModel.configHash");
+  const tokenizerHash = requiredString(input.tokenizerHash, "managedBaseModel.tokenizerHash");
+  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("managedBaseModel.revision must be an immutable commit SHA.");
+  if (!/^[a-f0-9]{64}$/.test(configHash) || !/^[a-f0-9]{64}$/.test(tokenizerHash)) {
+    throw new Error("managedBaseModel hashes must be SHA-256 values.");
+  }
+  if (input.source !== "huggingface") throw new Error("managedBaseModel.source must be huggingface.");
+  return {
+    source: "huggingface",
+    repoId: requiredString(input.repoId, "managedBaseModel.repoId"),
+    revision,
+    configHash,
+    tokenizerHash,
+    licenseId: requiredString(input.licenseId, "managedBaseModel.licenseId"),
+    gated: input.gated === true,
+  };
+}
 
 function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {
   return value === "preferences" || value === "verifiable_reward" || value === "rubric" || value === "discovery"

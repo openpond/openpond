@@ -9,11 +9,15 @@ import {
   DatasetBuildIntentSchema,
   DatasetBuildSpecificationSchema,
   GraderAuditReportSchema,
+  GradeResultSchema,
+  TaskAttemptArtifactSchema,
+  TaskAttemptResultSchema,
   TaskCreationSnapshotSchema,
   TasksetSchema,
   TrainingMethodReadinessReasonCodeSchema,
   TrainingSourceRefSchema,
 } from "./tasksets.js";
+import { TasksetDraftSchema } from "./taskset-drafts.js";
 import {
   TaskCandidateSchema,
   TaskMinerConfigSchema,
@@ -21,8 +25,14 @@ import {
 } from "./task-mining.js";
 import { DatasetArtifactSummarySchema } from "./dataset-artifacts.js";
 import { DatasetImportJobSchema } from "./dataset-imports.js";
-import { ModelRunSchema, ModelVersionSchema } from "./model-lifecycle.js";
 import {
+  ModelRunSchema,
+  ModelVersionSchema,
+  RewardModelRunSchema,
+  RewardModelVersionSchema,
+} from "./model-lifecycle.js";
+import {
+  LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
   PolicyOptimizationContractSchema,
   PolicyOptimizerSchema,
@@ -47,6 +57,7 @@ export * from "./training-managed-adapter.js";
 export * from "./training-trajectories.js";
 export {
   GrpoOptimizerSchema,
+  LearnedPreferenceRewardBindingSchema,
   PolicyOptimizationBudgetSchema,
   PolicyOptimizationContractSchema,
   PolicyOptimizerSchema,
@@ -138,6 +149,64 @@ export const PolicyTrainingRecordSchema = z.object({
   tags: z.array(IdSchema).max(100).default([]),
 });
 
+export const RewardModelRecipeSchema = z.object({
+  schemaVersion: z.literal("openpond.rewardModelRecipe.v1"),
+  method: z.literal("reward_model"),
+  parameterization: z.literal("lora_with_scalar_head"),
+  runScope: z.enum(["synthetic_smoke", "human_preference"]),
+  baseModel: z.object({
+    id: IdSchema,
+    revision: z.string().trim().min(1).max(256),
+    tokenizerRevision: z.string().trim().min(1).max(256),
+    processorRevision: z.string().trim().min(1).max(256),
+    chatTemplateHash: HashSchema,
+  }).strict(),
+  tasksetRelease: ImmutableReleaseRefSchema,
+  preferenceDatasetRelease: ImmutableReleaseRefSchema,
+  processorRelease: ImmutableReleaseRefSchema,
+  lora: z.object({
+    rank: z.number().int().positive().max(256),
+    alpha: z.number().positive().max(1_024),
+    dropout: z.number().min(0).max(1),
+    targetModules: z.array(IdSchema).min(1).max(100),
+  }).strict(),
+  heads: z.object({
+    scalar: z.literal("pooled_hidden_state_linear"),
+    bucket: z.enum(["none", "three_class"]).default("three_class"),
+  }).strict(),
+  loss: z.object({
+    ranking: z.literal("bradley_terry"),
+    rankingWeight: z.number().positive(),
+    bucketWeight: z.number().nonnegative(),
+    tieWeight: z.number().nonnegative(),
+  }).strict(),
+  optimizer: z.object({
+    learningRate: z.number().positive(),
+    maxSteps: z.number().int().positive().max(100_000),
+    batchSize: z.number().int().positive().max(10_000),
+    gradientAccumulationSteps: z.number().int().positive().max(10_000),
+    seed: z.number().int(),
+    checkpointEverySteps: z.number().int().positive().max(100_000),
+  }).strict(),
+  resourceLimits: z.object({
+    wallTimeMs: z.number().int().positive().max(24 * 60 * 60 * 1_000),
+    maxExamples: z.number().int().positive().max(100_000),
+    maxImagePixels: z.number().int().positive().max(100_000_000),
+    maximumSpendUsd: z.number().nonnegative().max(100_000),
+  }).strict(),
+}).superRefine((recipe, context) => {
+  if (
+    recipe.runScope === "synthetic_smoke"
+    && (recipe.optimizer.maxSteps > 100 || recipe.resourceLimits.maximumSpendUsd > 10)
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["resourceLimits"],
+      message: "Synthetic-smoke Reward Model runs are limited to 100 steps and USD 10.",
+    });
+  }
+});
+
 export const RftRecipeSchema = z.object({
   schemaVersion: z.literal("openpond.rftRecipe.v1"),
   method: z.literal("grpo"),
@@ -185,6 +254,7 @@ export const RftRecipeSchema = z.object({
     environmentId: IdSchema,
     environmentVersion: z.string().trim().min(1).max(256),
     toolContractHash: HashSchema,
+    learnedPreference: LearnedPreferenceRewardBindingSchema.nullable().optional(),
   }),
   resourceLimits: z.object({
     wallTimeMs: z
@@ -829,11 +899,21 @@ export const TrainingActivityResponseSchema = z.object({
   generatedAt: TimestampSchema,
 });
 
+export const TasksetOperationalStateSchema = z.object({
+  schemaVersion: z.literal("openpond.tasksetOperationalState.v1"),
+  tasksetId: IdSchema,
+  attempts: z.array(TaskAttemptResultSchema),
+  artifacts: z.array(TaskAttemptArtifactSchema),
+  grades: z.array(GradeResultSchema),
+  generatedAt: TimestampSchema,
+});
+
 export const TrainingStateResponseSchema = z.object({
   schemaVersion: z.literal("openpond.trainingState.v1"),
   profileId: IdSchema,
   sources: z.array(TrainingSourceRefSchema),
   creations: z.array(TaskCreationSnapshotSchema),
+  tasksetDrafts: z.array(TasksetDraftSchema).default([]),
   tasksets: z.array(TasksetSchema),
   benchmarkRuns: z.array(z.custom<BenchmarkRunSummary>()).default([]),
   benchmarkComparisons: z.array(z.custom<BenchmarkComparison>()).default([]),
@@ -848,6 +928,8 @@ export const TrainingStateResponseSchema = z.object({
   modelRunDrafts: z.array(ModelRunDraftSchema).default([]),
   modelVersions: z.array(ModelVersionSchema).default([]),
   modelRuns: z.array(ModelRunSchema).default([]),
+  rewardModelVersions: z.array(RewardModelVersionSchema).default([]),
+  rewardModelRuns: z.array(RewardModelRunSchema).default([]),
   modelTasksets: z.array(TasksetSchema).default([]),
   plans: z.array(TrainingPlanSchema),
   bundles: z.array(TrainingBundleManifestSchema),
@@ -876,6 +958,10 @@ export type SftRecipe = z.infer<typeof SftRecipeSchema>;
 export type DpoRecipe = z.infer<typeof DpoRecipeSchema>;
 export type PpoRecipe = z.infer<typeof PpoRecipeSchema>;
 export type RftRecipe = z.infer<typeof RftRecipeSchema>;
+export type RewardModelRecipe = z.infer<typeof RewardModelRecipeSchema>;
+export type LearnedPreferenceRewardBinding = z.infer<
+  typeof LearnedPreferenceRewardBindingSchema
+>;
 export type SftTrainingRecord = z.infer<typeof SftTrainingRecordSchema>;
 export type DpoTrainingRecord = z.infer<typeof DpoTrainingRecordSchema>;
 export type PolicyTrainingRecord = z.infer<typeof PolicyTrainingRecordSchema>;
@@ -934,3 +1020,4 @@ export type ModelBindingRole = z.infer<typeof ModelBindingRoleSchema>;
 export type ModelBinding = z.infer<typeof ModelBindingSchema>;
 export type TrainingStateResponse = z.infer<typeof TrainingStateResponseSchema>;
 export type TrainingActivityResponse = z.infer<typeof TrainingActivityResponseSchema>;
+export type TasksetOperationalState = z.infer<typeof TasksetOperationalStateSchema>;

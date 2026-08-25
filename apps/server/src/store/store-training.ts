@@ -52,7 +52,7 @@ import {
 import type { PayloadRow } from "../types.js";
 import { now } from "../utils.js";
 import { normalizeSessionPayload } from "./store-persistence.js";
-import { SqlitePreferenceComparisonStore } from "./store-preference-comparison.js";
+import { SqliteTasksetDraftStore } from "./store-taskset-drafts.js";
 import {
   appendTrainingChatSearchText,
   trainingChatFtsQuery,
@@ -84,7 +84,7 @@ type TrainingChatSearchEvidenceRow = {
 const ACTIVE_TRAINING_DESTINATIONS_SQL =
   "('openpond_managed')";
 
-export class SqliteTrainingStore extends SqlitePreferenceComparisonStore {
+export class SqliteTrainingStore extends SqliteTasksetDraftStore {
   async trainingChatSearchSignatures(source: TrainingChatSearchDocument["source"]): Promise<Map<string, string>> {
     await this.ready;
     await this.writeQueue;

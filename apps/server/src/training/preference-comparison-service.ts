@@ -1,5 +1,5 @@
 import path from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 
 import {
   ArtifactManifestSchema,
@@ -12,7 +12,11 @@ import {
   createComparisonAssignment,
   createPreferenceCalibrationReport,
   createPreferenceReceipt,
+  createSyntheticFixturePreferenceReceipt,
   createPreferenceRewardComponents,
+  materializePreferenceDatasetRelease,
+  PreferenceDatasetReleaseSchema,
+  verifyPreferenceDatasetRelease,
   type ComparisonAssignmentCandidateInput,
   type HarnessCompatibilityReceipt,
   type PreferenceCalibrationPair,
@@ -21,6 +25,7 @@ import {
   type PreferenceComparisonRelease,
   type PreferenceReceipt,
   type PreferenceReviewer,
+  type PreferenceDatasetRelease,
   type RewardComponentReceipt,
   type TasksetRelease,
 } from "@openpond/evals";
@@ -181,6 +186,115 @@ export function createPreferenceComparisonService(deps: {
       submittedAt: now(),
     });
     return record.receipt;
+  }
+
+  async function submitFixtureReceipt(input: {
+    id: string;
+    tasksetId: string;
+    assignmentId: string;
+    actorKey: string;
+    labelerRelease: { id: string; contentHash: string };
+    fixtureRelease: { id: string; contentHash: string };
+    ratings: Record<string, "love" | "like" | "reject">;
+    startedAt: string;
+  }): Promise<PreferenceReceipt> {
+    await requireAuthorized("calibrate", input.tasksetId, input.actorKey);
+    const assignmentRecord = await requireAssignment(input.tasksetId, input.assignmentId);
+    const release = await requireRelease(input.tasksetId, assignmentRecord.assignment.comparisonRelease.id);
+    const receipt = createSyntheticFixturePreferenceReceipt({
+      id: input.id,
+      assignment: assignmentRecord.assignment,
+      comparisonRelease: release.release,
+      labelerRelease: input.labelerRelease,
+      fixtureRelease: input.fixtureRelease,
+      ratings: input.ratings,
+      startedAt: input.startedAt,
+      completedAt: now(),
+      metadata: { source: "declared_synthetic_fixture" },
+    });
+    const reviewerKey = `fixture:${input.labelerRelease.contentHash}`;
+    const record = await deps.store.savePreferenceComparisonSubmission({
+      schemaVersion: "openpond.preferenceComparisonSubmissionRecord.v1",
+      id: receipt.id,
+      tasksetId: input.tasksetId,
+      assignmentId: input.assignmentId,
+      reviewerKey,
+      receipt,
+      submittedAt: now(),
+    });
+    return record.receipt;
+  }
+
+  async function materializePreferenceDataset(input: {
+    id: string;
+    revision: number;
+    tasksetId: string;
+    comparisonReleaseId: string;
+    authority: "human" | "synthetic_fixture";
+    groups: ReadonlyArray<{
+      assignmentId: string;
+      partition: "reward_train" | "reward_validation" | "reward_qualification";
+    }>;
+    actorKey: string;
+  }): Promise<PreferenceDatasetRelease> {
+    await requireAuthorized("calibrate", input.tasksetId, input.actorKey);
+    const release = await requireRelease(input.tasksetId, input.comparisonReleaseId);
+    const materializationGroups = await Promise.all(input.groups.map(async (group) => {
+      const assignment = await requireAssignment(input.tasksetId, group.assignmentId);
+      if (assignment.assignment.comparisonRelease.id !== release.id) {
+        throw new Error("Preference dataset groups must share one comparison release.");
+      }
+      const submissions = await deps.store.listPreferenceComparisonSubmissions(group.assignmentId);
+      const submission = submissions.find((candidate) => input.authority === "synthetic_fixture"
+        ? candidate.receipt.reviewer.kind === "fixture"
+        : candidate.receipt.reviewer.kind === "human");
+      if (!submission) {
+        throw new Error(`Preference dataset group ${group.assignmentId} lacks ${input.authority} evidence.`);
+      }
+      return {
+        assignment: assignment.assignment,
+        receipt: submission.receipt,
+        partition: group.partition,
+      };
+    }));
+    const dataset = materializePreferenceDatasetRelease({
+      id: input.id,
+      revision: input.revision,
+      tasksetRelease: release.tasksetRelease,
+      comparisonRelease: release.release,
+      authority: input.authority,
+      groups: materializationGroups,
+      createdAt: now(),
+      metadata: { materializedBy: input.actorKey },
+    });
+    const directory = preferenceDatasetDirectory(deps.storeDir, input.tasksetId);
+    await mkdir(directory, { recursive: true });
+    const filePath = path.join(directory, `${safeSegment(dataset.id)}.json`);
+    const bytes = `${JSON.stringify(dataset, null, 2)}\n`;
+    await writeFile(filePath, bytes, { flag: "wx", mode: 0o600 }).catch(async (error: NodeJS.ErrnoException) => {
+      if (error.code !== "EEXIST") throw error;
+      const existing = PreferenceDatasetReleaseSchema.parse(JSON.parse(await readFile(filePath, "utf8")));
+      if (existing.contentHash !== dataset.contentHash) {
+        throw new Error("A Preference Dataset release ID is immutable.");
+      }
+    });
+    return dataset;
+  }
+
+  async function listPreferenceDatasets(tasksetId: string): Promise<PreferenceDatasetRelease[]> {
+    const directory = preferenceDatasetDirectory(deps.storeDir, tasksetId);
+    const entries = await readdir(directory, { withFileTypes: true }).catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    });
+    const releases = await Promise.all(entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map(async (entry) => PreferenceDatasetReleaseSchema.parse(
+        JSON.parse(await readFile(path.join(directory, entry.name), "utf8")),
+      )));
+    return releases
+      .filter(verifyPreferenceDatasetRelease)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   }
 
   async function submitModelReceipt(input: {
@@ -593,6 +707,7 @@ export function createPreferenceComparisonService(deps: {
     createAssignment,
     nextAssignment,
     submitHumanReceipt,
+    submitFixtureReceipt,
     submitModelReceipt,
     markUnreviewable,
     saveCalibration,
@@ -601,8 +716,19 @@ export function createPreferenceComparisonService(deps: {
     saveCalibrationFromStoredReceipts,
     importManagedCalibrationBatch,
     projectModelReward,
+    materializePreferenceDataset,
+    listPreferenceDatasets,
     modelJudge: deps.modelJudge,
   };
+}
+
+function preferenceDatasetDirectory(storeDir: string, tasksetId: string): string {
+  return path.join(
+    storeDir,
+    "training",
+    "preference-datasets",
+    safeSegment(tasksetId),
+  );
 }
 
 const ManagedCalibrationBatchSchema = z.object({
