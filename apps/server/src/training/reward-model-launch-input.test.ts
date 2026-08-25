@@ -7,9 +7,20 @@ import { describe, expect, test, vi } from "vitest";
 import { sha256 } from "@openpond/taskset-sdk";
 
 import { managedSyntheticRewardSmokeRecipe } from "./managed-reward-model-recipes.js";
-import { buildManagedRewardModelLaunchInput } from "./reward-model-launch-input.js";
+import {
+  buildManagedRewardModelLaunchInput,
+  managedRewardModelIdempotencyKey,
+} from "./reward-model-launch-input.js";
 
 describe("managed Reward Model launch input", () => {
+  test("scopes remote idempotency to the immutable local Run", () => {
+    const recipeHash = "a".repeat(64);
+    const first = managedRewardModelIdempotencyKey({ runId: "rm0", recipeHash });
+    expect(first).toBe(managedRewardModelIdempotencyKey({ runId: "rm0", recipeHash }));
+    expect(first).not.toBe(managedRewardModelIdempotencyKey({ runId: "rm1", recipeHash }));
+    expect(first.length).toBeLessThanOrEqual(191);
+  });
+
   test("resolves canonical preference receipt refs back to stored Attempts", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-reward-launch-"));
     const imagePath = path.join(directory, "candidate.png");

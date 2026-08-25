@@ -174,7 +174,27 @@ export const RewardModelRunReceiptSchema = z.object({
   contentHash: ReleaseHashSchema,
 }).strict();
 
-export const RewardModelRunSchema = z.object({
+export const RewardModelRunSchema = z.preprocess((value) => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const record = value as Record<string, unknown>;
+  if (record.tasksetRelease !== undefined) return value;
+  const taskset = record.taskset;
+  if (!taskset || typeof taskset !== "object" || Array.isArray(taskset)) return value;
+  const tasksetRecord = taskset as Record<string, unknown>;
+  if (typeof tasksetRecord.id !== "string" || typeof tasksetRecord.contentHash !== "string") {
+    return value;
+  }
+  // Historical local RM smoke records predate the explicit immutable release
+  // ref. Preserve their inspectability; all new launch paths write the exact
+  // published Taskset release instead of relying on this compatibility value.
+  return {
+    ...record,
+    tasksetRelease: {
+      id: tasksetRecord.id,
+      contentHash: tasksetRecord.contentHash,
+    },
+  };
+}, z.object({
   schemaVersion: z.literal("openpond.rewardModelRun.v1"),
   id: ReleaseIdSchema,
   rewardModelId: ReleaseIdSchema,
@@ -206,7 +226,7 @@ export const RewardModelRunSchema = z.object({
   startedAt: ReleaseTimestampSchema,
   completedAt: ReleaseTimestampSchema.nullable(),
   updatedAt: ReleaseTimestampSchema,
-}).strict().superRefine((run, context) => {
+}).strict()).superRefine((run, context) => {
   if (run.status === "succeeded" && (!run.receipt || !run.qualificationReport)) {
     context.addIssue({
       code: "custom",

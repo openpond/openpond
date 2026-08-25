@@ -226,6 +226,38 @@ describe("learned preference training contracts", () => {
     expect(run.receipt?.cleanup.providerTerminalObserved).toBe(true);
   });
 
+  it("keeps historical Reward Model Runs inspectable while new Runs pin releases", () => {
+    const historical = RewardModelRunSchema.parse({
+      schemaVersion: "openpond.rewardModelRun.v1",
+      id: "reward-run-legacy",
+      rewardModelId: "taste-model",
+      rewardModelVersionId: null,
+      profileId: "profile-one",
+      role: "reward",
+      scope: "synthetic_smoke",
+      status: "failed",
+      taskset: { id: "taskset-one", revision: 1, contentHash: HASH },
+      preferenceDatasetRelease: ref("preference-dataset-d0"),
+      recipeRelease: ref("reward-recipe-one"),
+      destinationId: "openpond_managed",
+      quote: { maximumSpendUsd: 2, hourlyCostUsd: null },
+      managedRunId: null,
+      progress: { completedSteps: 0, totalSteps: 1, latestLoss: null },
+      receipt: null,
+      qualificationReport: null,
+      accruedSpendUsd: null,
+      failureOwner: "authoring",
+      failure: "legacy failure",
+      startedAt: "2026-08-25T12:00:00.000Z",
+      completedAt: "2026-08-25T12:00:01.000Z",
+      updatedAt: "2026-08-25T12:00:01.000Z",
+    });
+    expect(historical.tasksetRelease).toEqual({
+      id: historical.taskset.id,
+      contentHash: historical.taskset.contentHash,
+    });
+  });
+
   it("pins an exact learned Reward Model into a GRPO recipe", () => {
     const base = managedRftRecipe();
     const recipe = RftRecipeSchema.parse({

@@ -37,6 +37,7 @@ import { createTrainingModelBindingService } from "./training-model-binding-serv
 import { createTrainingPlanLifecycleService } from "./training-plan-lifecycle-service.js";
 import {
   buildManagedRewardModelLaunchInput,
+  managedRewardModelIdempotencyKey,
   type ManagedRewardModelBase,
 } from "./reward-model-launch-input.js";
 import { projectQualifiedRewardModel } from "./reward-model-qualification-projection.js";
@@ -289,7 +290,10 @@ export function createTrainingService(deps: {
         deps.store.listTaskAttemptArtifacts({ tasksetId: input.taskset.id }),
       ]);
       const request = await buildManagedRewardModelLaunchInput({
-        idempotencyKey: `openpond-reward-model:${recipeHash}`.slice(0, 191),
+        idempotencyKey: managedRewardModelIdempotencyKey({
+          runId: prepared.id,
+          recipeHash,
+        }),
         name: `OpenPond Managed Reward · ${input.rewardModelId}`.slice(0, 191),
         sourceRunRef: `openpond:reward-model-run:${prepared.id}`,
         taskset: prepared.taskset,

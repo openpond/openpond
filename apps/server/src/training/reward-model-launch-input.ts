@@ -27,6 +27,16 @@ export type ManagedRewardModelBase = {
   gated: boolean;
 };
 
+export function managedRewardModelIdempotencyKey(input: {
+  runId: string;
+  recipeHash: string;
+}): string {
+  return `openpond-reward-model:${contentHash({
+    runId: input.runId,
+    recipeHash: input.recipeHash,
+  }).slice(0, 48)}`;
+}
+
 export async function buildManagedRewardModelLaunchInput(input: {
   idempotencyKey: string;
   name: string;
