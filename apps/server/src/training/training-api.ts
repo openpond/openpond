@@ -259,6 +259,7 @@ export function createTrainingApi(deps: {
             ...candidate.policyVisibleContext,
             outputContract: taskset.metadata.tasksetOutputContract ?? null,
           },
+          rewardInput: candidate.input,
           expectedText: null,
           artifactRenderer: candidate.expectedOutput?.artifactRenderer ?? null,
         }));
