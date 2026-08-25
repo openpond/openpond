@@ -37,7 +37,8 @@ describe("PreferenceComparisonReview", () => {
     expect(html).toContain("Sync candidate batch");
     expect(html).toContain("Run next model review");
     expect(html).toContain("Save calibration report");
-    expect(html).toContain("Open next comparison");
+    expect(html).toContain("Open next review");
+    expect(html).toContain("My review queue");
     expect(html).toContain("Prefer coherent, polished outputs.");
   });
 });

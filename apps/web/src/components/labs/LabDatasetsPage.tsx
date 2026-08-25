@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import type { ChangeEvent } from "react";
 import type {
   ChatModelRef,
@@ -24,19 +24,6 @@ import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
 
 const PAGE_SIZE = 10;
-const MANAGED_REWARD_MODEL_BASE = {
-  source: "huggingface" as const,
-  repoId: "google/siglip-base-patch16-224",
-  revision: "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
-  configHash: "cd85b3d28829722820bcb89a2cfbb4160e55fd359249a3044da724166a8d9688",
-  tokenizerHash: "c6e405cb7c670d56636a9402c81023a55bc6c3c53d89cf02b92f5c5005bfe920",
-  licenseId: "apache-2.0",
-  gated: false,
-};
-const MANAGED_REWARD_PROCESSOR = {
-  id: "siglip-processor-7fd15f06",
-  contentHash: "d11ccb80f15d358a11bdb070e92e2d889005874b7db15823d5f10d9b2533b14a",
-};
 type TasksetListItem =
   | { kind: "draft"; value: TasksetDraft }
   | { kind: "taskset"; value: Taskset };
@@ -230,7 +217,7 @@ export function LabDatasetsPage({
         ) : detailTab === "attempts" ? (
           <TasksetAttempts taskset={selected} training={training} />
         ) : detailTab === "versions" ? (
-          <TasksetVersions taskset={selected} />
+          <TasksetVersions state={state} taskset={selected} />
         ) : (
           <>
             <LabModelDataset
@@ -515,48 +502,6 @@ function FixtureCollectionImporter({
         tasksetId: taskset.id,
         rewardModelId: `reward-model-${taskset.id}-smoke`,
         preferenceDatasetReleaseId: dataset.id,
-        managedBaseModel: MANAGED_REWARD_MODEL_BASE,
-        recipe: {
-          schemaVersion: "openpond.rewardModelRecipe.v1",
-          method: "reward_model",
-          parameterization: "lora_with_scalar_head",
-          runScope: "synthetic_smoke",
-          baseModel: {
-            id: MANAGED_REWARD_MODEL_BASE.repoId,
-            revision: MANAGED_REWARD_MODEL_BASE.revision,
-            tokenizerRevision: MANAGED_REWARD_MODEL_BASE.revision,
-            processorRevision: MANAGED_REWARD_MODEL_BASE.revision,
-            chatTemplateHash: MANAGED_REWARD_MODEL_BASE.tokenizerHash,
-          },
-          tasksetRelease: {
-            id: taskset.id,
-            contentHash: taskset.contentHash,
-          },
-          preferenceDatasetRelease: dataset,
-          processorRelease: MANAGED_REWARD_PROCESSOR,
-          lora: {
-            rank: 4,
-            alpha: 8,
-            dropout: 0,
-            targetModules: ["q_proj", "k_proj", "v_proj", "out_proj"],
-          },
-          heads: { scalar: "pooled_hidden_state_linear", bucket: "three_class" },
-          loss: { ranking: "bradley_terry", rankingWeight: 1, bucketWeight: 0.25, tieWeight: 0.1 },
-          optimizer: {
-            learningRate: 0.0001,
-            maxSteps: 1,
-            batchSize: 2,
-            gradientAccumulationSteps: 1,
-            seed: 17,
-            checkpointEverySteps: 1,
-          },
-          resourceLimits: {
-            wallTimeMs: 20 * 60 * 1_000,
-            maxExamples: 8,
-            maxImagePixels: 512 * 512,
-            maximumSpendUsd: 2,
-          },
-        },
       });
       setMessage(run
         ? `Reward Model Run ${run.id} is ${run.status}. It is fixture-only and capped at $2.`
@@ -611,6 +556,7 @@ function TasksetAttempts({
   const [operations, setOperations] = useState<TasksetOperationalState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAttemptId, setSelectedAttemptId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -634,7 +580,12 @@ function TasksetAttempts({
   if (!operations?.attempts.length) {
     return <div className="labs-table-empty">No Attempts have been recorded for this Taskset.</div>;
   }
-  const artifactsByAttempt = groupCount(operations.artifacts.map((artifact) => artifact.attemptId));
+  const artifactsByAttempt = new Map<string, TasksetOperationalState["artifacts"]>();
+  for (const artifact of operations.artifacts) {
+    const current = artifactsByAttempt.get(artifact.attemptId) ?? [];
+    current.push(artifact);
+    artifactsByAttempt.set(artifact.attemptId, current);
+  }
   const gradeByAttempt = new Map(operations.grades.map((grade) => [grade.attemptId, grade]));
   const distinctOutputs = new Set(operations.attempts.map((attempt) => JSON.stringify(attempt.output))).size;
   return (
@@ -657,15 +608,74 @@ function TasksetAttempts({
         <tbody>
           {operations.attempts.map((attempt) => {
             const grade = gradeByAttempt.get(attempt.id);
+            const artifacts = artifactsByAttempt.get(attempt.id) ?? [];
+            const expanded = selectedAttemptId === attempt.id;
             return (
-              <tr key={attempt.id}>
-                <td><code>{attempt.id}</code></td>
-                <td>{attempt.taskId}</td>
-                <td>{attempt.infrastructureError ? "Infrastructure error" : "Completed"}</td>
-                <td>{attemptEvidenceLabel(attempt)}</td>
-                <td>{grade?.score == null ? "—" : grade.score.toFixed(3)}</td>
-                <td>{artifactsByAttempt.get(attempt.id) ?? 0}</td>
-              </tr>
+              <Fragment key={attempt.id}>
+                <tr>
+                  <td>
+                    <button
+                      aria-expanded={expanded}
+                      className="labs-workproduct-link"
+                      type="button"
+                      onClick={() => setSelectedAttemptId(expanded ? null : attempt.id)}
+                    >
+                      <code>{attempt.id}</code>
+                    </button>
+                  </td>
+                  <td>{attempt.taskId}</td>
+                  <td>{attempt.infrastructureError ? "Infrastructure error" : "Completed"}</td>
+                  <td>{attemptEvidenceLabel(attempt)}</td>
+                  <td>{grade?.score == null ? "—" : grade.score.toFixed(3)}</td>
+                  <td>{artifacts.length}</td>
+                </tr>
+                {expanded ? (
+                  <tr className="labs-attempt-detail-row">
+                    <td colSpan={6}>
+                      <dl className="training-configuration-list">
+                        <div><dt>Split</dt><dd>{attempt.split}</dd></div>
+                        <div><dt>Seed</dt><dd>{attempt.seed}</dd></div>
+                        <div><dt>Latency</dt><dd>{attempt.latencyMs} ms</dd></div>
+                        <div><dt>Cost</dt><dd>{attempt.costUsd == null ? "—" : `$${attempt.costUsd.toFixed(4)}`}</dd></div>
+                        <div><dt>Reward eligible</dt><dd>{grade ? (grade.rewardEligible ? "Yes" : "No") : "Not graded"}</dd></div>
+                        <div><dt>Grade</dt><dd>{grade ? (grade.passed ? "Passed" : "Failed") : "Not graded"}</dd></div>
+                      </dl>
+                      <h3>Structured output</h3>
+                      <pre>{JSON.stringify(attempt.output, null, 2)}</pre>
+                      {grade?.components.length ? (
+                        <>
+                          <h3>Grader evidence</h3>
+                          <div className="training-table-wrap">
+                            <table className="training-data-table">
+                              <thead><tr><th>Grader</th><th>Score</th><th>Gate</th><th>Feedback</th></tr></thead>
+                              <tbody>{grade.components.map((component) => (
+                                <tr key={`${attempt.id}:${component.graderId}`}>
+                                  <td>{component.graderId}</td>
+                                  <td>{component.score.toFixed(3)}</td>
+                                  <td>{component.hardGate ? (component.passed ? "Passed" : "Failed") : "Advisory"}</td>
+                                  <td>{component.feedback ?? "—"}</td>
+                                </tr>
+                              ))}</tbody>
+                            </table>
+                          </div>
+                        </>
+                      ) : null}
+                      {artifacts.length ? (
+                        <>
+                          <h3>Artifacts</h3>
+                          <ul>
+                            {artifacts.map((artifact) => (
+                              <li key={artifact.id}>
+                                <code>{artifact.path}</code> · {artifact.mediaType ?? artifact.kind} · {artifact.sizeBytes.toLocaleString()} bytes
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             );
           })}
         </tbody>
@@ -689,17 +699,62 @@ function attemptEvidenceLabel(attempt: TasksetOperationalState["attempts"][numbe
   return attempt.modelRef ? "Model attempt" : "Recorded attempt";
 }
 
-function TasksetVersions({ taskset }: { taskset: Taskset }) {
+function TasksetVersions({
+  state,
+  taskset,
+}: {
+  state: TrainingStateResponse | null;
+  taskset: Taskset;
+}) {
+  const policyVersions = (state?.modelVersions ?? [])
+    .filter((version) => version.taskset.id === taskset.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const rewardVersions = (state?.rewardModelVersions ?? [])
+    .filter((version) => version.taskset.id === taskset.id)
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   return (
-    <section className="labs-dataset-run-intro">
-      <h2>Published version</h2>
-      <dl className="labs-inline-facts">
-        <div><dt>Revision</dt><dd>{taskset.revision}</dd></div>
-        <div><dt>Content hash</dt><dd><code>{taskset.contentHash}</code></dd></div>
-        <div><dt>Updated</dt><dd>{formatCompactDate(taskset.updatedAt)}</dd></div>
-      </dl>
-      <p>Runs pin this immutable revision. Editing starts a new draft and publishes a new version.</p>
-    </section>
+    <>
+      <section className="labs-dataset-run-intro">
+        <h2>Taskset revision</h2>
+        <dl className="labs-inline-facts">
+          <div><dt>Revision</dt><dd>{taskset.revision}</dd></div>
+          <div><dt>Content hash</dt><dd><code>{taskset.contentHash}</code></dd></div>
+          <div><dt>Updated</dt><dd>{formatCompactDate(taskset.updatedAt)}</dd></div>
+        </dl>
+        <p>Runs pin this immutable revision. Editing starts a new draft and publishes a new revision.</p>
+      </section>
+      <section className="labs-dataset-run-intro">
+        <h2>Model outputs from runs</h2>
+        <p>Policy and Reward Model versions are created by successful Runs. They are not assigned to the Taskset itself.</p>
+        {policyVersions.length || rewardVersions.length ? (
+          <div className="training-table-wrap">
+            <table className="training-data-table">
+              <thead><tr><th>Version</th><th>Role</th><th>Status</th><th>Scope</th><th>Created</th></tr></thead>
+              <tbody>
+                {rewardVersions.map((version) => (
+                  <tr key={version.id}>
+                    <td><code>{version.id}</code></td>
+                    <td>Reward</td>
+                    <td>{statusLabel(version.status)}</td>
+                    <td>{statusLabel(version.scope)}</td>
+                    <td>{formatCompactDate(version.createdAt)}</td>
+                  </tr>
+                ))}
+                {policyVersions.map((version) => (
+                  <tr key={version.id}>
+                    <td><code>{version.id}</code></td>
+                    <td>Policy</td>
+                    <td>{statusLabel(version.status)}</td>
+                    <td>{statusLabel(version.kind)}</td>
+                    <td>{formatCompactDate(version.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : <p className="labs-detail-copy">No Model versions have been produced from this Taskset yet.</p>}
+      </section>
+    </>
   );
 }
 
@@ -897,11 +952,6 @@ function formatCompactDate(value: string): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function groupCount(values: string[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-  return counts;
-}
 
 function DatasetPagination({
   page,

@@ -487,8 +487,6 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       tasksetId: string;
       rewardModelId: string;
       preferenceDatasetReleaseId: string;
-      recipe: unknown;
-      managedBaseModel: unknown;
     }) => mutate<TrainingStateResponse["rewardModelRuns"][number]>(
       "launch-reward-model-run",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/reward-model-runs`,

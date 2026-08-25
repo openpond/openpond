@@ -418,8 +418,6 @@ export function LabsRoute({
   ) {
     setModelEditorSection("run");
     setSelectedKey(null);
-    setSelectedDatasetId(null);
-    setActiveTab("models");
     onNewModel(initialTasksetId, learnedPreferenceReward);
   }
 
@@ -444,6 +442,61 @@ export function LabsRoute({
   }
   const closeSelectedWorkproduct = useCallback(() => setSelectedKey(null), []);
 
+  function renderLaunchEditor(returnToTasksetId: string | null) {
+    const request = training.launchRequest;
+    const payload = training.training.payload;
+    if (!request || !payload) return null;
+    return (
+      <ModelRunEditorPage
+        connection={profileView.connection}
+        initialObjective={request.objective}
+        initialTasksetId={request.initialTasksetId}
+        initialLearnedPreferenceReward={request.learnedPreferenceReward}
+        profileId={profileId}
+        training={training.training}
+        onCancel={() => {
+          training.onLaunchHandled(request.id);
+        }}
+        onFinished={async (modelId, tasksetId) => {
+          training.onSelectedTasksetIdChange(tasksetId);
+          training.onDetailTasksetIdChange(tasksetId);
+          training.onLaunchHandled(request.id);
+          if (returnToTasksetId) {
+            setSelectedDatasetId(tasksetId);
+            setActiveTab("tasksets");
+          } else {
+            setSelectedKey(workproductKey("model", modelId));
+            setActiveTab("models");
+          }
+          await createImprove.refresh();
+        }}
+        onNameChange={setModelEditorName}
+        onSectionChange={setModelEditorSection}
+        onSaved={async (modelId) => {
+          training.onLaunchHandled(request.id);
+          if (returnToTasksetId) {
+            setSelectedDatasetId(returnToTasksetId);
+            setActiveTab("tasksets");
+          } else {
+            setSelectedKey(workproductKey("model", modelId));
+            setActiveTab("models");
+          }
+        }}
+        onOpenProviderSettings={training.onOpenProviderSettings}
+        renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
+          <TasksetDraftEditor
+            defaultModel={training.defaultModel}
+            training={training.training}
+            onBack={onUseExistingDataset}
+            onOpenChat={openDatasetBuilderChat}
+            onPublished={onCreated}
+            onUseExistingTaskset={onUseExistingDataset}
+          />
+        )}
+      />
+    );
+  }
+
   return (
     <LabsView
       activeTab={activeTab}
@@ -456,7 +509,9 @@ export function LabsRoute({
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
     >
-      {activeTab === "tasksets" ? (
+      {activeTab === "tasksets" && training.launchRequest ? (
+        renderLaunchEditor(selectedDatasetId)
+      ) : activeTab === "tasksets" ? (
         datasetCreateRoute === "build" ? (
           <TasksetDraftEditor
             defaultModel={training.defaultModel}
@@ -500,44 +555,8 @@ export function LabsRoute({
           onError={profileView.onError}
           onOpenSourceSession={onOpenRunConversation}
         />
-      ) : training.launchRequest && training.training.payload ? (
-        <ModelRunEditorPage
-          connection={profileView.connection}
-          initialObjective={training.launchRequest.objective}
-          initialTasksetId={training.launchRequest.initialTasksetId}
-          initialLearnedPreferenceReward={training.launchRequest.learnedPreferenceReward}
-          profileId={profileId}
-          training={training.training}
-          onCancel={() => {
-            training.onLaunchHandled(training.launchRequest!.id);
-          }}
-          onFinished={async (modelId, tasksetId) => {
-            training.onSelectedTasksetIdChange(tasksetId);
-            training.onDetailTasksetIdChange(tasksetId);
-            training.onLaunchHandled(training.launchRequest!.id);
-            setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("models");
-            await createImprove.refresh();
-          }}
-          onNameChange={setModelEditorName}
-          onSectionChange={setModelEditorSection}
-          onSaved={async (modelId) => {
-            training.onLaunchHandled(training.launchRequest!.id);
-            setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("models");
-          }}
-          onOpenProviderSettings={training.onOpenProviderSettings}
-          renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
-            <TasksetDraftEditor
-              defaultModel={training.defaultModel}
-              training={training.training}
-              onBack={onUseExistingDataset}
-              onOpenChat={openDatasetBuilderChat}
-              onPublished={onCreated}
-              onUseExistingTaskset={onUseExistingDataset}
-            />
-          )}
-        />
+      ) : training.launchRequest ? (
+        renderLaunchEditor(null)
       ) : selected ? (
         <LabWorkproductDetail
           connection={profileView.connection}

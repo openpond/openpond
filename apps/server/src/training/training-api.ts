@@ -7,7 +7,6 @@ import {
   DatasetCatalogResponseSchema,
   ModelProjectSchema,
   ModelRunDraftSchema,
-  RewardModelRecipeSchema,
   nextCreateImproveRunRevision,
   PatchTaskCandidateRequestSchema,
   RunTaskMinerRequestSchema,
@@ -44,6 +43,10 @@ import type { createTaskCreatorService } from "./task-creator.js";
 import type { createTaskEvaluationService } from "./evaluation-service.js";
 import type { createTaskMinerService } from "./task-miner.js";
 import type { createTrainingService } from "./training-service.js";
+import {
+  MANAGED_REWARD_MODEL_PROFILE,
+  managedSyntheticRewardSmokeRecipe,
+} from "./managed-reward-model-recipes.js";
 import type { createTrainingChatSearchService } from "./training-chat-search.js";
 import type { createDatasetArtifactService } from "./dataset-artifact-service.js";
 import type { createDatasetImportService } from "./dataset-imports/import-service.js";
@@ -395,13 +398,17 @@ export function createTrainingApi(deps: {
         .listPreferenceDatasets(tasksetId))
         .find((candidate) => candidate.id === datasetId);
       if (!dataset) throw new Error("Preference Dataset release was not found for this Taskset.");
+      const recipe = managedSyntheticRewardSmokeRecipe({
+        tasksetRelease: { id: taskset.id, contentHash: taskset.contentHash },
+        preferenceDatasetRelease: { id: dataset.id, contentHash: dataset.contentHash },
+      });
       return deps.training.launchRewardModel({
         id: requiredString(input.id, "id"),
         rewardModelId: requiredString(input.rewardModelId, "rewardModelId"),
         taskset,
         dataset,
-        recipe: RewardModelRecipeSchema.parse(input.recipe),
-        managedBaseModel: managedRewardModelBase(input.managedBaseModel),
+        recipe,
+        managedBaseModel: MANAGED_REWARD_MODEL_PROFILE,
       });
     }
     if (action === "learned_preference_reward_binding") {
@@ -1747,35 +1754,6 @@ function preferenceRatings(value: unknown): Record<string, "love" | "like" | "re
     }
     return [attemptId, rating];
   }));
-}
-
-function managedRewardModelBase(value: unknown): {
-  source: "huggingface";
-  repoId: string;
-  revision: string;
-  configHash: string;
-  tokenizerHash: string;
-  licenseId: string;
-  gated: boolean;
-} {
-  const input = record(value);
-  const revision = requiredString(input.revision, "managedBaseModel.revision");
-  const configHash = requiredString(input.configHash, "managedBaseModel.configHash");
-  const tokenizerHash = requiredString(input.tokenizerHash, "managedBaseModel.tokenizerHash");
-  if (!/^[a-f0-9]{40}$/.test(revision)) throw new Error("managedBaseModel.revision must be an immutable commit SHA.");
-  if (!/^[a-f0-9]{64}$/.test(configHash) || !/^[a-f0-9]{64}$/.test(tokenizerHash)) {
-    throw new Error("managedBaseModel hashes must be SHA-256 values.");
-  }
-  if (input.source !== "huggingface") throw new Error("managedBaseModel.source must be huggingface.");
-  return {
-    source: "huggingface",
-    repoId: requiredString(input.repoId, "managedBaseModel.repoId"),
-    revision,
-    configHash,
-    tokenizerHash,
-    licenseId: requiredString(input.licenseId, "managedBaseModel.licenseId"),
-    gated: input.gated === true,
-  };
 }
 
 function datasetBuildIntent(value: unknown): TaskCreationRequest["buildIntent"] {

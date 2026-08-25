@@ -57,6 +57,7 @@ export function PreferenceComparisonReview({
   training: ReturnType<typeof useTraining>;
 }) {
   const [review, setReview] = useState<Awaited<ReturnType<typeof training.actions.nextPreferenceComparison>>>(null);
+  const [queueChecked, setQueueChecked] = useState(false);
   const [startedAt, setStartedAt] = useState<string | null>(null);
   const [ratings, setRatings] = useState<Record<string, PreferenceRating>>({});
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
@@ -77,12 +78,26 @@ export function PreferenceComparisonReview({
     for (const url of Object.values(previewUrls)) URL.revokeObjectURL(url);
   }, [previewUrls]);
 
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      training.actions.preferenceCalibrationStatus(tasksetId, reviewerKey),
+      training.actions.listPreferenceDatasets(tasksetId),
+    ]).then(([nextCalibration, nextDatasets]) => {
+      if (!active) return;
+      setCalibration(nextCalibration);
+      setDatasets(nextDatasets);
+    });
+    return () => { active = false; };
+  }, [reviewerKey, tasksetId, training.actions]);
+
   async function loadNext(): Promise<void> {
     for (const url of Object.values(previewUrls)) URL.revokeObjectURL(url);
     setPreviewUrls({});
     setRatings({});
     setReason("");
     const next = await training.actions.nextPreferenceComparison(tasksetId, reviewerKey);
+    setQueueChecked(true);
     setReview(next);
     setStartedAt(next ? new Date().toISOString() : null);
     if (!next) return;
@@ -198,101 +213,23 @@ export function PreferenceComparisonReview({
   }
 
   return (
-    <DetailSection title="Preference review">
+    <DetailSection title="Review workspace">
+      <h3>My review queue</h3>
       <p className="labs-detail-copy">
-        Rate every candidate Love, Like, or Reject. These are multiple Attempts for one scenario—not separate scenario definitions—and your choices become immutable comparison evidence.
+        Open one blinded assignment, rate every candidate Love, Like, or Reject, and submit one immutable review. Each submission is retained separately by reviewer and assignment.
       </p>
-      <div className="labs-dataset-detail-actions">
-        <button className="training-button secondary" type="button" onClick={() => void refreshDatasets()}>
-          Refresh preference datasets
-        </button>
-      </div>
-      {datasets ? (
-        datasets.length ? (
-          <div className="training-table-wrap">
-            <table className="training-data-table">
-              <thead><tr><th>Dataset release</th><th>Evidence</th><th>Groups</th><th>Pairs</th></tr></thead>
-              <tbody>{datasets.map((dataset) => (
-                <tr key={dataset.id}>
-                  <td><code>{dataset.id}</code></td>
-                  <td>{dataset.authority === "human" ? "Human held-out" : "Fixture smoke only"}</td>
-                  <td>{dataset.groups.length} ({dataset.groups.filter((group) => group.partition === "reward_train").length} train / {dataset.groups.filter((group) => group.partition === "reward_validation").length} validation)</td>
-                  <td>{dataset.derivedPairs.length}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        ) : <p className="labs-detail-copy">No immutable preference dataset has been materialized yet.</p>
-      ) : null}
-      <details className="labs-dataset-advanced-details">
-        <summary>Advanced calibration and candidate generation</summary>
-      <p className="labs-detail-copy">
-        One managed batch creates one four-candidate human assignment. Repeat the generate, sync, and rank flow until the human target is reached; the target does not generate or approve comparisons automatically.
-      </p>
-      <div className="training-question-answer">
-        <textarea
-          aria-label="Preference calibration rubric"
-          placeholder="Immutable comparison rubric"
-          value={rubric}
-          onChange={(event) => setRubric(event.target.value)}
-        />
-        <input
-          aria-label="Minimum calibration samples"
-          min={1}
-          type="number"
-          value={minimumSamples}
-          onChange={(event) => setMinimumSamples(Math.max(1, Number.parseInt(event.target.value || "1", 10)))}
-        />
-        <div className="labs-dataset-detail-actions">
-          <button
-            className="training-button"
-            disabled={!rubric.trim() || training.busyAction !== null || calibrationJobId !== null}
-            type="button"
-            onClick={() => void startCalibrationBatch()}
-          >
-            Generate 1 comparison (4 candidates)
-          </button>
-          <button
-            className="training-button secondary"
-            disabled={!calibrationJobId || training.busyAction !== null}
-            type="button"
-            onClick={() => void syncCalibrationBatch()}
-          >
-            Sync candidate batch
-          </button>
-          <button className="training-button secondary" type="button" onClick={() => void refreshCalibration()}>
-            Refresh calibration
-          </button>
-          <button
-            className="training-button secondary"
-            disabled={!rubric.trim() || training.busyAction !== null || !calibration?.humanCompleted}
-            type="button"
-            onClick={() => void runNextModelReview()}
-          >
-            Run next model review
-          </button>
-          <button
-            className="training-button"
-            disabled={!calibration?.readyToFinalize || training.busyAction !== null}
-            type="button"
-            onClick={() => void finalizeCalibration()}
-          >
-            Save calibration report
-          </button>
-        </div>
-      </div>
       {calibration ? (
-        <p className="labs-detail-copy" role="status">
-          Human {calibration.humanCompleted}/{calibration.minimumSamples ?? 0} · Model {calibration.canonicalModelCompleted}/{calibration.minimumSamples ?? 0} · Swapped {calibration.swappedModelCompleted}/{calibration.minimumSamples ?? 0}
-          {calibration.latestReport ? ` · ${calibration.latestReport.passed ? "Passed" : "Failed"} (${Math.round(calibration.latestReport.orderAgreement * 100)}% order, ${Math.round(calibration.latestReport.tieAgreement * 100)}% ties, ${Math.round(calibration.latestReport.orderSwapAgreement * 100)}% swap)` : ""}
+        <p className="labs-detail-copy">
+          {calibration.humanCompleted} human review{calibration.humanCompleted === 1 ? "" : "s"} saved · target {calibration.minimumSamples ?? defaultMinimumSamples}
         </p>
       ) : null}
-      {calibrationMessage ? <p className="labs-detail-copy" role="status">{calibrationMessage}</p> : null}
-      </details>
       {review === null ? (
-        <button className="training-button secondary" type="button" onClick={() => void loadNext()}>
-          Open next comparison
-        </button>
+        <>
+          <button className="training-button" type="button" onClick={() => void loadNext()}>
+            {queueChecked ? "Check for another review" : "Open next review"}
+          </button>
+          {queueChecked ? <p className="labs-detail-copy">No queued review is currently available.</p> : null}
+        </>
       ) : (
         <>
           {review.taskPrompt ? <pre className="labs-detail-copy">{JSON.stringify(review.taskPrompt, null, 2)}</pre> : null}
@@ -360,6 +297,94 @@ export function PreferenceComparisonReview({
           </div>
         </>
       )}
+      <h3>Saved review evidence</h3>
+      <div className="labs-dataset-detail-actions">
+        <button className="training-button secondary" type="button" onClick={() => void refreshDatasets()}>
+          Refresh preference datasets
+        </button>
+      </div>
+      {datasets ? (
+        datasets.length ? (
+          <div className="training-table-wrap">
+            <table className="training-data-table">
+              <thead><tr><th>Dataset release</th><th>Evidence</th><th>Groups</th><th>Pairs</th></tr></thead>
+              <tbody>{datasets.map((dataset) => (
+                <tr key={dataset.id}>
+                  <td><code>{dataset.id}</code></td>
+                  <td>{dataset.authority === "human" ? "Human held-out" : "Fixture smoke only"}</td>
+                  <td>{dataset.groups.length} ({dataset.groups.filter((group) => group.partition === "reward_train").length} train / {dataset.groups.filter((group) => group.partition === "reward_validation").length} validation)</td>
+                  <td>{dataset.derivedPairs.length}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        ) : <p className="labs-detail-copy">No immutable preference dataset has been materialized yet.</p>
+      ) : null}
+      <details className="labs-dataset-advanced-details">
+        <summary>Prepare review batches and calibrate a judge</summary>
+      <p className="labs-detail-copy">
+        One managed batch creates one four-candidate human assignment. Repeat the generate, sync, and rank flow until the human target is reached; the target does not generate or approve comparisons automatically.
+      </p>
+      <div className="training-question-answer">
+        <textarea
+          aria-label="Preference calibration rubric"
+          placeholder="Immutable comparison rubric"
+          value={rubric}
+          onChange={(event) => setRubric(event.target.value)}
+        />
+        <input
+          aria-label="Minimum calibration samples"
+          min={1}
+          type="number"
+          value={minimumSamples}
+          onChange={(event) => setMinimumSamples(Math.max(1, Number.parseInt(event.target.value || "1", 10)))}
+        />
+        <div className="labs-dataset-detail-actions">
+          <button
+            className="training-button"
+            disabled={!rubric.trim() || training.busyAction !== null || calibrationJobId !== null}
+            type="button"
+            onClick={() => void startCalibrationBatch()}
+          >
+            Generate 1 comparison (4 candidates)
+          </button>
+          <button
+            className="training-button secondary"
+            disabled={!calibrationJobId || training.busyAction !== null}
+            type="button"
+            onClick={() => void syncCalibrationBatch()}
+          >
+            Sync candidate batch
+          </button>
+          <button className="training-button secondary" type="button" onClick={() => void refreshCalibration()}>
+            Refresh calibration
+          </button>
+          <button
+            className="training-button secondary"
+            disabled={!rubric.trim() || training.busyAction !== null || !calibration?.humanCompleted}
+            type="button"
+            onClick={() => void runNextModelReview()}
+          >
+            Run next model review
+          </button>
+          <button
+            className="training-button"
+            disabled={!calibration?.readyToFinalize || training.busyAction !== null}
+            type="button"
+            onClick={() => void finalizeCalibration()}
+          >
+            Save calibration report
+          </button>
+        </div>
+      </div>
+      {calibration ? (
+        <p className="labs-detail-copy" role="status">
+          Human {calibration.humanCompleted}/{calibration.minimumSamples ?? 0} · Model {calibration.canonicalModelCompleted}/{calibration.minimumSamples ?? 0} · Swapped {calibration.swappedModelCompleted}/{calibration.minimumSamples ?? 0}
+          {calibration.latestReport ? ` · ${calibration.latestReport.passed ? "Passed" : "Failed"} (${Math.round(calibration.latestReport.orderAgreement * 100)}% order, ${Math.round(calibration.latestReport.tieAgreement * 100)}% ties, ${Math.round(calibration.latestReport.orderSwapAgreement * 100)}% swap)` : ""}
+        </p>
+      ) : null}
+      {calibrationMessage ? <p className="labs-detail-copy" role="status">{calibrationMessage}</p> : null}
+      </details>
     </DetailSection>
   );
 }

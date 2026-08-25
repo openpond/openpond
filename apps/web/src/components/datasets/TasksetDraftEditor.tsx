@@ -256,7 +256,6 @@ type SectionProps = {
 };
 
 function OverviewSection({ draft, disabled, onChange }: SectionProps) {
-  const methods = ["none", "sft", "dpo", "grpo", "ppo"] as const;
   return (
     <EditorSection
       title="What should this Taskset measure?"
@@ -305,28 +304,11 @@ function OverviewSection({ draft, disabled, onChange }: SectionProps) {
           </select>
         </Field>
       </div>
-      <fieldset className="taskset-draft-checks">
-        <legend>Compatible training methods</legend>
-        {methods.map((method) => (
-          <label key={method}>
-            <input
-              checked={draft.capabilities.compatibleMethods.includes(method)}
-              disabled={disabled}
-              type="checkbox"
-              onChange={(event) => {
-                const compatibleMethods = event.target.checked
-                  ? [...draft.capabilities.compatibleMethods, method]
-                  : draft.capabilities.compatibleMethods.filter((value) => value !== method);
-                onChange({
-                  ...draft,
-                  capabilities: { ...draft.capabilities, compatibleMethods },
-                });
-              }}
-            />
-            {method.toUpperCase()}
-          </label>
-        ))}
-      </fieldset>
+      <dl className="training-configuration-list">
+        <div><dt>Execution</dt><dd>{draft.capabilities.taskKind.replaceAll("_", " ")}</dd></div>
+        <div><dt>Training</dt><dd>Selected and validated when a run is created</dd></div>
+        <div><dt>Taskset ID</dt><dd>{draft.id}</dd></div>
+      </dl>
     </EditorSection>
   );
 }
@@ -419,7 +401,7 @@ function ScenariosSection({ draft, disabled, onChange }: SectionProps) {
               />
               <JsonObjectField
                 disabled={disabled}
-                label="Expected output JSON"
+                label="Reference output JSON (optional)"
                 nullable
                 value={task.expectedOutput}
                 onChange={(expectedOutput) => updateTask(index, { ...task, expectedOutput })}

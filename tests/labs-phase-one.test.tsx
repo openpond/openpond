@@ -737,7 +737,8 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Taskset checks");
+    expect(markup).toContain("Evaluation metrics");
+    expect(markup).toContain("Graders and reward gates");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
   });
