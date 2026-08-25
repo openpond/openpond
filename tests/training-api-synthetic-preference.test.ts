@@ -8,7 +8,6 @@ import { createTrainingApi } from "../apps/server/src/training/training-api.js";
 import { tasksetFixture } from "./helpers/training-fixtures.js";
 
 const HASH = "a".repeat(64);
-const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6N4QAAAAASUVORK5CYII=";
 
 function fixtureTaskset(): Taskset {
   const source = tasksetFixture({ ready: true });
@@ -28,7 +27,7 @@ function fixtureTaskset(): Taskset {
 }
 
 describe("synthetic preference collection API", () => {
-  it("routes C0 artifacts through grades and canonical comparison receipts before D0", async () => {
+  it("routes structured C0 attempts through grades and canonical comparison receipts before D0", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-c0-api-"));
     const taskset = fixtureTaskset();
     const artifacts = new Map<string, any[]>();
@@ -105,7 +104,6 @@ describe("synthetic preference collection API", () => {
       candidates: ["love", "like", "reject", "reject"].map((label, candidateIndex) => ({
         id: `candidate-${groupIndex}-${candidateIndex}`,
         output: JSON.stringify({ selection: `${groupIndex}-${candidateIndex}` }),
-        imageDataUrl: PNG,
         label,
       })),
     }));
@@ -127,7 +125,7 @@ describe("synthetic preference collection API", () => {
       expect(result.collection.attempts).toHaveLength(8);
       expect(assignments).toHaveLength(2);
       expect(assignments.every((assignment) => assignment.candidates.length === 4)).toBe(true);
-      expect(assignments.flatMap((assignment) => assignment.candidates).every((candidate) => candidate.visibleArtifactIds.length === 1)).toBe(true);
+      expect(assignments.flatMap((assignment) => assignment.candidates).every((candidate) => candidate.visibleArtifactIds.length === 0)).toBe(true);
       expect(receipts).toHaveLength(2);
       expect(datasets).toEqual([expect.objectContaining({
         authority: "synthetic_fixture",

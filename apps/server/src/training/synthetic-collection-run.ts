@@ -25,7 +25,7 @@ export const SyntheticCollectionRunRequestSchema = z.object({
     candidates: z.array(z.object({
       id: z.string().trim().min(1).max(240),
       output: z.string().trim().min(1).max(32_000),
-      imageDataUrl: ImageDataUrlSchema,
+      imageDataUrl: ImageDataUrlSchema.optional(),
       label: z.enum(["love", "like", "reject"]),
     }).strict()).length(4),
   }).strict()).min(2).max(16),
@@ -55,10 +55,11 @@ export const SyntheticCollectionRunRequestSchema = z.object({
 export type SyntheticCollectionRunRequest = z.infer<typeof SyntheticCollectionRunRequestSchema>;
 
 /**
- * Fixture-only C0 materialization. It creates normal Task Attempts and PNG
- * artifacts so D0/RM0 use the same storage and review path as a human or
- * managed collector. Labels are retained as fixture metadata only; the
- * preference service later turns them into authoritative synthetic receipts.
+ * Fixture-only C0 materialization. It creates normal Task Attempts from
+ * compact structured output. An optional preview image may be retained for a
+ * visual review protocol, but learned-reward training never depends on it.
+ * Labels are fixture metadata only; the preference service later turns them
+ * into authoritative synthetic receipts.
  */
 export async function materializeSyntheticCollectionRun(input: {
   store: SqliteStore;
@@ -110,23 +111,24 @@ export async function materializeSyntheticCollectionRun(input: {
           syntheticOnly: true,
         },
       });
-      const bytes = Buffer.from(candidate.imageDataUrl.slice("data:image/png;base64,".length), "base64");
-      const artifact = await persistBinaryTaskAttemptArtifact({
-        store: input.store,
-        storeDir: input.storeDir,
-        tasksetId: input.taskset.id,
-        taskId: task.id,
-        attemptId,
-        requestId: `collection:${request.id}`,
-        kind: "output_artifact",
-        bytes,
-        mediaType: "image/png",
-        fileLabel: "fixture-render",
-        extension: "png",
-        timestamp: now,
-        metadata: { collectionRunId: request.id, syntheticOnly: true },
-      });
-      const attempt = TaskAttemptResultSchema.parse({ ...base, artifactRefs: [artifact.id] });
+      const artifact = candidate.imageDataUrl
+        ? await persistBinaryTaskAttemptArtifact({
+            store: input.store,
+            storeDir: input.storeDir,
+            tasksetId: input.taskset.id,
+            taskId: task.id,
+            attemptId,
+            requestId: `collection:${request.id}`,
+            kind: "output_artifact",
+            bytes: Buffer.from(candidate.imageDataUrl.slice("data:image/png;base64,".length), "base64"),
+            mediaType: "image/png",
+            fileLabel: "fixture-render",
+            extension: "png",
+            timestamp: now,
+            metadata: { collectionRunId: request.id, syntheticOnly: true },
+          })
+        : null;
+      const attempt = TaskAttemptResultSchema.parse({ ...base, artifactRefs: artifact ? [artifact.id] : [] });
       await input.store.saveTaskAttempt(attempt);
       attempts.push({ attempt, artifact, groupIndex, partition: group.partition, label: candidate.label });
     }

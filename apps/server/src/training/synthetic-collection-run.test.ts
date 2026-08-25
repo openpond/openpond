@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -37,7 +37,6 @@ function request() {
       candidates: ["love", "like", "reject", "reject"].map((label, candidateIndex) => ({
         id: `candidate-${groupIndex}-${candidateIndex}`,
         output: JSON.stringify({ traits: { background: `variant-${groupIndex}-${candidateIndex}` } }),
-        imageDataUrl: PNG,
         label: label as "love" | "like" | "reject",
       })),
     })),
@@ -45,7 +44,7 @@ function request() {
 }
 
 describe("synthetic collection run", () => {
-  it("materializes bounded generic attempts and PNG artifacts without human authority", async () => {
+  it("materializes bounded structured attempts without image artifacts or human authority", async () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-c0-"));
     const attempts: unknown[] = [];
     const artifacts: Array<{ path: string }> = [];
@@ -63,9 +62,36 @@ describe("synthetic collection run", () => {
       });
       expect(result.attempts).toHaveLength(8);
       expect(attempts).toHaveLength(8);
-      expect(artifacts).toHaveLength(8);
+      expect(artifacts).toHaveLength(0);
       expect(result.attempts.every((item) => item.attempt.metadata.syntheticOnly === true)).toBe(true);
-      expect((await readFile(artifacts[0]!.path)).subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+      expect(result.attempts.every((item) => item.attempt.artifactRefs.length === 0 && item.artifact === null)).toBe(true);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("retains an optional preview artifact for visual review protocols", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-c0-preview-"));
+    const artifacts: Array<{ path: string }> = [];
+    const store = {
+      saveTaskAttempt: async (attempt: unknown) => attempt,
+      saveTaskAttemptArtifact: async (artifact: { path: string }) => { artifacts.push(artifact); return artifact; },
+    };
+    const withPreview = request();
+    withPreview.groups[0]!.candidates[0] = {
+      ...withPreview.groups[0]!.candidates[0]!,
+      imageDataUrl: PNG,
+    } as (typeof withPreview.groups)[number]["candidates"][number] & { imageDataUrl: string };
+    try {
+      const result = await materializeSyntheticCollectionRun({
+        store: store as never,
+        storeDir: directory,
+        taskset: taskset(),
+        request: SyntheticCollectionRunRequestSchema.parse(withPreview),
+        now: () => "2026-08-25T12:00:00.000Z",
+      });
+      expect(artifacts).toHaveLength(1);
+      expect(result.attempts.filter((item) => item.artifact)).toHaveLength(1);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

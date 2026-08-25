@@ -899,7 +899,7 @@ export function createTrainingApi(deps: {
             attempt: canonical.attemptReceipt,
             artifactManifest: canonical.artifactManifest,
             runManifest: context.runManifest,
-            visibleArtifactIds: [item.artifact.id],
+            visibleArtifactIds: item.artifact ? [item.artifact.id] : [],
           });
         }
         const assignmentId = `collection-comparison-${contentHash([collection.id, groupIndex, comparisonReleaseId]).slice(0, 24)}`;
