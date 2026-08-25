@@ -49,6 +49,18 @@ export async function buildManagedRewardModelLaunchInput(input: {
     throw new Error("Reward Model recipe must pin the materialized preference dataset.");
   }
   const attempts = new Map(input.attempts.map((attempt) => [attempt.id, attempt]));
+  const attemptsByReceipt = new Map<string, TaskAttemptResult>();
+  for (const attempt of input.attempts) {
+    const receipt = attempt.metadata.portableAttemptReceipt;
+    if (
+      receipt
+      && typeof receipt === "object"
+      && "id" in receipt
+      && typeof receipt.id === "string"
+    ) {
+      attemptsByReceipt.set(receipt.id, attempt);
+    }
+  }
   const imageByAttempt = new Map<string, TaskAttemptArtifact>();
   for (const artifact of input.artifacts) {
     if (!artifact.mediaType?.startsWith("image/")) continue;
@@ -67,8 +79,8 @@ export async function buildManagedRewardModelLaunchInput(input: {
           for (const attemptId of bucket) bucketByAttempt.set(attemptId, label);
         }
         const candidates = await Promise.all(group.attemptRefs.map(async (attemptRef) => {
-          const attempt = attempts.get(attemptRef.id);
-          const artifact = imageByAttempt.get(attemptRef.id);
+          const attempt = attempts.get(attemptRef.id) ?? attemptsByReceipt.get(attemptRef.id);
+          const artifact = attempt ? imageByAttempt.get(attempt.id) : undefined;
           const bucket = bucketByAttempt.get(attemptRef.id);
           if (!attempt || !artifact || !bucket) {
             throw new Error(`Preference group ${group.id} is missing an Attempt, rendered image, or label.`);

@@ -64,6 +64,41 @@ describe("training API Model Run approval forwarding", () => {
     });
   });
 
+  test("pins the preference dataset's released Taskset envelope in Reward Model recipes", async () => {
+    const tasksetRelease = {
+      id: "taskset-release-t0-r1",
+      contentHash: "b".repeat(64),
+    };
+    const launchRewardModel = vi.fn(async (input: unknown) => input);
+    const api = createTrainingApi({
+      store: {
+        getTaskset: vi.fn(async () => ({
+          id: "taskset-t0",
+          contentHash: "a".repeat(64),
+        })),
+      },
+      preferenceComparisons: {
+        listPreferenceDatasets: vi.fn(async () => [{
+          id: "preferences-d0",
+          contentHash: "c".repeat(64),
+          tasksetRelease,
+        }]),
+      },
+      training: { launchRewardModel },
+    } as never);
+
+    await api.request("reward_model_run_launch", {
+      id: "reward-run-rm0",
+      tasksetId: "taskset-t0",
+      rewardModelId: "reward-model-r0",
+      preferenceDatasetReleaseId: "preferences-d0",
+    });
+
+    expect(launchRewardModel).toHaveBeenCalledWith(expect.objectContaining({
+      recipe: expect.objectContaining({ tasksetRelease }),
+    }));
+  });
+
   test("routes evaluation cancellation to the Harness Refiner execution", async () => {
     const cancelEvaluation = vi.fn(async (id: string) => ({ id, status: "cancelled" }));
     const cancelTraining = vi.fn();

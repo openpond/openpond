@@ -60,8 +60,8 @@ import {
 } from "./synthetic-collection-run.js";
 import {
   compileDesktopHarnessContext,
-  projectDesktopCanonicalReceipts,
 } from "./portable-evals-adapter.js";
+import { persistCanonicalEvaluationEvidence } from "./canonical-evaluation-persistence.js";
 import {
   advanceUnexecutedModelRunTasksetRef,
   createExistingTasksetModelCreateImproveRun,
@@ -399,7 +399,7 @@ export function createTrainingApi(deps: {
         .find((candidate) => candidate.id === datasetId);
       if (!dataset) throw new Error("Preference Dataset release was not found for this Taskset.");
       const recipe = managedSyntheticRewardSmokeRecipe({
-        tasksetRelease: { id: taskset.id, contentHash: taskset.contentHash },
+        tasksetRelease: dataset.tasksetRelease,
         preferenceDatasetRelease: { id: dataset.id, contentHash: dataset.contentHash },
       });
       return deps.training.launchRewardModel({
@@ -837,7 +837,11 @@ export function createTrainingApi(deps: {
             attempt: item.attempt,
           });
           const artifacts = await deps.store.listTaskAttemptArtifacts({ attemptId: item.attempt.id });
-          const canonical = projectDesktopCanonicalReceipts({
+          const canonical = await persistCanonicalEvaluationEvidence({
+            store: deps.store,
+            storeDir: deps.storeDir,
+            taskset,
+            task: { id: item.attempt.taskId },
             context,
             attempt: item.attempt,
             grade,
