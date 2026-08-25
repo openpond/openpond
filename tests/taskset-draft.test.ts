@@ -9,6 +9,7 @@ import {
   createTasksetDraft,
   publishTasksetDraft,
   hashTasksetDraftPackage,
+  materializePortableTasksetRelease,
   readTasksetDraftPackage,
   validateTaskset,
   writeTasksetDraftPackage,
@@ -96,6 +97,73 @@ describe("Taskset draft authoring", () => {
     expect(taskset.tasks[0]?.sourceRefs).toEqual([taskset.sourceRefs[0]?.id]);
     expect(taskset.metadata.tasksetReviewPolicy).toEqual(draft.review);
     expect(validateTaskset(taskset).valid).toBe(true);
+  });
+
+  it("publishes Scenario references without embedding shared renderer assets", () => {
+    const base = completeDraft();
+    const draft = TasksetDraftSchema.parse({
+      ...base,
+      environment: {
+        ...base.environment,
+        resources: [{
+          id: "renderer-config",
+          kind: "configuration",
+          path: "assets/renderer.json",
+          mediaType: "application/json",
+          visibility: "privileged",
+          required: true,
+          metadata: {},
+        }],
+      },
+      tasks: base.tasks.map((task) => ({
+        ...task,
+        expectedOutput: {
+          artifactRendererRef: "renderer-config",
+          outputSchemaRef: "assets/output-schema.json",
+        },
+        resourceRefs: ["renderer-config"],
+      })),
+    });
+    const taskset = publishTasksetDraft({
+      draft,
+      now: NOW,
+      sourcePackageHash: "a".repeat(64),
+    });
+    const portable = materializePortableTasksetRelease({
+      taskset,
+      adapterId: "test-adapter",
+    });
+
+    expect(portable.tasksetRelease.tasks[0]?.expectedOutput).toEqual({
+      artifactRendererRef: "renderer-config",
+      outputSchemaRef: "assets/output-schema.json",
+    });
+    expect(portable.tasksetRelease.metadata).toMatchObject({
+      sourcePackageHash: "a".repeat(64),
+      environmentResources: [{ id: "renderer-config" }],
+    });
+    expect(JSON.stringify(portable.tasksetRelease)).not.toContain("data:image/");
+  });
+
+  it("rejects legacy inline artifact renderer blobs at the portable boundary", () => {
+    const taskset = publishTasksetDraft({ draft: completeDraft(), now: NOW });
+    const legacy = {
+      ...taskset,
+      tasks: taskset.tasks.map((task) => ({
+        ...task,
+        expectedOutput: {
+          artifactRenderer: {
+            kind: "reference_layered_artifact_v1",
+            config: { pngDataUrl: "data:image/png;base64,AAAA" },
+          },
+        },
+      })),
+    };
+
+    expect(() => materializePortableTasksetRelease({
+      taskset: legacy as typeof taskset,
+      adapterId: "test-adapter",
+    })).toThrow("embeds an artifact renderer");
   });
 
   it("round-trips the editable package layout", async () => {

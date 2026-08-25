@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -73,20 +73,12 @@ const outputSchema = {
   },
 };
 const hostedRenderer = {
-  kind: "reference_layered_artifact_v1",
+  kind: "reference_layered_artifact_files_v1",
   config: {
-    schemaVersion: "openpond.referenceLayeredArtifact.v1",
-    width: options.size,
-    height: options.size,
-    background: "transparent",
-    layers: await Promise.all(orderedCategories.map(async ({ category, rows }) => ({
-      id: category,
-      variants: await Promise.all(rows.map(async (row) => ({
-        id: variantId(row),
-        pngDataUrl: `data:image/png;base64,${(await readFile(path.join(options.output, row.file))).toString("base64")}`,
-        rarityWeight: 1,
-      }))),
-    }))),
+    schemaVersion: "openpond.referenceLayeredArtifactFiles.v1",
+    catalogRef: "assets/catalog.json",
+    assetRoot: "assets",
+    outputMediaType: "image/png",
   },
 };
 

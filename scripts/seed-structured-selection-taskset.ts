@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile } from "node:fs/promises";
+import { cp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -8,10 +8,9 @@ import { contentHash, createTasksetDraft } from "@openpond/taskset-sdk";
 import { SqliteStore } from "../apps/server/src/store/store.js";
 
 const options = parseOptions(process.argv.slice(2));
-const [catalog, outputSchema, artifactRenderer] = await Promise.all([
+const [catalog, outputSchema] = await Promise.all([
   readJson(path.join(options.catalogDirectory, "catalog.json")),
   readJson(path.join(options.catalogDirectory, "output-schema.json")),
-  readJson(path.join(options.catalogDirectory, "hosted-renderer.json")),
 ]);
 const timestamp = new Date().toISOString();
 const sourceId = `${options.id}-catalog-source`;
@@ -141,24 +140,32 @@ const draft = TasksetDraftSchema.parse({
 
 const store = new SqliteStore(options.storeDirectory);
 try {
-  const existing = await store.getTasksetDraft(draft.id);
+  const [existing, currentTaskset] = await Promise.all([
+    store.getTasksetDraft(draft.id),
+    store.getTaskset(draft.id),
+  ]);
   const savedDraft = existing
     ? TasksetDraftSchema.parse({
         ...draft,
         revision: existing.revision + 1,
         createdAt: existing.createdAt,
+        publishedTasksetRef: currentTaskset
+          ? {
+              id: currentTaskset.id,
+              revision: currentTaskset.revision,
+              contentHash: currentTaskset.contentHash,
+            }
+          : existing.publishedTasksetRef,
         updatedAt: timestamp,
       })
     : draft;
   await store.saveTasksetDraft(savedDraft);
   const workspace = await store.getTasksetDraftWorkspace(draft.id);
   if (!workspace) throw new Error("Draft workspace was not created.");
-  await mkdir(path.join(workspace.workspacePath, "assets"), { recursive: true });
-  await Promise.all([
-    copyFile(path.join(options.catalogDirectory, "catalog.json"), path.join(workspace.workspacePath, "assets", "catalog.json")),
-    copyFile(path.join(options.catalogDirectory, "output-schema.json"), path.join(workspace.workspacePath, "assets", "output-schema.json")),
-    copyFile(path.join(options.catalogDirectory, "hosted-renderer.json"), path.join(workspace.workspacePath, "assets", "hosted-renderer.json")),
-  ]);
+  await cp(options.catalogDirectory, path.join(workspace.workspacePath, "assets"), {
+    recursive: true,
+    force: true,
+  });
   await store.saveTasksetDraft(savedDraft);
   const finalWorkspace = await store.getTasksetDraftWorkspace(draft.id);
   process.stdout.write(JSON.stringify({ draftId: draft.id, workspace: finalWorkspace }, null, 2) + "\n");
@@ -178,7 +185,7 @@ function task(suffix: string, split: "train" | "validation" | "frozen_eval") {
       responseFormat: "Return only JSON matching the declared output schema.",
     },
     expectedOutput: {
-      artifactRenderer,
+      artifactRendererRef: "renderer-config",
       outputSchemaRef: "assets/output-schema.json",
     },
     policyVisibleContext: { selectionCatalog: visibleCatalog },
