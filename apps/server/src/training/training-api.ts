@@ -432,6 +432,7 @@ export function createTrainingApi(deps: {
     if (action === "reward_model_qualification_retry") {
       return deps.training.retryRewardModelQualification(
         requiredString(input.runId, "runId"),
+        requiredString(input.id, "id"),
       );
     }
     if (action === "learned_preference_reward_binding") {

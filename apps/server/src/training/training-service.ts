@@ -357,7 +357,10 @@ export function createTrainingService(deps: {
     });
   }
 
-  async function retryRewardModelQualification(runId: string) {
+  async function retryRewardModelQualification(
+    runId: string,
+    retryRunId: string,
+  ) {
     const run = await deps.store.getRewardModelRun(runId);
     if (
       !run ||
@@ -372,16 +375,26 @@ export function createTrainingService(deps: {
     if (remote.job.state !== "completed") {
       throw new Error("Reward Model qualification retry requires a completed managed Run.");
     }
-    await deps.store.saveRewardModelRun({
+    if (await deps.store.getRewardModelRun(retryRunId)) {
+      throw new Error("Reward Model qualification retry ID already exists.");
+    }
+    const now = new Date().toISOString();
+    const retryRun = RewardModelRunSchema.parse({
       ...run,
+      id: retryRunId,
       status: "running",
+      rewardModelVersionId: null,
+      receipt: null,
+      qualificationReport: null,
       failureOwner: null,
       failure: null,
+      startedAt: now,
       completedAt: null,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
+    await deps.store.saveRewardModelRun(retryRun);
     await reconcileRewardModelRuns();
-    const reconciled = await deps.store.getRewardModelRun(runId);
+    const reconciled = await deps.store.getRewardModelRun(retryRunId);
     if (!reconciled) {
       throw new Error("Reward Model Run disappeared during qualification retry.");
     }
