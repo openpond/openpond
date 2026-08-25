@@ -424,6 +424,10 @@ export function createTrainingService(deps: {
             if (!taskset || !rewardBase || !rewardProcessor || !harness || !checkpointPrefix || !artifactSha256) {
               throw new Error("Completed managed Reward Model job is missing immutable launch lineage.");
             }
+            const versionNumber = nextRewardModelVersionNumber(
+              await deps.store.listRewardModelVersions(),
+              run.rewardModelId,
+            );
             const version = projectQualifiedRewardModel({
               run,
               baseModel: {
@@ -443,6 +447,7 @@ export function createTrainingService(deps: {
                 ? { id: taskset.preferenceComparison.releaseId, contentHash: taskset.preferenceComparison.releaseHash }
                 : { id: `preference-dataset:${run.preferenceDatasetRelease.id}`, contentHash: run.preferenceDatasetRelease.contentHash },
               providerRunId: run.managedRunId,
+              versionNumber,
               checkpointPrefix,
               artifactSha256,
               inventory,
@@ -638,6 +643,15 @@ export function managedRewardModelRuntime(
       configHash: processorConfigHash,
     },
   };
+}
+
+export function nextRewardModelVersionNumber(
+  versions: RewardModelVersion[],
+  rewardModelId: string,
+): number {
+  return versions
+    .filter((version) => version.modelId === rewardModelId)
+    .reduce((maximum, version) => Math.max(maximum, version.version), 0) + 1;
 }
 
 function objectRef(value: unknown, label: string): { id: string; contentHash: string } {

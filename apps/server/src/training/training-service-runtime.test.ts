@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 
-import { managedRewardModelRuntime } from "./training-service.js";
+import {
+  managedRewardModelRuntime,
+  nextRewardModelVersionNumber,
+} from "./training-service.js";
 
 describe("managed Reward Model runtime projection", () => {
   test("preserves the qualified processor identity separately from model config", () => {
@@ -44,5 +47,16 @@ describe("managed Reward Model runtime projection", () => {
         },
       ),
     ).toThrow("processor must match its immutable base release");
+  });
+
+  test("allocates the next immutable version within one reward-model lineage", () => {
+    const versions = [
+      { modelId: "reward-a", version: 1 },
+      { modelId: "reward-b", version: 7 },
+      { modelId: "reward-a", version: 3 },
+    ] as Parameters<typeof nextRewardModelVersionNumber>[0];
+
+    expect(nextRewardModelVersionNumber(versions, "reward-a")).toBe(4);
+    expect(nextRewardModelVersionNumber(versions, "reward-new")).toBe(1);
   });
 });

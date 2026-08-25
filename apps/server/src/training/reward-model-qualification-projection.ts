@@ -24,6 +24,7 @@ export function projectQualifiedRewardModel(input: {
   harnessRelease: { id: string; contentHash: string };
   grader: { id: string; contentHash: string };
   providerRunId: string;
+  versionNumber: number;
   checkpointPrefix: string;
   artifactSha256: string;
   inventory: InventoryFile[];
@@ -72,7 +73,7 @@ export function projectQualifiedRewardModel(input: {
     id: `reward-model-version:${input.providerRunId}`,
     modelId: input.run.rewardModelId,
     profileId: input.run.profileId,
-    version: 1,
+    version: input.versionNumber,
     role: "reward" as const,
     status: "available" as const,
     scope: input.run.scope,
