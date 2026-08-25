@@ -5,6 +5,7 @@ import {
 import type {
   BaseModelCandidate,
   ModelRunDraft,
+  LearnedPreferenceRewardBinding,
   ModelRunPreset,
   Taskset,
   TrainingDestinationCapabilities,
@@ -50,6 +51,7 @@ export function ModelRunSetupContent({
   activeStep,
   onStepChange,
   draft,
+  learnedPreferenceReward,
   setDraft,
   selectedTaskset,
   methodCards,
@@ -69,6 +71,7 @@ export function ModelRunSetupContent({
   activeStep: ModelSetupStepId;
   onStepChange: (step: ModelSetupStepId) => void;
   draft: ModelRunDraft;
+  learnedPreferenceReward: LearnedPreferenceRewardBinding | null;
   setDraft: Dispatch<SetStateAction<ModelRunDraft>>;
   selectedTaskset: Taskset | null;
   methodCards: ReturnType<typeof methodAvailability>;
@@ -241,6 +244,7 @@ export function ModelRunSetupContent({
               baseModelCandidates={baseModelCandidates}
               connection={connection}
               taskset={selectedTaskset}
+              learnedPreferenceReward={learnedPreferenceReward}
               modelId={draft.modelId}
               destinations={destinations}
               initialMethod={draft.method}

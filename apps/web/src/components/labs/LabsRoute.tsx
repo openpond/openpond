@@ -4,6 +4,7 @@ import {
   type ChatModelRef,
   type CreateImproveCandidate,
   type CreateImproveRun,
+  type LearnedPreferenceRewardBinding,
   type WorkspaceDiffSummary,
 } from "@openpond/contracts";
 
@@ -58,7 +59,10 @@ export type LabsRouteProps = {
   account: AccountState | null;
   closeDetailKind: LabDetailKind | null;
   closeDetailRequestId: number;
-  onNewModel: (initialTasksetId?: string) => void;
+  onNewModel: (
+    initialTasksetId?: string,
+    learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
+  ) => void;
   onUseAgent: (actionId: string, agentName: string) => void;
   onCreateAgent: (
     objective: string,
@@ -408,12 +412,15 @@ export function LabsRoute({
     setSelectedDatasetId(tasksetId);
   }
 
-  function openModelRunEditor(initialTasksetId?: string) {
+  function openModelRunEditor(
+    initialTasksetId?: string,
+    learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
+  ) {
     setModelEditorSection("run");
     setSelectedKey(null);
     setSelectedDatasetId(null);
     setActiveTab("models");
-    onNewModel(initialTasksetId);
+    onNewModel(initialTasksetId, learnedPreferenceReward);
   }
 
   async function createModel(input: LabModelCreateInput): Promise<boolean> {
@@ -498,6 +505,7 @@ export function LabsRoute({
           connection={profileView.connection}
           initialObjective={training.launchRequest.objective}
           initialTasksetId={training.launchRequest.initialTasksetId}
+          initialLearnedPreferenceReward={training.launchRequest.learnedPreferenceReward}
           profileId={profileId}
           training={training.training}
           onCancel={() => {

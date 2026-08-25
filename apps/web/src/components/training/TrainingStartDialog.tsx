@@ -37,6 +37,7 @@ export function TrainingStartDialog({
   baseModelCandidates,
   connection,
   taskset,
+  learnedPreferenceReward = null,
   modelId = null,
   destinations,
   initialMethod,
@@ -284,6 +285,7 @@ export function TrainingStartDialog({
     rftLossMethod,
     executionMode: selectedComputeTarget?.executionMode,
     catalogModel: selectedCatalogModel,
+    learnedPreferenceReward,
   });
   const approval: TrainingStartApproval = {
     exportApproved: approvalPolicy ? exportApproved : true,

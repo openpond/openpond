@@ -5,6 +5,7 @@ import {
   DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
   DATASET_NO_TOOLS_CONTRACT_HASH,
   type BaseModelCandidate,
+  type LearnedPreferenceRewardBinding,
   type RftLossMethod,
   type Taskset,
   type TrainingCatalog,
@@ -28,6 +29,7 @@ export function trainingRecipe(input: {
   rftLossMethod?: RftLossMethod;
   executionMode?: TrainingCatalog["targets"][number]["executionMode"];
   catalogModel?: TrainingCatalog["models"][number] | null;
+  learnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
 }): TrainingRecipe {
   if (
     input.method !== "grpo"
@@ -77,6 +79,7 @@ export function trainingRecipe(input: {
           environmentId: "cross-system-operations",
           environmentVersion: CROSS_SYSTEM_OPERATIONS_GENERATOR_VERSION,
           toolContractHash: CROSS_SYSTEM_TOOL_CONTRACT_HASH,
+          learnedPreference: input.learnedPreferenceReward ?? null,
         }
       : {
           graderId: grader?.id ?? "math_final_answer",
@@ -84,6 +87,7 @@ export function trainingRecipe(input: {
           environmentId: DATASET_EXACT_ANSWER_ENVIRONMENT_ID,
           environmentVersion: DATASET_EXACT_ANSWER_ENVIRONMENT_VERSION,
           toolContractHash: DATASET_NO_TOOLS_CONTRACT_HASH,
+          learnedPreference: input.learnedPreferenceReward ?? null,
         },
     resourceLimits: {
       wallTimeMs: 1_800_000,

@@ -1541,12 +1541,13 @@ export function MainPane({
                 account={bootstrap?.account ?? null}
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
-                onNewModel={(initialTasksetId) => {
+                onNewModel={(initialTasksetId, learnedPreferenceReward) => {
                   setTrainingLaunchRequest({
                     id: Date.now(),
                     objective: null,
                     initialSessionIds: [],
                     initialTasksetId,
+                    learnedPreferenceReward,
                   });
                 }}
                 onUseAgent={handleUseAgent}

@@ -7,6 +7,7 @@ import type {
   TasksetDraft,
   TrainingStateResponse,
   TasksetOperationalState,
+  LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 
 import type { ShowAppToast } from "../../app/app-state";
@@ -77,7 +78,10 @@ export function LabDatasetsPage({
   onOpenDraft: (draftId: string) => void;
   defaultModel: ChatModelRef;
   onImproveInChat: (taskset: Taskset) => void;
-  onTrainModel: (tasksetId: string) => void;
+  onTrainModel: (
+    tasksetId: string,
+    learnedPreferenceReward?: LearnedPreferenceRewardBinding | null,
+  ) => void;
   onOpenFiles: (tasksetId: string) => void;
   training: ReturnType<typeof useTraining>;
   onToast: ShowAppToast;
@@ -219,7 +223,9 @@ export function LabDatasetsPage({
             state={state}
             taskset={selected}
             training={training}
-            onCreateRun={() => onTrainModel(selected.id)}
+            onCreateRun={(learnedPreferenceReward) =>
+              onTrainModel(selected.id, learnedPreferenceReward)
+            }
           />
         ) : detailTab === "attempts" ? (
           <TasksetAttempts taskset={selected} training={training} />
@@ -382,8 +388,27 @@ function TasksetRuns({
   state: TrainingStateResponse | null;
   taskset: Taskset;
   training: ReturnType<typeof useTraining>;
-  onCreateRun: () => void;
+  onCreateRun: (learnedPreferenceReward?: LearnedPreferenceRewardBinding | null) => void;
 }) {
+  const [bindingError, setBindingError] = useState<string | null>(null);
+  const rewardModels = (state?.rewardModelVersions ?? [])
+    .filter((version) => version.taskset.id === taskset.id && version.status === "available")
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
+  async function createLearnedRewardRun(rewardModelVersionId: string): Promise<void> {
+    setBindingError(null);
+    try {
+      const binding = await training.actions.learnedPreferenceRewardBinding({
+        tasksetId: taskset.id,
+        rewardModelVersionId,
+      });
+      if (!binding) throw new Error("The qualified Reward Model binding could not be created.");
+      onCreateRun(binding);
+    } catch (error) {
+      setBindingError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   return (
     <>
       <section className="labs-dataset-run-intro">
@@ -396,7 +421,7 @@ function TasksetRuns({
           className="training-button"
           disabled={readOnly}
           type="button"
-          onClick={onCreateRun}
+          onClick={() => onCreateRun()}
         >
           Create run
         </button>
@@ -407,6 +432,27 @@ function TasksetRuns({
         taskset={taskset}
         training={training}
       />
+      {rewardModels.length ? (
+        <section className="labs-dataset-run-intro">
+          <h2>Learned reward policy run</h2>
+          <p>
+            Start GRPO with an immutable, qualified Reward Model binding. The
+            policy updates; the Reward Model remains frozen.
+          </p>
+          {rewardModels.map((version) => (
+            <button
+              className="training-button secondary"
+              disabled={readOnly || training.busyAction !== null}
+              key={version.id}
+              onClick={() => void createLearnedRewardRun(version.id)}
+              type="button"
+            >
+              Create GRPO run with {version.id}
+            </button>
+          ))}
+          {bindingError ? <p className="training-banner error" role="alert">{bindingError}</p> : null}
+        </section>
+      ) : null}
       <TasksetHistory state={state} taskset={taskset} />
     </>
   );

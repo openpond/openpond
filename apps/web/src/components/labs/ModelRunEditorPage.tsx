@@ -9,6 +9,7 @@ import {
 import type {
   ModelProject,
   ModelRunDraft,
+  LearnedPreferenceRewardBinding,
   Taskset,
   TrainingDestinationId,
   TrainingRecipe,
@@ -42,6 +43,7 @@ export function ModelRunEditorPage({
   initialName,
   initialDraftId,
   initialTasksetId,
+  initialLearnedPreferenceReward = null,
   profileId,
   training,
   onCancel,
@@ -58,6 +60,7 @@ export function ModelRunEditorPage({
   initialName?: string;
   initialDraftId?: string;
   initialTasksetId?: string;
+  initialLearnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
   profileId: string;
   training: TrainingWorkspaceProps["training"];
   onCancel: () => void;
@@ -395,6 +398,7 @@ export function ModelRunEditorPage({
           activeStep={activeSetupStep}
           onStepChange={setActiveSetupStep}
           draft={draft}
+          learnedPreferenceReward={initialLearnedPreferenceReward}
           setDraft={setDraft}
           selectedTaskset={selectedTaskset}
           methodCards={methodCards}

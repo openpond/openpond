@@ -30,6 +30,7 @@ import type {
   Taskset,
   TasksetDraft,
   TasksetOperationalState,
+  LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 
@@ -496,7 +497,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     learnedPreferenceRewardBinding: (input: {
       tasksetId: string;
       rewardModelVersionId: string;
-    }) => mutate(
+    }) => mutate<LearnedPreferenceRewardBinding>(
       "learned-preference-reward-binding",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/learned-preference-reward-binding`,
       input,
