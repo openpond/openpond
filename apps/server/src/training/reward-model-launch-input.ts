@@ -105,7 +105,12 @@ export async function buildManagedRewardModelLaunchInput(input: {
             id: attempt.id,
             text: JSON.stringify(attempt.output),
             bucket,
-            artifact: uploaded,
+            artifact: {
+              objectRef: uploaded.objectRef,
+              sha256: uploaded.sha256,
+              sizeBytes: uploaded.sizeBytes,
+              mediaType: uploaded.mediaType,
+            },
           };
         }));
         return {

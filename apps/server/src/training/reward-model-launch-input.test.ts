@@ -37,6 +37,7 @@ describe("managed Reward Model launch input", () => {
       sha256: imageHash,
       sizeBytes: image.byteLength,
       mediaType: "image/png",
+      sideEffectsStarted: false,
     }));
 
     const launch = await buildManagedRewardModelLaunchInput({
@@ -75,7 +76,13 @@ describe("managed Reward Model launch input", () => {
 
     expect(uploadArtifact).toHaveBeenCalledTimes(6);
     const groups = (launch.rewardModelTraining as {
-      groups: Array<{ candidates: Array<{ id: string; bucket: string }> }>;
+      groups: Array<{
+        candidates: Array<{
+          id: string;
+          bucket: string;
+          artifact: Record<string, unknown>;
+        }>;
+      }>;
     }).groups;
     expect(groups.map((group) => group.candidates.map(({ id, bucket }) => ({ id, bucket })))).toEqual([
       [
@@ -89,5 +96,11 @@ describe("managed Reward Model launch input", () => {
         { id: "attempt-2", bucket: "reject" },
       ],
     ]);
+    expect(groups[0]?.candidates[0]?.artifact).toEqual({
+      objectRef: "r2://managed-rl/candidate.png",
+      sha256: imageHash,
+      sizeBytes: image.byteLength,
+      mediaType: "image/png",
+    });
   });
 });
