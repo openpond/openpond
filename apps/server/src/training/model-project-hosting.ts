@@ -30,6 +30,9 @@ const HostedTasksetSchema = z.object({
   contentHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).passthrough();
 
+const PORTABLE_TASKSET_PUBLICATION_CONTENT_TYPE =
+  "application/vnd.openpond.taskset-publication+json+gzip";
+
 export function createModelProjectHostingService(input: {
   store: SqliteStore;
   resolveAccess: () => Promise<HostedAccess>;
@@ -104,6 +107,7 @@ export function createModelProjectHostingService(input: {
         methodHint: null,
         release,
       },
+      gzip: true,
     });
     const hostedProject = HostedProjectSchema.parse(response.project);
     const hostedTaskset = HostedTasksetSchema.parse(response.taskset);
@@ -143,6 +147,7 @@ export function createModelProjectHostingService(input: {
     pathname: string;
     method: "POST" | "PUT";
     body: unknown;
+    gzip?: boolean;
   }): Promise<T> {
     const url = `${request.access.apiBaseUrl}${request.pathname}`;
     const headers = withVercelProtectionBypass(
@@ -151,22 +156,32 @@ export function createModelProjectHostingService(input: {
       input.env ?? process.env,
     );
     headers.set("accept", "application/json");
-    headers.set("content-type", "application/json");
+    headers.set(
+      "content-type",
+      request.gzip
+        ? PORTABLE_TASKSET_PUBLICATION_CONTENT_TYPE
+        : "application/json",
+    );
     headers.set("x-openpond-team-id", request.access.teamId);
     const response = await fetchImpl(url, {
       method: request.method,
       headers,
-      body: JSON.stringify(request.body),
+      body: request.gzip
+        ? gzipSync(Buffer.from(JSON.stringify(request.body)))
+        : JSON.stringify(request.body),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<
       string,
       unknown
     >;
     if (!response.ok) {
+      const endpoint = new URL(url);
       throw new Error(
-        typeof payload.error === "string"
-          ? payload.error
-          : `Hosted Model Project request failed (${response.status}).`,
+        `${
+          typeof payload.error === "string"
+            ? payload.error
+            : "Hosted Model Project request failed"
+        } (${response.status} ${endpoint.origin}${endpoint.pathname}).`,
       );
     }
     return payload as T;
@@ -194,3 +209,4 @@ function buildIntent(
   }
   return "discovery";
 }
+import { gzipSync } from "node:zlib";
