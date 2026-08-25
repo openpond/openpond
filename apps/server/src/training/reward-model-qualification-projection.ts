@@ -106,7 +106,7 @@ export function projectQualifiedRewardModel(input: {
     kind: input.run.scope === "synthetic_smoke" ? "synthetic_smoke" as const : "human_heldout" as const,
     rewardModelVersion: { id: provisional.id, contentHash: provisional.contentHash },
     preferenceDatasetRelease: input.run.preferenceDatasetRelease,
-    tasksetRelease: { id: input.run.taskset.id, contentHash: input.run.taskset.contentHash },
+    tasksetRelease: input.run.tasksetRelease,
     processorRelease: provisional.artifacts.processorRelease,
     metrics: {
       sampleCount,

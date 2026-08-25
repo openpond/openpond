@@ -271,6 +271,13 @@ describe("OpenPond Managed training adapter", () => {
                 createdAt: FIXED_TIME,
                 updatedAt: FIXED_TIME,
               },
+              resources: [
+                {
+                  kind: "artifact_upload",
+                  state: "pending",
+                  metadata: {},
+                },
+              ],
             },
           });
         }
@@ -340,6 +347,12 @@ describe("OpenPond Managed training adapter", () => {
       await expect(adapter.status(ref)).resolves.toMatchObject({
         state: "running",
         progress: 0.25,
+      });
+      await expect(adapter.rewardModelJob(ref.runId)).resolves.toMatchObject({
+        job: { id: "managed-job-2", state: "training" },
+        resources: [
+          { kind: "artifact_upload", state: "pending", metadata: {} },
+        ],
       });
       await expect(adapter.logs(ref, "1")).resolves.toEqual({
         cursor: "2",

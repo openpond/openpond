@@ -192,6 +192,7 @@ describe("learned preference training contracts", () => {
       scope: "synthetic_smoke",
       status: "succeeded",
       taskset: { id: "taskset-one", revision: 1, contentHash: HASH },
+      tasksetRelease: ref("taskset-release-one"),
       preferenceDatasetRelease: ref("preference-dataset-d0"),
       recipeRelease: ref("reward-recipe-one"),
       destinationId: "openpond_managed",

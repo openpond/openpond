@@ -184,6 +184,7 @@ export const RewardModelRunSchema = z.object({
   scope: z.enum(["synthetic_smoke", "human_preference"]),
   status: z.enum(["prepared", "running", "succeeded", "failed", "cancelled"]),
   taskset: VersionedReleaseRefSchema,
+  tasksetRelease: ImmutableReleaseRefSchema,
   preferenceDatasetRelease: ImmutableReleaseRefSchema,
   recipeRelease: ImmutableReleaseRefSchema,
   destinationId: ReleaseIdSchema,

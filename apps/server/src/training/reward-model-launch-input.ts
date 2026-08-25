@@ -6,6 +6,7 @@ import type {
   TaskAttemptResult,
 } from "@openpond/contracts";
 import type { PreferenceDatasetRelease } from "@openpond/evals";
+import type { TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import { sha256 } from "@openpond/taskset-sdk";
 
@@ -31,6 +32,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
   name: string;
   sourceRunRef: string;
   taskset: { id: string; revision: number; contentHash: string };
+  tasksetRelease: TasksetRelease;
   dataset: PreferenceDatasetRelease;
   recipe: RewardModelRecipe;
   managedBaseModel: ManagedRewardModelBase;
@@ -42,6 +44,14 @@ export async function buildManagedRewardModelLaunchInput(input: {
   attempts: TaskAttemptResult[];
   artifacts: TaskAttemptArtifact[];
 }): Promise<Record<string, unknown>> {
+  if (
+    input.recipe.tasksetRelease.id !== input.tasksetRelease.id ||
+    input.recipe.tasksetRelease.contentHash !== input.tasksetRelease.contentHash ||
+    input.dataset.tasksetRelease.id !== input.tasksetRelease.id ||
+    input.dataset.tasksetRelease.contentHash !== input.tasksetRelease.contentHash
+  ) {
+    throw new Error("Reward Model launch must use the exact Taskset release pinned by D0 and the recipe.");
+  }
   if (
     input.recipe.preferenceDatasetRelease.id !== input.dataset.id ||
     input.recipe.preferenceDatasetRelease.contentHash !== input.dataset.contentHash
@@ -128,7 +138,11 @@ export async function buildManagedRewardModelLaunchInput(input: {
     name: input.name,
     idempotencyKey: input.idempotencyKey,
     sourceRunRef: input.sourceRunRef,
-    taskset: input.taskset,
+    taskset: {
+      id: input.tasksetRelease.id,
+      revision: input.tasksetRelease.revision,
+      contentHash: input.tasksetRelease.contentHash,
+    },
     preferenceDatasetRelease: { id: input.dataset.id, contentHash: input.dataset.contentHash },
     scope: input.recipe.runScope === "synthetic_smoke" ? "synthetic_smoke" as const : "production" as const,
     rewardModelTraining: {

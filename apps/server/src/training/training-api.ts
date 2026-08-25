@@ -400,14 +400,30 @@ export function createTrainingApi(deps: {
         .listPreferenceDatasets(tasksetId))
         .find((candidate) => candidate.id === datasetId);
       if (!dataset) throw new Error("Preference Dataset release was not found for this Taskset.");
+      const comparisonRelease = await deps.store.getPreferenceComparisonRelease(
+        dataset.comparisonRelease.id,
+      );
+      if (
+        !comparisonRelease ||
+        comparisonRelease.tasksetId !== tasksetId ||
+        comparisonRelease.release.contentHash !== dataset.comparisonRelease.contentHash ||
+        comparisonRelease.tasksetRelease.id !== dataset.tasksetRelease.id ||
+        comparisonRelease.tasksetRelease.contentHash !== dataset.tasksetRelease.contentHash
+      ) {
+        throw new Error("Preference Dataset release does not resolve to its exact Taskset release.");
+      }
       const recipe = managedSyntheticRewardSmokeRecipe({
-        tasksetRelease: dataset.tasksetRelease,
+        tasksetRelease: {
+          id: dataset.tasksetRelease.id,
+          contentHash: dataset.tasksetRelease.contentHash,
+        },
         preferenceDatasetRelease: { id: dataset.id, contentHash: dataset.contentHash },
       });
       return deps.training.launchRewardModel({
         id: requiredString(input.id, "id"),
         rewardModelId: requiredString(input.rewardModelId, "rewardModelId"),
         taskset,
+        tasksetRelease: comparisonRelease.tasksetRelease,
         dataset,
         recipe,
         managedBaseModel: MANAGED_REWARD_MODEL_PROFILE,

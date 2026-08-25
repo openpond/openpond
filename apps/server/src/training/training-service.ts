@@ -9,7 +9,7 @@ import {
   type TaskAttemptResult,
   type Taskset,
 } from "@openpond/contracts";
-import type { PreferenceDatasetRelease } from "@openpond/evals";
+import type { PreferenceDatasetRelease, TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
 import {
   TrainingAdapterRegistry,
@@ -224,6 +224,7 @@ export function createTrainingService(deps: {
     id: string;
     rewardModelId: string;
     taskset: Taskset;
+    tasksetRelease: TasksetRelease;
     dataset: PreferenceDatasetRelease;
     recipe: RewardModelRecipe;
     managedBaseModel: ManagedRewardModelBase;
@@ -233,6 +234,12 @@ export function createTrainingService(deps: {
       input.recipe.tasksetRelease.contentHash !== input.dataset.tasksetRelease.contentHash
     ) {
       throw new Error("Reward Model recipe and D0 must pin the same Taskset release.");
+    }
+    if (
+      input.tasksetRelease.id !== input.dataset.tasksetRelease.id ||
+      input.tasksetRelease.contentHash !== input.dataset.tasksetRelease.contentHash
+    ) {
+      throw new Error("Reward Model Run must use the exact Taskset release pinned by D0.");
     }
     const now = new Date().toISOString();
     const recipeHash = contentHash(input.recipe);
@@ -247,8 +254,12 @@ export function createTrainingService(deps: {
       status: "prepared",
       taskset: {
         id: input.taskset.id,
-        revision: input.taskset.revision,
-        contentHash: input.taskset.contentHash,
+        revision: input.tasksetRelease.revision,
+        contentHash: input.tasksetRelease.contentHash,
+      },
+      tasksetRelease: {
+        id: input.tasksetRelease.id,
+        contentHash: input.tasksetRelease.contentHash,
       },
       preferenceDatasetRelease: {
         id: input.dataset.id,
@@ -282,6 +293,7 @@ export function createTrainingService(deps: {
         name: `OpenPond Managed Reward · ${input.rewardModelId}`.slice(0, 191),
         sourceRunRef: `openpond:reward-model-run:${prepared.id}`,
         taskset: prepared.taskset,
+        tasksetRelease: input.tasksetRelease,
         dataset: input.dataset,
         recipe: input.recipe,
         managedBaseModel: input.managedBaseModel,

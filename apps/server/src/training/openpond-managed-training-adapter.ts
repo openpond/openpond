@@ -162,18 +162,21 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
   }
 
   async rewardModelJob(jobId: string) {
-    return this.requestJson<{
-      job: ManagedJob;
-      resources: Array<{
-        kind: string;
-        state: string;
-        metadata: Record<string, unknown>;
-      }>;
+    const payload = await this.requestJson<{
+      job: {
+        job: ManagedJob;
+        resources: Array<{
+          kind: string;
+          state: string;
+          metadata: Record<string, unknown>;
+        }>;
+      };
     }>(
       `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`,
       {},
       await this.resolveBoundAccess(),
     );
+    return payload.job;
   }
 
   async capabilities() {

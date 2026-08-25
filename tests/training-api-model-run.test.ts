@@ -109,7 +109,12 @@ describe("training API Model Run approval forwarding", () => {
   test("pins the preference dataset's released Taskset envelope in Reward Model recipes", async () => {
     const tasksetRelease = {
       id: "taskset-release-t0-r1",
+      revision: 1,
       contentHash: "b".repeat(64),
+    };
+    const comparisonRelease = {
+      id: "comparison-r1",
+      contentHash: "d".repeat(64),
     };
     const launchRewardModel = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
@@ -118,12 +123,18 @@ describe("training API Model Run approval forwarding", () => {
           id: "taskset-t0",
           contentHash: "a".repeat(64),
         })),
+        getPreferenceComparisonRelease: vi.fn(async () => ({
+          tasksetId: "taskset-t0",
+          tasksetRelease,
+          release: comparisonRelease,
+        })),
       },
       preferenceComparisons: {
         listPreferenceDatasets: vi.fn(async () => [{
           id: "preferences-d0",
           contentHash: "c".repeat(64),
           tasksetRelease,
+          comparisonRelease,
         }]),
       },
       training: { launchRewardModel },
@@ -137,7 +148,13 @@ describe("training API Model Run approval forwarding", () => {
     });
 
     expect(launchRewardModel).toHaveBeenCalledWith(expect.objectContaining({
-      recipe: expect.objectContaining({ tasksetRelease }),
+      tasksetRelease,
+      recipe: expect.objectContaining({
+        tasksetRelease: {
+          id: tasksetRelease.id,
+          contentHash: tasksetRelease.contentHash,
+        },
+      }),
     }));
   });
 

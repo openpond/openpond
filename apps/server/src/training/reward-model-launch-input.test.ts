@@ -16,7 +16,14 @@ describe("managed Reward Model launch input", () => {
     const image = new Uint8Array([137, 80, 78, 71]);
     await writeFile(imagePath, image);
     const imageHash = sha256(image);
-    const tasksetRelease = { id: "taskset-release-t0-r1", contentHash: "a".repeat(64) };
+    const tasksetReleaseRef = {
+      id: "taskset-release-t0-r1",
+      contentHash: "a".repeat(64),
+    };
+    const tasksetRelease = {
+      ...tasksetReleaseRef,
+      revision: 1,
+    } as never;
     const datasetRef = { id: "preferences-d0", contentHash: "b".repeat(64) };
     const receiptIds = ["receipt-love", "receipt-like", "receipt-reject"];
     const attempts = receiptIds.map((receiptId, index) => ({
@@ -45,9 +52,11 @@ describe("managed Reward Model launch input", () => {
       name: "Reward RM0",
       sourceRunRef: "openpond:reward-model-run:rm0",
       taskset: { id: "taskset-t0", revision: 1, contentHash: "c".repeat(64) },
+      tasksetRelease,
       dataset: {
         id: datasetRef.id,
         contentHash: datasetRef.contentHash,
+        tasksetRelease,
         groups: ["reward_train", "reward_validation"].map((partition, index) => ({
           id: `group-${index}`,
           partition,
@@ -57,7 +66,7 @@ describe("managed Reward Model launch input", () => {
         })),
       } as never,
       recipe: managedSyntheticRewardSmokeRecipe({
-        tasksetRelease,
+        tasksetRelease: tasksetReleaseRef,
         preferenceDatasetRelease: datasetRef,
       }),
       managedBaseModel: {
