@@ -357,6 +357,33 @@ describe("server HTTP route table", () => {
     }
   });
 
+  test("routes the Taskset-scoped learned-reward handoff to Training", async () => {
+    const calls: RecordedCall[] = [];
+    const server = createServer(createHttpRequestHandler(routeTableDeps(calls)));
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address() as AddressInfo;
+    const origin = `http://127.0.0.1:${address.port}`;
+    try {
+      await expect(expectJsonRequest(
+        origin,
+        "POST",
+        "/v1/training/tasksets/taskset-t0/learned-preference-reward-binding",
+        200,
+        { rewardModelVersionId: "reward-r0" },
+      )).resolves.toMatchObject({
+        name: "trainingPayload",
+        args: expect.arrayContaining([
+          "learned_preference_reward_binding",
+          { tasksetId: "taskset-t0", rewardModelVersionId: "reward-r0" },
+        ]),
+      });
+    } finally {
+      server.close();
+      await once(server, "close");
+    }
+  });
+
   test("preserves hosted community status, code, and recovery details", async () => {
     const deps = routeTableDeps([]);
     deps.communityPayload = async () => {
