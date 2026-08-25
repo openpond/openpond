@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent } from "react";
 import type {
   ChatModelRef,
   CreateImproveRun,
@@ -204,6 +205,7 @@ export function LabDatasetsPage({
             readOnly={readOnly}
             state={state}
             taskset={selected}
+            training={training}
             onCreateRun={() => onTrainModel(selected.id)}
           />
         ) : detailTab === "attempts" ? (
@@ -360,11 +362,13 @@ function TasksetRuns({
   readOnly,
   state,
   taskset,
+  training,
   onCreateRun,
 }: {
   readOnly: boolean;
   state: TrainingStateResponse | null;
   taskset: Taskset;
+  training: ReturnType<typeof useTraining>;
   onCreateRun: () => void;
 }) {
   return (
@@ -384,8 +388,70 @@ function TasksetRuns({
           Create run
         </button>
       </section>
+      <FixtureCollectionImporter
+        actorKey={state?.profileId ?? taskset.profileId}
+        disabled={readOnly || training.busyAction !== null}
+        taskset={taskset}
+        training={training}
+      />
       <TasksetHistory state={state} taskset={taskset} />
     </>
+  );
+}
+
+function FixtureCollectionImporter({
+  actorKey,
+  disabled,
+  taskset,
+  training,
+}: {
+  actorKey: string;
+  disabled: boolean;
+  taskset: Taskset;
+  training: ReturnType<typeof useTraining>;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function importFixture(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const collection = JSON.parse(await file.text()) as unknown;
+      const result = await training.actions.materializeSyntheticPreferenceCollection({
+        tasksetId: taskset.id,
+        actorKey,
+        preferenceDatasetId: `fixture-preference-${crypto.randomUUID()}`,
+        preferenceDatasetRevision: 1,
+        collection,
+      });
+      if (result) {
+        setMessage(`Recorded ${result.collection.attempts.length} fixture Attempts and released ${result.dataset.groups.length} preference groups. Fixture evidence is smoke-only.`);
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return (
+    <details className="labs-dataset-advanced-details">
+      <summary>Advanced fixture smoke collection</summary>
+      <p className="labs-detail-copy">
+        Import a bounded, immutable collection manifest containing structured
+        candidate outputs and rendered artifacts. This records fixture-only
+        evidence for a systems smoke; it never counts as human preference data.
+      </p>
+      <label className="training-file-label">
+        <span>Collection manifest JSON</span>
+        <input
+          accept="application/json,.json"
+          disabled={disabled}
+          onChange={(event) => void importFixture(event)}
+          type="file"
+        />
+      </label>
+      {message ? <p className="labs-detail-copy" role="status">{message}</p> : null}
+    </details>
   );
 }
 

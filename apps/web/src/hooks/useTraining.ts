@@ -405,7 +405,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     materializeSyntheticPreferenceCollection: (input: {
       tasksetId: string;
       actorKey: string;
-      comparisonReleaseId: string;
+      comparisonReleaseId?: string;
       preferenceDatasetId: string;
       preferenceDatasetRevision: number;
       collection: unknown;

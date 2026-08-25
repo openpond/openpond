@@ -747,14 +747,64 @@ export function createTrainingApi(deps: {
       const taskset = await requireTaskset(deps.store, collection.tasksetId);
       const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
       const actorKey = requiredString(input.actorKey, "actorKey");
-      const comparisonReleaseId = requiredString(input.comparisonReleaseId, "comparisonReleaseId");
+      const tasksetRelease = await requireReleasedTaskset(deps.benchmarkTasksets, taskset);
+      let comparisonReleaseId = string(input.comparisonReleaseId);
+      if (!comparisonReleaseId) {
+        const rubric = `Fixture-only systems smoke for: ${taskset.objective}`;
+        const release = createPreferenceComparisonRelease({
+          schemaVersion: "openpond.preferenceComparisonRelease.v1",
+          id: `fixture-comparison-${taskset.id}-r${taskset.revision}-${contentHash(rubric).slice(0, 16)}`,
+          revision: taskset.revision,
+          tasksetRelease: {
+            id: tasksetRelease.id,
+            contentHash: tasksetRelease.contentHash,
+          },
+          candidateCount: 4,
+          resultMode: "ordered_tie_groups",
+          allowTies: true,
+          allowRejectAll: true,
+          presentation: {
+            showTaskPrompt: true,
+            randomizeCandidateOrder: true,
+            hideModelIdentity: true,
+            parts: [{ source: "attempt_output", path: "/text", renderer: "markdown" }],
+          },
+          rubricRef: {
+            id: `fixture-rubric-${contentHash(rubric).slice(0, 24)}`,
+            contentHash: contentHash(rubric),
+            mediaType: "text/markdown",
+            sizeBytes: Buffer.byteLength(rubric),
+          },
+          criteria: [{ id: "overall_quality", label: "Fixture order", instruction: rubric, weight: 1 }],
+          assignment: { strategy: "randomized_blinded_v1", maxAssignmentsPerCandidate: 20 },
+          aggregation: { algorithm: "mean_pairwise_win_fraction_v1", quorum: 1, rejectAllThreshold: 1 },
+          rewardProjection: { algorithm: "pairwise_win_fraction_v1", verifierId: "preference-quality", verifierVersion: "1", weight: 1 },
+          calibration: {
+            minimumSamples: 1,
+            minimumOrderAgreement: 1,
+            minimumTieAgreement: 1,
+            minimumOrderSwapAgreement: 1,
+          },
+          metadata: { source: "openpond-fixture-smoke" },
+        });
+        const existing = (await deps.store.listPreferenceComparisonReleases(taskset.id)).find((record) =>
+          record.release.id === release.id && record.release.contentHash === release.contentHash,
+        );
+        const published = existing ?? await preferenceComparisons.publishRelease({
+          tasksetId: taskset.id,
+          tasksetRelease,
+          release,
+          publisherKey: actorKey,
+        });
+        if (!existing) await bindTasksetPreferenceComparison({ store: deps.store, taskset, release: published.release });
+        comparisonReleaseId = published.release.id;
+      }
       const collectionReceipt = await materializeSyntheticCollectionRun({
         store: deps.store,
         storeDir: deps.storeDir,
         taskset,
         request: collection,
       });
-      const tasksetRelease = await requireReleasedTaskset(deps.benchmarkTasksets, taskset);
       // This identifies the fixture producer in immutable receipts. It is not
       // a configured provider and is never eligible to execute a model call.
       const context = compileDesktopHarnessContext({
