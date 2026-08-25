@@ -87,7 +87,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
           const text = JSON.stringify({
             schemaVersion: "openpond.structuredPreferenceCandidate.v1",
             scenario: task.input,
-            candidate: attempt.output,
+            candidate: structuredCandidateOutput(attempt),
           });
           if (text.length > input.recipe.input.maxCharacters) {
             throw new Error(`Preference candidate ${attempt.id} exceeds the Reward Model input limit.`);
@@ -145,4 +145,21 @@ export async function buildManagedRewardModelLaunchInput(input: {
     ...content,
     requestHash: contentHash(content),
   };
+}
+
+function structuredCandidateOutput(attempt: TaskAttemptResult): unknown {
+  const outputText = attempt.output.text;
+  if (typeof outputText !== "string") {
+    throw new Error(`Preference candidate ${attempt.id} does not contain structured JSON text.`);
+  }
+  try {
+    const parsed: unknown = JSON.parse(outputText);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("Structured candidate output must be a JSON object.");
+    }
+    return parsed;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Preference candidate ${attempt.id} is not valid structured JSON: ${detail}`);
+  }
 }
