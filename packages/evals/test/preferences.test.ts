@@ -71,6 +71,42 @@ describe("preference comparison contracts", () => {
     })).toThrow("missing, uncollected, or unreviewable");
   });
 
+  it("allows structured-output comparisons without artifacts", () => {
+    const fixture = comparisonFixture(2, { presentation: "attempt_output" });
+    const candidates = fixture.candidates.map((entry) => ({
+      ...entry,
+      visibleArtifactIds: [],
+    }));
+
+    const assignment = createComparisonAssignment({
+      id: "structured-output-assignment",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates,
+      purpose: "validation",
+      createdAt: NOW,
+    });
+
+    expect(assignment.candidates.every((candidate) => candidate.visibleArtifactIds.length === 0)).toBe(true);
+  });
+
+  it("requires artifacts when the comparison presentation includes them", () => {
+    const fixture = comparisonFixture(2);
+    const candidateWithoutArtifact = {
+      ...fixture.candidates[0]!,
+      visibleArtifactIds: [],
+    };
+
+    expect(() => createComparisonAssignment({
+      id: "artifact-required-assignment",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates: [candidateWithoutArtifact, fixture.candidates[1]!],
+      purpose: "validation",
+      createdAt: NOW,
+    })).toThrow("requires each candidate to expose a reviewable artifact");
+  });
+
   it("keeps reject-all distinct from an ordinary low-quality loss", () => {
     const fixture = comparisonFixture(2);
     const receipt = humanReceipt(fixture, "human-reject-all", [], true);
@@ -295,6 +331,7 @@ function comparisonFixture(
     quorum?: number;
     purpose?: "calibration" | "training_reward" | "validation" | "frozen_eval";
     minimumSamples?: number;
+    presentation?: "artifact" | "attempt_output";
   } = {},
 ) {
   const environment = createEnvironmentRelease({
@@ -348,7 +385,9 @@ function comparisonFixture(
       showTaskPrompt: true,
       randomizeCandidateOrder: true,
       hideModelIdentity: true,
-      parts: [{ source: "artifact", path: "candidate.png", renderer: "image" }, { source: "attempt_output", path: "/text", renderer: "markdown" }],
+      parts: options.presentation === "attempt_output"
+        ? [{ source: "attempt_output", path: "/text", renderer: "markdown" }]
+        : [{ source: "artifact", path: "candidate.png", renderer: "image" }, { source: "attempt_output", path: "/text", renderer: "markdown" }],
     },
     rubricRef: { id: "preference-fixture-rubric", contentHash: contentHash("rubric"), mediaType: "text/markdown", sizeBytes: 6 },
     criteria: [{ id: "visual-quality", label: "Visual quality", instruction: "Prefer the clearest and most cohesive result.", weight: 1 }],

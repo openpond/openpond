@@ -157,7 +157,7 @@ const ComparisonCandidateSchema = z.object({
   attemptRef: ImmutableReleaseRefSchema,
   runManifestRef: ImmutableReleaseRefSchema,
   artifactManifestRef: ImmutableReleaseRefSchema,
-  visibleArtifactIds: z.array(ReleaseIdSchema).min(1).max(100_000),
+  visibleArtifactIds: z.array(ReleaseIdSchema).max(100_000),
 }).strict().superRefine((candidate, context) => {
   if (new Set(candidate.visibleArtifactIds).size !== candidate.visibleArtifactIds.length) {
     context.addIssue({
@@ -323,7 +323,12 @@ export function createComparisonAssignment(input: {
   if (input.candidates.length !== release.candidateCount) {
     throw new Error("Comparison assignment candidate count does not match the immutable comparison release.");
   }
-  const normalized = input.candidates.map((candidate) => validateComparisonCandidate(candidate, taskset));
+  const requiresVisibleArtifact = release.presentation.parts.some((part) => part.source === "artifact");
+  const normalized = input.candidates.map((candidate) => validateComparisonCandidate(
+    candidate,
+    taskset,
+    requiresVisibleArtifact,
+  ));
   const first = normalized[0]!;
   for (const candidate of normalized.slice(1)) {
     if (candidate.attempt.taskId !== first.attempt.taskId) {
@@ -678,7 +683,11 @@ export function createPreferenceRewardComponents(input: {
   }));
 }
 
-function validateComparisonCandidate(input: ComparisonAssignmentCandidateInput, taskset: TasksetRelease): ValidatedComparisonCandidate {
+function validateComparisonCandidate(
+  input: ComparisonAssignmentCandidateInput,
+  taskset: TasksetRelease,
+  requiresVisibleArtifact: boolean,
+): ValidatedComparisonCandidate {
   const attempt = AttemptReceiptSchema.parse(input.attempt);
   if (!verifyAttemptReceipt(attempt)) throw new Error("Comparison candidate Attempt Receipt has an invalid content hash.");
   const artifactManifest = ArtifactManifestSchema.parse(input.artifactManifest);
@@ -704,7 +713,10 @@ function validateComparisonCandidate(input: ComparisonAssignmentCandidateInput, 
       .filter((entry) => entry.status === "collected" && entry.artifact !== null)
       .map((entry) => entry.artifact!.id),
   );
-  if (!visibleArtifactIds.length || visibleArtifactIds.some((id) => !available.has(id))) {
+  if (requiresVisibleArtifact && !visibleArtifactIds.length) {
+    throw new Error("Comparison presentation requires each candidate to expose a reviewable artifact.");
+  }
+  if (visibleArtifactIds.some((id) => !available.has(id))) {
     throw new Error("Comparison candidate exposes an artifact that is missing, uncollected, or unreviewable.");
   }
   if (visible.size !== visibleArtifactIds.length) throw new Error("Comparison candidate visible artifacts must be unique.");
