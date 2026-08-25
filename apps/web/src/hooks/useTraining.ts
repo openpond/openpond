@@ -47,6 +47,28 @@ export type PreferenceComparisonReview = {
   }>;
 };
 
+export type PreferenceCalibrationStatus = {
+  release: {
+    id: string;
+    contentHash: string;
+    calibration: { minimumSamples: number };
+  } | null;
+  assignmentCount: number;
+  humanCompleted: number;
+  canonicalModelCompleted: number;
+  swappedModelCompleted: number;
+  minimumSamples: number | null;
+  readyToFinalize: boolean;
+  latestReport: {
+    id: string;
+    passed: boolean;
+    sampleCount: number;
+    orderAgreement: number;
+    tieAgreement: number;
+    orderSwapAgreement: number;
+  } | null;
+};
+
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
   const { connection, profileId } = input;
   const [payload, setPayload] = useState<TrainingStateResponse | null>(null);
@@ -347,6 +369,82 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       "mark-preference-comparison-unreviewable",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/unreviewable`,
       input,
+    ),
+    preferenceCalibrationStatus: (
+      tasksetId: string,
+      reviewerKey: string,
+      comparisonReleaseId?: string | null,
+    ) => {
+      if (!connection) return Promise.resolve(null);
+      const params = new URLSearchParams({ reviewerKey });
+      if (comparisonReleaseId) params.set("comparisonReleaseId", comparisonReleaseId);
+      return api.trainingRequest<PreferenceCalibrationStatus>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/preference-comparisons/calibration/status?${params}`,
+        {},
+        "GET",
+      );
+    },
+    startPreferenceCalibrationBatch: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      rubric: string;
+      minimumSamples: number;
+      taskId?: string | null;
+    }) => mutate<{
+      release: { id: string; contentHash: string };
+      job: { id: string; state: string };
+      requestHash: string;
+    }>(
+      "start-preference-calibration-batch",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/batches`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    syncPreferenceCalibrationBatch: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      jobId: string;
+    }) => mutate<{
+      job: { id: string; state: string; terminalReason?: string | null };
+      batch: unknown | null;
+      assignment?: { id: string };
+    }>(
+      "sync-preference-calibration-batch",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/batches/${encodeURIComponent(input.jobId)}/sync`,
+      input,
+    ),
+    reviewPreferenceComparisonWithModel: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      reviewerKey: string;
+      model: ChatModelRef;
+      rubric: string;
+      reviewVariant?: "canonical" | "order_swap";
+    }) => mutate(
+      "review-preference-comparison-with-model",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/model-review`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    runNextPreferenceCalibrationReview: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      comparisonReleaseId?: string | null;
+      model: ChatModelRef;
+      rubric: string;
+    }) => mutate(
+      "run-next-preference-calibration-review",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/model-reviews/next`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    savePreferenceCalibration: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      comparisonReleaseId: string;
+      model: ChatModelRef;
+    }) => mutate(
+      "save-preference-calibration",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/report`,
+      { ...input, id: crypto.randomUUID() },
     ),
     preferenceArtifactUrl: async (artifactId: string) => {
       if (!connection) return null;

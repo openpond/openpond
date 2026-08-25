@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ChatModelRef } from "@openpond/contracts";
 
 import type { useTraining } from "../../hooks/useTraining";
 import { DetailSection } from "../training/DetailSection";
@@ -6,10 +7,14 @@ import { DetailSection } from "../training/DetailSection";
 export function PreferenceComparisonReview({
   tasksetId,
   reviewerKey,
+  defaultModel,
+  defaultRubric,
   training,
 }: {
   tasksetId: string;
   reviewerKey: string;
+  defaultModel: ChatModelRef;
+  defaultRubric: string;
   training: ReturnType<typeof useTraining>;
 }) {
   const [review, setReview] = useState<Awaited<ReturnType<typeof training.actions.nextPreferenceComparison>>>(null);
@@ -17,6 +22,11 @@ export function PreferenceComparisonReview({
   const [ranked, setRanked] = useState<string[][]>([]);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
+  const [rubric, setRubric] = useState(defaultRubric);
+  const [minimumSamples, setMinimumSamples] = useState(10);
+  const [calibrationJobId, setCalibrationJobId] = useState<string | null>(null);
+  const [calibration, setCalibration] = useState<Awaited<ReturnType<typeof training.actions.preferenceCalibrationStatus>>>(null);
+  const [calibrationMessage, setCalibrationMessage] = useState<string | null>(null);
   const orderedLabels = useMemo(() => review?.candidates.map((candidate) => candidate.label) ?? [], [review]);
   const rankedLabels = useMemo(() => new Set(ranked.flat()), [ranked]);
 
@@ -67,11 +77,143 @@ export function PreferenceComparisonReview({
     if (result) await loadNext();
   }
 
+  async function refreshCalibration(): Promise<void> {
+    const status = await training.actions.preferenceCalibrationStatus(tasksetId, reviewerKey);
+    setCalibration(status);
+  }
+
+  async function runNextModelReview(): Promise<void> {
+    if (!rubric.trim()) return;
+    setCalibrationMessage(null);
+    const result = await training.actions.runNextPreferenceCalibrationReview({
+      tasksetId,
+      reviewerKey,
+      comparisonReleaseId: calibration?.release?.id ?? null,
+      model: defaultModel,
+      rubric: rubric.trim(),
+    });
+    if (!result) {
+      setCalibrationMessage("Model review did not complete. The error above identifies whether artifacts, transport, model output, or portable validation owns the failure.");
+      return;
+    }
+    setCalibrationMessage("One pending canonical or swapped-order model review completed.");
+    await refreshCalibration();
+  }
+
+  async function startCalibrationBatch(): Promise<void> {
+    if (!rubric.trim()) return;
+    setCalibrationMessage(null);
+    const result = await training.actions.startPreferenceCalibrationBatch({
+      tasksetId,
+      reviewerKey,
+      rubric: rubric.trim(),
+      minimumSamples,
+    });
+    if (!result) return;
+    setCalibrationJobId(result.job.id);
+    setCalibrationMessage(`Managed candidate batch ${result.job.id} is ${result.job.state}. Sync it after the hosted rollout completes.`);
+    await refreshCalibration();
+  }
+
+  async function syncCalibrationBatch(): Promise<void> {
+    if (!calibrationJobId) return;
+    const result = await training.actions.syncPreferenceCalibrationBatch({
+      tasksetId,
+      reviewerKey,
+      jobId: calibrationJobId,
+    });
+    if (!result) return;
+    if (result.assignment) {
+      setCalibrationMessage("Managed candidates were verified, imported, and queued as a blinded human assignment.");
+      setCalibrationJobId(null);
+      await loadNext();
+      await refreshCalibration();
+      return;
+    }
+    setCalibrationMessage(
+      result.job.terminalReason
+        ? `Managed batch ${result.job.state}: ${result.job.terminalReason}`
+        : `Managed batch is ${result.job.state}.`,
+    );
+  }
+
+  async function finalizeCalibration(): Promise<void> {
+    if (!calibration?.release) return;
+    const report = await training.actions.savePreferenceCalibration({
+      tasksetId,
+      reviewerKey,
+      comparisonReleaseId: calibration.release.id,
+      model: defaultModel,
+    }) as { passed?: boolean } | null;
+    if (!report) return;
+    setCalibrationMessage(report.passed ? "Calibration passed and is ready for managed reward admission." : "Calibration was saved but did not pass the frozen thresholds.");
+    await refreshCalibration();
+  }
+
   return (
     <DetailSection title="Preference review">
       <p className="labs-detail-copy">
         Rank the presented outputs in visual or textual quality. Candidate identities are hidden; your order becomes immutable comparison evidence.
       </p>
+      <div className="training-question-answer">
+        <textarea
+          aria-label="Preference calibration rubric"
+          placeholder="Immutable comparison rubric"
+          value={rubric}
+          onChange={(event) => setRubric(event.target.value)}
+        />
+        <input
+          aria-label="Minimum calibration samples"
+          min={1}
+          type="number"
+          value={minimumSamples}
+          onChange={(event) => setMinimumSamples(Math.max(1, Number.parseInt(event.target.value || "1", 10)))}
+        />
+        <div className="labs-dataset-detail-actions">
+          <button
+            className="training-button"
+            disabled={!rubric.trim() || training.busyAction !== null || calibrationJobId !== null}
+            type="button"
+            onClick={() => void startCalibrationBatch()}
+          >
+            Generate 4 candidates
+          </button>
+          <button
+            className="training-button secondary"
+            disabled={!calibrationJobId || training.busyAction !== null}
+            type="button"
+            onClick={() => void syncCalibrationBatch()}
+          >
+            Sync candidate batch
+          </button>
+          <button className="training-button secondary" type="button" onClick={() => void refreshCalibration()}>
+            Refresh calibration
+          </button>
+          <button
+            className="training-button secondary"
+            disabled={!rubric.trim() || training.busyAction !== null || !calibration?.humanCompleted}
+            type="button"
+            onClick={() => void runNextModelReview()}
+          >
+            Run next model review
+          </button>
+          <button
+            className="training-button"
+            disabled={!calibration?.readyToFinalize || training.busyAction !== null}
+            type="button"
+            onClick={() => void finalizeCalibration()}
+          >
+            Save calibration report
+          </button>
+        </div>
+      </div>
+      {calibration ? (
+        <p className="labs-detail-copy" role="status">
+          Human {calibration.humanCompleted}/{calibration.minimumSamples ?? 0} · Model {calibration.canonicalModelCompleted}/{calibration.minimumSamples ?? 0} · Swapped {calibration.swappedModelCompleted}/{calibration.minimumSamples ?? 0}
+          {calibration.latestReport ? ` · ${calibration.latestReport.passed ? "Passed" : "Failed"} (${Math.round(calibration.latestReport.orderAgreement * 100)}% order, ${Math.round(calibration.latestReport.tieAgreement * 100)}% ties, ${Math.round(calibration.latestReport.orderSwapAgreement * 100)}% swap)` : ""}
+        </p>
+      ) : null}
+      {calibrationMessage ? <p className="labs-detail-copy" role="status">{calibrationMessage}</p> : null}
       {review === null ? (
         <button className="training-button secondary" type="button" onClick={() => void loadNext()}>
           Open next comparison
@@ -126,7 +268,7 @@ export function PreferenceComparisonReview({
           <div className="labs-dataset-detail-actions">
             <button
               className="training-button"
-              disabled={ranked.length !== orderedLabels.length || training.busyAction !== null}
+              disabled={rankedLabels.size !== orderedLabels.length || training.busyAction !== null}
               type="button"
               onClick={() => void submit(false)}
             >

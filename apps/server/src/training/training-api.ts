@@ -20,6 +20,7 @@ import {
   type TaskCreationSnapshot,
 } from "@openpond/contracts";
 import {
+  createPreferenceComparisonRelease,
   PreferenceComparisonReleaseSchema,
   type ComparisonAssignmentCandidateInput,
   type HarnessCompatibilityReceipt,
@@ -114,7 +115,12 @@ export function createTrainingApi(deps: {
   harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
   preferenceComparisons?: PreferenceComparisons;
 }) {
-  async function request(action: string, payload: unknown, requestUrl?: URL): Promise<unknown> {
+  async function request(
+    action: string,
+    payload: unknown,
+    requestUrl?: URL,
+    signal: AbortSignal = new AbortController().signal,
+  ): Promise<unknown> {
     const input = record(payload);
     if (action === "state") return state(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
     if (action === "activity") return activity(string(input.profileId) ?? requestUrl?.searchParams.get("profileId") ?? "default");
@@ -135,6 +141,139 @@ export function createTrainingApi(deps: {
       return deps.store.listPreferenceComparisonAssignments({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),
       });
+    }
+    if (action === "preference_comparison_calibration_status") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).calibrationStatus({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        reviewerKey: requiredString(
+          string(input.reviewerKey) ?? requestUrl?.searchParams.get("reviewerKey"),
+          "reviewerKey",
+        ),
+        comparisonReleaseId:
+          string(input.comparisonReleaseId)
+          ?? requestUrl?.searchParams.get("comparisonReleaseId"),
+      });
+    }
+    if (action === "preference_comparison_calibration_start") {
+      const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const reviewerKey = requiredString(input.reviewerKey, "reviewerKey");
+      const batchId = requiredString(input.id, "id");
+      const rubric = requiredString(input.rubric, "rubric");
+      const minimumSamples = optionalPositiveInteger(input.minimumSamples) ?? 10;
+      const taskset = await requireTaskset(deps.store, tasksetId);
+      const portable = materializePortableTasksetRelease({
+        taskset,
+        adapterId: "openpond-managed-calibration-v1",
+      });
+      const requestedTaskId = nullableString(input.taskId);
+      const task = requestedTaskId
+        ? taskset.tasks.find((candidate) => candidate.id === requestedTaskId) ?? null
+        : taskset.tasks.find((candidate) => candidate.split === "validation")
+          ?? taskset.tasks.find((candidate) => candidate.split === "train")
+          ?? null;
+      if (!task || task.split === "frozen_eval") {
+        throw new Error("Preference calibration requires a train or validation Taskset task.");
+      }
+      const existing = (await deps.store.listPreferenceComparisonReleases(tasksetId)).find((record) =>
+        record.release.tasksetRelease.id === portable.tasksetRelease.id
+        && record.release.tasksetRelease.contentHash === portable.tasksetRelease.contentHash
+        && record.release.rubricRef.contentHash === contentHash(rubric)
+        && record.release.calibration.minimumSamples === minimumSamples,
+      ) ?? null;
+      const release = existing?.release ?? createPreferenceComparisonRelease({
+        schemaVersion: "openpond.preferenceComparisonRelease.v1",
+        id: `preference-comparison-${tasksetId}-r${taskset.revision}-${contentHash({ rubric, minimumSamples }).slice(0, 16)}`,
+        revision: taskset.revision,
+        tasksetRelease: {
+          id: portable.tasksetRelease.id,
+          contentHash: portable.tasksetRelease.contentHash,
+        },
+        candidateCount: 4,
+        resultMode: "ordered_tie_groups",
+        allowTies: true,
+        allowRejectAll: true,
+        presentation: {
+          showTaskPrompt: true,
+          randomizeCandidateOrder: true,
+          hideModelIdentity: true,
+          parts: [
+            { source: "attempt_output", path: "/text", renderer: "markdown" },
+            ...(task.expectedOutput?.artifactRenderer
+              ? [{ source: "artifact" as const, path: "candidate-image-1.png", renderer: "image" as const }]
+              : []),
+          ],
+        },
+        rubricRef: {
+          id: `preference-rubric-${contentHash(rubric).slice(0, 24)}`,
+          contentHash: contentHash(rubric),
+          mediaType: "text/markdown",
+          sizeBytes: Buffer.byteLength(rubric),
+        },
+        criteria: [{ id: "overall_quality", label: "Overall quality", instruction: rubric, weight: 1 }],
+        assignment: { strategy: "randomized_blinded_v1", maxAssignmentsPerCandidate: 20 },
+        aggregation: { algorithm: "mean_pairwise_win_fraction_v1", quorum: 1, rejectAllThreshold: 1 },
+        rewardProjection: { algorithm: "pairwise_win_fraction_v1", verifierId: "preference-quality", verifierVersion: "1", weight: 1 },
+        calibration: {
+          minimumSamples,
+          minimumOrderAgreement: 0.8,
+          minimumTieAgreement: 0.8,
+          minimumOrderSwapAgreement: 0.8,
+        },
+        metadata: { source: "openpond-managed-calibration" },
+      });
+      if (!existing) {
+        await preferenceComparisons.publishRelease({
+          tasksetId,
+          tasksetRelease: portable.tasksetRelease,
+          release,
+          publisherKey: reviewerKey,
+        });
+        await bindTasksetPreferenceComparison({ store: deps.store, taskset, release });
+      }
+      const policyTasks = taskset.tasks
+        .filter((candidate) => candidate.split !== "frozen_eval")
+        .map((candidate) => ({
+          id: candidate.id,
+          instruction: typeof candidate.input.prompt === "string" ? candidate.input.prompt : JSON.stringify(candidate.input),
+          context: candidate.policyVisibleContext,
+          expectedText: null,
+          artifactRenderer: candidate.expectedOutput?.artifactRenderer ?? null,
+        }));
+      if (policyTasks.length === 1) policyTasks.push({ ...policyTasks[0]! });
+      const requestContent = {
+        schemaVersion: "openpond.managedRlCalibrationBatchRequest.v1" as const,
+        name: `Calibration · ${taskset.name}`.slice(0, 191),
+        idempotencyKey: `openpond-calibration:${release.contentHash}:${contentHash([task.id, batchId])}`.slice(0, 191),
+        taskId: task.id,
+        tasks: policyTasks,
+        tasksetRelease: portable.tasksetRelease,
+        verifierSetRelease: portable.verifierSetRelease,
+        comparisonRelease: release,
+        maximumSpendUsd: 2,
+      };
+      return {
+        release,
+        ...(await deps.training.createPreferenceCalibrationBatch({
+          ...requestContent,
+          requestHash: contentHash(requestContent),
+        })),
+      };
+    }
+    if (action === "preference_comparison_calibration_sync") {
+      const tasksetId = requiredString(input.tasksetId, "tasksetId");
+      const reviewerKey = requiredString(input.reviewerKey, "reviewerKey");
+      const jobId = requiredString(input.jobId, "jobId");
+      const result = await deps.training.preferenceCalibrationBatch(jobId);
+      if (!result.batch) return result;
+      return {
+        ...result,
+        assignment: await requirePreferenceComparisons(deps.preferenceComparisons).importManagedCalibrationBatch({
+          tasksetId,
+          importerKey: reviewerKey,
+          batch: result.batch,
+        }),
+      };
     }
     if (action === "preference_comparison_publish") {
       const preferenceComparisons = requirePreferenceComparisons(deps.preferenceComparisons);
@@ -207,7 +346,28 @@ export function createTrainingApi(deps: {
         actorKey,
         model: ChatModelRefSchema.parse(input.model),
         rubric: requiredString(input.rubric, "rubric"),
-        signal: new AbortController().signal,
+        reviewVariant: preferenceModelReviewVariant(input.reviewVariant),
+        signal,
+      });
+    }
+    if (action === "preference_comparison_calibration_review_next") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).submitNextCalibrationModelReceipt({
+        id: requiredString(input.id, "id"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        comparisonReleaseId: nullableString(input.comparisonReleaseId),
+        actorKey: requiredString(input.reviewerKey, "reviewerKey"),
+        model: ChatModelRefSchema.parse(input.model),
+        rubric: requiredString(input.rubric, "rubric"),
+        signal,
+      });
+    }
+    if (action === "preference_comparison_calibration_save") {
+      return requirePreferenceComparisons(deps.preferenceComparisons).saveCalibrationFromStoredReceipts({
+        id: requiredString(input.id, "id"),
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        comparisonReleaseId: requiredString(input.comparisonReleaseId, "comparisonReleaseId"),
+        reviewerKey: requiredString(input.reviewerKey, "reviewerKey"),
+        model: ChatModelRefSchema.parse(input.model),
       });
     }
     if (action === "preference_comparison_unreviewable") {
@@ -1042,6 +1202,20 @@ function requiredStringGroupArray(value: unknown, name: string): string[][] {
 function preferenceComparisonPurpose(value: unknown): PreferenceComparisonPurpose {
   if (value === "training_reward" || value === "validation" || value === "frozen_eval" || value === "calibration") return value;
   throw new Error("purpose must be training_reward, validation, frozen_eval, or calibration.");
+}
+
+function preferenceModelReviewVariant(value: unknown): "canonical" | "order_swap" | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value === "canonical" || value === "order_swap") return value;
+  throw new Error("reviewVariant must be canonical or order_swap.");
+}
+
+function optionalPositiveInteger(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new Error("minimumSamples must be a positive integer.");
+  }
+  return value;
 }
 function preferenceReviewer(value: unknown): PreferenceReviewer {
   const reviewer = record(value);

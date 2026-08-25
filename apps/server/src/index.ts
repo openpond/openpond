@@ -608,6 +608,7 @@ export async function createOpenPondServer(
   });
   const preferenceComparisonService = createPreferenceComparisonService({
     store,
+    storeDir,
     // The local server is already protected by its bearer boundary. Hosted
     // deployments replace this with organization-scoped authorization.
     authorize: ({ reviewerKey }) => Boolean(reviewerKey.trim()),

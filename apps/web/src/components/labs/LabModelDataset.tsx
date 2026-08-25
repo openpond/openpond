@@ -133,6 +133,9 @@ export function LabModelDataset({
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
+  const preferenceRubric = taskset.graders.find(
+    (grader) => grader.kind === "model_judge" || grader.kind === "human",
+  )?.rubric ?? "";
   const workTask = taskset.environment.kind === "work"
     ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
     : null;
@@ -346,6 +349,8 @@ export function LabModelDataset({
           </div>
         </DetailSection>
         <PreferenceComparisonReview
+          defaultModel={defaultModel}
+          defaultRubric={preferenceRubric}
           reviewerKey={taskset.profileId}
           tasksetId={taskset.id}
           training={training}

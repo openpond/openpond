@@ -307,6 +307,8 @@ export function createTrainingService(deps: {
     setModelPinned,
     cancelJob,
     refreshManagedRunEvidence,
+    createPreferenceCalibrationBatch: (request: unknown) => portableAdapters.createCalibrationBatch(request),
+    preferenceCalibrationBatch: (jobId: string) => portableAdapters.calibrationBatch(jobId),
     close,
   };
 

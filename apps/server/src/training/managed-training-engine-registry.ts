@@ -13,6 +13,8 @@ export function createDestinationTrainingEngineRegistry(input: {
   const adapters = new TrainingAdapterRegistry() as TrainingAdapterRegistry & {
     close(): Promise<void>;
     refreshManagedEvidence(job: TrainingJob): Promise<void>;
+    createCalibrationBatch(request: unknown): ReturnType<OpenPondManagedTrainingAdapter["createCalibrationBatch"]>;
+    calibrationBatch(jobId: string): ReturnType<OpenPondManagedTrainingAdapter["calibrationBatch"]>;
   };
   const managed = new OpenPondManagedTrainingAdapter({
     store: input.store,
@@ -27,5 +29,7 @@ export function createDestinationTrainingEngineRegistry(input: {
       await managed.refreshEvidence(parsed.data);
     }
   };
+  adapters.createCalibrationBatch = (request) => managed.createCalibrationBatch(request);
+  adapters.calibrationBatch = (jobId) => managed.calibrationBatch(jobId);
   return adapters;
 }

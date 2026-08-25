@@ -103,6 +103,22 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.readFileImpl = dependencies.readFileImpl ?? readFile;
   }
 
+  async createCalibrationBatch(request: unknown) {
+    return this.requestJson<{ job: ManagedJob; requestHash: string }>(
+      "/v1/managed-rl/calibration-batches",
+      { method: "POST", body: JSON.stringify(request) },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async calibrationBatch(jobId: string) {
+    return this.requestJson<{ job: ManagedJob; batch: unknown | null }>(
+      `/v1/managed-rl/calibration-batches/${encodeURIComponent(jobId)}`,
+      {},
+      await this.resolveBoundAccess(),
+    );
+  }
+
   async capabilities() {
     const checkedAt = new Date().toISOString();
     return TrainingEngineCapabilitiesSchema.parse({

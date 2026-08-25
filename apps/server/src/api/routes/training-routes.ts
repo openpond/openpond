@@ -118,9 +118,15 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "GET", action: "preference_comparison_list", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "POST", action: "preference_comparison_publish", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/status$/, method: "GET", action: "preference_comparison_calibration_status", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches$/, method: "POST", action: "preference_comparison_calibration_start", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches\/([^/]+)\/sync$/, method: "POST", action: "preference_comparison_calibration_sync", key: "tasksetId", assignmentKey: "jobId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/model-reviews\/next$/, method: "POST", action: "preference_comparison_calibration_review_next", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/report$/, method: "POST", action: "preference_comparison_calibration_save", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/assignments$/, method: "POST", action: "preference_comparison_create_assignment", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/next$/, method: "POST", action: "preference_comparison_next", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/submit$/, method: "POST", action: "preference_comparison_submit", key: "tasksetId", assignmentKey: "assignmentId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/model-review$/, method: "POST", action: "preference_comparison_model_review", key: "tasksetId", assignmentKey: "assignmentId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/unreviewable$/, method: "POST", action: "preference_comparison_unreviewable", key: "tasksetId", assignmentKey: "assignmentId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/, method: "POST", action: "run_taskset_benchmark", key: "tasksetId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
@@ -159,7 +165,12 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       [item.key]: decodeURIComponent(match[1]!),
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
     };
-    sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl));
+    const controller = new AbortController();
+    request.once("aborted", () => controller.abort(new Error("training_request_aborted")));
+    response.once("close", () => {
+      if (!response.writableEnded) controller.abort(new Error("training_response_closed"));
+    });
+    sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl, controller.signal));
     return true;
   }
   return false;
