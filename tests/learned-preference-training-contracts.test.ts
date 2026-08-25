@@ -9,7 +9,8 @@ import {
 import { createRewardModelQualificationReport } from "@openpond/evals";
 
 import { bindLearnedPreferenceReward } from "../apps/server/src/training/learned-preference-reward-binding.js";
-import { managedRftRecipe } from "./helpers/managed-training-fixtures.js";
+import { withAuthoritativeRecipeHashes } from "../apps/server/src/training/training-service-helpers.js";
+import { managedRftRecipe, rftTasksetFixture } from "./helpers/managed-training-fixtures.js";
 
 const HASH = "a".repeat(64);
 const ref = (id: string) => ({ id, contentHash: HASH });
@@ -256,5 +257,36 @@ describe("learned preference training contracts", () => {
       },
     });
     expect(recipe.reward.learnedPreference?.rewardModelVersion.id).toBe("reward-r0");
+  });
+
+  it("carries the pinned learned reward into the authoritative managed policy contract", () => {
+    const base = managedRftRecipe();
+    const learnedPreference = {
+      rewardModelVersion: ref("reward-r0"),
+      qualificationReport: ref("synthetic-smoke-report"),
+      checkpoint: {
+        id: "reward-checkpoint",
+        contentHash: HASH,
+        objectRef: "r2://bucket/tenants/team/jobs/rm0/checkpoints/r0",
+        files: ["adapter/adapter_config.json", "adapter/adapter_model.safetensors", "scalar-head.pt", "bucket-head.pt", "processor/preprocessor_config.json"].map((path, index) => ({ path, sizeBytes: index + 1, sha256: HASH })),
+      },
+      runtime: {
+        baseModel: { source: "huggingface" as const, repoId: "google/siglip-base-patch16-224", revision: "b".repeat(40), configHash: HASH, tokenizerHash: HASH, licenseId: "apache-2.0", gated: false },
+        processor: { repository: "google/siglip-base-patch16-224", revision: "b".repeat(40), configHash: HASH },
+      },
+      processorRelease: ref("processor-one"),
+      rewardComposerRelease: ref("reward-composer-one"),
+      qualificationKind: "synthetic_smoke" as const,
+    };
+    const recipe = RftRecipeSchema.parse({
+      ...base,
+      reward: { ...base.reward, learnedPreference },
+    });
+
+    const authoritative = RftRecipeSchema.parse(
+      withAuthoritativeRecipeHashes(rftTasksetFixture(), recipe),
+    );
+
+    expect(authoritative.policyOptimization?.reward.learnedPreference).toEqual(learnedPreference);
   });
 });

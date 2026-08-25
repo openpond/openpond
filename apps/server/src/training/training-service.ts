@@ -441,11 +441,11 @@ export function createTrainingService(deps: {
               },
               createdAt: new Date().toISOString(),
             });
-            await deps.store.saveRewardModelVersion(version.version);
             await saveRewardModelQualificationReport({
               storeDir: deps.storeDir,
               report: version.report,
             });
+            await deps.store.saveRewardModelVersion(version.version);
             await deps.store.saveRewardModelRun({
               ...run,
               status: "succeeded",
