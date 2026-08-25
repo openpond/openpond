@@ -42,6 +42,28 @@ describe("training API Model Run approval forwarding", () => {
     );
   });
 
+  test("forwards the exact Taskset and qualified Reward Model Version for a policy binding", async () => {
+    const learnedPreferenceRewardBinding = vi.fn(async (input: unknown) => ({
+      ...input as Record<string, unknown>,
+      rewardComposerRelease: { id: "reward-composer-r0", contentHash: "a".repeat(64) },
+    }));
+    const api = createTrainingApi({
+      training: { learnedPreferenceRewardBinding },
+    } as never);
+
+    await expect(api.request("learned_preference_reward_binding", {
+      tasksetId: "taskset-t0",
+      rewardModelVersionId: "reward-r0",
+    })).resolves.toMatchObject({
+      tasksetId: "taskset-t0",
+      rewardModelVersionId: "reward-r0",
+    });
+    expect(learnedPreferenceRewardBinding).toHaveBeenCalledWith({
+      tasksetId: "taskset-t0",
+      rewardModelVersionId: "reward-r0",
+    });
+  });
+
   test("routes evaluation cancellation to the Harness Refiner execution", async () => {
     const cancelEvaluation = vi.fn(async (id: string) => ({ id, status: "cancelled" }));
     const cancelTraining = vi.fn();
