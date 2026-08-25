@@ -418,9 +418,10 @@ export function createTrainingService(deps: {
             const inputBundle = remote.job.inputBundle;
             const rewardTraining = recordOrNull(inputBundle?.rewardModelTraining);
             const rewardBase = recordOrNull(rewardTraining?.baseModel);
+            const rewardProcessor = recordOrNull(rewardTraining?.processor);
             const harness = recordOrNull(inputBundle?.harnessRunManifest);
             const taskset = await deps.store.getTaskset(run.taskset.id);
-            if (!taskset || !rewardBase || !harness || !checkpointPrefix || !artifactSha256) {
+            if (!taskset || !rewardBase || !rewardProcessor || !harness || !checkpointPrefix || !artifactSha256) {
               throw new Error("Completed managed Reward Model job is missing immutable launch lineage.");
             }
             const version = projectQualifiedRewardModel({
@@ -434,7 +435,7 @@ export function createTrainingService(deps: {
                 modelAssetId: null,
                 source: "managed",
               },
-              runtime: managedRewardModelRuntime(rewardBase),
+              runtime: managedRewardModelRuntime(rewardBase, rewardProcessor),
               resolvedBundleHash: stringField(harness, "resolvedBundleHash"),
               profileRelease: { id: run.profileId, revision: taskset.revision, contentHash: taskset.contentHash },
               harnessRelease: objectRef(harness.harnessRelease, "harness release"),
@@ -609,8 +610,9 @@ function stringField(value: Record<string, unknown>, key: string): string {
   return field;
 }
 
-function managedRewardModelRuntime(
+export function managedRewardModelRuntime(
   value: Record<string, unknown>,
+  processor: Record<string, unknown>,
 ): NonNullable<RewardModelVersion["runtime"]> {
   const source = stringField(value, "source");
   if (source !== "huggingface") {
@@ -622,9 +624,19 @@ function managedRewardModelRuntime(
   const tokenizerHash = stringField(value, "tokenizerHash");
   const licenseId = stringField(value, "licenseId");
   const gated = value.gated === true;
+  const processorRepository = stringField(processor, "repository");
+  const processorRevision = stringField(processor, "revision");
+  const processorConfigHash = stringField(processor, "configHash");
+  if (processorRepository !== repoId || processorRevision !== revision) {
+    throw new Error("Managed Reward Model processor must match its immutable base release.");
+  }
   return {
     baseModel: { source, repoId, revision, configHash, tokenizerHash, licenseId, gated },
-    processor: { repository: repoId, revision, configHash },
+    processor: {
+      repository: processorRepository,
+      revision: processorRevision,
+      configHash: processorConfigHash,
+    },
   };
 }
 
