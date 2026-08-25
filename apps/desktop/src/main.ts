@@ -41,6 +41,7 @@ import {
   bundledServerLaunchPort,
   canLaunchBundledDesktopServer,
   canReuseDesktopServer,
+  desktopServerReadyTimeoutMs,
   isCompatibleDesktopServer,
   stopStaleLocalDesktopServer,
   type DesktopServerHealth,
@@ -189,7 +190,10 @@ async function waitForReady(child: ChildProcessWithoutNullStreams, fallbackUrl: 
     const parser = createReadyLineParser<{ url?: string }>("OPENPOND_APP_SERVER_READY ", (payload) => {
       finish(payload.url || fallbackUrl);
     });
-    const timer = setTimeout(() => fail(new Error("OpenPond App server did not start in time")), 15000);
+    const timer = setTimeout(
+      () => fail(new Error("OpenPond App server did not start in time")),
+      desktopServerReadyTimeoutMs(),
+    );
     const onStdout = (chunk: Buffer) => {
       try {
         parser.push(chunk.toString("utf8"));

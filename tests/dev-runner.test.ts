@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import {
   buildDevRunnerPlan,
+  devAppHomePath,
+  devServerReadyTimeoutMs,
   isReusableOpenPondHealth,
   parseDevRunnerArgs,
   vercelProtectionBypassSecret,
@@ -13,6 +15,32 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("dev runner", () => {
+  test("isolates persistent development state from installed app state", () => {
+    expect(devAppHomePath({}, "/test-home")).toBe(
+      "/test-home/.openpond/openpond-app-dev",
+    );
+    expect(
+      devAppHomePath({ OPENPOND_APP_CHANNEL: "nightly" }, "/test-home"),
+    ).toBe("/test-home/.openpond/openpond-app-nightly-dev");
+    expect(
+      devAppHomePath({ OPENPOND_APP_HOME: "/custom/openpond" }, "/test-home"),
+    ).toBe("/custom/openpond");
+  });
+
+  test("allows state-heavy app servers enough time to become ready", () => {
+    expect(devServerReadyTimeoutMs({})).toBe(60_000);
+    expect(
+      devServerReadyTimeoutMs({
+        OPENPOND_DEV_SERVER_READY_TIMEOUT_MS: "90000",
+      }),
+    ).toBe(90_000);
+    expect(
+      devServerReadyTimeoutMs({
+        OPENPOND_DEV_SERVER_READY_TIMEOUT_MS: "invalid",
+      }),
+    ).toBe(60_000);
+  });
+
   test("only reuses a healthy OpenPond app server", () => {
     expect(isReusableOpenPondHealth({ ok: true, server: "openpond-app-server" })).toBe(true);
     expect(isReusableOpenPondHealth({ ok: false, server: "openpond-app-server" })).toBe(false);
@@ -31,6 +59,7 @@ describe("dev runner", () => {
       server: "http://127.0.0.1:17874",
       web: "http://127.0.0.1:17876",
     });
+    expect(plan.appHome).toBe(devAppHomePath({ OPENPOND_APP_CHANNEL: "stable" }));
     expect(plan.setupCommands.map((command) => command.id)).toEqual(["build-desktop"]);
     expect(plan.processes.map((processPlan) => processPlan.id)).toEqual([
       "server",
@@ -43,6 +72,7 @@ describe("dev runner", () => {
       "17874",
     ]);
     expect(plan.processes.find((processPlan) => processPlan.id === "desktop")?.env).toMatchObject({
+      OPENPOND_APP_HOME: plan.appHome,
       OPENPOND_SERVER_PORT: "17874",
       OPENPOND_WEB_PORT: "17876",
       OPENPOND_WEB_URL: "http://127.0.0.1:17876",

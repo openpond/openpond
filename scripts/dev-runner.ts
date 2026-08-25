@@ -28,6 +28,7 @@ export type DevRunnerPlan = {
   mode: DevRunnerMode;
   root: string;
   host: string;
+  appHome: string;
   ports: {
     server: number;
     web: number;
@@ -61,6 +62,7 @@ type DevServerLock = {
 };
 
 const READY_PREFIX = "OPENPOND_APP_SERVER_READY ";
+const DEFAULT_SERVER_READY_TIMEOUT_MS = 60_000;
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 export function parseDevRunnerArgs(
@@ -142,7 +144,9 @@ export function buildDevRunnerPlan(
   const webPort = options.webPort ?? numberFromEnv(env.OPENPOND_WEB_PORT) ?? 17876;
   const serverUrl = `http://${host}:${serverPort}`;
   const webUrl = `http://${host}:${webPort}`;
+  const appHome = devAppHomePath(env);
   const baseEnv = {
+    OPENPOND_APP_HOME: appHome,
     OPENPOND_SERVER_PORT: String(serverPort),
     OPENPOND_WEB_PORT: String(webPort),
     OPENPOND_WEB_URL: webUrl,
@@ -193,6 +197,7 @@ export function buildDevRunnerPlan(
     mode: options.mode,
     root,
     host,
+    appHome,
     ports: {
       server: serverPort,
       web: webPort,
@@ -218,15 +223,16 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
 
   try {
     if (serverProcess) {
+      const plannedTokenFile = tokenFilePath(plan.appHome);
       serverLock = await acquireDevServerLock(plan);
       let serverReady: ReadyPayload;
       if (!serverLock) {
-        serverReady = await waitForReusableServer(plan.urls.server);
+        serverReady = await waitForReusableServer(plan.urls.server, plannedTokenFile);
         reusedServer = true;
       } else {
         const reusable = await probeReusableServer(plan.urls.server);
         if (reusable === "compatible") {
-          serverReady = { url: plan.urls.server, tokenFile: tokenFilePath() };
+          serverReady = { url: plan.urls.server, tokenFile: plannedTokenFile };
           reusedServer = true;
           await serverLock.release();
           serverLock = null;
@@ -239,8 +245,9 @@ async function runDevPlan(plan: DevRunnerPlan): Promise<void> {
           serverReady = await server.ready;
         }
       }
-      const token = await readToken(serverReady.tokenFile);
-      if (!token) throw new Error(`OpenPond App server did not write a capability token at ${serverReady.tokenFile ?? tokenFilePath()}`);
+      const tokenFile = serverReady.tokenFile ?? plannedTokenFile;
+      const token = await readToken(tokenFile);
+      if (!token) throw new Error(`OpenPond App server did not write a capability token at ${tokenFile}`);
       const serverUrl = serverReady.url ?? plan.urls.server;
       if (rendererProcess) {
         rendererProcess.env.VITE_OPENPOND_SERVER_URL = serverUrl;
@@ -331,11 +338,15 @@ function devServerLockPath(plan: DevRunnerPlan): string {
   return path.join(os.tmpdir(), `openpond-dev-server-${scope}.lock`);
 }
 
-async function waitForReusableServer(url: string, timeoutMs = 15_000): Promise<ReadyPayload> {
+async function waitForReusableServer(
+  url: string,
+  tokenFile: string,
+  timeoutMs = devServerReadyTimeoutMs(),
+): Promise<ReadyPayload> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const result = await probeReusableServer(url);
-    if (result === "compatible") return { url, tokenFile: tokenFilePath() };
+    if (result === "compatible") return { url, tokenFile };
     if (result === "incompatible") throw new Error(`${url} is already occupied by a different service.`);
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
@@ -357,6 +368,15 @@ export function isReusableOpenPondHealth(payload: unknown): boolean {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
   const record = payload as Record<string, unknown>;
   return record.ok === true && record.server === "openpond-app-server";
+}
+
+export function devServerReadyTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const configured = numberFromEnv(env.OPENPOND_DEV_SERVER_READY_TIMEOUT_MS);
+  return configured && configured > 0
+    ? configured
+    : DEFAULT_SERVER_READY_TIMEOUT_MS;
 }
 
 function runSetupCommand(setup: DevRunnerCommand): void {
@@ -396,7 +416,11 @@ function startProcess(
   return { child, ready };
 }
 
-function waitForReady(child: ChildProcessWithoutNullStreams, processId: string): Promise<ReadyPayload> {
+function waitForReady(
+  child: ChildProcessWithoutNullStreams,
+  processId: string,
+  timeoutMs = devServerReadyTimeoutMs(),
+): Promise<ReadyPayload> {
   return new Promise((resolve, reject) => {
     let buffer = "";
     let settled = false;
@@ -419,7 +443,7 @@ function waitForReady(child: ChildProcessWithoutNullStreams, processId: string):
     };
     const timer = setTimeout(
       () => fail(new Error(`${processId} did not print ${READY_PREFIX.trim()} in time`)),
-      15000,
+      timeoutMs,
     );
     const onStdout = (chunk: Buffer) => {
       buffer += chunk.toString("utf8");
@@ -523,7 +547,7 @@ function waitForChildExit(child: ChildProcessWithoutNullStreams, timeoutMs: numb
   });
 }
 
-async function readToken(file = tokenFilePath()): Promise<string | null> {
+async function readToken(file: string): Promise<string | null> {
   if (process.env.OPENPOND_APP_TOKEN?.trim()) return process.env.OPENPOND_APP_TOKEN.trim();
   try {
     const token = (await fs.readFile(file, "utf8")).trim();
@@ -533,8 +557,8 @@ async function readToken(file = tokenFilePath()): Promise<string | null> {
   }
 }
 
-function tokenFilePath(): string {
-  return path.join(process.env.OPENPOND_APP_HOME || path.join(os.homedir(), ".openpond", "openpond-app"), "token");
+function tokenFilePath(appHome: string): string {
+  return path.join(appHome, "token");
 }
 
 function childEnv(extra: Record<string, string>): NodeJS.ProcessEnv {
@@ -573,6 +597,18 @@ function prefixLines(prefix: string, value: string): string {
 
 function defaultServerPort(env: NodeJS.ProcessEnv): number {
   return env.OPENPOND_APP_CHANNEL === "nightly" ? 17875 : 17874;
+}
+
+export function devAppHomePath(
+  env: NodeJS.ProcessEnv = process.env,
+  homeDir = os.homedir(),
+): string {
+  const explicit = env.OPENPOND_APP_HOME?.trim();
+  if (explicit) return explicit;
+  const dirname = env.OPENPOND_APP_CHANNEL === "nightly"
+    ? "openpond-app-nightly-dev"
+    : "openpond-app-dev";
+  return path.join(homeDir, ".openpond", dirname);
 }
 
 function devEnvironmentWithVercelBypass(

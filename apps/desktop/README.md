@@ -11,9 +11,11 @@ The root dev supervisor is the supported entrypoint. It builds Desktop, runs the
 
 ## Ports and environment
 
-Stable development defaults to server port `17874` and renderer port `17876`; nightly defaults the server to `17875`. Override them with `OPENPOND_SERVER_PORT`, `OPENPOND_WEB_PORT`, or the dev-runner flags. Use `OPENPOND_APP_HOME` for an isolated data directory.
+Stable development defaults to server port `17874` and renderer port `17876`; nightly defaults the server to `17875`. Override them with `OPENPOND_SERVER_PORT`, `OPENPOND_WEB_PORT`, or the dev-runner flags. Development state is isolated in `~/.openpond/openpond-app-dev` by default (`openpond-app-nightly-dev` for nightly); set `OPENPOND_APP_HOME` explicitly to use another directory. The dev runner allows 60 seconds for a state-heavy server to become ready; override that limit with `OPENPOND_DEV_SERVER_READY_TIMEOUT_MS` when diagnosing startup behavior. Packaged Desktop uses the same 60-second allowance and supports `OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS` for diagnostics.
 
 Desktop reuses a server only when an explicit server URL or reuse policy is present and the matching capability token is available. Reused servers are never signalled by Desktop. Directly launching Electron without the supervisor is still supported: Desktop then owns its fallback server and renderer processes.
+
+The local SQLite store creates a full backup before upgrading an existing schema. After the migrated store is successfully read, OpenPond retains the two newest automatic `before-vN` backups and prunes older automatic migration snapshots. Manual recovery and corruption-quarantine directories are not part of automatic retention.
 
 ## Build and package
 
