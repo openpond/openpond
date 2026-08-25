@@ -40,6 +40,7 @@ import {
   type ManagedRewardModelBase,
 } from "./reward-model-launch-input.js";
 import { projectQualifiedRewardModel } from "./reward-model-qualification-projection.js";
+import { saveRewardModelQualificationReport } from "./reward-model-qualification-store.js";
 import { createTrainingModelConfigurationService } from "./training-model-controls.js";
 import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
@@ -399,6 +400,10 @@ export function createTrainingService(deps: {
               createdAt: new Date().toISOString(),
             });
             await deps.store.saveRewardModelVersion(version.version);
+            await saveRewardModelQualificationReport({
+              storeDir: deps.storeDir,
+              report: version.report,
+            });
             await deps.store.saveRewardModelRun({
               ...run,
               status: "succeeded",
