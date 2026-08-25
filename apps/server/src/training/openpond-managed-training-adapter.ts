@@ -330,17 +330,18 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           );
           if (
             learnedPreference &&
-            scoredTasks.some(
-              (task) =>
-                typeof task.expectedOutput?.artifactRendererRef !== "string" ||
-                typeof task.expectedOutput?.outputSchemaRef !== "string",
+            (
+              taskset.metadata.tasksetOutputContract === undefined
+              || scoredTasks.some(
+                (task) => typeof task.expectedOutput?.outputSchemaRef !== "string",
+              )
             )
           ) {
             issues.push({
-              code: "managed_learned_reward_renderer_missing",
-              path: "taskset.tasks",
+              code: "managed_learned_reward_output_contract_missing",
+              path: "taskset.metadata.tasksetOutputContract",
               message:
-                "Stateless learned-reward tasks require an artifact renderer and output schema.",
+                "Stateless learned-reward tasks require one immutable structured output contract.",
             });
           } else if (
             !learnedPreference &&

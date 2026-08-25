@@ -14,6 +14,7 @@ function input(overrides: Record<string, unknown> = {}) {
       scope: "synthetic_smoke",
       status: "running",
       taskset: { id: "taskset-t0", revision: 1, contentHash: HASH },
+      tasksetRelease: { id: "taskset-t0", contentHash: HASH },
       preferenceDatasetRelease: { id: "dataset-d0", contentHash: HASH },
     },
     baseModel: {
@@ -40,7 +41,7 @@ function input(overrides: Record<string, unknown> = {}) {
       "adapter/adapter_config.json",
       "scalar-head.pt",
       "bucket-head.pt",
-      "processor/preprocessor_config.json",
+      "processor/tokenizer_config.json",
       "optimizer.pt",
     ].map((path, index) => ({ path, sha256: HASH, sizeBytes: index + 1 })),
     evidence: {

@@ -7,17 +7,17 @@ import type { ManagedRewardModelBase } from "./reward-model-launch-input.js";
 
 export const MANAGED_REWARD_MODEL_PROFILE: ManagedRewardModelBase = {
   source: "huggingface",
-  repoId: "google/siglip-base-patch16-224",
-  revision: "7fd15f0689c79d79e38b1c2e2e2370a7bf2761ed",
-  configHash: "cd85b3d28829722820bcb89a2cfbb4160e55fd359249a3044da724166a8d9688",
-  tokenizerHash: "c6e405cb7c670d56636a9402c81023a55bc6c3c53d89cf02b92f5c5005bfe920",
+  repoId: "Qwen/Qwen3-0.6B",
+  revision: "c1899de289a04d12100db370d81485cdf75e47ca",
+  configHash: "660db3b73d788119c04535e48cf9be5f55bc3100841a718637ae695b442f27dd",
+  tokenizerHash: "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
   licenseId: "apache-2.0",
   gated: false,
 };
 
 const MANAGED_REWARD_PROCESSOR = {
-  id: "siglip-processor-7fd15f06",
-  contentHash: "d11ccb80f15d358a11bdb070e92e2d889005874b7db15823d5f10d9b2533b14a",
+  id: "qwen3-tokenizer-c1899de2",
+  contentHash: "d5d09f07b48c3086c508b30d1c9114bd1189145b74e982a265350c923acd8101",
 };
 
 export function managedSyntheticRewardSmokeRecipe(input: {
@@ -39,11 +39,16 @@ export function managedSyntheticRewardSmokeRecipe(input: {
     tasksetRelease: input.tasksetRelease,
     preferenceDatasetRelease: input.preferenceDatasetRelease,
     processorRelease: MANAGED_REWARD_PROCESSOR,
+    input: {
+      kind: "structured_text",
+      serialization: "scenario_input_and_candidate_json_v1",
+      maxCharacters: 32_000,
+    },
     lora: {
       rank: 4,
       alpha: 8,
       dropout: 0,
-      targetModules: ["q_proj", "k_proj", "v_proj", "out_proj"],
+      targetModules: ["q_proj", "k_proj", "v_proj", "o_proj"],
     },
     heads: { scalar: "pooled_hidden_state_linear", bucket: "three_class" },
     loss: {
@@ -63,7 +68,7 @@ export function managedSyntheticRewardSmokeRecipe(input: {
     resourceLimits: {
       wallTimeMs: 20 * 60 * 1_000,
       maxExamples: 8,
-      maxImagePixels: 512 * 512,
+      maxInputCharacters: 32_000,
       maximumSpendUsd: 2,
     },
   });

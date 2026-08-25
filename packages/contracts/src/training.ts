@@ -164,6 +164,15 @@ export const RewardModelRecipeSchema = z.object({
   tasksetRelease: ImmutableReleaseRefSchema,
   preferenceDatasetRelease: ImmutableReleaseRefSchema,
   processorRelease: ImmutableReleaseRefSchema,
+  input: z.object({
+    kind: z.literal("structured_text"),
+    serialization: z.literal("scenario_input_and_candidate_json_v1"),
+    maxCharacters: z.number().int().positive().max(500_000),
+  }).strict().default({
+    kind: "structured_text",
+    serialization: "scenario_input_and_candidate_json_v1",
+    maxCharacters: 32_000,
+  }),
   lora: z.object({
     rank: z.number().int().positive().max(256),
     alpha: z.number().positive().max(1_024),
@@ -191,7 +200,8 @@ export const RewardModelRecipeSchema = z.object({
   resourceLimits: z.object({
     wallTimeMs: z.number().int().positive().max(24 * 60 * 60 * 1_000),
     maxExamples: z.number().int().positive().max(100_000),
-    maxImagePixels: z.number().int().positive().max(100_000_000),
+    maxInputCharacters: z.number().int().positive().max(500_000).default(32_000),
+    maxImagePixels: z.number().int().positive().max(100_000_000).optional(),
     maximumSpendUsd: z.number().nonnegative().max(100_000),
   }).strict(),
 }).superRefine((recipe, context) => {

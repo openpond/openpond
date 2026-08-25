@@ -19,7 +19,7 @@ export const ModelVersionKindSchema = z.enum([
   "lora_adapter",
 ]);
 
-/** Exact multimodal runtime used to train and later serve a Reward Model. */
+/** Exact tokenizer/model runtime used to train and later serve a Reward Model. */
 export const RewardModelRuntimeSchema = z.object({
   baseModel: z.object({
     source: z.literal("huggingface"),
@@ -120,7 +120,7 @@ export const RewardModelVersionSchema = z.object({
   status: z.enum(["available", "failed"]),
   scope: z.enum(["synthetic_smoke", "human_preference"]),
   baseModel: BaseModelPreferenceSchema,
-  // Older persisted versions predate executable multimodal scorer identity.
+  // Older persisted versions predate executable scorer identity.
   // They remain readable but cannot be bound to a new policy run.
   runtime: RewardModelRuntimeSchema.nullable().default(null),
   taskset: VersionedReleaseRefSchema,

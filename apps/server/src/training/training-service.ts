@@ -285,10 +285,7 @@ export function createTrainingService(deps: {
     });
     await deps.store.saveRewardModelRun(prepared);
     try {
-      const [attempts, artifacts] = await Promise.all([
-        deps.store.listTaskAttempts(input.taskset.id),
-        deps.store.listTaskAttemptArtifacts({ tasksetId: input.taskset.id }),
-      ]);
+      const attempts = await deps.store.listTaskAttempts(input.taskset.id);
       const request = await buildManagedRewardModelLaunchInput({
         idempotencyKey: managedRewardModelIdempotencyKey({
           runId: prepared.id,
@@ -302,8 +299,6 @@ export function createTrainingService(deps: {
         recipe: input.recipe,
         managedBaseModel: input.managedBaseModel,
         attempts,
-        artifacts,
-        uploadArtifact: (artifact) => portableAdapters.uploadRewardModelArtifact(artifact),
       });
       const launched = await portableAdapters.createRewardModelLaunch(request);
       return deps.store.saveRewardModelRun({

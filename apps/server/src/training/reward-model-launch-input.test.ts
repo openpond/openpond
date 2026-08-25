@@ -1,10 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
-import { describe, expect, test, vi } from "vitest";
-
-import { sha256 } from "@openpond/taskset-sdk";
+import { describe, expect, test } from "vitest";
 
 import { managedSyntheticRewardSmokeRecipe } from "./managed-reward-model-recipes.js";
 import {
@@ -22,11 +16,6 @@ describe("managed Reward Model launch input", () => {
   });
 
   test("resolves canonical preference receipt refs back to stored Attempts", async () => {
-    const directory = await mkdtemp(path.join(os.tmpdir(), "openpond-reward-launch-"));
-    const imagePath = path.join(directory, "candidate.png");
-    const image = new Uint8Array([137, 80, 78, 71]);
-    await writeFile(imagePath, image);
-    const imageHash = sha256(image);
     const tasksetReleaseRef = {
       id: "taskset-release-t0-r1",
       contentHash: "a".repeat(64),
@@ -34,30 +23,16 @@ describe("managed Reward Model launch input", () => {
     const tasksetRelease = {
       ...tasksetReleaseRef,
       revision: 1,
+      tasks: [{ id: "scenario-1", input: { prompt: "Choose a coherent structured candidate." } }],
     } as never;
     const datasetRef = { id: "preferences-d0", contentHash: "b".repeat(64) };
     const receiptIds = ["receipt-love", "receipt-like", "receipt-reject"];
     const attempts = receiptIds.map((receiptId, index) => ({
       id: `attempt-${index}`,
+      taskId: "scenario-1",
       output: { text: `candidate-${index}` },
       metadata: { portableAttemptReceipt: { id: receiptId } },
     }));
-    const artifacts = attempts.map((attempt, index) => ({
-      id: `artifact-${index}`,
-      attemptId: attempt.id,
-      mediaType: "image/png",
-      path: imagePath,
-      sizeBytes: image.byteLength,
-      sha256: imageHash,
-    }));
-    const uploadArtifact = vi.fn(async () => ({
-      objectRef: "r2://managed-rl/candidate.png",
-      sha256: imageHash,
-      sizeBytes: image.byteLength,
-      mediaType: "image/png",
-      sideEffectsStarted: false,
-    }));
-
     const launch = await buildManagedRewardModelLaunchInput({
       idempotencyKey: "reward-run-rm0",
       name: "Reward RM0",
@@ -90,17 +65,14 @@ describe("managed Reward Model launch input", () => {
         gated: false,
       },
       attempts: attempts as never,
-      artifacts: artifacts as never,
-      uploadArtifact,
     });
 
-    expect(uploadArtifact).toHaveBeenCalledTimes(6);
     const groups = (launch.rewardModelTraining as {
       groups: Array<{
         candidates: Array<{
           id: string;
           bucket: string;
-          artifact: Record<string, unknown>;
+          text: string;
         }>;
       }>;
     }).groups;
@@ -116,11 +88,10 @@ describe("managed Reward Model launch input", () => {
         { id: "attempt-2", bucket: "reject" },
       ],
     ]);
-    expect(groups[0]?.candidates[0]?.artifact).toEqual({
-      objectRef: "r2://managed-rl/candidate.png",
-      sha256: imageHash,
-      sizeBytes: image.byteLength,
-      mediaType: "image/png",
+    expect(JSON.parse(groups[0]!.candidates[0]!.text)).toEqual({
+      schemaVersion: "openpond.structuredPreferenceCandidate.v1",
+      scenario: { prompt: "Choose a coherent structured candidate." },
+      candidate: { text: "candidate-0" },
     });
   });
 });

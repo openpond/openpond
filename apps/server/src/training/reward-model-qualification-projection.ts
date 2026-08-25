@@ -55,7 +55,7 @@ export function projectQualifiedRewardModel(input: {
   const adapter = requiredFile(files, "adapter/adapter_config.json");
   const scalarHead = requiredFile(files, "scalar-head.pt");
   const bucketHead = requiredFile(files, "bucket-head.pt");
-  const processor = requiredFile(files, "processor/preprocessor_config.json");
+  const processor = requiredFile(files, "processor/tokenizer_config.json");
   const optimizer = requiredFile(files, "optimizer.pt");
   const ref = (file: InventoryFile) => ({
     id: `${input.providerRunId}:${file.path}`.replaceAll("/", ":"),

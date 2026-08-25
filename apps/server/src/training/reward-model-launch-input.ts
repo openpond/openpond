@@ -1,21 +1,10 @@
-import { readFile } from "node:fs/promises";
-
 import type {
   RewardModelRecipe,
-  TaskAttemptArtifact,
   TaskAttemptResult,
 } from "@openpond/contracts";
 import type { PreferenceDatasetRelease } from "@openpond/evals";
 import type { TasksetRelease } from "@openpond/evals";
 import { contentHash } from "@openpond/harness";
-import { sha256 } from "@openpond/taskset-sdk";
-
-type ManagedArtifact = {
-  objectRef: string;
-  sha256: string;
-  sizeBytes: number;
-  mediaType: string;
-};
 
 export type ManagedRewardModelBase = {
   source: "huggingface";
@@ -46,13 +35,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
   dataset: PreferenceDatasetRelease;
   recipe: RewardModelRecipe;
   managedBaseModel: ManagedRewardModelBase;
-  uploadArtifact: (input: {
-    bytes: Uint8Array;
-    mediaType: string;
-    idempotencyKey: string;
-  }) => Promise<ManagedArtifact>;
   attempts: TaskAttemptResult[];
-  artifacts: TaskAttemptArtifact[];
 }): Promise<Record<string, unknown>> {
   if (
     input.recipe.tasksetRelease.id !== input.tasksetRelease.id ||
@@ -81,11 +64,7 @@ export async function buildManagedRewardModelLaunchInput(input: {
       attemptsByReceipt.set(receipt.id, attempt);
     }
   }
-  const imageByAttempt = new Map<string, TaskAttemptArtifact>();
-  for (const artifact of input.artifacts) {
-    if (!artifact.mediaType?.startsWith("image/")) continue;
-    if (!imageByAttempt.has(artifact.attemptId)) imageByAttempt.set(artifact.attemptId, artifact);
-  }
+  const tasks = new Map(input.tasksetRelease.tasks.map((task) => [task.id, task]));
   const groups = await Promise.all(
     input.dataset.groups
       .filter((group) => group.partition === "reward_train" || group.partition === "reward_validation")
@@ -98,41 +77,27 @@ export async function buildManagedRewardModelLaunchInput(input: {
           const label = index === 0 ? "love" : index === group.orderedBuckets.length - 1 ? "reject" : "like";
           for (const attemptId of bucket) bucketByAttempt.set(attemptId, label);
         }
-        const candidates = await Promise.all(group.attemptRefs.map(async (attemptRef) => {
+        const candidates = group.attemptRefs.map((attemptRef) => {
           const attempt = attempts.get(attemptRef.id) ?? attemptsByReceipt.get(attemptRef.id);
-          const artifact = attempt ? imageByAttempt.get(attempt.id) : undefined;
           const bucket = bucketByAttempt.get(attemptRef.id);
-          if (!attempt || !artifact || !bucket) {
-            throw new Error(`Preference group ${group.id} is missing an Attempt, rendered image, or label.`);
+          const task = attempt ? tasks.get(attempt.taskId) : undefined;
+          if (!attempt || !task || !bucket) {
+            throw new Error(`Preference group ${group.id} is missing an Attempt, Scenario, or label.`);
           }
-          const mediaType = artifact.mediaType;
-          if (!mediaType?.startsWith("image/")) {
-            throw new Error(`Preference group ${group.id} artifact ${artifact.id} is not an image.`);
-          }
-          const bytes = await readFile(artifact.path);
-          if (bytes.byteLength !== artifact.sizeBytes || sha256(bytes) !== artifact.sha256) {
-            throw new Error(`Rendered artifact ${artifact.id} changed before managed Reward Model upload.`);
-          }
-          const uploaded = await input.uploadArtifact({
-            bytes,
-            mediaType,
-            idempotencyKey: `${input.idempotencyKey}:artifact:${artifact.sha256}`,
+          const text = JSON.stringify({
+            schemaVersion: "openpond.structuredPreferenceCandidate.v1",
+            scenario: task.input,
+            candidate: attempt.output,
           });
-          if (uploaded.sha256 !== artifact.sha256 || uploaded.sizeBytes !== bytes.byteLength) {
-            throw new Error(`Managed artifact upload did not preserve ${artifact.id}.`);
+          if (text.length > input.recipe.input.maxCharacters) {
+            throw new Error(`Preference candidate ${attempt.id} exceeds the Reward Model input limit.`);
           }
           return {
             id: attempt.id,
-            text: JSON.stringify(attempt.output),
+            text,
             bucket,
-            artifact: {
-              objectRef: uploaded.objectRef,
-              sha256: uploaded.sha256,
-              sizeBytes: uploaded.sizeBytes,
-              mediaType: uploaded.mediaType,
-            },
           };
-        }));
+        });
         return {
           id: group.id,
           partition: group.partition,
