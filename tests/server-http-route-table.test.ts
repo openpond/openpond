@@ -384,6 +384,33 @@ describe("server HTTP route table", () => {
     }
   });
 
+  test("routes Reward Model cancellation through the normal Training boundary", async () => {
+    const calls: RecordedCall[] = [];
+    const server = createServer(createHttpRequestHandler(routeTableDeps(calls)));
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address() as AddressInfo;
+    const origin = `http://127.0.0.1:${address.port}`;
+    try {
+      await expect(expectJsonRequest(
+        origin,
+        "POST",
+        "/v1/training/reward-model-runs/reward-run-rm0/cancel",
+        200,
+        {},
+      )).resolves.toMatchObject({
+        name: "trainingPayload",
+        args: expect.arrayContaining([
+          "reward_model_run_cancel",
+          { runId: "reward-run-rm0" },
+        ]),
+      });
+    } finally {
+      server.close();
+      await once(server, "close");
+    }
+  });
+
   test("preserves hosted community status, code, and recovery details", async () => {
     const deps = routeTableDeps([]);
     deps.communityPayload = async () => {

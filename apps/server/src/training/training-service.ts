@@ -401,6 +401,17 @@ export function createTrainingService(deps: {
     return reconciled;
   }
 
+  async function cancelRewardModelRun(runId: string) {
+    const run = await deps.store.getRewardModelRun(runId);
+    if (!run || run.status !== "running" || !run.managedRunId) {
+      throw new Error("Only a running managed Reward Model Run can be cancelled.");
+    }
+    const remote = await portableAdapters.rewardModelJob(run.managedRunId);
+    await portableAdapters.cancelRewardModelJob(run.managedRunId, remote.job.version);
+    await reconcileRewardModelRuns();
+    return (await deps.store.getRewardModelRun(runId)) ?? run;
+  }
+
   async function activity() {
     await portableModelRuns.reconcileActive();
     await reconcileRewardModelRuns();
@@ -630,6 +641,7 @@ export function createTrainingService(deps: {
     state,
     launchRewardModel,
     retryRewardModelQualification,
+    cancelRewardModelRun,
     learnedPreferenceRewardBinding,
     exportBundle,
     artifactDownload,

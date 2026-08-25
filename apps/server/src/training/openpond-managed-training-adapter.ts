@@ -179,6 +179,14 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     return payload.job;
   }
 
+  async cancelRewardModelJob(jobId: string, expectedVersion: number) {
+    return this.requestJson<{ job: ManagedJob }>(
+      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}/cancel`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
+      await this.resolveBoundAccess(),
+    );
+  }
+
   async capabilities() {
     const checkedAt = new Date().toISOString();
     return TrainingEngineCapabilitiesSchema.parse({

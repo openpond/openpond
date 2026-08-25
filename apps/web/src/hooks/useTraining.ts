@@ -520,6 +520,11 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/reward-model-runs/${encodeURIComponent(input.runId)}/retry-qualification`,
       input,
     ),
+    cancelRewardModelRun: (runId: string) => mutate(
+      "cancel-reward-model-run",
+      `/reward-model-runs/${encodeURIComponent(runId)}/cancel`,
+      {},
+    ),
     markPreferenceComparisonUnreviewable: (input: {
       tasksetId: string;
       assignmentId: string;

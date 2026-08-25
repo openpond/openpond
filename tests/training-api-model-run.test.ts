@@ -3,11 +3,20 @@ import { describe, expect, test, vi } from "vitest";
 import { createTrainingApi } from "../apps/server/src/training/training-api";
 
 describe("training API Model Run approval forwarding", () => {
+  test("forwards Reward Model cancellation to its separate lifecycle", async () => {
+    const cancelRewardModelRun = vi.fn(async (runId: string) => ({ runId }));
+    const api = createTrainingApi({ training: { cancelRewardModelRun } } as never);
+
+    await api.request("reward_model_run_cancel", { runId: "reward-run-rm0" });
+
+    expect(cancelRewardModelRun).toHaveBeenCalledWith("reward-run-rm0");
+  });
+
   test("forwards explicit export approval to Model Run start", async () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
       store: {
-        getModelRun: vi.fn(async () => ({ destinationId: "local" })),
+        getModelRunDraft: vi.fn(async () => ({ destinationId: "local", status: "ready_to_run" })),
       },
       training: { startModelRun },
     } as never);
@@ -32,7 +41,7 @@ describe("training API Model Run approval forwarding", () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
       store: {
-        getModelRun: vi.fn(async () => ({ destinationId: "local" })),
+        getModelRunDraft: vi.fn(async () => ({ destinationId: "local", status: "ready_to_run" })),
       },
       training: { startModelRun },
     } as never);
@@ -64,10 +73,11 @@ describe("training API Model Run approval forwarding", () => {
       },
       modelProjectHosting: { publishTaskset },
       store: {
-        getModelRun: vi.fn(async () => ({
+        getModelRunDraft: vi.fn(async () => ({
           destinationId: "openpond_managed",
           modelId: "model_1",
-          taskset: { id: "taskset_1" },
+          status: "ready_to_run",
+          tasksetRef: { id: "taskset_1" },
         })),
         getTaskset: vi.fn(async () => taskset),
       },

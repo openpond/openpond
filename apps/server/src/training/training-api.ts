@@ -436,6 +436,9 @@ export function createTrainingApi(deps: {
         requiredString(input.id, "id"),
       );
     }
+    if (action === "reward_model_run_cancel") {
+      return deps.training.cancelRewardModelRun(requiredString(input.runId, "runId"));
+    }
     if (action === "learned_preference_reward_binding") {
       return deps.training.learnedPreferenceRewardBinding({
         tasksetId: requiredString(input.tasksetId, "tasksetId"),

@@ -1058,6 +1058,11 @@ function TasksetHistory({
                                 Retry qualification
                               </button>
                             ) : null}
+                            {run.status === "running" ? (
+                              <button className="training-button secondary" disabled={readOnly} onClick={() => void training.actions.cancelRewardModelRun(run.id).then((result) => setRewardActionMessage(result ? "Cancellation requested. Cleanup remains visible until the managed Run is terminal." : "Cancellation request did not complete.")).catch((error) => setRewardActionMessage(error instanceof Error ? error.message : String(error)))} type="button">
+                                Cancel run
+                              </button>
+                            ) : null}
                           </div>
                           {rewardActionMessage ? <p className="labs-detail-copy" role="status">{rewardActionMessage}</p> : null}
                         </td>

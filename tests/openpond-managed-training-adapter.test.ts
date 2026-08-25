@@ -21,6 +21,24 @@ const MANAGED_MODEL = {
 } as const;
 
 describe("OpenPond Managed training adapter", () => {
+  test("cancels a managed Reward Model job with optimistic version protection", async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (request, init) => {
+      expect(String(request)).toBe("https://staging-api.openpond.ai/v1/managed-rl/jobs/job-rm0/cancel");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ expectedVersion: 7 });
+      return new Response(JSON.stringify({ job: { id: "job-rm0", state: "cancelling", version: 8, createdAt: FIXED_TIME, updatedAt: FIXED_TIME } }));
+    });
+    const adapter = new OpenPondManagedTrainingAdapter({
+      store: {} as never,
+      storeDir: "/unused",
+      fetchImpl,
+      resolveAccess: async () => ({ apiBaseUrl: "https://staging-api.openpond.ai", token: "test-token", teamId: "team-test" }),
+    });
+
+    await expect(adapter.cancelRewardModelJob("job-rm0", 7)).resolves.toMatchObject({ job: { state: "cancelling", version: 8 } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   test("uploads a verified portable bundle without choosing a cloud provider", async () =>
     withTrainingStore(async ({ store, directory }) => {
       const baseTaskset = rftTasksetFixture();
