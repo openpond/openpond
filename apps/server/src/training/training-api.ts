@@ -1074,13 +1074,18 @@ export function createTrainingApi(deps: {
     });
     if (action === "start_model_run") {
       const modelRunId = requiredString(input.modelRunId, "modelRunId");
-      const modelRun = await deps.store.getModelRun(modelRunId);
-      if (!modelRun) throw new Error("Model Run was not found.");
+      const modelRun = await deps.store.getModelRunDraft(modelRunId);
+      if (!modelRun || modelRun.status !== "ready_to_run") {
+        throw new Error("A ready saved Model Run is required.");
+      }
       if (modelRun.destinationId === "openpond_managed") {
         if (!deps.modelProjectHosting) {
           throw new Error("Managed runs require hosted Model Project sync.");
         }
-        const taskset = await requireTaskset(deps.store, modelRun.taskset.id);
+        if (!modelRun.tasksetRef) {
+          throw new Error("The saved Model Run has no Taskset.");
+        }
+        const taskset = await requireTaskset(deps.store, modelRun.tasksetRef.id);
         const release = await requireReleasedTaskset(
           deps.benchmarkTasksets,
           taskset,
