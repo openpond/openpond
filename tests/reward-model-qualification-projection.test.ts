@@ -35,6 +35,7 @@ function input(overrides: Record<string, unknown> = {}) {
     harnessRelease: { id: "harness-h0", contentHash: HASH },
     grader: { id: "preference-comparison", contentHash: HASH },
     providerRunId: "managed-rm0",
+    versionNumber: 1,
     checkpointPrefix: "r2://managed-rl/tenants/team/jobs/rm0/checkpoints/r0",
     artifactSha256: HASH,
     inventory: [

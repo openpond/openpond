@@ -468,7 +468,13 @@ function TasksetRuns({
           {bindingError ? <p className="training-banner error" role="alert">{bindingError}</p> : null}
         </section>
       ) : null}
-      <TasksetHistory state={state} taskset={taskset} />
+      <TasksetHistory
+        onCreateLearnedRewardRun={createLearnedRewardRun}
+        readOnly={readOnly || training.busyAction !== null}
+        state={state}
+        taskset={taskset}
+        training={training}
+      />
     </>
   );
 }
@@ -485,7 +491,25 @@ function FixtureCollectionImporter({
   training: ReturnType<typeof useTraining>;
 }) {
   const [message, setMessage] = useState<string | null>(null);
-  const [datasets, setDatasets] = useState<Array<{ id: string; contentHash: string }>>([]);
+  const [datasets, setDatasets] = useState<Array<{
+    id: string;
+    contentHash: string;
+    authority: "human" | "synthetic_fixture";
+    qualificationEligibility: "smoke_only" | "human_heldout";
+    groupCount: number;
+    pairCount: number;
+    partitions: string[];
+  }>>([]);
+  const [prepared, setPrepared] = useState<{
+    collection: unknown;
+    fileName: string;
+    runId: string;
+    groupCount: number;
+    attemptCount: number;
+    distinctOutputCount: number;
+    partitions: string[];
+  } | null>(null);
+  const [collectionState, setCollectionState] = useState<"idle" | "ready" | "running" | "failed" | "completed">("idle");
 
   useEffect(() => {
     let active = true;
@@ -494,32 +518,66 @@ function FixtureCollectionImporter({
       setDatasets(released.map((dataset) => ({
         id: dataset.id,
         contentHash: dataset.contentHash,
+        authority: dataset.authority,
+        qualificationEligibility: dataset.qualificationEligibility,
+        groupCount: dataset.groups.length,
+        pairCount: dataset.derivedPairs.length,
+        partitions: [...new Set(dataset.groups.map((group) => group.partition))],
       })));
     });
     return () => { active = false; };
   }, [taskset.id, training.actions]);
 
-  async function importFixture(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+  async function prepareFixture(event: ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     try {
       const collection = JSON.parse(await file.text()) as unknown;
+      const summary = inspectCollectionManifest(collection);
+      setPrepared({ collection, fileName: file.name, ...summary });
+      setCollectionState("ready");
+      setMessage(`Preflight passed for ${summary.groupCount} groups and ${summary.attemptCount} globally unique Attempts.`);
+    } catch (error) {
+      setPrepared(null);
+      setCollectionState("failed");
+      setMessage(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function launchCollection(): Promise<void> {
+    if (!prepared) return;
+    setCollectionState("running");
+    setMessage("Recording immutable Attempts, grading fixture evidence, and materializing D0…");
+    try {
       const result = await training.actions.materializeSyntheticPreferenceCollection({
         tasksetId: taskset.id,
         actorKey,
         preferenceDatasetId: `fixture-preference-${crypto.randomUUID()}`,
         preferenceDatasetRevision: 1,
-        collection,
+        collection: prepared.collection,
       });
       if (result) {
         setDatasets((current) => [
-          { id: result.dataset.id, contentHash: result.dataset.contentHash },
+          {
+            id: result.dataset.id,
+            contentHash: result.dataset.contentHash,
+            authority: result.dataset.authority,
+            qualificationEligibility: result.dataset.qualificationEligibility,
+            groupCount: result.dataset.groups.length,
+            pairCount: result.dataset.derivedPairs.length,
+            partitions: [...new Set(result.dataset.groups.map((group) => group.partition))],
+          },
           ...current.filter((dataset) => dataset.id !== result.dataset.id),
         ]);
+        setCollectionState("completed");
         setMessage(`Recorded ${result.collection.attempts.length} fixture Attempts and released ${result.dataset.groups.length} preference groups. Fixture evidence is smoke-only.`);
+      } else {
+        setCollectionState("failed");
+        setMessage("Collection Run did not return a receipt. No completion was recorded.");
       }
     } catch (error) {
+      setCollectionState("failed");
       setMessage(error instanceof Error ? error.message : String(error));
     }
   }
@@ -541,24 +599,52 @@ function FixtureCollectionImporter({
 
   return (
     <details className="labs-dataset-advanced-details">
-      <summary>Advanced fixture smoke collection</summary>
+      <summary>Fixture collection run</summary>
       <p className="labs-detail-copy">
-        Import a bounded, immutable collection manifest containing structured
-        candidate outputs and rendered artifacts. This records fixture-only
-        evidence for a systems smoke; it never counts as human preference data.
+        Prepare and validate a bounded collection manifest before recording it.
+        This fixture path is for system verification only and never counts as
+        human preference data.
       </p>
       <label className="training-file-label">
         <span>Collection manifest JSON</span>
         <input
           accept="application/json,.json"
           disabled={disabled}
-          onChange={(event) => void importFixture(event)}
+          onChange={(event) => void prepareFixture(event)}
           type="file"
         />
       </label>
+      {prepared ? (
+        <section className="labs-dataset-run-intro" aria-label="Collection run preflight">
+          <h3>{prepared.fileName}</h3>
+          <dl className="training-configuration-list">
+            <div><dt>Run</dt><dd><code>{prepared.runId}</code></dd></div>
+            <div><dt>Groups</dt><dd>{prepared.groupCount} / 16 maximum</dd></div>
+            <div><dt>Attempts</dt><dd>{prepared.attemptCount}</dd></div>
+            <div><dt>Unique outputs</dt><dd>{prepared.distinctOutputCount} / {prepared.attemptCount}</dd></div>
+            <div><dt>Partitions</dt><dd>{prepared.partitions.join(", ")}</dd></div>
+            <div><dt>Progress</dt><dd>{collectionState === "completed" ? "100%" : collectionState === "running" ? "Recording…" : "Ready"}</dd></div>
+          </dl>
+          <div className="labs-dataset-advanced-action">
+            <button className="training-button" disabled={disabled || collectionState === "running" || collectionState === "completed"} onClick={() => void launchCollection()} type="button">
+              {collectionState === "failed" ? "Retry collection" : "Run collection"}
+            </button>
+            <button className="training-button secondary" disabled={collectionState === "running"} onClick={() => { setPrepared(null); setCollectionState("idle"); setMessage(collectionState === "completed" ? "Collection details closed." : "Collection preparation cancelled. No Attempts were written."); }} type="button">
+              {collectionState === "completed" ? "Close" : "Cancel"}
+            </button>
+          </div>
+        </section>
+      ) : null}
       {datasets.map((dataset) => (
-        <div className="labs-dataset-advanced-action" key={dataset.id}>
-          <code>{dataset.id}</code>
+        <section className="labs-dataset-run-intro" key={dataset.id}>
+          <h3><code>{dataset.id}</code></h3>
+          <dl className="training-configuration-list">
+            <div><dt>Authority</dt><dd>{statusLabel(dataset.authority)}</dd></div>
+            <div><dt>Eligibility</dt><dd>{statusLabel(dataset.qualificationEligibility)}</dd></div>
+            <div><dt>Partitions</dt><dd>{dataset.partitions.map(statusLabel).join(", ")}</dd></div>
+            <div><dt>Groups / pairs</dt><dd>{dataset.groupCount} / {dataset.pairCount}</dd></div>
+            <div><dt>Content hash</dt><dd><code>{dataset.contentHash}</code></dd></div>
+          </dl>
           <button
             className="training-button secondary"
             disabled={disabled}
@@ -567,11 +653,49 @@ function FixtureCollectionImporter({
           >
             Launch $2 reward smoke
           </button>
-        </div>
+        </section>
       ))}
       {message ? <p className="labs-detail-copy" role="status">{message}</p> : null}
     </details>
   );
+}
+
+export function inspectCollectionManifest(value: unknown): {
+  runId: string;
+  groupCount: number;
+  attemptCount: number;
+  distinctOutputCount: number;
+  partitions: string[];
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Collection manifest must be a JSON object.");
+  const record = value as Record<string, unknown>;
+  if (record.schemaVersion !== "openpond.syntheticCollectionRun.v1") throw new Error("Collection manifest must use openpond.syntheticCollectionRun.v1.");
+  if (typeof record.id !== "string" || !record.id.trim()) throw new Error("Collection manifest needs a stable Run ID.");
+  if (!Array.isArray(record.groups) || record.groups.length < 2 || record.groups.length > 16) throw new Error("Collection Runs require 2–16 groups.");
+  const candidateIds = new Set<string>();
+  const outputs = new Set<string>();
+  const partitions = new Set<string>();
+  for (const [groupIndex, rawGroup] of record.groups.entries()) {
+    if (!rawGroup || typeof rawGroup !== "object" || Array.isArray(rawGroup)) throw new Error(`Group ${groupIndex + 1} is invalid.`);
+    const group = rawGroup as Record<string, unknown>;
+    if (group.partition !== "reward_train" && group.partition !== "reward_validation") throw new Error(`Group ${groupIndex + 1} needs a reward_train or reward_validation partition.`);
+    partitions.add(group.partition);
+    if (!Array.isArray(group.candidates) || group.candidates.length !== 4) throw new Error(`Group ${groupIndex + 1} must contain exactly four candidates.`);
+    const labels = new Set<string>();
+    for (const rawCandidate of group.candidates) {
+      if (!rawCandidate || typeof rawCandidate !== "object" || Array.isArray(rawCandidate)) throw new Error(`Group ${groupIndex + 1} contains an invalid candidate.`);
+      const candidate = rawCandidate as Record<string, unknown>;
+      if (typeof candidate.id !== "string" || !candidate.id.trim()) throw new Error(`Group ${groupIndex + 1} contains a candidate without an ID.`);
+      if (typeof candidate.output !== "string" || !candidate.output.trim()) throw new Error(`Candidate ${candidate.id} needs structured output text.`);
+      if (candidateIds.has(candidate.id) || outputs.has(candidate.output)) throw new Error("Candidate IDs and outputs must be globally unique within a Collection Run.");
+      if (candidate.label !== "love" && candidate.label !== "like" && candidate.label !== "reject") throw new Error(`Candidate ${candidate.id} needs a Love, Like, or Reject fixture label.`);
+      candidateIds.add(candidate.id);
+      outputs.add(candidate.output);
+      labels.add(candidate.label);
+    }
+    if (labels.size < 2) throw new Error(`Group ${groupIndex + 1} needs at least two preference levels.`);
+  }
+  return { runId: record.id, groupCount: record.groups.length, attemptCount: candidateIds.size, distinctOutputCount: outputs.size, partitions: [...partitions] };
 }
 
 function TasksetAttempts({
@@ -787,13 +911,21 @@ function TasksetVersions({
 }
 
 function TasksetHistory({
+  onCreateLearnedRewardRun,
+  readOnly,
   state,
   taskset,
+  training,
 }: {
+  onCreateLearnedRewardRun: (rewardModelVersionId: string) => Promise<void>;
+  readOnly: boolean;
   state: TrainingStateResponse | null;
   taskset: Taskset;
+  training: ReturnType<typeof useTraining>;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [selectedRewardRunId, setSelectedRewardRunId] = useState<string | null>(null);
+  const [rewardActionMessage, setRewardActionMessage] = useState<string | null>(null);
   const runs = (state?.modelRuns ?? [])
     .filter((run) => run.taskset.id === taskset.id)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
@@ -885,16 +1017,55 @@ function TasksetHistory({
               <tr><th>Reward Model Run</th><th>Scope</th><th>Progress</th><th>Loss</th><th>Status</th><th>Spend</th></tr>
             </thead>
             <tbody>
-              {rewardRuns.map((run) => (
-                <tr key={run.id}>
-                  <td>{run.id}</td>
-                  <td>{statusLabel(run.scope)}</td>
-                  <td>{run.progress.completedSteps}/{run.progress.totalSteps}</td>
-                  <td>{run.progress.latestLoss?.toFixed(4) ?? "—"}</td>
-                  <td><LabStatusBadge label={statusLabel(run.status)} value={run.status} /></td>
-                  <td>{run.accruedSpendUsd == null ? "—" : `$${run.accruedSpendUsd.toFixed(2)}`}</td>
-                </tr>
-              ))}
+              {rewardRuns.map((run) => {
+                const expanded = selectedRewardRunId === run.id;
+                return (
+                  <Fragment key={run.id}>
+                    <tr>
+                      <td>
+                        <button className="labs-workproduct-link" aria-expanded={expanded} onClick={() => setSelectedRewardRunId(expanded ? null : run.id)} type="button">
+                          <code>{run.id}</code>
+                        </button>
+                      </td>
+                      <td>{statusLabel(run.scope)}</td>
+                      <td>{run.progress.completedSteps}/{run.progress.totalSteps}</td>
+                      <td>{run.progress.latestLoss?.toFixed(4) ?? "—"}</td>
+                      <td><LabStatusBadge label={statusLabel(run.status)} value={run.status} /></td>
+                      <td>{run.accruedSpendUsd == null ? "—" : `$${run.accruedSpendUsd.toFixed(2)}`}</td>
+                    </tr>
+                    {expanded ? (
+                      <tr className="labs-attempt-detail-row">
+                        <td colSpan={6}>
+                          <dl className="training-configuration-list">
+                            <div><dt>Dataset</dt><dd><code>{run.preferenceDatasetRelease.id}</code></dd></div>
+                            <div><dt>Recipe</dt><dd><code>{run.recipeRelease.id}</code></dd></div>
+                            <div><dt>Managed Run</dt><dd>{run.managedRunId ? <code>{run.managedRunId}</code> : "Not launched"}</dd></div>
+                            <div><dt>Maximum spend</dt><dd>${run.quote.maximumSpendUsd.toFixed(2)}</dd></div>
+                            <div><dt>Failure owner</dt><dd>{run.failureOwner ? statusLabel(run.failureOwner) : "—"}</dd></div>
+                            <div><dt>Cleanup</dt><dd>{run.receipt ? (run.receipt.cleanup.computeReleased && run.receipt.cleanup.providerTerminalObserved ? "Verified" : "Incomplete") : "Pending"}</dd></div>
+                            <div><dt>Checkpoint</dt><dd>{run.receipt ? <code>{run.receipt.finalCheckpoint.contentHash}</code> : "Pending"}</dd></div>
+                            <div><dt>Qualification</dt><dd>{run.qualificationReport ? <code>{run.qualificationReport.id}</code> : "Pending"}</dd></div>
+                          </dl>
+                          {run.failure ? <p className="training-banner error" role="alert">{run.failure}</p> : null}
+                          <div className="labs-dataset-advanced-action">
+                            {run.status === "succeeded" && run.rewardModelVersionId ? (
+                              <button className="training-button" disabled={readOnly} onClick={() => void onCreateLearnedRewardRun(run.rewardModelVersionId!)} type="button">
+                                Create GRPO run with this frozen reward
+                              </button>
+                            ) : null}
+                            {run.status === "failed" && run.failureOwner === "qualification" ? (
+                              <button className="training-button secondary" disabled={readOnly} onClick={() => void training.actions.retryRewardModelQualification({ runId: run.id, id: `${run.id}-qualification-${crypto.randomUUID()}` }).then((result) => setRewardActionMessage(result ? "Qualification retry recorded." : "Qualification retry did not start.")).catch((error) => setRewardActionMessage(error instanceof Error ? error.message : String(error)))} type="button">
+                                Retry qualification
+                              </button>
+                            ) : null}
+                          </div>
+                          {rewardActionMessage ? <p className="labs-detail-copy" role="status">{rewardActionMessage}</p> : null}
+                        </td>
+                      </tr>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

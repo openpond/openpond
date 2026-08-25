@@ -512,6 +512,14 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/tasksets/${encodeURIComponent(input.tasksetId)}/learned-preference-reward-binding`,
       input,
     ),
+    retryRewardModelQualification: (input: {
+      runId: string;
+      id: string;
+    }) => mutate(
+      "retry-reward-model-qualification",
+      `/reward-model-runs/${encodeURIComponent(input.runId)}/retry-qualification`,
+      input,
+    ),
     markPreferenceComparisonUnreviewable: (input: {
       tasksetId: string;
       assignmentId: string;

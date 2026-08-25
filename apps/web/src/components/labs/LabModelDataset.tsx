@@ -219,30 +219,7 @@ export function LabModelDataset({
               paired {titleCase(taskset.benchmark.evaluationSplit.replaceAll("_", " "))} runs.
             </p>
           </div>
-        ) : (
-          <div className="labs-dataset-method-readiness">
-            <strong>Training compatibility</strong>
-            <div className="training-pills">
-              {taskset.readiness?.methodReadiness.length
-                ? taskset.readiness.methodReadiness.map((entry) => (
-                  <span key={entry.method} title={entry.reasons.join(" ")}>
-                    {entry.method.toUpperCase()} · {titleCase(entry.status)}
-                  </span>
-                ))
-                : taskset.capabilities.compatibleMethods
-                    .filter((method) => !["none", "retrieval"].includes(method))
-                    .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
-            </div>
-            {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
-              <ul>
-                {taskset.readiness.methodReadiness.flatMap((entry) =>
-                  entry.reasons.map((reason) => (
-                    <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
-                  )))}
-              </ul>
-            ) : null}
-          </div>
-        )}
+        ) : null}
         <section className="labs-dataset-technical-details">
           <h3>Technical details</h3>
           <dl className="training-configuration-list">
@@ -666,7 +643,7 @@ function datasetDescription(input: {
     && input.chatSources === 0
     && input.customerSources === 0
   ) {
-    return `This dataset contains ${input.sourceCount} generated scenarios. It uses no raw chats or customer data.`;
+    return `This Taskset contains ${input.sourceCount} generated scenarios. It uses no raw chats or customer data.`;
   }
   const parts = [
     `${input.sourceCount} source${input.sourceCount === 1 ? "" : "s"}`,
@@ -675,7 +652,7 @@ function datasetDescription(input: {
   ];
   if (input.customerSources === 0) parts.push("no sources marked as customer data");
   else parts.push(`${input.customerSources} source${input.customerSources === 1 ? "" : "s"} marked as customer data`);
-  return `This dataset contains ${parts.join(", ")}.`;
+  return `This Taskset contains ${parts.join(", ")}.`;
 }
 
 function taskPrompt(task: Task): string {

@@ -15,7 +15,10 @@ import {
   labPrimaryTabFromSearch,
   searchWithLabPrimaryTab,
 } from "../apps/web/src/components/labs/lab-primary-tab-state";
-import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
+import {
+  LabDatasetsPage,
+  inspectCollectionManifest,
+} from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
 import {
@@ -91,6 +94,42 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
+  test("preflights generalized fixture collection manifests before writing Attempts", () => {
+    const manifest = {
+      schemaVersion: "openpond.syntheticCollectionRun.v1",
+      id: "collection-smoke-1",
+      groups: ["reward_train", "reward_validation"].map((partition, groupIndex) => ({
+        partition,
+        candidates: ["love", "like", "reject", "reject"].map((label, candidateIndex) => ({
+          id: `candidate-${groupIndex}-${candidateIndex}`,
+          output: JSON.stringify({ selection: [`value-${groupIndex}-${candidateIndex}`] }),
+          label,
+        })),
+      })),
+    };
+
+    expect(inspectCollectionManifest(manifest)).toEqual({
+      runId: "collection-smoke-1",
+      groupCount: 2,
+      attemptCount: 8,
+      distinctOutputCount: 8,
+      partitions: ["reward_train", "reward_validation"],
+    });
+    expect(() => inspectCollectionManifest({
+      ...manifest,
+      groups: [manifest.groups[0]],
+    })).toThrow("2–16 groups");
+    expect(() => inspectCollectionManifest({
+      ...manifest,
+      groups: [manifest.groups[0], {
+        ...manifest.groups[1],
+        candidates: manifest.groups[1].candidates.map((candidate, index) => index === 0
+          ? { ...candidate, output: manifest.groups[0].candidates[0].output }
+          : candidate),
+      }],
+    })).toThrow("globally unique");
+  });
+
   test("keeps Models subpage navigation out of the page header", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
@@ -744,6 +783,26 @@ describe("Lab workspace", () => {
     expect(markup).toContain("Graders and reward gates");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
+  });
+
+  test("keeps generic Taskset overview focused on evidence instead of speculative method advice", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const markup = renderToStaticMarkup(
+      createElement(LabModelDataset, {
+        artifact: null,
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
+        tab: "overview",
+        taskset,
+        onOpenFiles: noop,
+        onToast: noop,
+        training: { actions: {} } as never,
+      }),
+    );
+
+    expect(markup).toContain("Technical details");
+    expect(markup).toContain("This Taskset contains");
+    expect(markup).not.toContain("Training compatibility");
+    expect(markup).not.toContain("Needs Dataset Work");
   });
 
   test("does not expose benchmark installation as a Tasksets UI action", () => {
