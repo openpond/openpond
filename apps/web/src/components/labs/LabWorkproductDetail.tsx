@@ -85,6 +85,7 @@ type WorkproductDetailTab =
 
 export function LabWorkproductDetail({
   workproduct,
+  modelSection,
   runs,
   profile,
   training,
@@ -118,6 +119,7 @@ export function LabWorkproductDetail({
   onInitialBenchmarkOpenConsumed,
 }: {
   workproduct: LabWorkproductSummary;
+  modelSection: "overview" | "versions" | "runs" | "rollouts";
   runs: CreateImproveRun[];
   profile: OpenPondProfileState | null;
   training: TrainingController;
@@ -564,6 +566,22 @@ export function LabWorkproductDetail({
         </div>
         {workproduct.kind === "model" ? (
           <div className="labs-workproduct-header-actions">
+            <button
+              className="training-button secondary"
+              disabled={training.busyAction === "sync-model-project"}
+              type="button"
+              onClick={async () => {
+                const synced = await training.actions.syncModelProject(workproduct.id);
+                onToast(
+                  synced
+                    ? `${workproduct.name} synced to hosted.`
+                    : "The Model Project could not be synced.",
+                  synced ? "success" : "error",
+                );
+              }}
+            >
+              {training.busyAction === "sync-model-project" ? "Syncing…" : "Sync hosted"}
+            </button>
             {selectedModelVersion?.taskset ? (
               <button
                 className="training-button secondary"
@@ -709,24 +727,29 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
-            <LabModelRunsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onResumeDraft={setEditingRunDraftId}
-            />
-            <LabModelVersionsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onToast={onToast}
-            />
+            {modelSection === "overview" || modelSection === "runs" || modelSection === "rollouts" ? (
+              <LabModelRunsPage
+                runs={runs}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                mode={modelSection === "rollouts" ? "rollouts" : "all"}
+                onOpenDataset={onOpenDataset}
+                onOpenEntry={setSelectedModelEntryKey}
+                onResumeDraft={setEditingRunDraftId}
+              />
+            ) : null}
+            {modelSection === "overview" || modelSection === "versions" ? (
+              <LabModelVersionsPage
+                runs={runs}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                onOpenDataset={onOpenDataset}
+                onOpenEntry={setSelectedModelEntryKey}
+                onToast={onToast}
+              />
+            ) : null}
           </>
         ) : activeTab === "overview" ? (
           <DetailSection title="Overview">

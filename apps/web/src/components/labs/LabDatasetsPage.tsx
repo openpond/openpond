@@ -57,6 +57,7 @@ export function LabDatasetsPage({
   onOpenFiles,
   training,
   onToast,
+  modelProjectId,
 }: {
   state: TrainingStateResponse | null;
   runs: CreateImproveRun[];
@@ -72,6 +73,7 @@ export function LabDatasetsPage({
   onOpenFiles: (tasksetId: string) => void;
   training: ReturnType<typeof useTraining>;
   onToast: ShowAppToast;
+  modelProjectId?: string | null;
 }) {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -140,6 +142,32 @@ export function LabDatasetsPage({
             <p>{selected.objective}</p>
           </div>
           <div className="labs-dataset-detail-actions">
+            {modelProjectId ? (
+              <button
+                className="training-button secondary"
+                disabled={
+                  readOnly ||
+                  training.busyAction === "publish-model-project-taskset"
+                }
+                type="button"
+                onClick={async () => {
+                  const published = await training.actions.publishModelProjectTaskset(
+                    modelProjectId,
+                    selected.id,
+                  );
+                  onToast(
+                    published
+                      ? `${selected.name} published to the hosted Model Project.`
+                      : "The Taskset release could not be published.",
+                    published ? "success" : "error",
+                  );
+                }}
+              >
+                {training.busyAction === "publish-model-project-taskset"
+                  ? "Publishing…"
+                  : "Publish release"}
+              </button>
+            ) : null}
             {readOnly ? (
               <LabStatusBadge
                 label={`Profile: ${selected.profileId}`}

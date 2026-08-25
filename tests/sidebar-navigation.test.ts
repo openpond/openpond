@@ -155,10 +155,10 @@ describe("Sidebar navigation", () => {
 
     expect(schedule).toContain('class="nav-command nav-command-prominent active" aria-label="Scheduled"');
     expect(schedule).not.toContain('class="nav-command nav-command-prominent active" aria-label="My files"');
-    expect(schedule).not.toContain('class="nav-command active" aria-label="Models"');
+    expect(schedule).not.toContain('class="nav-command active" aria-label="Overview"');
     expect(outputs).toContain('class="nav-command nav-command-prominent active" aria-label="My files"');
     expect(outputs).not.toContain('class="nav-command nav-command-prominent active" aria-label="Scheduled"');
-    expect(models).toContain('class="nav-command active" aria-label="Models"');
+    expect(models).toContain('class="nav-command active" aria-label="Overview"');
     expect(models).not.toContain('aria-label="Scheduled"');
     expect(models).not.toContain("sidebar-profile-change-dot");
     expect(models).not.toContain("Local profile changes are not committed");

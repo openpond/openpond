@@ -37,7 +37,6 @@ import {
 } from "./LabModelCreateDialog";
 import { LabModelsPage } from "./LabModelsPage";
 import { LabServingPage } from "./LabServingPage";
-import { LabUsagePage } from "./LabUsagePage";
 import { ModelRunEditorPage } from "./ModelRunEditorPage";
 import { labModelVersions } from "./lab-models";
 import {
@@ -127,7 +126,6 @@ export type LabsRouteProps = {
 };
 
 export function LabsRoute({
-  account,
   closeDetailKind,
   closeDetailRequestId,
   onAnswerQuestion,
@@ -175,7 +173,7 @@ export function LabsRoute({
   );
   const [activeTab, setActiveTab] = useState<LabPrimaryTab>(() =>
     typeof window === "undefined"
-      ? "models"
+      ? "overview"
       : labPrimaryTabFromSearch(window.location.search),
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -212,6 +210,11 @@ export function LabsRoute({
   );
   const selected =
     models.find((workproduct) => workproduct.key === selectedKey) ?? null;
+  const modelProjects = training.training.payload?.modelProjects ?? [];
+  useEffect(() => {
+    if (selected || !models.length) return;
+    setSelectedKey(models[0]!.key);
+  }, [models, selected]);
 
   useEffect(() => {
     if (!profileView.connection) return;
@@ -290,7 +293,7 @@ export function LabsRoute({
       setActiveTab("tasksets");
       return;
     }
-    setActiveTab("models");
+    setActiveTab("overview");
   }, [closeDetailKind, closeDetailRequestId]);
   useEffect(() => {
     setModelEditorName(null);
@@ -335,7 +338,7 @@ export function LabsRoute({
       );
       return;
     }
-    if (activeTab !== "models") {
+    if (!["overview", "versions", "runs", "rollouts"].includes(activeTab)) {
       onDetailOpenChange(null);
       return;
     }
@@ -429,7 +432,7 @@ export function LabsRoute({
     const saved = await training.training.actions.saveModelProject(project);
     if (!saved) return false;
     setModelCreateOpen(false);
-    setActiveTab("models");
+    setActiveTab("overview");
     setSelectedKey(workproductKey("model", saved.id));
     if (input.purpose === "benchmark") {
       setBenchmarkLaunch({
@@ -466,7 +469,7 @@ export function LabsRoute({
             setActiveTab("tasksets");
           } else {
             setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("models");
+            setActiveTab("overview");
           }
           await createImprove.refresh();
         }}
@@ -479,7 +482,7 @@ export function LabsRoute({
             setActiveTab("tasksets");
           } else {
             setSelectedKey(workproductKey("model", modelId));
-            setActiveTab("models");
+            setActiveTab("overview");
           }
         }}
         onOpenProviderSettings={training.onOpenProviderSettings}
@@ -502,12 +505,16 @@ export function LabsRoute({
       activeTab={activeTab}
       showHeader={
         !training.launchRequest
-        && !selected
-        && !selectedDatasetId
         && datasetCreateRoute !== "build"
       }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
+      modelProjects={modelProjects}
+      selectedModelProjectId={selected?.id ?? null}
+      onSelectModelProject={(modelProjectId) => {
+        setSelectedKey(workproductKey("model", modelProjectId));
+        setSelectedDatasetId(null);
+      }}
     >
       {activeTab === "tasksets" && training.launchRequest ? (
         renderLaunchEditor(selectedDatasetId)
@@ -532,6 +539,7 @@ export function LabsRoute({
               profileView.onToast?.(message, tone) ?? 0
             }
             onSelectedIdChange={setSelectedDatasetId}
+            modelProjectId={selected?.id ?? null}
             onOpenDraft={(draftId) => {
               setDatasetDraftId(draftId);
               setDatasetCreateRoute("build");
@@ -548,13 +556,6 @@ export function LabsRoute({
         <LabServingPage
           state={training.training.payload}
         />
-      ) : activeTab === "usage" ? (
-        <LabUsagePage
-          account={account}
-          connection={profileView.connection}
-          onError={profileView.onError}
-          onOpenSourceSession={onOpenRunConversation}
-        />
       ) : training.launchRequest ? (
         renderLaunchEditor(null)
       ) : selected ? (
@@ -564,6 +565,7 @@ export function LabsRoute({
           runs={createImprove.runs}
           training={training.training}
           workproduct={selected}
+          modelSection={activeTab}
           onAnswerQuestion={onAnswerQuestion}
           onApplyCandidate={onApplyCandidate}
           onApprove={onApprove}

@@ -5,7 +5,6 @@ import type {
   ProductArea,
 } from "@openpond/contracts";
 import {
-  Activity,
   Boxes,
   CalendarClock,
   ChartColumnStacked,
@@ -50,7 +49,7 @@ export function SidebarNavigation({
 }) {
   const [activeModelsTab, setActiveModelsTab] = useState<LabPrimaryTab>(() =>
     typeof window === "undefined"
-      ? "models"
+      ? "overview"
       : labPrimaryTabFromSearch(window.location.search),
   );
 
@@ -100,13 +99,13 @@ export function SidebarNavigation({
       {productArea === "models" ? (
         <>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "models" ? "active" : ""}`}
-            aria-label="Models"
+            className={`nav-command ${view === "labs" && activeModelsTab === "overview" ? "active" : ""}`}
+            aria-label="Overview"
             type="button"
-            onClick={() => selectModelsTab("models")}
+            onClick={() => selectModelsTab("overview")}
           >
             <ChartColumnStacked size={16} />
-            <span>Models</span>
+            <span>Overview</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "tasksets" ? "active" : ""}`}
@@ -118,6 +117,33 @@ export function SidebarNavigation({
             <span>Tasksets</span>
           </button>
           <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "versions" ? "active" : ""}`}
+            aria-label="Model Versions"
+            type="button"
+            onClick={() => selectModelsTab("versions")}
+          >
+            <FileText size={16} />
+            <span>Model Versions</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "runs" ? "active" : ""}`}
+            aria-label="Runs"
+            type="button"
+            onClick={() => selectModelsTab("runs")}
+          >
+            <ChartColumnStacked size={16} />
+            <span>Runs</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "rollouts" ? "active" : ""}`}
+            aria-label="Rollouts"
+            type="button"
+            onClick={() => selectModelsTab("rollouts")}
+          >
+            <Boxes size={16} />
+            <span>Rollouts</span>
+          </button>
+          <button
             className={`nav-command ${view === "labs" && activeModelsTab === "serving" ? "active" : ""}`}
             aria-label="Serving"
             type="button"
@@ -125,15 +151,6 @@ export function SidebarNavigation({
           >
             <Cloud size={16} />
             <span>Serving</span>
-          </button>
-          <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "usage" ? "active" : ""}`}
-            aria-label="Usage"
-            type="button"
-            onClick={() => selectModelsTab("usage")}
-          >
-            <Activity size={16} />
-            <span>Usage</span>
           </button>
         </>
       ) : null}

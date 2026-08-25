@@ -172,6 +172,8 @@ import {
   resolveMaxHostedWorkspaceToolRounds,
 } from "./server-entry-helpers.js";
 import { createTrainingService } from "./training/training-service.js";
+import { createModelProjectHostingService } from "./training/model-project-hosting.js";
+import { managedRlOperatorAccess } from "./training/managed-rl-operator-access.js";
 import { createTrainingApi } from "./training/training-api.js";
 import { runLocalHarnessEvaluationBaseline } from "./harness/local-harness-taskset-review.js";
 import { createTrainingChatSearchService } from "./training/training-chat-search.js";
@@ -669,18 +671,26 @@ export async function createOpenPondServer(
       environment: process.env,
     }
   );
+  const resolveManagedTrainingAccess = async () => {
+    const operatorAccess = await managedRlOperatorAccess(process.env);
+    if (operatorAccess) return operatorAccess;
+    const entry = await store.getCacheEntry<unknown>(
+      APP_PREFERENCES_CACHE_TYPE,
+      APP_PREFERENCES_CACHE_KEY
+    );
+    const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
+    return resolveManagedAdapterUserAccess({ teamId });
+  };
+  const modelProjectHosting = createModelProjectHostingService({
+    store,
+    resolveAccess: resolveManagedTrainingAccess,
+    env: process.env,
+  });
   const trainingService = createTrainingService({
     store,
     storeDir,
     ...portableTrainingDependencies,
-    resolveManagedTrainingAccess: async () => {
-      const entry = await store.getCacheEntry<unknown>(
-        APP_PREFERENCES_CACHE_TYPE,
-        APP_PREFERENCES_CACHE_KEY
-      );
-      const teamId = normalizeAppPreferences(entry?.payload).defaultTeamId;
-      return resolveManagedAdapterUserAccess({ teamId });
-    },
+    resolveManagedTrainingAccess,
     loadProfileState: loadOpenPondProfileState,
     resolveReleasedHarness,
     resolveApprovalActor: async () => {
@@ -739,6 +749,7 @@ export async function createOpenPondServer(
     benchmarkTasksets,
     harnessRefinerBenchmarks,
     preferenceComparisons: preferenceComparisonService,
+    modelProjectHosting,
   });
   const trainingPayload = trainingApi.request;
   const teamChatAiExecutions = createTeamChatAiExecutionService({

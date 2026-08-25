@@ -455,10 +455,38 @@ export const ModelProjectSchema = z.object({
   schemaVersion: z.literal("openpond.modelProject.v1"),
   id: IdSchema,
   profileId: IdSchema,
+  revision: z.number().int().positive().default(1),
   name: z.string().trim().min(1).max(200),
   objective: z.string().trim().max(5_000).nullable(),
   defaultBaseModel: BaseModelPreferenceSchema.nullable(),
   defaultDestinationId: TrainingDestinationIdSchema.nullable(),
+  hosted: z
+    .object({
+      schemaVersion: z.literal("openpond.hostedModelProjectLink.v1"),
+      teamId: IdSchema,
+      projectId: IdSchema,
+      portableProjectId: IdSchema,
+      revision: z.number().int().positive(),
+      etag: HashSchema,
+      syncedSourceRevision: z.number().int().positive(),
+      syncedAt: TimestampSchema,
+      tasksets: z
+        .array(
+          z.object({
+            localTasksetId: IdSchema,
+            releaseId: IdSchema,
+            releaseRevision: z.number().int().positive(),
+            releaseHash: HashSchema,
+            hostedTasksetId: IdSchema,
+            syncedAt: TimestampSchema,
+          }).strict(),
+        )
+        .max(10_000)
+        .default([]),
+    })
+    .strict()
+    .nullable()
+    .default(null),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });

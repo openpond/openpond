@@ -183,6 +183,18 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         project,
         "PUT",
       ),
+    syncModelProject: (modelId: string) =>
+      mutate<ModelProject>(
+        "sync-model-project",
+        `/models/${encodeURIComponent(modelId)}/sync`,
+        {},
+      ),
+    publishModelProjectTaskset: (modelId: string, tasksetId: string) =>
+      mutate<ModelProject>(
+        "publish-model-project-taskset",
+        `/models/${encodeURIComponent(modelId)}/tasksets/${encodeURIComponent(tasksetId)}/publish`,
+        {},
+      ),
     saveModelRunDraft: (draft: ModelRunDraft) =>
       mutate<ModelRunDraft>(
         "save-model-run-draft",

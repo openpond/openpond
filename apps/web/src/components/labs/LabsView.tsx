@@ -1,3 +1,4 @@
+import type { ModelProject } from "@openpond/contracts";
 import type { ReactNode } from "react";
 
 import "../../styles/training/training.css";
@@ -9,10 +10,13 @@ import "../../styles/labs/labs-model-detail.css";
 import "../../styles/labs/labs-model-comparison.css";
 
 export type LabPrimaryTab =
-  | "models"
+  | "overview"
   | "tasksets"
+  | "versions"
+  | "runs"
+  | "rollouts"
   | "serving"
-  | "usage";
+  ;
 
 export function LabsView({
   activeTab,
@@ -20,24 +24,44 @@ export function LabsView({
   showHeader = true,
   onCreateDataset,
   onCreateModel,
+  modelProjects = [],
+  selectedModelProjectId = null,
+  onSelectModelProject = () => undefined,
 }: {
   activeTab: LabPrimaryTab;
   children: ReactNode;
   showHeader?: boolean;
   onCreateDataset: () => void;
   onCreateModel: () => void;
+  modelProjects: ModelProject[];
+  selectedModelProjectId: string | null;
+  onSelectModelProject: (modelProjectId: string) => void;
 }) {
   return (
     <section className="labs-route" aria-label="Models">
       {showHeader ? <header className="labs-header">
         <div className="labs-header-actions">
-          {activeTab === "models" ? (
+          <label className="labs-model-project-picker">
+            <span>Model Project</span>
+            <select
+              aria-label="Select Model Project"
+              disabled={!modelProjects.length}
+              value={selectedModelProjectId ?? ""}
+              onChange={(event) => onSelectModelProject(event.target.value)}
+            >
+              {!modelProjects.length ? <option value="">No Model Projects</option> : null}
+              {modelProjects.map((project) => (
+                <option key={project.id} value={project.id}>{project.name}</option>
+              ))}
+            </select>
+          </label>
+          {activeTab === "overview" ? (
             <button
               className="labs-create-button"
               type="button"
               onClick={onCreateModel}
             >
-              <span>New model</span>
+              <span>New Model Project</span>
             </button>
           ) : activeTab === "tasksets" ? (
             <button

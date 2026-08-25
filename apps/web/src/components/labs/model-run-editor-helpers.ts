@@ -25,10 +25,12 @@ export function newProject(
     schemaVersion: "openpond.modelProject.v1",
     id: modelId ?? `model_${suffix}`,
     profileId,
+    revision: 1,
     name: name?.trim() || "Model #1",
     objective,
     defaultBaseModel: null,
     defaultDestinationId: null,
+    hosted: null,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

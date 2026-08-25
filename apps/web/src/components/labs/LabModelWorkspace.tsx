@@ -60,10 +60,12 @@ export function LabModelRunsPage({
   onOpenEntry,
   onResumeDraft,
   readOnly = false,
+  mode = "all",
 }: ModelWorkspaceProps & {
   onOpenEntry: (entryKey: string) => void;
   onResumeDraft: (draftId: string) => void;
   readOnly?: boolean;
+  mode?: "all" | "rollouts";
 }) {
   const state = training.payload;
   const jobs = useMemo(
@@ -95,15 +97,22 @@ export function LabModelRunsPage({
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)),
     [state?.modelRunDrafts, workproduct.id],
   );
-  const runEntries = useMemo(
-    () => modelRunEntries(
+  const runEntries = useMemo(() => {
+    const entries = modelRunEntries(
       jobs,
       versions,
       lifecycleRuns,
       readOnly ? [] : drafts,
-    ),
-    [drafts, jobs, lifecycleRuns, readOnly, versions],
-  );
+    );
+    if (mode === "all") return entries;
+    return entries.filter((entry) => {
+      const method =
+        entry.draft?.method ??
+        entry.lifecycleRun?.method ??
+        (entry.job ? planById.get(entry.job.planId)?.recipe.method : null);
+      return entry.lifecycleRun?.kind === "rollout_smoke" || method === "grpo" || method === "ppo";
+    });
+  }, [drafts, jobs, lifecycleRuns, mode, planById, readOnly, versions]);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const visibleRunEntries = showAllRuns
     ? runEntries
@@ -133,8 +142,10 @@ export function LabModelRunsPage({
     <section className="labs-model-version-index" aria-label="Model runs">
       <header className="labs-model-section-intro">
         <div>
-          <h2>Recent runs</h2>
-          <p>Training and evaluation history, including unfinished drafts.</p>
+          <h2>{mode === "rollouts" ? "Rollouts" : "Recent runs"}</h2>
+          <p>{mode === "rollouts"
+            ? "Online policy-optimization rollouts and their unfinished drafts."
+            : "Training and evaluation history, including unfinished drafts."}</p>
         </div>
         <span>
           {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}

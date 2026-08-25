@@ -53,6 +53,7 @@ import type { createDatasetImportService } from "./dataset-imports/import-servic
 import type { createBenchmarkTasksetService } from "./benchmark-tasksets.js";
 import type { createHarnessRefinerBenchmarkService } from "./harness-refiner-benchmark-service.js";
 import type { createPreferenceComparisonService } from "./preference-comparison-service.js";
+import type { createModelProjectHostingService } from "./model-project-hosting.js";
 import { trainingRunDetail } from "./run-detail.js";
 import {
   materializeSyntheticCollectionRun,
@@ -131,6 +132,7 @@ export function createTrainingApi(deps: {
   benchmarkTasksets: BenchmarkTasksets;
   harnessRefinerBenchmarks?: HarnessRefinerBenchmarks;
   preferenceComparisons?: PreferenceComparisons;
+  modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
 }) {
   async function request(
     action: string,
@@ -464,14 +466,44 @@ export function createTrainingApi(deps: {
     if (action === "start_harness_refiner_benchmark") {
       return startHarnessRefinerBenchmark(deps.harnessRefinerBenchmarks, input);
     }
+    if (action === "sync_model_project") {
+      if (!deps.modelProjectHosting) {
+        throw new Error("Hosted Model Project sync is unavailable.");
+      }
+      return deps.modelProjectHosting.syncProject(
+        requiredString(input.modelId, "modelId"),
+      );
+    }
+    if (action === "publish_model_project_taskset") {
+      if (!deps.modelProjectHosting) {
+        throw new Error("Hosted Model Project sync is unavailable.");
+      }
+      const taskset = await requireTaskset(
+        deps.store,
+        requiredString(input.tasksetId, "tasksetId"),
+      );
+      const release = await requireReleasedTaskset(
+        deps.benchmarkTasksets,
+        taskset,
+      );
+      return deps.modelProjectHosting.publishTaskset({
+        projectId: requiredString(input.modelId, "modelId"),
+        taskset,
+        release,
+      });
+    }
     if (action === "save_model_project") {
       const project = ModelProjectSchema.parse(input);
       const existing = await deps.store.getModelProject(project.id);
       if (existing && existing.profileId !== project.profileId) {
         throw new Error("Model profile does not match the active Profile.");
       }
+      if (existing && existing.revision !== project.revision) {
+        throw new Error("Model Project changed since it was opened. Refresh and try again.");
+      }
       return deps.store.saveModelProject({
         ...project,
+        revision: existing ? existing.revision + 1 : project.revision,
         createdAt: existing?.createdAt ?? project.createdAt,
         updatedAt: new Date().toISOString(),
       });
@@ -1024,13 +1056,33 @@ export function createTrainingApi(deps: {
       maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
       retentionDays: nullableNumber(input.retentionDays),
     });
-    if (action === "start_model_run") return deps.training.startModelRun({
-      modelRunId: requiredString(input.modelRunId, "modelRunId"),
-      maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
-      retentionDays: nullableNumber(input.retentionDays),
-      exportApproved: input.exportApproved === true,
-      manifest: input.manifest,
-    });
+    if (action === "start_model_run") {
+      const modelRunId = requiredString(input.modelRunId, "modelRunId");
+      const modelRun = await deps.store.getModelRun(modelRunId);
+      if (!modelRun) throw new Error("Model Run was not found.");
+      if (modelRun.destinationId === "openpond_managed") {
+        if (!deps.modelProjectHosting) {
+          throw new Error("Managed runs require hosted Model Project sync.");
+        }
+        const taskset = await requireTaskset(deps.store, modelRun.taskset.id);
+        const release = await requireReleasedTaskset(
+          deps.benchmarkTasksets,
+          taskset,
+        );
+        await deps.modelProjectHosting.publishTaskset({
+          projectId: modelRun.modelId,
+          taskset,
+          release,
+        });
+      }
+      return deps.training.startModelRun({
+        modelRunId,
+        maximumSpendUsd: nullableNumber(input.maximumSpendUsd),
+        retentionDays: nullableNumber(input.retentionDays),
+        exportApproved: input.exportApproved === true,
+        manifest: input.manifest,
+      });
+    }
     if (isModelRunControlAction(action)) return handleModelRunControl({
       action,
       modelRunId: input.modelRunId,

@@ -94,7 +94,10 @@ describe("Lab workspace", () => {
   test("keeps Models subpage navigation out of the page header", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
-        activeTab: "models",
+        activeTab: "overview",
+        modelProjects: [],
+        selectedModelProjectId: null,
+        onSelectModelProject: noop,
         onCreateDataset: noop,
         onCreateModel: noop,
         children: createElement("div", null, "Unified inventory"),
@@ -104,7 +107,7 @@ describe("Lab workspace", () => {
     expect(markup).toContain('aria-label="Models"');
     expect(markup).not.toContain('aria-label="Model sections"');
     expect(markup).not.toContain('role="tab"');
-    expect(markup).toContain(">New model<");
+    expect(markup).toContain(">New Model Project<");
     expect(markup).not.toContain(">Profile<");
     expect(markup).not.toContain(">Home<");
     expect(markup).not.toContain(">Suggestions<");
@@ -113,15 +116,15 @@ describe("Lab workspace", () => {
   });
 
   test("keeps the primary Models tab addressable across refresh and history", () => {
-    expect(labPrimaryTabFromSearch("")).toBe("models");
+    expect(labPrimaryTabFromSearch("")).toBe("overview");
     expect(labPrimaryTabFromSearch("?modelsTab=serving")).toBe("serving");
-    expect(labPrimaryTabFromSearch("?modelsTab=usage")).toBe("usage");
-    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("models");
+    expect(labPrimaryTabFromSearch("?modelsTab=rollouts")).toBe("rollouts");
+    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("overview");
     expect(
       searchWithLabPrimaryTab("?profile=qa", "tasksets"),
     ).toBe("?profile=qa&modelsTab=tasksets");
     expect(
-      searchWithLabPrimaryTab("?profile=qa&modelsTab=usage", "models"),
+      searchWithLabPrimaryTab("?profile=qa&modelsTab=rollouts", "overview"),
     ).toBe("?profile=qa");
   });
 

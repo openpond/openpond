@@ -6,6 +6,9 @@ describe("training API Model Run approval forwarding", () => {
   test("forwards explicit export approval to Model Run start", async () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
+      store: {
+        getModelRun: vi.fn(async () => ({ destinationId: "local" })),
+      },
       training: { startModelRun },
     } as never);
 
@@ -28,6 +31,9 @@ describe("training API Model Run approval forwarding", () => {
   test("does not infer export approval when the caller omits it", async () => {
     const startModelRun = vi.fn(async (input: unknown) => input);
     const api = createTrainingApi({
+      store: {
+        getModelRun: vi.fn(async () => ({ destinationId: "local" })),
+      },
       training: { startModelRun },
     } as never);
 
@@ -40,6 +46,42 @@ describe("training API Model Run approval forwarding", () => {
     expect(startModelRun).toHaveBeenCalledWith(
       expect.objectContaining({ exportApproved: false }),
     );
+  });
+
+  test("publishes the exact Taskset release before a managed Model Run starts", async () => {
+    const release = {
+      schemaVersion: "openpond.tasksetRelease.v1",
+      id: "taskset-release-1",
+      revision: 3,
+      contentHash: "a".repeat(64),
+    };
+    const taskset = { id: "taskset_1" };
+    const publishTaskset = vi.fn(async () => ({ id: "model_1" }));
+    const startModelRun = vi.fn(async (input: unknown) => input);
+    const api = createTrainingApi({
+      benchmarkTasksets: {
+        releaseForTaskset: vi.fn(async () => release),
+      },
+      modelProjectHosting: { publishTaskset },
+      store: {
+        getModelRun: vi.fn(async () => ({
+          destinationId: "openpond_managed",
+          modelId: "model_1",
+          taskset: { id: "taskset_1" },
+        })),
+        getTaskset: vi.fn(async () => taskset),
+      },
+      training: { startModelRun },
+    } as never);
+
+    await api.request("start_model_run", { modelRunId: "run_managed" });
+
+    expect(publishTaskset).toHaveBeenCalledWith({
+      projectId: "model_1",
+      taskset,
+      release,
+    });
+    expect(startModelRun).toHaveBeenCalledOnce();
   });
 
   test("forwards the exact Taskset and qualified Reward Model Version for a policy binding", async () => {
