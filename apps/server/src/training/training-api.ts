@@ -404,6 +404,12 @@ export function createTrainingApi(deps: {
         managedBaseModel: managedRewardModelBase(input.managedBaseModel),
       });
     }
+    if (action === "learned_preference_reward_binding") {
+      return deps.training.learnedPreferenceRewardBinding({
+        tasksetId: requiredString(input.tasksetId, "tasksetId"),
+        rewardModelVersionId: requiredString(input.rewardModelVersionId, "rewardModelVersionId"),
+      });
+    }
     if (action === "preference_comparison_model_review") {
       const actorKey = requiredString(input.reviewerKey, "reviewerKey");
       return requirePreferenceComparisons(deps.preferenceComparisons).submitModelReceipt({

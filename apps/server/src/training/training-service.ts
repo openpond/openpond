@@ -40,7 +40,11 @@ import {
   type ManagedRewardModelBase,
 } from "./reward-model-launch-input.js";
 import { projectQualifiedRewardModel } from "./reward-model-qualification-projection.js";
-import { saveRewardModelQualificationReport } from "./reward-model-qualification-store.js";
+import {
+  loadRewardModelQualificationReport,
+  saveRewardModelQualificationReport,
+} from "./reward-model-qualification-store.js";
+import { bindLearnedPreferenceReward } from "./learned-preference-reward-binding.js";
 import { createTrainingModelConfigurationService } from "./training-model-controls.js";
 import type { TasksetWorkAttemptRuntime } from "./taskset-work-attempt-runner.js";
 
@@ -304,6 +308,44 @@ export function createTrainingService(deps: {
     }
   }
 
+  async function learnedPreferenceRewardBinding(input: {
+    tasksetId: string;
+    rewardModelVersionId: string;
+  }) {
+    const version = await deps.store.getRewardModelVersion(input.rewardModelVersionId);
+    if (!version || version.taskset.id !== input.tasksetId) {
+      throw new Error("Reward Model Version was not found for this Taskset.");
+    }
+    const run = (await deps.store.listRewardModelRuns({ tasksetId: input.tasksetId }))
+      .find((candidate) => candidate.rewardModelVersionId === version.id && candidate.status === "succeeded");
+    if (!run?.qualificationReport) {
+      throw new Error("Reward Model Version has no immutable qualification report.");
+    }
+    const report = await loadRewardModelQualificationReport({
+      storeDir: deps.storeDir,
+      id: run.qualificationReport.id,
+      contentHash: run.qualificationReport.contentHash,
+    });
+    if (!report) {
+      throw new Error("Reward Model qualification report payload is unavailable.");
+    }
+    const rewardComposerCore = {
+      schemaVersion: "openpond.rewardComposer.v1",
+      taskset: version.taskset,
+      rewardModelVersion: { id: version.id, contentHash: version.contentHash },
+      qualificationReport: run.qualificationReport,
+    };
+    const rewardComposerHash = contentHash(rewardComposerCore);
+    return bindLearnedPreferenceReward({
+      version,
+      qualificationReport: report,
+      rewardComposerRelease: {
+        id: `reward-composer:${rewardComposerHash.slice(0, 24)}`,
+        contentHash: rewardComposerHash,
+      },
+    });
+  }
+
   async function activity() {
     await portableModelRuns.reconcileActive();
     await reconcileRewardModelRuns();
@@ -526,6 +568,7 @@ export function createTrainingService(deps: {
     activity,
     state,
     launchRewardModel,
+    learnedPreferenceRewardBinding,
     exportBundle,
     artifactDownload,
     modelPackageDownload,

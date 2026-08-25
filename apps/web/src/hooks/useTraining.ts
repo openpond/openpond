@@ -493,6 +493,14 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       `/tasksets/${encodeURIComponent(input.tasksetId)}/reward-model-runs`,
       { ...input, id: `reward-model-run-${crypto.randomUUID()}` },
     ),
+    learnedPreferenceRewardBinding: (input: {
+      tasksetId: string;
+      rewardModelVersionId: string;
+    }) => mutate(
+      "learned-preference-reward-binding",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/learned-preference-reward-binding`,
+      input,
+    ),
     markPreferenceComparisonUnreviewable: (input: {
       tasksetId: string;
       assignmentId: string;
