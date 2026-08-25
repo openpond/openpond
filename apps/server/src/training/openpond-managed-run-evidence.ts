@@ -100,7 +100,7 @@ const ManagedJobDetailSchema = z.object({
         policyVersion: z.number().int().nonnegative(),
         rewardEligible: z.boolean(),
         reward: OptionalMoneySchema,
-        rewardComponents: z.record(z.string(), z.number()).default({}),
+        rewardComponents: z.record(z.string(), z.unknown()).default({}),
         promptTokenCount: z.number().int().nonnegative().nullable().optional(),
         outputTokenCount: z.number().int().nonnegative().nullable().optional(),
         consumedTrainingStepId: z
