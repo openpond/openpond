@@ -1,7 +1,7 @@
 import {
   ModelBindingRoleSchema,
   ModelBindingSchema,
-  resolveModelBindingPromotionGate,
+  resolveModelBindingEligibility,
   type ModelBindingRole,
 } from "@openpond/contracts";
 import { contentHash } from "@openpond/taskset-sdk";
@@ -84,21 +84,16 @@ export function createTrainingModelBindingService(
     if (!model || model.status !== "imported") {
       throw new Error("Imported model not found.");
     }
-    const promotionGate = resolveModelBindingPromotionGate(model);
-    if (!promotionGate) {
+    const bindingEligibility = resolveModelBindingEligibility(model);
+    if (!bindingEligibility) {
       throw new Error(
-        "This Model did not pass a supported frozen evaluation promotion gate.",
+        "This Model Version is not available to run yet.",
       );
     }
-    const [taskset, job, artifact, evaluationArtifact] = await Promise.all([
+    const [taskset, job, artifact] = await Promise.all([
       deps.store.getTaskset(model.tasksetId),
       deps.store.getTrainingJob(model.jobId),
       deps.store.getTrainingArtifact(model.artifactId),
-      promotionGate.evaluationArtifactId
-        ? deps.store.getTrainingArtifact(
-            promotionGate.evaluationArtifactId,
-          )
-        : Promise.resolve(null),
     ]);
     if (!taskset || taskset.profileId !== input.profileId) {
       throw new Error(
@@ -110,35 +105,11 @@ export function createTrainingModelBindingService(
         "The Model artifact does not have a completed training receipt.",
       );
     }
-    if (
-      promotionGate.kind === "source_frozen_evaluation"
-      && (
-        !evaluationArtifact
-        || evaluationArtifact.kind !== "evaluation"
-        || evaluationArtifact.jobId !== job.id
-        || evaluationArtifact.metadata.thresholdPassed !== true
-      )
-    ) {
-      throw new Error(
-        "The Model has no matching frozen-evaluation threshold receipt.",
-      );
-    }
-    await Promise.all([
-      assertArtifactIntegrity(
-        artifact.path,
-        artifact.sha256,
-        artifact.sizeBytes,
-      ),
-      ...(evaluationArtifact
-        ? [
-            assertArtifactIntegrity(
-              evaluationArtifact.path,
-              evaluationArtifact.sha256,
-              evaluationArtifact.sizeBytes,
-            ),
-          ]
-        : []),
-    ]);
+    await assertArtifactIntegrity(
+      artifact.path,
+      artifact.sha256,
+      artifact.sizeBytes,
+    );
     let current = await deps.store.getActiveModelBinding({
       profileId: input.profileId,
       role,
@@ -160,7 +131,7 @@ export function createTrainingModelBindingService(
       roleTargetId,
       modelArtifactLineageId: model.id,
       tasksetId: taskset.id,
-      evaluationArtifactId: promotionGate.evaluationArtifactId,
+      evaluationArtifactId: model.frozenEvaluationArtifactId,
       status: "active",
       priorBindingId: current?.id ?? null,
       rollbackTargetBindingId: current?.id ?? null,
@@ -174,10 +145,9 @@ export function createTrainingModelBindingService(
         trainingMethod:
           (await deps.store.getTrainingPlan(job.planId))?.recipe.method
           ?? null,
-        evaluationThresholdPassed: true,
-        promotionGate: promotionGate.kind,
-        canonicalSandboxArtifactId: promotionGate.canonicalArtifactId,
-        canonicalSandboxDeploymentId: promotionGate.canonicalDeploymentId,
+        bindingEligibility: bindingEligibility.kind,
+        canonicalSandboxArtifactId: bindingEligibility.canonicalArtifactId,
+        canonicalSandboxDeploymentId: bindingEligibility.canonicalDeploymentId,
         managedProjectionVersion: 1,
       },
     });

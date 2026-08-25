@@ -36,6 +36,7 @@ export function TasksetDraftEditor({
   onOpenChat,
   onPublished,
   onUseExistingTaskset,
+  modelProjectId,
 }: {
   draftId?: string | null;
   defaultModel: ChatModelRef;
@@ -44,6 +45,7 @@ export function TasksetDraftEditor({
   onOpenChat?: (draft: TasksetDraft) => void;
   onPublished: (tasksetId: string) => void;
   onUseExistingTaskset?: () => void;
+  modelProjectId?: string | null;
 }) {
   const [localDraftId, setLocalDraftId] = useState(draftId ?? null);
   const [draft, setDraft] = useState<TasksetDraft | null>(() =>
@@ -105,9 +107,19 @@ export function TasksetDraftEditor({
     if (!draft || issues.length) return;
     const saved = await save();
     if (!saved) return;
-    const result = await training.actions.publishTasksetDraft(saved.id);
+    const result = await training.actions.publishTasksetDraft(
+      saved.id,
+      modelProjectId,
+    );
     if (!result) return;
     setDraft(result.draft);
+    setNotice(
+      result.hostedSync.state === "synced"
+        ? "Published locally and synced to the hosted Model Project."
+        : result.hostedSync.state === "sync_failed"
+          ? "Published locally. Hosted sync failed and can be retried from the Taskset."
+          : "Published locally.",
+    );
     onPublished(result.taskset.id);
   }
 

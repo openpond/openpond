@@ -7,6 +7,7 @@ import type {
 } from "@openpond/contracts";
 import {
   managedAdapterCustomerBindingAllowed,
+  resolveModelBindingEligibility,
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
@@ -332,10 +333,10 @@ export function LabModelVersionsPage({
     const version = versions.find(
       (candidate) => candidate.lineage.id === versionId
     );
-    if (!version || !resolveModelBindingPromotionGate(version.lineage)) return;
+    if (!version || !resolveModelBindingEligibility(version.lineage)) return;
     if (
       !window.confirm(
-        `Set Version ${version.number} as active for ${workproduct.name}?`
+        `Set Version ${version.number} as the default for ${workproduct.name}?`
       )
     ) {
       return;
@@ -347,8 +348,8 @@ export function LabModelVersionsPage({
     );
     onToast(
       result
-        ? `Version ${version.number} is now active.`
-        : "The active Version could not be changed.",
+        ? `Version ${version.number} is now the project default.`
+        : "The default Version could not be changed.",
       result ? "success" : "error"
     );
   }
@@ -372,7 +373,7 @@ export function LabModelVersionsPage({
         <div>
           <h2>Versions</h2>
           <p>
-            Trained outputs that can be evaluated, activated, and downloaded.
+            Trained outputs that can be evaluated, served, and selected as the project default.
           </p>
         </div>
         <span>{versions.length} trained</span>
@@ -488,7 +489,7 @@ export function LabModelVersionsPage({
                           className="training-button secondary"
                           disabled={
                             readOnly ||
-                            !resolveModelBindingPromotionGate(version.lineage)
+                            !resolveModelBindingEligibility(version.lineage)
                           }
                           type="button"
                           onClick={(event) => {
@@ -496,7 +497,7 @@ export function LabModelVersionsPage({
                             void setCurrent(version.lineage.id);
                           }}
                         >
-                          Activate
+                          Set as default
                         </button>
                       ) : null}
                       <button

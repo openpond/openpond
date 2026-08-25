@@ -126,6 +126,12 @@ export function LabDatasetsPage({
   }, [selectedId]);
 
   if (selected) {
+    const project = modelProjectId
+      ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
+      : null;
+    const sync = project?.tasksetSyncs.find(
+      (candidate) => candidate.localTasksetId === selected.id,
+    );
     return (
       <div className="labs-flat-body labs-datasets-page">
         <div className="labs-dataset-detail-heading">
@@ -142,7 +148,7 @@ export function LabDatasetsPage({
             <p>{selected.objective}</p>
           </div>
           <div className="labs-dataset-detail-actions">
-            {modelProjectId ? (
+            {modelProjectId && sync?.state !== "synced" ? (
               <button
                 className="training-button secondary"
                 disabled={
@@ -157,16 +163,32 @@ export function LabDatasetsPage({
                   );
                   onToast(
                     published
-                      ? `${selected.name} published to the hosted Model Project.`
+                      ? `${selected.name} synced to the hosted Model Project.`
                       : "The Taskset release could not be published.",
                     published ? "success" : "error",
                   );
                 }}
               >
                 {training.busyAction === "publish-model-project-taskset"
-                  ? "Publishing…"
-                  : "Publish release"}
+                  ? "Syncing…"
+                  : sync?.state === "sync_failed"
+                    ? "Retry sync"
+                    : "Sync hosted"}
               </button>
+            ) : null}
+            {modelProjectId ? (
+              <LabStatusBadge
+                label={
+                  sync?.state === "synced"
+                    ? "Synced"
+                    : sync?.state === "syncing"
+                      ? "Syncing"
+                      : sync?.state === "sync_failed"
+                        ? "Sync failed"
+                        : "Local"
+                }
+                value={sync?.state === "synced" ? "available" : sync?.state ?? "local"}
+              />
             ) : null}
             {readOnly ? (
               <LabStatusBadge

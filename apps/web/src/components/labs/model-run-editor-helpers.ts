@@ -31,6 +31,7 @@ export function newProject(
     defaultBaseModel: null,
     defaultDestinationId: null,
     hosted: null,
+    tasksetSyncs: [],
     createdAt: timestamp,
     updatedAt: timestamp,
   };

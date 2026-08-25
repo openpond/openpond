@@ -497,6 +497,22 @@ export const ModelProjectSchema = z.object({
     .strict()
     .nullable()
     .default(null),
+  tasksetSyncs: z
+    .array(
+      z.object({
+        localTasksetId: IdSchema,
+        releaseId: IdSchema,
+        releaseRevision: z.number().int().positive(),
+        releaseHash: HashSchema,
+        state: z.enum(["syncing", "synced", "sync_failed"]),
+        hostedTasksetId: IdSchema.nullable().default(null),
+        lastAttemptAt: TimestampSchema,
+        syncedAt: TimestampSchema.nullable().default(null),
+        lastError: z.string().trim().min(1).max(5_000).nullable().default(null),
+      }).strict(),
+    )
+    .max(10_000)
+    .default([]),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });

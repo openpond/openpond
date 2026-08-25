@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  resolveModelBindingPromotionGate,
+  resolveModelBindingEligibility,
   type CreateImproveCandidate,
   type CreateImproveRun,
   type ChatModelRef,
@@ -566,35 +566,19 @@ export function LabWorkproductDetail({
         </div>
         {workproduct.kind === "model" ? (
           <div className="labs-workproduct-header-actions">
-            <button
-              className="training-button secondary"
-              disabled={training.busyAction === "sync-model-project"}
-              type="button"
-              onClick={async () => {
-                const synced = await training.actions.syncModelProject(workproduct.id);
-                onToast(
-                  synced
-                    ? `${workproduct.name} synced to hosted.`
-                    : "The Model Project could not be synced.",
-                  synced ? "success" : "error",
-                );
-              }}
-            >
-              {training.busyAction === "sync-model-project" ? "Syncing…" : "Sync hosted"}
-            </button>
             {selectedModelVersion?.taskset ? (
               <button
                 className="training-button secondary"
                 disabled={
                   readOnlyModel ||
-                  !resolveModelBindingPromotionGate(
+                  !resolveModelBindingEligibility(
                     selectedModelVersion.lineage
                   )
                 }
                 title={
-                  resolveModelBindingPromotionGate(selectedModelVersion.lineage)
+                  resolveModelBindingEligibility(selectedModelVersion.lineage)
                     ? "Chat with this Version"
-                    : "Chat is unavailable because this Version did not pass evaluation."
+                    : "Chat is unavailable until this Version is ready to run."
                 }
                 type="button"
                 onClick={() => useModelVersion(selectedModelVersion.lineage.id)}

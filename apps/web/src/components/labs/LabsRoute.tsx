@@ -489,6 +489,7 @@ export function LabsRoute({
         renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
           <TasksetDraftEditor
             defaultModel={training.defaultModel}
+            modelProjectId={selected?.id ?? null}
             training={training.training}
             onBack={onUseExistingDataset}
             onOpenChat={openDatasetBuilderChat}
@@ -523,6 +524,7 @@ export function LabsRoute({
           <TasksetDraftEditor
             defaultModel={training.defaultModel}
             draftId={datasetDraftId}
+            modelProjectId={selected?.id ?? null}
             training={training.training}
             onBack={closeDatasetCreation}
             onOpenChat={openDatasetBuilderChat}
@@ -617,6 +619,7 @@ export function LabsRoute({
               renderDatasetBuilder={(onCreated, onUseExistingDataset) => (
                 <TasksetDraftEditor
                   defaultModel={training.defaultModel}
+                  modelProjectId={selected.id}
                   training={training.training}
                   onBack={onUseExistingDataset}
                   onOpenChat={openDatasetBuilderChat}

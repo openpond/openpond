@@ -134,6 +134,45 @@ export function createTrainingApi(deps: {
   preferenceComparisons?: PreferenceComparisons;
   modelProjectHosting?: ReturnType<typeof createModelProjectHostingService>;
 }) {
+  async function publishTasksetToHostedProject(input: {
+    draft: ReturnType<typeof TasksetDraftSchema.parse>;
+    taskset: ReturnType<typeof TasksetSchema.parse>;
+    modelId: string | null;
+  }) {
+    if (!input.modelId || !deps.modelProjectHosting) {
+      return {
+        draft: input.draft,
+        taskset: input.taskset,
+        hostedSync: { state: "local" as const, error: null },
+      };
+    }
+    const release = await requireReleasedTaskset(
+      deps.benchmarkTasksets,
+      input.taskset,
+    );
+    try {
+      await deps.modelProjectHosting.publishTaskset({
+        projectId: input.modelId,
+        taskset: input.taskset,
+        release,
+      });
+      return {
+        draft: input.draft,
+        taskset: input.taskset,
+        hostedSync: { state: "synced" as const, error: null },
+      };
+    } catch (caught) {
+      return {
+        draft: input.draft,
+        taskset: input.taskset,
+        hostedSync: {
+          state: "sync_failed" as const,
+          error: caught instanceof Error ? caught.message : String(caught),
+        },
+      };
+    }
+  }
+
   async function request(
     action: string,
     payload: unknown,
@@ -673,7 +712,11 @@ export function createTrainingApi(deps: {
             )
           : null;
         if (!taskset) throw new Error("Published Taskset draft lost its immutable Taskset revision.");
-        return { draft, taskset };
+        return publishTasksetToHostedProject({
+          draft,
+          taskset,
+          modelId: string(input.modelId),
+        });
       }
       const workspace = await deps.store.getTasksetDraftWorkspace(draft.id);
       if (!workspace) throw new Error("Taskset draft workspace was not found.");
@@ -697,7 +740,11 @@ export function createTrainingApi(deps: {
         updatedAt: new Date().toISOString(),
       });
       await deps.store.saveTasksetDraft(published);
-      return { draft: published, taskset };
+      return publishTasksetToHostedProject({
+        draft: published,
+        taskset,
+        modelId: string(input.modelId),
+      });
     }
     if (action === "delete_taskset_draft") {
       const draft = await requireTasksetDraft(

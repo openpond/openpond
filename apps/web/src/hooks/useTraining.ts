@@ -233,11 +233,15 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         return null;
       }
     },
-    publishTasksetDraft: (draftId: string) =>
-      mutate<{ draft: TasksetDraft; taskset: Taskset }>(
+    publishTasksetDraft: (draftId: string, modelId?: string | null) =>
+      mutate<{
+        draft: TasksetDraft;
+        taskset: Taskset;
+        hostedSync: { state: "local" | "synced" | "sync_failed"; error: string | null };
+      }>(
         "publish-taskset-draft",
         `/taskset-drafts/${encodeURIComponent(draftId)}/publish`,
-        {},
+        { modelId: modelId ?? null },
       ),
     deleteTasksetDraft: (draftId: string) =>
       mutate<{ deleted: boolean; draftId: string }>(

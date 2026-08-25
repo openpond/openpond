@@ -88,27 +88,61 @@ export function createModelProjectHostingService(input: {
     release: TasksetRelease;
   }): Promise<ModelProject> {
     const release = TasksetReleaseSchema.parse(inputValue.release);
-    const project = await syncProject(inputValue.projectId);
+    await recordTasksetSync({
+      projectId: inputValue.projectId,
+      taskset: inputValue.taskset,
+      release,
+      state: "syncing",
+      hostedTasksetId: null,
+      error: null,
+    });
+    let project: ModelProject;
+    try {
+      project = await syncProject(inputValue.projectId);
+    } catch (caught) {
+      await recordTasksetSync({
+        projectId: inputValue.projectId,
+        taskset: inputValue.taskset,
+        release,
+        state: "sync_failed",
+        hostedTasksetId: null,
+        error: errorMessage(caught),
+      });
+      throw caught;
+    }
     if (!project.hosted) throw new Error("Hosted Model Project link was not persisted.");
     const access = await input.resolveAccess();
     if (project.hosted.teamId !== access.teamId) {
       throw new Error("Model Project is linked to a different hosted workspace.");
     }
-    const response = await requestJson<{ project: unknown; taskset: unknown }>({
-      access,
-      pathname: "/v1/taskset-releases",
-      method: "POST",
-      body: {
-        schemaVersion: "openpond.portableTasksetPublication.v1",
-        modelProjectId: project.hosted.projectId,
-        name: inputValue.taskset.name,
-        description: inputValue.taskset.objective,
-        buildIntent: buildIntent(inputValue.taskset),
-        methodHint: null,
+    let response: { project: unknown; taskset: unknown };
+    try {
+      response = await requestJson<{ project: unknown; taskset: unknown }>({
+        access,
+        pathname: "/v1/taskset-releases",
+        method: "POST",
+        body: {
+          schemaVersion: "openpond.portableTasksetPublication.v1",
+          modelProjectId: project.hosted.projectId,
+          name: inputValue.taskset.name,
+          description: inputValue.taskset.objective,
+          buildIntent: buildIntent(inputValue.taskset),
+          methodHint: null,
+          release,
+        },
+        gzip: true,
+      });
+    } catch (caught) {
+      await recordTasksetSync({
+        projectId: inputValue.projectId,
+        taskset: inputValue.taskset,
         release,
-      },
-      gzip: true,
-    });
+        state: "sync_failed",
+        hostedTasksetId: null,
+        error: errorMessage(caught),
+      });
+      throw caught;
+    }
     const hostedProject = HostedProjectSchema.parse(response.project);
     const hostedTaskset = HostedTasksetSchema.parse(response.taskset);
     const syncedAt = new Date().toISOString();
@@ -137,6 +171,17 @@ export function createModelProjectHostingService(input: {
         syncedAt,
         tasksets,
       },
+      tasksetSyncs: upsertTasksetSync(project.tasksetSyncs ?? [], {
+        localTasksetId: inputValue.taskset.id,
+        releaseId: release.id,
+        releaseRevision: release.revision,
+        releaseHash: release.contentHash,
+        state: "synced",
+        hostedTasksetId: hostedTaskset.id,
+        lastAttemptAt: syncedAt,
+        syncedAt,
+        lastError: null,
+      }),
     });
     await input.store.saveModelProject(saved);
     return saved;
@@ -188,6 +233,46 @@ export function createModelProjectHostingService(input: {
   }
 
   return { publishTaskset, syncProject };
+
+  async function recordTasksetSync(value: {
+    projectId: string;
+    taskset: Taskset;
+    release: TasksetRelease;
+    state: "syncing" | "sync_failed";
+    hostedTasksetId: string | null;
+    error: string | null;
+  }): Promise<void> {
+    const project = await requireProject(input.store, value.projectId);
+    const timestamp = new Date().toISOString();
+    await input.store.saveModelProject(ModelProjectSchema.parse({
+      ...project,
+      tasksetSyncs: upsertTasksetSync(project.tasksetSyncs ?? [], {
+        localTasksetId: value.taskset.id,
+        releaseId: value.release.id,
+        releaseRevision: value.release.revision,
+        releaseHash: value.release.contentHash,
+        state: value.state,
+        hostedTasksetId: value.hostedTasksetId,
+        lastAttemptAt: timestamp,
+        syncedAt: null,
+        lastError: value.error,
+      }),
+    }));
+  }
+}
+
+function upsertTasksetSync(
+  entries: ModelProject["tasksetSyncs"],
+  entry: ModelProject["tasksetSyncs"][number],
+): ModelProject["tasksetSyncs"] {
+  return [
+    ...entries.filter((candidate) => candidate.localTasksetId !== entry.localTasksetId),
+    entry,
+  ];
+}
+
+function errorMessage(value: unknown): string {
+  return value instanceof Error ? value.message : String(value);
 }
 
 async function requireProject(
