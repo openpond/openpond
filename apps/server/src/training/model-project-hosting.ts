@@ -44,22 +44,39 @@ export function createModelProjectHostingService(input: {
   async function syncProject(projectId: string): Promise<ModelProject> {
     const project = await requireProject(input.store, projectId);
     const access = await input.resolveAccess();
-    const hosted = await requestJson<{ project: unknown }>({
-      access,
-      pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
-      method: "PUT",
-      body: {
-        schemaVersion: "openpond.hostedModelProjectSync.v1",
-        portableProjectId: project.id,
-        name: project.name,
-        objective: project.objective,
-        defaultBaseModel: project.defaultBaseModel,
-        defaultDestinationId: project.defaultDestinationId,
-        sourceRevision: project.revision,
-        sourceUpdatedAt: project.updatedAt,
-        expectedEtag: project.hosted?.etag ?? null,
-      },
-    });
+    const syncBody = {
+      schemaVersion: "openpond.hostedModelProjectSync.v1" as const,
+      portableProjectId: project.id,
+      name: project.name,
+      objective: project.objective,
+      defaultBaseModel: project.defaultBaseModel,
+      defaultDestinationId: project.defaultDestinationId,
+      sourceRevision: project.revision,
+      sourceUpdatedAt: project.updatedAt,
+    };
+    let hosted: { project: unknown };
+    try {
+      hosted = await requestJson<{ project: unknown }>({
+        access,
+        pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
+        method: "PUT",
+        body: {
+          ...syncBody,
+          expectedEtag: project.hosted?.etag ?? null,
+        },
+      });
+    } catch (caught) {
+      if (!isProjectSyncConflict(caught)) throw caught;
+      // Desktop is the authoring source for this container. A prior successful
+      // release publication can leave its local container ETag behind; retry
+      // the same source revision without the stale compare-and-swap token.
+      hosted = await requestJson<{ project: unknown }>({
+        access,
+        pathname: `/v1/model-projects/${encodeURIComponent(project.id)}`,
+        method: "PUT",
+        body: { ...syncBody, expectedEtag: null },
+      });
+    }
     const hostedProject = HostedProjectSchema.parse(hosted.project);
     const syncedAt = new Date().toISOString();
     const saved = ModelProjectSchema.parse({
@@ -286,6 +303,10 @@ function upsertTasksetSync(
 
 function errorMessage(value: unknown): string {
   return value instanceof Error ? value.message : String(value);
+}
+
+function isProjectSyncConflict(value: unknown): boolean {
+  return errorMessage(value).startsWith("model_project_sync_conflict (");
 }
 
 async function requireProject(
