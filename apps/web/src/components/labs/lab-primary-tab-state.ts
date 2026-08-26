@@ -7,14 +7,15 @@ export const LAB_MODEL_PROJECT_CHANGE_EVENT = "openpond:model-project-change";
 const LAB_PRIMARY_TABS = new Set<LabPrimaryTab>([
   "overview",
   "tasksets",
-  "versions",
-  "runs",
-  "rollouts",
+  "training",
+  "evals",
   "serving",
 ]);
 
 export function labPrimaryTabFromSearch(search: string): LabPrimaryTab {
   const value = new URLSearchParams(search).get(LAB_TAB_QUERY_KEY);
+  if (value === "runs" || value === "rollouts") return "training";
+  if (value === "versions") return "overview";
   return value && LAB_PRIMARY_TABS.has(value as LabPrimaryTab)
     ? (value as LabPrimaryTab)
     : "overview";

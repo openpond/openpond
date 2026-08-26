@@ -157,7 +157,7 @@ describe("Lab workspace", () => {
   test("keeps the primary Models tab addressable across refresh and history", () => {
     expect(labPrimaryTabFromSearch("")).toBe("overview");
     expect(labPrimaryTabFromSearch("?modelsTab=serving")).toBe("serving");
-    expect(labPrimaryTabFromSearch("?modelsTab=rollouts")).toBe("rollouts");
+    expect(labPrimaryTabFromSearch("?modelsTab=rollouts")).toBe("training");
     expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("overview");
     expect(
       searchWithLabPrimaryTab("?profile=qa", "tasksets"),
@@ -936,7 +936,7 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Run Benchmark");
+    expect(markup).not.toContain("Run Benchmark");
     expect(markup).not.toContain("Improve in Chat");
     expect(markup).not.toContain("Train Model");
   });

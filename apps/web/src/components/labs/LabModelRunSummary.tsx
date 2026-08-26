@@ -25,6 +25,7 @@ export function LabModelRunSummary({
   children,
   failure,
   onOpenTaskset,
+  showHeader = true,
 }: {
   title: string;
   status: string;
@@ -43,6 +44,7 @@ export function LabModelRunSummary({
   children?: ReactNode;
   failure: string | null;
   onOpenTaskset?: () => void;
+  showHeader?: boolean;
 }) {
   const cost =
     telemetry?.cost.providerReportedUsd ??
@@ -52,7 +54,7 @@ export function LabModelRunSummary({
 
   return (
     <div className="labs-model-run-summary">
-      <section className="labs-run-outcome-card">
+      {showHeader ? <section className="labs-run-outcome-card">
         <header>
           <div>
             <div className="labs-run-title-row">
@@ -64,7 +66,7 @@ export function LabModelRunSummary({
             </p>
           </div>
         </header>
-      </section>
+      </section> : null}
 
       {children}
 

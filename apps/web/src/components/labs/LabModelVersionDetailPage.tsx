@@ -3,7 +3,6 @@ import {
   type ModelEvaluationReceipt,
   type ModelEvaluationStopReceipt,
   type ModelRun,
-  type ManagedAdapterServingProjection,
   type TrainingJobEvent,
 } from "@openpond/contracts";
 
@@ -36,6 +35,7 @@ import {
   StoppedEvaluationDetail,
 } from "./LabModelEvaluationBenchmarkDetails";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 import {
   labLifecycleModelRuns,
   labModelJobs,
@@ -50,10 +50,11 @@ import {
 } from "./LabModelWorkspace";
 
 type RunDetailTab =
+  | "overview"
+  | "metrics"
   | "artifacts"
   | "evaluation"
   | "rollouts"
-  | "serving"
   | "activity";
 
 export function LabModelVersionDetailPage({
@@ -70,7 +71,7 @@ export function LabModelVersionDetailPage({
   onOpenConversation: (conversationId: string) => void;
 }) {
   const [requestedDetailTab, setRequestedDetailTab] =
-    useState<RunDetailTab>("artifacts");
+    useState<RunDetailTab>("overview");
   const state = training.payload;
   const jobs = useMemo(
     () => labModelJobs(workproduct, runs, state),
@@ -155,7 +156,6 @@ export function LabModelVersionDetailPage({
     null;
   const selectedEvaluationArtifactId =
     selectedVersion?.lineage.frozenEvaluationArtifactId ?? null;
-  const managedServing = selectedVersion?.lineage.managedServing ?? null;
   const selectedPlan =
     selectedVersion?.plan ??
     (selectedJob ? planById.get(selectedJob.planId) ?? null : null);
@@ -184,7 +184,8 @@ export function LabModelVersionDetailPage({
       event.payload.metricKind === "rollout_trajectory",
   ) ?? false;
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
-    { id: "artifacts", label: "Artifacts" },
+    { id: "overview", label: "Overview" },
+    ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
     ...(detail.loading ||
     detail.detail?.evaluation ||
     selectedEvaluationArtifactId ||
@@ -194,9 +195,7 @@ export function LabModelVersionDetailPage({
     ...(receipts.length || hasManagedAttempts
       ? [{ id: "rollouts" as const, label: "Rollouts" }]
       : []),
-    ...(managedServing
-      ? [{ id: "serving" as const, label: "Serving" }]
-      : []),
+    { id: "artifacts", label: "Artifacts" },
     ...(selectedJob
       ? [{ id: "activity" as const, label: "Activity" }]
       : []),
@@ -233,7 +232,51 @@ export function LabModelVersionDetailPage({
 
   return (
     <div className="labs-model-version-detail">
-      <LabModelRunSummary
+      <ModelProjectPageHeader
+        title={selectedLifecycleRun || selectedJob
+          ? selectedRunNumber ? `Run ${selectedRunNumber}` : "Run details"
+          : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
+        description={`${trainingMethodLabel(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
+        status={<LabStatusBadge
+          label={selectedLifecycleRun ? statusLabel(selectedLifecycleRun.status) : selectedJob ? statusLabel(selectedJob.status) : "Imported"}
+          value={selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"}
+        />}
+        metrics={[
+          { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
+          { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, selectedLifecycleRun.completedAt) : selectedJob ? formatDuration(selectedJob.startedAt, selectedJob.completedAt) : "Not recorded" },
+          { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
+          { label: "Taskset", value: selectedTaskset?.name ?? "Unavailable" },
+        ]}
+      />
+
+      <section className="labs-run-detail-tabs">
+        <div
+          className="training-detail-tabs"
+          role="tablist"
+          aria-label="Run details"
+        >
+          {detailTabs.map((tab) => (
+            <button
+              aria-controls={`run-detail-panel-${tab.id}`}
+              aria-selected={activeDetailTab === tab.id}
+              className={activeDetailTab === tab.id ? "active" : undefined}
+              id={`run-detail-tab-${tab.id}`}
+              key={tab.id}
+              role="tab"
+              type="button"
+              onClick={() => setRequestedDetailTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div
+          aria-labelledby={`run-detail-tab-${activeDetailTab}`}
+          className="labs-run-detail-tab-panel"
+          id={`run-detail-panel-${activeDetailTab}`}
+          role="tabpanel"
+        >
+          {activeDetailTab === "overview" ? <LabModelRunSummary
         baseModel={baseModelName(selectedPlan, selectedBaseModelId)}
         compute={
           selectedLifecycleRun
@@ -308,43 +351,15 @@ export function LabModelVersionDetailPage({
             ? () => onOpenDataset(selectedTaskset.id)
             : undefined
         }
-      >
-        {selectedJob ? (
+        showHeader={false}
+      /> : null}
+          {activeDetailTab === "metrics" && selectedJob ? (
           <TrainingRunMetrics
             detail={detail.detail}
             error={detail.error}
             loading={detail.loading}
           />
         ) : null}
-      </LabModelRunSummary>
-
-      <section className="labs-run-detail-tabs">
-        <div
-          className="training-detail-tabs"
-          role="tablist"
-          aria-label="Run details"
-        >
-          {detailTabs.map((tab) => (
-            <button
-              aria-controls={`run-detail-panel-${tab.id}`}
-              aria-selected={activeDetailTab === tab.id}
-              className={activeDetailTab === tab.id ? "active" : undefined}
-              id={`run-detail-tab-${tab.id}`}
-              key={tab.id}
-              role="tab"
-              type="button"
-              onClick={() => setRequestedDetailTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <div
-          aria-labelledby={`run-detail-tab-${activeDetailTab}`}
-          className="labs-run-detail-tab-panel"
-          id={`run-detail-panel-${activeDetailTab}`}
-          role="tabpanel"
-        >
           {activeDetailTab === "artifacts" ? (
             <dl className="training-configuration-list">
               <Fact
@@ -447,9 +462,6 @@ export function LabModelVersionDetailPage({
               <TrainingManagedAttempts events={detail.detail?.events ?? []} />
             )
           ) : null}
-          {activeDetailTab === "serving" ? (
-            <ManagedAdapterServingStatus projection={managedServing} />
-          ) : null}
           {activeDetailTab === "activity" && selectedJob ? (
             <TrainingEventLog
               error={selectedJob.error ?? detail.error}
@@ -476,6 +488,7 @@ function LabModelEvaluationRunDetail({
   onOpenTaskset?: () => void;
   onOpenConversation: (conversationId: string) => void;
 }) {
+  const [activeTab, setActiveTab] = useState<"results" | "scenarios" | "activity">("results");
   const receipt = run.receipt?.schemaVersion === "openpond.modelEvaluationReceipt.v1"
     ? run.receipt as ModelEvaluationReceipt
     : null;
@@ -486,12 +499,10 @@ function LabModelEvaluationRunDetail({
   const taskEfficiency = receipt ? benchmarkTaskEfficiency(receipt) : null;
   return (
     <div className="labs-model-version-detail labs-model-evaluation-detail">
-      <section className="labs-run-outcome-card">
-        <header>
-          <div>
-            <div className="labs-run-title-row">
-              <h2>{runNumber ? `Run ${runNumber}` : "Evaluation run"}</h2>
-              <LabStatusBadge
+      <ModelProjectPageHeader
+        title={runNumber ? `Eval ${runNumber}` : "Evaluation run"}
+        description={`Harness Refiner benchmark · ${tasksetName}`}
+        status={<LabStatusBadge
                 label={receipt
                   ? taskEfficiency?.comparedTaskCount
                     ? `${taskEfficiency.passedTaskCount}/${taskEfficiency.comparedTaskCount} passed`
@@ -505,19 +516,23 @@ function LabModelEvaluationRunDetail({
                     ? "succeeded"
                     : "neutral"
                   : stopReceipt?.terminalClassification ?? run.status}
-              />
-            </div>
-            <p>
-              Harness Refiner benchmark · {tasksetName}
-              {receipt || stopReceipt
-                ? ` · execution ${statusLabel(run.status).toLowerCase()}`
-                : ""}
-            </p>
-          </div>
-        </header>
-      </section>
+              />}
+        metrics={[
+          { label: "Baseline pass rate", value: receipt ? `${(receipt.quality.baselinePassRate * 100).toFixed(1)}%` : "—" },
+          { label: "Candidate pass rate", value: receipt ? `${(receipt.quality.candidatePassRate * 100).toFixed(1)}%` : "—" },
+          { label: "Scenarios", value: receipt?.attempts?.length ?? 0 },
+          { label: "Execution", value: statusLabel(run.status) },
+        ]}
+      />
+      <div className="training-detail-tabs" role="tablist" aria-label="Evaluation details">
+        {(["results", "scenarios", "activity"] as const).map((tab) => (
+          <button key={tab} className={activeTab === tab ? "active" : undefined} aria-selected={activeTab === tab} role="tab" type="button" onClick={() => setActiveTab(tab)}>
+            {tab === "results" ? "Results" : tab === "scenarios" ? "Scenarios" : "Activity"}
+          </button>
+        ))}
+      </div>
 
-      {receipt ? (
+      {activeTab === "results" && receipt ? (
         <>
           <EvaluationComparisonCharts
             series={[
@@ -563,28 +578,19 @@ function LabModelEvaluationRunDetail({
               },
             ]}
           />
-          {(receipt.attempts ?? []).length ? (
-            <BenchmarkAttemptCharts receipt={receipt} />
-          ) : null}
           <BenchmarkComparisonSummary
             receipt={receipt}
             run={run}
             tasksetName={tasksetName}
             onOpenTaskset={onOpenTaskset}
           />
-          {(receipt.attempts ?? []).length ? (
-            <BenchmarkAttemptTable
-              receipt={receipt}
-              onOpenConversation={onOpenConversation}
-            />
-          ) : null}
         </>
-      ) : stopReceipt ? (
+      ) : activeTab === "results" && stopReceipt ? (
         <StoppedEvaluationDetail
           receipt={stopReceipt}
           onOpenConversation={onOpenConversation}
         />
-      ) : (
+      ) : activeTab === "results" ? (
         <section className="labs-run-summary-card">
           {run.failure ? (
             <p className="training-run-placeholder">{run.failure}</p>
@@ -592,7 +598,21 @@ function LabModelEvaluationRunDetail({
             <BenchmarkProgress run={run} />
           )}
         </section>
-      )}
+      ) : null}
+      {activeTab === "scenarios" && receipt ? (
+        <>
+          {(receipt.attempts ?? []).length ? <BenchmarkAttemptCharts receipt={receipt} /> : null}
+          {(receipt.attempts ?? []).length ? <BenchmarkAttemptTable receipt={receipt} onOpenConversation={onOpenConversation} /> : <div className="training-run-placeholder">No per-scenario attempts were retained.</div>}
+        </>
+      ) : null}
+      {activeTab === "activity" ? (
+        <dl className="labs-inline-facts">
+          <Fact label="Run ID" value={run.id} />
+          <Fact label="Status" value={statusLabel(run.status)} />
+          <Fact label="Started" value={run.startedAt ? formatDateTime(run.startedAt) : "Not started"} />
+          <Fact label="Completed" value={run.completedAt ? formatDateTime(run.completedAt) : "In progress"} />
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -615,6 +635,10 @@ function baseModelName(
 
 function modelRefName(modelId: string) {
   return modelId.split("/").at(-1) ?? modelId;
+}
+
+function formatMetric(value: number | null): string {
+  return value === null ? "Not reported" : value.toFixed(4);
 }
 
 function runConfiguration(
@@ -674,41 +698,6 @@ function Fact({ label, value }: { label: string; value: string }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
-  );
-}
-
-function ManagedAdapterServingStatus({
-  projection,
-}: {
-  projection: ManagedAdapterServingProjection | null;
-}) {
-  if (!projection) return null;
-  return (
-    <dl className="labs-inline-facts">
-      <Fact
-        label="Admission"
-        value={projection.customerBindingAllowed ? "Allowed" : "Pending"}
-      />
-      <Fact
-        label="Artifact"
-        value={managedStateLabel(projection.canonicalArtifactState)}
-      />
-      <Fact
-        label="Deployment"
-        value={managedStateLabel(projection.canonicalDeploymentState)}
-      />
-      <Fact
-        label="Base profile"
-        value={projection.baseProfileId ?? "Pending"}
-      />
-      <Fact
-        label="Last synchronized"
-        value={formatDateTime(projection.lastSyncedAt)}
-      />
-      {projection.lastError ? (
-        <Fact label="Synchronization" value={projection.lastError} />
-      ) : null}
-    </dl>
   );
 }
 

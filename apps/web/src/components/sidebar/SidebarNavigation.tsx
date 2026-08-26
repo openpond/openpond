@@ -10,6 +10,7 @@ import {
   CalendarClock,
   ChartColumnStacked,
   Cloud,
+  CheckCircle2,
   FileOutput,
   FolderGit2,
   Shapes,
@@ -157,13 +158,22 @@ export function SidebarNavigation({
             <span>Taskset</span>
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "runs" ? "active" : ""}`}
-            aria-label="Runs"
+            className={`nav-command ${view === "labs" && activeModelsTab === "training" ? "active" : ""}`}
+            aria-label="Training"
             type="button"
-            onClick={() => selectModelsTab("runs")}
+            onClick={() => selectModelsTab("training")}
           >
             <ChartColumnStacked size={16} />
-            <span>Runs</span>
+            <span>Training</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "evals" ? "active" : ""}`}
+            aria-label="Evals"
+            type="button"
+            onClick={() => selectModelsTab("evals")}
+          >
+            <CheckCircle2 size={16} />
+            <span>Evals</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "serving" ? "active" : ""}`}

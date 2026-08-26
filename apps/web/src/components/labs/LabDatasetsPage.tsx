@@ -22,6 +22,7 @@ import { LabModelDataset } from "./LabModelDataset";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const PAGE_SIZE = 10;
 type TasksetListItem =
@@ -272,15 +273,15 @@ export function LabDatasetsPage({
   return (
     <div className="labs-flat-body labs-datasets-page">
       {modelProjectId ? (
-        <div className="labs-model-section-intro">
-          <div>
-            <h2>Taskset</h2>
-            <p>
-              This project’s attached, immutable Taskset releases.
-            </p>
-          </div>
-          <span>{project?.tasksetSyncs.length ?? 0} attached</span>
-        </div>
+        <ModelProjectPageHeader
+          title="Taskset"
+          description="Scenarios, environment resources, graders, review protocol, and immutable releases."
+          metrics={[
+            { label: "Attached releases", value: project?.tasksetSyncs.length ?? 0 },
+            { label: "Scenarios", value: filtered.reduce((total, item) => total + item.value.tasks.length, 0) },
+            { label: "Graders", value: filtered.reduce((total, item) => total + ("graders" in item.value ? item.value.graders.length : 0), 0) },
+          ]}
+        />
       ) : null}
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">

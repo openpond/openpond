@@ -12,9 +12,8 @@ import "../../styles/labs/labs-model-comparison.css";
 export type LabPrimaryTab =
   | "overview"
   | "tasksets"
-  | "versions"
-  | "runs"
-  | "rollouts"
+  | "training"
+  | "evals"
   | "serving"
   ;
 

@@ -5,6 +5,7 @@ import type {
 
 import { Loader2 } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 type LabServingRow = {
   lineageId: string;
@@ -33,6 +34,15 @@ export function LabServingPage({
   const rows = labServingRows(state, modelProjectId);
   return (
     <div className="labs-flat-body labs-serving-page">
+      <ModelProjectPageHeader
+        title="Serving"
+        description="Published adapters, active bindings, and deployment readiness."
+        metrics={[
+          { label: "Bindings", value: rows.length },
+          { label: "Ready", value: rows.filter((row) => row.managed.customerBindingAllowed).length },
+          { label: "Pending", value: rows.filter((row) => !row.managed.customerBindingAllowed).length },
+        ]}
+      />
       <section className="labs-operational-section" aria-labelledby="managed-serving-title">
         <header>
           <div>

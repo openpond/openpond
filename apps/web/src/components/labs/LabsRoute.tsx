@@ -411,7 +411,7 @@ export function LabsRoute({
       );
       return;
     }
-    if (!["overview", "versions", "runs", "rollouts"].includes(activeTab)) {
+    if (!["overview", "training", "evals"].includes(activeTab)) {
       onDetailOpenChange(null);
       return;
     }
