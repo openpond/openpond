@@ -112,11 +112,11 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain(">All models<");
   });
 
-  test("starts token activity in June of the current year", () => {
+  test("starts compact token activity in July of the current year", () => {
     const calendar = buildActivityCalendar([], NOW);
 
-    expect(calendar[0]?.firstDate).toBe("2026-06-01");
-    expect(calendar).toHaveLength(5);
+    expect(calendar[0]?.firstDate).toBe("2026-07-01");
+    expect(calendar).toHaveLength(1);
   });
 
   test("paginates threads in groups of ten", () => {

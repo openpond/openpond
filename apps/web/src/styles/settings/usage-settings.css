@@ -208,13 +208,14 @@
 }
 
 .usage-activity-canvas {
-  width: min(100%, 680px);
+  width: var(--usage-canvas-width);
+  max-width: 100%;
   min-width: 0;
 }
 
 .usage-heatmap {
   display: grid;
-  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
+  grid-template-columns: repeat(var(--usage-week-count), 10px);
   grid-auto-flow: column;
   grid-template-rows: repeat(7, 10px);
   gap: 4px;
@@ -223,7 +224,6 @@
 
 .usage-activity-cell {
   position: relative;
-  justify-self: center;
   width: 10px;
   height: 10px;
   border-radius: 3px;
@@ -269,12 +269,12 @@
 }
 
 .usage-activity-cell.future {
-  background: transparent;
+  background: #202326;
 }
 
 .usage-activity-months {
   display: grid;
-  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
+  grid-template-columns: repeat(var(--usage-week-count), 10px);
   column-gap: 4px;
   margin-top: 8px;
   color: #71777d;
@@ -284,6 +284,12 @@
 .usage-activity-months span {
   overflow: visible;
   white-space: nowrap;
+}
+
+.usage-activity-year {
+  margin-top: 4px;
+  color: #5f666d;
+  font-size: 10px;
 }
 
 .usage-day-tooltip {
@@ -391,7 +397,7 @@
 
 .usage-activity-bars {
   display: grid;
-  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
+  grid-template-columns: repeat(var(--usage-week-count), 10px);
   align-items: end;
   column-gap: 4px;
   height: 94px;
@@ -399,8 +405,7 @@
 
 .usage-activity-bars > span {
   display: block;
-  justify-self: center;
-  width: min(10px, 100%);
+  width: 10px;
   min-height: 2px;
   border-radius: 3px 3px 2px 2px;
   background: linear-gradient(180deg, #7fbcef, #365773);

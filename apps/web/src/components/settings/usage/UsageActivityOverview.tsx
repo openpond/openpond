@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type {
   AccountState,
   UsageDailyBucket,
@@ -240,15 +240,37 @@ function ActivityVisualization({
   modelColors: ModelColor[];
 }) {
   const [hoveredDay, setHoveredDay] = useState<HoveredActivityDay | null>(null);
-  const monthLabels = calendar.map((week, index) => {
+  const visualizationRef = useRef<HTMLDivElement | null>(null);
+  const [dailyWeekCount, setDailyWeekCount] = useState(calendar.length);
+
+  useEffect(() => {
+    if (mode !== "daily") return;
+    const visualization = visualizationRef.current;
+    if (!visualization) return;
+
+    const updateWeekCount = () => {
+      const next = Math.max(calendar.length, Math.ceil((visualization.clientWidth + 4) / 14));
+      setDailyWeekCount((current) => current === next ? current : next);
+    };
+    updateWeekCount();
+    const observer = new ResizeObserver(updateWeekCount);
+    observer.observe(visualization);
+    return () => observer.disconnect();
+  }, [calendar.length, mode]);
+
+  const displayCalendar = useMemo(
+    () => mode === "daily" ? extendActivityCalendar(calendar, dailyWeekCount) : calendar,
+    [calendar, dailyWeekCount, mode],
+  );
+  const monthLabels = displayCalendar.map((week, index) => {
     const date = localDateFromKey(week.firstDate);
-    const previous = index > 0 ? localDateFromKey(calendar[index - 1]!.firstDate) : null;
+    const previous = index > 0 ? localDateFromKey(displayCalendar[index - 1]!.firstDate) : null;
     const show = !previous || previous.getMonth() !== date.getMonth();
     return show ? monthFormatter.format(date) : "";
   });
 
   return (
-    <div className="usage-activity-visualization">
+    <div className="usage-activity-visualization" ref={visualizationRef}>
       {mode === "daily" && hoveredDay && !hoveredDay.day.future ? (
         <ActivityDayTooltip
           colorByModel={colorByModel}
@@ -260,18 +282,21 @@ function ActivityVisualization({
       <div className="usage-activity-scroll">
         <div
           className="usage-activity-canvas"
-          style={{ "--usage-week-count": calendar.length } as CSSProperties}
+          style={{
+            "--usage-week-count": displayCalendar.length,
+            "--usage-canvas-width": `${Math.max(10, displayCalendar.length * 14 - 4)}px`,
+          } as CSSProperties}
         >
           {mode === "daily" ? (
-            <div className="usage-heatmap" role="grid" aria-label="Daily token activity since June">
-              {calendar.flatMap((week) =>
+            <div className="usage-heatmap" role="grid" aria-label="Daily token activity since July">
+              {displayCalendar.flatMap((week) =>
                 week.days.map((day) => {
                   const gradient = dayModelGradient(day.models, colorByModel);
                   return (
                     <span
                       aria-label={activityDayLabel(day)}
                       className={`usage-activity-cell ${day.future ? "future" : ""} ${day.totalTokens > 0 ? "has-activity" : ""}`}
-                      data-level={activityLevel(day.totalTokens, calendar)}
+                      data-level={activityLevel(day.totalTokens, displayCalendar)}
                       data-model-count={day.models.length}
                       key={day.date}
                       onBlur={() => setHoveredDay(null)}
@@ -298,12 +323,15 @@ function ActivityVisualization({
               )}
             </div>
           ) : (
-            <ActivityBars calendar={calendar} cumulative={mode === "cumulative"} />
+            <ActivityBars calendar={displayCalendar} cumulative={mode === "cumulative"} />
           )}
           <div className="usage-activity-months" aria-hidden="true">
             {monthLabels.map((label, index) => (
-              <span key={`${calendar[index]!.firstDate}:${label}`}>{label}</span>
+              <span key={`${displayCalendar[index]!.firstDate}:${label}`}>{label}</span>
             ))}
+          </div>
+          <div className="usage-activity-year" aria-hidden="true">
+            {displayCalendar.length ? localDateFromKey(displayCalendar[0]!.firstDate).getFullYear() : ""}
           </div>
         </div>
       </div>
@@ -453,7 +481,7 @@ function ModelMix({
 export function buildActivityCalendar(daily: UsageDailyBucket[], rangeEnd?: string): ActivityWeek[] {
   const endSource = rangeEnd ? new Date(rangeEnd) : new Date();
   const today = Number.isNaN(endSource.getTime()) ? new Date() : endSource;
-  const firstDay = new Date(today.getFullYear(), 5, 1);
+  const firstDay = new Date(today.getFullYear(), 6, 1);
   const finalDay = addDays(startOfDay(today), 6 - today.getDay());
   const weekCount = Math.max(1, Math.ceil((finalDay.getTime() - firstDay.getTime() + 1) / (7 * 24 * 60 * 60 * 1000)));
   const bucketByDate = new Map(daily.map((bucket) => [bucket.date, bucket]));
@@ -477,6 +505,31 @@ export function buildActivityCalendar(daily: UsageDailyBucket[], rangeEnd?: stri
       firstDate: days[0]!.date,
       totalTokens: days.reduce((total, day) => total + day.totalTokens, 0),
     });
+  }
+  return weeks;
+}
+
+function extendActivityCalendar(calendar: ActivityWeek[], minimumWeekCount: number): ActivityWeek[] {
+  if (calendar.length >= minimumWeekCount) return calendar;
+  const weeks = [...calendar];
+  let firstDate = addDays(localDateFromKey(calendar.at(-1)!.firstDate), 7);
+  while (weeks.length < minimumWeekCount) {
+    const days = Array.from({ length: 7 }, (_, dayIndex) => {
+      const date = addDays(firstDate, dayIndex);
+      return {
+        date: localDateKey(date),
+        future: true,
+        models: [],
+        requests: 0,
+        totalTokens: 0,
+      };
+    });
+    weeks.push({
+      days,
+      firstDate: days[0]!.date,
+      totalTokens: 0,
+    });
+    firstDate = addDays(firstDate, 7);
   }
   return weeks;
 }
