@@ -593,12 +593,12 @@ export function LabWorkproductDetail({
                     const synced = await training.actions.syncModelProject(
                       modelProject.id,
                     );
-                    onToast(
-                      synced
-                        ? "Model Project synced to the active hosted Team."
-                        : "The Model Project could not be synced.",
-                      synced ? "success" : "error",
-                    );
+                    if (synced) {
+                      onToast(
+                        "Model Project synced to the active hosted Team.",
+                        "success",
+                      );
+                    }
                   }}
                 >
                   {training.busyAction === "sync-model-project"

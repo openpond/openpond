@@ -266,11 +266,18 @@ export function LabsRoute({
       setSelectedDatasetId(null);
       setActiveTab(labPrimaryTabFromSearch(window.location.search));
     };
+    const onPrimaryTabChange = () => {
+      setSelectedDatasetId(null);
+      setActiveTab(labPrimaryTabFromSearch(window.location.search));
+    };
     window.addEventListener("popstate", onPopState);
-    window.addEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPopState);
+    window.addEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPrimaryTabChange);
     return () => {
       window.removeEventListener("popstate", onPopState);
-      window.removeEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPopState);
+      window.removeEventListener(
+        LAB_PRIMARY_TAB_CHANGE_EVENT,
+        onPrimaryTabChange,
+      );
     };
   }, []);
   useEffect(() => {
