@@ -21,6 +21,7 @@ import type { TrainingStartApproval } from "../training/TrainingStartDialog";
 import type { ModelSetupStepId } from "./ModelSetupSteps";
 import { ModelRunEditorHeader } from "./ModelRunEditorHeader";
 import { ModelRunSetupContent } from "./ModelRunSetupContent";
+import { labModelTasksets } from "./lab-models";
 import {
   bindTaskset,
   buildPageReason,
@@ -75,6 +76,17 @@ export function ModelRunEditorPage({
   onOpenProviderSettings?: () => void;
 }) {
   const state = training.payload;
+  const availableTasksets = useMemo(() => {
+    const tasksets = labModelTasksets(state);
+    const project = initialModelId
+      ? state?.modelProjects.find((candidate) => candidate.id === initialModelId)
+      : null;
+    if (!project) return tasksets;
+    const attachedIds = new Set(
+      project.tasksetSyncs.map((sync) => sync.localTasksetId),
+    );
+    return tasksets.filter((taskset) => attachedIds.has(taskset.id));
+  }, [initialModelId, state]);
   const restoredDraft = useMemo(
     () =>
       state?.modelRunDrafts.find(
@@ -89,7 +101,8 @@ export function ModelRunEditorPage({
     state?.modelProjects.find((candidate) => candidate.id === initialModelId) ??
     null;
   const initialTaskset =
-    state?.tasksets.find((candidate) => candidate.id === initialTasksetId) ??
+    availableTasksets.find((candidate) => candidate.id === initialTasksetId) ??
+    availableTasksets[0] ??
     null;
   const previousLaunchedDraft = useMemo(() => {
     if (!initialModelId || initialDraftId) return null;
@@ -98,7 +111,7 @@ export function ModelRunEditorPage({
         (candidate) =>
           candidate.modelId === initialModelId &&
           candidate.status === "launched" &&
-          state?.tasksets.some(
+          availableTasksets.some(
             (taskset) =>
               taskset.id === candidate.tasksetRef?.id &&
               taskset.revision === candidate.tasksetRef.revision &&
@@ -106,7 +119,7 @@ export function ModelRunEditorPage({
           )
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0] ?? null;
-  }, [initialDraftId, initialModelId, state?.modelRunDrafts, state?.tasksets]);
+  }, [availableTasksets, initialDraftId, initialModelId, state?.modelRunDrafts]);
   const initialProjectRef = useRef<ModelProject | null>(null);
   if (!initialProjectRef.current) {
     initialProjectRef.current =
@@ -160,7 +173,7 @@ export function ModelRunEditorPage({
     region: null,
   });
   const selectedTaskset =
-    state?.tasksets.find(
+    availableTasksets.find(
       (taskset) =>
         taskset.id === draft.tasksetRef?.id &&
         taskset.revision === draft.tasksetRef.revision &&
@@ -291,6 +304,11 @@ export function ModelRunEditorPage({
 
   async function launch() {
     if (!canRun || !selectedTaskset) return;
+    // The final review is the explicit authorization for this bounded
+    // Taskset export. The embedded provider form may not be opened when the
+    // backend reports no quoted spend, but the managed endpoint still records
+    // that authorization.
+    const approvedRun = { ...runApproval, exportApproved: true };
     const saved = await save(false);
     if (!saved) return;
     const preparation = await training.actions.prepareModelRun(saved.id, {
@@ -310,9 +328,9 @@ export function ModelRunEditorPage({
     });
     if (!confirmed) return;
     const started = await training.actions.startModelRun(saved.id, {
-      maximumSpendUsd: runApproval.maximumCostUsd,
-      retentionDays: runApproval.retentionDays,
-      exportApproved: runApproval.exportApproved,
+      maximumSpendUsd: approvedRun.maximumCostUsd,
+      retentionDays: approvedRun.retentionDays,
+      exportApproved: approvedRun.exportApproved,
     });
     if (!started) return;
     await onFinished(saved.modelId, selectedTaskset.id);
@@ -351,7 +369,7 @@ export function ModelRunEditorPage({
         </header>
         {renderDatasetBuilder(
           (tasksetId) => {
-            const taskset = state?.tasksets.find(
+            const taskset = availableTasksets.find(
               (candidate) => candidate.id === tasksetId
             );
             if (taskset) selectTaskset(taskset);
@@ -402,7 +420,7 @@ export function ModelRunEditorPage({
           setDraft={setDraft}
           selectedTaskset={selectedTaskset}
           methodCards={methodCards}
-          tasksets={state?.tasksets ?? []}
+          tasksets={availableTasksets}
           baseModelCandidates={state?.baseModelCandidates ?? []}
           destinations={state?.destinations ?? []}
           connection={connection}

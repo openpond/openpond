@@ -528,32 +528,44 @@ export function LabWorkproductDetail({
   }
 
   if (workproduct.kind === "model" && editingRunDraftId) {
-    return renderModelRunEditor({
-      initialTasksetId: taskset?.id ?? null,
-      draftId: editingRunDraftId === "new" ? null : editingRunDraftId,
-      modelId: workproduct.id,
-      modelName: workproduct.name,
-      onCancel: () => {
-        const target = editorExitTargetRef.current;
-        setEditingRunDraftId(null);
-        setEditorSection("run");
-        if (target === "collection") {
-          onClose();
-          return;
-        }
-        setActiveTab(target);
-      },
-      onFinished: async () => {
-        setEditingRunDraftId(null);
-        setEditorSection("run");
-        setActiveTab("runs");
-      },
-      onSectionChange: setEditorSection,
-    });
+    return (
+      <div className="labs-model-run-modal-backdrop" role="presentation">
+        <section
+          aria-label="New Run"
+          aria-modal="true"
+          className="labs-model-run-modal"
+          role="dialog"
+        >
+          {renderModelRunEditor({
+            initialTasksetId: taskset?.id ?? null,
+            draftId: editingRunDraftId === "new" ? null : editingRunDraftId,
+            modelId: workproduct.id,
+            modelName: workproduct.name,
+            onCancel: () => {
+              const target = editorExitTargetRef.current;
+              setEditingRunDraftId(null);
+              setEditorSection("run");
+              if (target === "collection") {
+                onClose();
+                return;
+              }
+              setActiveTab(target);
+            },
+            onFinished: async () => {
+              setEditingRunDraftId(null);
+              setEditorSection("run");
+              setActiveTab("runs");
+            },
+            onSectionChange: setEditorSection,
+          })}
+        </section>
+      </div>
+    );
   }
 
   return (
     <div className="training-model-detail labs-workproduct-detail">
+      {workproduct.kind !== "model" || selectedModelEntryKey ? (
       <header className="training-model-detail-header labs-workproduct-detail-header">
         <div>
           <div className="labs-workproduct-name-row">
@@ -682,6 +694,7 @@ export function LabWorkproductDetail({
           </div>
         ) : null}
       </header>
+      ) : null}
 
       {workproduct.kind === "model" || selectedModelEntryKey ? null : (
         <div
@@ -739,7 +752,36 @@ export function LabWorkproductDetail({
         ) : workproduct.kind === "model" ? (
           <>
             {modelSection === "overview" ? (
-              <DetailSection title="Model Project overview">
+              <DetailSection title={`${workproduct.name} overview`}>
+                {modelProject ? (
+                  <div className="labs-workproduct-header-actions">
+                    <button
+                      className="training-button secondary"
+                      disabled={
+                        readOnlyModel ||
+                        training.busyAction === "sync-model-project"
+                      }
+                      type="button"
+                      onClick={async () => {
+                        const synced = await training.actions.syncModelProject(
+                          modelProject.id,
+                        );
+                        if (synced) {
+                          onToast(
+                            "Model Project synced to the active hosted Team.",
+                            "success",
+                          );
+                        }
+                      }}
+                    >
+                      {training.busyAction === "sync-model-project"
+                        ? "Syncing…"
+                        : modelProject.hosted
+                          ? "Sync project"
+                          : "Connect to hosted Team"}
+                    </button>
+                  </div>
+                ) : null}
                 <dl className="labs-inline-facts">
                   <Fact
                     label="Hosted sync"

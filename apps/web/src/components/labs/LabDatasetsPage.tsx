@@ -52,7 +52,7 @@ export function LabDatasetsPage({
   onSelectedIdChange,
   onOpenDraft,
   defaultModel,
-  onImproveInChat,
+  onImproveInChat: _onImproveInChat,
   onTrainModel,
   onOpenFiles,
   training,
@@ -87,7 +87,6 @@ export function LabDatasetsPage({
       (taskset) => taskset.id === selectedId,
     ) ?? null;
   const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
-  const builtIn = selected?.benchmark?.source === "builtin";
   const selectedArtifact = selected?.datasetArtifact
     ? state?.datasetArtifacts.find(
         (artifact) =>
@@ -201,40 +200,6 @@ export function LabDatasetsPage({
                 value="available"
               />
             ) : null}
-            {!builtIn ? (
-              <button
-                className="training-button secondary"
-                disabled={readOnly}
-                title={
-                  readOnly
-                    ? "Switch to this Taskset's Profile to modify it."
-                    : "Improve this Taskset in Chat."
-                }
-                type="button"
-                onClick={() => onImproveInChat(selected)}
-              >
-                Improve in Chat
-              </button>
-            ) : null}
-            {selected.purpose === "benchmark" ? (
-              <button
-                className="training-button"
-                disabled={readOnly}
-                type="button"
-                onClick={() => setDetailTab("runs")}
-              >
-                Run Benchmark
-              </button>
-            ) : (
-              <button
-                className="training-button"
-                disabled={readOnly}
-                type="button"
-                onClick={() => setDetailTab("runs")}
-              >
-                Create run
-              </button>
-            )}
             <LabStatusBadge
               label={datasetStatus(selected)}
               value={selected.status}

@@ -22,7 +22,7 @@ export function LabsView({
   activeTab,
   children,
   showHeader = true,
-  onCreateDataset,
+  onCreateDataset: _onCreateDataset,
   onCreateModel,
 }: {
   activeTab: LabPrimaryTab;
@@ -47,14 +47,6 @@ export function LabsView({
               onClick={onCreateModel}
             >
               <span>New Model Project</span>
-            </button>
-          ) : activeTab === "tasksets" ? (
-            <button
-              className="labs-create-button"
-              type="button"
-              onClick={onCreateDataset}
-            >
-              <span>New Taskset</span>
             </button>
           ) : null}
         </div>

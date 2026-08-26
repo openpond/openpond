@@ -22,6 +22,7 @@ export function trainingRecipe(input: {
   sequenceLength: number;
   rank: number;
   learningRate: number;
+  klBeta: number | null;
   rolloutGroupSize: number;
   rolloutConcurrency: number;
   rolloutMaxOutputTokens: number;
@@ -34,7 +35,6 @@ export function trainingRecipe(input: {
   if (
     input.method !== "grpo"
     || input.destinationId !== "openpond_managed"
-    || input.executionMode !== "provider_native"
   ) {
     throw new Error("This Model improvement path requires OpenPond Managed GRPO.");
   }
@@ -70,7 +70,7 @@ export function trainingRecipe(input: {
     optimizer: { learningRate: 0.00001, maxSteps: input.maxSteps },
     loss: {
       method: input.rftLossMethod ?? defaultRftLossMethod(input.taskset),
-      klBeta: null,
+      klBeta: input.klBeta,
     },
     reward: crossSystem
       ? {
