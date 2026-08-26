@@ -298,6 +298,7 @@ function normalizeRoutePath(pathValue: string): string {
     [/^\/v1\/organizations\/[^/]+\/mcp-server\/enable$/, "/v1/organizations/:slug/mcp-server/enable"],
     [/^\/v1\/diagnostics\/client$/, "/v1/diagnostics/client"],
     [/^\/v1\/sandbox-projects\/[^/]+$/, "/v1/sandbox-projects/:projectId"],
+    [/^\/v1\/sandbox-projects\/[^/]+\/workspace$/, "/v1/sandbox-projects/:projectId/workspace"],
     [/^\/v1\/sandbox-projects\/[^/]+\/sync$/, "/v1/sandbox-projects/:projectId/sync"],
     [/^\/v1\/sandbox-projects\/[^/]+\/source$/, "/v1/sandbox-projects/:projectId/source"],
     [/^\/v1\/projects\/[^/]+$/, "/v1/projects/:projectId"],

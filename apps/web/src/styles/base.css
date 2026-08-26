@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Figtree";
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url("../assets/figtree-latin.woff2") format("woff2");
+}
+
 * {
   box-sizing: border-box;
 }
@@ -81,6 +89,7 @@ button:disabled {
   --panel-hover: #292929;
   --border: rgba(255, 255, 255, 0.08);
   --text: #f4f4f5;
+  --font-web: "Figtree", Inter, ui-sans-serif, system-ui, sans-serif;
   --muted: #9a9a9a;
   --muted-strong: #b9b9b9;
   --orange: #ff7a2f;

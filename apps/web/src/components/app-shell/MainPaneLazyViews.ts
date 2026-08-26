@@ -18,6 +18,9 @@ export const ScheduledWorkPage = lazy(() =>
 export const OutputsPage = lazy(() =>
   import("../outputs/OutputsPage").then((module) => ({ default: module.OutputsPage })),
 );
+export const ProjectsPage = lazy(() =>
+  import("../projects/ProjectsPage").then((module) => ({ default: module.ProjectsPage })),
+);
 export const LabSkillSidebar = lazy(() =>
   import("../labs/LabSkillSidebar").then((module) => ({ default: module.LabSkillSidebar })),
 );

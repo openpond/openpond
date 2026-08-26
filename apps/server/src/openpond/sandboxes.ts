@@ -87,6 +87,7 @@ export type SandboxRequestAction =
   | { type: "profile_push"; payload: unknown }
   | { type: "project_upsert"; payload: unknown }
   | { type: "project_get"; projectId: string; payload: unknown }
+  | { type: "project_workspace"; projectId: string; payload: unknown }
   | { type: "project_git"; projectId: string; payload: unknown }
   | { type: "project_sync"; projectId: string; payload: unknown }
   | { type: "project_source_upload"; projectId: string; payload: unknown }
@@ -462,6 +463,19 @@ export async function sandboxRequestPayload(
         sandboxApiUrl,
         path: sandboxScopedCollectionPath(
           `/projects/${encodeURIComponent(action.projectId)}`,
+          normalizeSandboxListInput(action.payload)
+        ),
+      })),
+      account,
+    };
+  }
+  if (action.type === "project_workspace") {
+    return {
+      ...(await requestSandboxPublicApiRoot({
+        apiKey,
+        sandboxApiUrl,
+        path: sandboxScopedCollectionPath(
+          `/projects/${encodeURIComponent(action.projectId)}/workspace`,
           normalizeSandboxListInput(action.payload)
         ),
       })),

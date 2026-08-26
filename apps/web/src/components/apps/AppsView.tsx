@@ -39,7 +39,6 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
   const [statusRows, setStatusRows] = useState<ConnectedAppStatusRow[]>(() =>
     buildConnectedAppStatusRows(),
   );
-  const [statusState, setStatusState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [statusTeamId, setStatusTeamId] = useState<string | null>(null);
   const accountBaseUrl = account?.baseUrl ?? account?.activeProfile?.baseUrl ?? null;
   const setupTeamId = connectedAppSetupTeamId(defaultTeamId, statusTeamId);
@@ -55,13 +54,11 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
     let active = true;
     if (!connection) {
       setStatusRows(buildConnectedAppStatusRows());
-      setStatusState("idle");
       setStatusTeamId(null);
       return () => {
         active = false;
       };
     }
-    setStatusState("loading");
     void api
       .connectedAppStatus(connection, {
         status: "all",
@@ -70,14 +67,12 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
         if (!active) return;
         setStatusRows(payload.apps);
         setStatusTeamId(payload.teamId?.trim() || null);
-        setStatusState("ready");
       })
       .catch((caught) => {
         if (!active) return;
         console.warn("Unable to load connected app status.", caught);
         setStatusRows(buildConnectedAppStatusRows());
         setStatusTeamId(null);
-        setStatusState("error");
       });
     return () => {
       active = false;
@@ -112,11 +107,6 @@ export function AppsView({ account, connection, defaultTeamId, onToast }: AppsVi
             value={search}
           />
         </label>
-      </div>
-
-      <div className={`connected-apps-status-strip ${statusState}`}>
-        <span>{statusStateLabel(statusState)}</span>
-        <span>{connectedCount(statusRows)} connected</span>
       </div>
 
       <section className="connected-apps-hero" aria-label="App context">
@@ -335,17 +325,6 @@ async function openExternalUrl(url: string): Promise<void> {
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
-}
-
-function statusStateLabel(status: "idle" | "loading" | "ready" | "error"): string {
-  if (status === "loading") return "Checking connections";
-  if (status === "ready") return "Connection status current";
-  if (status === "error") return "Connection status unavailable";
-  return "Connection status pending";
-}
-
-function connectedCount(rows: ConnectedAppStatusRow[]): number {
-  return rows.filter((row) => row.connected).length;
 }
 
 function accountSummary(connections: ConnectedAppStatusRow["connections"]): string {

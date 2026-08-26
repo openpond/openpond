@@ -105,6 +105,7 @@ import {
   LabSkillSidebar,
   NativeSkillSidebar,
   OutputsPage,
+  ProjectsPage,
   ScheduledWorkPage,
   RightChatPanelStack,
   TeamAiThreadPanel,
@@ -205,6 +206,14 @@ export function MainPane({
   onOpenSession,
   onExperienceHandoff,
   cloudProjects,
+  projects,
+  projectsAccountBaseUrl,
+  projectsTeamName,
+  projectTaskCounts,
+  onNewCloudProject,
+  onNewProjectTask,
+  onToggleProjectPinned,
+  onUploadLocalProject,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
   onDiffPanelResizeStart,
@@ -1530,6 +1539,20 @@ export function MainPane({
       ) : view === "outputs" ? (
         <Suspense fallback={null}>
           <OutputsPage connection={connection} onViewChat={onOpenSession} />
+        </Suspense>
+      ) : view === "projects" ? (
+        <Suspense fallback={null}>
+          <ProjectsPage
+            accountBaseUrl={projectsAccountBaseUrl}
+            connection={connection}
+            onNewCloudProject={onNewCloudProject}
+            onNewTask={onNewProjectTask}
+            onTogglePinned={onToggleProjectPinned}
+            onUploadLocalProject={onUploadLocalProject}
+            projects={projects}
+            taskCountByProjectId={projectTaskCounts}
+            teamName={projectsTeamName}
+          />
         </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (

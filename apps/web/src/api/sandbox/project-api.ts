@@ -7,6 +7,7 @@ import type {
   SandboxProjectListResponse,
   SandboxProjectResponse,
   SandboxProjectSourceUploadInput,
+  SandboxProjectWorkspaceResponse,
   SandboxProjectUpsertInput,
 } from "../../lib/sandbox-types";
 import {
@@ -20,6 +21,28 @@ export const sandboxProjectApi = {
     return apiFetch<SandboxProjectListResponse>(
       connection,
       `/v1/sandbox-projects?${query.toString()}`,
+    );
+  },
+  getSandboxProject: (
+    connection: ClientConnection,
+    projectId: string,
+    input: { teamId: string },
+  ) => {
+    const query = new URLSearchParams({ teamId: input.teamId });
+    return apiFetch<SandboxProjectResponse>(
+      connection,
+      `/v1/sandbox-projects/${encodeURIComponent(projectId)}?${query.toString()}`,
+    );
+  },
+  getSandboxProjectWorkspace: (
+    connection: ClientConnection,
+    projectId: string,
+    input: { teamId: string },
+  ) => {
+    const query = new URLSearchParams({ teamId: input.teamId });
+    return apiFetch<SandboxProjectWorkspaceResponse>(
+      connection,
+      `/v1/sandbox-projects/${encodeURIComponent(projectId)}/workspace?${query.toString()}`,
     );
   },
   upsertSandboxProject: (connection: ClientConnection, input: SandboxProjectUpsertInput) =>

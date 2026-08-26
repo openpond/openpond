@@ -196,8 +196,9 @@
 
 .sidebar-nav {
   display: grid;
-  gap: 1px;
+  gap: 2px;
   padding: 4px 14px 14px;
+  font-family: var(--font-web);
 }
 
 .sidebar-utility-nav {
@@ -369,44 +370,44 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 28px;
+  min-height: 36px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text);
-  padding: 0 4px;
+  padding: 0 8px;
   text-align: left;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .nav-command-new-task {
-  display: flex;
-  justify-content: center;
-  min-height: 40px;
-  margin-bottom: 5px;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0 12px;
-  text-align: center;
+  margin-bottom: 0;
   font-size: 15px;
 }
 
 .nav-command-prominent {
-  min-height: 40px;
-  padding: 0 12px;
   font-size: 15px;
 }
 
-.nav-command-prominent svg {
-  color: var(--cyan);
+.nav-command-new-task > svg,
+.nav-command-prominent > svg {
+  color: #69c4d2;
+  opacity: 0.82;
+}
+
+.nav-command-new-task.active > svg,
+.nav-command-prominent.active > svg {
+  color: #82d7e3;
+  opacity: 1;
 }
 
 .nav-command-prominent.active {
-  background: rgba(6, 182, 212, 0.11);
-  color: #e6fbff;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
 }
 
 .nav-command-prominent.active:hover {
-  background: rgba(6, 182, 212, 0.15);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-command:hover,
@@ -417,7 +418,7 @@
 }
 
 .nav-command-new-task:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .nav-command:disabled {

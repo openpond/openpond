@@ -9,8 +9,11 @@ import {
   CalendarClock,
   ChartColumnStacked,
   Cloud,
+  FileOutput,
   FileText,
-  Plus,
+  FolderGit2,
+  Shapes,
+  SquarePen,
 } from "../icons";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -92,7 +95,7 @@ export function SidebarNavigation({
           type="button"
           onClick={() => beginNewChat(null)}
         >
-          <Plus size={18} />
+          <SquarePen size={18} />
           <span>{newExperienceTitle(experience)}</span>
         </button>
       )}
@@ -158,7 +161,7 @@ export function SidebarNavigation({
         <>
           <button
             className={`nav-command nav-command-prominent ${view === "scheduled" ? "active" : ""}`}
-            aria-label="Scheduled"
+            aria-label="Workflows"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
@@ -166,19 +169,43 @@ export function SidebarNavigation({
             }}
           >
             <CalendarClock size={18} />
-            <span>Scheduled</span>
+            <span>Workflows</span>
           </button>
           <button
             className={`nav-command nav-command-prominent ${view === "outputs" ? "active" : ""}`}
-            aria-label="My files"
+            aria-label="Outputs"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
               setView("outputs");
             }}
           >
-            <FileText size={18} />
-            <span>My files</span>
+            <FileOutput size={18} />
+            <span>Outputs</span>
+          </button>
+          <button
+            className={`nav-command nav-command-prominent ${view === "apps" ? "active" : ""}`}
+            aria-label="Apps"
+            type="button"
+            onClick={() => {
+              clearWorkspaceSelection();
+              setView("apps");
+            }}
+          >
+            <Shapes size={18} />
+            <span>Apps</span>
+          </button>
+          <button
+            className={`nav-command nav-command-prominent ${view === "projects" ? "active" : ""}`}
+            aria-label="Projects"
+            type="button"
+            onClick={() => {
+              clearWorkspaceSelection();
+              setView("projects");
+            }}
+          >
+            <FolderGit2 size={18} />
+            <span>Projects</span>
           </button>
         </>
       ) : null}

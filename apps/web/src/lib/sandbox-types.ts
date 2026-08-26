@@ -4,4 +4,5 @@ export type * from "./sandbox-types/catalog";
 export type * from "./sandbox-types/projects";
 export type * from "./sandbox-types/record";
 export type * from "./sandbox-types/responses";
+export type * from "./sandbox-types/project-workspace";
 export type * from "./sandbox-types/replay";

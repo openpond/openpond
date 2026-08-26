@@ -123,7 +123,7 @@ export function OutputsPage({
 
   return (
     <section
-      aria-label="My files"
+      aria-label="Outputs"
       className={`outputs-view${preview ? " detail-open" : ""}`}
     >
       <div className="outputs-scroll">
