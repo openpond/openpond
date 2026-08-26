@@ -1,6 +1,6 @@
 {
   "name": "@openpond/evals",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Portable Tasksets, graders, evaluation runs, receipts, conformance fixtures, and Work evidence for OpenPond Harnesses",
   "license": "MIT",
   "type": "module",
