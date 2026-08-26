@@ -1,0 +1,655 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.telemetryExportBundle.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "runId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+    },
+    "definitions": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "openpond.metricDefinition.v1"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "valueType": {
+            "type": "string",
+            "enum": [
+              "gauge",
+              "counter",
+              "distribution"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "ratio",
+              "count",
+              "seconds",
+              "milliseconds",
+              "tokens",
+              "bytes",
+              "usd",
+              "scalar"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "higher",
+              "lower",
+              "neutral"
+            ]
+          },
+          "aggregation": {
+            "type": "string",
+            "enum": [
+              "last",
+              "sum",
+              "mean",
+              "min",
+              "max",
+              "p50",
+              "p95"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "policy_visible",
+              "team_visible",
+              "host_private"
+            ]
+          },
+          "boundedDimensions": {
+            "maxItems": 32,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "id",
+          "displayName",
+          "description",
+          "valueType",
+          "unit",
+          "direction",
+          "aggregation",
+          "visibility",
+          "boundedDimensions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "events": {
+      "maxItems": 1000000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "openpond.runTelemetryEvent.v1"
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "runtime",
+              "environment",
+              "grader",
+              "optimizer",
+              "control_plane",
+              "evaluation"
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "run_started",
+              "run_state_changed",
+              "rollout_group_started",
+              "attempt_completed",
+              "grader_completed",
+              "reward_composed",
+              "optimizer_step_completed",
+              "checkpoint_committed",
+              "evaluation_completed",
+              "run_completed",
+              "run_failed",
+              "cleanup_completed"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "policy_visible",
+              "team_visible",
+              "host_private"
+            ]
+          },
+          "lineage": {
+            "type": "object",
+            "properties": {
+              "modelProjectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "runId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "modelVersionId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "harnessReleaseHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "tasksetReleaseHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "environmentReleaseHash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checkpointId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "step": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rolloutGroupId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "attemptId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scenarioId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "modelProjectId",
+              "runId",
+              "modelVersionId",
+              "harnessReleaseHash",
+              "tasksetReleaseHash",
+              "environmentReleaseHash",
+              "checkpointId",
+              "step",
+              "rolloutGroupId",
+              "attemptId",
+              "scenarioId"
+            ],
+            "additionalProperties": false
+          },
+          "attributes": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "eventId",
+          "sequence",
+          "occurredAt",
+          "source",
+          "type",
+          "visibility",
+          "lineage",
+          "attributes"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "observations": {
+      "maxItems": 10000000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "openpond.metricObservation.v1"
+          },
+          "observationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "metricId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "eventId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "observedAt": {
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
+          },
+          "value": {
+            "type": "number"
+          },
+          "lineage": {
+            "type": "object",
+            "properties": {
+              "modelProjectId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "runId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 240
+              },
+              "modelVersionId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "harnessReleaseHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "tasksetReleaseHash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "environmentReleaseHash": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checkpointId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "step": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rolloutGroupId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "attemptId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "scenarioId": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 240
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "modelProjectId",
+              "runId",
+              "modelVersionId",
+              "harnessReleaseHash",
+              "tasksetReleaseHash",
+              "environmentReleaseHash",
+              "checkpointId",
+              "step",
+              "rolloutGroupId",
+              "attemptId",
+              "scenarioId"
+            ],
+            "additionalProperties": false
+          },
+          "dimensions": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "observationId",
+          "metricId",
+          "eventId",
+          "sequence",
+          "observedAt",
+          "value",
+          "lineage",
+          "dimensions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "evidenceRefs": {
+      "maxItems": 1000000,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "contentHash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "rollout",
+              "attempt",
+              "trace",
+              "grader",
+              "checkpoint",
+              "artifact"
+            ]
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "policy_visible",
+              "team_visible",
+              "host_private"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "contentHash",
+          "kind",
+          "visibility"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "string",
+          "const": "openpond.telemetryEvidenceCompleteness.v1"
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "partial",
+            "missing"
+          ]
+        },
+        "expectedEventTypes": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "observedEventTypes": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "missingEventTypes": {
+          "maxItems": 100,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          }
+        },
+        "lastSequence": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequenceGaps": {
+          "maxItems": 10000,
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "runId",
+        "status",
+        "expectedEventTypes",
+        "observedEventTypes",
+        "missingEventTypes",
+        "lastSequence",
+        "sequenceGaps"
+      ],
+      "additionalProperties": false
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "runId",
+    "exportedAt",
+    "definitions",
+    "events",
+    "observations",
+    "evidenceRefs",
+    "completeness",
+    "contentHash"
+  ],
+  "additionalProperties": false
+}

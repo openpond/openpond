@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "contentHash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "rollout",
+        "attempt",
+        "trace",
+        "grader",
+        "checkpoint",
+        "artifact"
+      ]
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "policy_visible",
+        "team_visible",
+        "host_private"
+      ]
+    }
+  },
+  "required": [
+    "id",
+    "contentHash",
+    "kind",
+    "visibility"
+  ],
+  "additionalProperties": false
+}

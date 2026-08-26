@@ -50,6 +50,7 @@ import {
 } from "@openpond/evals";
 import { genericToolConformance } from "@openpond/evals/conformance";
 import { workEvidenceConformance, verifyWorkEvidenceReceipt } from "@openpond/evals/evidence";
+import { CORE_METRIC_CATALOG, createRunTelemetryEvent } from "@openpond/evals/telemetry";
 HarnessReleaseSchema.parse(genericToolConformance.harness);
 RunManifestSchema.parse(genericToolConformance.manifest);
 TasksetReleaseSchema.parse(genericToolConformance.taskset);
@@ -156,6 +157,27 @@ if (!environment.contentHash) throw new Error("packed Environment Release failed
 if (!verifyWorkEvidenceReceipt(workEvidenceConformance.receipt)) {
   throw new Error("packed Work evidence validation failed");
 }
+const telemetry = createRunTelemetryEvent({
+  sequence: 0,
+  occurredAt: "2026-08-17T00:00:00.000Z",
+  source: "control_plane",
+  type: "run_started",
+  visibility: "team_visible",
+  lineage: {
+    modelProjectId: "packed-project",
+    runId: "packed-run",
+    modelVersionId: null,
+    harnessReleaseHash: genericToolConformance.harness.contentHash,
+    tasksetReleaseHash: genericToolConformance.taskset.contentHash,
+    environmentReleaseHash: null,
+    checkpointId: null,
+    step: null,
+    rolloutGroupId: null,
+    attemptId: null,
+    scenarioId: null,
+  },
+});
+if (telemetry.sequence !== 0 || CORE_METRIC_CATALOG.length < 10) throw new Error("packed telemetry failed");
 process.stdout.write("clean Evals consumer verified\\n");
 `);
   await writeFile(path.join(temporary, "verify-types.mts"), `
@@ -172,7 +194,8 @@ import type {
   TaskRecord,
   WorkEvidenceReceipt,
 } from "@openpond/evals";
-void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt);
+import type { MetricObservation, RunTelemetryEvent } from "@openpond/evals/telemetry";
+void (null as unknown as HarnessRelease | AttemptReceipt | ArtifactManifest | CanonicalRolloutRecord | EnvironmentRelease | EvaluationRunner | GraderEvidence | RewardReceipt | RunManifest | TaskRecord | WorkEvidenceReceipt | MetricObservation | RunTelemetryEvent);
 `);
   execFileSync(process.execPath, [path.join(temporary, "verify.mjs")], {
     cwd: temporary,

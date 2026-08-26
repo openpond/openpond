@@ -4,7 +4,8 @@
 model-driven refinement/review policy, improvements, traces, tools, model
 identities, and shared hashing.
 `@openpond/evals` owns Tasksets, graders, evaluation runs and receipts,
-execution orchestration, conformance fixtures, and Work-evidence eligibility.
+execution orchestration, conformance fixtures, Work-evidence eligibility, and
+portable Run telemetry/metric semantics.
 Evals depends on Harness for exact release identities but does not re-export
 Harness APIs; Harness never depends on Evals. Host applications own persistence, provider sessions, secret
 leases, connected-app authorization, model streaming, artifact bytes, and
@@ -26,6 +27,8 @@ runtime processes.
 | user feedback on Work output | `WorkFeedbackReceipt` | Append a new receipt bound to the evidence receipt and, when selected, the exact content-addressed output-revision descriptor. Corrections are separate artifacts and never mutate prior receipts. |
 | bounded cross-Work review | `HarnessEvaluationReviewReceipt` | Select only currently authorized immutable evidence, advance one watermark, group one stable claim, route to the smallest correct layer, and name the next authority without performing downstream effects. |
 | model-improvement qualification | `ModelImprovementQualificationReceipt` | Bind the originating review, exact Harness, Taskset, real baseline Evaluation, Model, Environment/tool/permission/policy hashes, Verifier, source policies, privacy, budget, and non-frozen signal. Weak or confounded evidence emits `no_training`; training and activation remain host effects. |
+| trainer/runtime telemetry | `RunTelemetryEvent` + `MetricObservation` | Emit compact ordered events and observations with exact Run lineage, bounded attributes/dimensions, source authority, visibility, and stable idempotency identity. Tenant identity, provider credentials, storage, retention, billing, and durable indexes remain host projections. |
+| local/hosted Run investigation export | `TelemetryExportBundle` | Export metric definitions, ordered evidence, bounded references, completeness, and a content hash. Apply visibility and redaction before crossing authority boundaries; never include raw privileged trace bytes. |
 
 ## Compatibility policy
 
@@ -48,6 +51,15 @@ runtime processes.
   immutable objects and rejects lifecycle, tool, grader-interface, or required
   Environment-tool drift before issuing the receipt.
 - The initial support target is Node.js ESM on Node 22.14 through Node 24.
+- Telemetry schema literals are shared across `@openpond/evals/telemetry` and
+  the `openpond-evals` Python distribution. Generated JSON Schemas and positive
+  and negative fixtures are the cross-language conformance authority.
+- Telemetry producer sequence is monotonic within a Run. Receivers deduplicate
+  exact retries, accept late delivery, and reject conflicting reuse of an
+  idempotency key or `(runId, sequence)` pair.
+- Core metrics reject unknown dimensions. Taskset- or Environment-specific
+  extensions require an explicit `MetricDefinition`; arbitrary metric names or
+  unbounded labels are not portable telemetry.
 - Portable paths are relative and at most 2,000 characters. Individual assets
   are at most 250 MB. Tasksets, traces, and evidence arrays have schema-level
   upper bounds.

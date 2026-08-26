@@ -3,7 +3,8 @@
 Portable evaluation and benchmark contracts plus pure helpers for Tasksets,
 graders, run manifests, attempt and evaluation receipts, paired benchmark
 comparisons, execution adapters, conformance fixtures, Work-evidence
-eligibility, and no-training/SFT/preference/RL qualification receipts. The package depends on
+eligibility, no-training/SFT/preference/RL qualification receipts, and portable
+training telemetry. The package depends on
 [`@openpond/harness`](../harness/README.md) for exact Harness identities but
 does not re-export Harness APIs. Applications import the two packages directly,
 which keeps refinement and evaluation authority visibly separate.
@@ -34,7 +35,7 @@ import {
 ```
 
 Subpath exports are available at `/harness`, `/tasksets`, `/benchmarks`, `/graders`, `/runs`,
-`/conformance`, `/evidence`, `/preferences`, `/review`, and
+`/conformance`, `/evidence`, `/telemetry`, `/preferences`, `/review`, and
 `/model-improvement-qualification`. The package is an evaluation protocol library,
 not a hosted client. It does not execute OpenPond Desktop or Sandbox sessions,
 resolve credentials, or persist artifacts.
@@ -121,6 +122,29 @@ semantics. Infrastructure failures must remain reward-ineligible.
 
 Package semver and schema literals are independent. See [CONTRACT.md](./CONTRACT.md)
 for compatibility aliases, migration rules, size limits, and the field map.
+
+## Training telemetry
+
+The `@openpond/evals/telemetry` subpath defines the cross-runtime Run event,
+metric, cohort, evidence-completeness, and export-bundle protocol. It includes a
+bounded core metric catalog, deterministic builders, duplicate and late-delivery
+merge semantics, chart-ready aggregation, cohort filtering, and
+visibility-aware export helpers. The sibling `openpond-evals` Python
+distribution implements the producer-facing models, builders, and asynchronous
+buffered emitter used by GPU workers and external trainers; both languages
+validate the same fixtures and schema literals.
+
+Telemetry records what an admitted Run did; it does not configure the Taskset
+or execute training. Core observations are accepted only when their metric ID
+and bounded dimensions match the catalog. Custom metrics require an explicit
+versioned definition. Events carry immutable Run/Model/Harness/Taskset lineage,
+producer sequence, source authority, and evidence visibility.
+
+Portable export bundles contain definitions, events, observations, bounded
+evidence references, completeness state, and a content hash. Raw trace bytes,
+credentials, provider handles, tenant identity, billing policy, and hosted
+indexes remain host-owned. The package contains no trainer, optimizer,
+provisioner, persistence client, or diagnostic agent.
 
 ## Release preparation
 

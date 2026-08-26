@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "openpond.metricDefinition.v1"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "valueType": {
+      "type": "string",
+      "enum": [
+        "gauge",
+        "counter",
+        "distribution"
+      ]
+    },
+    "unit": {
+      "type": "string",
+      "enum": [
+        "ratio",
+        "count",
+        "seconds",
+        "milliseconds",
+        "tokens",
+        "bytes",
+        "usd",
+        "scalar"
+      ]
+    },
+    "direction": {
+      "type": "string",
+      "enum": [
+        "higher",
+        "lower",
+        "neutral"
+      ]
+    },
+    "aggregation": {
+      "type": "string",
+      "enum": [
+        "last",
+        "sum",
+        "mean",
+        "min",
+        "max",
+        "p50",
+        "p95"
+      ]
+    },
+    "visibility": {
+      "type": "string",
+      "enum": [
+        "policy_visible",
+        "team_visible",
+        "host_private"
+      ]
+    },
+    "boundedDimensions": {
+      "maxItems": 32,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 100
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "displayName",
+    "description",
+    "valueType",
+    "unit",
+    "direction",
+    "aggregation",
+    "visibility",
+    "boundedDimensions"
+  ],
+  "additionalProperties": false
+}
