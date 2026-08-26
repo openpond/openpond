@@ -183,15 +183,16 @@ export function LabModelVersionDetailPage({
       event.type === "metric" &&
       event.payload.metricKind === "rollout_trajectory",
   ) ?? false;
+  const currentRunStatus =
+    detail.detail?.job.status ??
+    selectedLifecycleRun?.status ??
+    selectedJob?.status ??
+    "imported";
   const runActive = ["queued", "starting", "running", "reconciling"].includes(
-    selectedJob?.status ?? selectedLifecycleRun?.status ?? "",
+    currentRunStatus,
   );
   const latestActivity = detail.detail?.events.at(-1);
-  const runStatus = selectedLifecycleRun
-    ? statusLabel(selectedLifecycleRun.status)
-    : selectedJob
-      ? statusLabel(selectedJob.status)
-      : "Imported";
+  const runStatus = statusLabel(currentRunStatus);
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
     ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
@@ -247,7 +248,7 @@ export function LabModelVersionDetailPage({
             : runStatus}
           pulse={runActive}
           tone={runActive ? "positive" : undefined}
-          value={selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"}
+          value={currentRunStatus}
         />}
         metrics={[
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },

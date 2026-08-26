@@ -49,7 +49,6 @@ export function TrainingMetricWorkbench({
     }
     return [...byId.values()];
   }, [live, loading, series]);
-  const canSmooth = cards.some((metric) => metric.points.length >= 3);
 
   if (!cards.length) {
     return (
@@ -70,24 +69,22 @@ export function TrainingMetricWorkbench({
               : `${cards.length} recorded metric ${cards.length === 1 ? "series" : "series"}.`}
           </p>
         </div>
-        {canSmooth ? (
-          <div className="training-metric-view-toggle" aria-label="Metric trend" role="group">
-            <button
-              className={!smoothed ? "active" : undefined}
-              type="button"
-              onClick={() => setSmoothed(false)}
-            >
-              Raw
-            </button>
-            <button
-              className={smoothed ? "active" : undefined}
-              type="button"
-              onClick={() => setSmoothed(true)}
-            >
-              Smoothed
-            </button>
-          </div>
-        ) : null}
+        <div className="training-metric-view-toggle" aria-label="Metric trend" role="group">
+          <button
+            className={!smoothed ? "active" : undefined}
+            type="button"
+            onClick={() => setSmoothed(false)}
+          >
+            Raw
+          </button>
+          <button
+            className={smoothed ? "active" : undefined}
+            type="button"
+            onClick={() => setSmoothed(true)}
+          >
+            Smoothed
+          </button>
+        </div>
       </header>
 
       <div className="training-metric-chart-grid">
@@ -163,6 +160,8 @@ const TrainingMetricChartCard = memo(function TrainingMetricChartCard({
               />
               <YAxis
                 axisLine={false}
+                dataKey="value"
+                domain={metric.format === "percent" ? [0, 1] : ["auto", "auto"]}
                 fontSize={10}
                 stroke="var(--muted)"
                 tickFormatter={format}
