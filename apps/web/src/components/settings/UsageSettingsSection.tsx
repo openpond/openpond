@@ -435,6 +435,7 @@ export function UsageSettingsContent({
             rowKey={(row) => row.sessionId}
             emptyLabel="No thread usage"
             columns={threadTableColumns}
+            pageSize={10}
           />
 
           <UsageDataTable
@@ -620,6 +621,7 @@ function UsageDataTable<T>({
   emptyLabel,
   footer,
   compact = false,
+  pageSize,
 }: {
   title: string;
   rows: T[];
@@ -628,7 +630,21 @@ function UsageDataTable<T>({
   emptyLabel: string;
   footer?: string | null;
   compact?: boolean;
+  pageSize?: number;
 }) {
+  const [page, setPage] = useState(0);
+  const pageCount = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+  const activePage = Math.min(page, pageCount - 1);
+  const visibleRows = pageSize
+    ? rows.slice(activePage * pageSize, activePage * pageSize + pageSize)
+    : rows;
+  const pageStart = activePage * (pageSize ?? rows.length) + 1;
+  const pageEnd = Math.min(rows.length, pageStart + (pageSize ?? rows.length) - 1);
+
+  useEffect(() => {
+    if (page !== activePage) setPage(activePage);
+  }, [activePage, page]);
+
   return (
     <div className={`account-list usage-table-panel ${compact ? "compact" : ""}`}>
       <div className="account-list-heading">
@@ -650,7 +666,7 @@ function UsageDataTable<T>({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, index) => (
+              {visibleRows.map((row, index) => (
                 <tr key={rowKey(row, index)}>
                   {columns.map((column) => (
                     <td className={column.align === "end" ? "align-end" : undefined} key={column.key}>
@@ -661,7 +677,19 @@ function UsageDataTable<T>({
               ))}
             </tbody>
           </table>
-          {footer ? <div className="usage-table-footer">{footer}</div> : null}
+          {footer || pageSize ? (
+            <div className="usage-table-footer">
+              {footer ? <span>{footer}</span> : null}
+              {pageSize && rows.length ? <span>Showing {formatInteger(pageStart)}–{formatInteger(pageEnd)} of {formatInteger(rows.length)}</span> : null}
+              {pageSize && pageCount > 1 ? (
+                <nav className="usage-table-pagination" aria-label={`${title} pages`}>
+                  <button type="button" disabled={activePage === 0} onClick={() => setPage((current) => Math.max(0, current - 1))}>Previous</button>
+                  <span>Page {activePage + 1} of {pageCount}</span>
+                  <button type="button" disabled={activePage === pageCount - 1} onClick={() => setPage((current) => Math.min(pageCount - 1, current + 1))}>Next</button>
+                </nav>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
     </div>

@@ -258,9 +258,12 @@ function ActivityVisualization({
         />
       ) : null}
       <div className="usage-activity-scroll">
-        <div className="usage-activity-canvas">
+        <div
+          className="usage-activity-canvas"
+          style={{ "--usage-week-count": calendar.length } as CSSProperties}
+        >
           {mode === "daily" ? (
-            <div className="usage-heatmap" role="grid" aria-label="Daily token activity for the last year">
+            <div className="usage-heatmap" role="grid" aria-label="Daily token activity since June">
               {calendar.flatMap((week) =>
                 week.days.map((day) => {
                   const gradient = dayModelGradient(day.models, colorByModel);
@@ -447,17 +450,18 @@ function ModelMix({
   );
 }
 
-function buildActivityCalendar(daily: UsageDailyBucket[], rangeEnd?: string): ActivityWeek[] {
+export function buildActivityCalendar(daily: UsageDailyBucket[], rangeEnd?: string): ActivityWeek[] {
   const endSource = rangeEnd ? new Date(rangeEnd) : new Date();
   const today = Number.isNaN(endSource.getTime()) ? new Date() : endSource;
-  const finalSaturday = addDays(startOfDay(today), 6 - today.getDay());
-  const firstSunday = addDays(finalSaturday, -(53 * 7 - 1));
+  const firstDay = new Date(today.getFullYear(), 5, 1);
+  const finalDay = addDays(startOfDay(today), 6 - today.getDay());
+  const weekCount = Math.max(1, Math.ceil((finalDay.getTime() - firstDay.getTime() + 1) / (7 * 24 * 60 * 60 * 1000)));
   const bucketByDate = new Map(daily.map((bucket) => [bucket.date, bucket]));
   const weeks: ActivityWeek[] = [];
-  for (let weekIndex = 0; weekIndex < 53; weekIndex += 1) {
+  for (let weekIndex = 0; weekIndex < weekCount; weekIndex += 1) {
     const days: ActivityDay[] = [];
     for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
-      const date = addDays(firstSunday, weekIndex * 7 + dayIndex);
+      const date = addDays(firstDay, weekIndex * 7 + dayIndex);
       const key = localDateKey(date);
       const bucket = bucketByDate.get(key);
       days.push({
@@ -503,7 +507,7 @@ function activityTooltipPosition(
   if (!container) return null;
   const cellRect = cell.getBoundingClientRect();
   const containerRect = container.getBoundingClientRect();
-  const tooltipHalfWidth = Math.min(125, Math.max(80, containerRect.width / 2));
+  const tooltipHalfWidth = Math.min(125, Math.max(0, (containerRect.width - 16) / 2));
   const centeredLeft = cellRect.left - containerRect.left + cellRect.width / 2;
   return {
     day,

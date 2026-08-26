@@ -198,14 +198,9 @@
 }
 
 .usage-activity-scroll {
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.usage-activity-scroll::-webkit-scrollbar {
-  display: none;
+  overflow: visible;
+  margin: 0 -8px;
+  padding: 0 8px 4px;
 }
 
 .usage-activity-visualization {
@@ -213,12 +208,13 @@
 }
 
 .usage-activity-canvas {
-  min-width: 738px;
+  width: min(100%, 680px);
+  min-width: 0;
 }
 
 .usage-heatmap {
   display: grid;
-  grid-auto-columns: 10px;
+  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
   grid-auto-flow: column;
   grid-template-rows: repeat(7, 10px);
   gap: 4px;
@@ -227,6 +223,7 @@
 
 .usage-activity-cell {
   position: relative;
+  justify-self: center;
   width: 10px;
   height: 10px;
   border-radius: 3px;
@@ -277,7 +274,7 @@
 
 .usage-activity-months {
   display: grid;
-  grid-template-columns: repeat(53, 10px);
+  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
   column-gap: 4px;
   margin-top: 8px;
   color: #71777d;
@@ -296,7 +293,7 @@
   left: var(--usage-tooltip-left);
   display: grid;
   gap: 5px;
-  width: min(250px, calc(100vw - 48px));
+  width: min(250px, calc(100% - 16px));
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   background: rgba(19, 20, 23, 0.96);
@@ -394,7 +391,7 @@
 
 .usage-activity-bars {
   display: grid;
-  grid-template-columns: repeat(53, 10px);
+  grid-template-columns: repeat(var(--usage-week-count), minmax(8px, 1fr));
   align-items: end;
   column-gap: 4px;
   height: 94px;
@@ -402,6 +399,8 @@
 
 .usage-activity-bars > span {
   display: block;
+  justify-self: center;
+  width: min(10px, 100%);
   min-height: 2px;
   border-radius: 3px 3px 2px 2px;
   background: linear-gradient(180deg, #7fbcef, #365773);
@@ -823,10 +822,42 @@
 }
 
 .usage-table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
   padding: 10px 12px 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   color: #9b9b9b;
   font-size: 12px;
+}
+
+.usage-table-pagination {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.usage-table-pagination button {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #d8dadd;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+
+.usage-table-pagination button:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.usage-table-pagination span {
+  color: #b5bac0;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 @media (max-width: 920px) {
