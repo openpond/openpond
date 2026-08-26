@@ -40,6 +40,19 @@ describe("managed run evidence", () => {
 
   test("preserves portable worker telemetry for local run inspection", () => {
     const timestamp = "2026-08-26T13:31:00.000Z";
+    const lineage = {
+      modelProjectId: "model-project-1",
+      runId: "job-telemetry",
+      modelVersionId: null,
+      harnessReleaseHash: "a".repeat(64),
+      tasksetReleaseHash: "b".repeat(64),
+      environmentReleaseHash: "c".repeat(64),
+      checkpointId: null,
+      step: 1,
+      rolloutGroupId: null,
+      attemptId: null,
+      scenarioId: null,
+    };
     const detail = parseManagedJobDetail({
       job: {
         id: "job-telemetry",
@@ -54,12 +67,15 @@ describe("managed run evidence", () => {
           sequence: 1,
           kind: "event",
           event: {
+            schemaVersion: "openpond.runTelemetryEvent.v1",
             eventId: "event-1",
+            sequence: 1,
             type: "optimizer_step_completed",
             source: "optimizer",
+            visibility: "team_visible",
             occurredAt: timestamp,
             attributes: { idempotentReplay: false },
-            lineage: { step: 1 },
+            lineage,
           },
           observation: null,
         },
@@ -70,12 +86,15 @@ describe("managed run evidence", () => {
           kind: "observation",
           event: null,
           observation: {
+            schemaVersion: "openpond.metricObservation.v1",
             observationId: "observation-1",
             eventId: "event-1",
+            sequence: 2,
             metricId: "optimizer.kl",
             value: 0.03125,
             observedAt: timestamp,
-            lineage: { step: 1 },
+            dimensions: { split: "train" },
+            lineage,
           },
         },
       ],

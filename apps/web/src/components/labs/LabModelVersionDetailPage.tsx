@@ -8,7 +8,10 @@ import {
 } from "@openpond/contracts";
 
 import type { ClientConnection } from "../../api";
-import { TrainingRolloutReceipts } from "../training/TrainingModelEvidence";
+import {
+  TrainingManagedAttempts,
+  TrainingRolloutReceipts,
+} from "../training/TrainingModelEvidence";
 import { TrainingRunEvaluation } from "../training/TrainingRunEvaluation";
 import { TrainingRunMetrics } from "../training/TrainingRunMetrics";
 import {
@@ -175,6 +178,11 @@ export function LabModelVersionDetailPage({
       ) ?? []
     : [];
   const managedEvidence = detail.detail?.managedEvidence ?? null;
+  const hasManagedAttempts = detail.detail?.events.some(
+    (event) =>
+      event.type === "metric" &&
+      event.payload.metricKind === "rollout_trajectory",
+  ) ?? false;
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "artifacts", label: "Artifacts" },
     ...(detail.loading ||
@@ -183,7 +191,7 @@ export function LabModelVersionDetailPage({
     managedEvidence?.evaluations.length
       ? [{ id: "evaluation" as const, label: "Evaluation" }]
       : []),
-    ...(receipts.length
+    ...(receipts.length || hasManagedAttempts
       ? [{ id: "rollouts" as const, label: "Rollouts" }]
       : []),
     ...(managedServing
@@ -433,7 +441,11 @@ export function LabModelVersionDetailPage({
             </div>
           ) : null}
           {activeDetailTab === "rollouts" ? (
-            <TrainingRolloutReceipts receipts={receipts} />
+            receipts.length ? (
+              <TrainingRolloutReceipts receipts={receipts} />
+            ) : (
+              <TrainingManagedAttempts events={detail.detail?.events ?? []} />
+            )
           ) : null}
           {activeDetailTab === "serving" ? (
             <ManagedAdapterServingStatus projection={managedServing} />
@@ -769,13 +781,17 @@ function eventSummary(event: TrainingJobEvent): string {
   const step = finiteNumber(payload.step);
   const maxSteps = finiteNumber(payload.maxSteps);
   if (typeof payload.telemetryType === "string") {
+    const message =
+      typeof payload.message === "string" ? payload.message : null;
+    const errorCode =
+      typeof payload.errorCode === "string" ? payload.errorCode : null;
     const source =
       typeof payload.telemetrySource === "string"
         ? ` · ${payload.telemetrySource}`
         : "";
-    return `${payload.telemetryType.replaceAll("_", " ")}${
+    return `${message ?? payload.telemetryType.replaceAll("_", " ")}${
       step == null ? "" : ` · step ${step}`
-    }${source}`;
+    }${source}${errorCode ? ` · ${errorCode}` : ""}`;
   }
   if (event.type === "start") {
     return typeof payload.device === "string"

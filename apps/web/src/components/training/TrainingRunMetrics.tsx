@@ -123,7 +123,7 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
     [detail?.events],
   );
   const managedTelemetry = useMemo(
-    () => managedTelemetryPoints(detail?.events ?? []),
+    () => mergedManagedTelemetryPoints(detail?.events ?? []),
     [detail?.events],
   );
   const summary = detail ? finalSummary(detail) : {};
@@ -146,6 +146,7 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
           clipPoints={policyClipPoints}
           lossPoints={managedTelemetry.get("optimizer.loss") ?? []}
           gradientNormPoints={managedTelemetry.get("optimizer.gradient_norm") ?? []}
+          supplementalMetrics={managedTelemetry}
         />
       );
     }
@@ -245,6 +246,7 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
         clipPoints={[]}
         lossPoints={managedTelemetry.get("optimizer.loss") ?? []}
         gradientNormPoints={managedTelemetry.get("optimizer.gradient_norm") ?? []}
+        supplementalMetrics={managedTelemetry}
       />
     );
   }
@@ -291,6 +293,7 @@ function GrpoChartGrid({
   clipPoints,
   lossPoints,
   gradientNormPoints,
+  supplementalMetrics,
 }: {
   rewardPoints: Array<{ step: number; value: number }>;
   rolloutPoints: Array<{ step: number; value: number }>;
@@ -300,7 +303,9 @@ function GrpoChartGrid({
   clipPoints: Array<{ step: number; value: number }>;
   lossPoints: Array<{ step: number; value: number }>;
   gradientNormPoints: Array<{ step: number; value: number }>;
+  supplementalMetrics: Map<string, Array<{ step: number; value: number }>>;
 }) {
+  const supplemental = supplementalMetricCharts(supplementalMetrics);
   return (
     <div className="training-run-metrics">
       <div className="training-metric-chart-grid three">
@@ -335,6 +340,15 @@ function GrpoChartGrid({
         {gradientNormPoints.length ? (
           <MetricChartCard format={compactNumber} label="Gradient norm" points={gradientNormPoints} />
         ) : null}
+        {supplemental.map((metric) => (
+          <MetricChartCard
+            axisLabel={metric.axisLabel}
+            format={metric.format}
+            key={metric.id}
+            label={metric.label}
+            points={metric.points}
+          />
+        ))}
       </div>
     </div>
   );
@@ -464,6 +478,114 @@ function managedTelemetryPoints(
     byMetric.set(metricId, points);
   }
   return byMetric;
+}
+
+function mergedManagedTelemetryPoints(
+  events: TrainingRunDetail["events"],
+): Map<string, Array<{ step: number; value: number }>> {
+  const merged = managedTelemetryPoints(events);
+  for (const [metricId, points] of derivedRolloutTelemetryPoints(events)) {
+    if (!merged.has(metricId)) merged.set(metricId, points);
+  }
+  return merged;
+}
+
+function derivedRolloutTelemetryPoints(
+  events: TrainingRunDetail["events"],
+): Map<string, Array<{ step: number; value: number }>> {
+  const groups = new Map<string, Array<TrainingRunDetail["events"][number]>>();
+  for (const event of events) {
+    if (event.type !== "metric" || event.payload.metricKind !== "rollout_trajectory") continue;
+    const groupId = typeof event.payload.rolloutGroupId === "string"
+      ? event.payload.rolloutGroupId
+      : "group-0";
+    const current = groups.get(groupId) ?? [];
+    current.push(event);
+    groups.set(groupId, current);
+  }
+  const result = new Map<string, Array<{ step: number; value: number }>>();
+  const push = (metricId: string, step: number, value: number) => {
+    const points = result.get(metricId) ?? [];
+    points.push({ step, value });
+    result.set(metricId, points);
+  };
+  [...groups.values()].forEach((group, step) => {
+    const rewards = group.flatMap((event) => {
+      const reward = finiteNumber(event.payload.reward);
+      return event.payload.rewardEligible === true && reward != null ? [reward] : [];
+    });
+    const mean = rewards.length
+      ? rewards.reduce((total, value) => total + value, 0) / rewards.length
+      : 0;
+    const variance = rewards.length
+      ? rewards.reduce((total, value) => total + (value - mean) ** 2, 0) / rewards.length
+      : 0;
+    push("attempt.valid_rate", step, group.length ? rewards.length / group.length : 0);
+    push("attempt.failure_count", step, group.length - rewards.length);
+    push("reward.variance", step, variance);
+    push("reward.constant_group_rate", step, rewards.length > 1 && new Set(rewards).size === 1 ? 1 : 0);
+    push("tokens.input", step, group.reduce((total, event) => total + (finiteNumber(event.payload.inputTokens) ?? 0), 0));
+    push("tokens.output", step, group.reduce((total, event) => total + (finiteNumber(event.payload.outputTokens) ?? 0), 0));
+    const components = new Map<string, number[]>();
+    for (const event of group) {
+      const value = event.payload.rewardComponents;
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      for (const [key, component] of Object.entries(value)) {
+        if (typeof component !== "number" || !Number.isFinite(component)) continue;
+        const values = components.get(key) ?? [];
+        values.push(component);
+        components.set(key, values);
+      }
+    }
+    for (const [key, values] of components) {
+      push(`reward.component.${key}`, step, values.reduce((total, value) => total + value, 0) / values.length);
+    }
+  });
+  return result;
+}
+
+function supplementalMetricCharts(
+  metrics: Map<string, Array<{ step: number; value: number }>>,
+): Array<{
+  id: string;
+  label: string;
+  axisLabel: string;
+  format: (value: number) => string;
+  points: Array<{ step: number; value: number }>;
+}> {
+  const excluded = new Set([
+    "optimizer.loss",
+    "optimizer.kl",
+    "optimizer.entropy",
+    "optimizer.gradient_norm",
+    "optimizer.clip_fraction",
+    "optimizer.learning_rate",
+  ]);
+  return [...metrics.entries()]
+    .filter(([id, points]) => !excluded.has(id) && points.length > 0)
+    .slice(0, 10)
+    .map(([id, points]) => ({
+      id,
+      label: metricDisplayName(id),
+      axisLabel: id.startsWith("optimizer.") ? "Optimizer step" : "Rollout group",
+      format: id.endsWith("rate") || id.includes("fraction") ? percent : compactNumber,
+      points,
+    }));
+}
+
+function metricDisplayName(metricId: string): string {
+  const known: Record<string, string> = {
+    "attempt.valid_rate": "Valid attempt rate",
+    "attempt.failure_count": "Attempt failures",
+    "reward.variance": "Reward variance",
+    "reward.constant_group_rate": "Constant-reward groups",
+    "tokens.input": "Input tokens",
+    "tokens.output": "Output tokens",
+  };
+  return known[metricId] ?? metricId
+    .replace(/^reward\.component\./, "Reward · ")
+    .replaceAll(/[._]/g, " ")
+    .replace(/^./, (value) => value.toUpperCase());
 }
 
 function finiteNumber(value: unknown): number | null {

@@ -7,6 +7,10 @@ import {
   type TrainingExecutionRef,
   type TrainingJobEvent,
 } from "@openpond/contracts";
+import {
+  MetricObservationSchema,
+  RunTelemetryEventSchema,
+} from "@openpond/evals/telemetry";
 import { contentHash } from "@openpond/taskset-sdk";
 
 import type { SqliteStore } from "../store/store.js";
@@ -171,28 +175,35 @@ const ManagedJobDetailSchema = z.object({
         itemId: z.string().trim().min(1),
         sequence: z.number().int().nonnegative(),
         kind: z.enum(["event", "observation"]),
-        event: z
-          .object({
-            eventId: z.string().trim().min(1).optional(),
-            type: z.string().trim().min(1),
-            source: z.string().trim().min(1).optional(),
-            occurredAt: z.string().trim().min(1),
-            attributes: z.record(z.string(), z.unknown()).default({}),
-            lineage: z.object({ step: z.number().int().nonnegative().nullable().optional() }).default({}),
-          })
-          .nullable()
-          .optional(),
-        observation: z
-          .object({
-            observationId: z.string().trim().min(1).optional(),
-            eventId: z.string().trim().min(1).optional(),
-            metricId: z.string().trim().min(1),
-            value: z.number().finite(),
-            observedAt: z.string().trim().min(1),
-            lineage: z.object({ step: z.number().int().nonnegative().nullable().optional() }).default({}),
-          })
-          .nullable()
-          .optional(),
+        event: RunTelemetryEventSchema.nullable().optional(),
+        observation: MetricObservationSchema.nullable().optional(),
+      }),
+    )
+    .default([]),
+  commands: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        commandType: z.string().trim().min(1),
+        state: z.string().trim().min(1),
+        errorCode: z.string().trim().min(1).nullable().optional(),
+        createdAt: z.string().trim().min(1),
+        updatedAt: z.string().trim().min(1),
+        completedAt: OptionalTimestampSchema,
+      }),
+    )
+    .default([]),
+  outbox: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        commandType: z.string().trim().min(1),
+        state: z.string().trim().min(1),
+        attemptCount: z.number().int().nonnegative().default(0),
+        lastErrorCode: z.string().trim().min(1).nullable().optional(),
+        createdAt: z.string().trim().min(1),
+        updatedAt: z.string().trim().min(1),
+        completedAt: OptionalTimestampSchema,
       }),
     )
     .default([]),
@@ -344,8 +355,27 @@ function managedTrainingEvents(input: {
       device:
         input.detail.gpuLeases.find((lease) => lease.gpuType)?.gpuType ??
         "OpenPond Managed",
+      provider:
+        input.detail.gpuLeases.find((lease) => lease.provider)?.provider ??
+        "openpond",
     },
   });
+
+  for (const lease of input.detail.gpuLeases) {
+    candidates.push({
+      identity: `gpu-lease:${lease.id}`,
+      timestamp: lease.terminatedAt ?? lease.readyAt ?? input.detail.job.updatedAt,
+      type: lease.state === "failed" ? "failure" : "progress",
+      payload: {
+        telemetryType: "gpu_worker_state",
+        telemetrySource: "control_plane",
+        message: `${providerLabel(lease.provider)} GPU worker ${humanLabel(lease.state)}`,
+        provider: lease.provider,
+        state: lease.state,
+        gpuType: lease.gpuType ?? null,
+      },
+    });
+  }
 
   const rolloutById = new Map(
     input.detail.rollouts.map((rollout) => [rollout.id, rollout]),
@@ -365,6 +395,7 @@ function managedTrainingEvents(input: {
         metricKind: "rollout_trajectory",
         rolloutIndex: index + 1,
         rolloutId: trajectory.rolloutId,
+        rolloutGroupId: trajectory.groupId,
         policyVersion: trajectory.policyVersion,
         workerSlot: rollout?.workerSlot ?? null,
         reward: decimal(trajectory.reward),
@@ -382,6 +413,56 @@ function managedTrainingEvents(input: {
       },
     });
   });
+
+  for (const group of input.detail.rolloutGroups) {
+    candidates.push({
+      identity: `group:${group.id}`,
+      timestamp: group.completedAt ?? group.startedAt ?? input.detail.job.updatedAt,
+      type: group.state === "failed" ? "failure" : "progress",
+      payload: {
+        telemetryType: "rollout_group_state",
+        telemetrySource: "control_plane",
+        message: `Rollout group ${group.groupIndex + 1} ${humanLabel(group.state)}`,
+        groupIndex: group.groupIndex,
+        policyVersion: group.policyVersion,
+        eligibleAttempts: group.eligibleTrajectoryCount,
+        rewardMean: decimal(group.rewardMean),
+      },
+    });
+  }
+
+  for (const command of input.detail.outbox) {
+    candidates.push({
+      identity: `control-command:${command.id}`,
+      timestamp: command.updatedAt,
+      type: command.lastErrorCode ? "failure" : "progress",
+      payload: {
+        telemetryType: "control_plane_command",
+        telemetrySource: "control_plane",
+        message: `${humanLabel(command.commandType)} ${humanLabel(command.state)}`,
+        commandType: command.commandType,
+        state: command.state,
+        attempts: command.attemptCount,
+        errorCode: command.lastErrorCode ?? null,
+      },
+    });
+  }
+
+  for (const command of input.detail.commands) {
+    candidates.push({
+      identity: `worker-command:${command.id}`,
+      timestamp: command.updatedAt,
+      type: command.errorCode ? "failure" : "progress",
+      payload: {
+        telemetryType: "worker_command",
+        telemetrySource: "runtime",
+        message: `${humanLabel(command.commandType)} ${humanLabel(command.state)}`,
+        commandType: command.commandType,
+        state: command.state,
+        errorCode: command.errorCode ?? null,
+      },
+    });
+  }
 
   const trajectoryByStep = new Map<string, ManagedJobDetail["trajectories"]>();
   for (const trajectory of input.detail.trajectories) {
@@ -574,6 +655,16 @@ type EventCandidate = {
 
 function managedEventId(jobId: string, identity: string): string {
   return `managed_event_${contentHash({ jobId, identity }).slice(0, 32)}`;
+}
+
+function humanLabel(value: string): string {
+  return value.replaceAll("_", " ");
+}
+
+function providerLabel(value: string): string {
+  if (value.toLowerCase().includes("runpod")) return "RunPod";
+  if (value.toLowerCase().includes("prime")) return "Prime Intellect";
+  return value;
 }
 
 function metricNumber(
