@@ -37,4 +37,55 @@ describe("managed run evidence", () => {
       rewardComposerRelease: { id: "composer-v1" },
     });
   });
+
+  test("preserves portable worker telemetry for local run inspection", () => {
+    const timestamp = "2026-08-26T13:31:00.000Z";
+    const detail = parseManagedJobDetail({
+      job: {
+        id: "job-telemetry",
+        state: "running",
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+      telemetry: [
+        {
+          id: "row-1",
+          itemId: "event-1",
+          sequence: 1,
+          kind: "event",
+          event: {
+            eventId: "event-1",
+            type: "optimizer_step_completed",
+            source: "optimizer",
+            occurredAt: timestamp,
+            attributes: { idempotentReplay: false },
+            lineage: { step: 1 },
+          },
+          observation: null,
+        },
+        {
+          id: "row-2",
+          itemId: "observation-1",
+          sequence: 2,
+          kind: "observation",
+          event: null,
+          observation: {
+            observationId: "observation-1",
+            eventId: "event-1",
+            metricId: "optimizer.kl",
+            value: 0.03125,
+            observedAt: timestamp,
+            lineage: { step: 1 },
+          },
+        },
+      ],
+    });
+
+    expect(detail.telemetry).toHaveLength(2);
+    expect(detail.telemetry[1]?.observation).toMatchObject({
+      metricId: "optimizer.kl",
+      value: 0.03125,
+      lineage: { step: 1 },
+    });
+  });
 });

@@ -768,6 +768,15 @@ function eventSummary(event: TrainingJobEvent): string {
   const payload = event.payload;
   const step = finiteNumber(payload.step);
   const maxSteps = finiteNumber(payload.maxSteps);
+  if (typeof payload.telemetryType === "string") {
+    const source =
+      typeof payload.telemetrySource === "string"
+        ? ` · ${payload.telemetrySource}`
+        : "";
+    return `${payload.telemetryType.replaceAll("_", " ")}${
+      step == null ? "" : ` · step ${step}`
+    }${source}`;
+  }
   if (event.type === "start") {
     return typeof payload.device === "string"
       ? `Worker started on ${payload.device}.`
@@ -792,7 +801,12 @@ function eventSummary(event: TrainingJobEvent): string {
         percentValue
       ),
     ].filter((value): value is string => Boolean(value));
-    return `${kind}${step == null ? "" : ` · step ${step}`}${
+    const managedMetric =
+      typeof payload.metricId === "string" &&
+      typeof payload.value === "number"
+        ? ` · ${payload.metricId}: ${payload.value.toPrecision(4)}`
+        : "";
+    return `${kind}${step == null ? "" : ` · step ${step}`}${managedMetric}${
       values.length ? ` · ${values.join(" · ")}` : ""
     }`;
   }

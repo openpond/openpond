@@ -122,6 +122,10 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
     () => rolloutRewardPoints(detail?.events ?? []),
     [detail?.events],
   );
+  const managedTelemetry = useMemo(
+    () => managedTelemetryPoints(detail?.events ?? []),
+    [detail?.events],
+  );
   const summary = detail ? finalSummary(detail) : {};
 
   if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
@@ -140,6 +144,8 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
           klPoints={policyKlPoints}
           entropyPoints={policyEntropyPoints}
           clipPoints={policyClipPoints}
+          lossPoints={managedTelemetry.get("optimizer.loss") ?? []}
+          gradientNormPoints={managedTelemetry.get("optimizer.gradient_norm") ?? []}
         />
       );
     }
@@ -237,6 +243,8 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
         klPoints={[]}
         entropyPoints={[]}
         clipPoints={[]}
+        lossPoints={managedTelemetry.get("optimizer.loss") ?? []}
+        gradientNormPoints={managedTelemetry.get("optimizer.gradient_norm") ?? []}
       />
     );
   }
@@ -281,6 +289,8 @@ function GrpoChartGrid({
   klPoints,
   entropyPoints,
   clipPoints,
+  lossPoints,
+  gradientNormPoints,
 }: {
   rewardPoints: Array<{ step: number; value: number }>;
   rolloutPoints: Array<{ step: number; value: number }>;
@@ -288,6 +298,8 @@ function GrpoChartGrid({
   klPoints: Array<{ step: number; value: number }>;
   entropyPoints: Array<{ step: number; value: number }>;
   clipPoints: Array<{ step: number; value: number }>;
+  lossPoints: Array<{ step: number; value: number }>;
+  gradientNormPoints: Array<{ step: number; value: number }>;
 }) {
   return (
     <div className="training-run-metrics">
@@ -308,6 +320,9 @@ function GrpoChartGrid({
           label="Learning rate"
           points={learningRatePoints}
         />
+        {lossPoints.length ? (
+          <MetricChartCard format={compactNumber} label="Optimizer loss" points={lossPoints} />
+        ) : null}
         {klPoints.length ? (
           <MetricChartCard format={compactNumber} label="KL divergence" points={klPoints} />
         ) : null}
@@ -316,6 +331,9 @@ function GrpoChartGrid({
         ) : null}
         {clipPoints.length ? (
           <MetricChartCard format={percent} label="Clip fraction" points={clipPoints} />
+        ) : null}
+        {gradientNormPoints.length ? (
+          <MetricChartCard format={compactNumber} label="Gradient norm" points={gradientNormPoints} />
         ) : null}
       </div>
     </div>
@@ -429,6 +447,23 @@ function rolloutRewardPoints(
     const value = finiteNumber(event.payload.reward);
     return step == null || value == null ? [] : [{ step, value }];
   });
+}
+
+function managedTelemetryPoints(
+  events: TrainingRunDetail["events"],
+): Map<string, Array<{ step: number; value: number }>> {
+  const byMetric = new Map<string, Array<{ step: number; value: number }>>();
+  for (const event of events) {
+    if (event.type !== "metric" || event.payload.metricKind !== "managed_telemetry") continue;
+    const metricId = typeof event.payload.metricId === "string" ? event.payload.metricId : null;
+    const value = finiteNumber(event.payload.value);
+    const step = finiteNumber(event.payload.step) ?? event.sequence;
+    if (!metricId || value == null) continue;
+    const points = byMetric.get(metricId) ?? [];
+    points.push({ step, value });
+    byMetric.set(metricId, points);
+  }
+  return byMetric;
 }
 
 function finiteNumber(value: unknown): number | null {

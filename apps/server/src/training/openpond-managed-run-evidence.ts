@@ -163,6 +163,38 @@ const ManagedJobDetailSchema = z.object({
       }),
     )
     .default([]),
+  telemetry: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1),
+        itemId: z.string().trim().min(1),
+        sequence: z.number().int().nonnegative(),
+        kind: z.enum(["event", "observation"]),
+        event: z
+          .object({
+            eventId: z.string().trim().min(1).optional(),
+            type: z.string().trim().min(1),
+            source: z.string().trim().min(1).optional(),
+            occurredAt: z.string().trim().min(1),
+            attributes: z.record(z.string(), z.unknown()).default({}),
+            lineage: z.object({ step: z.number().int().nonnegative().nullable().optional() }).default({}),
+          })
+          .nullable()
+          .optional(),
+        observation: z
+          .object({
+            observationId: z.string().trim().min(1).optional(),
+            eventId: z.string().trim().min(1).optional(),
+            metricId: z.string().trim().min(1),
+            value: z.number().finite(),
+            observedAt: z.string().trim().min(1),
+            lineage: z.object({ step: z.number().int().nonnegative().nullable().optional() }).default({}),
+          })
+          .nullable()
+          .optional(),
+      }),
+    )
+    .default([]),
 });
 
 export type ManagedJobDetail = z.infer<typeof ManagedJobDetailSchema>;
@@ -353,11 +385,21 @@ function managedTrainingEvents(input: {
   const groupById = new Map(
     input.detail.rolloutGroups.map((group) => [group.id, group]),
   );
+  const telemetryMetricsByStep = new Map<number, Record<string, number>>();
+  for (const item of input.detail.telemetry) {
+    if (item.kind !== "observation" || !item.observation) continue;
+    const step = item.observation.lineage.step;
+    if (step == null) continue;
+    const current = telemetryMetricsByStep.get(step) ?? {};
+    current[item.observation.metricId] = item.observation.value;
+    telemetryMetricsByStep.set(step, current);
+  }
   for (const step of input.detail.trainingSteps.filter(
     (candidate) => candidate.state === "committed",
   )) {
     const trajectories = trajectoryByStep.get(step.id) ?? [];
     const group = groupById.get(step.groupId);
+    const telemetry = telemetryMetricsByStep.get(step.stepIndex) ?? {};
     candidates.push({
       identity: `optimizer:${step.id}`,
       timestamp:
@@ -371,18 +413,24 @@ function managedTrainingEvents(input: {
         timestamp:
           step.committedAt ?? step.startedAt ?? input.detail.job.updatedAt,
         learningRate: input.learningRate,
-        policyLoss: metricNumber(step.metrics, "policyLoss"),
+        policyLoss:
+          metricNumber(step.metrics, "policyLoss") ??
+          metricNumber(telemetry, "optimizer.loss"),
         valueLoss: metricNumber(step.metrics, "valueLoss"),
         meanReward:
           metricNumber(step.metrics, "rewardMean") ??
           decimal(group?.rewardMean),
         meanReturn: metricNumber(step.metrics, "meanReturn"),
-        kl: metricNumber(step.metrics, "kl"),
-        entropy: metricNumber(step.metrics, "entropy"),
+        kl:
+          metricNumber(step.metrics, "kl") ??
+          metricNumber(telemetry, "optimizer.kl"),
+        entropy:
+          metricNumber(step.metrics, "entropy") ??
+          metricNumber(telemetry, "optimizer.entropy"),
         policyClipFraction: metricNumber(
           step.metrics,
           "policyClipFraction",
-        ),
+        ) ?? metricNumber(telemetry, "optimizer.clip_fraction"),
         valueClipFraction: metricNumber(step.metrics, "valueClipFraction"),
         explainedVariance: metricNumber(step.metrics, "explainedVariance"),
         rolloutLearnerLag: 0,
@@ -398,6 +446,45 @@ function managedTrainingEvents(input: {
         outputPolicyVersion: step.outputPolicyVersion,
       },
     });
+  }
+
+  for (const item of input.detail.telemetry) {
+    if (item.kind === "event" && item.event) {
+      candidates.push({
+        identity: `telemetry-event:${item.itemId}`,
+        timestamp: item.event.occurredAt,
+        type:
+          item.event.type === "run_failed"
+            ? "failure"
+            : item.event.type === "checkpoint_committed"
+              ? "checkpoint"
+              : item.event.type === "run_completed"
+                ? "complete"
+                : item.event.type === "run_started"
+                  ? "start"
+                  : "progress",
+        payload: {
+          telemetryType: item.event.type,
+          telemetrySource: item.event.source ?? "managed",
+          step: item.event.lineage.step ?? null,
+          ...item.event.attributes,
+        },
+      });
+      continue;
+    }
+    if (item.kind === "observation" && item.observation) {
+      candidates.push({
+        identity: `telemetry-observation:${item.itemId}`,
+        timestamp: item.observation.observedAt,
+        type: "metric",
+        payload: {
+          metricKind: "managed_telemetry",
+          metricId: item.observation.metricId,
+          value: item.observation.value,
+          step: item.observation.lineage.step ?? null,
+        },
+      });
+    }
   }
 
   for (const checkpoint of input.detail.checkpoints.filter(
