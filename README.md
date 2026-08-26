@@ -103,7 +103,7 @@ if (decision.decision === "propose") {
 
 The Refiner never treats a prompt keyword, an error string, or a fixed recurrence count as authority to change the Harness. See the [@openpond/harness README](packages/harness/README.md) for the evidence contract, decision schema, and verification command.
 
-Refiner behavior can be extended with a separately versioned JSON Review Profile. Run `/refiner <change>` in Work to inspect and update it through the bundled authoring Skill, or use `@openpond/harness/refiner` directly. The Local app stores immutable Refiner releases beside—not inside—Harness releases, and exposes their history and rollback controls in Settings. Headless hosts get the same lifecycle from `openpond app-server --store-dir <dir>` over `refiner/*` JSON-RPC methods.
+Refiner behavior can be extended with a separately versioned JSON Review Profile. Invoke `$openpond-refiner-authoring <change>` in Work to inspect and update it through the bundled Skill, or use `@openpond/harness/refiner` directly. Settings exposes the active Refiner Core and Review Profile, immutable release history, validation receipts, activation, and rollback.
 
 ## Use the SDK with an API key
 

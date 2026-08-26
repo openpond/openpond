@@ -1192,9 +1192,7 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
           `${
             authoringRoute.intent.artifact === "agent"
               ? "Agent"
-              : authoringRoute.intent.artifact === "refiner"
-                ? "Refiner"
-                : "Skill"
+              : "Skill"
           } authoring requires an OpenPond hosted-tool provider so the bundled authoring skill and validation tools are available.`
         );
       }

@@ -114,13 +114,11 @@ const decision = await authorLocalHarnessRefinementWithModel({
 });
 ```
 
-`openpond app-server --store-dir <dir>` adds host-owned persistence beside the
-Harness store under `<dir>/refiners`. Its JSON-RPC surface exposes
-`refiner/inspect`, `refiner/update`, `refiner/activate`, and `refiner/rollback`.
-The bundled `openpond-refiner-authoring` Skill uses those operations from a
-normal Work turn; `/refiner <change>` is the explicit authoring route. Core
-evidence, privacy, ownership, validation, and activation boundaries cannot be
-relaxed by a Review Profile.
+OpenPond hosts can persist, validate, activate, and roll back immutable Review
+Profile releases. The bundled `openpond-refiner-authoring` Skill uses those
+operations from a normal Work turn; invoke it with
+`$openpond-refiner-authoring <change>`. Core evidence, privacy, ownership,
+validation, and activation boundaries cannot be relaxed by a Review Profile.
 
 1. The host supplies the completed-turn evidence, admitted and current Harness
    source, available mutation capabilities, and the exact evidence IDs the

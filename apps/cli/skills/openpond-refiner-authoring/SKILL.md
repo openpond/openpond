@@ -1,11 +1,13 @@
 ---
 name: openpond-refiner-authoring
-description: Inspect, extend, validate, activate, or roll back the OpenPond Refiner Review Profile. Use for /refiner and ordinary requests to change what the Refiner emphasizes or understands.
+description: Inspect, extend, validate, activate, or roll back the OpenPond Refiner Review Profile. Use when invoked as $openpond-refiner-authoring or for ordinary requests to change what the Refiner emphasizes or understands.
 ---
 
 # OpenPond Refiner Authoring
 
 Update the separately versioned Review Profile through a normal Work turn. The active Refiner never edits itself during trace review.
+
+Invoke this Skill explicitly with `$openpond-refiner-authoring` followed by the requested change. It uses the same profile-skill loading path as every other shipped Skill; it is not a slash command or a separate authoring mode.
 
 ## Workflow
 

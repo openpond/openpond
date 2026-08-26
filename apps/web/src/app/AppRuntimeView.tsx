@@ -521,7 +521,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const startRefinerAuthoring = useCallback((objective: string) => {
     beginNewChat(null);
     setDraftExperience("work");
-    composerDraftStore.set(`/refiner ${objective}`);
+    composerDraftStore.set(`$openpond-refiner-authoring ${objective}`);
     setView("chat");
     setSidebarOpen(true);
   }, [beginNewChat, composerDraftStore, setDraftExperience, setSidebarOpen, setView]);
