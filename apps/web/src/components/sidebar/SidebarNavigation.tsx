@@ -138,15 +138,6 @@ export function SidebarNavigation({
             <span>Runs</span>
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "rollouts" ? "active" : ""}`}
-            aria-label="Rollouts"
-            type="button"
-            onClick={() => selectModelsTab("rollouts")}
-          >
-            <Boxes size={16} />
-            <span>Rollouts</span>
-          </button>
-          <button
             className={`nav-command ${view === "labs" && activeModelsTab === "serving" ? "active" : ""}`}
             aria-label="Serving"
             type="button"

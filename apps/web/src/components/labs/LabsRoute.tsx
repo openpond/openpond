@@ -212,11 +212,6 @@ export function LabsRoute({
     models.find((workproduct) => workproduct.key === selectedKey) ?? null;
   const modelProjects = training.training.payload?.modelProjects ?? [];
   useEffect(() => {
-    if (selected || !models.length) return;
-    setSelectedKey(models[0]!.key);
-  }, [models, selected]);
-
-  useEffect(() => {
     if (!profileView.connection) return;
     let cancelled = false;
     void api.bootstrap(profileView.connection)
