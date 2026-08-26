@@ -373,6 +373,10 @@ function managedTrainingEvents(input: {
         failureClass: trajectory.rewardEligible
           ? null
           : trajectory.terminalClass ?? "not_reward_eligible",
+        failureCode:
+          trajectory.rewardEligible
+            ? null
+            : failureCode(trajectory.rewardComponents),
         inputTokens: trajectory.promptTokenCount ?? 0,
         outputTokens: trajectory.outputTokenCount ?? 0,
       },
@@ -584,6 +588,13 @@ function decimal(value: string | null | undefined): number | null {
   if (value == null) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function failureCode(components: Record<string, unknown>): string | null {
+  const value = components.failureCode;
+  return typeof value === "string" && value.trim().length
+    ? value.slice(0, 191)
+    : null;
 }
 
 function sumNullableIntegers(

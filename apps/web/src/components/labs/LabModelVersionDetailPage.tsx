@@ -803,6 +803,8 @@ function eventSummary(event: TrainingJobEvent): string {
     ].filter((value): value is string => Boolean(value));
     const failureClass =
       typeof payload.failureClass === "string" ? payload.failureClass : null;
+    const failureCode =
+      typeof payload.failureCode === "string" ? payload.failureCode : null;
     const managedMetric =
       typeof payload.metricId === "string" &&
       typeof payload.value === "number"
@@ -810,7 +812,9 @@ function eventSummary(event: TrainingJobEvent): string {
         : "";
     return `${kind}${step == null ? "" : ` · step ${step}`}${managedMetric}${
       failureClass ? ` · ${failureClass}` : ""
-    }${values.length ? ` · ${values.join(" · ")}` : ""}`;
+    }${failureCode ? ` · ${failureCode}` : ""}${
+      values.length ? ` · ${values.join(" · ")}` : ""
+    }`;
   }
   if (event.type === "checkpoint") {
     const policyVersion = finiteNumber(payload.policyVersion);
