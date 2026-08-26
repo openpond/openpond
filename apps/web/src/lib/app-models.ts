@@ -43,6 +43,7 @@ export type AppView =
   | "get-started"
   | "labs"
   | "outputs"
+  | "projects"
   | "scheduled"
   | "settings";
 export type SettingsSection =

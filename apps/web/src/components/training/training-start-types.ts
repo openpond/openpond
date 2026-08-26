@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type {
   BaseModelCandidate,
   BaseModelPreference,
+  LearnedPreferenceRewardBinding,
   ModelRunPreset,
   Taskset,
   TrainingDestinationCapabilities,
@@ -22,6 +23,7 @@ export type TrainingStartDialogProps = {
   baseModelCandidates: BaseModelCandidate[];
   connection: ClientConnection | null;
   taskset: Taskset;
+  learnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
   modelId?: string | null;
   destinations: TrainingDestinationCapabilities[];
   initialMethod?: "sft" | "dpo" | "grpo" | "ppo";

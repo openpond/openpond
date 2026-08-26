@@ -47,6 +47,36 @@ export async function persistJsonTaskAttemptArtifact(input: {
   });
 }
 
+/** Stores declared immutable fixture or renderer bytes without treating them as
+ * executable code. The caller remains responsible for validating the declared
+ * media type and producing the bytes. */
+export async function persistBinaryTaskAttemptArtifact(input: {
+  store: SqliteStore;
+  storeDir: string;
+  tasksetId: string;
+  taskId: string;
+  attemptId: string;
+  requestId: string;
+  kind: TaskAttemptArtifact["kind"];
+  bytes: Buffer;
+  mediaType: string;
+  fileLabel: string;
+  extension: string;
+  timestamp: () => string;
+  metadata?: Record<string, unknown>;
+}) {
+  const extension = input.extension.replace(/^\.+/, "");
+  if (!/^[a-z0-9]{1,12}$/i.test(extension)) {
+    throw new Error("Task Attempt artifact extension is invalid.");
+  }
+  const directory = path.join(input.storeDir, "training", "evaluation-artifacts", input.tasksetId);
+  await mkdir(directory, { recursive: true });
+  const file = path.join(directory, `${input.attemptId}-${safeFileLabel(input.fileLabel)}.${extension}`);
+  await writeFile(file, input.bytes, { mode: 0o600 });
+  return saveArtifact({ ...input, file });
+}
+
+
 function safeFileLabel(value: string): string {
   const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "");

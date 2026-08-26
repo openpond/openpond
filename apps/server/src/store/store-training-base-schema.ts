@@ -17,6 +17,8 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS task_creation_profile_updated_idx ON task_creation_snapshots(profile_id, updated_at DESC);
   CREATE TABLE IF NOT EXISTS tasksets (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS tasksets_profile_status_updated_idx ON tasksets(profile_id, status, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS taskset_drafts (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS taskset_drafts_profile_updated_idx ON taskset_drafts(profile_id, updated_at DESC);
   CREATE TABLE IF NOT EXISTS taskset_revisions (taskset_id TEXT NOT NULL, revision INTEGER NOT NULL, content_hash TEXT NOT NULL, profile_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(taskset_id, revision));
   CREATE UNIQUE INDEX IF NOT EXISTS taskset_revisions_hash_idx ON taskset_revisions(taskset_id, content_hash);
   CREATE TABLE IF NOT EXISTS task_candidates (id TEXT PRIMARY KEY, profile_id TEXT NOT NULL, status TEXT NOT NULL, fingerprint TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -49,6 +51,12 @@ export const TRAINING_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS model_runs_profile_updated_idx ON model_runs(profile_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS model_runs_model_updated_idx ON model_runs(model_id, updated_at DESC);
   CREATE INDEX IF NOT EXISTS model_runs_taskset_updated_idx ON model_runs(taskset_id, updated_at DESC);
+  CREATE TABLE IF NOT EXISTS reward_model_versions (id TEXT PRIMARY KEY, model_id TEXT NOT NULL, profile_id TEXT NOT NULL, version_number INTEGER NOT NULL, taskset_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(model_id, version_number));
+  CREATE INDEX IF NOT EXISTS reward_model_versions_profile_created_idx ON reward_model_versions(profile_id, created_at DESC);
+  CREATE INDEX IF NOT EXISTS reward_model_versions_taskset_created_idx ON reward_model_versions(taskset_id, created_at DESC);
+  CREATE TABLE IF NOT EXISTS reward_model_runs (id TEXT PRIMARY KEY, reward_model_id TEXT NOT NULL, profile_id TEXT NOT NULL, taskset_id TEXT NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+  CREATE INDEX IF NOT EXISTS reward_model_runs_profile_updated_idx ON reward_model_runs(profile_id, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS reward_model_runs_taskset_updated_idx ON reward_model_runs(taskset_id, updated_at DESC);
   CREATE TABLE IF NOT EXISTS training_plans (id TEXT PRIMARY KEY, taskset_id TEXT NOT NULL, destination_id TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);
   CREATE INDEX IF NOT EXISTS training_plans_taskset_idx ON training_plans(taskset_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS training_bundles (id TEXT PRIMARY KEY, plan_id TEXT NOT NULL, content_hash TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL);

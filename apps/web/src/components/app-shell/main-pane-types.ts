@@ -28,7 +28,7 @@ import type {
 } from "react";
 import type { ClientConnection } from "../../api";
 import type { useTraining } from "../../hooks/useTraining";
-import type { AppView, ChatMessage } from "../../lib/app-models";
+import type { AppView, ChatMessage, SidebarProjectItem } from "../../lib/app-models";
 import type { ComposerDraftStore } from "../../lib/composer-draft-store";
 import type { ConnectedAppMentionOption } from "../../lib/connected-app-mentions";
 import type { ContextWindowStatus } from "../../lib/context-window";
@@ -153,6 +153,14 @@ export type MainPaneProps = {
     prompt: string;
   }) => Promise<Session>;
   cloudProjects: CloudProject[];
+  projects: SidebarProjectItem[];
+  projectsAccountBaseUrl: string | null;
+  projectsTeamName: string | null;
+  projectTaskCounts: Record<string, number>;
+  onNewCloudProject: () => void;
+  onNewProjectTask: (project: SidebarProjectItem) => void;
+  onToggleProjectPinned: (project: SidebarProjectItem) => void;
+  onUploadLocalProject: (project: SidebarProjectItem) => void;
   chatHistoryHasMore?: boolean;
   chatHistoryLoading?: boolean;
   onDiffPanelResizeStart: (event: ReactPointerEvent<HTMLDivElement>) => void;

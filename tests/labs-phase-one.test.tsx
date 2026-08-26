@@ -8,13 +8,17 @@ import {
   type ModelRun,
   type TrainingStateResponse,
 } from "@openpond/contracts";
+import { createTasksetDraft } from "@openpond/taskset-sdk";
 import { LabsView } from "../apps/web/src/components/labs/LabsView";
 import { labServingRows } from "../apps/web/src/components/labs/LabServingPage";
 import {
   labPrimaryTabFromSearch,
   searchWithLabPrimaryTab,
 } from "../apps/web/src/components/labs/lab-primary-tab-state";
-import { LabDatasetsPage } from "../apps/web/src/components/labs/LabDatasetsPage";
+import {
+  LabDatasetsPage,
+  inspectCollectionManifest,
+} from "../apps/web/src/components/labs/LabDatasetsPage";
 import { ExpertTrajectoryDialog } from "../apps/web/src/components/labs/LabExpertBootstrap";
 import { LabModelDataset } from "../apps/web/src/components/labs/LabModelDataset";
 import {
@@ -90,10 +94,49 @@ function modelCandidate(input: {
 }
 
 describe("Lab workspace", () => {
+  test("preflights generalized fixture collection manifests before writing Attempts", () => {
+    const manifest = {
+      schemaVersion: "openpond.syntheticCollectionRun.v1",
+      id: "collection-smoke-1",
+      groups: ["reward_train", "reward_validation"].map((partition, groupIndex) => ({
+        partition,
+        candidates: ["love", "like", "reject", "reject"].map((label, candidateIndex) => ({
+          id: `candidate-${groupIndex}-${candidateIndex}`,
+          output: JSON.stringify({ selection: [`value-${groupIndex}-${candidateIndex}`] }),
+          label,
+        })),
+      })),
+    };
+
+    expect(inspectCollectionManifest(manifest)).toEqual({
+      runId: "collection-smoke-1",
+      groupCount: 2,
+      attemptCount: 8,
+      distinctOutputCount: 8,
+      partitions: ["reward_train", "reward_validation"],
+    });
+    expect(() => inspectCollectionManifest({
+      ...manifest,
+      groups: [manifest.groups[0]],
+    })).toThrow("2–16 groups");
+    expect(() => inspectCollectionManifest({
+      ...manifest,
+      groups: [manifest.groups[0], {
+        ...manifest.groups[1],
+        candidates: manifest.groups[1].candidates.map((candidate, index) => index === 0
+          ? { ...candidate, output: manifest.groups[0].candidates[0].output }
+          : candidate),
+      }],
+    })).toThrow("globally unique");
+  });
+
   test("keeps Models subpage navigation out of the page header", () => {
     const markup = renderToStaticMarkup(
       createElement(LabsView, {
-        activeTab: "models",
+        activeTab: "overview",
+        modelProjects: [],
+        selectedModelProjectId: null,
+        onSelectModelProject: noop,
         onCreateDataset: noop,
         onCreateModel: noop,
         children: createElement("div", null, "Unified inventory"),
@@ -103,7 +146,7 @@ describe("Lab workspace", () => {
     expect(markup).toContain('aria-label="Models"');
     expect(markup).not.toContain('aria-label="Model sections"');
     expect(markup).not.toContain('role="tab"');
-    expect(markup).toContain(">New model<");
+    expect(markup).toContain(">New Model Project<");
     expect(markup).not.toContain(">Profile<");
     expect(markup).not.toContain(">Home<");
     expect(markup).not.toContain(">Suggestions<");
@@ -112,15 +155,15 @@ describe("Lab workspace", () => {
   });
 
   test("keeps the primary Models tab addressable across refresh and history", () => {
-    expect(labPrimaryTabFromSearch("")).toBe("models");
+    expect(labPrimaryTabFromSearch("")).toBe("overview");
     expect(labPrimaryTabFromSearch("?modelsTab=serving")).toBe("serving");
-    expect(labPrimaryTabFromSearch("?modelsTab=usage")).toBe("usage");
-    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("models");
+    expect(labPrimaryTabFromSearch("?modelsTab=rollouts")).toBe("rollouts");
+    expect(labPrimaryTabFromSearch("?modelsTab=unknown")).toBe("overview");
     expect(
       searchWithLabPrimaryTab("?profile=qa", "tasksets"),
     ).toBe("?profile=qa&modelsTab=tasksets");
     expect(
-      searchWithLabPrimaryTab("?profile=qa&modelsTab=usage", "models"),
+      searchWithLabPrimaryTab("?profile=qa&modelsTab=rollouts", "overview"),
     ).toBe("?profile=qa");
   });
 
@@ -588,6 +631,43 @@ describe("Lab workspace", () => {
     expect(markup).not.toContain("Embedded Taskset builder");
   });
 
+  test("shows resumable drafts in the normal Taskset table", () => {
+    const draft = {
+      ...createTasksetDraft({
+        id: "taskset-layered-artifact-v1-draft",
+        profileId: "artifact-lab",
+        name: "Layered artifact v1",
+        now: "2026-08-24T12:00:00.000Z",
+      }),
+      objective: "Choose six compatible visual traits.",
+    };
+    const markup = renderToStaticMarkup(
+      createElement(LabDatasetsPage, {
+        defaultModel: { providerId: "openpond", modelId: "openpond-chat" },
+        runs: [],
+        selectedId: null,
+        state: {
+          profileId: "artifact-lab",
+          tasksetDrafts: [draft],
+          tasksets: [],
+          modelTasksets: [],
+        } as unknown as TrainingStateResponse,
+        training: { loading: false, refresh: async () => null } as never,
+        onToast: noop,
+        onSelectedIdChange: noop,
+        onOpenDraft: noop,
+        onImproveInChat: noop,
+        onTrainModel: noop,
+        onOpenFiles: noop,
+      }),
+    );
+
+    expect(markup).toContain("Layered artifact v1");
+    expect(markup).toContain("Draft</span>");
+    expect(markup).toContain("Resume draft");
+    expect(markup).toContain("Choose six compatible visual traits.");
+  });
+
   test("uses Taskset language in Lab breadcrumbs", () => {
     const breadcrumbs = buildLabDetailBreadcrumbs(
       {
@@ -685,7 +765,7 @@ describe("Lab workspace", () => {
           providerId: "openrouter",
           modelId: "test/model",
         },
-        tab: "scoring",
+        tab: "metrics",
         taskset,
         onOpenFiles: noop,
         onToast: noop,
@@ -699,9 +779,30 @@ describe("Lab workspace", () => {
       }),
     );
 
-    expect(markup).toContain("Taskset checks");
+    expect(markup).toContain("Evaluation metrics");
+    expect(markup).toContain("Graders and reward gates");
     expect(markup).toContain("Audit graders");
     expect(markup).toContain("Refresh readiness");
+  });
+
+  test("keeps generic Taskset overview focused on evidence instead of speculative method advice", () => {
+    const taskset = tasksetFixture({ ready: true });
+    const markup = renderToStaticMarkup(
+      createElement(LabModelDataset, {
+        artifact: null,
+        defaultModel: { providerId: "openrouter", modelId: "test/model" },
+        tab: "overview",
+        taskset,
+        onOpenFiles: noop,
+        onToast: noop,
+        training: { actions: {} } as never,
+      }),
+    );
+
+    expect(markup).toContain("Technical details");
+    expect(markup).toContain("This Taskset contains");
+    expect(markup).not.toContain("Training compatibility");
+    expect(markup).not.toContain("Needs Dataset Work");
   });
 
   test("does not expose benchmark installation as a Tasksets UI action", () => {
@@ -760,7 +861,7 @@ describe("Lab workspace", () => {
           providerId: "openpond",
           modelId: "openpond-chat",
         },
-        tab: "scoring",
+        tab: "metrics",
         taskset,
         onOpenFiles: noop,
         onToast: noop,

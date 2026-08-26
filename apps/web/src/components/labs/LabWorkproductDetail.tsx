@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  resolveModelBindingPromotionGate,
+  resolveModelBindingEligibility,
   type CreateImproveCandidate,
   type CreateImproveRun,
   type ChatModelRef,
@@ -85,6 +85,7 @@ type WorkproductDetailTab =
 
 export function LabWorkproductDetail({
   workproduct,
+  modelSection,
   runs,
   profile,
   training,
@@ -118,6 +119,7 @@ export function LabWorkproductDetail({
   onInitialBenchmarkOpenConsumed,
 }: {
   workproduct: LabWorkproductSummary;
+  modelSection: "overview" | "versions" | "runs" | "rollouts";
   runs: CreateImproveRun[];
   profile: OpenPondProfileState | null;
   training: TrainingController;
@@ -569,14 +571,14 @@ export function LabWorkproductDetail({
                 className="training-button secondary"
                 disabled={
                   readOnlyModel ||
-                  !resolveModelBindingPromotionGate(
+                  !resolveModelBindingEligibility(
                     selectedModelVersion.lineage
                   )
                 }
                 title={
-                  resolveModelBindingPromotionGate(selectedModelVersion.lineage)
+                  resolveModelBindingEligibility(selectedModelVersion.lineage)
                     ? "Chat with this Version"
-                    : "Chat is unavailable because this Version did not pass evaluation."
+                    : "Chat is unavailable until this Version is ready to run."
                 }
                 type="button"
                 onClick={() => useModelVersion(selectedModelVersion.lineage.id)}
@@ -709,24 +711,29 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
-            <LabModelRunsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onResumeDraft={setEditingRunDraftId}
-            />
-            <LabModelVersionsPage
-              runs={runs}
-              training={training}
-              workproduct={workproduct}
-              readOnly={readOnlyModel}
-              onOpenDataset={onOpenDataset}
-              onOpenEntry={setSelectedModelEntryKey}
-              onToast={onToast}
-            />
+            {modelSection === "overview" || modelSection === "runs" || modelSection === "rollouts" ? (
+              <LabModelRunsPage
+                runs={runs}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                mode={modelSection === "rollouts" ? "rollouts" : "all"}
+                onOpenDataset={onOpenDataset}
+                onOpenEntry={setSelectedModelEntryKey}
+                onResumeDraft={setEditingRunDraftId}
+              />
+            ) : null}
+            {modelSection === "overview" || modelSection === "versions" ? (
+              <LabModelVersionsPage
+                runs={runs}
+                training={training}
+                workproduct={workproduct}
+                readOnly={readOnlyModel}
+                onOpenDataset={onOpenDataset}
+                onOpenEntry={setSelectedModelEntryKey}
+                onToast={onToast}
+              />
+            ) : null}
           </>
         ) : activeTab === "overview" ? (
           <DetailSection title="Overview">

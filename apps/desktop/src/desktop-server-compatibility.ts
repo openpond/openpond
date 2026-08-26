@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_DESKTOP_SERVER_READY_TIMEOUT_MS = 60_000;
 
 export type DesktopServerHealth = {
   ok: boolean;
@@ -9,6 +10,18 @@ export type DesktopServerHealth = {
   version?: string;
   runtimeVersion?: string;
 };
+
+export function desktopServerReadyTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const configured = Number.parseInt(
+    env.OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS ?? "",
+    10,
+  );
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_DESKTOP_SERVER_READY_TIMEOUT_MS;
+}
 
 export function isCompatibleDesktopServer(
   health: DesktopServerHealth | null,

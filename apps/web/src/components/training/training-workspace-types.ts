@@ -3,6 +3,7 @@ import type {
   ChatModelRef,
   CodexReasoningEffort,
   LocalProject,
+  LearnedPreferenceRewardBinding,
   ProviderSettings,
   Session,
 } from "@openpond/contracts";
@@ -19,6 +20,7 @@ export type TrainingLaunchRequest = {
   objective: string | null;
   initialSessionIds?: string[];
   initialTasksetId?: string;
+  learnedPreferenceReward?: LearnedPreferenceRewardBinding | null;
 };
 
 export type TrainingWorkspaceProps = {

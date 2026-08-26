@@ -82,6 +82,7 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { method: "POST", path: "/v1/training/dataset-imports/huggingface/inspect", action: "inspect_huggingface_dataset", status: 201 },
     { method: "POST", path: "/v1/training/harness-reviews/accept", action: "accept_harness_review", status: 201 },
     { method: "POST", path: "/v1/training/task-creations", action: "start_creation", status: 201 },
+    { method: "POST", path: "/v1/training/taskset-drafts", action: "init_taskset_draft", status: 201 },
     { method: "POST", path: "/v1/training/models/from-taskset", action: "create_model_from_taskset", status: 201 },
     { method: "PUT", path: "/v1/training/models", action: "save_model_project" },
     { method: "PUT", path: "/v1/training/model-run-drafts", action: "save_model_run_draft" },
@@ -115,15 +116,37 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/cancel$/, method: "POST", action: "cancel_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/model-runs\/([^/]+)\/resume$/, method: "POST", action: "resume_model_run", key: "modelRunId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/rows$/, method: "GET", action: "dataset_rows", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/operations$/, method: "GET", action: "taskset_operational_state", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/workspace$/, method: "GET", action: "taskset_draft_workspace", key: "draftId" },
+    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "PUT", action: "save_taskset_draft", key: "draftId", wrap: "draft" },
+    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)\/publish$/, method: "POST", action: "publish_taskset_draft", key: "draftId" },
+    { pattern: /^\/v1\/training\/taskset-drafts\/([^/]+)$/, method: "DELETE", action: "delete_taskset_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/attempts$/, method: "POST", action: "execute_taskset_attempt", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-collection$/, method: "POST", action: "materialize_synthetic_collection", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/synthetic-preference-collection$/, method: "POST", action: "materialize_synthetic_preference_collection", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "GET", action: "preference_comparison_list", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons$/, method: "POST", action: "preference_comparison_publish", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/status$/, method: "GET", action: "preference_comparison_calibration_status", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches$/, method: "POST", action: "preference_comparison_calibration_start", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/batches\/([^/]+)\/sync$/, method: "POST", action: "preference_comparison_calibration_sync", key: "tasksetId", assignmentKey: "jobId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/model-reviews\/next$/, method: "POST", action: "preference_comparison_calibration_review_next", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/calibration\/report$/, method: "POST", action: "preference_comparison_calibration_save", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/assignments$/, method: "POST", action: "preference_comparison_create_assignment", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/next$/, method: "POST", action: "preference_comparison_next", key: "tasksetId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/submit$/, method: "POST", action: "preference_comparison_submit", key: "tasksetId", assignmentKey: "assignmentId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/fixture-submit$/, method: "POST", action: "preference_comparison_fixture_submit", key: "tasksetId", assignmentKey: "assignmentId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/model-review$/, method: "POST", action: "preference_comparison_model_review", key: "tasksetId", assignmentKey: "assignmentId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-comparisons\/([^/]+)\/unreviewable$/, method: "POST", action: "preference_comparison_unreviewable", key: "tasksetId", assignmentKey: "assignmentId" },
     { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/benchmark-runs$/, method: "POST", action: "run_taskset_benchmark", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "GET", action: "preference_dataset_list", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/preference-datasets$/, method: "POST", action: "preference_dataset_materialize", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/reward-model-runs$/, method: "POST", action: "reward_model_run_launch", key: "tasksetId" },
+    { pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/retry-qualification$/, method: "POST", action: "reward_model_qualification_retry", key: "runId" },
+    { pattern: /^\/v1\/training\/reward-model-runs\/([^/]+)\/cancel$/, method: "POST", action: "reward_model_run_cancel", key: "runId" },
+    { pattern: /^\/v1\/training\/tasksets\/([^/]+)\/learned-preference-reward-binding$/, method: "POST", action: "learned_preference_reward_binding", key: "tasksetId" },
     { pattern: /^\/v1\/training\/models\/([^/]+)\/harness-refiner-benchmark$/, method: "POST", action: "start_harness_refiner_benchmark", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/sync$/, method: "POST", action: "sync_model_project", key: "modelId" },
+    { pattern: /^\/v1\/training\/models\/([^/]+)\/tasksets\/([^/]+)\/publish$/, method: "POST", action: "publish_model_project_taskset", key: "modelId", assignmentKey: "tasksetId" },
     { pattern: /^\/v1\/training\/model-run-drafts\/([^/]+)$/, method: "DELETE", action: "delete_model_run_draft", key: "draftId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/materialize$/, method: "POST", action: "materialize_dataset_import", key: "importId" },
     { pattern: /^\/v1\/training\/dataset-imports\/([^/]+)\/cancel$/, method: "POST", action: "cancel_dataset_import", key: "importId" },
@@ -159,7 +182,12 @@ export async function handleTrainingRoutes({ deps, request, requestUrl, response
       [item.key]: decodeURIComponent(match[1]!),
       ...(item.assignmentKey ? { [item.assignmentKey]: decodeURIComponent(match[2]!) } : {}),
     };
-    sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl));
+    const controller = new AbortController();
+    request.once("aborted", () => controller.abort(new Error("training_request_aborted")));
+    response.once("close", () => {
+      if (!response.writableEnded) controller.abort(new Error("training_response_closed"));
+    });
+    sendJson(response, 200, await deps.trainingPayload(item.action, payload, requestUrl, controller.signal));
     return true;
   }
   return false;

@@ -49,6 +49,9 @@ function ModelsBrowserProof() {
     <main style={{ height: "100vh" }}>
       <LabsView
         activeTab={activeTab}
+        modelProjects={[]}
+        selectedModelProjectId={null}
+        onSelectModelProject={() => undefined}
         onCreateDataset={() => setLastAction("create-taskset")}
         onCreateModel={() => setLastAction("create-model")}
       >

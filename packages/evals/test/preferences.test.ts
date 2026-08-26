@@ -13,6 +13,7 @@ import {
   createPreferenceComparisonRelease,
   createPreferenceReceipt,
   createPreferenceRewardComponents,
+  materializePreferenceDatasetRelease,
   createRunManifest,
   createVerifierSetRelease,
   aggregatePreferenceReceipts,
@@ -68,6 +69,42 @@ describe("preference comparison contracts", () => {
       purpose: "validation",
       createdAt: NOW,
     })).toThrow("missing, uncollected, or unreviewable");
+  });
+
+  it("allows structured-output comparisons without artifacts", () => {
+    const fixture = comparisonFixture(2, { presentation: "attempt_output" });
+    const candidates = fixture.candidates.map((entry) => ({
+      ...entry,
+      visibleArtifactIds: [],
+    }));
+
+    const assignment = createComparisonAssignment({
+      id: "structured-output-assignment",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates,
+      purpose: "validation",
+      createdAt: NOW,
+    });
+
+    expect(assignment.candidates.every((candidate) => candidate.visibleArtifactIds.length === 0)).toBe(true);
+  });
+
+  it("requires artifacts when the comparison presentation includes them", () => {
+    const fixture = comparisonFixture(2);
+    const candidateWithoutArtifact = {
+      ...fixture.candidates[0]!,
+      visibleArtifactIds: [],
+    };
+
+    expect(() => createComparisonAssignment({
+      id: "artifact-required-assignment",
+      comparisonRelease: fixture.release,
+      taskset: fixture.taskset,
+      candidates: [candidateWithoutArtifact, fixture.candidates[1]!],
+      purpose: "validation",
+      createdAt: NOW,
+    })).toThrow("requires each candidate to expose a reviewable artifact");
   });
 
   it("keeps reject-all distinct from an ordinary low-quality loss", () => {
@@ -197,6 +234,95 @@ describe("preference comparison contracts", () => {
     expect(components[fixture.ids[0]!]).toMatchObject({ status: "scored", normalizedScore: 1, rewardEligible: true });
     expect(components[fixture.ids[1]!]).toMatchObject({ status: "unscorable", normalizedScore: null, rewardEligible: false, failureOwner: "collector" });
   });
+
+  it("keeps synthetic fixture labels smoke-only and distinct from human qualification", () => {
+    const fixture = comparisonFixture(2, { minimumSamples: 1 });
+    const synthetic = createPreferenceReceipt({
+      id: "synthetic-smoke-label",
+      assignment: fixture.assignment,
+      comparisonRelease: fixture.release,
+      reviewer: {
+        kind: "fixture",
+        releaseRef: { id: "fixture-labeler-v1", contentHash: contentHash("fixture-labeler-v1") },
+        fixtureRelease: { id: "artifact-fixture-v1", contentHash: contentHash("artifact-fixture-v1") },
+        labelSource: "synthetic",
+        qualificationEligibility: "smoke_only",
+      },
+      order: [[fixture.ids[0]!], [fixture.ids[1]!]],
+      rejectAll: false,
+      startedAt: NOW,
+      completedAt: NOW,
+    });
+
+    expect(verifyPreferenceReceipt(synthetic)).toBe(true);
+    expect(createPreferenceRewardComponents({
+      assignment: fixture.assignment,
+      comparisonRelease: fixture.release,
+      result: synthetic,
+    })[fixture.ids[0]!]).toMatchObject({
+      status: "unscorable",
+      rewardEligible: false,
+    });
+    expect(createPreferenceRewardComponents({
+      assignment: fixture.assignment,
+      comparisonRelease: fixture.release,
+      result: synthetic,
+      rewardScope: "synthetic_smoke",
+    })[fixture.ids[0]!]).toMatchObject({
+      status: "scored",
+      rewardEligible: true,
+      normalizedScore: 1,
+    });
+
+    const model = modelReceipt(fixture, "model-against-fixture", [[fixture.ids[0]!], [fixture.ids[1]!]]);
+    expect(() => createPreferenceCalibrationReport({
+      id: "fixture-cannot-qualify-model",
+      comparisonRelease: fixture.release,
+      pairs: [{ assignment: fixture.assignment, human: synthetic, model }],
+      createdAt: NOW,
+    })).toThrow("one human and one automated model receipt");
+  });
+
+  it("materializes fixture receipts as group-preserving smoke-only dataset evidence", () => {
+    const fixture = comparisonFixture(4);
+    const receipt = createPreferenceReceipt({
+      id: "synthetic-dataset-label",
+      assignment: fixture.assignment,
+      comparisonRelease: fixture.release,
+      reviewer: {
+        kind: "fixture",
+        releaseRef: { id: "fixture-labeler-v1", contentHash: contentHash("fixture-labeler-v1") },
+        fixtureRelease: { id: "artifact-fixture-v1", contentHash: contentHash("artifact-fixture-v1") },
+        labelSource: "synthetic",
+        qualificationEligibility: "smoke_only",
+      },
+      order: [[fixture.ids[0]!], [fixture.ids[1]!, fixture.ids[2]!], [fixture.ids[3]!]],
+      rejectAll: false,
+      startedAt: NOW,
+      completedAt: NOW,
+    });
+    const release = materializePreferenceDatasetRelease({
+      id: "fixture-preference-dataset-v1",
+      revision: 1,
+      tasksetRelease: fixture.taskset,
+      comparisonRelease: fixture.release,
+      authority: "synthetic_fixture",
+      groups: [{ assignment: fixture.assignment, receipt, partition: "reward_train" }],
+      createdAt: NOW,
+    });
+
+    expect(release).toMatchObject({
+      authority: "synthetic_fixture",
+      qualificationEligibility: "smoke_only",
+      fixtureRelease: receipt.reviewer.kind === "fixture" ? receipt.reviewer.fixtureRelease : null,
+    });
+    expect(release.groups[0]?.attemptRefs).toHaveLength(4);
+    expect(release.groups[0]?.artifactManifestRefs).toHaveLength(4);
+    expect(release.derivedPairs).toHaveLength(6);
+    expect(new Set(release.derivedPairs.map((pair) => pair.groupId))).toEqual(
+      new Set([release.groups[0]!.id]),
+    );
+  });
 });
 
 function comparisonFixture(
@@ -205,6 +331,7 @@ function comparisonFixture(
     quorum?: number;
     purpose?: "calibration" | "training_reward" | "validation" | "frozen_eval";
     minimumSamples?: number;
+    presentation?: "artifact" | "attempt_output";
   } = {},
 ) {
   const environment = createEnvironmentRelease({
@@ -258,7 +385,9 @@ function comparisonFixture(
       showTaskPrompt: true,
       randomizeCandidateOrder: true,
       hideModelIdentity: true,
-      parts: [{ source: "artifact", path: "candidate.png", renderer: "image" }, { source: "attempt_output", path: "/text", renderer: "markdown" }],
+      parts: options.presentation === "attempt_output"
+        ? [{ source: "attempt_output", path: "/text", renderer: "markdown" }]
+        : [{ source: "artifact", path: "candidate.png", renderer: "image" }, { source: "attempt_output", path: "/text", renderer: "markdown" }],
     },
     rubricRef: { id: "preference-fixture-rubric", contentHash: contentHash("rubric"), mediaType: "text/markdown", sizeBytes: 6 },
     criteria: [{ id: "visual-quality", label: "Visual quality", instruction: "Prefer the clearest and most cohesive result.", weight: 1 }],

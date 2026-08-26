@@ -26,10 +26,21 @@ export type PreferenceModelJudgeOutcome =
     }
   | {
       status: "unscorable";
+      code:
+        | "artifact_load_failed"
+        | "native_visual_evidence_missing"
+        | "judge_cancelled"
+        | "judge_timed_out"
+        | "judge_transport_failed"
+        | "judge_response_invalid"
+        | "receipt_validation_failed";
+      failureOwner: "artifact" | "caller" | "model_provider" | "model_output" | "portable_contract";
       reason: string;
       usage: unknown[];
       costUsd: number;
     };
+
+const MODEL_REVIEW_TIMEOUT_MS = 90_000;
 
 /**
  * Runs an automated preference reviewer over the exact presentation candidates.
@@ -55,6 +66,7 @@ export function createPreferenceComparisonModelJudge(deps: {
     model: ChatModelRef;
     rubric: string;
     taskPrompt?: string | null;
+    presentedCandidateOrder?: readonly string[];
     signal: AbortSignal;
   }): Promise<PreferenceModelJudgeOutcome> {
     const usages: unknown[] = [];
@@ -69,7 +81,7 @@ export function createPreferenceComparisonModelJudge(deps: {
         comparisonRelease: input.comparisonRelease,
       });
     } catch (error) {
-      return unscorable(`Visual artifact loading failed: ${errorMessage(error)}`, usages, costUsd);
+      return unscorable("artifact_load_failed", "artifact", `Visual artifact loading failed: ${errorMessage(error)}`, usages, costUsd);
     }
     const imageByAttempt = new Map(candidates.map((candidate) => [candidate.attemptId, candidate.images]));
     if (requiresImages) {
@@ -78,6 +90,8 @@ export function createPreferenceComparisonModelJudge(deps: {
       );
       if (missing.length) {
         return unscorable(
+          "native_visual_evidence_missing",
+          "artifact",
           "Native visual evidence is unavailable for one or more presented candidates.",
           usages,
           costUsd,
@@ -85,7 +99,10 @@ export function createPreferenceComparisonModelJudge(deps: {
       }
     }
 
-    const presentation = input.assignment.presentedCandidateOrder.map((attemptId, index) => ({
+    const presentedCandidateOrder = input.presentedCandidateOrder
+      ? validatePresentedCandidateOrder(input.assignment, input.presentedCandidateOrder)
+      : input.assignment.presentedCandidateOrder;
+    const presentation = presentedCandidateOrder.map((attemptId, index) => ({
       label: `candidate-${index + 1}`,
       attemptId,
       images: imageByAttempt.get(attemptId) ?? [],
@@ -93,10 +110,12 @@ export function createPreferenceComparisonModelJudge(deps: {
     const imageInputs = presentation.flatMap((candidate) => candidate.images);
     const startedAt = now();
     let raw: string;
+    const timeoutSignal = AbortSignal.timeout(MODEL_REVIEW_TIMEOUT_MS);
+    const signal = AbortSignal.any([input.signal, timeoutSignal]);
     try {
       raw = await deps.modelText({
         model: input.model,
-        signal: input.signal,
+        signal,
         requestId: `preference-model-judge:${input.assignment.id}:${input.id}`,
         maxOutputTokens: 1_200,
         temperature: 0,
@@ -122,13 +141,24 @@ export function createPreferenceComparisonModelJudge(deps: {
         ],
       });
     } catch (error) {
-      return unscorable(`Model reviewer did not produce a usable response: ${errorMessage(error)}`, usages, costUsd);
+      const timedOut = timeoutSignal.aborted && !input.signal.aborted;
+      return unscorable(
+        timedOut ? "judge_timed_out" : input.signal.aborted ? "judge_cancelled" : "judge_transport_failed",
+        timedOut || input.signal.aborted ? "caller" : "model_provider",
+        timedOut
+          ? `Model reviewer exceeded the ${MODEL_REVIEW_TIMEOUT_MS / 1_000}-second deadline.`
+          : input.signal.aborted
+            ? "Model review was cancelled by the caller."
+            : `Model reviewer did not produce a usable response: ${errorMessage(error)}`,
+        usages,
+        costUsd,
+      );
     }
     let judgment: ParsedPreferenceJudgment;
     try {
       judgment = parsePreferenceModelJudgment(raw, presentation.map((candidate) => candidate.label));
     } catch (error) {
-      return unscorable(`Model reviewer returned invalid ranking JSON: ${errorMessage(error)}`, usages, costUsd);
+      return unscorable("judge_response_invalid", "model_output", `Model reviewer returned invalid ranking JSON: ${errorMessage(error)}`, usages, costUsd);
     }
     try {
       const receipt = createPreferenceReceipt({
@@ -155,7 +185,7 @@ export function createPreferenceComparisonModelJudge(deps: {
       });
       return { status: "scored", receipt, usage: usages, costUsd };
     } catch (error) {
-      return unscorable(`Model reviewer receipt failed verification: ${errorMessage(error)}`, usages, costUsd);
+      return unscorable("receipt_validation_failed", "portable_contract", `Model reviewer receipt failed verification: ${errorMessage(error)}`, usages, costUsd);
     }
   }
 
@@ -262,11 +292,28 @@ function jsonObjectFromText(value: string): string {
 }
 
 function unscorable(
+  code: Extract<PreferenceModelJudgeOutcome, { status: "unscorable" }>["code"],
+  failureOwner: Extract<PreferenceModelJudgeOutcome, { status: "unscorable" }>["failureOwner"],
   reason: string,
   usage: unknown[],
   costUsd: number,
 ): PreferenceModelJudgeOutcome {
-  return { status: "unscorable", reason, usage, costUsd };
+  return { status: "unscorable", code, failureOwner, reason, usage, costUsd };
+}
+
+function validatePresentedCandidateOrder(
+  assignment: ComparisonAssignment,
+  value: readonly string[],
+): readonly string[] {
+  const expected = assignment.candidates.map((candidate) => candidate.attemptRef.id);
+  if (
+    value.length !== expected.length
+    || new Set(value).size !== expected.length
+    || value.some((attemptId) => !expected.includes(attemptId))
+  ) {
+    throw new Error("Model-review presentation order must contain every assignment candidate exactly once.");
+  }
+  return value;
 }
 
 function errorMessage(error: unknown): string {

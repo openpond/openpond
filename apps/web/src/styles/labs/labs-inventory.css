@@ -67,6 +67,27 @@
   margin-top: 12px;
 }
 
+.labs-dataset-advanced-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.labs-dataset-advanced-action code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.labs-dataset-advanced-action .training-button {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
 .labs-model-create-dialog textarea,
 .labs-model-create-dialog select {
   width: 100%;

@@ -27,6 +27,60 @@ describe("deterministic grader primitives", () => {
     await expect(gradeAttempt({ task, attempt: attemptFixture({ output: { response: "expected\n" } }), graders: [grader] })).resolves.toMatchObject({ passed: false, score: 0 });
   });
 
+  test("validates forced JSON semantically against the structured output contract", async () => {
+    const task = tasksetFixture().tasks[1]!;
+    const grader = {
+      id: "structured-selection",
+      version: "1",
+      label: "Structured selection",
+      kind: "schema" as const,
+      weight: 1,
+      hardGate: true,
+      rewardEligible: true,
+      privileged: false,
+      config: {
+        operator: "json_schema_subset",
+        jsonField: "text",
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["traits"],
+          properties: {
+            traits: {
+              type: "object",
+              additionalProperties: false,
+              required: ["background", "skin"],
+              properties: {
+                background: { type: "string", enum: ["background-001", "background-002"] },
+                skin: { type: "string", enum: ["skin-001"] },
+              },
+            },
+          },
+        },
+      },
+      metadata: {},
+    };
+    await expect(gradeAttempt({
+      task,
+      attempt: attemptFixture({
+        output: { text: '{"traits":{"background":"background-002","skin":"skin-001"}}' },
+      }),
+      graders: [grader],
+    })).resolves.toMatchObject({ passed: true, score: 1 });
+    await expect(gradeAttempt({
+      task,
+      attempt: attemptFixture({
+        output: { text: '{"traits":{"background":"unknown","skin":"skin-001"}}' },
+      }),
+      graders: [grader],
+    })).resolves.toMatchObject({ passed: false, score: 0 });
+    await expect(gradeAttempt({
+      task,
+      attempt: attemptFixture({ output: { text: "not json" } }),
+      graders: [grader],
+    })).resolves.toMatchObject({ passed: false, score: 0 });
+  });
+
   test("extracts and compares deterministic mathematical final answers", async () => {
     const task = {
       ...tasksetFixture().tasks[1]!,

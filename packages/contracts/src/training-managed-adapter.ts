@@ -70,6 +70,18 @@ export type ModelBindingPromotionGate =
       canonicalDeploymentId: string;
     };
 
+export type ModelBindingEligibility =
+  | {
+      kind: "source_artifact";
+      canonicalArtifactId: null;
+      canonicalDeploymentId: null;
+    }
+  | {
+      kind: "sandbox_serving";
+      canonicalArtifactId: string;
+      canonicalDeploymentId: string;
+    };
+
 export function managedAdapterCustomerBindingAllowed(
   lineage: ManagedAdapterPromotionLineage,
 ): boolean {
@@ -116,6 +128,32 @@ export function resolveModelBindingPromotionGate(
     return {
       kind: "sandbox_customer_binding",
       evaluationArtifactId: null,
+      canonicalArtifactId: projection.canonicalArtifactId,
+      canonicalDeploymentId: projection.canonicalDeploymentId,
+    };
+  }
+  return null;
+}
+
+/** Runtime eligibility is intentionally independent from evaluation quality. */
+export function resolveModelBindingEligibility(
+  lineage: ManagedAdapterPromotionLineage,
+): ModelBindingEligibility | null {
+  const projection = lineage.managedServing;
+  if (!projection) {
+    return {
+      kind: "source_artifact",
+      canonicalArtifactId: null,
+      canonicalDeploymentId: null,
+    };
+  }
+  if (
+    managedAdapterProjectionReady(projection)
+    && projection.canonicalArtifactId
+    && projection.canonicalDeploymentId
+  ) {
+    return {
+      kind: "sandbox_serving",
       canonicalArtifactId: projection.canonicalArtifactId,
       canonicalDeploymentId: projection.canonicalDeploymentId,
     };

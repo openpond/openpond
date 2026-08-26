@@ -52,6 +52,10 @@
       "types": "./dist/types/preferences.d.ts",
       "import": "./dist/preferences.js"
     },
+    "./learned-preference": {
+      "types": "./dist/types/learned-preference.d.ts",
+      "import": "./dist/learned-preference.js"
+    },
     "./review": {
       "types": "./dist/types/review-conformance.d.ts",
       "import": "./dist/review-conformance.js"

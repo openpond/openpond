@@ -16,7 +16,7 @@ import { LabStatusBadge } from "./LabStatusBadge";
 import { PreferenceComparisonReview } from "./PreferenceComparisonReview";
 
 type DatasetSplit = "train" | "validation" | "frozen_eval";
-type DatasetDetailTab = "overview" | "cases" | "scoring";
+type DatasetDetailTab = "overview" | "scenarios" | "review" | "metrics";
 type Task = Taskset["tasks"][number];
 
 const SPLITS: Array<{ id: DatasetSplit; label: string }> = [
@@ -66,12 +66,15 @@ export function LabModelDataset({
   const [rowsLoading, setRowsLoading] = useState(false);
   const [rowsError, setRowsError] = useState<string | null>(null);
   const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const [metricOperations, setMetricOperations] = useState<Awaited<ReturnType<typeof training.actions.tasksetOperationalState>>>(null);
+  const [metricDatasets, setMetricDatasets] = useState<Awaited<ReturnType<typeof training.actions.listPreferenceDatasets>>>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
   const sourceById = useMemo(
     () => new Map(taskset.sourceRefs.map((source) => [source.id, source])),
     [taskset.sourceRefs],
   );
   useEffect(() => {
-    if (tab !== "cases" || !artifact) return undefined;
+    if (tab !== "scenarios" || !artifact) return undefined;
     let cancelled = false;
     setRowsLoading(true);
     setRowsError(null);
@@ -96,6 +99,23 @@ export function LabModelDataset({
       cancelled = true;
     };
   }, [artifact, cursor, split, tab, taskset.id, training.actions]);
+
+  useEffect(() => {
+    if (tab !== "metrics") return;
+    let active = true;
+    setMetricsLoading(true);
+    void Promise.all([
+      training.actions.tasksetOperationalState(taskset.id),
+      training.actions.listPreferenceDatasets(taskset.id),
+    ]).then(([operations, datasets]) => {
+      if (!active) return;
+      setMetricOperations(operations);
+      setMetricDatasets(datasets);
+    }).finally(() => {
+      if (active) setMetricsLoading(false);
+    });
+    return () => { active = false; };
+  }, [tab, taskset.id, training.actions]);
 
   const visibleTasks = artifact
     ? artifactRows
@@ -133,6 +153,19 @@ export function LabModelDataset({
     (signal) => signal.approved && signal.labelKind === "rubric",
   ).length;
   const hasModelJudge = taskset.graders.some((grader) => grader.kind === "model_judge");
+  const reviewPolicy = taskset.metadata.tasksetReviewPolicy;
+  const storedReviewPolicy = reviewPolicy && typeof reviewPolicy === "object" && !Array.isArray(reviewPolicy)
+    ? reviewPolicy as Record<string, unknown>
+    : null;
+  const graderRubric = taskset.graders.find(
+    (grader) => grader.kind === "model_judge" || grader.kind === "human",
+  )?.rubric ?? "";
+  const preferenceRubric = typeof storedReviewPolicy?.rubric === "string"
+    ? storedReviewPolicy.rubric
+    : graderRubric;
+  const preferenceMinimumSamples = typeof storedReviewPolicy?.minimumSamples === "number"
+    ? storedReviewPolicy.minimumSamples
+    : 100;
   const workTask = taskset.environment.kind === "work"
     ? taskset.tasks.find((task) => task.split !== "frozen_eval") ?? null
     : null;
@@ -186,32 +219,9 @@ export function LabModelDataset({
               paired {titleCase(taskset.benchmark.evaluationSplit.replaceAll("_", " "))} runs.
             </p>
           </div>
-        ) : (
-          <div className="labs-dataset-method-readiness">
-            <strong>Training compatibility</strong>
-            <div className="training-pills">
-              {taskset.readiness?.methodReadiness.length
-                ? taskset.readiness.methodReadiness.map((entry) => (
-                  <span key={entry.method} title={entry.reasons.join(" ")}>
-                    {entry.method.toUpperCase()} · {titleCase(entry.status)}
-                  </span>
-                ))
-                : taskset.capabilities.compatibleMethods
-                    .filter((method) => !["none", "retrieval"].includes(method))
-                    .map((method) => <span key={method}>{method.toUpperCase()}</span>)}
-            </div>
-            {taskset.readiness?.methodReadiness.some((entry) => entry.reasons.length) ? (
-              <ul>
-                {taskset.readiness.methodReadiness.flatMap((entry) =>
-                  entry.reasons.map((reason) => (
-                    <li key={`${entry.method}:${reason}`}><strong>{entry.method.toUpperCase()}:</strong> {reason}</li>
-                  )))}
-              </ul>
-            ) : null}
-          </div>
-        )}
-        <details className="labs-dataset-advanced-details">
-          <summary>Technical details</summary>
+        ) : null}
+        <section className="labs-dataset-technical-details">
+          <h3>Technical details</h3>
           <dl className="training-configuration-list">
             <Fact label="Taskset ID" value={taskset.id} />
             <Fact label="Revision" value={String(taskset.revision)} />
@@ -247,12 +257,43 @@ export function LabModelDataset({
           >
             Open files
           </button>
-        </details>
+        </section>
       </DetailSection>
     );
   }
 
-  if (tab === "scoring") {
+  if (tab === "review") {
+    return (
+      <>
+        <PreferenceComparisonReview
+          defaultModel={defaultModel}
+          defaultRubric={preferenceRubric}
+          defaultMinimumSamples={preferenceMinimumSamples}
+          reviewerKey={taskset.profileId}
+          tasksetId={taskset.id}
+          training={training}
+        />
+        <PreferenceDatasetSummary tasksetId={taskset.id} training={training} />
+      </>
+    );
+  }
+
+  if (tab === "metrics") {
+    const metricPolicy = taskset.metrics ?? {
+      primaryMetric: "score",
+      aggregation: "mean_score" as const,
+    };
+    const grades = metricOperations?.grades ?? [];
+    const scoredGrades = grades.filter((grade) => grade.score !== null);
+    const meanScore = scoredGrades.length
+      ? scoredGrades.reduce((sum, grade) => sum + (grade.score ?? 0), 0) / scoredGrades.length
+      : null;
+    const passRate = grades.length
+      ? grades.filter((grade) => grade.passed).length / grades.length
+      : null;
+    const attempts = metricOperations?.attempts ?? [];
+    const distinctOutputs = new Set(attempts.map((attempt) => JSON.stringify(attempt.output))).size;
+    const preferenceGroups = (metricDatasets ?? []).reduce((sum, dataset) => sum + dataset.groups.length, 0);
     return (
       <>
         {taskset.purpose === "benchmark" ? (
@@ -265,9 +306,55 @@ export function LabModelDataset({
             </p>
           </DetailSection>
         ) : null}
-        <DetailSection title="Taskset checks">
+        <DetailSection title="Evaluation metrics">
           <p className="labs-detail-copy">
-            Audit the reward and graders before creating a Model run.
+            This view summarizes recorded Attempt, grader, artifact, and preference evidence. Run configuration belongs to Generate &amp; Runs.
+          </p>
+          <dl className="labs-inline-facts">
+            <Fact label="Primary metric" value={titleCase(metricPolicy.primaryMetric)} />
+            <Fact label="Aggregation" value={titleCase(metricPolicy.aggregation)} />
+            <Fact label="Attempts" value={metricsLoading ? "Loading…" : String(attempts.length)} />
+            <Fact label="Distinct outputs" value={metricsLoading ? "Loading…" : String(distinctOutputs)} />
+            <Fact label="Mean score" value={meanScore === null ? "—" : meanScore.toFixed(3)} />
+            <Fact label="Pass rate" value={passRate === null ? "—" : `${Math.round(passRate * 100)}%`} />
+            <Fact label="Artifacts" value={String(metricOperations?.artifacts.length ?? 0)} />
+            <Fact label="Preference groups" value={String(preferenceGroups)} />
+          </dl>
+        </DetailSection>
+        <DetailSection title="Graders and reward gates">
+          {taskset.graders.length ? (
+            <div className="labs-dataset-examples">
+              {taskset.graders.map((grader) => (
+                <details className="labs-dataset-example" key={grader.id}>
+                  <summary>
+                    <span className="labs-dataset-example-title">
+                      <strong>{grader.label}</strong>
+                      <small>{titleCase(grader.kind)} · weight {grader.weight}</small>
+                    </span>
+                    <LabStatusBadge
+                      label={grader.hardGate ? "Required" : "Advisory"}
+                      value={grader.hardGate ? "ready" : "available"}
+                    />
+                  </summary>
+                  <div className="labs-dataset-example-body">
+                    <dl className="training-configuration-list">
+                      <Fact label="ID" value={grader.id} />
+                      <Fact label="Version" value={grader.version} />
+                      <Fact label="Reward eligible" value={grader.rewardEligible ? "Yes" : "No"} />
+                      <Fact label="Privileged" value={grader.privileged ? "Yes" : "No"} />
+                    </dl>
+                    {"rubric" in grader ? <pre>{grader.rubric}</pre> : null}
+                    {"config" in grader ? <pre>{JSON.stringify(grader.config, null, 2)}</pre> : null}
+                    {"module" in grader ? <p><code>{grader.module}</code> · {grader.exportName}</p> : null}
+                  </div>
+                </details>
+              ))}
+            </div>
+          ) : <p className="labs-detail-copy">No graders are attached to this Taskset revision.</p>}
+        </DetailSection>
+        <DetailSection title="Diagnostics">
+          <p className="labs-detail-copy">
+            Re-run authoring checks when grader code, fixtures, or readiness evidence changes.
           </p>
           <div className="labs-dataset-detail-actions">
             {workTask ? (
@@ -335,27 +422,12 @@ export function LabModelDataset({
             </div>
           ) : null}
         </DetailSection>
-        <DetailSection title="Graders">
-          <div className="labs-dataset-grader-list">
-            {taskset.graders.map((grader) => (
-              <div key={grader.id}>
-                <strong>{grader.label}</strong>
-                <small>{titleCase(grader.kind)}</small>
-              </div>
-            ))}
-          </div>
-        </DetailSection>
-        <PreferenceComparisonReview
-          reviewerKey={taskset.profileId}
-          tasksetId={taskset.id}
-          training={training}
-        />
       </>
     );
   }
 
   return (
-      <DetailSection title="Cases">
+      <DetailSection title="Scenarios">
         <div className="labs-method-tabs labs-dataset-tabs" role="tablist" aria-label="Taskset splits">
           {SPLITS.map((item) => (
             <button
@@ -443,6 +515,51 @@ export function LabModelDataset({
   );
 }
 
+function PreferenceDatasetSummary({
+  tasksetId,
+  training,
+}: {
+  tasksetId: string;
+  training: ReturnType<typeof useTraining>;
+}) {
+  const [datasets, setDatasets] = useState<Awaited<ReturnType<typeof training.actions.listPreferenceDatasets>>>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function refresh(): Promise<void> {
+    setLoading(true);
+    setDatasets(await training.actions.listPreferenceDatasets(tasksetId));
+    setLoading(false);
+  }
+
+  return (
+    <DetailSection title="Preference datasets">
+      <div className="labs-dataset-detail-actions">
+        <button className="training-button secondary" disabled={loading} type="button" onClick={() => void refresh()}>
+          {loading ? "Loading…" : "Load releases"}
+        </button>
+      </div>
+      {datasets?.length ? (
+        <div className="training-table-wrap">
+          <table className="training-data-table">
+            <thead><tr><th>Release</th><th>Authority</th><th>Groups</th><th>Pairs</th><th>Eligibility</th></tr></thead>
+            <tbody>
+              {datasets.map((dataset) => (
+                <tr key={dataset.contentHash}>
+                  <td>{dataset.id}</td>
+                  <td>{titleCase(dataset.authority)}</td>
+                  <td>{dataset.groups.length}</td>
+                  <td>{dataset.derivedPairs.length}</td>
+                  <td>{titleCase(dataset.qualificationEligibility)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : datasets ? <p className="labs-detail-copy">No Preference Dataset release has been materialized.</p> : null}
+    </DetailSection>
+  );
+}
+
 
 function DatasetExample({
   index,
@@ -476,11 +593,11 @@ function DatasetExample({
           <p>{prompt}</p>
         </section>
         <section>
-          <h3>{task.split === "frozen_eval" ? "Expected result" : "Approved answer"}</h3>
+          <h3>{task.split === "frozen_eval" ? "Held-out reference" : "Reference output"}</h3>
           {task.split === "frozen_eval" ? (
-            <p>The answer stays held out and is only opened by the Eval runner.</p>
+            <p>Any reference stays held out and is only opened by the Eval runner.</p>
           ) : (
-            <pre>{finalAnswer ?? "No approved answer is attached."}</pre>
+            <pre>{finalAnswer ?? "No reference output is attached. Graders and review define success."}</pre>
           )}
         </section>
         {toolNames.length ? (
@@ -526,7 +643,7 @@ function datasetDescription(input: {
     && input.chatSources === 0
     && input.customerSources === 0
   ) {
-    return `This dataset contains ${input.sourceCount} generated scenarios. It uses no raw chats or customer data.`;
+    return `This Taskset contains ${input.sourceCount} generated scenarios. It uses no raw chats or customer data.`;
   }
   const parts = [
     `${input.sourceCount} source${input.sourceCount === 1 ? "" : "s"}`,
@@ -535,7 +652,7 @@ function datasetDescription(input: {
   ];
   if (input.customerSources === 0) parts.push("no sources marked as customer data");
   else parts.push(`${input.customerSources} source${input.customerSources === 1 ? "" : "s"} marked as customer data`);
-  return `This dataset contains ${parts.join(", ")}.`;
+  return `This Taskset contains ${parts.join(", ")}.`;
 }
 
 function taskPrompt(task: Task): string {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   DEFAULT_CHAT_MODEL,
   DEFAULT_CHAT_PROVIDER,
@@ -292,10 +292,12 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     toggleSessionPinned,
     toggleProjectPinned,
     toggleSessionSavedForLater,
+    moveProjectToCloud,
     startCloudSetupUpload,
     changeWorkspaceTarget,
     sendPromptFromMainComposer,
     openSandboxWorkspace,
+    openCloudProjectDialog,
     openUrlInBrowserPanel,
     showBrowserPanel,
     showChangesPanel,
@@ -326,6 +328,33 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     expandProject(projectId);
     requestMainComposerFocus();
   }, [expandProject, requestMainComposerFocus, setSelectedAppId, setSelectedProjectId, setSelectedSessionId, setView]);
+  const projectsTeamId = teamChatTeamId ?? appDefaults.defaultTeamId ?? null;
+  const projectsForActiveTeam = useMemo(
+    () =>
+      projectRows.filter(
+        (project) =>
+          project.kind === "local" ||
+          (projectsTeamId !== null && project.project.teamId === projectsTeamId),
+      ),
+    [projectRows, projectsTeamId],
+  );
+  const projectTaskCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const session of activeSessions) {
+      const projectId = sidebarProjectIdBySessionId[session.id];
+      if (!projectId) continue;
+      counts[projectId] = (counts[projectId] ?? 0) + 1;
+    }
+    for (const project of localProjectRows) {
+      if (project.kind !== "local") continue;
+      const linkedProjectId = project.project.linkedSandboxProject?.projectId;
+      if (!linkedProjectId || !project.cloudLinkTrusted) continue;
+      const cloudProjectKey = projectSelectionKey("cloud", linkedProjectId);
+      counts[project.id] =
+        (counts[project.id] ?? 0) + (counts[cloudProjectKey] ?? 0);
+    }
+    return counts;
+  }, [activeSessions, localProjectRows, sidebarProjectIdBySessionId]);
   const [nativeSkillSidebar, setNativeSkillSidebar] =
     useState<SkillSourceDocument | null>(null);
   const [extensionSkillSidebar, setExtensionSkillSidebar] =
@@ -913,6 +942,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             view !== "labs" &&
             view !== "scheduled" &&
             view !== "outputs" &&
+            view !== "projects" &&
             (
               activeExperience === "development" ||
               (
@@ -1065,6 +1095,15 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
           onOpenSession: openSessionInChat,
           onExperienceHandoff: handoffExperience,
           cloudProjects: bootstrap?.cloudProjects ?? [],
+          projects: projectsForActiveTeam,
+          projectsAccountBaseUrl:
+            account?.baseUrl ?? account?.activeProfile?.baseUrl ?? null,
+          projectsTeamName: teamChatOrganization?.displayName ?? null,
+          projectTaskCounts,
+          onNewCloudProject: openCloudProjectDialog,
+          onNewProjectTask: (project) => beginProjectChat(project.id),
+          onToggleProjectPinned: toggleProjectPinned,
+          onUploadLocalProject: moveProjectToCloud,
           chatHistoryHasMore: selectedChatHistoryHasMore,
           chatHistoryLoading: selectedChatHistoryLoading,
           onDiffPanelResizeStart: startDiffPanelResize,

@@ -110,6 +110,14 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
     point.learningRate == null
       ? []
       : [{ step: point.step, value: point.learningRate }]);
+  const policyKlPoints = policyMetrics.flatMap((point) =>
+    point.kl == null ? [] : [{ step: point.step, value: point.kl }]);
+  const policyEntropyPoints = policyMetrics.flatMap((point) =>
+    point.entropy == null ? [] : [{ step: point.step, value: point.entropy }]);
+  const policyClipPoints = policyMetrics.flatMap((point) =>
+    point.policyClipFraction == null
+      ? []
+      : [{ step: point.step, value: point.policyClipFraction }]);
   const rolloutPoints = useMemo(
     () => rolloutRewardPoints(detail?.events ?? []),
     [detail?.events],
@@ -129,6 +137,9 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
           learningRatePoints={policyLearningRatePoints}
           rewardPoints={policyRewardPoints}
           rolloutPoints={rolloutPoints}
+          klPoints={policyKlPoints}
+          entropyPoints={policyEntropyPoints}
+          clipPoints={policyClipPoints}
         />
       );
     }
@@ -223,6 +234,9 @@ export function TrainingRunMetrics({ detail, loading, error }: { detail: Trainin
             : rewardPoints.filter((point) => point.step <= committedStepLimit)
         }
         rolloutPoints={rolloutPoints}
+        klPoints={[]}
+        entropyPoints={[]}
+        clipPoints={[]}
       />
     );
   }
@@ -264,10 +278,16 @@ function GrpoChartGrid({
   rewardPoints,
   rolloutPoints,
   learningRatePoints,
+  klPoints,
+  entropyPoints,
+  clipPoints,
 }: {
   rewardPoints: Array<{ step: number; value: number }>;
   rolloutPoints: Array<{ step: number; value: number }>;
   learningRatePoints: Array<{ step: number; value: number }>;
+  klPoints: Array<{ step: number; value: number }>;
+  entropyPoints: Array<{ step: number; value: number }>;
+  clipPoints: Array<{ step: number; value: number }>;
 }) {
   return (
     <div className="training-run-metrics">
@@ -288,6 +308,15 @@ function GrpoChartGrid({
           label="Learning rate"
           points={learningRatePoints}
         />
+        {klPoints.length ? (
+          <MetricChartCard format={compactNumber} label="KL divergence" points={klPoints} />
+        ) : null}
+        {entropyPoints.length ? (
+          <MetricChartCard format={compactNumber} label="Policy entropy" points={entropyPoints} />
+        ) : null}
+        {clipPoints.length ? (
+          <MetricChartCard format={percent} label="Clip fraction" points={clipPoints} />
+        ) : null}
       </div>
     </div>
   );

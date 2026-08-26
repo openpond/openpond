@@ -62,10 +62,6 @@ import {
   profileStateForRef,
 } from "../../lib/profile-selection";
 import { selectComposerProfileTransaction } from "../../lib/profile-selection-transaction";
-import { AppTerminalPanel } from "./AppTerminalPanel";
-import { RightSidebarHomePanel } from "./RightSidebarHomePanel";
-import { WorkSidebarPanel } from "./WorkSidebarPanel";
-import { NewExperienceSwitcher } from "./NewExperienceSwitcher";
 import { trainingCreationForSession } from "../training/training-flow";
 import type { TrainingLaunchRequest } from "../training/training-workspace-types";
 import type { TrainingSidebarSummary } from "../training/TrainingRunSidebarSummary";
@@ -95,22 +91,27 @@ import type { ComposerAttachmentRequest } from "../../lib/sidebar-files";
 import type { LabSkillSourceSelection } from "../labs/lab-skill-source";
 import { outputHandoffPrompt } from "../../lib/experience-handoff";
 import { useMainPaneChatScroll } from "./useMainPaneChatScroll";
-import { CollaborationTabs } from "../collaboration/CollaborationTabs";
 
 import {
   AppsView,
+  AppTerminalPanel,
   BrowserSidebar,
   GetStartedView,
   LabsRoute,
   LabSkillSidebar,
   NativeSkillSidebar,
+  NewExperienceSwitcher,
   OutputsPage,
+  ProjectsPage,
+  RightSidebarHomePanel,
   ScheduledWorkPage,
   RightChatPanelStack,
   TeamAiThreadPanel,
   TeamAgentConversationPanel,
   TeamChatProView,
   TeamChatView,
+  CollaborationTabs,
+  WorkSidebarPanel,
   CommunityView,
   WorkspaceDiffPanel,
 } from "./MainPaneLazyViews";
@@ -205,6 +206,14 @@ export function MainPane({
   onOpenSession,
   onExperienceHandoff,
   cloudProjects,
+  projects,
+  projectsAccountBaseUrl,
+  projectsTeamName,
+  projectTaskCounts,
+  onNewCloudProject,
+  onNewProjectTask,
+  onToggleProjectPinned,
+  onUploadLocalProject,
   chatHistoryHasMore = false,
   chatHistoryLoading = false,
   onDiffPanelResizeStart,
@@ -1466,18 +1475,20 @@ export function MainPane({
     workPanel ??
     homePanel;
   const terminalPanel = (
-    <AppTerminalPanel
-      open={terminalOpen}
-      connection={connection}
-      scope={terminalScope}
-      tabs={terminalTabs}
-      onTabsChange={onTerminalTabsChange}
-      cwd={terminalCwd}
-      appId={activeWorkspaceAppId}
-      workspaceName={workspaceName}
-      queuedCommand={pendingTerminalCommand}
-      onClose={onCloseTerminal}
-    />
+    <Suspense fallback={null}>
+      <AppTerminalPanel
+        open={terminalOpen}
+        connection={connection}
+        scope={terminalScope}
+        tabs={terminalTabs}
+        onTabsChange={onTerminalTabsChange}
+        cwd={terminalCwd}
+        appId={activeWorkspaceAppId}
+        workspaceName={workspaceName}
+        queuedCommand={pendingTerminalCommand}
+        onClose={onCloseTerminal}
+      />
+    </Suspense>
   );
   return (
     <main
@@ -1488,7 +1499,9 @@ export function MainPane({
       }`}
     >
       {view === "team" || view === "community" ? (
-        <CollaborationTabs onSelect={setView} view={view} />
+        <Suspense fallback={null}>
+          <CollaborationTabs onSelect={setView} view={view} />
+        </Suspense>
       ) : null}
       {view === "apps" ? (
         <Suspense fallback={null}>
@@ -1531,6 +1544,20 @@ export function MainPane({
         <Suspense fallback={null}>
           <OutputsPage connection={connection} onViewChat={onOpenSession} />
         </Suspense>
+      ) : view === "projects" ? (
+        <Suspense fallback={null}>
+          <ProjectsPage
+            accountBaseUrl={projectsAccountBaseUrl}
+            connection={connection}
+            onNewCloudProject={onNewCloudProject}
+            onNewTask={onNewProjectTask}
+            onTogglePinned={onToggleProjectPinned}
+            onUploadLocalProject={onUploadLocalProject}
+            projects={projects}
+            taskCountByProjectId={projectTaskCounts}
+            teamName={projectsTeamName}
+          />
+        </Suspense>
       ) : view === "labs" ? (
         rightPanelExpanded ? (
           <Suspense fallback={null}>{rightPanel}</Suspense>
@@ -1541,12 +1568,13 @@ export function MainPane({
                 account={bootstrap?.account ?? null}
                 closeDetailRequestId={labCloseDetailRequestId}
                 closeDetailKind={labCloseDetailKind}
-                onNewModel={(initialTasksetId) => {
+                onNewModel={(initialTasksetId, learnedPreferenceReward) => {
                   setTrainingLaunchRequest({
                     id: Date.now(),
                     objective: null,
                     initialSessionIds: [],
                     initialTasksetId,
+                    learnedPreferenceReward,
                   });
                 }}
                 onUseAgent={handleUseAgent}
@@ -1780,10 +1808,12 @@ export function MainPane({
       ) : (
         <>
           <section className="start-panel">
-            <NewExperienceSwitcher
-              value={experience === "chat" ? "chat" : "work"}
-              onChange={onNewExperienceChange}
-            />
+            <Suspense fallback={null}>
+              <NewExperienceSwitcher
+                value={experience === "chat" ? "chat" : "work"}
+                onChange={onNewExperienceChange}
+              />
+            </Suspense>
             <div className="start-welcome">
               <h1>{startMessage}</h1>
               {canSyncWorkspace && (

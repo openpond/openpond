@@ -65,7 +65,7 @@ describe("ScheduledWorkPage", () => {
 
     expect(markup).toContain('aria-label="Refresh schedules"');
     expect(markup).toContain('aria-label="Schedule filter"');
-    expect(markup).toContain('aria-label="Scheduled view"');
+    expect(markup).toContain('aria-label="Workflow view"');
     expect(markup).toContain('aria-selected="true" class="active" role="tab" type="button">Calendar');
     expect(markup).toContain('<option value="all" selected="">All</option>');
     expect(markup).not.toContain("Ask OpenPond to schedule");

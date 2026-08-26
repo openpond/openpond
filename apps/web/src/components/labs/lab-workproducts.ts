@@ -7,6 +7,7 @@ import type {
 import {
   conciseWorkproductName,
   managedAdapterCustomerBindingAllowed,
+  resolveModelBindingEligibility,
   resolveModelBindingPromotionGate,
 } from "@openpond/contracts";
 
@@ -284,7 +285,7 @@ export function labWorkproductProjection(input: {
       path: `tasksets/${row.taskset.id}`,
       enabled: row.localModel
         ? row.localModel.status === "imported" &&
-          Boolean(resolveModelBindingPromotionGate(row.localModel))
+          Boolean(resolveModelBindingEligibility(row.localModel))
         : null,
       runIds: modelRun
         ? [...new Set([...(existing?.runIds ?? []), modelRun.id])]

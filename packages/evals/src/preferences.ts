@@ -43,6 +43,11 @@ export const PreferenceReviewerKindSchema = z.enum([
   "human",
   "model",
   "deterministic",
+  "fixture",
+]);
+export const PreferenceRewardScopeSchema = z.enum([
+  "production",
+  "synthetic_smoke",
 ]);
 export const PreferenceRendererSchema = z.enum([
   "markdown",
@@ -152,7 +157,7 @@ const ComparisonCandidateSchema = z.object({
   attemptRef: ImmutableReleaseRefSchema,
   runManifestRef: ImmutableReleaseRefSchema,
   artifactManifestRef: ImmutableReleaseRefSchema,
-  visibleArtifactIds: z.array(ReleaseIdSchema).min(1).max(100_000),
+  visibleArtifactIds: z.array(ReleaseIdSchema).max(100_000),
 }).strict().superRefine((candidate, context) => {
   if (new Set(candidate.visibleArtifactIds).size !== candidate.visibleArtifactIds.length) {
     context.addIssue({
@@ -204,14 +209,25 @@ export const ComparisonAssignmentSchema = ComparisonAssignmentBaseSchema
 
 const PreferenceOrderSchema = z.array(z.array(ReleaseIdSchema).min(1).max(4)).max(4);
 
+const PreferenceReviewerSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.enum(["human", "model", "deterministic"]),
+    releaseRef: ImmutableReleaseRefSchema,
+  }).strict(),
+  z.object({
+    kind: z.literal("fixture"),
+    releaseRef: ImmutableReleaseRefSchema,
+    fixtureRelease: ImmutableReleaseRefSchema,
+    labelSource: z.literal("synthetic"),
+    qualificationEligibility: z.literal("smoke_only"),
+  }).strict(),
+]);
+
 const PreferenceReceiptBaseSchema = z.object({
   schemaVersion: z.literal("openpond.preferenceReceipt.v1"),
   id: ReleaseIdSchema,
   assignmentRef: ImmutableReleaseRefSchema,
-  reviewer: z.object({
-    kind: PreferenceReviewerKindSchema,
-    releaseRef: ImmutableReleaseRefSchema,
-  }).strict(),
+  reviewer: PreferenceReviewerSchema,
   order: PreferenceOrderSchema,
   rejectAll: z.boolean(),
   criterionScores: z.record(ReleaseIdSchema, z.record(ReleaseIdSchema, z.number().finite().min(0).max(1))),
@@ -307,7 +323,12 @@ export function createComparisonAssignment(input: {
   if (input.candidates.length !== release.candidateCount) {
     throw new Error("Comparison assignment candidate count does not match the immutable comparison release.");
   }
-  const normalized = input.candidates.map((candidate) => validateComparisonCandidate(candidate, taskset));
+  const requiresVisibleArtifact = release.presentation.parts.some((part) => part.source === "artifact");
+  const normalized = input.candidates.map((candidate) => validateComparisonCandidate(
+    candidate,
+    taskset,
+    requiresVisibleArtifact,
+  ));
   const first = normalized[0]!;
   for (const candidate of normalized.slice(1)) {
     if (candidate.attempt.taskId !== first.attempt.taskId) {
@@ -413,6 +434,58 @@ export function createPreferenceReceipt(input: {
   validatePreferenceResult({ order: content.order, rejectAll: content.rejectAll }, assignment, release);
   validateCriterionScores(content.criterionScores, assignment, release);
   return PreferenceReceiptSchema.parse({ ...content, contentHash: contentHash(content) });
+}
+
+export function createSyntheticFixturePreferenceReceipt(input: {
+  id: string;
+  assignment: ComparisonAssignment;
+  comparisonRelease: PreferenceComparisonRelease;
+  labelerRelease: { id: string; contentHash: string };
+  fixtureRelease: { id: string; contentHash: string };
+  ratings: Record<string, "love" | "like" | "reject">;
+  startedAt: string;
+  completedAt: string;
+  metadata?: Record<string, unknown>;
+}): PreferenceReceipt {
+  const candidateIds = input.assignment.candidates.map((candidate) => candidate.attemptRef.id);
+  const ratingIds = Object.keys(input.ratings);
+  if (
+    ratingIds.length !== candidateIds.length
+    || candidateIds.some((candidateId) => !input.ratings[candidateId])
+    || ratingIds.some((candidateId) => !candidateIds.includes(candidateId))
+  ) {
+    throw new Error("Synthetic fixture ratings must label every assignment candidate exactly once.");
+  }
+  const orderedRatings = ["love", "like", "reject"] as const;
+  const rejectAll = candidateIds.every((candidateId) => input.ratings[candidateId] === "reject");
+  const order = rejectAll ? [] : orderedRatings
+    .map((rating) => candidateIds.filter((candidateId) => input.ratings[candidateId] === rating))
+    .filter((bucket) => bucket.length > 0);
+  const score = { love: 1, like: 0.5, reject: 0 } as const;
+  return createPreferenceReceipt({
+    id: input.id,
+    assignment: input.assignment,
+    comparisonRelease: input.comparisonRelease,
+    reviewer: {
+      kind: "fixture",
+      releaseRef: input.labelerRelease,
+      fixtureRelease: input.fixtureRelease,
+      labelSource: "synthetic",
+      qualificationEligibility: "smoke_only",
+    },
+    order,
+    rejectAll,
+    criterionScores: Object.fromEntries(candidateIds.map((candidateId) => [
+      candidateId,
+      Object.fromEntries(input.comparisonRelease.criteria.map((criterion) => [
+        criterion.id,
+        score[input.ratings[candidateId]!],
+      ])),
+    ])),
+    startedAt: input.startedAt,
+    completedAt: input.completedAt,
+    metadata: input.metadata ?? {},
+  });
 }
 
 export function verifyPreferenceReceipt(value: unknown): value is PreferenceReceipt {
@@ -540,6 +613,7 @@ export function createPreferenceRewardComponents(input: {
   result: PreferenceReceipt | PreferenceAggregationReceipt;
   calibrationReport?: PreferenceCalibrationReport | null;
   candidates?: readonly PreferenceCandidateEligibility[];
+  rewardScope?: z.input<typeof PreferenceRewardScopeSchema>;
 }): Record<string, RewardComponentReceipt> {
   const assignment = verifyAssignment(input.assignment);
   const release = verifyComparisonRelease(input.comparisonRelease);
@@ -549,12 +623,16 @@ export function createPreferenceRewardComponents(input: {
     ? input.result
     : null;
   const automatedReceipt = modelReceipt?.reviewer.kind === "model";
-  const calibrated = !automatedReceipt || isCalibratedAutomatedReviewer(modelReceipt!, release, input.calibrationReport ?? null);
+  const fixtureReceipt = modelReceipt?.reviewer.kind === "fixture";
+  const rewardScope = PreferenceRewardScopeSchema.parse(input.rewardScope ?? "production");
+  const admittedReviewer = fixtureReceipt
+    ? rewardScope === "synthetic_smoke"
+    : !automatedReceipt || isCalibratedAutomatedReviewer(modelReceipt!, release, input.calibrationReport ?? null);
   return Object.fromEntries(assignment.candidates.map((candidate) => {
     const candidateEligibility = eligible.get(candidate.attemptRef.id);
     const canScore = candidateEligibility?.eligible ?? true;
     const score = scores[candidate.attemptRef.id]!;
-    const component = canScore && calibrated
+    const component = canScore && admittedReviewer
       ? RewardComponentReceiptSchema.parse({
         verifierId: release.rewardProjection.verifierId,
         verifierVersion: release.rewardProjection.verifierVersion,
@@ -588,7 +666,11 @@ export function createPreferenceRewardComponents(input: {
         rewardEligible: false,
         rewardContribution: null,
         failureOwner: candidateEligibility?.failureOwner ?? "verifier",
-        feedback: [canScore ? "Automated preference reviewer is uncalibrated or inconsistent." : "Candidate is not eligible for comparative preference scoring."],
+        feedback: [canScore
+          ? fixtureReceipt
+            ? "Synthetic fixture preference evidence is admitted only to synthetic-smoke reward scope."
+            : "Automated preference reviewer is uncalibrated or inconsistent."
+          : "Candidate is not eligible for comparative preference scoring."],
         visibleEvidenceRefs: [],
         privilegedEvidenceRefs: [],
         metadata: {
@@ -601,7 +683,11 @@ export function createPreferenceRewardComponents(input: {
   }));
 }
 
-function validateComparisonCandidate(input: ComparisonAssignmentCandidateInput, taskset: TasksetRelease): ValidatedComparisonCandidate {
+function validateComparisonCandidate(
+  input: ComparisonAssignmentCandidateInput,
+  taskset: TasksetRelease,
+  requiresVisibleArtifact: boolean,
+): ValidatedComparisonCandidate {
   const attempt = AttemptReceiptSchema.parse(input.attempt);
   if (!verifyAttemptReceipt(attempt)) throw new Error("Comparison candidate Attempt Receipt has an invalid content hash.");
   const artifactManifest = ArtifactManifestSchema.parse(input.artifactManifest);
@@ -627,7 +713,10 @@ function validateComparisonCandidate(input: ComparisonAssignmentCandidateInput, 
       .filter((entry) => entry.status === "collected" && entry.artifact !== null)
       .map((entry) => entry.artifact!.id),
   );
-  if (!visibleArtifactIds.length || visibleArtifactIds.some((id) => !available.has(id))) {
+  if (requiresVisibleArtifact && !visibleArtifactIds.length) {
+    throw new Error("Comparison presentation requires each candidate to expose a reviewable artifact.");
+  }
+  if (visibleArtifactIds.some((id) => !available.has(id))) {
     throw new Error("Comparison candidate exposes an artifact that is missing, uncollected, or unreviewable.");
   }
   if (visible.size !== visibleArtifactIds.length) throw new Error("Comparison candidate visible artifacts must be unique.");
@@ -876,6 +965,7 @@ function verifyRunManifest(value: RunManifest): boolean {
 
 export type PreferenceComparisonPurpose = z.infer<typeof PreferenceComparisonPurposeSchema>;
 export type PreferenceReviewerKind = z.infer<typeof PreferenceReviewerKindSchema>;
+export type PreferenceRewardScope = z.infer<typeof PreferenceRewardScopeSchema>;
 export type PreferenceComparisonRelease = z.infer<typeof PreferenceComparisonReleaseSchema>;
 export type ComparisonAssignment = z.infer<typeof ComparisonAssignmentSchema>;
 export type PreferenceReceipt = z.infer<typeof PreferenceReceiptSchema>;

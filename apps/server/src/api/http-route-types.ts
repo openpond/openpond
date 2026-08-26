@@ -99,7 +99,8 @@ export type HttpRouteDeps = {
   trainingPayload: (
     action: string,
     payload: unknown,
-    requestUrl?: URL
+    requestUrl?: URL,
+    signal?: AbortSignal,
   ) => Promise<unknown>;
   datasetStoragePayload: (action: "state" | "update", payload?: unknown) => Promise<unknown>;
   listLocalAgentSchedulesPayload: (payload?: unknown) => Promise<unknown>;

@@ -46,6 +46,7 @@ import {
 import { retireGoalAndInsightsStorageState } from "./store-goal-insights-retirement.js";
 import { retireLegacyHarnessBenchmarkRuns } from "./store-harness-benchmark-retirement.js";
 import { TRAINING_TABLES_SQL } from "./store-training-base-schema.js";
+import { pruneMigrationBackups } from "./store-backup-retention.js";
 
 type UserVersionRow = { user_version: number };
 type QuickCheckRow = { quick_check: string };
@@ -90,6 +91,21 @@ export class SqliteStoreCore {
     this.data = await readStoreData({
       allPayloadRows: (sql, params) => this.all<PayloadRow>(sql, params),
     });
+    await pruneMigrationBackups(storeDir)
+      .then(({ removed, retained }) => {
+        if (removed.length === 0) return;
+        this.logger?.info("sqlite migration backups pruned", {
+          removed,
+          retained,
+          storePath: this.storePath,
+        });
+      })
+      .catch((error) => {
+        this.logger?.warn("sqlite migration backup pruning failed", {
+          error,
+          storePath: this.storePath,
+        });
+      });
   }
 
   protected async configureDatabase(): Promise<void> {
@@ -537,6 +553,22 @@ export class SqliteStoreCore {
 
   async createTrainingTables(): Promise<void> {
     await this.exec(TRAINING_TABLES_SQL);
+  }
+
+  async createTasksetDraftTables(): Promise<void> {
+    await this.exec(`
+      CREATE TABLE IF NOT EXISTS taskset_drafts (
+        id TEXT PRIMARY KEY,
+        profile_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        payload TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS taskset_drafts_profile_updated_idx
+        ON taskset_drafts(profile_id, updated_at DESC);
+    `);
   }
 
   async createModelBuildDraftTables(): Promise<void> {

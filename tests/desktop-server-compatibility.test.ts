@@ -4,6 +4,7 @@ import {
   bundledServerLaunchPort,
   canLaunchBundledDesktopServer,
   canReuseDesktopServer,
+  desktopServerReadyTimeoutMs,
   isCompatibleDesktopServer,
   localServerPort,
   parseListeningProcessIds,
@@ -11,6 +12,16 @@ import {
 } from "../apps/desktop/src/desktop-server-compatibility";
 
 describe("desktop server compatibility", () => {
+  test("allows state-heavy bundled servers enough time to become ready", () => {
+    expect(desktopServerReadyTimeoutMs({})).toBe(60_000);
+    expect(desktopServerReadyTimeoutMs({
+      OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS: "90000",
+    })).toBe(90_000);
+    expect(desktopServerReadyTimeoutMs({
+      OPENPOND_DESKTOP_SERVER_READY_TIMEOUT_MS: "invalid",
+    })).toBe(60_000);
+  });
+
   test("only reuses the OpenPond server bundled for the same Desktop version", () => {
     expect(
       isCompatibleDesktopServer(

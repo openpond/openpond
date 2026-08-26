@@ -220,9 +220,24 @@ export async function handleSandboxRoutes({ deps, request, requestUrl, response 
   const sandboxProjectSyncMatch = /^\/v1\/sandbox-projects\/([^/]+)\/sync$/.exec(
     requestUrl.pathname,
   );
+  const sandboxProjectWorkspaceMatch = /^\/v1\/sandbox-projects\/([^/]+)\/workspace$/.exec(
+    requestUrl.pathname,
+  );
   const sandboxProjectSourceUploadMatch = /^\/v1\/sandbox-projects\/([^/]+)\/source$/.exec(
     requestUrl.pathname,
   );
+  if (request.method === "GET" && sandboxProjectWorkspaceMatch) {
+    sendJson(
+      response,
+      200,
+      await sandboxPayload({
+        type: "project_workspace",
+        projectId: decodeURIComponent(sandboxProjectWorkspaceMatch[1]!),
+        payload: { teamId: requestUrl.searchParams.get("teamId") ?? undefined },
+      }),
+    );
+    return true;
+  }
   if (request.method === "POST" && sandboxProjectSyncMatch) {
     sendJson(
       response,

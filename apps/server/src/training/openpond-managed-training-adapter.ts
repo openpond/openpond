@@ -58,7 +58,13 @@ type ManagedJob = {
   terminalReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  resources?: Array<{
+    kind: string;
+    state: string;
+    metadata: Record<string, unknown>;
+  }>;
   inputBundle?: {
+    rewardModelTraining?: Record<string, unknown>;
     harnessRelease?: {
       contentHash?: string;
     };
@@ -66,8 +72,9 @@ type ManagedJob = {
       runtimeTarget?: {
         placement?: string;
       };
-    };
+    } & Record<string, unknown>;
   };
+  cleanupAttestation?: unknown;
 };
 
 type ManagedCandidateBundle = {
@@ -101,6 +108,83 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
     this.resolveAccess =
       dependencies.resolveAccess ?? ((teamId) => resolveManagedAdapterUserAccess({ teamId }));
     this.readFileImpl = dependencies.readFileImpl ?? readFile;
+  }
+
+  async createCalibrationBatch(request: unknown) {
+    return this.requestJson<{ job: ManagedJob; requestHash: string }>(
+      "/v1/managed-rl/calibration-batches",
+      { method: "POST", body: JSON.stringify(request) },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async calibrationBatch(jobId: string) {
+    return this.requestJson<{ job: ManagedJob; batch: unknown | null }>(
+      `/v1/managed-rl/calibration-batches/${encodeURIComponent(jobId)}`,
+      {},
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  /** Uploads an immutable rendered artifact for a managed Reward Model run. */
+  async uploadRewardModelArtifact(input: {
+    bytes: Uint8Array;
+    mediaType: string;
+    idempotencyKey: string;
+  }) {
+    const bytes = Buffer.from(input.bytes);
+    return this.requestJson<{
+      objectRef: string;
+      sha256: string;
+      sizeBytes: number;
+      mediaType: string;
+    }>(
+      "/v1/managed-rl/reward-model-artifacts",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          contentBase64: bytes.toString("base64"),
+          expectedSha256: sha256(bytes),
+          idempotencyKey: input.idempotencyKey,
+          mediaType: input.mediaType,
+        }),
+      },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async createRewardModelLaunch(request: unknown) {
+    return this.requestJson<{ job: ManagedJob; requestHash: string }>(
+      "/v1/managed-rl/reward-model-launches",
+      { method: "POST", body: JSON.stringify(request) },
+      await this.resolveBoundAccess(),
+    );
+  }
+
+  async rewardModelJob(jobId: string) {
+    const payload = await this.requestJson<{
+      job: {
+        job: ManagedJob;
+        resources: Array<{
+          kind: string;
+          state: string;
+          metadata: Record<string, unknown>;
+        }>;
+      };
+    }>(
+      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}`,
+      {},
+      await this.resolveBoundAccess(),
+    );
+    return payload.job;
+  }
+
+  async cancelRewardModelJob(jobId: string, expectedVersion: number) {
+    return this.requestJson<{ job: ManagedJob }>(
+      `/v1/managed-rl/jobs/${encodeURIComponent(jobId)}/cancel`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
+      await this.resolveBoundAccess(),
+    );
   }
 
   async capabilities() {
@@ -245,20 +329,41 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
               "This Taskset harness is not yet supported by the selected OpenPond Managed rollout placement.",
           });
         }
-        if (
-          !requiresHarness &&
-          taskset.tasks.some(
-            (task) =>
-              task.split !== "frozen_eval" &&
-              typeof task.expectedOutput?.text !== "string",
-          )
-        ) {
-          issues.push({
-            code: "managed_exact_answer_missing",
-            path: "taskset.tasks",
-            message:
-              "Stateless OpenPond Managed tasks require an exact expected text answer.",
-          });
+        if (!requiresHarness) {
+          const learnedPreference = plan.recipe.method === "grpo"
+            ? plan.recipe.reward.learnedPreference ?? null
+            : null;
+          const scoredTasks = taskset.tasks.filter(
+            (task) => task.split !== "frozen_eval",
+          );
+          if (
+            learnedPreference &&
+            (
+              taskset.metadata.tasksetOutputContract === undefined
+              || scoredTasks.some(
+                (task) => typeof task.expectedOutput?.outputSchemaRef !== "string",
+              )
+            )
+          ) {
+            issues.push({
+              code: "managed_learned_reward_output_contract_missing",
+              path: "taskset.metadata.tasksetOutputContract",
+              message:
+                "Stateless learned-reward tasks require one immutable structured output contract.",
+            });
+          } else if (
+            !learnedPreference &&
+            scoredTasks.some(
+              (task) => typeof task.expectedOutput?.text !== "string",
+            )
+          ) {
+            issues.push({
+              code: "managed_exact_answer_missing",
+              path: "taskset.tasks",
+              message:
+                "Stateless exact-reward tasks require an exact expected text answer.",
+            });
+          }
         }
       }
     }

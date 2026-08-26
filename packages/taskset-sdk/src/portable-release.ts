@@ -61,7 +61,11 @@ export function materializePortableTasksetRelease(input: {
     adapterConformanceHashes: {
       [input.adapterId]: contentHash({ adapterId: input.adapterId, environment, tools }),
     },
-    metadata: { sourceTasksetId: input.taskset.id },
+    metadata: {
+      sourceTasksetId: input.taskset.id,
+      sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
+      resources: input.taskset.environment.resources ?? [],
+    },
   });
   const verifierSetRelease = createVerifierSetRelease({
     schemaVersion: "openpond.verifierSetRelease.v1",
@@ -94,6 +98,8 @@ export function materializePortableTasksetRelease(input: {
     metadata: {
       sourceTasksetId: input.taskset.id,
       sourceTasksetHash: input.taskset.contentHash,
+      sourcePackageHash: input.taskset.metadata.sourcePackageHash ?? null,
+      environmentResources: input.taskset.environment.resources ?? [],
     },
   });
   const draft = input.admittedTasksetRelease
@@ -150,7 +156,7 @@ function portableTask(task: TaskDataRecord) {
     clusterKey: task.clusterKey,
     split: task.split,
     input: task.input,
-    expectedOutput: task.expectedOutput,
+    expectedOutput: portableExpectedOutput(task),
     policyVisibleContext: task.policyVisibleContext,
     privilegedContextRef: task.privilegedContextRef,
     artifactRefs: (task.assets ?? []).map((item) => ({
@@ -173,6 +179,18 @@ function portableTask(task: TaskDataRecord) {
     })),
     tags: task.tags,
   };
+}
+
+function portableExpectedOutput(
+  task: TaskDataRecord,
+): Record<string, unknown> | null {
+  if (!task.expectedOutput) return null;
+  if ("artifactRenderer" in task.expectedOutput) {
+    throw new Error(
+      `Task ${task.id} embeds an artifact renderer. Put shared renderer configuration in Environment resources and reference it from the Scenario.`,
+    );
+  }
+  return task.expectedOutput;
 }
 
 function portableEnvironment(taskset: Taskset): EnvironmentContract {

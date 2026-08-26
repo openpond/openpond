@@ -177,9 +177,11 @@ export function useAppSecondaryRuntime(primary: AppPrimaryRuntime) {
       : view === "labs"
       ? "Models"
       : view === "scheduled"
-      ? "Scheduled"
+      ? "Workflows"
       : view === "outputs"
-      ? "My files"
+      ? "Outputs"
+      : view === "projects"
+      ? "Projects"
       : view === "team"
       ? teamChat.detail
         ? teamChatThreadTitle(teamChat.detail.thread, teamChat.currentUserId)

@@ -19,11 +19,14 @@ describe("training navigation surfaces", () => {
       setView: () => undefined,
       view: "labs",
     }));
-    expect(html).toContain("Models");
+    expect(html).toContain("Overview");
     expect(html).toContain("Tasksets");
     expect(html).toContain("Serving");
-    expect(html).toContain("Usage");
-    expect(html).toContain('class="nav-command active" aria-label="Models"');
+    expect(html).toContain("Model Versions");
+    expect(html).toContain("Runs");
+    expect(html).toContain("Rollouts");
+    expect(html).not.toContain("Usage");
+    expect(html).toContain('class="nav-command active" aria-label="Overview"');
     expect(html).not.toContain("training-navigation-rail");
   });
 

@@ -5,13 +5,15 @@ import type {
   ProductArea,
 } from "@openpond/contracts";
 import {
-  Activity,
   Boxes,
   CalendarClock,
   ChartColumnStacked,
   Cloud,
+  FileOutput,
   FileText,
-  Plus,
+  FolderGit2,
+  Shapes,
+  SquarePen,
 } from "../icons";
 import { SidebarHelpMenu } from "./SidebarHelpMenu";
 import type { SidebarSectionMenuId } from "../../app/app-state";
@@ -50,7 +52,7 @@ export function SidebarNavigation({
 }) {
   const [activeModelsTab, setActiveModelsTab] = useState<LabPrimaryTab>(() =>
     typeof window === "undefined"
-      ? "models"
+      ? "overview"
       : labPrimaryTabFromSearch(window.location.search),
   );
 
@@ -93,20 +95,20 @@ export function SidebarNavigation({
           type="button"
           onClick={() => beginNewChat(null)}
         >
-          <Plus size={18} />
+          <SquarePen size={18} />
           <span>{newExperienceTitle(experience)}</span>
         </button>
       )}
       {productArea === "models" ? (
         <>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "models" ? "active" : ""}`}
-            aria-label="Models"
+            className={`nav-command ${view === "labs" && activeModelsTab === "overview" ? "active" : ""}`}
+            aria-label="Overview"
             type="button"
-            onClick={() => selectModelsTab("models")}
+            onClick={() => selectModelsTab("overview")}
           >
             <ChartColumnStacked size={16} />
-            <span>Models</span>
+            <span>Overview</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "tasksets" ? "active" : ""}`}
@@ -118,6 +120,33 @@ export function SidebarNavigation({
             <span>Tasksets</span>
           </button>
           <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "versions" ? "active" : ""}`}
+            aria-label="Model Versions"
+            type="button"
+            onClick={() => selectModelsTab("versions")}
+          >
+            <FileText size={16} />
+            <span>Model Versions</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "runs" ? "active" : ""}`}
+            aria-label="Runs"
+            type="button"
+            onClick={() => selectModelsTab("runs")}
+          >
+            <ChartColumnStacked size={16} />
+            <span>Runs</span>
+          </button>
+          <button
+            className={`nav-command ${view === "labs" && activeModelsTab === "rollouts" ? "active" : ""}`}
+            aria-label="Rollouts"
+            type="button"
+            onClick={() => selectModelsTab("rollouts")}
+          >
+            <Boxes size={16} />
+            <span>Rollouts</span>
+          </button>
+          <button
             className={`nav-command ${view === "labs" && activeModelsTab === "serving" ? "active" : ""}`}
             aria-label="Serving"
             type="button"
@@ -126,22 +155,13 @@ export function SidebarNavigation({
             <Cloud size={16} />
             <span>Serving</span>
           </button>
-          <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "usage" ? "active" : ""}`}
-            aria-label="Usage"
-            type="button"
-            onClick={() => selectModelsTab("usage")}
-          >
-            <Activity size={16} />
-            <span>Usage</span>
-          </button>
         </>
       ) : null}
       {productArea === "chat" ? (
         <>
           <button
             className={`nav-command nav-command-prominent ${view === "scheduled" ? "active" : ""}`}
-            aria-label="Scheduled"
+            aria-label="Workflows"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
@@ -149,19 +169,43 @@ export function SidebarNavigation({
             }}
           >
             <CalendarClock size={18} />
-            <span>Scheduled</span>
+            <span>Workflows</span>
           </button>
           <button
             className={`nav-command nav-command-prominent ${view === "outputs" ? "active" : ""}`}
-            aria-label="My files"
+            aria-label="Outputs"
             type="button"
             onClick={() => {
               clearWorkspaceSelection();
               setView("outputs");
             }}
           >
-            <FileText size={18} />
-            <span>My files</span>
+            <FileOutput size={18} />
+            <span>Outputs</span>
+          </button>
+          <button
+            className={`nav-command nav-command-prominent ${view === "apps" ? "active" : ""}`}
+            aria-label="Apps"
+            type="button"
+            onClick={() => {
+              clearWorkspaceSelection();
+              setView("apps");
+            }}
+          >
+            <Shapes size={18} />
+            <span>Apps</span>
+          </button>
+          <button
+            className={`nav-command nav-command-prominent ${view === "projects" ? "active" : ""}`}
+            aria-label="Projects"
+            type="button"
+            onClick={() => {
+              clearWorkspaceSelection();
+              setView("projects");
+            }}
+          >
+            <FolderGit2 size={18} />
+            <span>Projects</span>
           </button>
         </>
       ) : null}

@@ -127,7 +127,7 @@ export function ScheduledWorkPage({
     [combinedRows],
   );
 
-  useErrorToast(savedWork.error, { prefix: "Scheduled Work" });
+  useErrorToast(savedWork.error, { prefix: "Workflows" });
   useErrorToast(localSchedules.error, { prefix: "Local schedules" });
 
   useEffect(() => {
@@ -171,14 +171,14 @@ export function ScheduledWorkPage({
 
   return (
     <section
-      aria-label="Scheduled work"
+      aria-label="Workflows"
       className={`scheduled-work-view${selectedHosted || selectedLocal ? " detail-open" : ""}${detailExpanded ? " detail-expanded" : ""}`}
     >
       <div className="scheduled-work-scroll">
         <div className="scheduled-work-content">
           <header className="scheduled-work-header">
             <div
-              aria-label="Scheduled view"
+              aria-label="Workflow view"
               className="scheduled-view-tabs"
               role="tablist"
             >

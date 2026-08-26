@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { RewardModelRuntimeSchema } from "./model-lifecycle.js";
 
 const IdSchema = z.string().trim().min(1).max(240);
 const HashSchema = z.string().trim().min(8).max(256);
@@ -46,6 +47,25 @@ export const PolicyOptimizerSchema = z.discriminatedUnion("method", [
   PpoOptimizerSchema,
 ]);
 
+export const LearnedPreferenceRewardBindingSchema = z.object({
+  rewardModelVersion: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
+  qualificationReport: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
+  checkpoint: z.object({
+    id: IdSchema,
+    contentHash: HashSchema,
+    objectRef: z.string().regex(/^r2:\/\/[A-Za-z0-9._/-]+$/),
+    files: z.array(z.object({
+      path: z.string().trim().min(1).max(512),
+      sizeBytes: z.number().int().positive(),
+      sha256: HashSchema,
+    }).strict()).min(4).max(128),
+  }).strict(),
+  runtime: RewardModelRuntimeSchema,
+  processorRelease: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
+  rewardComposerRelease: z.object({ id: IdSchema, contentHash: HashSchema }).strict(),
+  qualificationKind: z.enum(["synthetic_smoke", "human_heldout"]),
+}).strict();
+
 export const PolicyOptimizationContractSchema = z.object({
   schemaVersion: z.literal("openpond.policyOptimization.v1"),
   policyModel: TrainingModelRefSchema,
@@ -73,6 +93,7 @@ export const PolicyOptimizationContractSchema = z.object({
   reward: z.object({
     graderId: IdSchema,
     graderHash: HashSchema,
+    learnedPreference: LearnedPreferenceRewardBindingSchema.nullable().default(null),
   }),
   kl: z.object({
     coefficient: z.number().nonnegative().nullable(),

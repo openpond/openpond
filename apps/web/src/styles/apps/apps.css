@@ -68,28 +68,6 @@
   border-color: rgba(255, 255, 255, 0.24);
 }
 
-.connected-apps-status-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-  color: #a4a4a4;
-  padding: 7px 11px;
-  font-size: 12px;
-}
-
-.connected-apps-status-strip.ready span:last-child {
-  color: #64d790;
-}
-
-.connected-apps-status-strip.error span:first-child {
-  color: #ffb66d;
-}
-
 .connected-apps-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;

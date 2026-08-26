@@ -50,7 +50,7 @@ describe("OutputsPage", () => {
       }),
     );
 
-    expect(markup).toContain('aria-label="My files"');
+    expect(markup).toContain('aria-label="Outputs"');
     expect(markup).not.toContain("<h1>Outputs</h1>");
     expect(markup).not.toContain("Files created by your Work tasks.");
   });

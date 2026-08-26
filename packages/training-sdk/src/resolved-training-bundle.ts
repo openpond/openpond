@@ -112,6 +112,7 @@ export function buildTasksetTrainingBundle(input: {
     environment: taskset.environment,
     capabilities: taskset.capabilities,
     policy: taskset.policy,
+    outputContract: taskset.metadata.tasksetOutputContract ?? null,
   });
   addJsonAsset(assets, "graders.json", {
     schemaVersion: "openpond.harnessGraders.v1",
@@ -125,7 +126,6 @@ export function buildTasksetTrainingBundle(input: {
     capabilities: taskset.capabilities,
     connectedAppScopes: taskset.policy.connectedAppScopes,
   });
-
   const trainTasks = taskset.tasks.filter((task) => task.split === "train");
   if (trainTasks.length > 0) {
     addJsonAsset(assets, "dataset/train.json", {

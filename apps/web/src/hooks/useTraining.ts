@@ -28,6 +28,9 @@ import type {
   TaskAttemptArtifact,
   TaskAttemptResult,
   Taskset,
+  TasksetDraft,
+  TasksetOperationalState,
+  LearnedPreferenceRewardBinding,
 } from "@openpond/contracts";
 import { api, type ClientConnection } from "../api";
 
@@ -45,6 +48,42 @@ export type PreferenceComparisonReview = {
     output: Record<string, unknown>;
     artifacts: Array<{ id: string; mediaType: string | null; sizeBytes: number }>;
   }>;
+};
+
+export type PreferenceCalibrationStatus = {
+  release: {
+    id: string;
+    contentHash: string;
+    calibration: { minimumSamples: number };
+  } | null;
+  assignmentCount: number;
+  humanCompleted: number;
+  canonicalModelCompleted: number;
+  swappedModelCompleted: number;
+  minimumSamples: number | null;
+  readyToFinalize: boolean;
+  latestReport: {
+    id: string;
+    passed: boolean;
+    sampleCount: number;
+    orderAgreement: number;
+    tieAgreement: number;
+    orderSwapAgreement: number;
+  } | null;
+};
+
+export type PreferenceDatasetReleaseView = {
+  id: string;
+  contentHash: string;
+  authority: "human" | "synthetic_fixture";
+  qualificationEligibility: "smoke_only" | "human_heldout";
+  groups: Array<{
+    id: string;
+    partition: "reward_train" | "reward_validation" | "reward_qualification";
+    attemptRefs: Array<{ id: string; contentHash: string }>;
+  }>;
+  derivedPairs: Array<{ groupId: string; relation: "preferred" | "tie" }>;
+  createdAt: string;
 };
 
 export function useTraining(input: { connection: ClientConnection | null; profileId: string }) {
@@ -144,12 +183,72 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         project,
         "PUT",
       ),
+    syncModelProject: (modelId: string) =>
+      mutate<ModelProject>(
+        "sync-model-project",
+        `/models/${encodeURIComponent(modelId)}/sync`,
+        {},
+      ),
+    publishModelProjectTaskset: (modelId: string, tasksetId: string) =>
+      mutate<ModelProject>(
+        "publish-model-project-taskset",
+        `/models/${encodeURIComponent(modelId)}/tasksets/${encodeURIComponent(tasksetId)}/publish`,
+        {},
+      ),
     saveModelRunDraft: (draft: ModelRunDraft) =>
       mutate<ModelRunDraft>(
         "save-model-run-draft",
         "/model-run-drafts",
         draft,
         "PUT",
+      ),
+    createTasksetDraft: (name = "") =>
+      mutate<TasksetDraft>(
+        "create-taskset-draft",
+        "/taskset-drafts",
+        { profileId, name },
+      ),
+    saveTasksetDraft: (draft: TasksetDraft) =>
+      mutate<TasksetDraft>(
+        "save-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draft.id)}`,
+        draft,
+        "PUT",
+      ),
+    tasksetDraftWorkspace: async (draftId: string) => {
+      if (!connection) return null;
+      try {
+        return await api.trainingRequest<{
+          draftId: string;
+          workspacePath: string;
+          packageHash: string;
+        }>(
+          connection,
+          `/taskset-drafts/${encodeURIComponent(draftId)}/workspace`,
+          {},
+          "GET",
+        );
+      } catch (caught) {
+        setError(message(caught));
+        return null;
+      }
+    },
+    publishTasksetDraft: (draftId: string, modelId?: string | null) =>
+      mutate<{
+        draft: TasksetDraft;
+        taskset: Taskset;
+        hostedSync: { state: "local" | "synced" | "sync_failed"; error: string | null };
+      }>(
+        "publish-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draftId)}/publish`,
+        { modelId: modelId ?? null },
+      ),
+    deleteTasksetDraft: (draftId: string) =>
+      mutate<{ deleted: boolean; draftId: string }>(
+        "delete-taskset-draft",
+        `/taskset-drafts/${encodeURIComponent(draftId)}`,
+        {},
+        "DELETE",
       ),
     deleteModelRunDraft: (draftId: string) =>
       mutate<{ deleted: boolean; draftId?: string }>(
@@ -320,6 +419,31 @@ export function useTraining(input: { connection: ClientConnection | null; profil
         },
       },
     ),
+    materializeSyntheticPreferenceCollection: (input: {
+      tasksetId: string;
+      actorKey: string;
+      comparisonReleaseId?: string;
+      preferenceDatasetId: string;
+      preferenceDatasetRevision: number;
+      collection: unknown;
+    }) => mutate<{
+      collection: { id: string; attempts: TaskAttemptResult[] };
+      assignments: Array<{ assignment: { id: string }; partition: "reward_train" | "reward_validation" }>;
+      dataset: PreferenceDatasetReleaseView;
+    }>(
+      "materialize-synthetic-preference-collection",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/synthetic-preference-collection`,
+      input,
+    ),
+    tasksetOperationalState: (tasksetId: string) => {
+      if (!connection) return Promise.resolve(null);
+      return api.trainingRequest<TasksetOperationalState>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/operations`,
+        {},
+        "GET",
+      );
+    },
     calibrateJudges: (tasksetId: string) => mutate<{ passed: boolean }>("calibrate-judges", "/calibrate-judges", { tasksetId }),
     nextPreferenceComparison: (tasksetId: string, reviewerKey: string) => mutate<PreferenceComparisonReview | null>(
       "next-preference-comparison",
@@ -332,11 +456,78 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       reviewerKey: string;
       order: string[][];
       rejectAll: boolean;
+      criterionScores?: Record<string, Record<string, number>>;
       startedAt: string;
     }) => mutate(
       "submit-preference-comparison",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/submit`,
       input,
+    ),
+    submitSyntheticFixturePreference: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      actorKey: string;
+      labelerRelease: { id: string; contentHash: string };
+      fixtureRelease: { id: string; contentHash: string };
+      ratings: Record<string, "love" | "like" | "reject">;
+      startedAt: string;
+    }) => mutate(
+      "submit-synthetic-fixture-preference",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/fixture-submit`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    listPreferenceDatasets: (tasksetId: string) => {
+      if (!connection) return Promise.resolve(null);
+      return api.trainingRequest<PreferenceDatasetReleaseView[]>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/preference-datasets`,
+        {},
+        "GET",
+      );
+    },
+    materializePreferenceDataset: (input: {
+      tasksetId: string;
+      comparisonReleaseId: string;
+      authority: "human" | "synthetic_fixture";
+      groups: Array<{
+        assignmentId: string;
+        partition: "reward_train" | "reward_validation" | "reward_qualification";
+      }>;
+      actorKey: string;
+    }) => mutate<PreferenceDatasetReleaseView>(
+      "materialize-preference-dataset",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-datasets`,
+      { ...input, id: `preference-dataset-${crypto.randomUUID()}`, revision: 1 },
+    ),
+    launchRewardModelRun: (input: {
+      tasksetId: string;
+      rewardModelId: string;
+      preferenceDatasetReleaseId: string;
+    }) => mutate<TrainingStateResponse["rewardModelRuns"][number]>(
+      "launch-reward-model-run",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/reward-model-runs`,
+      { ...input, id: `reward-model-run-${crypto.randomUUID()}` },
+    ),
+    learnedPreferenceRewardBinding: (input: {
+      tasksetId: string;
+      rewardModelVersionId: string;
+    }) => mutate<LearnedPreferenceRewardBinding>(
+      "learned-preference-reward-binding",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/learned-preference-reward-binding`,
+      input,
+    ),
+    retryRewardModelQualification: (input: {
+      runId: string;
+      id: string;
+    }) => mutate(
+      "retry-reward-model-qualification",
+      `/reward-model-runs/${encodeURIComponent(input.runId)}/retry-qualification`,
+      input,
+    ),
+    cancelRewardModelRun: (runId: string) => mutate(
+      "cancel-reward-model-run",
+      `/reward-model-runs/${encodeURIComponent(runId)}/cancel`,
+      {},
     ),
     markPreferenceComparisonUnreviewable: (input: {
       tasksetId: string;
@@ -347,6 +538,82 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       "mark-preference-comparison-unreviewable",
       `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/unreviewable`,
       input,
+    ),
+    preferenceCalibrationStatus: (
+      tasksetId: string,
+      reviewerKey: string,
+      comparisonReleaseId?: string | null,
+    ) => {
+      if (!connection) return Promise.resolve(null);
+      const params = new URLSearchParams({ reviewerKey });
+      if (comparisonReleaseId) params.set("comparisonReleaseId", comparisonReleaseId);
+      return api.trainingRequest<PreferenceCalibrationStatus>(
+        connection,
+        `/tasksets/${encodeURIComponent(tasksetId)}/preference-comparisons/calibration/status?${params}`,
+        {},
+        "GET",
+      );
+    },
+    startPreferenceCalibrationBatch: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      rubric: string;
+      minimumSamples: number;
+      taskId?: string | null;
+    }) => mutate<{
+      release: { id: string; contentHash: string };
+      job: { id: string; state: string };
+      requestHash: string;
+    }>(
+      "start-preference-calibration-batch",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/batches`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    syncPreferenceCalibrationBatch: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      jobId: string;
+    }) => mutate<{
+      job: { id: string; state: string; terminalReason?: string | null };
+      batch: unknown | null;
+      assignment?: { id: string };
+    }>(
+      "sync-preference-calibration-batch",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/batches/${encodeURIComponent(input.jobId)}/sync`,
+      input,
+    ),
+    reviewPreferenceComparisonWithModel: (input: {
+      tasksetId: string;
+      assignmentId: string;
+      reviewerKey: string;
+      model: ChatModelRef;
+      rubric: string;
+      reviewVariant?: "canonical" | "order_swap";
+    }) => mutate(
+      "review-preference-comparison-with-model",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/${encodeURIComponent(input.assignmentId)}/model-review`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    runNextPreferenceCalibrationReview: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      comparisonReleaseId?: string | null;
+      model: ChatModelRef;
+      rubric: string;
+    }) => mutate(
+      "run-next-preference-calibration-review",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/model-reviews/next`,
+      { ...input, id: crypto.randomUUID() },
+    ),
+    savePreferenceCalibration: (input: {
+      tasksetId: string;
+      reviewerKey: string;
+      comparisonReleaseId: string;
+      model: ChatModelRef;
+    }) => mutate(
+      "save-preference-calibration",
+      `/tasksets/${encodeURIComponent(input.tasksetId)}/preference-comparisons/calibration/report`,
+      { ...input, id: crypto.randomUUID() },
     ),
     preferenceArtifactUrl: async (artifactId: string) => {
       if (!connection) return null;
