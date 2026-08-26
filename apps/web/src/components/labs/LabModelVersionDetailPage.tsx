@@ -18,6 +18,7 @@ import {
   formatDateTime,
   formatDuration,
   statusLabel,
+  terminalRunEnd,
   trainingMethodLabel,
 } from "../training/training-model-data";
 import { useTrainingRunDetail } from "../training/useTrainingRunDetail";
@@ -252,7 +253,7 @@ export function LabModelVersionDetailPage({
         />}
         metrics={[
           { label: "Final reward", value: formatMetric(selectedLifecycleRun?.reward?.raw ?? managedEvidence?.reward.finalMean ?? null) },
-          { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, selectedLifecycleRun.completedAt) : selectedJob ? formatDuration(selectedJob.startedAt, selectedJob.completedAt) : "Not recorded" },
+          { label: "Duration", value: selectedLifecycleRun ? formatDuration(selectedLifecycleRun.startedAt, terminalRunEnd(selectedLifecycleRun.status, selectedLifecycleRun.completedAt, selectedLifecycleRun.updatedAt)) : selectedJob ? formatDuration(selectedJob.startedAt, terminalRunEnd(selectedJob.status, selectedJob.completedAt, selectedJob.updatedAt)) : "Not recorded" },
           { label: "Output", value: selectedVersion ? `Version ${selectedVersion.number}` : "No version" },
           { label: "Taskset", value: selectedTaskset?.name ?? "Unavailable" },
         ]}
@@ -300,10 +301,21 @@ export function LabModelVersionDetailPage({
           selectedLifecycleRun
             ? formatDuration(
                 selectedLifecycleRun.startedAt,
-                selectedLifecycleRun.completedAt
+                terminalRunEnd(
+                  selectedLifecycleRun.status,
+                  selectedLifecycleRun.completedAt,
+                  selectedLifecycleRun.updatedAt
+                )
               )
             : selectedJob
-            ? formatDuration(selectedJob.startedAt, selectedJob.completedAt)
+            ? formatDuration(
+                selectedJob.startedAt,
+                terminalRunEnd(
+                  selectedJob.status,
+                  selectedJob.completedAt,
+                  selectedJob.updatedAt
+                )
+              )
             : "Not recorded"
         }
         failure={selectedJob?.error ?? selectedLifecycleRun?.failure ?? null}

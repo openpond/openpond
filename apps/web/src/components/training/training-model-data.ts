@@ -203,6 +203,17 @@ export function formatDuration(
   return `${days}d ${hours % 24}h`;
 }
 
+export function terminalRunEnd(
+  status: string,
+  completedAt: string | null,
+  updatedAt: string
+): string | null {
+  if (completedAt) return completedAt;
+  return ["succeeded", "failed", "cancelled"].includes(status)
+    ? updatedAt
+    : null;
+}
+
 function newestFirst(
   left: { createdAt: string },
   right: { createdAt: string }

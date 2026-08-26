@@ -811,6 +811,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       const linkedJob = payload.jobs
         .filter((job) => job.metadata.modelRunId === run.id)
         .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+      if (linkedJob && !activeStatuses.has(linkedJob.status)) continue;
       const status = linkedJob?.status ?? (run.status === "prepared" ? "starting" : "running");
       activities[run.modelId] = {
         label: labels[status] ?? "Running",
