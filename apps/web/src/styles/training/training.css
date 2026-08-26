@@ -87,13 +87,24 @@
 .training-metric-tabs{display:flex;gap:2px;overflow:auto}
 .training-metric-tabs button{border:0;border-radius:5px;background:transparent;color:var(--muted);padding:6px 8px;font:inherit;font-size:11px;white-space:nowrap;cursor:pointer}
 .training-metric-tabs button.active{background:var(--panel-soft);color:var(--text)}
-.training-metric-chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));gap:14px}
+.training-metric-chart-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .training-metric-chart-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}
 .training-metric-chart-card{min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--panel-soft) 45%,transparent)}
 .training-metric-chart-card>header{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--border);padding:11px 13px}
+.training-metric-chart-card>header>div{display:grid;gap:2px;min-width:0}
 .training-metric-chart-card>header h4{margin:0;font-size:13px;font-weight:600}
 .training-metric-chart-card>header span{color:var(--muted);font-size:10px}
+.training-metric-chart-card>header strong{font-family:var(--mono);font-size:13px;font-weight:620}
 .training-metric-chart-empty{display:grid;min-height:210px;place-items:center;color:var(--muted);font-size:11px}
+.training-metric-chart-empty.is-loading{position:relative;overflow:hidden;background:linear-gradient(100deg,transparent 20%,color-mix(in srgb,var(--panel-soft) 80%,transparent) 40%,transparent 60%);background-size:220% 100%;animation:training-metric-skeleton 1.4s ease-in-out infinite}
+.training-metric-chart-empty.is-loading::after{width:74%;height:48%;border-radius:8px;background:color-mix(in srgb,var(--border) 62%,transparent);content:""}
+.training-metric-card-chart{height:230px;min-width:0;padding:4px 6px 0}
+.training-metric-card-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:0;border-top:1px solid var(--border)}
+.training-metric-card-stats>div{display:grid;gap:3px;min-width:0;padding:9px 11px;border-right:1px solid var(--border)}
+.training-metric-card-stats>div:last-child{border-right:0}
+.training-metric-card-stats dt{color:var(--muted);font-size:9px}
+.training-metric-card-stats dd{margin:0;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono);font-size:11px;font-weight:600}
+@keyframes training-metric-skeleton{0%{background-position:100% 0}100%{background-position:-100% 0}}
 .training-metric-workbench{display:grid;gap:16px;min-width:0}
 .training-metric-workbench-toolbar{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .training-metric-workbench-toolbar h3,.training-metric-workbench-toolbar p{margin:0}
@@ -111,7 +122,7 @@
 .training-metric-stat-strip dd{margin:0;font-family:var(--mono);font-size:13px;font-weight:600}
 .training-metric-primary-chart{height:360px;min-width:0;border:1px solid var(--border);border-radius:9px;background:var(--panel);padding:6px}
 .training-metric-step-table{max-height:340px;overflow:auto}
-@media (max-width:900px){.training-metric-stat-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.training-metric-stat-strip>div:nth-child(3){border-right:0}.training-metric-workbench-toolbar{align-items:flex-start;flex-direction:column}.training-metric-workbench-controls{width:100%}.training-metric-workbench-controls label,.training-metric-workbench-controls select{flex:1}}
+@media (max-width:900px){.training-metric-chart-grid{grid-template-columns:1fr}.training-metric-stat-strip{grid-template-columns:repeat(3,minmax(0,1fr))}.training-metric-stat-strip>div:nth-child(3){border-right:0}.training-metric-workbench-toolbar{align-items:flex-start;flex-direction:column}.training-metric-workbench-controls{width:100%}.training-metric-workbench-controls label,.training-metric-workbench-controls select{flex:1}}
 .training-line-chart{width:100%;margin:0;color:var(--text)}
 .training-line-chart svg{display:block;width:100%;height:auto;min-height:210px;overflow:visible;padding:4px 5px 0}
 .training-chart-grid{stroke:var(--border);stroke-width:1}

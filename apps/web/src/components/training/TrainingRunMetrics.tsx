@@ -37,10 +37,12 @@ const STEP_SERIES: Array<SeriesDefinition<SftStepMetric>> = [
 export function TrainingRunMetrics({ detail, loading, error }: { detail: TrainingRunDetail | null; loading: boolean; error: string | null }) {
   useErrorToast(error, { prefix: "Training metrics" });
   const series = useMemo(() => detail ? metricSeries(detail) : [], [detail]);
-  if (loading && !detail) return <div className="training-run-placeholder">Loading training metrics…</div>;
   if (error && !detail) return <div className="training-run-placeholder">Training metrics are unavailable.</div>;
-  if (!detail) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
-  return <TrainingMetricWorkbench series={series} />;
+  if (!detail && !loading) return <div className="training-run-placeholder">Select a training run to inspect its metrics.</div>;
+  const live = detail
+    ? ["queued", "starting", "running", "reconciling"].includes(detail.job.status)
+    : false;
+  return <TrainingMetricWorkbench live={live} loading={loading && !detail} series={series} />;
 }
 
 export function metricSeries(detail: TrainingRunDetail): TrainingMetricSeries[] {

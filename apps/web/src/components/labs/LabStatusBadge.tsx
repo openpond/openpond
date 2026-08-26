@@ -1,15 +1,25 @@
+import "../../styles/labs/lab-status.css";
+
 export type LabStatusTone = "positive" | "info" | "warning" | "negative" | "neutral";
 
 export function LabStatusBadge({
   label,
   value = label,
+  tone,
+  pulse = false,
 }: {
   label: string;
   value?: string;
+  tone?: LabStatusTone;
+  pulse?: boolean;
 }) {
   return (
-    <span className={`labs-status-badge ${labStatusTone(value)}`}>
-      {label}
+    <span
+      className={`labs-status-badge ${tone ?? labStatusTone(value)}${pulse ? " is-live" : ""}`}
+      title={label}
+    >
+      {pulse ? <span aria-hidden="true" className="labs-status-live-dot" /> : null}
+      <span className="labs-status-badge-label">{label}</span>
     </span>
   );
 }

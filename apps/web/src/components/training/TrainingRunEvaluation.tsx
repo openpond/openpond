@@ -1,9 +1,23 @@
 import type { TrainingEvaluationGrade, TrainingRunDetail } from "@openpond/contracts";
 
-export function TrainingRunEvaluation({ detail, loading }: { detail: TrainingRunDetail | null; loading: boolean }) {
+export function TrainingRunEvaluation({
+  detail,
+  loading,
+  pending = false,
+}: {
+  detail: TrainingRunDetail | null;
+  loading: boolean;
+  pending?: boolean;
+}) {
   if (loading && !detail) return <div className="training-run-placeholder">Loading evaluation results…</div>;
   const evaluation = detail?.evaluation;
-  if (!evaluation) return <div className="training-run-placeholder">No scored evaluation results are available for this run.</div>;
+  if (!evaluation) return (
+    <div className="training-run-placeholder">
+      {pending
+        ? "Evaluation will appear here after the first eligible checkpoint is scored."
+        : "No scored evaluation results are available for this run."}
+    </div>
+  );
   return (
     <div className="training-run-evaluation">
       <div className="training-metric-summary">

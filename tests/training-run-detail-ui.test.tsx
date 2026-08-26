@@ -188,14 +188,16 @@ describe("Training run detail UI", () => {
     expect(html).not.toContain("labs-run-outcome-grid");
   });
 
-  test("renders selectable per-step telemetry as an accessible chart", () => {
+  test("renders every per-step metric as an accessible chart grid", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={detail} loading={false} />
     );
     expect(html).toContain('aria-label="Loss by optimizer step"');
     expect(html).toContain("Learning rate");
     expect(html).toContain("Token accuracy");
-    expect(html).toContain("2 recorded optimizer steps");
+    expect(html).toContain("5 recorded metric series");
+    expect(html).toContain("2 points");
+    expect(html).not.toContain("<select");
   });
 
   test("renders base-versus-trained evaluation and inspectable outputs", () => {
@@ -239,12 +241,12 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={rftDetail} loading={false} />
     );
-    expect(html).toContain("<h3>Reward</h3>");
-    expect(html).toContain("2 recorded optimizer steps");
+    expect(html).toContain("<h4>Reward</h4>");
+    expect(html).toContain("2 points");
     expect(html).toContain("Learning rate");
     expect(html).not.toContain("2 of 2");
     expect(html).toContain('aria-label="Reward by optimizer step"');
-    expect(html.match(/<td>1<\/td>/g)).toHaveLength(1);
+    expect(html).toContain("Live metrics update as each rollout and optimizer step completes.");
   });
 
   test("does not count a reward metric as a verified optimizer update", () => {
@@ -269,7 +271,7 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={failedRftDetail} loading={false} />
     );
-    expect(html).toContain("Waiting for the first recorded optimizer metric.");
+    expect(html).toContain("This run did not report chartable metrics.");
     expect(html).not.toContain('aria-label="Reward by optimizer step"');
   });
 
@@ -328,11 +330,21 @@ describe("Training run detail UI", () => {
     const html = renderToStaticMarkup(
       <TrainingRunMetrics detail={ppoDetail} loading={false} />
     );
-    expect(html).toContain("1 recorded optimizer step");
+    expect(html).toContain("9 recorded metric series");
+    expect(html).toContain("1 point");
     expect(html).toContain("Policy loss");
     expect(html).toContain("Value loss");
     expect(html).toContain("KL divergence");
     expect(html).toContain('aria-label="Mean reward by optimizer step"');
+  });
+
+  test("keeps an empty evaluation surface mounted while training is active", () => {
+    const html = renderToStaticMarkup(
+      <TrainingRunEvaluation detail={null} loading={false} pending />
+    );
+    expect(html).toContain(
+      "Evaluation will appear here after the first eligible checkpoint is scored."
+    );
   });
 
 });

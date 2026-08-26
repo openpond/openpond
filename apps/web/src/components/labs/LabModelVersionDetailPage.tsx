@@ -183,15 +183,19 @@ export function LabModelVersionDetailPage({
       event.type === "metric" &&
       event.payload.metricKind === "rollout_trajectory",
   ) ?? false;
+  const runActive = ["queued", "starting", "running", "reconciling"].includes(
+    selectedJob?.status ?? selectedLifecycleRun?.status ?? "",
+  );
+  const latestActivity = detail.detail?.events.at(-1);
+  const runStatus = selectedLifecycleRun
+    ? statusLabel(selectedLifecycleRun.status)
+    : selectedJob
+      ? statusLabel(selectedJob.status)
+      : "Imported";
   const detailTabs: Array<{ id: RunDetailTab; label: string }> = [
     { id: "overview", label: "Overview" },
     ...(selectedJob ? [{ id: "metrics" as const, label: "Metrics" }] : []),
-    ...(detail.loading ||
-    detail.detail?.evaluation ||
-    selectedEvaluationArtifactId ||
-    managedEvidence?.evaluations.length
-      ? [{ id: "evaluation" as const, label: "Evaluation" }]
-      : []),
+    { id: "evaluation", label: "Evaluation" },
     ...(receipts.length || hasManagedAttempts
       ? [{ id: "rollouts" as const, label: "Rollouts" }]
       : []),
@@ -238,7 +242,11 @@ export function LabModelVersionDetailPage({
           : selectedVersion ? `Version ${selectedVersion.number}` : "Run details"}
         description={`${trainingMethodLabel(selectedLifecycleRun?.method ?? selectedPlan?.recipe.method)} on ${baseModelName(selectedPlan, selectedBaseModelId)}`}
         status={<LabStatusBadge
-          label={selectedLifecycleRun ? statusLabel(selectedLifecycleRun.status) : selectedJob ? statusLabel(selectedJob.status) : "Imported"}
+          label={runActive && latestActivity
+            ? `${runStatus} · ${eventSummary(latestActivity)}`
+            : runStatus}
+          pulse={runActive}
+          tone={runActive ? "positive" : undefined}
           value={selectedLifecycleRun?.status ?? selectedJob?.status ?? "imported"}
         />}
         metrics={[
@@ -414,12 +422,11 @@ export function LabModelVersionDetailPage({
           ) : null}
           {activeDetailTab === "evaluation" ? (
             <div className="training-run-evaluation">
-              {detail.loading || detail.detail?.evaluation ? (
-                <TrainingRunEvaluation
-                  detail={detail.detail}
-                  loading={detail.loading}
-                />
-              ) : null}
+              <TrainingRunEvaluation
+                detail={detail.detail}
+                loading={detail.loading}
+                pending={runActive}
+              />
               {!detail.detail?.evaluation &&
               managedEvidence?.evaluations.length ? (
                 <dl className="labs-inline-facts">
