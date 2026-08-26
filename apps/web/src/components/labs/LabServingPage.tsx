@@ -8,6 +8,7 @@ import { LabStatusBadge } from "./LabStatusBadge";
 
 type LabServingRow = {
   lineageId: string;
+  modelProjectId: string;
   modelName: string;
   versionLabel: string;
   managed: ManagedAdapterServingProjection;
@@ -15,8 +16,10 @@ type LabServingRow = {
 };
 
 export function LabServingPage({
+  modelProjectId = null,
   state,
 }: {
+  modelProjectId?: string | null;
   state: TrainingStateResponse | null;
 }) {
   if (!state) {
@@ -27,7 +30,7 @@ export function LabServingPage({
     );
   }
 
-  const rows = labServingRows(state);
+  const rows = labServingRows(state, modelProjectId);
   return (
     <div className="labs-flat-body labs-serving-page">
       <section className="labs-operational-section" aria-labelledby="managed-serving-title">
@@ -85,7 +88,10 @@ export function LabServingPage({
   );
 }
 
-export function labServingRows(state: TrainingStateResponse): LabServingRow[] {
+export function labServingRows(
+  state: TrainingStateResponse,
+  modelProjectId: string | null = null,
+): LabServingRow[] {
   const projectById = new Map(
     state.modelProjects.map((project) => [project.id, project] as const),
   );
@@ -104,12 +110,14 @@ export function labServingRows(state: TrainingStateResponse): LabServingRow[] {
       const project = projectById.get(lineage.modelId) ?? null;
       return [{
         lineageId: lineage.id,
+        modelProjectId: lineage.modelId,
         modelName: project?.name ?? lineage.modelId,
         versionLabel: version ? `Version ${version.version}` : lineage.id,
         managed: lineage.managedServing,
         updatedAt: lineage.managedServing.lastSyncedAt,
       }];
     })
+    .filter((row) => !modelProjectId || row.modelProjectId === modelProjectId)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 

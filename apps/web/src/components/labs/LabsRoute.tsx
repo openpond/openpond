@@ -50,8 +50,11 @@ import {
 } from "./LabsRouteSections";
 import {
   LAB_PRIMARY_TAB_CHANGE_EVENT,
+  LAB_MODEL_PROJECT_CHANGE_EVENT,
+  labModelProjectIdFromSearch,
   labPrimaryTabFromSearch,
   searchWithLabPrimaryTab,
+  searchWithLabModelProject,
 } from "./lab-primary-tab-state";
 
 export type LabsRouteProps = {
@@ -177,6 +180,9 @@ export function LabsRoute({
       : labPrimaryTabFromSearch(window.location.search),
   );
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedProjectRouteId, setSelectedProjectRouteId] = useState<string | null>(
+    () => typeof window === "undefined" ? null : labModelProjectIdFromSearch(window.location.search),
+  );
   const [selectedDatasetId, setSelectedDatasetId] = useState<string | null>(
     null,
   );
@@ -232,6 +238,9 @@ export function LabsRoute({
   const selected =
     models.find((workproduct) => workproduct.key === selectedKey) ?? null;
   const modelProjects = training.training.payload?.modelProjects ?? [];
+  const selectedModelProject = selected
+    ? modelProjects.find((project) => project.id === selected.id) ?? null
+    : null;
   const activeHostedTeamId =
     training.settingsPreferences.defaultTeamId?.trim() ?? null;
   const scopedModelProjects = useMemo(
@@ -265,6 +274,7 @@ export function LabsRoute({
       setSelectedKey(null);
       setSelectedDatasetId(null);
       setActiveTab(labPrimaryTabFromSearch(window.location.search));
+      setSelectedProjectRouteId(labModelProjectIdFromSearch(window.location.search));
     };
     const onPrimaryTabChange = () => {
       setSelectedDatasetId(null);
@@ -272,14 +282,42 @@ export function LabsRoute({
     };
     window.addEventListener("popstate", onPopState);
     window.addEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, onPrimaryTabChange);
+    const onModelProjectChange = () => {
+      setSelectedProjectRouteId(labModelProjectIdFromSearch(window.location.search));
+      setSelectedDatasetId(null);
+    };
+    window.addEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, onModelProjectChange);
     return () => {
       window.removeEventListener("popstate", onPopState);
       window.removeEventListener(
         LAB_PRIMARY_TAB_CHANGE_EVENT,
         onPrimaryTabChange,
       );
+      window.removeEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, onModelProjectChange);
     };
   }, []);
+  useEffect(() => {
+    if (selectedProjectRouteId || !scopedModelProjects.length) return;
+    const defaultProjectId = scopedModelProjects[0].id;
+    const search = searchWithLabModelProject(window.location.search, defaultProjectId);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
+    setSelectedProjectRouteId(defaultProjectId);
+    window.dispatchEvent(new Event(LAB_MODEL_PROJECT_CHANGE_EVENT));
+  }, [scopedModelProjects, selectedProjectRouteId]);
+  useEffect(() => {
+    if (!selectedProjectRouteId) return;
+    const project = scopedModelProjects.find((candidate) => candidate.id === selectedProjectRouteId);
+    if (project) setSelectedKey(workproductKey("model", project.id));
+  }, [scopedModelProjects, selectedProjectRouteId]);
+  useEffect(() => {
+    if (activeTab !== "tasksets" || selectedDatasetId || !selected) return;
+    const attachedTasksetId = selectedModelProject?.tasksetSyncs[0]?.localTasksetId ?? null;
+    if (attachedTasksetId) setSelectedDatasetId(attachedTasksetId);
+  }, [activeTab, selected, selectedDatasetId, selectedModelProject]);
   useEffect(() => {
     const search = searchWithLabPrimaryTab(window.location.search, activeTab);
     const nextUrl = `${window.location.pathname}${search}${window.location.hash}`;
@@ -545,13 +583,6 @@ export function LabsRoute({
       }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
-      modelProjects={scopedModelProjects}
-      activeHostedTeamId={activeHostedTeamId}
-      selectedModelProjectId={selected?.id ?? null}
-      onSelectModelProject={(modelProjectId) => {
-        setSelectedKey(workproductKey("model", modelProjectId));
-        setSelectedDatasetId(null);
-      }}
     >
       {activeTab === "tasksets" && training.launchRequest ? (
         renderLaunchEditor(selectedDatasetId)
@@ -592,6 +623,7 @@ export function LabsRoute({
         )
       ) : activeTab === "serving" ? (
         <LabServingPage
+          modelProjectId={selected?.id ?? selectedProjectRouteId}
           state={training.training.payload}
         />
       ) : training.launchRequest ? (

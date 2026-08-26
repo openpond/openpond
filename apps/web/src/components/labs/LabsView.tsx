@@ -24,44 +24,22 @@ export function LabsView({
   showHeader = true,
   onCreateDataset,
   onCreateModel,
-  modelProjects = [],
-  selectedModelProjectId = null,
-  activeHostedTeamId = null,
-  onSelectModelProject = () => undefined,
 }: {
   activeTab: LabPrimaryTab;
   children: ReactNode;
   showHeader?: boolean;
   onCreateDataset: () => void;
   onCreateModel: () => void;
-  modelProjects: ModelProject[];
-  selectedModelProjectId: string | null;
+  /** Compatibility props while callers migrate the picker into the sidebar. */
+  modelProjects?: ModelProject[];
+  selectedModelProjectId?: string | null;
   activeHostedTeamId?: string | null;
-  onSelectModelProject: (modelProjectId: string) => void;
+  onSelectModelProject?: (modelProjectId: string) => void;
 }) {
   return (
     <section className="labs-route" aria-label="Models">
       {showHeader ? <header className="labs-header">
         <div className="labs-header-actions">
-          <label className="labs-model-project-picker">
-            <span>Model Project</span>
-            <select
-              aria-label="Select Model Project"
-              disabled={!modelProjects.length}
-              value={selectedModelProjectId ?? ""}
-              onChange={(event) => onSelectModelProject(event.target.value)}
-            >
-              {!modelProjects.length ? <option value="">No Model Projects</option> : null}
-              {modelProjects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-            <small>
-              {activeHostedTeamId
-                ? `Hosted Team · ${activeHostedTeamId}`
-                : "Local-only projects until a hosted Team is active"}
-            </small>
-          </label>
           {activeTab === "overview" ? (
             <button
               className="labs-create-button"

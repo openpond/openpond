@@ -780,6 +780,9 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         style={appShellStyle}
         sidebar={{
           productArea,
+          modelProjects: (training.payload?.modelProjects ?? []).filter((project) =>
+            project.hosted === null || project.hosted.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
+          ),
           onProductAreaChange: changeProductArea,
           experience: activeExperience,
           view,

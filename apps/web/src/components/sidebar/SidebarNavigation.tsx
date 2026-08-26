@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   Experience,
+  ModelProject,
   OpenPondApp,
   ProductArea,
 } from "@openpond/contracts";
@@ -21,7 +22,10 @@ import { newExperienceTitle } from "../../lib/experience-options";
 import type { LabPrimaryTab } from "../labs/LabsView";
 import {
   LAB_PRIMARY_TAB_CHANGE_EVENT,
+  LAB_MODEL_PROJECT_CHANGE_EVENT,
+  labModelProjectIdFromSearch,
   labPrimaryTabFromSearch,
+  searchWithLabModelProject,
   searchWithLabPrimaryTab,
 } from "../labs/lab-primary-tab-state";
 
@@ -34,6 +38,7 @@ type SidebarDestinationProps = {
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
+  modelProjects?: ModelProject[];
 };
 
 export function SidebarNavigation({
@@ -46,6 +51,7 @@ export function SidebarNavigation({
   setSelectedSessionId,
   setView,
   view,
+  modelProjects = [],
 }: SidebarDestinationProps & {
   beginNewChat: (app?: OpenPondApp | null) => void;
 }) {
@@ -53,6 +59,9 @@ export function SidebarNavigation({
     typeof window === "undefined"
       ? "overview"
       : labPrimaryTabFromSearch(window.location.search),
+  );
+  const [selectedModelProjectId, setSelectedModelProjectId] = useState<string | null>(
+    () => typeof window === "undefined" ? null : labModelProjectIdFromSearch(window.location.search),
   );
 
   useEffect(() => {
@@ -63,6 +72,17 @@ export function SidebarNavigation({
     return () => {
       window.removeEventListener("popstate", syncModelsTab);
       window.removeEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, syncModelsTab);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncModelProject = () =>
+      setSelectedModelProjectId(labModelProjectIdFromSearch(window.location.search));
+    window.addEventListener("popstate", syncModelProject);
+    window.addEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, syncModelProject);
+    return () => {
+      window.removeEventListener("popstate", syncModelProject);
+      window.removeEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, syncModelProject);
     };
   }, []);
 
@@ -86,6 +106,12 @@ export function SidebarNavigation({
     window.dispatchEvent(new Event(LAB_PRIMARY_TAB_CHANGE_EVENT));
   }
 
+  function selectModelProject(modelProjectId: string) {
+    const search = searchWithLabModelProject(window.location.search, modelProjectId || null);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search}${window.location.hash}`);
+    window.dispatchEvent(new Event(LAB_MODEL_PROJECT_CHANGE_EVENT));
+  }
+
   return (
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea === "models" ? null : (
@@ -100,6 +126,18 @@ export function SidebarNavigation({
       )}
       {productArea === "models" ? (
         <>
+          <label className="sidebar-model-project-picker">
+            <span>Model Project</span>
+            <select
+              aria-label="Select Model Project"
+              disabled={!modelProjects.length}
+              value={selectedModelProjectId ?? ""}
+              onChange={(event) => selectModelProject(event.target.value)}
+            >
+              {!modelProjects.length ? <option value="">No Model Projects</option> : null}
+              {modelProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "overview" ? "active" : ""}`}
             aria-label="Overview"

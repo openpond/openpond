@@ -29,6 +29,7 @@ export function Sidebar(props: SidebarProps) {
     setSettingsSection,
     setView,
     view,
+    modelProjects,
   } = props;
   const updateCheck = useReleaseUpdateCheck({
     currentVersion,
@@ -77,6 +78,7 @@ export function Sidebar(props: SidebarProps) {
         setSelectedSessionId={setSelectedSessionId}
         setView={setView}
         view={view}
+        modelProjects={modelProjects}
       />
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}

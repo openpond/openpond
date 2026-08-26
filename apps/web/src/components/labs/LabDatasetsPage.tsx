@@ -97,16 +97,21 @@ export function LabDatasetsPage({
     : null;
   const filtered = useMemo<TasksetListItem[]>(() => {
     const normalized = query.trim().toLowerCase();
+    const attachedTasksetIds = new Set(
+      project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? [],
+    );
     return [
-      ...(state?.tasksetDrafts ?? [])
+      ...(modelProjectId ? [] : (state?.tasksetDrafts ?? []))
         .filter((draft) => draft.status !== "published")
         .map((value) => ({ kind: "draft" as const, value })),
-      ...tasksets.map((value) => ({ kind: "taskset" as const, value })),
+      ...tasksets
+        .filter((value) => !modelProjectId || attachedTasksetIds.has(value.id))
+        .map((value) => ({ kind: "taskset" as const, value })),
     ]
       .filter(({ value }) => !normalized || [value.name, value.objective, value.id]
         .some((candidate) => candidate.toLowerCase().includes(normalized)))
       .sort((left, right) => right.value.updatedAt.localeCompare(left.value.updatedAt));
-  }, [query, state?.tasksetDrafts, tasksets]);
+  }, [modelProjectId, project?.tasksetSyncs, query, state?.tasksetDrafts, tasksets]);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const modelCountByDataset = useMemo(() => {
     const counts = new Map<string, number>();
@@ -307,10 +312,9 @@ export function LabDatasetsPage({
       {modelProjectId ? (
         <div className="labs-model-section-intro">
           <div>
-            <h2>Tasksets for this Model Project</h2>
+            <h2>Taskset</h2>
             <p>
-              Select an existing local Taskset, then use Sync hosted to attach
-              its immutable release to this Model Project.
+              This project’s attached, immutable Taskset releases.
             </p>
           </div>
           <span>{project?.tasksetSyncs.length ?? 0} attached</span>

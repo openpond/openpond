@@ -11,6 +11,7 @@ import type {
   CommunitySummary,
   Experience,
   ProductArea,
+  ModelProject,
 } from "@openpond/contracts";
 import type { SidebarSectionMenuId } from "../../app/app-state";
 import type {
@@ -31,6 +32,7 @@ export type SidebarProps = {
   onProductAreaChange: (productArea: ProductArea) => void;
   experience: Experience;
   view: AppView;
+  modelProjects: ModelProject[];
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;
