@@ -772,7 +772,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const selectedChatHistoryLoading = Boolean(
     selectedChatHistoryLoadState?.loading
   );
-  const modelTrainingActivityByProjectId = useMemo(() => {
+  const modelTrainingActivityByProjectId = (() => {
     const payload = training.payload;
     if (!payload) return {};
     const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
@@ -821,7 +821,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
       };
     }
     return activities;
-  }, [training.payload]);
+  })();
 
   return (
     <AppToastProvider showToast={showToast}>
