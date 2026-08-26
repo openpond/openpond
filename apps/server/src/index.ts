@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-import path from "node:path";
-import { randomUUID } from "node:crypto";
+import path from "node:path"; import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import {
   CompactSessionRequestSchema,
@@ -13,9 +12,7 @@ import {
   type RuntimeEvent,
   type ServerStatus,
 } from "@openpond/contracts";
-import { detectCodexStatus } from "@openpond/codex-provider";
-import { runAgentCompaction } from "@openpond/agent-runtime";
-import { createAppServer } from "@openpond/app-server";
+import { detectCodexStatus } from "@openpond/codex-provider"; import { runAgentCompaction } from "@openpond/agent-runtime"; import { createAppServer } from "@openpond/app-server";
 import {
   installAgentPackageIntoActiveProfile,
   loadOpenPondProfileLibrary,

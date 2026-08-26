@@ -39,6 +39,7 @@ const productionLineLimitAllowlist = new Set([
   "apps/web/src/components/app-shell/MainPane.tsx",
   "apps/web/src/components/chat/Composer.tsx",
   "apps/web/src/components/chat/WorkspaceEnvironmentMenu.tsx",
+  "apps/web/src/components/labs/LabDatasetsPage.tsx",
   "apps/web/src/components/settings/ProfileSettingsSection.tsx",
   "apps/web/src/components/sidebar/SidebarRows.tsx",
   "apps/web/src/components/workspace-diff/WorkspaceDiffPanel.tsx",
@@ -53,6 +54,8 @@ const productionLineLimitAllowlist = new Set([
   "packages/cloud/src/profile/local-profile.ts",
   "packages/cloud/src/sandbox/client.ts",
   "packages/cloud/src/sandbox-template/manifest.ts",
+  "packages/contracts/src/training.ts",
+  "packages/evals/src/preferences.ts",
 ]);
 const extractedTurnDomains = ["turns", "hosted-turn", "subagents", "goals", "create-pipeline"];
 
