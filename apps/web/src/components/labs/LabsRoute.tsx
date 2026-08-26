@@ -205,12 +205,45 @@ export function LabsRoute({
     [createImprove.runs, profile, training.training.payload]
   );
   const models = useMemo(
-    () => workproducts.filter((workproduct) => workproduct.kind === "model"),
-    [workproducts],
+    () => {
+      const activeHostedTeamId =
+        training.settingsPreferences.defaultTeamId?.trim() ?? null;
+      const visibleIds = new Set(
+        (training.training.payload?.modelProjects ?? [])
+          .filter(
+            (project) =>
+              project.hosted === null ||
+              (activeHostedTeamId !== null &&
+                project.hosted.teamId === activeHostedTeamId),
+          )
+          .map((project) => project.id),
+      );
+      return workproducts.filter(
+        (workproduct) =>
+          workproduct.kind === "model" && visibleIds.has(workproduct.id),
+      );
+    },
+    [
+      training.settingsPreferences.defaultTeamId,
+      training.training.payload?.modelProjects,
+      workproducts,
+    ],
   );
   const selected =
     models.find((workproduct) => workproduct.key === selectedKey) ?? null;
   const modelProjects = training.training.payload?.modelProjects ?? [];
+  const activeHostedTeamId =
+    training.settingsPreferences.defaultTeamId?.trim() ?? null;
+  const scopedModelProjects = useMemo(
+    () =>
+      modelProjects.filter(
+        (project) =>
+          project.hosted === null ||
+          (activeHostedTeamId !== null &&
+            project.hosted.teamId === activeHostedTeamId),
+      ),
+    [activeHostedTeamId, modelProjects],
+  );
   useEffect(() => {
     if (!profileView.connection) return;
     let cancelled = false;
@@ -272,11 +305,11 @@ export function LabsRoute({
   useEffect(() => {
     if (
       selectedKey &&
-      !workproducts.some((workproduct) => workproduct.key === selectedKey)
+      !models.some((workproduct) => workproduct.key === selectedKey)
     ) {
       setSelectedKey(null);
     }
-  }, [selectedKey, workproducts]);
+  }, [models, selectedKey]);
   useEffect(() => {
     onSkillSelectionChange(null);
   }, [onSkillSelectionChange]);
@@ -505,7 +538,8 @@ export function LabsRoute({
       }
       onCreateDataset={openDatasetCreation}
       onCreateModel={() => setModelCreateOpen(true)}
-      modelProjects={modelProjects}
+      modelProjects={scopedModelProjects}
+      activeHostedTeamId={activeHostedTeamId}
       selectedModelProjectId={selected?.id ?? null}
       onSelectModelProject={(modelProjectId) => {
         setSelectedKey(workproductKey("model", modelProjectId));

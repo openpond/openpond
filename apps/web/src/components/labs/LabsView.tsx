@@ -26,6 +26,7 @@ export function LabsView({
   onCreateModel,
   modelProjects = [],
   selectedModelProjectId = null,
+  activeHostedTeamId = null,
   onSelectModelProject = () => undefined,
 }: {
   activeTab: LabPrimaryTab;
@@ -35,6 +36,7 @@ export function LabsView({
   onCreateModel: () => void;
   modelProjects: ModelProject[];
   selectedModelProjectId: string | null;
+  activeHostedTeamId?: string | null;
   onSelectModelProject: (modelProjectId: string) => void;
 }) {
   return (
@@ -54,6 +56,11 @@ export function LabsView({
                 <option key={project.id} value={project.id}>{project.name}</option>
               ))}
             </select>
+            <small>
+              {activeHostedTeamId
+                ? `Hosted Team · ${activeHostedTeamId}`
+                : "Local-only projects until a hosted Team is active"}
+            </small>
           </label>
           {activeTab === "overview" ? (
             <button

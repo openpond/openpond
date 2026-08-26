@@ -240,6 +240,12 @@ export function LabWorkproductDetail({
       workproduct.ownerProfileId &&
         workproduct.ownerProfileId !== profile?.activeProfile
     );
+  const modelProject =
+    workproduct.kind === "model"
+      ? training.payload?.modelProjects.find(
+          (project) => project.id === workproduct.id,
+        ) ?? null
+      : null;
   const modelVersions = useMemo(
     () =>
       workproduct.kind === "model"
@@ -566,6 +572,43 @@ export function LabWorkproductDetail({
         </div>
         {workproduct.kind === "model" ? (
           <div className="labs-workproduct-header-actions">
+            {modelProject ? (
+              <>
+                <LabStatusBadge
+                  label={
+                    modelProject.hosted
+                      ? `Hosted · ${modelProject.hosted.teamId}`
+                      : "Local only"
+                  }
+                  value={modelProject.hosted ? "available" : "not_run"}
+                />
+                <button
+                  className="training-button secondary"
+                  disabled={
+                    readOnlyModel ||
+                    training.busyAction === "sync-model-project"
+                  }
+                  type="button"
+                  onClick={async () => {
+                    const synced = await training.actions.syncModelProject(
+                      modelProject.id,
+                    );
+                    onToast(
+                      synced
+                        ? "Model Project synced to the active hosted Team."
+                        : "The Model Project could not be synced.",
+                      synced ? "success" : "error",
+                    );
+                  }}
+                >
+                  {training.busyAction === "sync-model-project"
+                    ? "Syncing…"
+                    : modelProject.hosted
+                      ? "Sync project"
+                      : "Connect to hosted Team"}
+                </button>
+              </>
+            ) : null}
             {selectedModelVersion?.taskset ? (
               <button
                 className="training-button secondary"
