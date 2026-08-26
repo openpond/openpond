@@ -242,16 +242,16 @@ export function LabModelRunsPage({
                           ? entry.draft.status === "ready_to_run"
                             ? "Ready to run"
                             : "Draft"
-                          : entry.lifecycleRun
-                          ? statusLabel(entry.lifecycleRun.status)
                           : entry.job
                           ? statusLabel(entry.job.status)
+                          : entry.lifecycleRun
+                          ? statusLabel(entry.lifecycleRun.status)
                           : "Not started"
                       }
                       value={
                         entry.draft?.status ??
-                        entry.lifecycleRun?.status ??
                         entry.job?.status ??
+                        entry.lifecycleRun?.status ??
                         "not_run"
                       }
                     />
