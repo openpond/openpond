@@ -10,7 +10,6 @@ import {
   ChartColumnStacked,
   Cloud,
   FileOutput,
-  FileText,
   FolderGit2,
   Shapes,
   SquarePen,
@@ -112,21 +111,12 @@ export function SidebarNavigation({
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "tasksets" ? "active" : ""}`}
-            aria-label="Tasksets"
+            aria-label="Taskset"
             type="button"
             onClick={() => selectModelsTab("tasksets")}
           >
             <Boxes size={16} />
-            <span>Tasksets</span>
-          </button>
-          <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "versions" ? "active" : ""}`}
-            aria-label="Model Versions"
-            type="button"
-            onClick={() => selectModelsTab("versions")}
-          >
-            <FileText size={16} />
-            <span>Model Versions</span>
+            <span>Taskset</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "runs" ? "active" : ""}`}

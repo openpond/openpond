@@ -750,14 +750,14 @@ export function LabWorkproductDetail({
                     }
                   />
                   <Fact
-                    label="Tasksets"
+                    label="Taskset releases"
                     value={String(modelProject?.tasksetSyncs.length ?? 0)}
                   />
                   <Fact label="Model versions" value={String(modelVersions.length)} />
                   <Fact label="Runs" value={String(modelRunHistory.length)} />
                 </dl>
                 <p className="labs-detail-copy">
-                  Attach an existing Taskset in Tasksets, sync its immutable
+                  Attach an existing Taskset in Taskset, sync its immutable
                   release to this hosted project, then create a Run. Versions
                   only appear after a Run produces a trained artifact.
                 </p>
