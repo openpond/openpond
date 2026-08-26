@@ -179,10 +179,10 @@ export function SidebarNavigation({
             {selectedTrainingActivity ? (
               <span
                 className="nav-command-training-status"
+                aria-label={`Training ${selectedTrainingActivity.label.toLowerCase()}`}
                 title={`Training ${selectedTrainingActivity.label.toLowerCase()}`}
               >
                 <span className="sidebar-running-dot" aria-hidden="true" />
-                <span>{selectedTrainingActivity.label}</span>
               </span>
             ) : null}
           </button>

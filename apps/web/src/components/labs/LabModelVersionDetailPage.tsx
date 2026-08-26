@@ -749,32 +749,26 @@ function TrainingEventLog({
     );
   }
   return (
-    <div className="training-table-wrap">
-      <table className="training-data-table">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Event</th>
-            <th>Details</th>
-          </tr>
-        </thead>
-        <tbody>
-          {events.map((event) => (
-            <tr key={event.id}>
-              <td>{formatDateTime(event.timestamp)}</td>
-              <td>{eventLabel(event.type)}</td>
-              <td>{eventSummary(event)}</td>
-            </tr>
-          ))}
-          {error ? (
-            <tr>
-              <td>Not available</td>
-              <td>Failure</td>
-              <td>{error}</td>
-            </tr>
-          ) : null}
-        </tbody>
-      </table>
+    <div
+      aria-label="Training activity log"
+      aria-live="polite"
+      className="training-event-log"
+      role="log"
+    >
+      {events.map((event) => (
+        <div className={`training-event-log-line ${event.type}`} key={event.id}>
+          <time dateTime={event.timestamp}>{formatDateTime(event.timestamp)}</time>
+          <span>{eventLabel(event.type)}</span>
+          <code>{eventSummary(event)}</code>
+        </div>
+      ))}
+      {error ? (
+        <div className="training-event-log-line failure">
+          <time>—</time>
+          <span>Failure</span>
+          <code>{error}</code>
+        </div>
+      ) : null}
     </div>
   );
 }

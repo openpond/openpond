@@ -165,9 +165,13 @@
 .training-artifact-list span{color:var(--muted);font-size:11px;text-transform:capitalize}
 .training-artifact-list code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
 .training-artifact-list strong{font-size:11px;font-weight:500}
-.training-event-log{max-height:360px;overflow:auto}
-.training-event-log>div{display:grid;grid-template-columns:86px 90px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:11px}
-.training-event-log time,.training-event-log code{color:var(--muted);overflow-wrap:anywhere}
+.training-event-log{max-height:min(440px,55vh);overflow:auto;border:1px solid var(--border);border-radius:7px;background:color-mix(in srgb,var(--panel) 84%,#050709);padding:6px 0;font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;scrollbar-gutter:stable}
+.training-event-log>div{display:grid;grid-template-columns:150px 88px minmax(0,1fr);gap:12px;padding:5px 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 70%,transparent)}
+.training-event-log>div:hover{background:color-mix(in srgb,var(--cyan) 4%,transparent)}
+.training-event-log time{color:var(--muted);white-space:nowrap}
+.training-event-log span{color:var(--text);font-weight:600;text-transform:lowercase}
+.training-event-log code{color:color-mix(in srgb,var(--text) 82%,var(--muted));overflow-wrap:anywhere;white-space:pre-wrap}
+.training-event-log-line.failure span,.training-event-log-line.failure code{color:var(--danger)}
 .training-sidebar-summary{height:100%;overflow:auto;padding:16px}
 .training-sidebar-summary header{display:grid;gap:6px;padding-bottom:14px;border-bottom:1px solid var(--border)}
 .training-sidebar-summary h2{margin:0;font-size:14px;line-height:1.4}
