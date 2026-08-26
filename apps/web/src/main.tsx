@@ -1,8 +1,9 @@
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./styles.css";
+
+const App = lazy(() => import("./App").then((module) => ({ default: module.App })));
 
 window.addEventListener("error", (event) => {
   void window.openpond?.logRendererError?.({
@@ -26,7 +27,9 @@ window.addEventListener("unhandledrejection", (event) => {
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <ErrorBoundary>
-      <App />
+      <Suspense fallback={null}>
+        <App />
+      </Suspense>
     </ErrorBoundary>
   </StrictMode>
 );

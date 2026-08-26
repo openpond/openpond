@@ -75,13 +75,12 @@ function renderSidebarUtilityNavigation(
 }
 
 describe("Sidebar navigation", () => {
-  test("does not render a Projects primary navigation entry", () => {
+  test("keeps development navigation focused on starting work", () => {
     const markup = renderSidebarNavigation("chat");
 
     expect(markup).toContain("New task");
     expect(markup).toContain('class="nav-command nav-command-new-task"');
-    expect(markup).toContain('class="lucide lucide-plus"');
-    expect(markup).not.toContain('class="lucide lucide-square-pen"');
+    expect(markup).toContain('class="lucide lucide-square-pen"');
     expect(markup).not.toContain("Profile");
     expect(markup).not.toContain("Models");
     expect(markup).not.toContain("Docs");
@@ -148,40 +147,40 @@ describe("Sidebar navigation", () => {
     expect(markup).toContain('aria-current="page" class="active"');
   });
 
-  test("highlights Scheduled, My files, and Models destinations independently", () => {
+  test("highlights Workflows, Outputs, and Models destinations independently", () => {
     const schedule = renderSidebarNavigation("scheduled", "work", "chat");
     const outputs = renderSidebarNavigation("outputs", "work", "chat");
     const models = renderSidebarNavigation("labs", "development", "models");
 
-    expect(schedule).toContain('class="nav-command nav-command-prominent active" aria-label="Scheduled"');
-    expect(schedule).not.toContain('class="nav-command nav-command-prominent active" aria-label="My files"');
+    expect(schedule).toContain('class="nav-command nav-command-prominent active" aria-label="Workflows"');
+    expect(schedule).not.toContain('class="nav-command nav-command-prominent active" aria-label="Outputs"');
     expect(schedule).not.toContain('class="nav-command active" aria-label="Overview"');
-    expect(outputs).toContain('class="nav-command nav-command-prominent active" aria-label="My files"');
-    expect(outputs).not.toContain('class="nav-command nav-command-prominent active" aria-label="Scheduled"');
+    expect(outputs).toContain('class="nav-command nav-command-prominent active" aria-label="Outputs"');
+    expect(outputs).not.toContain('class="nav-command nav-command-prominent active" aria-label="Workflows"');
     expect(models).toContain('class="nav-command active" aria-label="Overview"');
-    expect(models).not.toContain('aria-label="Scheduled"');
+    expect(models).not.toContain('aria-label="Workflows"');
     expect(models).not.toContain("sidebar-profile-change-dot");
     expect(models).not.toContain("Local profile changes are not committed");
   });
 
-  test("keeps Chat and Work inside Chat with Scheduled and My files available", () => {
+  test("keeps Chat and Work inside Chat with Workflows and Outputs available", () => {
     const chat = renderSidebarNavigation("chat", "chat", "chat");
     const work = renderSidebarNavigation("chat", "work", "chat");
     const chatUtilities = renderSidebarUtilityNavigation("chat", "chat");
     const workUtilities = renderSidebarUtilityNavigation("chat", "work");
 
     expect(chat).toContain("New chat");
-    expect(chat).toContain("Scheduled");
-    expect(chat).toContain("My files");
+    expect(chat).toContain("Workflows");
+    expect(chat).toContain("Outputs");
     expect(chat).not.toContain("Profile");
     expect(chat).not.toContain("Models");
-    expect(chat).not.toContain("Apps");
+    expect(chat).toContain("Apps");
     expect(work).toContain("New task");
-    expect(work).toContain("Scheduled");
-    expect(work).toContain("My files");
+    expect(work).toContain("Workflows");
+    expect(work).toContain("Outputs");
     expect(work).not.toContain("Profile");
     expect(work).not.toContain("Models");
-    expect(work).not.toContain("Apps");
+    expect(work).toContain("Apps");
     expect(chatUtilities).toContain('aria-label="Open docs and help menu"');
     expect(chatUtilities).not.toContain("Apps");
     expect(workUtilities).toContain('aria-label="Open docs and help menu"');
