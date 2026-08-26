@@ -801,14 +801,16 @@ function eventSummary(event: TrainingJobEvent): string {
         percentValue
       ),
     ].filter((value): value is string => Boolean(value));
+    const failureClass =
+      typeof payload.failureClass === "string" ? payload.failureClass : null;
     const managedMetric =
       typeof payload.metricId === "string" &&
       typeof payload.value === "number"
         ? ` · ${payload.metricId}: ${payload.value.toPrecision(4)}`
         : "";
     return `${kind}${step == null ? "" : ` · step ${step}`}${managedMetric}${
-      values.length ? ` · ${values.join(" · ")}` : ""
-    }`;
+      failureClass ? ` · ${failureClass}` : ""
+    }${values.length ? ` · ${values.join(" · ")}` : ""}`;
   }
   if (event.type === "checkpoint") {
     const policyVersion = finiteNumber(payload.policyVersion);

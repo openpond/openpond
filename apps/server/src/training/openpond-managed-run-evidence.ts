@@ -100,6 +100,7 @@ const ManagedJobDetailSchema = z.object({
         policyVersion: z.number().int().nonnegative(),
         rewardEligible: z.boolean(),
         reward: OptionalMoneySchema,
+        terminalClass: z.string().trim().min(1).nullable().optional(),
         rewardComponents: z.record(z.string(), z.unknown()).default({}),
         promptTokenCount: z.number().int().nonnegative().nullable().optional(),
         outputTokenCount: z.number().int().nonnegative().nullable().optional(),
@@ -369,6 +370,9 @@ function managedTrainingEvents(input: {
         reward: decimal(trajectory.reward),
         rewardEligible: trajectory.rewardEligible,
         rewardComponents: trajectory.rewardComponents,
+        failureClass: trajectory.rewardEligible
+          ? null
+          : trajectory.terminalClass ?? "not_reward_eligible",
         inputTokens: trajectory.promptTokenCount ?? 0,
         outputTokens: trajectory.outputTokenCount ?? 0,
       },
