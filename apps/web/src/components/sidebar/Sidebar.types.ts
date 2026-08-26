@@ -33,6 +33,10 @@ export type SidebarProps = {
   experience: Experience;
   view: AppView;
   modelProjects: ModelProject[];
+  modelTrainingActivityByProjectId: Record<
+    string,
+    { label: string; status: string }
+  >;
   selectedAppId: string | null;
   selectedProjectId: string | null;
   selectedSessionId: string | null;

@@ -40,6 +40,10 @@ type SidebarDestinationProps = {
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
   modelProjects?: ModelProject[];
+  modelTrainingActivityByProjectId?: Record<
+    string,
+    { label: string; status: string }
+  >;
 };
 
 export function SidebarNavigation({
@@ -53,6 +57,7 @@ export function SidebarNavigation({
   setView,
   view,
   modelProjects = [],
+  modelTrainingActivityByProjectId = {},
 }: SidebarDestinationProps & {
   beginNewChat: (app?: OpenPondApp | null) => void;
 }) {
@@ -113,6 +118,10 @@ export function SidebarNavigation({
     window.dispatchEvent(new Event(LAB_MODEL_PROJECT_CHANGE_EVENT));
   }
 
+  const selectedTrainingActivity = selectedModelProjectId
+    ? modelTrainingActivityByProjectId[selectedModelProjectId] ?? null
+    : null;
+
   return (
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea === "models" ? null : (
@@ -158,13 +167,24 @@ export function SidebarNavigation({
             <span>Taskset</span>
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "training" ? "active" : ""}`}
-            aria-label="Training"
+            className={`nav-command ${selectedTrainingActivity ? "nav-command-training-live " : ""}${view === "labs" && activeModelsTab === "training" ? "active" : ""}`}
+            aria-label={selectedTrainingActivity
+              ? `Training, ${selectedTrainingActivity.label}`
+              : "Training"}
             type="button"
             onClick={() => selectModelsTab("training")}
           >
             <ChartColumnStacked size={16} />
             <span>Training</span>
+            {selectedTrainingActivity ? (
+              <span
+                className="nav-command-training-status"
+                title={`Training ${selectedTrainingActivity.label.toLowerCase()}`}
+              >
+                <span className="sidebar-running-dot" aria-hidden="true" />
+                <span>{selectedTrainingActivity.label}</span>
+              </span>
+            ) : null}
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "evals" ? "active" : ""}`}

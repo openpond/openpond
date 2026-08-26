@@ -30,6 +30,7 @@ export function Sidebar(props: SidebarProps) {
     setView,
     view,
     modelProjects,
+    modelTrainingActivityByProjectId,
   } = props;
   const updateCheck = useReleaseUpdateCheck({
     currentVersion,
@@ -79,6 +80,7 @@ export function Sidebar(props: SidebarProps) {
         setView={setView}
         view={view}
         modelProjects={modelProjects}
+        modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
       />
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}

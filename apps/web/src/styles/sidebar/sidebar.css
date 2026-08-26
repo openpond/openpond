@@ -401,6 +401,25 @@
   font-size: 15px;
 }
 
+.nav-command-training-live {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.nav-command-training-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: #49d17f;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.nav-command-training-status .sidebar-running-dot {
+  margin: 0 3px 0 0;
+}
+
 .nav-command-new-task {
   margin-bottom: 0;
   font-size: 15px;
