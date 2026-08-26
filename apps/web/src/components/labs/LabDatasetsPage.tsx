@@ -22,6 +22,7 @@ import { LabModelDataset } from "./LabModelDataset";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { labModelDatasets } from "./lab-models";
 import { labWorkproductProjection } from "./lab-workproducts";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const PAGE_SIZE = 10;
 type TasksetListItem =
@@ -38,11 +39,8 @@ type DatasetDetailTab =
 const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "scenarios", label: "Scenarios" },
-  { id: "runs", label: "Generate & Runs" },
-  { id: "attempts", label: "Attempts" },
   { id: "review", label: "Review" },
   { id: "metrics", label: "Metrics" },
-  { id: "versions", label: "Versions" },
 ];
 
 export function LabDatasetsPage({
@@ -52,7 +50,7 @@ export function LabDatasetsPage({
   onSelectedIdChange,
   onOpenDraft,
   defaultModel,
-  onImproveInChat,
+  onImproveInChat: _onImproveInChat,
   onTrainModel,
   onOpenFiles,
   training,
@@ -79,12 +77,14 @@ export function LabDatasetsPage({
   const [page, setPage] = useState(1);
   const [detailTab, setDetailTab] = useState<DatasetDetailTab>("overview");
   const tasksets = state?.tasksets ?? [];
+  const project = modelProjectId
+    ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
+    : null;
   const selected =
     [...tasksets, ...(state?.modelTasksets ?? [])].find(
       (taskset) => taskset.id === selectedId,
     ) ?? null;
   const readOnly = Boolean(selected && selected.profileId !== state?.profileId);
-  const builtIn = selected?.benchmark?.source === "builtin";
   const selectedArtifact = selected?.datasetArtifact
     ? state?.datasetArtifacts.find(
         (artifact) =>
@@ -94,16 +94,21 @@ export function LabDatasetsPage({
     : null;
   const filtered = useMemo<TasksetListItem[]>(() => {
     const normalized = query.trim().toLowerCase();
+    const attachedTasksetIds = new Set(
+      project?.tasksetSyncs.map((sync) => sync.localTasksetId) ?? [],
+    );
     return [
-      ...(state?.tasksetDrafts ?? [])
+      ...(modelProjectId ? [] : (state?.tasksetDrafts ?? []))
         .filter((draft) => draft.status !== "published")
         .map((value) => ({ kind: "draft" as const, value })),
-      ...tasksets.map((value) => ({ kind: "taskset" as const, value })),
+      ...tasksets
+        .filter((value) => !modelProjectId || attachedTasksetIds.has(value.id))
+        .map((value) => ({ kind: "taskset" as const, value })),
     ]
       .filter(({ value }) => !normalized || [value.name, value.objective, value.id]
         .some((candidate) => candidate.toLowerCase().includes(normalized)))
       .sort((left, right) => right.value.updatedAt.localeCompare(left.value.updatedAt));
-  }, [query, state?.tasksetDrafts, tasksets]);
+  }, [modelProjectId, project?.tasksetSyncs, query, state?.tasksetDrafts, tasksets]);
   const visible = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const modelCountByDataset = useMemo(() => {
     const counts = new Map<string, number>();
@@ -126,9 +131,6 @@ export function LabDatasetsPage({
   }, [selectedId]);
 
   if (selected) {
-    const project = modelProjectId
-      ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
-      : null;
     const sync = project?.tasksetSyncs.find(
       (candidate) => candidate.localTasksetId === selected.id,
     );
@@ -196,40 +198,6 @@ export function LabDatasetsPage({
                 value="available"
               />
             ) : null}
-            {!builtIn ? (
-              <button
-                className="training-button secondary"
-                disabled={readOnly}
-                title={
-                  readOnly
-                    ? "Switch to this Taskset's Profile to modify it."
-                    : "Improve this Taskset in Chat."
-                }
-                type="button"
-                onClick={() => onImproveInChat(selected)}
-              >
-                Improve in Chat
-              </button>
-            ) : null}
-            {selected.purpose === "benchmark" ? (
-              <button
-                className="training-button"
-                disabled={readOnly}
-                type="button"
-                onClick={() => setDetailTab("runs")}
-              >
-                Run Benchmark
-              </button>
-            ) : (
-              <button
-                className="training-button"
-                disabled={readOnly}
-                type="button"
-                onClick={() => setDetailTab("runs")}
-              >
-                Create run
-              </button>
-            )}
             <LabStatusBadge
               label={datasetStatus(selected)}
               value={selected.status}
@@ -269,7 +237,7 @@ export function LabDatasetsPage({
         ) : detailTab === "versions" ? (
           <TasksetVersions state={state} taskset={selected} />
         ) : (
-          <>
+        <>
             <LabModelDataset
               artifact={selectedArtifact}
               defaultModel={defaultModel}
@@ -296,7 +264,7 @@ export function LabDatasetsPage({
                 onToast={onToast}
               />
             ) : null}
-          </>
+        </>
         )}
       </div>
     );
@@ -304,6 +272,17 @@ export function LabDatasetsPage({
 
   return (
     <div className="labs-flat-body labs-datasets-page">
+      {modelProjectId ? (
+        <ModelProjectPageHeader
+          title="Taskset"
+          description="Scenarios, environment resources, graders, review protocol, and immutable releases."
+          metrics={[
+            { label: "Attached releases", value: project?.tasksetSyncs.length ?? 0 },
+            { label: "Scenarios", value: filtered.reduce((total, item) => total + item.value.tasks.length, 0) },
+            { label: "Graders", value: filtered.reduce((total, item) => total + ("graders" in item.value ? item.value.graders.length : 0), 0) },
+          ]}
+        />
+      ) : null}
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />
@@ -335,6 +314,7 @@ export function LabDatasetsPage({
               <th>Validation</th>
               <th>Frozen Eval</th>
               <th>Graders</th>
+              {modelProjectId ? <th>Project</th> : null}
               <th>Activity</th>
               <th>Updated</th>
             </tr>
@@ -362,6 +342,7 @@ export function LabDatasetsPage({
                     <td>{draftSplitCount(draft, "validation")}</td>
                     <td>{draftSplitCount(draft, "frozen_eval")}</td>
                     <td>{draft.graders.length}</td>
+                    {modelProjectId ? <td>Draft</td> : null}
                     <td>Resume draft</td>
                     <td>{formatCompactDate(draft.updatedAt)}</td>
                   </tr>
@@ -372,6 +353,9 @@ export function LabDatasetsPage({
               const benchmarkRunCount = (state?.benchmarkRuns ?? []).filter(
                 (run) => run.metadata.sourceTasksetId === taskset.id,
               ).length;
+              const sync = project?.tasksetSyncs.find(
+                (candidate) => candidate.localTasksetId === taskset.id,
+              );
               return (
                 <tr key={taskset.id}>
                   <td>
@@ -388,6 +372,17 @@ export function LabDatasetsPage({
                   <td>{splitCount(taskset, state, "validation")}</td>
                   <td>{splitCount(taskset, state, "frozen_eval")}</td>
                   <td>{taskset.graders.length}</td>
+                  {modelProjectId ? (
+                    <td>
+                      {sync?.state === "synced"
+                        ? "Attached"
+                        : sync?.state === "syncing"
+                          ? "Syncing"
+                          : sync?.state === "sync_failed"
+                            ? "Retry required"
+                            : "Not attached"}
+                    </td>
+                  ) : null}
                   <td>
                     {taskset.purpose === "benchmark"
                       ? benchmarkRunCount

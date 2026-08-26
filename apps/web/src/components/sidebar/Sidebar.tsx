@@ -29,6 +29,8 @@ export function Sidebar(props: SidebarProps) {
     setSettingsSection,
     setView,
     view,
+    modelProjects,
+    modelTrainingActivityByProjectId,
   } = props;
   const updateCheck = useReleaseUpdateCheck({
     currentVersion,
@@ -77,6 +79,8 @@ export function Sidebar(props: SidebarProps) {
         setSelectedSessionId={setSelectedSessionId}
         setView={setView}
         view={view}
+        modelProjects={modelProjects}
+        modelTrainingActivityByProjectId={modelTrainingActivityByProjectId}
       />
 
       {productArea === "models" ? null : <SidebarSectionList {...props} />}
@@ -95,13 +99,6 @@ export function Sidebar(props: SidebarProps) {
         <div className="sidebar-footer-row">
           <UserAuthFooter
             account={props.account}
-            onOpenApps={productArea === "development" || productArea === "chat" ? () => {
-              setSectionMenuOpen(null);
-              setSelectedAppId(null);
-              setSelectedProjectId(null);
-              setSelectedSessionId(null);
-              setView("apps");
-            } : undefined}
             onOpenActivity={() => {
               setSectionMenuOpen(null);
               setSettingsSection("usage");

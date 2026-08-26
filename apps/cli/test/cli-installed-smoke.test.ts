@@ -9,7 +9,7 @@ import { listCliCommandDefinitions } from "../src/cli/command-registry";
 import { runProcessCommand } from "../src/process-runner";
 
 const cliRoot = join(import.meta.dirname, "..");
-const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-06";
+const RELEASE_AGENT_PROTOCOL_VERSION = "2026-08-26";
 
 type CliPackageJson = {
   version: string;

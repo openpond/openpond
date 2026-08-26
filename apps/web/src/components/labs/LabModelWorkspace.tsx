@@ -29,6 +29,7 @@ import {
   labModelVersions,
 } from "./lab-models";
 import type { LabWorkproductSummary } from "./lab-workproducts";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 type TrainingController = ReturnType<typeof useTraining>;
 type LabModelVersion = ReturnType<typeof labModelVersions>[number];
@@ -59,14 +60,16 @@ export function LabModelRunsPage({
   training,
   onOpenDataset,
   onOpenEntry,
+  onNewRun,
   onResumeDraft,
   readOnly = false,
-  mode = "all",
+  mode = "training",
 }: ModelWorkspaceProps & {
   onOpenEntry: (entryKey: string) => void;
+  onNewRun: () => void;
   onResumeDraft: (draftId: string) => void;
   readOnly?: boolean;
-  mode?: "all" | "rollouts";
+  mode?: "training" | "evals";
 }) {
   const state = training.payload;
   const jobs = useMemo(
@@ -105,14 +108,11 @@ export function LabModelRunsPage({
       lifecycleRuns,
       readOnly ? [] : drafts,
     );
-    if (mode === "all") return entries;
-    return entries.filter((entry) => {
-      const method =
-        entry.draft?.method ??
-        entry.lifecycleRun?.method ??
-        (entry.job ? planById.get(entry.job.planId)?.recipe.method : null);
-      return entry.lifecycleRun?.kind === "rollout_smoke" || method === "grpo" || method === "ppo";
-    });
+    return entries.filter((entry) =>
+      mode === "evals"
+        ? entry.lifecycleRun?.kind === "evaluation"
+        : entry.lifecycleRun?.kind !== "evaluation",
+    );
   }, [drafts, jobs, lifecycleRuns, mode, planById, readOnly, versions]);
   const [showAllRuns, setShowAllRuns] = useState(false);
   const visibleRunEntries = showAllRuns
@@ -141,20 +141,26 @@ export function LabModelRunsPage({
 
   return (
     <section className="labs-model-version-index" aria-label="Model runs">
-      <header className="labs-model-section-intro">
-        <div>
-          <h2>{mode === "rollouts" ? "Rollouts" : "Recent runs"}</h2>
-          <p>{mode === "rollouts"
-            ? "Online policy-optimization rollouts and their unfinished drafts."
-            : "Training and evaluation history, including unfinished drafts."}</p>
-        </div>
-        <span>
-          {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}
-          {draftCount
-            ? ` · ${draftCount} ${draftCount === 1 ? "draft" : "drafts"}`
-            : ""}
-        </span>
-      </header>
+      <ModelProjectPageHeader
+        title={mode === "evals" ? "Evals" : "Training"}
+        description={mode === "evals"
+          ? "Evaluation-only runs, held-out results, and grader evidence."
+          : "Training runs, optimizer progress, checkpoints, and unfinished drafts."}
+        metrics={[
+          { label: mode === "evals" ? "Eval runs" : "Training runs", value: submittedRunCount },
+          { label: "Drafts", value: draftCount },
+          { label: "Latest activity", value: runEntries[0] ? formatDateTime(entryTimestamp(runEntries[0])) : "None" },
+        ]}
+        actions={!readOnly && mode === "training" ? (
+            <button
+              className="training-button"
+              type="button"
+              onClick={onNewRun}
+            >
+              New training run
+            </button>
+        ) : null}
+      />
       <div className="training-table-wrap">
         <table className="training-data-table labs-model-runs-table">
           <thead>
@@ -236,16 +242,16 @@ export function LabModelRunsPage({
                           ? entry.draft.status === "ready_to_run"
                             ? "Ready to run"
                             : "Draft"
-                          : entry.lifecycleRun
-                          ? statusLabel(entry.lifecycleRun.status)
                           : entry.job
                           ? statusLabel(entry.job.status)
+                          : entry.lifecycleRun
+                          ? statusLabel(entry.lifecycleRun.status)
                           : "Not started"
                       }
                       value={
                         entry.draft?.status ??
-                        entry.lifecycleRun?.status ??
                         entry.job?.status ??
+                        entry.lifecycleRun?.status ??
                         "not_run"
                       }
                     />

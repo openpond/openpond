@@ -354,14 +354,16 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           } else if (
             !learnedPreference &&
             scoredTasks.some(
-              (task) => typeof task.expectedOutput?.text !== "string",
+              (task) =>
+                typeof task.expectedOutput?.text !== "string" &&
+                typeof task.expectedOutput?.outputSchemaRef !== "string",
             )
           ) {
             issues.push({
               code: "managed_exact_answer_missing",
               path: "taskset.tasks",
               message:
-                "Stateless exact-reward tasks require an exact expected text answer.",
+                "Stateless deterministic-reward tasks require an exact expected text answer or a structured output contract.",
             });
           }
         }
@@ -435,11 +437,20 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
         };
       }),
     );
+    const project = await this.dependencies.store.getModelProject(
+      trainingPlan.modelId,
+    );
     const submission = {
       schemaVersion: "openpond.managedRlPortableSubmission.v1" as const,
       sourceRunRef: `openpond:model-run:${plan.manifest.id}`,
       name: `OpenPond Managed · ${trainingPlan.modelId}`.slice(0, 191),
       idempotencyKey: `openpond-managed:${plan.manifest.contentHash}`.slice(0, 191),
+      modelProject: project?.hosted
+        ? {
+            id: project.hosted.projectId,
+            portableProjectId: project.hosted.portableProjectId,
+          }
+        : null,
       manifest: plan.manifest,
       sourceTaskset: {
         id: taskset.id,

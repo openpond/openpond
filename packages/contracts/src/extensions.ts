@@ -6,6 +6,7 @@ export const SHIPPED_OPENPOND_SKILL_NAMES = [
   "openpond-taskset-authoring",
   "openpond-skill-authoring",
   "openpond-agent-authoring",
+  "openpond-refiner-authoring",
 ] as const;
 
 export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
@@ -64,6 +65,24 @@ export const BUILT_IN_OPENPOND_PROFILE_SKILLS = [
       "references/action-and-chat-design.md",
       "references/integrations-and-setup.md",
       "references/validation-and-repair.md",
+    ],
+  },
+  {
+    name: "openpond-refiner-authoring",
+    description:
+      "Inspect, extend, validate, activate, or roll back the OpenPond Refiner Review Profile without changing the Refiner Core.",
+    path: "skills/openpond-refiner-authoring/SKILL.md",
+    scope: "profile" as const,
+    enabled: true,
+    sourcePath: "bundled://openpond",
+    charCount: 0,
+    sourceHash: "bundled",
+    validationStatus: "valid" as const,
+    validationMessages: [],
+    resourceFiles: [
+      "references/review-profile.md",
+      "references/core-boundary.md",
+      "references/validation-and-activation.md",
     ],
   },
 ] as const;

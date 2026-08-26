@@ -36,6 +36,10 @@
       "types": "./dist/types/packages/sdk/src/workflows.d.ts",
       "import": "./dist/workflows.js"
     },
+    "./refiner": {
+      "types": "./dist/types/packages/sdk/src/refiner.d.ts",
+      "import": "./dist/refiner.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -56,10 +60,11 @@
   },
   "openpondBundledSourceDependencies": [
     "@openpond/actions",
-    "@openpond/cloud"
+    "@openpond/cloud",
+    "@openpond/harness"
   ],
   "scripts": {
-    "prebuild": "pnpm --dir ../cloud run build",
+    "prebuild": "pnpm --dir ../cloud run build && pnpm --dir ../harness run build",
     "build": "tsx scripts/build.ts",
     "typecheck": "tsc --noEmit --project tsconfig.json",
     "test": "vitest run --root ../.. --config vitest.config.ts --project sdk",
@@ -75,6 +80,7 @@
     "vitest": "4.1.10"
   },
   "dependencies": {
+    "@openpond/harness": "workspace:*",
     "esbuild": "0.28.1",
     "zod": "^4.1.13"
   }

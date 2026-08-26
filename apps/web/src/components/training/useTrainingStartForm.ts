@@ -121,6 +121,7 @@ export function useTrainingStartForm(input: {
   const [learningRate, setLearningRate] = useState(() =>
     defaultLearningRate(initialCandidate?.preference.modelId ?? "")
   );
+  const [klBeta, setKlBeta] = useState<number | null>(0.01);
   const [exportApproved, setExportApproved] = useState(false);
   const [maximumCostUsd, setMaximumCostUsd] =
     useState<number | null>(null);
@@ -163,6 +164,8 @@ export function useTrainingStartForm(input: {
     setRank,
     learningRate,
     setLearningRate,
+    klBeta,
+    setKlBeta,
     exportApproved,
     setExportApproved,
     maximumCostUsd,

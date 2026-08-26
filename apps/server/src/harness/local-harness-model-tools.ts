@@ -6,13 +6,86 @@ import { HarnessSourceManifestSchema } from "@openpond/contracts";
 import type { ModelToolDefinition } from "../openpond/model-tool-registry.js";
 import type { SqliteStore } from "../store/store.js";
 import { loadLocalHarnessRuntimeForAgentRun } from "./local-harness-run-overlay.js";
+import { inspectRefinerProfile, updateRefinerProfile } from "../refiner/refiner-profile-service.js";
+import { loadBundledAuthoringProfileSkill } from "../runtime/bundled-authoring-skills.js";
 
 const MAX_INSPECT_BYTES = 24_000;
 
 export function createLocalHarnessModelToolDefinitions(input: {
   store: SqliteStore;
+  storeDir: string;
 }): ModelToolDefinition[] {
   return [
+    {
+      name: "refiner_profile_inspect",
+      description:
+        "Inspect the separately versioned active Refiner Review Profile, its immutable release identity, and recent transitions. Use before editing Refiner behavior.",
+      parameters: { type: "object", additionalProperties: false, properties: {} },
+      execute: async (context) => modelResult(
+        context.callId,
+        "refiner_profile_inspect",
+        await inspectRefinerProfile(input.storeDir),
+      ),
+    },
+    {
+      name: "refiner_profile_update",
+      description:
+        "Validate and write a complete JSON Refiner Review Profile as a new immutable Refiner release. Activation is explicit; normal Harness refinement never calls this tool.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          profile: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              schemaVersion: { type: "string", const: "openpond.refinerReviewProfile.v1" },
+              id: { type: "string", minLength: 1, maxLength: 120 },
+              version: { type: "string", minLength: 1, maxLength: 120 },
+              name: { type: "string", minLength: 1, maxLength: 200 },
+              objective: { type: "string", minLength: 1, maxLength: 10000 },
+              instructions: {
+                type: "array",
+                maxItems: 100,
+                items: {
+                  type: "object",
+                  additionalProperties: false,
+                  properties: {
+                    id: { type: "string", minLength: 1, maxLength: 120 },
+                    text: { type: "string", minLength: 1, maxLength: 10000 },
+                  },
+                  required: ["id", "text"],
+                },
+              },
+              allowedProposalRoutes: {
+                type: "array",
+                items: { type: "string", enum: ["memory", "prompt", "skill", "agent"] },
+                maxItems: 4,
+              },
+              allowedExternalRoutes: {
+                type: "array",
+                items: { type: "string", enum: ["runtime", "product", "taskset", "training"] },
+                maxItems: 4,
+              },
+            },
+            required: ["schemaVersion", "id", "version", "name", "objective", "instructions", "allowedProposalRoutes", "allowedExternalRoutes"],
+          },
+          activate: { type: "boolean" },
+          reason: { type: "string", minLength: 1, maxLength: 10000 },
+        },
+        required: ["profile", "activate", "reason"],
+      },
+      execute: async (context) => {
+        const authoringSkill = await loadBundledAuthoringProfileSkill("openpond-refiner-authoring");
+        return modelResult(context.callId, "refiner_profile_update", await updateRefinerProfile(input.storeDir, {
+          profile: context.args.profile,
+          activate: context.args.activate,
+          reason: boundedText(context.args.reason, 10_000),
+          actor: `work:${context.session.id}`,
+          authoringSkillHash: authoringSkill.sourceHash,
+        }));
+      },
+    },
     {
       name: "memory_search",
       description:

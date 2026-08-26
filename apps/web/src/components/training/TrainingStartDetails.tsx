@@ -208,6 +208,7 @@ export function TrainingAdvancedSettings({
   defaultRolloutOutputTokens,
   rank,
   learningRate,
+  klBeta,
   rftLossMethod,
   rolloutGroupSize,
   rolloutConcurrency,
@@ -217,6 +218,7 @@ export function TrainingAdvancedSettings({
   onRolloutMaxOutputTokensChange,
   onRankChange,
   onLearningRateChange,
+  onKlBetaChange,
   onRftLossMethodChange,
   onRolloutGroupSizeChange,
   onRolloutConcurrencyChange,
@@ -232,6 +234,7 @@ export function TrainingAdvancedSettings({
   defaultRolloutOutputTokens: number;
   rank: number;
   learningRate: number;
+  klBeta: number | null;
   rftLossMethod: RftLossMethod;
   rolloutGroupSize: number;
   rolloutConcurrency: number;
@@ -241,6 +244,7 @@ export function TrainingAdvancedSettings({
   onRolloutMaxOutputTokensChange: (value: number) => void;
   onRankChange: (value: number) => void;
   onLearningRateChange: (value: number) => void;
+  onKlBetaChange: (value: number | null) => void;
   onRftLossMethodChange: (value: RftLossMethod) => void;
   onRolloutGroupSizeChange: (value: number) => void;
   onRolloutConcurrencyChange: (value: number) => void;
@@ -341,6 +345,21 @@ export function TrainingAdvancedSettings({
         </label>
         {method === "grpo" ? (
           <>
+            <label>
+              <span>KL penalty</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.001}
+                value={klBeta ?? ""}
+                placeholder="Engine default"
+                onChange={(event) => {
+                  const value = event.target.valueAsNumber;
+                  onKlBetaChange(Number.isFinite(value) ? Math.max(0, value) : null);
+                }}
+              />
+            </label>
             <label>
               <span>RL loss</span>
               <select

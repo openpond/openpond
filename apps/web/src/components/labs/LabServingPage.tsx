@@ -5,9 +5,11 @@ import type {
 
 import { Loader2 } from "../icons";
 import { LabStatusBadge } from "./LabStatusBadge";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 type LabServingRow = {
   lineageId: string;
+  modelProjectId: string;
   modelName: string;
   versionLabel: string;
   managed: ManagedAdapterServingProjection;
@@ -15,8 +17,10 @@ type LabServingRow = {
 };
 
 export function LabServingPage({
+  modelProjectId = null,
   state,
 }: {
+  modelProjectId?: string | null;
   state: TrainingStateResponse | null;
 }) {
   if (!state) {
@@ -27,9 +31,18 @@ export function LabServingPage({
     );
   }
 
-  const rows = labServingRows(state);
+  const rows = labServingRows(state, modelProjectId);
   return (
     <div className="labs-flat-body labs-serving-page">
+      <ModelProjectPageHeader
+        title="Serving"
+        description="Published adapters, active bindings, and deployment readiness."
+        metrics={[
+          { label: "Bindings", value: rows.length },
+          { label: "Ready", value: rows.filter((row) => row.managed.customerBindingAllowed).length },
+          { label: "Pending", value: rows.filter((row) => !row.managed.customerBindingAllowed).length },
+        ]}
+      />
       <section className="labs-operational-section" aria-labelledby="managed-serving-title">
         <header>
           <div>
@@ -85,7 +98,10 @@ export function LabServingPage({
   );
 }
 
-export function labServingRows(state: TrainingStateResponse): LabServingRow[] {
+export function labServingRows(
+  state: TrainingStateResponse,
+  modelProjectId: string | null = null,
+): LabServingRow[] {
   const projectById = new Map(
     state.modelProjects.map((project) => [project.id, project] as const),
   );
@@ -104,12 +120,14 @@ export function labServingRows(state: TrainingStateResponse): LabServingRow[] {
       const project = projectById.get(lineage.modelId) ?? null;
       return [{
         lineageId: lineage.id,
+        modelProjectId: lineage.modelId,
         modelName: project?.name ?? lineage.modelId,
         versionLabel: version ? `Version ${version.version}` : lineage.id,
         managed: lineage.managedServing,
         updatedAt: lineage.managedServing.lastSyncedAt,
       }];
     })
+    .filter((row) => !modelProjectId || row.modelProjectId === modelProjectId)
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 

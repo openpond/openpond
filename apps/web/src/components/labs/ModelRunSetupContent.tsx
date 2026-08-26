@@ -333,6 +333,7 @@ export function ModelRunSetupContent({
                   modelId: draft.modelId,
                   tasksetId: selectedTaskset.id,
                   destinationId,
+                  environmentPlacement: draft.managedRolloutPlacement,
                   recipe,
                   exportApproved: approval.exportApproved,
                   retentionDays: approval.retentionDays,
@@ -363,6 +364,7 @@ export function ModelRunSetupContent({
                   modelId: draft.modelId,
                   tasksetId: selectedTaskset.id,
                   destinationId,
+                  environmentPlacement: draft.managedRolloutPlacement,
                   recipe,
                   ...approval,
                 });

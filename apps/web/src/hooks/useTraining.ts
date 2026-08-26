@@ -119,19 +119,27 @@ export function useTraining(input: { connection: ClientConnection | null; profil
     return request;
   }, [connection, profileId]);
 
+  const refreshAfterMutation = useCallback(async (): Promise<TrainingStateResponse | null> => {
+    // A background activity poll can already be reading the pre-mutation
+    // projection. Let that request settle, then fetch again so a successful
+    // mutation cannot leave the UI showing the old hosted sync state.
+    if (refreshInFlightRef.current) await refreshInFlightRef.current;
+    return refresh();
+  }, [refresh]);
+
   const mutate = useCallback(async <T,>(key: string, path: string, body: unknown, method: "POST" | "PUT" | "PATCH" | "DELETE" = "POST", options: { silent?: boolean } = {}): Promise<T | null> => {
     if (!connection) return null;
     if (!options.silent) setBusyAction(key);
     try {
       const result = await api.trainingRequest<T>(connection, path, body, method);
-      await refresh();
+      await refreshAfterMutation();
       if (!options.silent) setError(null);
       return result;
     } catch (caught) {
       if (!options.silent) setError(message(caught));
       return null;
     } finally { if (!options.silent) setBusyAction(null); }
-  }, [connection, refresh]);
+  }, [connection, refreshAfterMutation]);
 
   useEffect(() => {
     activityRevisionRef.current = null;
@@ -646,6 +654,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       modelId: string;
       tasksetId: string;
       destinationId: string;
+      environmentPlacement?: "local" | "remote";
       recipe: unknown;
       exportApproved: boolean;
       retentionDays: number | null;
@@ -689,7 +698,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       job: { id: string };
       createImproveRunId: string;
     }>("start-prepared-training", "/start/prepared", body),
-    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
+    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; environmentPlacement?: "local" | "remote"; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     rejectModel: (modelId: string, reason: string) => mutate("reject-model", `/models/${encodeURIComponent(modelId)}/reject`, { reason }),
     bindModel: (

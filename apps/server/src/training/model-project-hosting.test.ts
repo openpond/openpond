@@ -60,6 +60,64 @@ describe("Model Project hosting", () => {
     expect(saveModelProject).toHaveBeenCalledWith(synced);
   });
 
+  test("retries a stale hosted container ETag with the local source revision", async () => {
+    const project = {
+      schemaVersion: "openpond.modelProject.v1" as const,
+      id: "model_project_1",
+      profileId: "default",
+      revision: 4,
+      name: "Taste model",
+      objective: "Learn a visual preference policy",
+      defaultBaseModel: null,
+      defaultDestinationId: "openpond_managed" as const,
+      hosted: {
+        schemaVersion: "openpond.hostedModelProjectLink.v1" as const,
+        teamId: "team_1",
+        projectId: "hosted_project_1",
+        portableProjectId: "model_project_1",
+        revision: 1,
+        etag: "a".repeat(64),
+        syncedSourceRevision: 4,
+        syncedAt: "2026-08-25T12:00:00.000Z",
+        tasksets: [],
+      },
+      createdAt: "2026-08-25T12:00:00.000Z",
+      updatedAt: "2026-08-25T12:30:00.000Z",
+    };
+    const request = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { expectedEtag: string | null };
+      if (body.expectedEtag) {
+        return Response.json({ error: "model_project_sync_conflict" }, { status: 409 });
+      }
+      return Response.json({
+        project: {
+          id: "hosted_project_1",
+          portableProjectId: project.id,
+          revision: 2,
+          etag: "b".repeat(64),
+        },
+      });
+    });
+    const service = createModelProjectHostingService({
+      store: {
+        getModelProject: vi.fn(async () => project),
+        saveModelProject: vi.fn(async (value: unknown) => value),
+      } as never,
+      resolveAccess: async () => ({
+        apiBaseUrl: "https://hosted.example.test",
+        teamId: "team_1",
+        token: "test-token",
+      }),
+      env: {},
+      fetch: request as typeof fetch,
+    });
+
+    const synced = await service.syncProject(project.id);
+
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(synced.hosted?.etag).toBe("b".repeat(64));
+  });
+
   test("publishes immutable Taskset releases with compressed transport", async () => {
     const project = {
       schemaVersion: "openpond.modelProject.v1" as const,

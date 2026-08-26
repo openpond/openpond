@@ -38,7 +38,7 @@ import {
 } from "@openpond/harness";
 ```
 
-Subpath exports are available at `/harness`, `/evaluation-review`,
+Subpath exports are available at `/harness`, `/evaluation-review`, `/refiner`,
 `/harness-improvements`, `/harness-workspaces`, `/refinement-lifecycle`,
 `/models`, and `/tools`.
 
@@ -67,6 +67,58 @@ host Agent/runtime
   -> no action | external route | exact edit proposal
   -> host review, validation, application, and release
 ```
+
+### Extend the Refiner with a Review Profile
+
+The Refiner definition is versioned separately from the Harness it reviews. A
+turn pins a Harness release and a Refiner release. The Refiner may propose the
+next Harness release, but it never edits its own active definition during that
+review.
+
+The portable managed source is JSON:
+
+```json
+{
+  "schemaVersion": "openpond.refinerReviewProfile.v1",
+  "id": "acme.review",
+  "version": "1",
+  "name": "Acme review",
+  "objective": "Find the smallest reusable correction supported by the trace.",
+  "instructions": [
+    {
+      "id": "pdf-completion",
+      "text": "Treat a failure that prevents reading a requested PDF as material review evidence."
+    }
+  ],
+  "allowedProposalRoutes": ["memory", "prompt", "skill", "agent"],
+  "allowedExternalRoutes": ["runtime", "product", "taskset", "training"]
+}
+```
+
+Use `defineReviewProfile` as an optional TypeScript authoring helper, then pass
+the profile to `authorLocalHarnessRefinementWithModel`. The same contracts are
+also re-exported from `openpond-sdk/refiner`.
+
+```ts
+import {
+  authorLocalHarnessRefinementWithModel,
+  defineReviewProfile,
+} from "@openpond/harness/refiner";
+
+const reviewProfile = defineReviewProfile(profileJson);
+const decision = await authorLocalHarnessRefinementWithModel({
+  evidence,
+  stream,
+  signal,
+  reviewProfile,
+});
+```
+
+OpenPond hosts can persist, validate, activate, and roll back immutable Review
+Profile releases. The bundled `openpond-refiner-authoring` Skill uses those
+operations from a normal Work turn; invoke it with
+`$openpond-refiner-authoring <change>`. Core evidence, privacy, ownership,
+validation, and activation boundaries cannot be relaxed by a Review Profile.
 
 1. The host supplies the completed-turn evidence, admitted and current Harness
    source, available mutation capabilities, and the exact evidence IDs the

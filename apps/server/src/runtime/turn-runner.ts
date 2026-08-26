@@ -1190,7 +1190,9 @@ export function createTurnRunner(deps: TurnRunnerDependencies): TurnRunner {
       if (authoringRoute && !shouldLoadProfileSkills) {
         throw new Error(
           `${
-            authoringRoute.intent.artifact === "agent" ? "Agent" : "Skill"
+            authoringRoute.intent.artifact === "agent"
+              ? "Agent"
+              : "Skill"
           } authoring requires an OpenPond hosted-tool provider so the bundled authoring skill and validation tools are available.`
         );
       }

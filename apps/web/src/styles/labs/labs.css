@@ -618,39 +618,6 @@
   font-weight: 600;
 }
 
-.labs-status-badge {
-  display: inline-flex;
-  align-items: center;
-  width: max-content;
-  border-radius: 999px;
-  padding: 3px 8px;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.labs-status-badge.positive {
-  background: #34784e;
-}
-
-.labs-status-badge.info {
-  background: #3f6394;
-}
-
-.labs-status-badge.warning {
-  background: #8b681f;
-}
-
-.labs-status-badge.negative {
-  background: #91484b;
-}
-
-.labs-status-badge.neutral {
-  background: #565861;
-}
-
 .labs-pagination {
   display: flex;
   align-items: center;

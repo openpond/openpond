@@ -7,14 +7,14 @@ import "../../styles/labs/taskset-drafts.css";
 import "../../styles/labs/labs-inventory.css";
 import "../../styles/labs/labs-detail.css";
 import "../../styles/labs/labs-model-detail.css";
+import "../../styles/labs/model-project-page.css";
 import "../../styles/labs/labs-model-comparison.css";
 
 export type LabPrimaryTab =
   | "overview"
   | "tasksets"
-  | "versions"
-  | "runs"
-  | "rollouts"
+  | "training"
+  | "evals"
   | "serving"
   ;
 
@@ -22,39 +22,24 @@ export function LabsView({
   activeTab,
   children,
   showHeader = true,
-  onCreateDataset,
+  onCreateDataset: _onCreateDataset,
   onCreateModel,
-  modelProjects = [],
-  selectedModelProjectId = null,
-  onSelectModelProject = () => undefined,
 }: {
   activeTab: LabPrimaryTab;
   children: ReactNode;
   showHeader?: boolean;
   onCreateDataset: () => void;
   onCreateModel: () => void;
-  modelProjects: ModelProject[];
-  selectedModelProjectId: string | null;
-  onSelectModelProject: (modelProjectId: string) => void;
+  /** Compatibility props while callers migrate the picker into the sidebar. */
+  modelProjects?: ModelProject[];
+  selectedModelProjectId?: string | null;
+  activeHostedTeamId?: string | null;
+  onSelectModelProject?: (modelProjectId: string) => void;
 }) {
   return (
     <section className="labs-route" aria-label="Models">
       {showHeader ? <header className="labs-header">
         <div className="labs-header-actions">
-          <label className="labs-model-project-picker">
-            <span>Model Project</span>
-            <select
-              aria-label="Select Model Project"
-              disabled={!modelProjects.length}
-              value={selectedModelProjectId ?? ""}
-              onChange={(event) => onSelectModelProject(event.target.value)}
-            >
-              {!modelProjects.length ? <option value="">No Model Projects</option> : null}
-              {modelProjects.map((project) => (
-                <option key={project.id} value={project.id}>{project.name}</option>
-              ))}
-            </select>
-          </label>
           {activeTab === "overview" ? (
             <button
               className="labs-create-button"
@@ -62,14 +47,6 @@ export function LabsView({
               onClick={onCreateModel}
             >
               <span>New Model Project</span>
-            </button>
-          ) : activeTab === "tasksets" ? (
-            <button
-              className="labs-create-button"
-              type="button"
-              onClick={onCreateDataset}
-            >
-              <span>New Taskset</span>
             </button>
           ) : null}
         </div>

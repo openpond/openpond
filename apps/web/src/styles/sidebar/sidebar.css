@@ -136,6 +136,27 @@
   border-radius: 14px;
 }
 
+.sidebar-model-project-picker {
+  display: grid;
+  gap: 5px;
+  padding: 8px 12px 5px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.sidebar-model-project-picker select {
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+  padding: 0 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
 .sidebar-icon,
 .section-icon,
 .composer-icon,
@@ -378,6 +399,22 @@
   padding: 0 8px;
   text-align: left;
   font-size: 15px;
+}
+
+.nav-command-training-live {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.nav-command-training-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  color: #49d17f;
+}
+
+.nav-command-training-status .sidebar-running-dot {
+  margin: 0;
 }
 
 .nav-command-new-task {

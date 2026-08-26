@@ -518,6 +518,13 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
     },
     [beginNewChat, setSidebarOpen]
   );
+  const startRefinerAuthoring = useCallback((objective: string) => {
+    beginNewChat(null);
+    setDraftExperience("work");
+    composerDraftStore.set(`$openpond-refiner-authoring ${objective}`);
+    setView("chat");
+    setSidebarOpen(true);
+  }, [beginNewChat, composerDraftStore, setDraftExperience, setSidebarOpen, setView]);
   const openExtensionFromSettings = useCallback(
     (extension: OpenPondExtension) => {
       setPendingExtensionSkillSidebar(extensionSourceSelection(extension));
@@ -693,6 +700,7 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
             onError: setError,
             onToast: showToast,
             onOpenSourceSession: openSessionInChat,
+            onStartRefinerAuthoring: startRefinerAuthoring,
             onAcceptEvaluationReview: acceptHarnessEvaluationReview,
             onOpenSkill: openSkillFromSettings,
             onOpenExtension: openExtensionFromSettings,
@@ -772,6 +780,57 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
   const selectedChatHistoryLoading = Boolean(
     selectedChatHistoryLoadState?.loading
   );
+  const modelTrainingActivityByProjectId = (() => {
+    const payload = training.payload;
+    if (!payload) return {};
+    const plansById = new Map(payload.plans.map((plan) => [plan.id, plan]));
+    const activeStatuses = new Set([
+      "queued",
+      "starting",
+      "running",
+      "cancelling",
+      "reconciling",
+    ]);
+    const labels: Record<string, string> = {
+      queued: "Queued",
+      starting: "Starting",
+      running: "Running",
+      cancelling: "Cancelling",
+      reconciling: "Reconciling",
+    };
+    const activities: Record<
+      string,
+      { label: string; status: string }
+    > = {};
+    for (const run of [...payload.modelRuns].sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt)
+    )) {
+      if (run.kind === "evaluation" || !["prepared", "running"].includes(run.status)) {
+        continue;
+      }
+      const linkedJob = payload.jobs
+        .filter((job) => job.metadata.modelRunId === run.id)
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+      if (linkedJob && !activeStatuses.has(linkedJob.status)) continue;
+      const status = linkedJob?.status ?? (run.status === "prepared" ? "starting" : "running");
+      activities[run.modelId] = {
+        label: labels[status] ?? "Running",
+        status,
+      };
+    }
+    for (const job of [...payload.jobs].sort((left, right) =>
+      right.updatedAt.localeCompare(left.updatedAt)
+    )) {
+      if (!activeStatuses.has(job.status)) continue;
+      const modelId = plansById.get(job.planId)?.modelId;
+      if (!modelId || activities[modelId]) continue;
+      activities[modelId] = {
+        label: labels[job.status] ?? "Active",
+        status: job.status,
+      };
+    }
+    return activities;
+  })();
 
   return (
     <AppToastProvider showToast={showToast}>
@@ -780,6 +839,10 @@ export function AppRuntimeView({ primary, secondary }: AppRuntimeViewProps) {
         style={appShellStyle}
         sidebar={{
           productArea,
+          modelProjects: (training.payload?.modelProjects ?? []).filter((project) =>
+            project.hosted === null || project.hosted.teamId === (appDefaults.defaultTeamId?.trim() ?? null),
+          ),
+          modelTrainingActivityByProjectId,
           onProductAreaChange: changeProductArea,
           experience: activeExperience,
           view,

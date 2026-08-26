@@ -79,6 +79,8 @@ export function TrainingStartDialog({
     setRank,
     learningRate,
     setLearningRate,
+    klBeta,
+    setKlBeta,
     exportApproved,
     setExportApproved,
     maximumCostUsd,
@@ -278,6 +280,7 @@ export function TrainingStartDialog({
     sequenceLength,
     rank,
     learningRate,
+    klBeta,
     rolloutGroupSize,
     rolloutConcurrency,
     rolloutMaxOutputTokens,
@@ -584,6 +587,7 @@ export function TrainingStartDialog({
         }
         rank={rank}
         learningRate={learningRate}
+        klBeta={klBeta}
         rftLossMethod={rftLossMethod}
         rolloutGroupSize={rolloutGroupSize}
         rolloutConcurrency={rolloutConcurrency}
@@ -593,6 +597,7 @@ export function TrainingStartDialog({
         onRolloutMaxOutputTokensChange={setRolloutMaxOutputTokens}
         onRankChange={setRank}
         onLearningRateChange={setLearningRate}
+        onKlBetaChange={setKlBeta}
         onRftLossMethodChange={setRftLossMethod}
         onRolloutGroupSizeChange={setRolloutGroupSize}
         onRolloutConcurrencyChange={setRolloutConcurrency}

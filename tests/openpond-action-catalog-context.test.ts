@@ -182,7 +182,7 @@ describe("OpenPond action catalog context", () => {
     expect(prompt).toContain("OpenPond capabilities:");
     expect(prompt).toContain("- workspace_context: use resource_search and resource_read");
     expect(prompt).toContain(
-      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn.",
+      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring. Profile Skills, including $openpond-refiner-authoring, load through their $skill-name tag in a normal model turn.",
     );
     expect(prompt).not.toContain("goal_control");
     expect(prompt).toContain("- Capability names are not slash commands.");
@@ -231,7 +231,7 @@ describe("OpenPond action catalog context", () => {
       "Agent and Skill authoring remain normal skill-backed turns; do not start Create Pipeline or Goal mode for them.",
     );
     expect(prompt).toContain(
-      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring into a normal model turn.",
+      "- authoring_skills: /skill preloads openpond-skill-authoring and /agent preloads openpond-agent-authoring. Profile Skills, including $openpond-refiner-authoring, load through their $skill-name tag in a normal model turn.",
     );
     expect(prompt).toContain("sandbox_read_file");
     expect(prompt).toContain("sandbox_edit_file");

@@ -21,6 +21,7 @@ import {
 import {
   authorLocalHarnessRefinementWithModel,
   admitLocalHarnessRefinerDecision,
+  admitRefinerProfileDecision,
   HostedHarnessRefinerRequestSchema,
   HostedHarnessRefinerResponseSchema,
   contentHash,
@@ -40,9 +41,11 @@ import {
   loadExactObservations,
 } from "./local-harness-refiner-context.js";
 import { loadRefinerReleaseContext } from "./local-harness-refiner-release-context.js";
+import { loadActiveRefinerRelease } from "../refiner/refiner-profile-service.js";
 import {
   boundedObservationEvidence,
   boundedTriggerEvidence,
+  assertHostedResponseBinding,
   expectedMemoryRevision,
   findProposal,
   findProposalByTrigger,
@@ -51,6 +54,7 @@ import {
   memoryKeyFromTarget,
   overlayRef,
   proposalEvidence,
+  refinerReleaseMetadata,
   sameOverlayRef,
   sameWorkspaceRevision,
   stableId,
@@ -230,6 +234,7 @@ async function executeLocalHarnessRefinerWorker(
     sourceCatalog: source.catalog,
     additionalEvidence: input.additionalEvidence ?? null,
   };
+  const activeRefinerRelease = await loadActiveRefinerRelease(input.storeDir);
   let decision: LocalHarnessRefinerDecisionV2;
   if (input.stream) {
     decision = await authorLocalHarnessRefinementWithModel({
@@ -237,6 +242,7 @@ async function executeLocalHarnessRefinerWorker(
       stream: input.stream,
       signal: input.signal,
       timeoutMs: input.timeoutMs,
+      reviewProfile: activeRefinerRelease.profile,
     });
   } else if (input.refine) {
     const request = HostedHarnessRefinerRequestSchema.parse({
@@ -270,6 +276,7 @@ async function executeLocalHarnessRefinerWorker(
     decision,
     evidence: refinerEvidence,
   });
+  decision = admitRefinerProfileDecision(decision, activeRefinerRelease.profile);
   if (decision.decision === "no_action") {
     return persistNoAction({
       store: input.store,
@@ -278,6 +285,7 @@ async function executeLocalHarnessRefinerWorker(
       trigger,
       observations,
       reason: decision.reason,
+      metadata: { refinerRelease: refinerReleaseMetadata(activeRefinerRelease) },
       now: input.now,
     });
   }
@@ -289,6 +297,7 @@ async function executeLocalHarnessRefinerWorker(
       trigger,
       observations,
       decision,
+      refinerRelease: refinerReleaseMetadata(activeRefinerRelease),
       now: input.now,
     });
   }
@@ -353,6 +362,7 @@ async function executeLocalHarnessRefinerWorker(
         expectedOutcome: decision.expectedOutcome,
         createdAt: timestamp,
         metadata: {
+          refinerRelease: refinerReleaseMetadata(activeRefinerRelease),
           trigger: { id: trigger.id, contentHash: trigger.contentHash },
           reason: decision.reason,
           evidenceBasis: decision.evidenceBasis,
@@ -380,23 +390,6 @@ async function executeLocalHarnessRefinerWorker(
     proposal: atomic.proposal,
     observations,
   });
-}
-
-function assertHostedResponseBinding(
-  request: HostedHarnessRefinerRequest,
-  response: HostedHarnessRefinerResponse,
-): void {
-  if (
-    response.requestId !== request.requestId ||
-    response.evidenceHash !== request.evidenceHash ||
-    response.admittedRelease.id !== request.harness.admittedRelease.id ||
-    response.admittedRelease.contentHash !==
-      request.harness.admittedRelease.contentHash ||
-    response.currentRelease.id !== request.harness.currentRelease.id ||
-    response.currentRelease.contentHash !== request.harness.currentRelease.contentHash
-  ) {
-    throw new Error("Managed Harness Refiner response binding does not match the request.");
-  }
 }
 
 async function finishPersistedProposal(input: {
@@ -493,6 +486,7 @@ async function finishPersistedProposal(input: {
     estimatedCostUsd: input.trigger.estimatedMaxCostUsd,
     createdAt: timestamp,
     metadata: {
+      refinerRelease: input.proposal.metadata.refinerRelease ?? null,
       validationStatuses: validations.map((validation) => validation.status),
       workspaceAdvanceReceipt: {
         id: advanced.receipt.id,
@@ -588,7 +582,10 @@ async function finishMemoryProposal(input: {
     evidenceRefs: input.trigger.observations,
     estimatedCostUsd: input.trigger.estimatedMaxCostUsd,
     createdAt: input.timestamp,
-    metadata: { validationStatuses: input.validations.map((validation) => validation.status) },
+    metadata: {
+      refinerRelease: input.proposal.metadata.refinerRelease ?? null,
+      validationStatuses: input.validations.map((validation) => validation.status),
+    },
   });
   await input.store.saveHarnessImprovementArtifact(input.workspace.id, "refiner_outcome", outcome);
   return {
@@ -648,6 +645,7 @@ async function persistExternalRoute(input: {
   trigger: RefinementTriggerDecision;
   observations: ImprovementObservation[];
   decision: Extract<LocalHarnessRefinerDecisionV2, { decision: "route" }>;
+  refinerRelease: Record<string, unknown>;
   now?: () => string;
 }): Promise<LocalHarnessRefinerWorkerResult> {
   const timestamp = (input.now ?? (() => new Date().toISOString()))();
@@ -664,6 +662,7 @@ async function persistExternalRoute(input: {
       summary: input.decision.summary,
       expectedOutcome: input.decision.expectedOutcome,
       evidenceBasis: input.decision.evidenceBasis,
+      refinerRelease: input.refinerRelease,
     },
   });
   await input.store.saveHarnessImprovementArtifact(
@@ -684,6 +683,7 @@ async function persistExternalRoute(input: {
       routeDecision: { id: route.id, contentHash: route.contentHash },
       expectedOutcome: input.decision.expectedOutcome,
       evidenceBasis: input.decision.evidenceBasis,
+      refinerRelease: input.refinerRelease,
     },
     now: () => timestamp,
   });

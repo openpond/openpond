@@ -4,6 +4,7 @@ import type {
   RolloutTrajectoryReceipt,
   Taskset,
   TrainingJob,
+  TrainingJobEvent,
   TrainingStateResponse,
 } from "@openpond/contracts";
 import { destinationLabel } from "./training-model-data";
@@ -84,6 +85,55 @@ export function TrainingModelComparisons({
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+export function TrainingManagedAttempts({
+  events,
+}: {
+  events: TrainingJobEvent[];
+}) {
+  const attempts = events.filter(
+    (event) =>
+      event.type === "metric" &&
+      event.payload.metricKind === "rollout_trajectory",
+  );
+  if (!attempts.length) {
+    return <div className="training-run-placeholder">No managed attempts were recorded for this run.</div>;
+  }
+  return (
+    <div className="training-rollout-receipts">
+      {attempts.map((event, index) => {
+        const eligible = event.payload.rewardEligible === true;
+        const reward = number(event.payload.reward);
+        const failureClass = typeof event.payload.failureClass === "string"
+          ? event.payload.failureClass
+          : null;
+        const failureCode = typeof event.payload.failureCode === "string"
+          ? event.payload.failureCode
+          : null;
+        return (
+          <details key={event.id}>
+            <summary>
+              <span>Attempt {index + 1}</span>
+              <strong>{eligible ? "eligible" : "ineligible"}</strong>
+              <em>{eligible && reward != null ? reward.toFixed(3) : failureCode ?? failureClass ?? "not reward eligible"}</em>
+            </summary>
+            <dl className="training-configuration-list">
+              <Config label="Rollout" value={string(event.payload.rolloutId)} />
+              <Config label="Group" value={string(event.payload.rolloutGroupId)} />
+              <Config label="Policy" value={`v${number(event.payload.policyVersion) ?? 0}`} />
+              <Config label="Worker" value={String((number(event.payload.workerSlot) ?? 0) + 1)} />
+              <Config label="Reward" value={reward == null ? "Not eligible" : String(reward)} />
+              <Config label="Failure class" value={failureClass ?? "None"} />
+              <Config label="Failure code" value={failureCode ?? "None"} />
+              <Config label="Components" value={JSON.stringify(event.payload.rewardComponents ?? {})} />
+              <Config label="Tokens" value={`${number(event.payload.inputTokens) ?? 0} input · ${number(event.payload.outputTokens) ?? 0} output`} />
+            </dl>
+          </details>
+        );
+      })}
     </div>
   );
 }
@@ -183,6 +233,10 @@ function Config({ label, value }: { label: string; value: string }) {
 
 function number(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function string(value: unknown): string {
+  return typeof value === "string" && value ? value : "Not recorded";
 }
 
 function percent(value: number) {

@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ModelUsageRecord, UsageRecordsResponse, UsageSummaryResponse } from "@openpond/contracts";
 
 import { UsageSettingsContent } from "../apps/web/src/components/settings/UsageSettingsSection";
+import { buildActivityCalendar } from "../apps/web/src/components/settings/usage/UsageActivityOverview";
 
 const NOW = "2026-07-04T20:00:00.000Z";
 
@@ -109,6 +110,29 @@ describe("UsageSettingsContent", () => {
     expect(html).toContain('aria-label="Filter usage by model"');
     expect(html).toContain(">All providers<");
     expect(html).toContain(">All models<");
+  });
+
+  test("starts compact token activity in July of the current year", () => {
+    const calendar = buildActivityCalendar([], NOW);
+
+    expect(calendar[0]?.firstDate).toBe("2026-07-01");
+    expect(calendar).toHaveLength(1);
+  });
+
+  test("paginates threads in groups of ten", () => {
+    const summary = usageSummary();
+    summary.threads = Array.from({ length: 11 }, (_, index) => ({
+      ...summary.threads[0]!,
+      sessionId: `thread_${index + 1}`,
+      title: `Thread ${index + 1}`,
+    }));
+
+    const html = renderUsage({ summary });
+
+    expect(html).toContain("Showing 1–10 of 11");
+    expect(html).toContain("Page 1 of 2");
+    expect(html).toContain("Thread 10");
+    expect(html).not.toContain("Thread 11");
   });
 });
 

@@ -103,6 +103,8 @@ if (decision.decision === "propose") {
 
 The Refiner never treats a prompt keyword, an error string, or a fixed recurrence count as authority to change the Harness. See the [@openpond/harness README](packages/harness/README.md) for the evidence contract, decision schema, and verification command.
 
+Refiner behavior can be extended with a separately versioned JSON Review Profile. Invoke `$openpond-refiner-authoring <change>` in Work to inspect and update it through the bundled Skill, or use `@openpond/harness/refiner` directly. Settings exposes the active Refiner Core and Review Profile, immutable release history, validation receipts, activation, and rollback.
+
 ## Use the SDK with an API key
 
 Use [openpond-sdk](https://www.npmjs.com/package/openpond-sdk) from a Node.js server, worker, or Next.js route handler to run hosted Work and manage sandboxes directly. Create an OpenPond API key, keep it in server-side configuration, and never expose it in browser code or a NEXT_PUBLIC_* variable.

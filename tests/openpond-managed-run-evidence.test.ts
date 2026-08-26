@@ -209,7 +209,7 @@ describe("OpenPond Managed run evidence", () => {
       checkpoint: { sizeBytes: 3_171_729_123 },
     });
     expect(second).toEqual(first);
-    expect(events).toHaveLength(8);
+    expect(events).toHaveLength(10);
     expect([...events.values()].map((event) => event.sequence)).toEqual(
       firstSequences,
     );

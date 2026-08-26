@@ -65,6 +65,11 @@ describe("skill-backed authoring command routing", () => {
     expect(authoringCommandRoute("/skill list")).toBeNull();
     expect(authoringCommandRoute("/skill help")).toBeNull();
     expect(authoringCommandRoute("/agent help")).toBeNull();
+    expect(
+      authoringCommandRoute(
+        "/refiner Treat unreadable PDFs as material review evidence.",
+      ),
+    ).toBeNull();
     expect(authoringCommandRoute("make a skill for release notes")).toBeNull();
     expect(authoringCommandRoute("how should I design an agent?")).toBeNull();
   });

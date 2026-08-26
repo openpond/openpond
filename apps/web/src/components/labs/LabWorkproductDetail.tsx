@@ -8,7 +8,6 @@ import {
   type ReactNode,
 } from "react";
 import {
-  resolveModelBindingEligibility,
   type CreateImproveCandidate,
   type CreateImproveRun,
   type ChatModelRef,
@@ -20,13 +19,9 @@ import {
 import type { ClientConnection } from "../../api";
 import type { ShowAppToast } from "../../app/app-state";
 import type { useTraining } from "../../hooks/useTraining";
-import {
-  buildTrainingModelChatHandoff,
-  type TrainingModelChatHandoff,
-} from "../../lib/training-model-chat-handoff";
+import type { TrainingModelChatHandoff } from "../../lib/training-model-chat-handoff";
 import type { CreateImproveReviewActionInput } from "../chat/create-pipeline-types";
 import { DetailSection } from "../training/DetailSection";
-import { ModelUseDialog } from "../training/ModelUseDialog";
 import type { LabWorkproductSummary } from "./lab-workproducts";
 import {
   labWorkproductKindLabel,
@@ -45,7 +40,6 @@ import {
 import { LabRunDecisionSection } from "./LabRunDecisionSection";
 import { LabStatusBadge } from "./LabStatusBadge";
 import { LabStatusDot } from "./LabStatusDot";
-import { downloadModelJson } from "./lab-model-downloads";
 import {
   labLifecycleModelRuns,
   labModelJobs,
@@ -66,7 +60,8 @@ import {
   VersionSummary,
   WorkproductConfiguration,
 } from "./LabWorkproductDetailSections";
-import { Download, MessageSquare, SquarePen } from "../icons";
+import { SquarePen } from "../icons";
+import { ModelProjectPageHeader } from "./ModelProjectPageHeader";
 
 const LabModelVersionDetailPage = lazy(() =>
   import("./LabModelVersionDetailPage").then((module) => ({
@@ -101,7 +96,7 @@ export function LabWorkproductDetail({
   candidateReview,
   onApprove,
   onCancel,
-  onChatWithModel,
+  onChatWithModel: _onChatWithModel,
   onApplyCandidate,
   onCandidateReviewChange,
   onOpenCandidateFiles,
@@ -119,7 +114,7 @@ export function LabWorkproductDetail({
   onInitialBenchmarkOpenConsumed,
 }: {
   workproduct: LabWorkproductSummary;
-  modelSection: "overview" | "versions" | "runs" | "rollouts";
+  modelSection: "overview" | "training" | "evals";
   runs: CreateImproveRun[];
   profile: OpenPondProfileState | null;
   training: TrainingController;
@@ -213,9 +208,9 @@ export function LabWorkproductDetail({
   const [selectedModelEntryKey, setSelectedModelEntryKey] = useState<
     string | null
   >(null);
-  const [modelUseVersionId, setModelUseVersionId] = useState<string | null>(
-    null
-  );
+  useEffect(() => {
+    setSelectedModelEntryKey(null);
+  }, [modelSection]);
   const [benchmarkOpen, setBenchmarkOpen] = useState(initialBenchmarkOpen);
 
   useEffect(() => {
@@ -240,6 +235,12 @@ export function LabWorkproductDetail({
       workproduct.ownerProfileId &&
         workproduct.ownerProfileId !== profile?.activeProfile
     );
+  const modelProject =
+    workproduct.kind === "model"
+      ? training.payload?.modelProjects.find(
+          (project) => project.id === workproduct.id,
+        ) ?? null
+      : null;
   const modelVersions = useMemo(
     () =>
       workproduct.kind === "model"
@@ -319,7 +320,7 @@ export function LabWorkproductDetail({
         ? editingRunDraftId
           ? [
               {
-                label: "Runs",
+                label: "Training",
                 onSelect: () => requestEditorExit("runs"),
               },
               {
@@ -334,7 +335,9 @@ export function LabWorkproductDetail({
               {
                 label: selectedModelEntryKey.startsWith("version:")
                   ? "Versions"
-                  : "Runs",
+                  : selectedModelLifecycleRun?.kind === "evaluation"
+                    ? "Evals"
+                    : "Training",
                 onSelect: () => {
                   setSelectedModelEntryKey(null);
                 },
@@ -365,6 +368,7 @@ export function LabWorkproductDetail({
       selectedChangeCommit,
       selectedChangeRunId,
       selectedModelEntryKey,
+      selectedModelLifecycleRun?.kind,
       selectedModelRunNumber,
       selectedModelVersion,
       workproduct.kind,
@@ -502,52 +506,50 @@ export function LabWorkproductDetail({
     [onCandidateReviewChange]
   );
 
-  function useModelVersion(versionId: string) {
-    if (readOnlyModel) return;
-    const version = modelVersions.find(
-      (candidate) => candidate.lineage.id === versionId
-    );
-    if (!version?.taskset) return;
-    onChatWithModel(
-      buildTrainingModelChatHandoff({
-        modelId: versionId,
-        taskset: version.taskset,
-      })
-    );
-  }
-
   function requestEditorExit(target: "overview" | "runs" | "collection") {
     editorExitTargetRef.current = target;
     document.getElementById("model-run-editor-cancel")?.click();
   }
 
   if (workproduct.kind === "model" && editingRunDraftId) {
-    return renderModelRunEditor({
-      initialTasksetId: taskset?.id ?? null,
-      draftId: editingRunDraftId === "new" ? null : editingRunDraftId,
-      modelId: workproduct.id,
-      modelName: workproduct.name,
-      onCancel: () => {
-        const target = editorExitTargetRef.current;
-        setEditingRunDraftId(null);
-        setEditorSection("run");
-        if (target === "collection") {
-          onClose();
-          return;
-        }
-        setActiveTab(target);
-      },
-      onFinished: async () => {
-        setEditingRunDraftId(null);
-        setEditorSection("run");
-        setActiveTab("runs");
-      },
-      onSectionChange: setEditorSection,
-    });
+    return (
+      <div className="labs-model-run-modal-backdrop" role="presentation">
+        <section
+          aria-label="New Run"
+          aria-modal="true"
+          className="labs-model-run-modal"
+          role="dialog"
+        >
+          {renderModelRunEditor({
+            initialTasksetId: taskset?.id ?? null,
+            draftId: editingRunDraftId === "new" ? null : editingRunDraftId,
+            modelId: workproduct.id,
+            modelName: workproduct.name,
+            onCancel: () => {
+              const target = editorExitTargetRef.current;
+              setEditingRunDraftId(null);
+              setEditorSection("run");
+              if (target === "collection") {
+                onClose();
+                return;
+              }
+              setActiveTab(target);
+            },
+            onFinished: async () => {
+              setEditingRunDraftId(null);
+              setEditorSection("run");
+              setActiveTab("runs");
+            },
+            onSectionChange: setEditorSection,
+          })}
+        </section>
+      </div>
+    );
   }
 
   return (
     <div className="training-model-detail labs-workproduct-detail">
+      {workproduct.kind !== "model" ? (
       <header className="training-model-detail-header labs-workproduct-detail-header">
         <div>
           <div className="labs-workproduct-name-row">
@@ -564,76 +566,7 @@ export function LabWorkproductDetail({
             </p>
           ) : null}
         </div>
-        {workproduct.kind === "model" ? (
-          <div className="labs-workproduct-header-actions">
-            {selectedModelVersion?.taskset ? (
-              <button
-                className="training-button secondary"
-                disabled={
-                  readOnlyModel ||
-                  !resolveModelBindingEligibility(
-                    selectedModelVersion.lineage
-                  )
-                }
-                title={
-                  resolveModelBindingEligibility(selectedModelVersion.lineage)
-                    ? "Chat with this Version"
-                    : "Chat is unavailable until this Version is ready to run."
-                }
-                type="button"
-                onClick={() => useModelVersion(selectedModelVersion.lineage.id)}
-              >
-                <MessageSquare size={14} />
-                Chat
-              </button>
-            ) : null}
-            {selectedModelVersion ? (
-              <button
-                className="training-button secondary"
-                type="button"
-                onClick={() =>
-                  void training.actions.downloadModelPackage(
-                    selectedModelVersion.lineage.id
-                  )
-                }
-              >
-                <Download size={14} />
-                Download LoRA
-              </button>
-            ) : null}
-            {selectedModelLifecycleRun?.receipt ? (
-              <button
-                className="training-button secondary"
-                type="button"
-                onClick={() =>
-                  downloadModelJson(
-                    `${selectedModelLifecycleRun.id}-receipt.json`,
-                    selectedModelLifecycleRun.receipt
-                  )
-                }
-              >
-                <Download size={14} />
-                Download receipt
-              </button>
-            ) : null}
-            <button
-              className="training-button secondary"
-              type="button"
-              onClick={() => setBenchmarkOpen(true)}
-            >
-              Benchmark
-            </button>
-            {!readOnlyModel ? (
-              <button
-                className="training-button"
-                type="button"
-                onClick={() => setEditingRunDraftId("new")}
-              >
-                New run
-              </button>
-            ) : null}
-          </div>
-        ) : workproduct.kind === "agent" ? (
+        {workproduct.kind === "agent" ? (
           <div className="labs-workproduct-header-actions">
             <button
               className="training-button"
@@ -655,6 +588,7 @@ export function LabWorkproductDetail({
           </div>
         ) : null}
       </header>
+      ) : null}
 
       {workproduct.kind === "model" || selectedModelEntryKey ? null : (
         <div
@@ -711,27 +645,73 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
-            {modelSection === "overview" || modelSection === "runs" || modelSection === "rollouts" ? (
+            {modelSection === "overview" ? (
+              <>
+                <ModelProjectPageHeader
+                  title="Overview"
+                  description="Project status, synchronized Tasksets, trained versions, and recent activity."
+                  status={modelProject ? (
+                    <LabStatusBadge
+                      label={modelProject.hosted ? "Hosted" : "Local"}
+                      value={modelProject.hosted ? "available" : "not_run"}
+                    />
+                  ) : undefined}
+                  actions={modelProject ? (
+                    <button
+                      className="training-button secondary"
+                      disabled={
+                        readOnlyModel ||
+                        training.busyAction === "sync-model-project"
+                      }
+                      type="button"
+                      onClick={async () => {
+                        const synced = await training.actions.syncModelProject(
+                          modelProject.id,
+                        );
+                        if (synced) {
+                          onToast(
+                            "Model Project synced to the active hosted Team.",
+                            "success",
+                          );
+                        }
+                      }}
+                    >
+                      {training.busyAction === "sync-model-project"
+                        ? "Syncing…"
+                        : modelProject.hosted
+                          ? "Sync project"
+                          : "Connect to hosted Team"}
+                    </button>
+                  ) : undefined}
+                  metrics={[
+                    { label: "Taskset releases", value: modelProject?.tasksetSyncs.length ?? 0 },
+                    { label: "Model versions", value: modelVersions.length },
+                    { label: "Runs", value: modelRunHistory.length },
+                    { label: "Hosted revision", value: modelProject?.hosted?.revision ?? "Local" },
+                  ]}
+                />
+                <LabModelVersionsPage
+                  runs={runs}
+                  training={training}
+                  workproduct={workproduct}
+                  readOnly={readOnlyModel}
+                  onOpenDataset={onOpenDataset}
+                  onOpenEntry={setSelectedModelEntryKey}
+                  onToast={onToast}
+                />
+              </>
+            ) : null}
+            {modelSection === "training" || modelSection === "evals" ? (
               <LabModelRunsPage
                 runs={runs}
                 training={training}
                 workproduct={workproduct}
                 readOnly={readOnlyModel}
-                mode={modelSection === "rollouts" ? "rollouts" : "all"}
+                mode={modelSection}
                 onOpenDataset={onOpenDataset}
                 onOpenEntry={setSelectedModelEntryKey}
+                onNewRun={() => setEditingRunDraftId("new")}
                 onResumeDraft={setEditingRunDraftId}
-              />
-            ) : null}
-            {modelSection === "overview" || modelSection === "versions" ? (
-              <LabModelVersionsPage
-                runs={runs}
-                training={training}
-                workproduct={workproduct}
-                readOnly={readOnlyModel}
-                onOpenDataset={onOpenDataset}
-                onOpenEntry={setSelectedModelEntryKey}
-                onToast={onToast}
               />
             ) : null}
           </>
@@ -909,23 +889,6 @@ export function LabWorkproductDetail({
         />
       ) : null}
 
-      {modelUseVersionId
-        ? (() => {
-            const version = modelVersions.find(
-              (candidate) => candidate.lineage.id === modelUseVersionId
-            );
-            if (!version?.taskset) return null;
-            return (
-              <ModelUseDialog
-                lineage={version.lineage}
-                taskset={version.taskset}
-                training={training}
-                onChat={onChatWithModel}
-                onClose={() => setModelUseVersionId(null)}
-              />
-            );
-          })()
-        : null}
     </div>
   );
 }

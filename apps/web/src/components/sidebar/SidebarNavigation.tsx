@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import type {
   Experience,
+  ModelProject,
   OpenPondApp,
   ProductArea,
 } from "@openpond/contracts";
@@ -9,8 +10,8 @@ import {
   CalendarClock,
   ChartColumnStacked,
   Cloud,
+  CheckCircle2,
   FileOutput,
-  FileText,
   FolderGit2,
   Shapes,
   SquarePen,
@@ -22,7 +23,10 @@ import { newExperienceTitle } from "../../lib/experience-options";
 import type { LabPrimaryTab } from "../labs/LabsView";
 import {
   LAB_PRIMARY_TAB_CHANGE_EVENT,
+  LAB_MODEL_PROJECT_CHANGE_EVENT,
+  labModelProjectIdFromSearch,
   labPrimaryTabFromSearch,
+  searchWithLabModelProject,
   searchWithLabPrimaryTab,
 } from "../labs/lab-primary-tab-state";
 
@@ -35,6 +39,11 @@ type SidebarDestinationProps = {
   setSelectedSessionId: Dispatch<SetStateAction<string | null>>;
   setView: Dispatch<SetStateAction<AppView>>;
   view: AppView;
+  modelProjects?: ModelProject[];
+  modelTrainingActivityByProjectId?: Record<
+    string,
+    { label: string; status: string }
+  >;
 };
 
 export function SidebarNavigation({
@@ -47,6 +56,8 @@ export function SidebarNavigation({
   setSelectedSessionId,
   setView,
   view,
+  modelProjects = [],
+  modelTrainingActivityByProjectId = {},
 }: SidebarDestinationProps & {
   beginNewChat: (app?: OpenPondApp | null) => void;
 }) {
@@ -54,6 +65,9 @@ export function SidebarNavigation({
     typeof window === "undefined"
       ? "overview"
       : labPrimaryTabFromSearch(window.location.search),
+  );
+  const [selectedModelProjectId, setSelectedModelProjectId] = useState<string | null>(
+    () => typeof window === "undefined" ? null : labModelProjectIdFromSearch(window.location.search),
   );
 
   useEffect(() => {
@@ -64,6 +78,17 @@ export function SidebarNavigation({
     return () => {
       window.removeEventListener("popstate", syncModelsTab);
       window.removeEventListener(LAB_PRIMARY_TAB_CHANGE_EVENT, syncModelsTab);
+    };
+  }, []);
+
+  useEffect(() => {
+    const syncModelProject = () =>
+      setSelectedModelProjectId(labModelProjectIdFromSearch(window.location.search));
+    window.addEventListener("popstate", syncModelProject);
+    window.addEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, syncModelProject);
+    return () => {
+      window.removeEventListener("popstate", syncModelProject);
+      window.removeEventListener(LAB_MODEL_PROJECT_CHANGE_EVENT, syncModelProject);
     };
   }, []);
 
@@ -87,6 +112,16 @@ export function SidebarNavigation({
     window.dispatchEvent(new Event(LAB_PRIMARY_TAB_CHANGE_EVENT));
   }
 
+  function selectModelProject(modelProjectId: string) {
+    const search = searchWithLabModelProject(window.location.search, modelProjectId || null);
+    window.history.pushState(window.history.state, "", `${window.location.pathname}${search}${window.location.hash}`);
+    window.dispatchEvent(new Event(LAB_MODEL_PROJECT_CHANGE_EVENT));
+  }
+
+  const selectedTrainingActivity = selectedModelProjectId
+    ? modelTrainingActivityByProjectId[selectedModelProjectId] ?? null
+    : null;
+
   return (
     <nav className="sidebar-nav" aria-label="Primary">
       {productArea === "models" ? null : (
@@ -101,6 +136,18 @@ export function SidebarNavigation({
       )}
       {productArea === "models" ? (
         <>
+          <label className="sidebar-model-project-picker">
+            <span>Model Project</span>
+            <select
+              aria-label="Select Model Project"
+              disabled={!modelProjects.length}
+              value={selectedModelProjectId ?? ""}
+              onChange={(event) => selectModelProject(event.target.value)}
+            >
+              {!modelProjects.length ? <option value="">No Model Projects</option> : null}
+              {modelProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          </label>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "overview" ? "active" : ""}`}
             aria-label="Overview"
@@ -112,39 +159,41 @@ export function SidebarNavigation({
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "tasksets" ? "active" : ""}`}
-            aria-label="Tasksets"
+            aria-label="Taskset"
             type="button"
             onClick={() => selectModelsTab("tasksets")}
           >
             <Boxes size={16} />
-            <span>Tasksets</span>
+            <span>Taskset</span>
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "versions" ? "active" : ""}`}
-            aria-label="Model Versions"
+            className={`nav-command ${selectedTrainingActivity ? "nav-command-training-live " : ""}${view === "labs" && activeModelsTab === "training" ? "active" : ""}`}
+            aria-label={selectedTrainingActivity
+              ? `Training, ${selectedTrainingActivity.label}`
+              : "Training"}
             type="button"
-            onClick={() => selectModelsTab("versions")}
-          >
-            <FileText size={16} />
-            <span>Model Versions</span>
-          </button>
-          <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "runs" ? "active" : ""}`}
-            aria-label="Runs"
-            type="button"
-            onClick={() => selectModelsTab("runs")}
+            onClick={() => selectModelsTab("training")}
           >
             <ChartColumnStacked size={16} />
-            <span>Runs</span>
+            <span>Training</span>
+            {selectedTrainingActivity ? (
+              <span
+                className="nav-command-training-status"
+                aria-label={`Training ${selectedTrainingActivity.label.toLowerCase()}`}
+                title={`Training ${selectedTrainingActivity.label.toLowerCase()}`}
+              >
+                <span className="sidebar-running-dot" aria-hidden="true" />
+              </span>
+            ) : null}
           </button>
           <button
-            className={`nav-command ${view === "labs" && activeModelsTab === "rollouts" ? "active" : ""}`}
-            aria-label="Rollouts"
+            className={`nav-command ${view === "labs" && activeModelsTab === "evals" ? "active" : ""}`}
+            aria-label="Evals"
             type="button"
-            onClick={() => selectModelsTab("rollouts")}
+            onClick={() => selectModelsTab("evals")}
           >
-            <Boxes size={16} />
-            <span>Rollouts</span>
+            <CheckCircle2 size={16} />
+            <span>Evals</span>
           </button>
           <button
             className={`nav-command ${view === "labs" && activeModelsTab === "serving" ? "active" : ""}`}
