@@ -88,6 +88,20 @@ export function createModelProjectHostingService(input: {
     release: TasksetRelease;
   }): Promise<ModelProject> {
     const release = TasksetReleaseSchema.parse(inputValue.release);
+    const existingProject = await requireProject(input.store, inputValue.projectId);
+    const access = await input.resolveAccess();
+    const matchingRelease = existingProject.hosted?.teamId === access.teamId
+      && existingProject.hosted.tasksets.some(
+        (entry) =>
+          entry.localTasksetId === inputValue.taskset.id
+          && entry.releaseId === release.id
+          && entry.releaseRevision === release.revision
+          && entry.releaseHash === release.contentHash,
+      );
+    // A managed Run references an already published immutable release. Avoid
+    // rewriting the project container on every launch: doing so turns a
+    // harmless stale container ETag into a launch-blocking sync conflict.
+    if (matchingRelease) return existingProject;
     await recordTasksetSync({
       projectId: inputValue.projectId,
       taskset: inputValue.taskset,
@@ -111,7 +125,6 @@ export function createModelProjectHostingService(input: {
       throw caught;
     }
     if (!project.hosted) throw new Error("Hosted Model Project link was not persisted.");
-    const access = await input.resolveAccess();
     if (project.hosted.teamId !== access.teamId) {
       throw new Error("Model Project is linked to a different hosted workspace.");
     }
