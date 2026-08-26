@@ -354,14 +354,16 @@ export class OpenPondManagedTrainingAdapter implements TrainingEngineAdapter {
           } else if (
             !learnedPreference &&
             scoredTasks.some(
-              (task) => typeof task.expectedOutput?.text !== "string",
+              (task) =>
+                typeof task.expectedOutput?.text !== "string" &&
+                typeof task.expectedOutput?.outputSchemaRef !== "string",
             )
           ) {
             issues.push({
               code: "managed_exact_answer_missing",
               path: "taskset.tasks",
               message:
-                "Stateless exact-reward tasks require an exact expected text answer.",
+                "Stateless deterministic-reward tasks require an exact expected text answer or a structured output contract.",
             });
           }
         }
