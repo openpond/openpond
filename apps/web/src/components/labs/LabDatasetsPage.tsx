@@ -79,6 +79,9 @@ export function LabDatasetsPage({
   const [page, setPage] = useState(1);
   const [detailTab, setDetailTab] = useState<DatasetDetailTab>("overview");
   const tasksets = state?.tasksets ?? [];
+  const project = modelProjectId
+    ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
+    : null;
   const selected =
     [...tasksets, ...(state?.modelTasksets ?? [])].find(
       (taskset) => taskset.id === selectedId,
@@ -126,9 +129,6 @@ export function LabDatasetsPage({
   }, [selectedId]);
 
   if (selected) {
-    const project = modelProjectId
-      ? state?.modelProjects.find((candidate) => candidate.id === modelProjectId)
-      : null;
     const sync = project?.tasksetSyncs.find(
       (candidate) => candidate.localTasksetId === selected.id,
     );
@@ -304,6 +304,18 @@ export function LabDatasetsPage({
 
   return (
     <div className="labs-flat-body labs-datasets-page">
+      {modelProjectId ? (
+        <div className="labs-model-section-intro">
+          <div>
+            <h2>Tasksets for this Model Project</h2>
+            <p>
+              Select an existing local Taskset, then use Sync hosted to attach
+              its immutable release to this Model Project.
+            </p>
+          </div>
+          <span>{project?.tasksetSyncs.length ?? 0} attached</span>
+        </div>
+      ) : null}
       <div className="labs-workproduct-toolbar">
         <label className="labs-search">
           <Search size={14} />
@@ -335,6 +347,7 @@ export function LabDatasetsPage({
               <th>Validation</th>
               <th>Frozen Eval</th>
               <th>Graders</th>
+              {modelProjectId ? <th>Project</th> : null}
               <th>Activity</th>
               <th>Updated</th>
             </tr>
@@ -362,6 +375,7 @@ export function LabDatasetsPage({
                     <td>{draftSplitCount(draft, "validation")}</td>
                     <td>{draftSplitCount(draft, "frozen_eval")}</td>
                     <td>{draft.graders.length}</td>
+                    {modelProjectId ? <td>Draft</td> : null}
                     <td>Resume draft</td>
                     <td>{formatCompactDate(draft.updatedAt)}</td>
                   </tr>
@@ -372,6 +386,9 @@ export function LabDatasetsPage({
               const benchmarkRunCount = (state?.benchmarkRuns ?? []).filter(
                 (run) => run.metadata.sourceTasksetId === taskset.id,
               ).length;
+              const sync = project?.tasksetSyncs.find(
+                (candidate) => candidate.localTasksetId === taskset.id,
+              );
               return (
                 <tr key={taskset.id}>
                   <td>
@@ -388,6 +405,17 @@ export function LabDatasetsPage({
                   <td>{splitCount(taskset, state, "validation")}</td>
                   <td>{splitCount(taskset, state, "frozen_eval")}</td>
                   <td>{taskset.graders.length}</td>
+                  {modelProjectId ? (
+                    <td>
+                      {sync?.state === "synced"
+                        ? "Attached"
+                        : sync?.state === "syncing"
+                          ? "Syncing"
+                          : sync?.state === "sync_failed"
+                            ? "Retry required"
+                            : "Not attached"}
+                    </td>
+                  ) : null}
                   <td>
                     {taskset.purpose === "benchmark"
                       ? benchmarkRunCount

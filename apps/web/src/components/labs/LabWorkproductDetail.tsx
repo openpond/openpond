@@ -754,7 +754,32 @@ export function LabWorkproductDetail({
           </Suspense>
         ) : workproduct.kind === "model" ? (
           <>
-            {modelSection === "overview" || modelSection === "runs" || modelSection === "rollouts" ? (
+            {modelSection === "overview" ? (
+              <DetailSection title="Model Project overview">
+                <dl className="labs-inline-facts">
+                  <Fact
+                    label="Hosted sync"
+                    value={
+                      modelProject?.hosted
+                        ? `Team ${modelProject.hosted.teamId} · revision ${modelProject.hosted.revision}`
+                        : "Local only"
+                    }
+                  />
+                  <Fact
+                    label="Tasksets"
+                    value={String(modelProject?.tasksetSyncs.length ?? 0)}
+                  />
+                  <Fact label="Model versions" value={String(modelVersions.length)} />
+                  <Fact label="Runs" value={String(modelRunHistory.length)} />
+                </dl>
+                <p className="labs-detail-copy">
+                  Attach an existing Taskset in Tasksets, sync its immutable
+                  release to this hosted project, then create a Run. Versions
+                  only appear after a Run produces a trained artifact.
+                </p>
+              </DetailSection>
+            ) : null}
+            {modelSection === "runs" || modelSection === "rollouts" ? (
               <LabModelRunsPage
                 runs={runs}
                 training={training}
@@ -766,7 +791,7 @@ export function LabWorkproductDetail({
                 onResumeDraft={setEditingRunDraftId}
               />
             ) : null}
-            {modelSection === "overview" || modelSection === "versions" ? (
+            {modelSection === "versions" ? (
               <LabModelVersionsPage
                 runs={runs}
                 training={training}
