@@ -1,0 +1,81 @@
+name: Release Python Evals
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+    paths:
+      - "packages/evals/python/pyproject.toml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-python-evals-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and verify openpond-evals
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      should_publish: ${{ steps.package.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+
+      - name: Resolve package state
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python -c 'import tomllib; print(tomllib.load(open("packages/evals/python/pyproject.toml", "rb"))["project"]["version"])')"
+          should_publish="true"
+          if python -c 'import sys, urllib.request; urllib.request.urlopen(f"https://pypi.org/pypi/openpond-evals/{sys.argv[1]}/json", timeout=15)' "${version}" >/dev/null 2>&1; then
+            should_publish="false"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "should_publish=${should_publish}" >> "$GITHUB_OUTPUT"
+
+      - name: Install build dependencies
+        run: python -m pip install --disable-pip-version-check build pydantic pytest
+
+      - name: Test shared conformance
+        env:
+          PYTHONPATH: packages/evals/python/src
+        run: python -m pytest packages/evals/python/tests -q
+
+      - name: Build distributions
+        run: python -m build packages/evals/python
+
+      - name: Verify wheel installation
+        run: python -m pip install --force-reinstall packages/evals/python/dist/openpond_evals-${{ steps.package.outputs.version }}-py3-none-any.whl
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: openpond-evals-python-${{ steps.package.outputs.version }}
+          path: packages/evals/python/dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish openpond-evals
+    needs: build
+    if: needs.build.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi-production
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: openpond-evals-python-${{ needs.build.outputs.version }}
+          path: dist
+
+      - uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: dist/
