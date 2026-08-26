@@ -59,11 +59,13 @@ export function LabModelRunsPage({
   training,
   onOpenDataset,
   onOpenEntry,
+  onNewRun,
   onResumeDraft,
   readOnly = false,
   mode = "all",
 }: ModelWorkspaceProps & {
   onOpenEntry: (entryKey: string) => void;
+  onNewRun: () => void;
   onResumeDraft: (draftId: string) => void;
   readOnly?: boolean;
   mode?: "all" | "rollouts";
@@ -148,12 +150,23 @@ export function LabModelRunsPage({
             ? "Online policy-optimization rollouts and their unfinished drafts."
             : "Training and evaluation history, including unfinished drafts."}</p>
         </div>
-        <span>
-          {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}
-          {draftCount
-            ? ` · ${draftCount} ${draftCount === 1 ? "draft" : "drafts"}`
-            : ""}
-        </span>
+        <div className="flex items-center gap-3">
+          <span>
+            {submittedRunCount} {submittedRunCount === 1 ? "run" : "runs"}
+            {draftCount
+              ? ` · ${draftCount} ${draftCount === 1 ? "draft" : "drafts"}`
+              : ""}
+          </span>
+          {!readOnly ? (
+            <button
+              className="training-button"
+              type="button"
+              onClick={onNewRun}
+            >
+              New Run
+            </button>
+          ) : null}
+        </div>
       </header>
       <div className="training-table-wrap">
         <table className="training-data-table labs-model-runs-table">

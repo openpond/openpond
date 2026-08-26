@@ -659,22 +659,6 @@ export function LabWorkproductDetail({
                 Download receipt
               </button>
             ) : null}
-            <button
-              className="training-button secondary"
-              type="button"
-              onClick={() => setBenchmarkOpen(true)}
-            >
-              Benchmark
-            </button>
-            {!readOnlyModel ? (
-              <button
-                className="training-button"
-                type="button"
-                onClick={() => setEditingRunDraftId("new")}
-              >
-                New run
-              </button>
-            ) : null}
           </div>
         ) : workproduct.kind === "agent" ? (
           <div className="labs-workproduct-header-actions">
@@ -788,6 +772,7 @@ export function LabWorkproductDetail({
                 mode={modelSection === "rollouts" ? "rollouts" : "all"}
                 onOpenDataset={onOpenDataset}
                 onOpenEntry={setSelectedModelEntryKey}
+                onNewRun={() => setEditingRunDraftId("new")}
                 onResumeDraft={setEditingRunDraftId}
               />
             ) : null}
