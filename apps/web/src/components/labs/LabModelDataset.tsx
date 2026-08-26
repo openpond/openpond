@@ -308,7 +308,7 @@ export function LabModelDataset({
         ) : null}
         <DetailSection title="Evaluation metrics">
           <p className="labs-detail-copy">
-            This view summarizes recorded Attempt, grader, artifact, and preference evidence. Run configuration belongs to Generate &amp; Runs.
+            This view summarizes recorded Attempt, grader, artifact, and preference evidence. Configure and start runs from the project’s Runs workspace.
           </p>
           <dl className="labs-inline-facts">
             <Fact label="Primary metric" value={titleCase(metricPolicy.primaryMetric)} />

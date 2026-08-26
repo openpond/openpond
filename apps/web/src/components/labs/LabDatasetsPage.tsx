@@ -38,11 +38,8 @@ type DatasetDetailTab =
 const DATASET_DETAIL_TABS: Array<{ id: DatasetDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
   { id: "scenarios", label: "Scenarios" },
-  { id: "runs", label: "Generate & Runs" },
-  { id: "attempts", label: "Attempts" },
   { id: "review", label: "Review" },
   { id: "metrics", label: "Metrics" },
-  { id: "versions", label: "Versions" },
 ];
 
 export function LabDatasetsPage({
@@ -239,7 +236,7 @@ export function LabDatasetsPage({
         ) : detailTab === "versions" ? (
           <TasksetVersions state={state} taskset={selected} />
         ) : (
-          <>
+        <>
             <LabModelDataset
               artifact={selectedArtifact}
               defaultModel={defaultModel}
@@ -266,7 +263,7 @@ export function LabDatasetsPage({
                 onToast={onToast}
               />
             ) : null}
-          </>
+        </>
         )}
       </div>
     );

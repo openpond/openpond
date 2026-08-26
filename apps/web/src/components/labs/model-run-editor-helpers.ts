@@ -222,6 +222,7 @@ export function preparationReview(
         ? "local policy"
         : `${preparation.retentionDays} days`
     }.`,
+    "Confirming explicitly authorizes export of this bounded, immutable Taskset release for this run.",
     "No side effects have started. Confirming may begin downloads, connections, uploads, provisioning, or spend.",
   ].join(" ");
 }
