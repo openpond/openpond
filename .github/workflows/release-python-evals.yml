@@ -78,6 +78,6 @@ jobs:
 
       # v1.14.2. This is the commit behind the official release/v1 branch and
       # has a published ghcr.io container image for immutable execution.
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
