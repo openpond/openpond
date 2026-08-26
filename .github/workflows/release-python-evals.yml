@@ -76,6 +76,8 @@ jobs:
           name: openpond-evals-python-${{ needs.build.outputs.version }}
           path: dist
 
-      - uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+      # Use the maintained release tag: the previously pinned commit did not
+      # have a matching ghcr.io container image and could never start.
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
