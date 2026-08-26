@@ -31,6 +31,27 @@ import { api, type ClientConnection } from "../../api";
 import { ArrowUpRight, Loader2 } from "../icons";
 import { useErrorToast } from "../../app/AppToastContext";
 import { UsageActivityOverview } from "./usage/UsageActivityOverview";
+import {
+  cacheCohortLabel,
+  commandSourceLabel,
+  formatCacheRate,
+  formatCompactNumber,
+  formatDateTime,
+  formatDuration,
+  formatInteger,
+  formatPercent,
+  formatShortDate,
+  formatTokens,
+  numericValue,
+  providerLabel,
+  requestCacheLabel,
+  requestContext,
+  requestKindLabel,
+  routeLabel,
+  sourceLabel,
+  statusLabel,
+  shortId,
+} from "./usage/usage-formatters";
 
 type UsageRangeFilter = "7d" | "30d" | "90d" | "all";
 
@@ -121,24 +142,6 @@ const CHART_COLORS = [
   "#9b9b9b",
 ];
 
-const integerFormatter = new Intl.NumberFormat("en-US");
-const compactNumberFormatter = new Intl.NumberFormat("en-US", {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const percentFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 1,
-});
-const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-});
-const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-});
 
 export function UsageSettingsSection({
   account = null,
@@ -881,137 +884,4 @@ function buildUsageChart(daily: UsageDailyBucket[]): { rows: UsageChartRow[]; se
 
 function usageModelKey(provider: string, model: string): string {
   return `${provider}\u0000${model}`;
-}
-
-function formatInteger(value: number): string {
-  return integerFormatter.format(value);
-}
-
-function formatCompactNumber(value: number): string {
-  return compactNumberFormatter.format(value);
-}
-
-function formatTokens(value: number | null): string {
-  if (value === null) return "missing";
-  if (value >= 10_000) return compactNumberFormatter.format(value);
-  return integerFormatter.format(value);
-}
-
-function formatDuration(value: number | null): string {
-  if (value === null) return "missing";
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10_000 ? 0 : 1)}s`;
-  return `${integerFormatter.format(Math.round(value))}ms`;
-}
-
-function formatPercent(value: number): string {
-  return `${percentFormatter.format(value * 100)}%`;
-}
-
-function formatCacheRate(value: number | null): string {
-  return value === null ? "not reported" : formatPercent(value);
-}
-
-function requestCacheLabel(row: ModelUsageRecord): string {
-  if (row.cacheTelemetrySource === null) return "not reported";
-  if (row.cachedPromptTokens === null || row.uncachedPromptTokens === null) return "reported";
-  const total = row.cachedPromptTokens + row.uncachedPromptTokens;
-  return total > 0 ? formatPercent(row.cachedPromptTokens / total) : "0%";
-}
-
-function formatShortDate(value: string): string {
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-  return shortDateFormatter.format(date);
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return dateTimeFormatter.format(date);
-}
-
-function numericValue(value: number | string | undefined): number {
-  if (typeof value === "number") return value;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return 0;
-}
-
-function providerLabel(provider: string): string {
-  if (provider === "openai") return "OpenAI";
-  if (provider === "anthropic") return "Anthropic";
-  if (provider === "google") return "Google";
-  if (provider === "openpond") return "OpenPond";
-  if (provider === "openrouter") return "OpenRouter";
-  if (provider === "codex") return "Codex";
-  return titleFromIdentifier(provider);
-}
-
-function routeLabel(route: string): string {
-  if (route === "openpond_hosted") return "OpenPond hosted";
-  if (route === "local_byok") return "Local BYOK";
-  if (route === "codex_app_server") return "Codex app server";
-  return "Unknown";
-}
-
-function sourceLabel(source: string): string {
-  if (source === "provider_usage") return "Provider usage";
-  if (source === "codex_context_usage") return "Codex context";
-  if (source === "missing") return "Missing";
-  return titleFromIdentifier(source);
-}
-
-function statusLabel(status: string): string {
-  return titleFromIdentifier(status);
-}
-
-function commandSourceLabel(source: UsageCommandBreakdown["commandSource"]): string {
-  if (!source) return "Unknown source";
-  if (source === "composer_selection") return "Composer selection";
-  if (source === "prompt_parse") return "Prompt parse";
-  if (source === "server_parser") return "Server parser";
-  if (source === "model_tool") return "Model tool";
-  return titleFromIdentifier(source);
-}
-
-function cacheCohortLabel(cohort: UsageCacheCohortBreakdown["cohort"]): string {
-  if (cohort === "foreground") return "Foreground";
-  if (cohort === "tool_loop") return "Tool loop";
-  if (cohort === "compaction") return "Compaction";
-  if (cohort === "subagent") return "Subagent";
-  if (cohort === "refiner") return "Refiner";
-  return "Other";
-}
-
-function requestKindLabel(kind: string): string {
-  if (kind === "chat_turn") return "Chat turn";
-  if (kind === "tool_loop") return "Tool loop";
-  if (kind === "slash_command") return "Slash command";
-  if (kind === "create_improve_planner") return "Create/Improve planner";
-  if (kind === "harness_refiner") return "Harness Refiner";
-  if (kind === "context_compaction") return "Compaction";
-  if (kind === "subagent") return "Subagent";
-  if (kind === "codex_context") return "Codex context";
-  return "Other";
-}
-
-function requestContext(row: ModelUsageRecord): ReactNode {
-  if (row.attribution.commandName) return row.attribution.commandName;
-  if (row.sessionId) return shortId(row.sessionId);
-  return "None";
-}
-
-function titleFromIdentifier(value: string): string {
-  return value
-    .split("_")
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
-}
-
-function shortId(value: string): string {
-  if (value.length <= 14) return value;
-  return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }

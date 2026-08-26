@@ -7,6 +7,7 @@ import "../../styles/labs/taskset-drafts.css";
 import "../../styles/labs/labs-inventory.css";
 import "../../styles/labs/labs-detail.css";
 import "../../styles/labs/labs-model-detail.css";
+import "../../styles/labs/model-project-page.css";
 import "../../styles/labs/labs-model-comparison.css";
 
 export type LabPrimaryTab =
