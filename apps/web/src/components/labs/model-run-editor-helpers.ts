@@ -88,7 +88,7 @@ export function newDraft(
     baseModel: null,
     method: null,
     destinationId: null,
-    managedRolloutPlacement: "local",
+    managedRolloutPlacement: "remote",
     runPreset: null,
     recipe: null,
     createdAt: timestamp,

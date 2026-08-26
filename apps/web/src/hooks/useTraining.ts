@@ -646,6 +646,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       modelId: string;
       tasksetId: string;
       destinationId: string;
+      environmentPlacement?: "local" | "remote";
       recipe: unknown;
       exportApproved: boolean;
       retentionDays: number | null;
@@ -689,7 +690,7 @@ export function useTraining(input: { connection: ClientConnection | null; profil
       job: { id: string };
       createImproveRunId: string;
     }>("start-prepared-training", "/start/prepared", body),
-    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
+    startTraining: (body: { modelId: string; tasksetId: string; destinationId: string; environmentPlacement?: "local" | "remote"; recipe: unknown; exportApproved: boolean; maximumCostUsd: number | null; retentionDays: number | null; region: string | null }) => mutate<{ plan: TrainingPlan; bundle: TrainingBundleManifest; approval: { id: string }; job: { id: string } }>("start-training", "/start", body),
     cancelJob: (jobId: string) => mutate("cancel-job", `/jobs/${encodeURIComponent(jobId)}/cancel`, {}),
     rejectModel: (modelId: string, reason: string) => mutate("reject-model", `/models/${encodeURIComponent(modelId)}/reject`, { reason }),
     bindModel: (
